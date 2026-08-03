@@ -64,17 +64,33 @@ describe('/api/posts/[id]/bookmark service audience boundary', () => {
       },
       error: null,
     })
-    mockUserRpc.mockResolvedValue({
-      data: {
-        status: 'removed',
-        user_id: mockUser.id,
-        post_id: POST_ID,
-        bookmark_id: BOOKMARK_ID,
-        folder_id: FOLDER_ID,
-        bookmarked: false,
-        bookmark_count: 0,
-      },
-      error: null,
+    mockUserRpc.mockImplementation(async (name: string) => {
+      if (name === 'save_post_bookmark_to_folder_atomic') {
+        return {
+          data: {
+            status: 'added',
+            user_id: mockUser.id,
+            post_id: POST_ID,
+            bookmark_id: BOOKMARK_ID,
+            folder_id: FOLDER_ID,
+            bookmarked: true,
+            bookmark_count: 1,
+          },
+          error: null,
+        }
+      }
+      return {
+        data: {
+          status: 'removed',
+          user_id: mockUser.id,
+          post_id: POST_ID,
+          bookmark_id: BOOKMARK_ID,
+          folder_id: FOLDER_ID,
+          bookmarked: false,
+          bookmark_count: 0,
+        },
+        error: null,
+      }
     })
   })
 
@@ -89,15 +105,15 @@ describe('/api/posts/[id]/bookmark service audience boundary', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('toggles only through the actor-bound atomic RPC', async () => {
-    const response = await POST(request('POST', { folder_id: FOLDER_ID }), context)
+  it('toggles a bodyless bookmark only through the actor-bound atomic RPC', async () => {
+    const response = await POST(request('POST'), context)
     const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenCalledWith('toggle_post_bookmark_atomic', {
       p_actor_id: mockUser.id,
       p_post_id: POST_ID,
-      p_folder_id: FOLDER_ID,
+      p_folder_id: null,
     })
     expect(body).toEqual({
       action: 'added',
@@ -106,6 +122,105 @@ describe('/api/posts/[id]/bookmark service audience boundary', () => {
       folder_id: FOLDER_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('saves into a folder through the authenticated idempotent authority', async () => {
+    const requestValue = request('POST', { folder_id: FOLDER_ID })
+    const response = await POST(requestValue, context)
+
+    expect(mockCreateUserScopedServerClient).toHaveBeenCalledWith(requestValue)
+    expect(mockUserRpc).toHaveBeenCalledWith('save_post_bookmark_to_folder_atomic', {
+      p_post_id: POST_ID,
+      p_folder_id: FOLDER_ID,
+    })
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(await response.json()).toEqual({
+      status: 'added',
+      user_id: mockUser.id,
+      post_id: POST_ID,
+      bookmark_id: BOOKMARK_ID,
+      folder_id: FOLDER_ID,
+      bookmarked: true,
+      bookmark_count: 1,
+    })
+  })
+
+  it.each(['moved', 'already_saved'] as const)(
+    'preserves the idempotent %s acknowledgement without toggling',
+    async (status) => {
+      mockUserRpc.mockResolvedValue({
+        data: {
+          status,
+          user_id: mockUser.id,
+          post_id: POST_ID,
+          bookmark_id: BOOKMARK_ID,
+          folder_id: FOLDER_ID,
+          bookmarked: true,
+          bookmark_count: 7,
+        },
+        error: null,
+      })
+
+      const response = await POST(request('POST', { folder_id: FOLDER_ID }), context)
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ status, bookmarked: true, bookmark_count: 7 })
+      expect(mockRpc).not.toHaveBeenCalled()
+    }
+  )
+
+  it('fails closed when a folder save acknowledgement crosses actor identity', async () => {
+    mockUserRpc.mockResolvedValue({
+      data: {
+        status: 'added',
+        user_id: '55555555-5555-4555-8555-555555555555',
+        post_id: POST_ID,
+        bookmark_id: BOOKMARK_ID,
+        folder_id: FOLDER_ID,
+        bookmarked: true,
+        bookmark_count: 1,
+      },
+      error: null,
+    })
+
+    const response = await POST(request('POST', { folder_id: FOLDER_ID }), context)
+
+    expect(response.status).toBe(500)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when a folder save acknowledgement has an invalid count', async () => {
+    mockUserRpc.mockResolvedValue({
+      data: {
+        status: 'already_saved',
+        user_id: mockUser.id,
+        post_id: POST_ID,
+        bookmark_id: BOOKMARK_ID,
+        folder_id: FOLDER_ID,
+        bookmarked: true,
+        bookmark_count: -1,
+      },
+      error: null,
+    })
+
+    const response = await POST(request('POST', { folder_id: FOLDER_ID }), context)
+
+    expect(response.status).toBe(500)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['invalid', 400],
+    ['account_inactive', 403],
+    ['post_not_found', 404],
+    ['folder_not_found', 404],
+  ] as const)('maps folder save denial %s to %s', async (status, expectedStatus) => {
+    mockUserRpc.mockResolvedValue({ data: { status }, error: null })
+
+    const response = await POST(request('POST', { folder_id: FOLDER_ID }), context)
+
+    expect(response.status).toBe(expectedStatus)
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
   it('maps an atomic audience denial to authoritative absence', async () => {

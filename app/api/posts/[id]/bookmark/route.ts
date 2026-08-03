@@ -11,6 +11,7 @@ import { apiLogger } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
 import { createUserScopedServerClient } from '@/lib/supabase/user-scoped-server'
+import { validateBookmarkFolderSaveAck } from '@/lib/bookmarks/folder-save'
 
 const ToggleBookmarkSchema = z
   .object({
@@ -199,6 +200,45 @@ export async function POST(request: NextRequest, context: RouteContext) {
           folder_id: input.folder_id.toLowerCase(),
           already_removed: result.status === 'already_removed',
         })
+      }
+
+      if (input?.folder_id) {
+        const userSupabase = createUserScopedServerClient(req)
+        const { data, error } = await userSupabase.rpc('save_post_bookmark_to_folder_atomic', {
+          p_post_id: postId.data,
+          p_folder_id: input.folder_id,
+        })
+        if (error) {
+          apiLogger.error('Atomic bookmark folder save failed:', error)
+          return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
+        }
+
+        let result
+        try {
+          result = validateBookmarkFolderSaveAck(data, {
+            userId: user.id,
+            postId: postId.data,
+            folderId: input.folder_id,
+          })
+        } catch (error) {
+          apiLogger.error('Atomic bookmark folder save acknowledgement failed:', error)
+          return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
+        }
+
+        if (result.status === 'invalid') {
+          return NextResponse.json({ error: 'Invalid bookmark request' }, { status: 400 })
+        }
+        if (result.status === 'account_inactive') {
+          return NextResponse.json({ error: 'Account is inactive' }, { status: 403 })
+        }
+        if (result.status === 'post_not_found') {
+          return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+        }
+        if (result.status === 'folder_not_found') {
+          return NextResponse.json({ error: 'Bookmark folder not found' }, { status: 404 })
+        }
+
+        return NextResponse.json(result)
       }
 
       const folder_id = input?.folder_id ?? null

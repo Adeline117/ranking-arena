@@ -84,7 +84,7 @@ function apiErrorMessage(payload: unknown, fallback: string): string {
 interface BookmarkModalProps {
   isOpen: boolean
   onClose: () => void
-  onSelect: (folderId: string) => void
+  onSelect: (folderId: string) => Promise<boolean>
   postId: string
 }
 
@@ -103,6 +103,7 @@ export default function BookmarkModal({
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [selectingFolderId, setSelectingFolderId] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderPublic, setNewFolderPublic] = useState(true)
@@ -115,6 +116,7 @@ export default function BookmarkModal({
   const loadControllerRef = useRef<AbortController | null>(null)
   const createRequestIdRef = useRef(0)
   const createControllerRef = useRef<AbortController | null>(null)
+  const selectRequestIdRef = useRef(0)
 
   const loadFolders = useCallback(async () => {
     if (!accessToken || !userId || viewerKey === 'pending' || viewerKey === 'anon') {
@@ -218,10 +220,12 @@ export default function BookmarkModal({
       createControllerRef.current?.abort()
       loadRequestIdRef.current += 1
       createRequestIdRef.current += 1
+      selectRequestIdRef.current += 1
       setFolders([])
       setLoading(true)
       setLoadFailed(false)
       setCreating(false)
+      setSelectingFolderId(null)
       setShowCreateForm(false)
       setNewFolderName('')
       setNewFolderPublic(true)
@@ -233,10 +237,12 @@ export default function BookmarkModal({
       createControllerRef.current?.abort()
       loadRequestIdRef.current += 1
       createRequestIdRef.current += 1
+      selectRequestIdRef.current += 1
       setFolders([])
       setLoading(true)
       setLoadFailed(false)
       setCreating(false)
+      setSelectingFolderId(null)
       setShowCreateForm(false)
       setNewFolderName('')
       setNewFolderPublic(true)
@@ -257,6 +263,7 @@ export default function BookmarkModal({
       createControllerRef.current?.abort()
       loadRequestIdRef.current += 1
       createRequestIdRef.current += 1
+      selectRequestIdRef.current += 1
     },
     []
   )
@@ -356,9 +363,38 @@ export default function BookmarkModal({
     }
   }
 
-  const handleSelectFolder = (folderId: string) => {
-    onSelect(folderId)
-    onClose()
+  const handleSelectFolder = async (folderId: string) => {
+    if (selectingFolderId || !userId || viewerKey === 'pending' || viewerKey === 'anon') {
+      return
+    }
+    const scope: BookmarkModalScope = { viewerKey, sessionGeneration, userId }
+    const requestId = ++selectRequestIdRef.current
+    setSelectingFolderId(folderId)
+    try {
+      const succeeded = await onSelect(folderId)
+      if (
+        succeeded &&
+        selectRequestIdRef.current === requestId &&
+        isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        onClose()
+      }
+    } catch (error) {
+      if (
+        selectRequestIdRef.current === requestId &&
+        isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        logger.error('Save bookmark to folder failed:', error)
+        showToast(tRef.current('operationFailed'), 'error')
+      }
+    } finally {
+      if (
+        selectRequestIdRef.current === requestId &&
+        isScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        setSelectingFolderId(null)
+      }
+    }
   }
 
   const getDefaultAvatar = (name: string) => {
@@ -500,7 +536,7 @@ export default function BookmarkModal({
               variant="text"
               size="sm"
               onClick={() => setShowCreateForm(!showCreateForm)}
-              disabled={foldersLoading || loadFailed}
+              disabled={foldersLoading || loadFailed || selectingFolderId !== null}
               style={{ color: tokens.colors.accent?.primary }}
             >
               {t('newBookmarkFolder')}
@@ -613,13 +649,15 @@ export default function BookmarkModal({
               <Box
                 key={folder.id}
                 role="button"
-                tabIndex={0}
+                tabIndex={selectingFolderId === null ? 0 : -1}
                 aria-label={folder.name}
-                onClick={() => handleSelectFolder(folder.id)}
+                aria-disabled={selectingFolderId !== null}
+                aria-busy={selectingFolderId === folder.id}
+                onClick={() => void handleSelectFolder(folder.id)}
                 onKeyDown={(e: React.KeyboardEvent) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    handleSelectFolder(folder.id)
+                    void handleSelectFolder(folder.id)
                   }
                 }}
                 style={{
@@ -628,7 +666,8 @@ export default function BookmarkModal({
                   gap: tokens.spacing[3],
                   padding: tokens.spacing[3],
                   borderRadius: tokens.radius.md,
-                  cursor: 'pointer',
+                  cursor: selectingFolderId === null ? 'pointer' : 'wait',
+                  opacity: selectingFolderId === null || selectingFolderId === folder.id ? 1 : 0.55,
                   transition: `background ${tokens.transition.base}`,
                   border: `1px solid ${tokens.colors.border.primary}`,
                 }}

@@ -10570,6 +10570,10 @@ export type Database = {
         Args: { p_bookmark_id: string; p_folder_id: string; p_post_id: string }
         Returns: Json
       }
+      save_post_bookmark_to_folder_atomic: {
+        Args: { p_folder_id: string; p_post_id: string }
+        Returns: Json
+      }
       mutate_trader_watchlist_atomic: {
         Args: {
           p_action: string

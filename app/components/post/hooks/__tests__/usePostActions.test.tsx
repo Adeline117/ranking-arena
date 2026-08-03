@@ -7,6 +7,8 @@ import { usePostActions } from '../usePostActions'
 const mockSetOpenPost = jest.fn()
 const mockUpdatePostReaction = jest.fn()
 const mockRouterPush = jest.fn()
+const mockShowToast = jest.fn()
+const mockSavePostToBookmarkFolder = jest.fn()
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -20,6 +22,9 @@ jest.mock('@/lib/stores/postStore', () => ({
 
 jest.mock('@/lib/utils/haptics', () => ({ haptic: jest.fn() }))
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
+jest.mock('@/lib/bookmarks/folder-save-client', () => ({
+  savePostToBookmarkFolder: (...args: unknown[]) => mockSavePostToBookmarkFolder(...args),
+}))
 
 const initialPost: PostWithUserState = {
   id: 'post-1',
@@ -80,7 +85,7 @@ function useAliasedPostActions(viewer: ViewerProps = viewerA) {
     openPost: post,
     setOpenPost: mockSetOpenPost,
     openPostAliasesPosts: true,
-    showToast: jest.fn(),
+    showToast: mockShowToast,
     showDangerConfirm: async () => true,
     t: (key) => key,
   })
@@ -98,6 +103,18 @@ describe('usePostActions aliased detail state', () => {
     window.sessionStorage.clear()
     window.history.replaceState({}, '', '/')
     global.fetch = jest.fn()
+    mockSavePostToBookmarkFolder.mockResolvedValue({
+      ok: true,
+      acknowledgement: {
+        status: 'added',
+        user_id: '11111111-1111-4111-8111-111111111111',
+        post_id: '22222222-2222-4222-8222-222222222222',
+        bookmark_id: '33333333-3333-4333-8333-333333333333',
+        folder_id: '44444444-4444-4444-8444-444444444444',
+        bookmarked: true,
+        bookmark_count: 4,
+      },
+    })
   })
 
   it('updates the detail post once and preserves optimistic counts when ACK counts are null', async () => {
@@ -158,6 +175,112 @@ describe('usePostActions aliased detail state', () => {
       bookmark_count: 4,
     })
     expect(mockSetOpenPost).not.toHaveBeenCalled()
+  })
+
+  it('reconciles an exact folder-save ACK and leaves modal closure to its caller', async () => {
+    const { result } = renderHook(() => useAliasedPostActions())
+    act(() => {
+      result.current.actions.setBookmarkingPostId('post-1')
+      result.current.actions.setShowBookmarkModal(true)
+    })
+
+    let succeeded: boolean | undefined
+    await act(async () => {
+      succeeded = await result.current.actions.handleBookmarkToFolder(
+        '44444444-4444-4444-8444-444444444444'
+      )
+    })
+
+    expect(succeeded).toBe(true)
+    expect(result.current.actions.showBookmarkModal).toBe(true)
+    expect(result.current.actions.bookmarkingPostId).toBe('post-1')
+    expect(result.current.actions.userBookmarks['post-1']).toBe(true)
+    expect(result.current.post.bookmark_count).toBe(4)
+    expect(mockSavePostToBookmarkFolder).toHaveBeenCalledWith({
+      accessToken: viewerA.accessToken,
+      userId: viewerA.currentUserId,
+      postId: 'post-1',
+      folderId: '44444444-4444-4444-8444-444444444444',
+      sessionGeneration: viewerA.sessionGeneration,
+    })
+  })
+
+  it('keeps folder state and modal retryable after an uncertain save failure', async () => {
+    mockSavePostToBookmarkFolder.mockResolvedValue({
+      ok: false,
+      status: 0,
+      error: null,
+      stale: false,
+    })
+    const { result } = renderHook(() => useAliasedPostActions())
+    act(() => {
+      result.current.actions.setBookmarkingPostId('post-1')
+      result.current.actions.setShowBookmarkModal(true)
+    })
+
+    let succeeded: boolean | undefined
+    await act(async () => {
+      succeeded = await result.current.actions.handleBookmarkToFolder(
+        '44444444-4444-4444-8444-444444444444'
+      )
+    })
+
+    expect(succeeded).toBe(false)
+    expect(result.current.actions.showBookmarkModal).toBe(true)
+    expect(result.current.actions.bookmarkingPostId).toBe('post-1')
+    expect(result.current.post.bookmark_count).toBe(3)
+    expect(mockShowToast).toHaveBeenCalledWith('networkError', 'error')
+  })
+
+  it('drops a late folder-save acknowledgement after the viewer scope changes', async () => {
+    let resolveSave!: (value: Awaited<ReturnType<typeof mockSavePostToBookmarkFolder>>) => void
+    mockSavePostToBookmarkFolder.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve
+      })
+    )
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: viewerA }
+    )
+    act(() => {
+      result.current.actions.setBookmarkingPostId('post-1')
+      result.current.actions.setShowBookmarkModal(true)
+    })
+    let request: Promise<boolean>
+    act(() => {
+      request = result.current.actions.handleBookmarkToFolder(
+        '44444444-4444-4444-8444-444444444444'
+      )
+    })
+
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: 'viewer-b',
+      viewerKey: 'user:viewer-b',
+      sessionGeneration: 2,
+    })
+    let succeeded: boolean | undefined
+    await act(async () => {
+      resolveSave({
+        ok: true,
+        acknowledgement: {
+          status: 'added',
+          user_id: '11111111-1111-4111-8111-111111111111',
+          post_id: '22222222-2222-4222-8222-222222222222',
+          bookmark_id: '33333333-3333-4333-8333-333333333333',
+          folder_id: '44444444-4444-4444-8444-444444444444',
+          bookmarked: true,
+          bookmark_count: 99,
+        },
+      })
+      succeeded = await request!
+    })
+
+    expect(succeeded).toBe(false)
+    expect(result.current.post.bookmark_count).toBe(3)
+    expect(result.current.actions.userBookmarks).toEqual({})
+    expect(mockShowToast).not.toHaveBeenCalledWith('bookmarked', 'success')
   })
 
   it('reverses one optimistic reaction delta when the server rejects the request', async () => {

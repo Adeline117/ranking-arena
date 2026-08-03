@@ -45,15 +45,33 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function renderModal() {
+function renderModal({
+  onClose = jest.fn(),
+  onSelect = jest.fn(async () => true),
+}: {
+  onClose?: jest.Mock
+  onSelect?: jest.Mock
+} = {}) {
   return render(
     <BookmarkModal
       isOpen
-      onClose={jest.fn()}
-      onSelect={jest.fn()}
+      onClose={onClose}
+      onSelect={onSelect}
       postId="22222222-2222-4222-8222-222222222222"
     />
   )
+}
+
+function folder(id = '33333333-3333-4333-8333-333333333333', name = 'Saved folder') {
+  return {
+    id,
+    name,
+    description: null,
+    avatar_url: null,
+    is_public: false,
+    is_default: false,
+    post_count: 0,
+  }
 }
 
 describe('BookmarkModal folder load states', () => {
@@ -267,5 +285,63 @@ describe('BookmarkModal folder load states', () => {
     expect(screen.queryByText('Viewer A private draft')).not.toBeInTheDocument()
     expect(screen.getByText('Viewer B folder')).toBeInTheDocument()
     expect(mockShowToast).not.toHaveBeenCalledWith('bookmarkFolderCreated', 'success')
+  })
+
+  it('keeps the modal open after a rejected save and closes only after a strict success', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(response({ data: { folders: [folder()] } }))
+    const onClose = jest.fn()
+    const onSelect = jest.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    renderModal({ onClose, onSelect })
+    const folderButton = await screen.findByRole('button', { name: 'Saved folder' })
+
+    fireEvent.click(folderButton)
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1))
+    expect(onClose).not.toHaveBeenCalled()
+
+    fireEvent.click(folderButton)
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(onSelect).toHaveBeenCalledTimes(2)
+  })
+
+  it('coalesces duplicate folder clicks while one save is unresolved', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(response({ data: { folders: [folder()] } }))
+    const pendingSave = deferred<boolean>()
+    const onClose = jest.fn()
+    const onSelect = jest.fn(() => pendingSave.promise)
+    renderModal({ onClose, onSelect })
+    const folderButton = await screen.findByRole('button', { name: 'Saved folder' })
+
+    fireEvent.click(folderButton)
+    fireEvent.click(folderButton)
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(folderButton).toHaveAttribute('aria-busy', 'true')
+
+    await act(async () => pendingSave.resolve(true))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not let a late viewer A save close viewer B modal state', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(response({ data: { folders: [folder()] } }))
+    const pendingSave = deferred<boolean>()
+    const onClose = jest.fn()
+    const onSelect = jest.fn(() => pendingSave.promise)
+    const view = renderModal({ onClose, onSelect })
+    fireEvent.click(await screen.findByRole('button', { name: 'Saved folder' }))
+
+    mockAuthSession.accessToken = 'token-viewer-b'
+    mockAuthSession.userId = '22222222-2222-4222-8222-222222222222'
+    mockAuthSession.viewerKey = 'user:22222222-2222-4222-8222-222222222222'
+    mockAuthSession.sessionGeneration = 2
+    view.rerender(
+      <BookmarkModal
+        isOpen
+        onClose={onClose}
+        onSelect={onSelect}
+        postId="22222222-2222-4222-8222-222222222222"
+      />
+    )
+
+    await act(async () => pendingSave.resolve(true))
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

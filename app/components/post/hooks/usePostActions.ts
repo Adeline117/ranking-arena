@@ -14,6 +14,7 @@ import {
   consumePostBookmarkLogin,
   queueProfileActionLogin,
 } from '@/lib/auth/profile-action-login'
+import { savePostToBookmarkFolder } from '@/lib/bookmarks/folder-save-client'
 
 type Post = PostWithUserState
 
@@ -56,7 +57,7 @@ interface BookmarkRepostState {
   setBookmarkingPostId: (v: string | null) => void
   handleBookmark: (postId: string) => Promise<void>
   openBookmarkFolderModal: (postId: string) => void
-  handleBookmarkToFolder: (folderId: string) => Promise<void>
+  handleBookmarkToFolder: (folderId: string) => Promise<boolean>
   handleRepost: (postId: string, comment?: string) => Promise<boolean>
   loadUserBookmarksAndReposts: (postIds: string[]) => Promise<void>
 }
@@ -794,44 +795,94 @@ export function usePostActions({
   )
 
   const handleBookmarkToFolder = useCallback(
-    async (folderId: string) => {
-      if (!accessToken || !bookmarkingPostId) return
+    async (folderId: string): Promise<boolean> => {
       const capturedScope = captureRenderedScope()
-      if (!scopeIsCurrent(capturedScope)) return
+      if (
+        !accessToken ||
+        !capturedScope.userId ||
+        !bookmarkingPostId ||
+        !scopeIsCurrent(capturedScope)
+      ) {
+        return false
+      }
       const capturedPostId = bookmarkingPostId
+      const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${capturedPostId}\u0000folder-save`
+      if (bookmarkLockRef.current.has(lockKey)) return false
+      bookmarkLockRef.current.add(lockKey)
       setBookmarkLoading((prev) => ({ ...prev, [capturedPostId]: true }))
       try {
-        const response = await fetch(`/api/posts/${capturedPostId}/bookmark`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ folder_id: folderId }),
+        const result = await savePostToBookmarkFolder({
+          accessToken,
+          userId: capturedScope.userId,
+          postId: capturedPostId,
+          folderId,
+          sessionGeneration: capturedScope.sessionGeneration,
         })
-        const result = await response.json()
-        if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok) {
-          setUserBookmarks((prev) => ({ ...prev, [capturedPostId]: result.bookmarked }))
-          setBookmarkCounts((prev) => ({ ...prev, [capturedPostId]: result.bookmark_count }))
+        if (!scopeIsCurrent(capturedScope)) return false
+        if (!result.ok && result.stale) return false
+        if (result.ok) {
+          const acknowledgement = result.acknowledgement
+          setUserBookmarks((prev) => ({ ...prev, [capturedPostId]: true }))
+          setBookmarkCounts((prev) => ({
+            ...prev,
+            [capturedPostId]: acknowledgement.bookmark_count,
+          }))
+          setPosts((prev) =>
+            prev.map((post) =>
+              post.id === capturedPostId
+                ? { ...post, bookmark_count: acknowledgement.bookmark_count }
+                : post
+            )
+          )
+          const openedPost = openPostRef.current
+          if (!openPostAliasesPosts && openedPost?.id === capturedPostId) {
+            setOpenPost({
+              ...openedPost,
+              bookmark_count: acknowledgement.bookmark_count,
+            } as Post)
+          }
+          if (acknowledgement.status === 'added') {
+            trackEvent('post_bookmark', { post_id: capturedPostId })
+          }
           showToast(t('bookmarked'), 'success')
+          return true
+        }
+
+        if (result.status === 401) {
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
+          redirectBookmarkToLogin(capturedPostId)
         } else {
-          showToast(result.error || t('operationFailed'), 'error')
+          showToast(
+            result.error || t(result.status === 0 ? 'networkError' : 'operationFailed'),
+            'error'
+          )
         }
       } catch (err) {
-        if (!scopeIsCurrent(capturedScope)) return
+        if (!scopeIsCurrent(capturedScope)) return false
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
+        bookmarkLockRef.current.delete(lockKey)
         if (scopeIsCurrent(capturedScope)) {
           setBookmarkLoading((prev) => ({ ...prev, [capturedPostId]: false }))
-          setShowBookmarkModal(false)
-          setBookmarkingPostId(null)
         }
       }
+      return false
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, bookmarkingPostId, captureRenderedScope, scopeIsCurrent, showToast]
+    [
+      accessToken,
+      bookmarkingPostId,
+      captureRenderedScope,
+      openPostAliasesPosts,
+      redirectBookmarkToLogin,
+      scopeIsCurrent,
+      setBookmarkCounts,
+      setBookmarkLoading,
+      setOpenPost,
+      setPosts,
+      setUserBookmarks,
+      showToast,
+      t,
+    ]
   )
 
   // Open repost editor — auth-gated so anonymous users get the login modal
