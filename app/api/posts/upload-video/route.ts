@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     // 生成唯一文件名
-    const timestamp = Date.now()
-    const randomStr = Math.random().toString(36).substring(2, 15)
-    const fileName = `${userId}/videos/${timestamp}-${randomStr}.${fileExt}`
+    const objectName = `${crypto.randomUUID()}.${fileExt}`
+    const directory = `${userId}/videos`
+    const fileName = `${directory}/${objectName}`
 
     // 上传到 Supabase Storage — use sniffed content type
     const { data, error } = await supabase.storage.from('posts').upload(fileName, file, {
@@ -84,15 +84,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
+    if (!data || data.path !== fileName) {
+      logger.error('Video upload acknowledgement path mismatch', {
+        expectedPath: fileName,
+        acknowledgedPath: data?.path,
+      })
+      try {
+        const { error: cleanupError } = await supabase.storage.from('posts').remove([fileName])
+        if (cleanupError) logger.error('Failed to clean up unacknowledged video:', cleanupError)
+      } catch (cleanupError) {
+        logger.error('Failed to clean up unacknowledged video:', cleanupError)
+      }
+      return NextResponse.json({ error: 'Video upload verification failed' }, { status: 500 })
+    }
+
+    const { data: fileList, error: listError } = await supabase.storage
+      .from('posts')
+      .list(directory, { search: objectName, limit: 1 })
+    if (listError || !fileList?.some((storedFile) => storedFile.name === objectName)) {
+      logger.error('Video upload verification failed - object not found:', listError)
+      try {
+        const { error: cleanupError } = await supabase.storage.from('posts').remove([fileName])
+        if (cleanupError) logger.error('Failed to clean up unverifiable video:', cleanupError)
+      } catch (cleanupError) {
+        logger.error('Failed to clean up unverifiable video:', cleanupError)
+      }
+      return NextResponse.json({ error: 'Video upload verification failed' }, { status: 500 })
+    }
+
     // 获取公共 URL
     const { data: urlData } = supabase.storage.from('posts').getPublicUrl(fileName)
 
-    return NextResponse.json({
-      url: urlData.publicUrl,
-      fileName: data.path,
-      fileSize: file.size,
-      fileType: contentType,
-    })
+    return NextResponse.json(
+      {
+        url: urlData.publicUrl,
+        fileName: data.path,
+        fileSize: file.size,
+        fileType: contentType,
+      },
+      { headers: { 'Cache-Control': 'private, no-store' } }
+    )
   } catch (error: unknown) {
     logger.error('Error uploading video:', error)
     const _errorMessage = error instanceof Error ? error.message : 'Video upload failed'
