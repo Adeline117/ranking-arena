@@ -207,11 +207,13 @@ describe('ingest worker metric-trust startup gate', () => {
     const firstAwaitLine = /^\s*await\b/m.exec(main)
     const firstAwait =
       firstAwaitLine === null ? -1 : firstAwaitLine.index + firstAwaitLine[0].indexOf('await')
+    const metricRetryGate = main.indexOf("await retryReadinessGate('metric-trust readiness'")
     const metricGate = main.indexOf('await assertMetricTrustWorkerReadiness()')
 
     expect(handlers).toBeGreaterThan(-1)
     expect(handlers).toBeLessThan(firstAwait)
-    expect(metricGate).toBe(firstAwait)
+    expect(metricRetryGate).toBe(firstAwait)
+    expect(metricGate).toBeGreaterThan(metricRetryGate)
 
     // This is the source-level construction boundary. startup-gate.test.ts
     // executes the callbacks and proves their heartbeat/reconcile/start/ready order.
@@ -223,7 +225,7 @@ describe('ingest worker metric-trust startup gate', () => {
       'await startNativeIngestServing({',
       '[ingest-worker] ready (regions=',
     ]) {
-      expect(main.indexOf(laterPhase)).toBeGreaterThan(metricGate)
+      expect(main.indexOf(laterPhase)).toBeGreaterThan(metricRetryGate)
     }
   })
 

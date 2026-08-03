@@ -42,6 +42,7 @@ import {
 } from './ingest/attempt-bound-capture-runtime'
 import { assertPartitionedV4WorkerReadiness } from './ingest/attempt-bound-capture-readiness'
 import { startNativeIngestServing } from './ingest/startup-gate'
+import { retryTransientStartup } from './ingest/startup-retry'
 import { routeJobWithSourceLease } from './ingest/source-job-routing'
 import { routeTierCJobRegion } from './ingest/tier-c-region-router'
 import { getSourceBySlug } from '@/lib/ingest/sources'
@@ -238,10 +239,26 @@ async function main(): Promise<void> {
 
     // No scheduler, BullMQ consumer, heartbeat, or authority attempt may start
     // until the production database proves the exact source-lineage contract.
-    await assertMetricTrustWorkerReadiness()
+    const retryReadinessGate = (label: string, operation: () => Promise<void>) =>
+      retryTransientStartup(operation, {
+        signal: processCoordinator.startupSignal,
+        onRetry: (error, attempt, delayMs) => {
+          const message = error instanceof Error ? error.message : String(error)
+          console.error(
+            `[ingest-worker] ${label} dependency unavailable (attempt ${attempt}); ` +
+              `retrying in ${delayMs}ms: ${message}`
+          )
+        },
+      })
+
+    await retryReadinessGate('metric-trust readiness', async () => {
+      await assertMetricTrustWorkerReadiness()
+    })
     processCoordinator.assertStartupOpen()
     console.log('[ingest-worker] metric-trust database release contract ready')
-    await assertPartitionedV4WorkerReadiness()
+    await retryReadinessGate('partitioned V4 readiness', async () => {
+      await assertPartitionedV4WorkerReadiness()
+    })
     processCoordinator.assertStartupOpen()
     console.log('[ingest-worker] partitioned V4 database release contract ready')
 
