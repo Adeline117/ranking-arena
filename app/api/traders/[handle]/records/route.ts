@@ -110,7 +110,12 @@ export async function GET(
       const pending: RecordsPage = {
         rows: page?.rows ?? [],
         nextCursor: null,
-        provenance: page?.provenance ?? { source: resolved.source, asOf: new Date().toISOString() },
+        provenance: page?.provenance ?? {
+          source: resolved.source,
+          sourceAsOf: null,
+          observedAt: null,
+          publishedAt: null,
+        },
         cacheState: 'pending',
         ...(kind === 'position_history'
           ? {

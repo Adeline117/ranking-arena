@@ -11,7 +11,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatMoney } from '@/lib/utils/money'
-import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import RecordProvenanceFooter from '@/app/components/common/RecordProvenanceFooter'
 import ModuleDegraded from './ModuleDegraded'
 import type { CopierAggregate } from '@/lib/data/serving/types'
 
@@ -152,7 +152,7 @@ export default function CopierAggregatePanel({
         {t('copierAggregateNotice')}
       </Text>
 
-      <ProvenanceFooter provenance={aggregate.provenance} exchangeName={exchangeName} />
+      <RecordProvenanceFooter provenance={aggregate.provenance} exchangeName={exchangeName} />
     </Box>
   )
 }
