@@ -600,7 +600,7 @@ describe('Tier-C incomplete profile window gate', () => {
     ).toBe(false)
   })
 
-  it('reconciles an audit-only RAW pointer when Tier-C history parsing fails', async () => {
+  it('commits the audit-only RAW pointer before Tier-C history parsing', async () => {
     mockGetAdapter.mockReturnValue(positionHistoryAdapter())
     mockGetHistory.mockImplementation(() => positionHistoryStream(1))
     mockParseHistory.mockImplementation(() => {
@@ -611,10 +611,7 @@ describe('Tier-C incomplete profile window gate', () => {
       'position parser rejected the page'
     )
 
-    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
-    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
-      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
-    )
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockRedisSet).not.toHaveBeenCalled()
     expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])

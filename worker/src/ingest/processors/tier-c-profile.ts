@@ -364,16 +364,18 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         }
 
         let storageDurable = false
+        let rawPointerDurable = false
         const renderPreviewWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
           // The writer calls this only after the immutable artifact is in
           // Storage. Tier-C remains preview-only: publish its RAW audit pointer
           // before rendering, but never write typed rows or advance a cursor.
           storageDurable = true
+          const receipt = await runHistoryTransaction(persistRawPointer)
+          rawPointerDurable = true
           const parsed = acquisition.pages.flatMap((page) =>
             adapter.parseHistory(page.payload, kind, ctx)
           )
           rows = historyRowsForRender(parsed, kind)
-          const receipt = await runHistoryTransaction(persistRawPointer)
           await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
           return receipt
         }
@@ -381,7 +383,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         try {
           await writePositionHistoryRawArtifact(rawInput, renderPreviewWithRaw)
         } catch (cause) {
-          if (storageDurable) {
+          if (storageDurable && !rawPointerDurable) {
             try {
               await writePositionHistoryRawArtifact(rawInput, runHistoryTransaction)
             } catch (rawCause) {
