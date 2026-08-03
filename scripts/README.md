@@ -6,17 +6,15 @@ This directory contains data import, enrichment, verification, and maintenance s
 
 ```text
 scripts/
-├── import/           # Platform data import scripts
-├── maintenance/      # Data cleanup and calculations
-├── monitoring/       # Data quality and freshness monitoring
-├── verify/           # Verification and consistency checks
-├── test/             # Script test utilities
-├── performance/      # Performance measurement tools
-├── setup/            # Environment/setup helpers
-├── shell/            # Shell-based ops helpers
-├── sql/              # SQL snippets and helpers
+├── ci/               # Release and workflow gates
 ├── cron/             # Scheduled runner scripts
-└── *.mjs             # Root-level entrypoints and utilities
+├── import/           # Platform data import scripts
+├── maintenance/      # Backup, restore, and release maintenance
+├── openclaw/         # Automated sentinels and reports
+├── performance/      # Performance measurement tools
+├── qa/               # Executable QA contracts and sweep tools
+├── vps-deploy/       # VPS deployment and runtime helpers
+└── *.mjs             # Supported root-level entrypoints and utilities
 ```
 
 ## ✅ Unified Diagnostics Entry
@@ -28,6 +26,7 @@ npm run diagnose
 ```
 
 This runs:
+
 - seasons check
 - status check
 - freshness check
@@ -60,6 +59,7 @@ npm run check:enrichment
 ## 📝 Environment Requirements
 
 Most scripts require:
+
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
@@ -68,15 +68,25 @@ Some enrichment/fetch scripts may also require proxy credentials.
 ## 🔧 Operations Rhythm
 
 ### Daily/Before release
+
 - `npm run diagnose`
+- `npm run qa:serving`
 
 ### Weekly
+
 - Spot-check enrichment and avatar coverage if needed
 
 ### As needed
+
 - Platform-specific import/enrichment scripts
-- Verification scripts under `scripts/verify/`
+- QA contracts and sweep tools under `scripts/qa/`
 
 ---
 
-Last updated: 2026-02-22
+Retired standalone status and data-validation scripts must not be restored. Use
+`npm run diagnose` for routine public diagnostics, `scripts/pipeline-health-check.mjs`
+for pipeline investigation, and `npm run qa:serving` for the release acceptance gate.
+
+---
+
+Last updated: 2026-08-03
