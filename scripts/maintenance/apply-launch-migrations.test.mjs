@@ -146,8 +146,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
 
   const additiveApiTierMigration = '20260729020000_api_tier_cancellation_identity.sql'
   const legacyApiTierCleanupMigration = '20260729021000_disable_legacy_api_tier_writer.sql'
+  const stripeWebhookAuthorityMigration =
+    '20260803153000_stripe_webhook_event_lease_and_retention_authority.sql'
 
-  assert.equal(predeploy.length, 124)
+  assert.equal(predeploy.length, 125)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -244,6 +246,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260729224000_rank_eligible_leaderboard_count_cache.sql',
           '20260729225000_token_trader_rank_authority.sql',
           '20260729230000_token_ranking_generation_barrier.sql',
+          stripeWebhookAuthorityMigration,
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -262,12 +265,22 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 139)
+  assert.equal(new Set(all).size, 140)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
     1
   )
+  assert.equal(
+    predeploy.filter((migration) => migration === stripeWebhookAuthorityMigration).length,
+    1
+  )
+  assert.ok(!postdeploy.includes(stripeWebhookAuthorityMigration))
+  assert.ok(!recoveryPrerequisites.includes(stripeWebhookAuthorityMigration))
+  assert.ok(!concurrentRecovery.includes(stripeWebhookAuthorityMigration))
+  assert.ok(!recovery.includes(stripeWebhookAuthorityMigration))
+  assert.ok(!quarantined.includes(stripeWebhookAuthorityMigration))
+  assert.ok(!superseded.includes(stripeWebhookAuthorityMigration))
   assert.ok(!predeploy.includes(legacyApiTierCleanupMigration))
   assert.ok(!postdeploy.includes(additiveApiTierMigration))
   assert.ok(!recoveryPrerequisites.includes(legacyApiTierCleanupMigration))
@@ -276,7 +289,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-83), [
+  assert.deepEqual(predeploy.slice(-84), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -360,6 +373,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
     '20260729230000_token_ranking_generation_barrier.sql',
+    stripeWebhookAuthorityMigration,
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -448,11 +462,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729074000_b2c_subscription_webhook_authority.sql'))
   assert.ok(predeploy.includes('20260729075000_account_recovery_capability_reacquisition.sql'))
   assert.ok(predeploy.includes('20260729080000_api_tier_recovery_payment_authority.sql'))
-  assert.deepEqual(predeploy.slice(-4), [
+  assert.deepEqual(predeploy.slice(-5), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
     '20260729230000_token_ranking_generation_barrier.sql',
+    stripeWebhookAuthorityMigration,
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
   assert.ok(
