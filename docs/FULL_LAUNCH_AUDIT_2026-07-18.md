@@ -45,19 +45,20 @@ P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布�
 
 ### P1 — 重要：当前清单
 
-| ID    | 问题                                                                                          | 当前处置                                                                                                                                  |
-| ----- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                               | 根因是 `responsive.css` 被 `media=print` 延迟；现改为首屏阻塞加载并锁定唯一 stylesheet，hydration 前 1440px 已是三栏。✅                  |
-| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                                 | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                                                |
-| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                                         | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy` 与 40px 触控高度。✅                                              |
-| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。                    | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                                                            |
-| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。              | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                                                  |
-| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。           | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅                                       |
-| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                          | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。                              |
-| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。                     | 🔄 按公开主流程优先继续；排行榜日文 320/375px 工具栏裁切已修并留几何/截图证据，其余页面继续。                                             |
-| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                            | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                                                            |
-| P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                    | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。 |
-| P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。 | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅             |
+| ID    | 问题                                                                                               | 当前处置                                                                                                                                  |
+| ----- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                                    | 根因是 `responsive.css` 被 `media=print` 延迟；现改为首屏阻塞加载并锁定唯一 stylesheet，hydration 前 1440px 已是三栏。✅                  |
+| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                                      | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                                                |
+| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                                              | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy` 与 40px 触控高度。✅                                              |
+| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。                         | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                                                            |
+| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。                   | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                                                  |
+| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。                | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅                                       |
+| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                               | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。                              |
+| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。                          | 🔄 按公开主流程优先继续；排行榜日文 320/375px 工具栏裁切已修并留几何/截图证据，其余页面继续。                                             |
+| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                                 | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                                                            |
+| P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                         | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。 |
+| P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。      | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅             |
+| P1-12 | 上传后取消/失败、编辑移除或删帖会遗留 `posts` Storage 对象；直接查引用后删除又会产生并发数据丢失。 | 🔄 已锁定删帖 no-Storage 边界并记录全路径；需 `post_media_uploads` registry + mutation 内 claim + durable outbox/lease 后才能安全清理。   |
 
 ### P2 — 边缘：明确上线后
 
@@ -205,6 +206,7 @@ fail closed，直到 P0-06 的 readiness、writer 撤权和 live canary 全部�
 | Hot last-good     | SSR 帖子已显示后，hydration/定时刷新遇 500 会把 `{error}` 当空数组，清空整页并显示 noData。                                                                             | 非 2xx/畸形 2xx 进入显式错误，保留当前帖子并显示 Retry；只有成功合法空数组进入 noData；pull-to-refresh 改成原地请求。✅                                   |
 | 帖子编辑一致性    | 正文保存成功后 language/mentions/hashtags/join/count 仍可能失败；旧回执不能证明最终 facet，编辑鉴权异常还会永久 skeleton。                                              | 服务端从清洗后正文派生 facet，数据库事务内 CAS + 同步 join/count 并返回严格 ACK；鉴权失败明确跳登录/错误；原签名待 postdeploy 关闭。✅代码/PG17           |
 | 帖子媒体与预览    | 上传成功响应可伪造 URL/owner；自定义 alt 图片控制失效；占位符文本会被移动算法误替换；危险 Markdown 图片可进入预览。                                                     | 回执精确验证 storage origin/owner/path/类型/大小；共享纯函数按 URL 精确移动删除且无占位符；预览只渲染 http(s) 图片并切断新窗口 opener。✅                 |
+| 帖子媒体生命周期  | 上传未认领、草稿放弃、编辑移除和硬删除都会留下对象；“删行后查无引用再删对象”与并发 create/edit 存在 TOCTOU，会破坏活帖。                                                | 线上删帖静态禁止读取客户端媒体值或调用 Storage；保持 P1 泄漏，不引入 P0 数据丢失；完整 registry/claim/outbox/lease 方案见独立审计。🔄                     |
 | 群组申请头像      | 可达申请页只读取 `data.url`，跨 owner、外域或扩展成功回执会被当成头像。                                                                                                 | 复用帖子媒体严格回执；账户切换时旧上传不能覆盖新 viewer；删除两个零引用的宽松旧 hooks。✅                                                                 |
 | Tip 成功页        | `tips.post_id` 被误当成 group id；“Back to post”和分享都跳 `/groups/{postId}`。                                                                                         | 统一生成 `/post/{encodedPostId}`；没有 post id 时才返回 Groups。✅                                                                                        |
 | Sentry sourcemap  | Production 虽已有 `SENTRY_AUTH_TOKEN`，但 `withSentryConfig` 已移除、browser sourcemap 关闭，仓库也没有 exact-SHA 上传调用。                                            | 补回受控上传机制并在 Sentry 侧保存同一 release SHA 的可读栈留证；仅存在 token 不算完成。👤                                                                |
