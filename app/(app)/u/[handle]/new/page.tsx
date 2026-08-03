@@ -23,6 +23,12 @@ import { ImageUploader, VideoUploader } from './components/MediaUploader'
 import { PollEditor } from './components/PollEditor'
 import type { UploadedImage, UploadedVideo, PollOption } from './types'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
+import {
+  bindPostCreateOperation,
+  publishPostAtomic,
+  type BoundPostCreateOperation,
+} from '@/lib/posts/post-create-client'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import {
   TITLE_MAX_LENGTH,
@@ -45,6 +51,7 @@ export default function NewPostPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const submitRef = useRef(false)
+  const publishOperationRef = useRef<BoundPostCreateOperation | null>(null)
   const [cursorPosition, setCursorPosition] = useState<number | null>(null)
 
   const [email, setEmail] = useState<string | null>(null)
@@ -480,11 +487,9 @@ export default function NewPostPage() {
 
   const handleSubmit = async () => {
     if (submitRef.current || loading) return
-    submitRef.current = true
 
     if (!title.trim()) {
       showToast(t('pleaseEnterTitle'), 'warning')
-      submitRef.current = false
       return
     }
 
@@ -492,25 +497,39 @@ export default function NewPostPage() {
       showToast(t('pleaseLogin'), 'warning')
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/login'
       router.push(`/login?returnUrl=${encodeURIComponent(currentPath)}`)
-      submitRef.current = false
       return
     }
 
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('handle')
-      .eq('id', userId)
-      .maybeSingle()
-
-    const decodedHandle = decodeURIComponent(handle)
-    if (!profile || profile.handle !== decodedHandle) {
-      showToast(t('noPermission'), 'error')
-      submitRef.current = false
+    const capturedViewerScope = getViewerScope()
+    if (capturedViewerScope.userId !== userId) {
+      showToast(t('pleaseLogin'), 'warning')
       return
     }
 
+    const validPollOptions = pollOptions
+      .map((option) => option.text.trim())
+      .filter((option) => option.length > 0)
+    if (pollEnabled && validPollOptions.length < 2) {
+      showToast(t('pollMinOptions'), 'warning')
+      return
+    }
+
+    submitRef.current = true
     setLoading(true)
     try {
+      const decodedHandle = decodeURIComponent(handle)
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (!isViewerScopeCurrent(capturedViewerScope)) return
+      if (!profile || profile.handle !== decodedHandle) {
+        showToast(t('noPermission'), 'error')
+        return
+      }
+
       let finalContent = content
       if (images.length > 0) {
         const unincludedImages = images.filter((img) => !content.includes(img.url))
@@ -519,80 +538,50 @@ export default function NewPostPage() {
         }
       }
 
-      let validPollOptions: { text: string; votes: number }[] = []
-      if (pollEnabled) {
-        validPollOptions = pollOptions.filter((opt) => opt.text.trim())
-        if (validPollOptions.length < 2) {
-          showToast(t('pollMinOptions'), 'warning')
-          setLoading(false)
-          submitRef.current = false
-          return
-        }
-      }
-
-      const { data: newPost, error: postError } = await supabase
-        .from('posts')
-        .insert({
+      const operation = bindPostCreateOperation(
+        {
           title,
           content: finalContent,
-          author_handle: decodedHandle,
-          author_id: userId,
+          group_id: null,
           images: images.map((img) => img.url),
           poll_enabled: pollEnabled,
+          ...(pollEnabled
+            ? {
+                poll_options: validPollOptions,
+                poll_type: pollType,
+                poll_duration_hours: pollDuration,
+              }
+            : {}),
           visibility,
           is_sensitive: isSensitive,
           content_warning: isSensitive && contentWarning ? contentWarning : null,
-        })
-        .select('id')
-        .single()
+        },
+        publishOperationRef.current
+      )
+      publishOperationRef.current = operation
 
-      if (postError || !newPost) {
-        logger.error('Post creation failed:', JSON.stringify(postError, null, 2))
-        showToast(postError?.message || t('createPostFailed'), 'error')
+      const result = await publishPostAtomic(operation.request, capturedViewerScope)
+      if (result.status === 'superseded') return
+      if (result.status === 'failed') {
+        logger.error('Post creation error:', result.error)
+        showToast(result.error, 'error')
+        return
+      }
+      if (result.status === 'invalid_ack') {
+        logger.error('Post creation acknowledgement rejected')
+        showToast(t('createPostFailed'), 'error')
         return
       }
 
-      if (pollEnabled && validPollOptions.length >= 2) {
-        const endAt =
-          pollDuration > 0
-            ? new Date(Date.now() + pollDuration * 60 * 60 * 1000).toISOString()
-            : null
-
-        const { data: pollData, error: pollError } = await supabase
-          .from('polls')
-          .insert({
-            post_id: newPost.id,
-            question: title,
-            options: validPollOptions.map((opt, index) => ({
-              text: opt.text.trim(),
-              votes: 0,
-              index,
-            })),
-            type: pollType,
-            end_at: endAt,
-          })
-          .select('id')
-          .single()
-
-        if (pollError) {
-          logger.error('Poll creation failed:', JSON.stringify(pollError, null, 2))
-          await supabase.from('posts').delete().eq('id', newPost.id)
-          showToast(
-            `${t('pollCreateFailed')}: ${pollError.message || pollError.code || t('unknownError')}`,
-            'error'
-          )
-          return
-        } else if (pollData) {
-          await supabase.from('posts').update({ poll_id: pollData.id }).eq('id', newPost.id)
-        }
-      }
-
+      publishOperationRef.current = null
       clearDraft()
       trackEvent('create_post', { has_images: images.length > 0 ? 1 : 0 })
       showToast(t('publishSuccess'), 'success')
-      router.push(`/u/${encodeURIComponent(decodedHandle)}`)
+      router.push(`/u/${encodeURIComponent(result.data.post.author_handle)}`)
     } catch (_error) {
-      showToast(t('publishFailed'), 'error')
+      if (isViewerScopeCurrent(capturedViewerScope)) {
+        showToast(t('publishFailed'), 'error')
+      }
     } finally {
       setLoading(false)
       submitRef.current = false
