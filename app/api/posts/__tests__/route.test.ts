@@ -65,7 +65,6 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 
 const mockGetAuthUser = jest.fn()
 const mockRequireAuth = jest.fn()
-const mockGetUserHandle = jest.fn()
 // Chainable mock for Supabase client (select/eq/maybeSingle return PromiseLike)
 const mockChain = () => {
   const chain: Record<string, unknown> = {}
@@ -103,12 +102,10 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => mockSupabase),
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
-  getUserHandle: (...args: unknown[]) => mockGetUserHandle(...args),
   getUserProfile: jest.fn(),
 }))
 
 const mockGetPosts = jest.fn()
-const mockCreatePost = jest.fn()
 const mockGetUserPostReactions = jest.fn()
 const mockGetUserPostVotes = jest.fn()
 const mockCacheGet = jest.fn().mockResolvedValue(null)
@@ -117,7 +114,7 @@ const mockCacheDel = jest.fn().mockResolvedValue(undefined)
 
 jest.mock('@/lib/data/posts', () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
-  createPost: (...args: unknown[]) => mockCreatePost(...args),
+  detectPostLanguage: (text: string) => (/[^\u0000-\u007f]/.test(text) ? 'zh' : 'en'),
   getUserPostReactions: (...args: unknown[]) => mockGetUserPostReactions(...args),
   getUserPostVotes: (...args: unknown[]) => mockGetUserPostVotes(...args),
 }))
@@ -146,6 +143,8 @@ jest.mock('@/lib/features', () => ({
 
 jest.mock('@/lib/data/hashtags', () => ({
   extractAndSyncHashtags: jest.fn().mockResolvedValue(undefined),
+  extractHashtags: (text: string) =>
+    [...text.matchAll(/#([A-Za-z0-9_]{1,30})/g)].map((match) => match[1].toLowerCase()),
 }))
 
 jest.mock('@/lib/utils/csrf', () => ({
@@ -562,6 +561,42 @@ describe('/api/posts', () => {
   // --- POST: Create Post ---
 
   describe('POST /api/posts', () => {
+    const actorId = '11111111-1111-4111-8111-111111111111'
+    const operationId = '22222222-2222-4222-8222-222222222222'
+    const postId = '33333333-3333-4333-8333-333333333333'
+    const createdPost = {
+      id: postId,
+      author_id: actorId,
+      author_handle: 'testuser',
+      group_id: null,
+      title: 'My Post',
+      content: 'Great content',
+      images: [],
+      poll_enabled: false,
+      poll_id: null,
+      visibility: 'public',
+      is_sensitive: false,
+      content_warning: null,
+      language: 'en',
+      mentions: [],
+      hashtags: [],
+      author_arena_score: 0,
+      author_is_verified: false,
+      content_version: 0,
+      status: 'active',
+      created_at: '2026-07-30T01:45:00.123456+00:00',
+      updated_at: '2026-07-30T01:45:00.123456+00:00',
+    }
+
+    const createAck = (status: 'created' | 'replayed' = 'created') => ({
+      status,
+      applied: status === 'created',
+      operation_id: operationId,
+      actor_id: actorId,
+      post: createdPost,
+      poll: null,
+    })
+
     it('returns 401 when not authenticated', async () => {
       mockRequireAuth.mockRejectedValue(
         Object.assign(new Error('Unauthorized'), { statusCode: 401 })
@@ -580,7 +615,6 @@ describe('/api/posts', () => {
 
     it('returns 400 when title is missing', async () => {
       mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
-      mockGetUserHandle.mockResolvedValue('testuser')
 
       const req = new NextRequest('http://localhost/api/posts', {
         method: 'POST',
@@ -596,7 +630,6 @@ describe('/api/posts', () => {
 
     it('returns 400 when content is missing', async () => {
       mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
-      mockGetUserHandle.mockResolvedValue('testuser')
 
       const req = new NextRequest('http://localhost/api/posts', {
         method: 'POST',
@@ -610,21 +643,79 @@ describe('/api/posts', () => {
     })
 
     it('creates post successfully with valid input', async () => {
-      const mockPost = { id: 'post-new', title: 'My Post', content: 'Great content' }
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
-      mockGetUserHandle.mockResolvedValue('testuser')
-      mockCreatePost.mockResolvedValue(mockPost)
+      mockGetAuthUser.mockResolvedValue({ id: actorId, email: 'test@test.com' })
+      mockSupabase.rpc.mockResolvedValueOnce({ data: createAck(), error: null })
 
       const req = new NextRequest('http://localhost/api/posts', {
         method: 'POST',
-        body: { title: 'My Post', content: 'Great content' },
+        body: { operation_id: operationId, title: 'My Post', content: 'Great content' },
       })
       const res = await POST(req)
       const body = await res.json()
 
       expect(res.status).toBe(201)
       expect(body.success).toBe(true)
-      expect(body.data.post.id).toBe('post-new')
+      expect(body.data.post).toEqual(createdPost)
+      expect(body.data.operation).toEqual({
+        status: 'created',
+        applied: true,
+        operation_id: operationId,
+      })
+    })
+
+    it('returns a replay acknowledgement without creating a second post', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: actorId, email: 'test@test.com' })
+      mockSupabase.rpc.mockResolvedValueOnce({ data: createAck('replayed'), error: null })
+
+      const req = new NextRequest('http://localhost/api/posts', {
+        method: 'POST',
+        body: { operation_id: operationId, title: 'My Post', content: 'Great content' },
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data.operation.status).toBe('replayed')
+      expect(body.data.operation.applied).toBe(false)
+    })
+
+    it('rejects attempts to set database-managed ranking fields', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: actorId, email: 'test@test.com' })
+
+      const req = new NextRequest('http://localhost/api/posts', {
+        method: 'POST',
+        body: {
+          operation_id: operationId,
+          title: 'My Post',
+          content: 'Great content',
+          hot_score: 999,
+          is_pinned: true,
+        },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(400)
+      expect(mockSupabase.rpc).not.toHaveBeenCalled()
+    })
+
+    it('fails closed when the RPC returns an inexact acknowledgement', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: actorId, email: 'test@test.com' })
+      mockSupabase.rpc.mockResolvedValueOnce({
+        data: { ...createAck(), post: { ...createdPost, author_id: operationId } },
+        error: null,
+      })
+
+      const req = new NextRequest('http://localhost/api/posts', {
+        method: 'POST',
+        body: { operation_id: operationId, title: 'My Post', content: 'Great content' },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(500)
+      await expect(res.json()).resolves.toEqual({
+        success: false,
+        error: 'Post publishing failed',
+      })
     })
   })
 })

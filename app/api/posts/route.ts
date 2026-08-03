@@ -12,9 +12,7 @@ export const runtime = 'nodejs'
 
 import { z } from 'zod'
 import {
-  getUserHandle,
   handleError,
-  success,
   successWithPagination,
   unauthorized,
   validateString,
@@ -24,38 +22,12 @@ import {
   ErrorCode,
 } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
-import { badRequest, forbidden, notFound } from '@/lib/api/response'
+import { badRequest } from '@/lib/api/response'
 import { socialFeatureGuard } from '@/lib/features'
-import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
+import { getPosts, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 import { getWeightedPosts } from '@/lib/data/posts-weighted'
-import {
-  getServerCache,
-  setServerCache,
-  deleteServerCacheByPrefix,
-  CacheTTL,
-} from '@/lib/utils/server-cache'
-import { del as cacheDel } from '@/lib/cache'
-import { fireAndForget } from '@/lib/utils/logger'
-import { sendNotifications } from '@/lib/data/notifications'
-import { extractAndSyncHashtags } from '@/lib/data/hashtags'
+import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { logRpcError } from '@/lib/data/serving/log-rpc-error'
-// sanitizeInput / sanitizeText are dynamically imported inside POST only —
-// keeps the sanitize-html parser out of the GET handler's module graph at
-// cold-start (the GET handler doesn't need it).
-
-// Zod schema for POST /api/posts
-const CreatePostSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title must be at most 200 characters'),
-  content: z
-    .string()
-    .min(1, 'Content is required')
-    .max(10000, 'Content must be at most 10000 characters'),
-  group_id: z.string().uuid().optional().nullable(),
-  poll_enabled: z.boolean().optional().default(false),
-  visibility: z.enum(['public', 'followers', 'group']).optional().default('public'),
-  is_sensitive: z.boolean().optional().default(false),
-  content_warning: z.string().max(200).optional().nullable(),
-})
 
 const FollowingCursorSchema = z
   .object({
@@ -474,143 +446,8 @@ export const POST = withAuth(
   async ({ user, supabase, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
-
-    let body: Record<string, unknown>
-    try {
-      body = await request.json()
-    } catch {
-      return badRequest('Invalid JSON in request body')
-    }
-
-    // Zod 输入验证
-    const parsed = CreatePostSchema.safeParse(body)
-    if (!parsed.success) {
-      throw new ApiError('Invalid input', {
-        code: ErrorCode.VALIDATION_ERROR,
-        details: { errors: parsed.error.flatten() },
-      })
-    }
-    // Sanitize user content — strip HTML/scripts before DB storage (defense-in-depth)
-    const { sanitizeInput, sanitizeText } = await import('@/lib/utils/sanitize')
-    const title = sanitizeInput(parsed.data.title, { maxLength: 200 })
-    const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 10000 })
-    const content_warning = parsed.data.content_warning
-      ? sanitizeInput(parsed.data.content_warning, { maxLength: 200 })
-      : undefined
-    const { poll_enabled, visibility, is_sensitive } = parsed.data
-    const group_id = parsed.data.group_id ?? undefined
-
-    // 并行获取用户 handle + reputation data
-    const [userHandle, reputationResult] = await Promise.all([
-      getUserHandle(user.id, user.email),
-      Promise.resolve(
-        supabase
-          .from('user_profiles')
-          .select('reputation_score, is_verified_trader')
-          .eq('id', user.id)
-          .maybeSingle()
-      )
-        .then((r) => ({
-          score: r.data?.reputation_score ?? 0,
-          verified: r.data?.is_verified_trader ?? false,
-        }))
-        .catch(() => ({ score: 0, verified: false })),
-    ])
-
-    // Group posting gate — this handler uses the service-role client, which
-    // BYPASSES the `posts_insert_member` RLS policy, so the group rules must be
-    // enforced here in code. Without it, any authed user can inject posts into
-    // private/premium/dissolved groups and banned/muted users keep posting.
-    if (group_id) {
-      const [groupRes, memberRes, banRes] = await Promise.all([
-        supabase.from('groups').select('dissolved_at').eq('id', group_id).maybeSingle(),
-        supabase
-          .from('group_members')
-          .select('muted_until')
-          .eq('group_id', group_id)
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        supabase
-          .from('group_bans')
-          .select('user_id') // composite PK — select user_id, not id
-          .eq('group_id', group_id)
-          .eq('user_id', user.id)
-          .maybeSingle(),
-      ])
-      if (!groupRes.data) return notFound('Group not found')
-      if (groupRes.data.dissolved_at)
-        return badRequest('This group has been dissolved — no new posts')
-      if (banRes.data) return forbidden('You are banned from this group')
-      if (!memberRes.data) return forbidden('You must be a member to post in this group')
-      const mutedUntil = memberRes.data.muted_until as string | null
-      if (mutedUntil && new Date(mutedUntil) > new Date())
-        return forbidden('You are muted in this group')
-    }
-
-    const post = await createPost(supabase, user.id, userHandle, {
-      title,
-      content,
-      group_id,
-      poll_enabled,
-      visibility: group_id ? 'group' : visibility,
-      is_sensitive,
-      content_warning: content_warning ?? undefined,
-      authorReputation: reputationResult,
-    })
-
-    // Extract and sync hashtags (fire-and-forget to not block response)
-    fireAndForget(
-      extractAndSyncHashtags(supabase, post.id, `${title} ${content}`),
-      'Sync hashtags for post'
-    )
-
-    // Parse @mentions from content and send notifications (fire-and-forget)
-    const mentionRegex = /@(\w+)/g
-    const mentionHandles = [
-      ...new Set([...content.matchAll(mentionRegex)].map((m: RegExpExecArray) => m[1])),
-    ]
-    if (mentionHandles.length > 0) {
-      fireAndForget(
-        (async () => {
-          const { data: mentionedUsers } = await supabase
-            .from('user_profiles')
-            .select('id, handle')
-            .in('handle', mentionHandles)
-
-          if (mentionedUsers && mentionedUsers.length > 0) {
-            // Store resolved mentions on the post
-            await supabase
-              .from('posts')
-              .update({
-                mentions: mentionedUsers.map((u: { id: string; handle: string }) => u.handle),
-              })
-              .eq('id', post.id)
-
-            // Send mention notifications (deduped, each independently)
-            const notificationRows = mentionedUsers
-              .filter((m: { id: string }) => m.id !== user.id)
-              .map((m: { id: string }) => ({
-                user_id: m.id,
-                type: 'mention' as const,
-                title: `${userHandle} mentioned you in a post`,
-                message: (title || content).slice(0, 100),
-                actor_id: user.id,
-                link: `/post/${post.id}`,
-                reference_id: post.id,
-                read: false,
-              }))
-            sendNotifications(supabase, notificationRows, 'Mention notifications')
-          }
-        })(),
-        'Parse mentions and send notifications'
-      )
-    }
-
-    // 创建帖子后清除相关缓存
-    deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
-    fireAndForget(cacheDel('hot_posts:top50'), 'delete-hot-posts-cache')
-
-    return success({ post }, 201)
+    const { handleAtomicPostCreateHttp } = await import('@/lib/posts/post-create-server')
+    return handleAtomicPostCreateHttp({ request, supabase, actorId: user.id })
   },
   { name: 'posts-create', rateLimit: 'write' }
 )
