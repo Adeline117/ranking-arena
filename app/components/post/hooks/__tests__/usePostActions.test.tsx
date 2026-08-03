@@ -97,6 +97,14 @@ function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500): Respon
   return { ok, status, json: async () => body } as Response
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
 describe('usePostActions aliased detail state', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -115,6 +123,64 @@ describe('usePostActions aliased detail state', () => {
         bookmark_count: 4,
       },
     })
+  })
+
+  it('single-flights a pin scope and submits one stable desired state', async () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    const authorId = '33333333-3333-4333-8333-333333333333'
+    const response = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
+    const { result } = renderHook(() => useAliasedPostActions())
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: postId,
+        author_id: authorId,
+        group_id: null,
+        is_pinned: false,
+      }))
+    })
+    const event = { stopPropagation: jest.fn() } as unknown as React.MouseEvent
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.actions.handleTogglePin(result.current.post, event)
+      duplicate = result.current.actions.handleTogglePin(result.current.post, event)
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledWith(`/api/posts/${postId}/pin`, {
+      method: 'POST',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer token-a',
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify({ is_pinned: true }),
+    })
+
+    await act(async () => {
+      response.resolve(
+        jsonResponse({
+          success: true,
+          data: {
+            post_id: postId,
+            author_id: authorId,
+            group_id: null,
+            scope_type: 'author',
+            scope_id: authorId,
+            is_pinned: true,
+            already_set: false,
+            unpinned_count: 0,
+            message: 'Pinned',
+          },
+        })
+      )
+      await Promise.all([first, duplicate])
+    })
+
+    expect(result.current.post.is_pinned).toBe(true)
+    expect(mockShowToast).toHaveBeenCalledWith('Pinned', 'success')
   })
 
   it('updates the detail post once and preserves optimistic counts when ACK counts are null', async () => {

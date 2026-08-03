@@ -32,6 +32,7 @@ import {
   type GroupApplicationOperation,
 } from '@/lib/groups/application-operation'
 import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
+import { postBelongsToPinScope, readPostPinAcknowledgement } from '@/lib/posts/post-pin-client'
 
 import MemberList from './components/MemberList'
 import ContentManagement from './components/ContentManagement'
@@ -72,6 +73,7 @@ type GroupMember = {
 
 type Post = {
   id: string
+  group_id: string
   title: string
   content?: string | null
   author_handle?: string | null
@@ -339,6 +341,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [group, setGroup] = useViewerSlotState<Group | null>(manageStateOwnerKey, null)
   const [members, setMembers] = useViewerSlotState<GroupMember[]>(manageStateOwnerKey, [])
   const [posts, setPosts] = useViewerSlotState<Post[]>(manageStateOwnerKey, [])
+  const postsRef = useRef(posts)
+  postsRef.current = posts
   const [comments, setComments] = useViewerSlotState<Comment[]>(manageStateOwnerKey, [])
   const [userRole, setUserRole] = useViewerSlotState<'owner' | 'admin' | 'member' | null>(
     manageStateOwnerKey,
@@ -397,6 +401,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [notifyMessage, setNotifyMessage] = useViewerSlotState(manageStateOwnerKey, '')
   const [notifySending, setNotifySending] = useViewerSlotState(manageStateOwnerKey, false)
   const notificationOperationsRef = useRef(new GroupNotificationOperationLedger())
+  const pinRequestLockRef = useRef<Set<string>>(new Set())
   const profileEditSubmitOperationIdRef = useRef<Record<string, string>>({})
   const profileEditContextRef = useRef({
     accessToken,
@@ -499,7 +504,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
             .order('role', { ascending: true }),
           supabase
             .from('posts')
-            .select('id, title, content, author_handle, created_at, is_pinned')
+            .select('id, group_id, title, content, author_handle, created_at, is_pinned')
             .eq('group_id', requestGroupId)
             .order('is_pinned', { ascending: false, nullsFirst: false })
             .order('created_at', { ascending: false })
@@ -517,7 +522,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         const membersData = (membersResult.data || []) as GroupMember[]
         const postsData = (postsResult.data || []) as Post[]
         const userIds = membersData.map((member) => member.user_id)
-        const loadedPosts = (postsData || []).map((p) => ({ ...p, deleted_at: null })) as Post[]
+        const loadedPosts = (postsData || []).map((p) => ({
+          ...p,
+          group_id: requestGroupId,
+          deleted_at: null,
+        })) as Post[]
         const postIds = (postsData || []).map((p) => p.id)
 
         const [profilesResult, ownerProfileResult, commentsResult] = await Promise.all([
@@ -1004,27 +1013,56 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const handlePinPost = async (postId: string) => {
     const requestScope = manageOwnerScope
     const requestToken = accessToken
+    const requestGroupId = requestScope.groupId
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
-    if (!requestToken || !canManage || pinningPost || !requestIsCurrent()) return
+    const currentPost = postsRef.current.find((post) => post.id === postId)
+    if (!requestToken || !requestGroupId || !canManage || !currentPost || !requestIsCurrent())
+      return
+
+    const desiredState = !Boolean(currentPost.is_pinned)
+    const requestLockKey = `${manageStateOwnerKey}\u0000group:${requestGroupId.toLowerCase()}`
+    if (pinRequestLockRef.current.has(requestLockKey)) return
+    pinRequestLockRef.current.add(requestLockKey)
     setPinningPost(postId)
     try {
       const res = await fetch(`/api/posts/${postId}/pin`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
+        headers: {
+          Authorization: `Bearer ${requestToken}`,
+          'Content-Type': 'application/json',
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ is_pinned: desiredState }),
       })
       if (!requestIsCurrent()) return
       if (res.ok) {
         const data = await res.json()
         if (!requestIsCurrent()) return
-        const np = data.data?.is_pinned ?? data.is_pinned
+
+        const acknowledgement = readPostPinAcknowledgement(data, {
+          postId,
+          groupId: requestGroupId,
+          isPinned: desiredState,
+        })
+        if (!acknowledgement) {
+          showToast(t('operationFailed'), 'error')
+          return
+        }
+
         setPosts((prev) =>
-          prev.map((p) => {
-            if (p.id === postId) return { ...p, is_pinned: np }
-            if (np) return { ...p, is_pinned: false }
-            return p
+          prev.map((post) => {
+            if (post.id === postId) return { ...post, is_pinned: acknowledgement.isPinned }
+            if (
+              acknowledgement.isPinned &&
+              post.is_pinned &&
+              postBelongsToPinScope(post, acknowledgement)
+            ) {
+              return { ...post, is_pinned: false }
+            }
+            return post
           })
         )
-        showToast(np ? t('pinned') : t('unpinned'), 'success')
+        showToast(acknowledgement.isPinned ? t('pinned') : t('unpinned'), 'success')
       } else {
         const data = res.headers.get('content-type')?.includes('application/json')
           ? await res.json()
@@ -1038,6 +1076,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(t('networkErrorRetry'), 'error')
       }
     } finally {
+      pinRequestLockRef.current.delete(requestLockKey)
       if (requestIsCurrent()) setPinningPost(null)
     }
   }
@@ -1059,7 +1098,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     try {
       const { data, error } = await supabase
         .from('posts')
-        .select('id, title, content, author_handle, created_at, is_pinned')
+        .select('id, group_id, title, content, author_handle, created_at, is_pinned')
         .eq('group_id', requestGroupId)
         .lt('created_at', requestCursor)
         .order('created_at', { ascending: false })
@@ -1067,7 +1106,14 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       if (!requestIsCurrent()) return
       if (error) throw error
       if (data && data.length > 0) {
-        setPosts((prev) => [...prev, ...(data.map((p) => ({ ...p, deleted_at: null })) as Post[])])
+        setPosts((prev) => [
+          ...prev,
+          ...(data.map((p) => ({
+            ...p,
+            group_id: requestGroupId,
+            deleted_at: null,
+          })) as Post[]),
+        ])
         setHasMorePosts(data.length === POSTS_PER_PAGE)
       } else {
         setHasMorePosts(false)

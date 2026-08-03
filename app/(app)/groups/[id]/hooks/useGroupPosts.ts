@@ -17,6 +17,11 @@ import {
 import { logger } from '@/lib/logger'
 import { shouldLoadExpandedGroupComments } from '@/lib/comments/group-comment-read'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+import {
+  postBelongsToPinScope,
+  postPinScopeKey,
+  readPostPinAcknowledgement,
+} from '@/lib/posts/post-pin-client'
 
 export interface Post {
   id: string
@@ -231,6 +236,8 @@ export function useGroupPosts({
   )
   // Core state
   const [posts, setPosts] = useViewerOwnedState<Post[]>([], () => [], scopeKey)
+  const postsRef = useRef(posts)
+  postsRef.current = posts
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
   const [viewMode, setViewMode] = useState<'list' | 'masonry'>(() => {
     if (typeof window !== 'undefined') {
@@ -281,6 +288,7 @@ export function useGroupPosts({
   const [repostComment, setRepostComment] = useViewerOwnedState('', () => '', scopeKey)
   const likeRequestLockRef = useRef<Set<string>>(new Set())
   const repostRequestLockRef = useRef<Set<string>>(new Set())
+  const pinRequestLockRef = useRef<Set<string>>(new Set())
 
   // Comments state
   // Expansion is resource UI state rather than viewer data. Preserve it across
@@ -486,6 +494,7 @@ export function useGroupPosts({
     commentMutationLocksRef.current.clear()
     replyMutationLocksRef.current.clear()
     likeRequestLockRef.current.clear()
+    pinRequestLockRef.current.clear()
     setPosts([])
     setHasMorePosts(true)
     setLoadingMore(false)
@@ -1032,21 +1041,53 @@ export function useGroupPosts({
   const handlePinPost = useCallback(
     async (postId: string) => {
       const context = captureMutationContext()
-      const result = await apiCall(`/api/posts/${postId}/pin`, {}, context.scope)
-      if (!mutationContextIsCurrent(context)) return
-      if (result.ok) {
-        const data = result.data as { data?: { is_pinned: boolean }; is_pinned?: boolean }
-        const newPinned = data.data?.is_pinned ?? data.is_pinned
+      const currentPost = postsRef.current.find((post) => post.id === postId)
+      const pinScope = currentPost ? postPinScopeKey(currentPost) : null
+      if (!currentPost || !pinScope || currentPost.group_id !== context.groupId) return
+
+      const desiredState = !Boolean(currentPost.is_pinned)
+      const requestLockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${pinScope}`
+      if (pinRequestLockRef.current.has(requestLockKey)) return
+      pinRequestLockRef.current.add(requestLockKey)
+
+      try {
+        const result = await apiCall(
+          `/api/posts/${postId}/pin`,
+          { body: { is_pinned: desiredState } },
+          context.scope
+        )
+        if (!mutationContextIsCurrent(context)) return
+
+        const acknowledgement = result.ok
+          ? readPostPinAcknowledgement(result.data, {
+              postId,
+              authorId: currentPost.author_id,
+              groupId: context.groupId,
+              isPinned: desiredState,
+            })
+          : null
+
+        if (!acknowledgement) {
+          showToast(result.error || t('operationFailed'), 'error')
+          return
+        }
+
         setPosts((prev) =>
-          prev.map((p) => {
-            if (p.id === postId) return { ...p, is_pinned: newPinned }
-            if (newPinned) return { ...p, is_pinned: false }
-            return p
+          prev.map((post) => {
+            if (post.id === postId) return { ...post, is_pinned: acknowledgement.isPinned }
+            if (
+              acknowledgement.isPinned &&
+              post.is_pinned &&
+              postBelongsToPinScope(post, acknowledgement)
+            ) {
+              return { ...post, is_pinned: false }
+            }
+            return post
           })
         )
-        showToast(newPinned ? t('pinned') : t('unpinned'), 'success')
-      } else {
-        showToast(result.error || t('operationFailed'), 'error')
+        showToast(acknowledgement.isPinned ? t('pinned') : t('unpinned'), 'success')
+      } finally {
+        pinRequestLockRef.current.delete(requestLockKey)
       }
     },
     [apiCall, captureMutationContext, mutationContextIsCurrent, setPosts, showToast, t]

@@ -123,6 +123,7 @@ const OTHER_GROUP_ID = '55555555-5555-4555-8555-555555555555'
 const APPLICATION_ID = '44444444-4444-4444-8444-444444444444'
 const AUDIT_LOG_A = '77777777-7777-4777-8777-777777777777'
 const AUDIT_LOG_B = '88888888-8888-4888-8888-888888888888'
+const POST_ID = '66666666-6666-4666-8666-666666666666'
 
 function token(subject: string, marker: string): string {
   const payload = btoa(JSON.stringify({ sub: subject, marker }))
@@ -197,6 +198,23 @@ function auditPage(id: string, action: string) {
   }
 }
 
+function pinAcknowledgement(groupId: string) {
+  return {
+    success: true,
+    data: {
+      post_id: POST_ID,
+      author_id: ACTOR_A,
+      group_id: groupId,
+      scope_type: 'group',
+      scope_id: groupId,
+      is_pinned: true,
+      already_set: false,
+      unpinned_count: 0,
+      message: 'Pinned',
+    },
+  }
+}
+
 function installSupabaseMock({ groupError = null }: { groupError?: unknown } = {}) {
   const group = {
     id: GROUP_ID,
@@ -245,7 +263,21 @@ function installSupabaseMock({ groupError = null }: { groupError?: unknown } = {
             }
           : table === 'user_profiles'
             ? { data: [{ id: ACTOR_A, handle: 'owner', avatar_url: null }], error: null }
-            : { data: [], error: null }
+            : table === 'posts'
+              ? {
+                  data: [
+                    {
+                      id: POST_ID,
+                      group_id: GROUP_ID,
+                      title: 'Post',
+                      author_handle: 'owner',
+                      created_at: '2026-07-16T00:00:00.000Z',
+                      is_pinned: false,
+                    },
+                  ],
+                  error: null,
+                }
+              : { data: [], error: null }
       ).then(resolve)
     return builder
   })
@@ -410,12 +442,12 @@ describe('group profile edit submit operation', () => {
     const responseA = deferred<{
       ok: boolean
       headers: Headers
-      json(): Promise<{ is_pinned: boolean }>
+      json(): Promise<ReturnType<typeof pinAcknowledgement>>
     }>()
     const responseB = deferred<{
       ok: boolean
       headers: Headers
-      json(): Promise<{ is_pinned: boolean }>
+      json(): Promise<ReturnType<typeof pinAcknowledgement>>
     }>()
     mockFetch.mockReturnValueOnce(responseA.promise).mockReturnValueOnce(responseB.promise)
     const paramsA = Promise.resolve({ id: GROUP_ID })
@@ -438,7 +470,7 @@ describe('group profile edit submit operation', () => {
       responseA.resolve({
         ok: true,
         headers: new Headers({ 'content-type': 'application/json' }),
-        json: async () => ({ is_pinned: true }),
+        json: async () => pinAcknowledgement(GROUP_ID),
       })
     )
     expect(screen.getByTestId('content-pin-state')).toHaveTextContent('loading')
@@ -448,12 +480,17 @@ describe('group profile edit submit operation', () => {
       responseB.resolve({
         ok: true,
         headers: new Headers({ 'content-type': 'application/json' }),
-        json: async () => ({ is_pinned: true }),
+        json: async () => pinAcknowledgement(OTHER_GROUP_ID),
       })
     )
     await waitFor(() => expect(screen.getByTestId('content-pin-state')).toHaveTextContent('idle'))
     expect(showToast).toHaveBeenCalledTimes(1)
     expect(showToast).toHaveBeenCalledWith('pinned', 'success')
+    expect(mockFetch.mock.calls[1][1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ is_pinned: true }),
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+    })
   })
 
   it('cannot let an A acknowledgement mutate, toast, or clear B submission ownership', async () => {

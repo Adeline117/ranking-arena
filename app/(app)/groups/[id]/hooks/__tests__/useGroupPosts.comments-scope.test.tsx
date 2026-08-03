@@ -85,12 +85,13 @@ function postsQuery(response: Promise<{ data: unknown[] | null; error: unknown }
 function renderGroupHook(
   initialProps: Props,
   onRender?: (comments: Record<string, CommentWithAuthor[]>) => void,
-  showToast = jest.fn()
+  showToast = jest.fn(),
+  groupId = 'group-1'
 ) {
   return renderHook(
     (props: Props) => {
       const value = useGroupPosts({
-        groupId: 'group-1',
+        groupId,
         ...props,
         language: 'en',
         t: (key) => key,
@@ -489,6 +490,77 @@ describe('useGroupPosts comment audience and viewer scope', () => {
       user_reaction: 'up',
     })
     expect(result.current.likeLoading['post-1']).toBe(false)
+  })
+
+  it('single-flights one group pin scope and adopts only its explicit desired-state ACK', async () => {
+    const groupId = '11111111-1111-4111-8111-111111111111'
+    const postId = '22222222-2222-4222-8222-222222222222'
+    const authorId = '33333333-3333-4333-8333-333333333333'
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: authorId,
+      viewerKey: `user:${authorId}`,
+      isMember: true,
+    }
+    const request = deferred<unknown>()
+    mockAuthedFetch.mockReturnValue(request.promise)
+    const showToast = jest.fn()
+    const { result } = renderGroupHook(props, undefined, showToast, groupId)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: postId,
+          group_id: groupId,
+          author_id: authorId,
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          is_pinned: false,
+        },
+      ])
+    })
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.handlePinPost(postId)
+      duplicate = result.current.handlePinPost(postId)
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      `/api/posts/${postId}/pin`,
+      'POST',
+      'token-a',
+      { is_pinned: true },
+      15_000,
+      { expectedUserId: authorId, expectedSessionGeneration: 1 }
+    )
+
+    await act(async () => {
+      request.resolve({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: {
+            post_id: postId,
+            author_id: authorId,
+            group_id: groupId,
+            scope_type: 'group',
+            scope_id: groupId,
+            is_pinned: true,
+            already_set: false,
+            unpinned_count: 0,
+            message: 'Pinned',
+          },
+        },
+      })
+      await Promise.all([first, duplicate])
+    })
+
+    expect(result.current.posts[0].is_pinned).toBe(true)
+    expect(showToast).toHaveBeenCalledWith('pinned', 'success')
   })
 
   it('rejects a malformed reaction ACK without changing local state and unlocks retry', async () => {

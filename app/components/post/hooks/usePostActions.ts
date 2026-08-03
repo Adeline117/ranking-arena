@@ -15,6 +15,11 @@ import {
   queueProfileActionLogin,
 } from '@/lib/auth/profile-action-login'
 import { savePostToBookmarkFolder } from '@/lib/bookmarks/folder-save-client'
+import {
+  postBelongsToPinScope,
+  postPinScopeKey,
+  readPostPinAcknowledgement,
+} from '@/lib/posts/post-pin-client'
 
 type Post = PostWithUserState
 
@@ -136,6 +141,7 @@ export function usePostActions({
   )
   const lockRef = useRef<Set<string>>(new Set())
   const bookmarkLockRef = useRef<Set<string>>(new Set())
+  const pinRequestLockRef = useRef<Set<string>>(new Set())
   const postsRef = useRef(posts)
   postsRef.current = posts
   // Always read the FRESHEST openPost. The toggleReaction callback is memoized on
@@ -1125,28 +1131,64 @@ export function usePostActions({
         showToast(t('pleaseLogin'), 'warning')
         return
       }
+
+      const currentPost = postsRef.current.find((candidate) => candidate.id === post.id)
+      const pinScope = currentPost ? postPinScopeKey(currentPost) : null
+      if (!currentPost || !pinScope) {
+        showToast(t('operationFailed'), 'error')
+        return
+      }
+
+      const desiredState = !Boolean(currentPost.is_pinned)
+      const requestLockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000pin-${pinScope}`
+      if (pinRequestLockRef.current.has(requestLockKey)) return
+      pinRequestLockRef.current.add(requestLockKey)
+
       try {
         const response = await fetch(`/api/posts/${post.id}/pin`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ is_pinned: desiredState }),
         })
         const data = await response.json()
         if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok && data.success) {
+
+        const acknowledgement = response.ok
+          ? readPostPinAcknowledgement(data, {
+              postId: currentPost.id,
+              authorId: currentPost.author_id,
+              groupId: currentPost.group_id ?? null,
+              isPinned: desiredState,
+            })
+          : null
+
+        if (acknowledgement) {
           setPosts((prev) =>
             prev.map((p) => {
-              if (p.id === post.id) return { ...p, is_pinned: data.data.is_pinned }
-              if (data.data.is_pinned && p.is_pinned) return { ...p, is_pinned: false }
+              if (p.id === post.id) return { ...p, is_pinned: acknowledgement.isPinned }
+              if (
+                acknowledgement.isPinned &&
+                p.is_pinned &&
+                postBelongsToPinScope(p, acknowledgement)
+              ) {
+                return { ...p, is_pinned: false }
+              }
               return p
             })
           )
-          showToast(data.data.message, 'success')
+          showToast(acknowledgement.message, 'success')
         } else {
-          showToast(data.error || t('operationFailed'), 'error')
+          showToast(typeof data?.error === 'string' ? data.error : t('operationFailed'), 'error')
         }
       } catch {
         if (!scopeIsCurrent(capturedScope)) return
         showToast(t('operationFailed'), 'error')
+      } finally {
+        pinRequestLockRef.current.delete(requestLockKey)
       }
     },
     [accessToken, captureRenderedScope, scopeIsCurrent, setPosts, showToast, t]
