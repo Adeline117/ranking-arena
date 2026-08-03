@@ -5793,6 +5793,9 @@ const ja = {
   provenanceVerifiedTip:
     '読み取り専用 API で約定を確認——数値は取引所口座から直接取得したもので、スクレイピングではありません。',
   provenanceAsOf: '更新',
+  recordProvenanceSourceAsOf: '提供元データ基準',
+  recordProvenanceObservedAt: 'Arena 取得時刻',
+  recordProvenanceUnknown: '不明',
   derivedBoardBadge: '派生データ',
   derivedBoardTooltip:
     'プロフィールデータから派生 — 対象は最近ランクインしたトレーダーに限られます。',

@@ -291,22 +291,43 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
     let rawPayload: unknown = null
     let rawPersisted = false
     let historyCompleteness: HistoryCompleteness | undefined
+    let sourceAsOf: string | null = null
+    let observedAt: string | null = null
+    const renderPayload = () => ({
+      rows,
+      nextCursor: null,
+      sourceAsOf,
+      observedAt,
+      publishedAt: null,
+      ...(historyCompleteness ? { completeness: historyCompleteness } : {}),
+    })
 
     if (surface === 'positions') {
       const bundle = await adapter.getPositions(session, src, exchangeTraderId, traderMeta)
       rawPayload = bundle.pages
+      observedAt = bundle.pages.at(-1)?.fetchedAt ?? null
+      if (observedAt === null) {
+        throw new Error('[tier-c] positions capture returned no evidence page')
+      }
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
       rows = positions.map((p) => ({ ...p, currency: src.currency }))
 
-      await redis.set(
-        resultKey,
-        JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
-        'EX',
-        120
-      )
-      const delayHours = Number(src.meta.positions_delay_hours ?? 0)
-      const asOf = new Date(Date.parse(scrapedAt) - delayHours * 3600_000).toISOString()
-      await publishPositions(src, traderId, positions, asOf)
+      const configuredDelayHours = src.meta.positions_delay_hours
+      if (
+        typeof configuredDelayHours === 'number' &&
+        Number.isFinite(configuredDelayHours) &&
+        configuredDelayHours >= 0 &&
+        Number.isFinite(Date.parse(observedAt))
+      ) {
+        sourceAsOf = new Date(
+          Date.parse(observedAt) - configuredDelayHours * 3600_000
+        ).toISOString()
+      }
+      await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
+      // positions_current.as_of is legacy NOT NULL storage. Until its schema is
+      // split, persist the observation clock as fallback but never expose that
+      // fallback to clients as sourceAsOf.
+      await publishPositions(src, traderId, positions, sourceAsOf ?? observedAt)
     } else {
       const kind = surface as import('@/lib/ingest/core/types').HistoryKind
       const cursor = await getHistoryCursor(traderId, kind)
@@ -331,6 +352,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         }
 
         const termination = acquisition.artifact.termination
+        observedAt = acquisition.artifact.pages.at(-1)?.fetched_at ?? null
         // Tier-C is an interactive preview lane. Even a verifier-confirmed
         // one-page exhaustion does not prove the requested 7/30/90-day window,
         // so the render contract must remain partial and rank-ineligible.
@@ -351,17 +373,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
             adapter.parseHistory(page.payload, kind, ctx)
           )
           rows = historyRowsForRender(parsed, kind)
-          await redis.set(
-            resultKey,
-            JSON.stringify({
-              rows,
-              nextCursor: null,
-              asOf: scrapedAt,
-              completeness: historyCompleteness,
-            }),
-            'EX',
-            120
-          )
+          await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
           return runHistoryTransaction(async (transaction) => {
             const receipt = await persistRawPointer(transaction)
             await publishHistoryRowsInTransaction(transaction, src, traderId, kind, parsed, null)
@@ -413,6 +425,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
           fetchError = error
         }
         rawPayload = pages
+        observedAt = pages.at(-1)?.fetchedAt ?? null
 
         // Non-ranking history surfaces retain the compatibility RAW path.
         await writeRawObject({
@@ -434,12 +447,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         const parsed = pages.flatMap((page) => adapter.parseHistory(page.payload, kind, ctx))
         rows = historyRowsForRender(parsed, kind)
 
-        await redis.set(
-          resultKey,
-          JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
-          'EX',
-          120
-        )
+        await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
 
         await publishHistoryRows(
           src,
@@ -472,18 +480,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
          expires_at = EXCLUDED.expires_at,
          is_refreshing = false,
          payload = EXCLUDED.payload`,
-      [
-        traderId,
-        timeframe,
-        surface,
-        src.profile_cache_ttl_seconds,
-        JSON.stringify({
-          rows,
-          nextCursor: null,
-          asOf: scrapedAt,
-          ...(historyCompleteness ? { completeness: historyCompleteness } : {}),
-        }),
-      ]
+      [traderId, timeframe, surface, src.profile_cache_ttl_seconds, JSON.stringify(renderPayload())]
     )
 
     return { traderId, surface, rows: rows.length }

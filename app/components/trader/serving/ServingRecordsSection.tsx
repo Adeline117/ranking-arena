@@ -22,7 +22,7 @@ import RecordsTable, { type RecordColumn } from './RecordsTable'
 import CopierAggregatePanel from './CopierAggregatePanel'
 import HistoryCompletenessNotice from './HistoryCompletenessNotice'
 import ModuleDegraded from './ModuleDegraded'
-import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import RecordProvenanceFooter from '@/app/components/common/RecordProvenanceFooter'
 import type { RecordKind, ServingTimeframe, SourceCapability } from '@/lib/data/serving/types'
 
 export const RECORD_COLUMNS: Record<Exclude<RecordKind, 'copiers'>, RecordColumn[]> = {
@@ -135,7 +135,7 @@ function RecordKindPanel({
         onLoadMore={() => records.fetchNextPage()}
       />
       {records.provenance && (
-        <ProvenanceFooter provenance={records.provenance} exchangeName={exchangeName} />
+        <RecordProvenanceFooter provenance={records.provenance} exchangeName={exchangeName} />
       )}
     </Box>
   )

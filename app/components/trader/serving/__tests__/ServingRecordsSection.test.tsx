@@ -14,7 +14,7 @@ jest.mock('@/lib/hooks/useTraderRecords', () => ({
 jest.mock('../RecordsTable', () => () => null)
 jest.mock('../CopierAggregatePanel', () => () => null)
 jest.mock('../ModuleDegraded', () => () => null)
-jest.mock('@/app/components/common/ProvenanceFooter', () => () => null)
+jest.mock('@/app/components/common/RecordProvenanceFooter', () => () => null)
 
 function capability(enabledKinds: RecordKind[]): SourceCapability {
   const enabled = new Set(enabledKinds)

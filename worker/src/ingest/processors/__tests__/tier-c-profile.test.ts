@@ -207,6 +207,32 @@ function positionHistoryAdapter(withVerifier = true) {
   }
 }
 
+function positionsAdapter() {
+  return {
+    capabilities: {
+      profile: true,
+      positions: true,
+      positionHistory: false,
+      orders: false,
+      transfers: false,
+      copiers: false,
+    },
+    getPositions: mockGetPositions,
+    parsePositions: jest.fn(() => [
+      {
+        symbol: 'BTCUSDT',
+        side: 'long',
+        leverage: 2,
+        size: 1,
+        entryPrice: 100,
+        markPrice: 110,
+        unrealizedPnl: 10,
+        raw: {},
+      },
+    ]),
+  }
+}
+
 describe('Tier-C incomplete profile window gate', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -496,6 +522,12 @@ describe('Tier-C incomplete profile window gate', () => {
       expect.not.objectContaining({ raw: expect.anything() }),
     ])
     expect(renderPayload.nextCursor).toBeNull()
+    expect(renderPayload).toMatchObject({
+      sourceAsOf: null,
+      observedAt: mockWritePositionHistoryRawArtifact.mock.calls[0][0].artifact.pages[1].fetched_at,
+      publishedAt: null,
+    })
+    expect(renderPayload).not.toHaveProperty('asOf')
     expect(renderPayload.completeness).toEqual({
       state: 'partial',
       reason: 'interactive_preview',
@@ -507,6 +539,7 @@ describe('Tier-C incomplete profile window gate', () => {
       String(sql).includes('arena.profile_cache')
     )
     expect(JSON.parse(String(cacheCall?.[1]?.[4])).completeness).toEqual(renderPayload.completeness)
+    expect(JSON.parse(String(cacheCall?.[1]?.[4])).observedAt).toBe(renderPayload.observedAt)
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
   })
 
@@ -540,6 +573,11 @@ describe('Tier-C incomplete profile window gate', () => {
       null
     )
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload).toMatchObject({
+      sourceAsOf: null,
+      observedAt: mockWritePositionHistoryRawArtifact.mock.calls[0][0].artifact.pages[0].fetched_at,
+      publishedAt: null,
+    })
     expect(renderPayload.completeness).toEqual({
       state: 'partial',
       reason: 'interactive_preview',
@@ -594,6 +632,65 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockRedisSet).not.toHaveBeenCalled()
     expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+  })
+
+  it('keeps position source freshness distinct from the capture clock', async () => {
+    mockGetSourceBySlug.mockResolvedValue({
+      ...src,
+      meta: { positions_delay_hours: 1 },
+    })
+    mockGetAdapter.mockReturnValue(positionsAdapter())
+    mockGetPositions.mockResolvedValue(bundle)
+
+    await expect(
+      processTierC(
+        {
+          data: { ...job.data, surface: 'positions' },
+        } as Job<TierCJobData>,
+        'local'
+      )
+    ).resolves.toMatchObject({ traderId: 42, surface: 'positions', rows: 1 })
+
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload).toMatchObject({
+      sourceAsOf: '2026-07-15T11:00:00.000Z',
+      observedAt: '2026-07-15T12:00:00.000Z',
+      publishedAt: null,
+    })
+    expect(renderPayload).not.toHaveProperty('asOf')
+  })
+
+  it('does not infer position source freshness without an explicit delay contract', async () => {
+    mockGetAdapter.mockReturnValue(positionsAdapter())
+    mockGetPositions.mockResolvedValue(bundle)
+
+    await processTierC(
+      { data: { ...job.data, surface: 'positions' } } as Job<TierCJobData>,
+      'local'
+    )
+
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload).toMatchObject({
+      sourceAsOf: null,
+      observedAt: '2026-07-15T12:00:00.000Z',
+      publishedAt: null,
+    })
+  })
+
+  it('fails closed when a position capture has no evidence page', async () => {
+    const adapter = positionsAdapter()
+    mockGetAdapter.mockReturnValue(adapter)
+    mockGetPositions.mockResolvedValue({ ...bundle, pages: [] })
+
+    await expect(
+      processTierC({ data: { ...job.data, surface: 'positions' } } as Job<TierCJobData>, 'local')
+    ).rejects.toThrow('positions capture returned no evidence page')
+
+    expect(adapter.parsePositions).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
   })
 
   it('rejects a source-specific unsupported heavy surface before opening a session', async () => {
