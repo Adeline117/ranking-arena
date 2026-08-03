@@ -68,6 +68,7 @@ describe('ExchangePartners', () => {
   it('renders one accessible link plus an inert tab duplicate for seamless animation', () => {
     const { container } = render(<ExchangePartners />)
 
+    expect(screen.getByTestId('interactive-source-strip')).toHaveClass('home-source-strip')
     expect(screen.getAllByRole('link')).toHaveLength(1)
     expect(container.querySelectorAll('a')).toHaveLength(2)
     expect(container.querySelector('a[aria-hidden="true"]')).toHaveAttribute('tabindex', '-1')

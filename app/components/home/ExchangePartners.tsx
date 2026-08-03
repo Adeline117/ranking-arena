@@ -73,6 +73,8 @@ export default function ExchangePartners() {
 
   return (
     <div
+      className="home-source-strip"
+      data-testid="interactive-source-strip"
       style={{
         overflow: 'hidden',
         padding: '10px 0',

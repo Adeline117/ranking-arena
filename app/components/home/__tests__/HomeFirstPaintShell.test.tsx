@@ -29,7 +29,7 @@ describe('HomeFirstPaintShell', () => {
         expect.stringContaining('three-col-right'),
       ])
     )
-    expect(screen.getByTestId('first-paint-source-strip')).toBeInTheDocument()
+    expect(screen.getByTestId('first-paint-source-strip')).toHaveClass('home-source-strip')
     expect(
       within(screen.getByTestId('first-paint-center')).getByText('Server rankings')
     ).toBeVisible()
@@ -55,6 +55,9 @@ describe('HomeFirstPaintShell', () => {
     )
     expect(criticalCss).toContain(
       'html:has(#homepage-interactive[data-home-ready="true"]) #ssr-home-content-shell{display:none}'
+    )
+    expect(criticalCss).toContain(
+      '@media(max-width:767px){.home-source-strip{display:none!important}}'
     )
     expect(criticalCss).not.toContain(
       'html:has(#homepage-interactive) #ssr-home-content-shell{display:none}'

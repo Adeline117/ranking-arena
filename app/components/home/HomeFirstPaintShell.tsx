@@ -64,6 +64,7 @@ export default function HomeFirstPaintShell({ children }: { children: ReactNode 
         />
       )}
       <div
+        className="home-source-strip"
         data-testid="first-paint-source-strip"
         aria-hidden="true"
         style={{

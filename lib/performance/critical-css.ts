@@ -180,6 +180,9 @@ iframe{display:block;max-width:100%}
 .home-page-root{min-height:100vh;background:var(--bg-primary,#0B0A10);color:var(--text-primary,#EDEDED)}
 .home-page-container{max-width:1400px;margin:0 auto;padding:8px 16px}
 @media(min-width:1441px){.home-page-container{max-width:1600px}}
+/* Mobile prioritizes the ranking controls over the secondary source marquee.
+   Apply this before the full stylesheet so first paint and hydration agree. */
+@media(max-width:767px){.home-source-strip{display:none!important}}
 /* Phase 2 is appended after the server shell, but mounting is not readiness.
    Keep the interactive tree out of layout until HomePageClient has committed
    usable data/error state, then swap both geometry-matched shells in one style
