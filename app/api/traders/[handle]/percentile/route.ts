@@ -18,6 +18,7 @@ import { resolveTrader } from '@/lib/data/unified'
 import { hasFeatureAccess } from '@/lib/types/premium'
 import _logger from '@/lib/logger'
 import { escapeLikePattern } from '@/lib/sanitize'
+import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
 
 export const runtime = 'nodejs'
 
@@ -81,14 +82,7 @@ export async function GET(
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin() as SupabaseClient
 
-    // 获取用户订阅等级
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('tier')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    const tier = subscription?.tier || 'free'
+    const tier = await getCanonicalSubscriptionTier(supabase, user.id)
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'score_breakdown')) {

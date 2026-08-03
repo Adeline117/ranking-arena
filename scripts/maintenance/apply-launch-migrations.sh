@@ -136,6 +136,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729054400_leaderboard_rank_generation_private_staging.sql
   20260729060000_stale_leaderboard_attempt_report.sql
   20260729061533_leaderboard_rank_generation_staging_only_writer.sql
+  20260729062000_atomic_trader_follow_limit.sql
   20260729063000_leaderboard_rank_staging_full_xid_guard.sql
   20260729064500_leaderboard_rank_generation_publication_plan.sql
   20260729065000_normalize_arena_score_input_platform_aliases.sql
@@ -175,6 +176,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260717120000_trader_follows_composite_identity.sql
   20260729061000_tier_a_execution_claim_enforcement.sql
   20260729021000_disable_legacy_api_tier_writer.sql
+  20260729062500_close_trader_follow_direct_writes.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover

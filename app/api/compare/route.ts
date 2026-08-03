@@ -14,6 +14,7 @@ import {
   parseCompareAccounts,
   type CompareAccountRef,
 } from '@/lib/compare/identity'
+import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
 
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
@@ -50,14 +51,7 @@ interface TraderCompareData {
  */
 export const GET = withAuth(
   async ({ supabase, user, request }) => {
-    // 获取用户订阅等级
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('tier')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    const tier = subscription?.tier || 'free'
+    const tier = PRO_FREE_PROMO ? 'free' : await getCanonicalSubscriptionTier(supabase, user.id)
 
     // 检查是否有权限。2026-07-04 修 U6-1(二次):此前只查 subscriptions.tier,
     // 不认 PRO_FREE_PROMO 全站限免 → promo 期间所有非 Pro 用户(即全体)对比 API

@@ -84,6 +84,10 @@ jest.mock('@/lib/types/premium', () => ({
   getFeatureLimits: jest.fn().mockReturnValue({ comparisonReportsPerMonth: 100 }),
 }))
 
+jest.mock('@/lib/premium/server-entitlement', () => ({
+  getCanonicalSubscriptionTier: jest.fn().mockResolvedValue('pro'),
+}))
+
 // Mock unified data layer
 const mockResolveTrader = jest.fn()
 const mockGetTraderDetail = jest.fn()

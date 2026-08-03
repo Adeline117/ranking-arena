@@ -12521,6 +12521,18 @@ export type Database = {
         }
         Returns: Json
       }
+      mutate_trader_follow_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_free_limit: number
+          p_pro_limit: number
+          p_promo_unlocked: boolean
+          p_source: string | null
+          p_trader_id: string
+        }
+        Returns: Json
+      }
       mutate_user_block_atomic: {
         Args: { p_action: string; p_actor_id: string; p_target_id: string }
         Returns: Json

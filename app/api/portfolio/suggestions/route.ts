@@ -22,6 +22,7 @@ import {
 } from '@/lib/utils/portfolio-builder'
 import { getFeatureLimits } from '@/lib/types/premium'
 import _logger from '@/lib/logger'
+import { getCanonicalSubscriptionTier } from '@/lib/premium/server-entitlement'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,24 +40,19 @@ export async function GET(request: NextRequest) {
 
     // 获取风险偏好参数
     const preferenceParam = searchParams.get('preference')
-    const preference = validateEnum(
-      preferenceParam,
-      ['conservative', 'balanced', 'aggressive'] as const
-    )
+    const preference = validateEnum(preferenceParam, [
+      'conservative',
+      'balanced',
+      'aggressive',
+    ] as const)
 
     // 获取当前用户（检查权限）
     const user = await getAuthUser(request)
-    
-    // 获取用户订阅信息
+
+    // Authorize from exact entitlement authority, never a mutable projection.
     let userTier: 'free' | 'pro' = 'free'
     if (user) {
-      const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('tier')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      
-      userTier = (subscription?.tier as typeof userTier) || 'free'
+      userTier = await getCanonicalSubscriptionTier(supabase, user.id)
     }
 
     // 检查权限
@@ -81,7 +77,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Filter to positive ROI traders only
-    const filteredTraders = leaderboardTraders.filter(t => (t.roi ?? 0) >= 10)
+    const filteredTraders = leaderboardTraders.filter((t) => (t.roi ?? 0) >= 10)
 
     if (filteredTraders.length < 10) {
       return success({
@@ -91,7 +87,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Map unified traders to TraderForPortfolio format
-    const traders: TraderForPortfolio[] = filteredTraders.map(t => {
+    const traders: TraderForPortfolio[] = filteredTraders.map((t) => {
       return {
         trader_id: t.traderKey,
         source: t.platform,
@@ -101,8 +97,11 @@ export async function GET(request: NextRequest) {
         win_rate: t.winRate,
         arena_score: t.arenaScore != null ? Math.round(t.arenaScore) : 0,
         followers: t.followers || 0,
-        source_type: t.platform.includes('spot') ? 'spot' as const :
-                     t.platform.includes('web3') ? 'web3' as const : 'futures' as const,
+        source_type: t.platform.includes('spot')
+          ? ('spot' as const)
+          : t.platform.includes('web3')
+            ? ('web3' as const)
+            : ('futures' as const),
       }
     })
 
