@@ -531,7 +531,12 @@ export function RankingFilters({
       >
         {/* Trader type filter — inline */}
         {onTraderTypeFilterChange && (
-          <Box style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <Box
+            role="group"
+            aria-label={t('traderTypeFilter')}
+            className="ranking-trader-type-filter"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
+          >
             {[
               { value: 'all' as const, label: t('allTraderTypes') },
               { value: 'human' as const, label: t('isHuman') },

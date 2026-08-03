@@ -1589,13 +1589,23 @@
     display: none !important;
   }
 
-  /* 4. Ranking toolbar: ensure category tabs get full width, tools wrap below */
+  /* 4. Ranking toolbar: long localized trader-type labels scroll inside their
+     own lane instead of pushing Filter / Compare beyond the clipped card. */
   .ranking-toolbar-row {
     gap: 4px !important;
   }
-  .ranking-toolbar-row > *:first-child {
-    width: 100%;
-    flex: unset !important;
+  .ranking-toolbar-row .ranking-trader-type-filter {
+    width: auto !important;
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 1 auto !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .ranking-toolbar-row .ranking-trader-type-filter::-webkit-scrollbar {
+    display: none;
   }
 
   /* 4. Hot page: ensure post title links have adequate touch targets */
