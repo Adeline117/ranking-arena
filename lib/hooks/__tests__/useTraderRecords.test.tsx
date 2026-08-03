@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useCopierAggregate } from '../useTraderRecords'
+import { useCopierAggregate, useTraderRecords } from '../useTraderRecords'
 import { fetcher } from '@/lib/hooks/fetchers'
-import type { CopierAggregate } from '@/lib/data/serving/types'
+import type { CopierAggregate, RecordsPage } from '@/lib/data/serving/types'
 import type { ApiSuccessResponse } from '@/lib/types/index'
 
 jest.mock('@/lib/hooks/fetchers', () => ({ fetcher: jest.fn() }))
@@ -68,6 +68,122 @@ describe('useCopierAggregate subject identity', () => {
       await pendingB.promise
     })
     await waitFor(() => expect(view.result.current.aggregate?.copierCount).toBe(3))
+
+    view.unmount()
+    queryClient.clear()
+  })
+})
+
+function recordsResponse(data: RecordsPage): ApiSuccessResponse<RecordsPage> {
+  return { success: true, data }
+}
+
+function recordsPage(overrides: Partial<RecordsPage> = {}): RecordsPage {
+  return {
+    rows: [],
+    nextCursor: null,
+    provenance: { source: 'gmx', asOf: '2026-07-29T12:00:00.000Z' },
+    cacheState: 'warm',
+    ...overrides,
+  }
+}
+
+describe('useTraderRecords history completeness', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it.each([
+    ['cold-fetched', 'partial', 'interactive_preview'],
+    ['warm', 'unknown', 'history_evidence_not_bound'],
+    ['pending', 'unknown', 'history_evidence_not_bound'],
+  ] as const)(
+    'fails closed for a legacy %s page without completeness metadata',
+    async (cacheState, state, reason) => {
+      ;(fetcher as jest.Mock).mockResolvedValue(recordsResponse(recordsPage({ cacheState })))
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      })
+
+      function Wrapper({ children }: { children: ReactNode }) {
+        return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      }
+
+      const view = renderHook(
+        () =>
+          useTraderRecords({
+            source: 'gmx',
+            exchangeTraderId: 'trader-a',
+            kind: 'position_history',
+            enabled: true,
+          }),
+        { wrapper: Wrapper }
+      )
+
+      await waitFor(() => expect(view.result.current.completeness?.state).toBe(state))
+      expect(view.result.current.completeness?.reason).toBe(reason)
+
+      view.unmount()
+      queryClient.clear()
+    }
+  )
+
+  it('aggregates every page without allowing later pages to upgrade trust', async () => {
+    ;(fetcher as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('cursor=page-3')) {
+        return Promise.resolve(recordsResponse(recordsPage()))
+      }
+      if (url.includes('cursor=page-2')) {
+        return Promise.resolve(
+          recordsResponse(
+            recordsPage({
+              nextCursor: 'page-3',
+              completeness: { state: 'partial', reason: 'interactive_preview' },
+            })
+          )
+        )
+      }
+      return Promise.resolve(
+        recordsResponse(
+          recordsPage({
+            nextCursor: 'page-2',
+            completeness: {
+              state: 'complete',
+              reason: 'verified_terminal_history',
+              evidenceState: 'verified',
+              scanTerminalState: 'exhausted',
+              blockerReasons: [],
+            },
+          })
+        )
+      )
+    })
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'position_history',
+          enabled: true,
+        }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.completeness?.state).toBe('complete'))
+    await act(async () => {
+      await view.result.current.fetchNextPage()
+    })
+    await waitFor(() => expect(view.result.current.completeness?.state).toBe('partial'))
+    await act(async () => {
+      await view.result.current.fetchNextPage()
+    })
+    await waitFor(() => expect(view.result.current.completeness?.state).toBe('unknown'))
 
     view.unmount()
     queryClient.clear()

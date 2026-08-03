@@ -6209,6 +6209,12 @@ const en = {
   tabCopiers: 'Copiers',
   recordsEmpty: 'No records to show',
   recordsLoadMore: 'Load more',
+  historyCompletenessPartialTitle: 'Partial history',
+  historyCompletenessPartialDescription:
+    'Only the captured preview is shown; full coverage is not verified. These records are not used in rankings.',
+  historyCompletenessUnknownTitle: 'History completeness unknown',
+  historyCompletenessUnknownDescription:
+    'Full-history evidence is not linked to this page. These records are not used in rankings.',
   assetPreference: 'Asset Preference',
   assetOther: 'Other',
   metaLastTrade: 'Last trade',

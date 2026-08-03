@@ -5857,6 +5857,12 @@ const ja = {
   tabCopiers: 'コピーユーザー',
   recordsEmpty: '記録がありません',
   recordsLoadMore: 'もっと見る',
+  historyCompletenessPartialTitle: '履歴は一部のみです',
+  historyCompletenessPartialDescription:
+    '取得済みのプレビューのみを表示しています。全期間の網羅性は未検証で、ランキングには使用されません。',
+  historyCompletenessUnknownTitle: '履歴の完全性は不明です',
+  historyCompletenessUnknownDescription:
+    'このページには完全な履歴証拠が紐付いていません。これらの記録はランキングには使用されません。',
   assetPreference: '資産選好',
   assetOther: 'その他',
   metaLastTrade: '最終取引',

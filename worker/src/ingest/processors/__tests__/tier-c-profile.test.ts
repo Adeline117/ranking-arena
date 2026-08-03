@@ -496,6 +496,17 @@ describe('Tier-C incomplete profile window gate', () => {
       expect.not.objectContaining({ raw: expect.anything() }),
     ])
     expect(renderPayload.nextCursor).toBeNull()
+    expect(renderPayload.completeness).toEqual({
+      state: 'partial',
+      reason: 'interactive_preview',
+      evidenceState: 'caller_limited',
+      scanTerminalState: 'partial',
+      blockerReasons: ['caller_limit'],
+    })
+    const cacheCall = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('arena.profile_cache')
+    )
+    expect(JSON.parse(String(cacheCall?.[1]?.[4])).completeness).toEqual(renderPayload.completeness)
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
   })
 
@@ -528,6 +539,14 @@ describe('Tier-C incomplete profile window gate', () => {
       [positionRow(1)],
       null
     )
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload.completeness).toEqual({
+      state: 'partial',
+      reason: 'interactive_preview',
+      evidenceState: 'verified',
+      scanTerminalState: 'exhausted',
+      blockerReasons: [],
+    })
   })
 
   it('persists upstream-error position-history RAW without rendering or publishing rows', async () => {
