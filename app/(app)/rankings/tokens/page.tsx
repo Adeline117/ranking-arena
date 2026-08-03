@@ -1,11 +1,16 @@
 import type { Metadata } from 'next'
-import { unstable_cache } from 'next/cache'
 import TokensIndexClient from './TokensIndexClient'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
+import {
+  getPopularTokenRankingSnapshot,
+  type PopularTokenRankingSnapshot,
+} from '@/lib/rankings/token-ranking-snapshot'
 
-export const revalidate = 3600 // ISR: 1 hour (matches API cache)
+// The publication head is the cache boundary. Request-time rendering prevents
+// an hour-old ISR payload from outliving the atomically published generation.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // SSR timeout guard: getPopularTokens now reads the pre-aggregated MV via RPC
 // (fast), but keep a bound so a cold cache-miss never hangs the page render.
@@ -38,61 +43,27 @@ export const metadata: Metadata = {
   },
 }
 
-export interface PopularToken {
-  token: string
-  trade_count: number
-  trader_count: number
-  total_pnl: number
-}
-
-export async function loadPopularTokensSSR(): Promise<PopularToken[]> {
-  const supabase = getSupabaseAdmin()
-  // SQL aggregate via the same RPC as /api/rankings/by-token — replaces the
-  // cold-path 50k-row trader_position_history scan into JS (was guarded only
-  // by a 4s SSR timeout). The MV now filters junk symbols at source
-  // (migration 20260709232817 — mirrors isValidTokenSymbol), so the RPC's
-  // top-50 is already clean; the filter below is belt-and-suspenders.
-  const { data, error } = await supabase.rpc('get_popular_tokens', {
-    lookback_days: 90,
-    max_tokens: 50,
-  })
-  if (error) throw new Error(error.message)
-  if (!data || data.length === 0) return []
-
-  return (
-    data as Array<{
-      token: string
-      trade_count: number
-      trader_count: number
-      total_pnl: number
-    }>
+export async function loadPopularTokensSSR(
+  signal?: AbortSignal
+): Promise<PopularTokenRankingSnapshot> {
+  return getPopularTokenRankingSnapshot(
+    getSupabaseAdmin(),
+    { limit: 50 },
+    signal ? { signal } : undefined
   )
-    .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
-    .map((row) => ({
-      token: row.token,
-      trade_count: Number(row.trade_count),
-      trader_count: Number(row.trader_count),
-      total_pnl: Number(row.total_pnl),
-    }))
 }
 
-// Bump the cache namespace so empty values written by the former fail-soft
-// loader cannot survive this error-contract change for another ISR window.
-const getPopularTokens = unstable_cache(loadPopularTokensSSR, ['popular-tokens-ssr-v2'], {
-  revalidate: 3600,
-  tags: ['rankings', 'popular-tokens'],
-})
-
-async function withSsrTimeout<T>(promise: Promise<T>): Promise<T> {
+async function withSsrTimeout<T>(loader: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController()
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
-      promise,
+      loader(controller.signal),
       new Promise<T>((_resolve, reject) => {
-        timeout = setTimeout(
-          () => reject(new Error('Token rankings SSR timed out')),
-          SSR_TIMEOUT_MS
-        )
+        timeout = setTimeout(() => {
+          controller.abort()
+          reject(new Error('Token rankings SSR timed out'))
+        }, SSR_TIMEOUT_MS)
       }),
     ])
   } finally {
@@ -101,13 +72,19 @@ async function withSsrTimeout<T>(promise: Promise<T>): Promise<T> {
 }
 
 export default async function TokensPage() {
-  let initialTokens: PopularToken[] = []
+  let initialSnapshot: PopularTokenRankingSnapshot | null = null
   let initialStatus: 'success' | 'error' = 'success'
   try {
-    initialTokens = await withSsrTimeout(getPopularTokens())
+    initialSnapshot = await withSsrTimeout((signal) => loadPopularTokensSSR(signal))
   } catch {
     initialStatus = 'error'
   }
 
-  return <TokensIndexClient initialTokens={initialTokens} initialStatus={initialStatus} />
+  return (
+    <TokensIndexClient
+      key={initialSnapshot?.generation ?? 'unavailable'}
+      initialSnapshot={initialSnapshot}
+      initialStatus={initialStatus}
+    />
+  )
 }

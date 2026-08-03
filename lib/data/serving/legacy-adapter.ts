@@ -76,7 +76,7 @@ const num = (v: unknown): number => {
 /** Like num() but returns null (not 0) for missing/non-finite input, so
  *  callers can distinguish "genuinely absent" from "measured zero". */
 const numOrNull = (v: unknown): number | null => {
-  if (v == null || v === '') return null
+  if (v == null || (typeof v === 'string' && v.trim() === '')) return null
   const n = typeof v === 'string' ? Number(v) : (v as number)
   return Number.isFinite(n) ? n : null
 }
@@ -222,7 +222,9 @@ export function servingStatsToPerformance(byTf: {
   // Set only when present so a source that omits a metric NULL-collapses (renders
   // '--') instead of a misleading 0 — matches the ServingProfilePanel MetricGrid.
   const set = (v: unknown): number | undefined => {
-    if (v === null || v === undefined || v === '') return undefined
+    if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) {
+      return undefined
+    }
     const n = Number(v)
     return Number.isFinite(n) ? n : undefined
   }
@@ -230,8 +232,8 @@ export function servingStatsToPerformance(byTf: {
   const ex = (o: Record<string, unknown> | null | undefined, k: string): number | undefined =>
     set(o?.[k])
   if (s7) {
-    perf.roi_7d = num(s7.roi)
-    perf.pnl_7d = num(s7.pnl)
+    perf.roi_7d = set(s7.roi)
+    perf.pnl_7d = set(s7.pnl)
     perf.win_rate_7d = set(s7.win_rate)
     perf.max_drawdown_7d = set(s7.mdd)
     perf.sharpe_ratio_7d = set(s7.sharpe)
@@ -241,8 +243,8 @@ export function servingStatsToPerformance(byTf: {
     perf.total_positions_7d = set(s7.total_positions)
   }
   if (s30) {
-    perf.roi_30d = num(s30.roi)
-    perf.pnl_30d = num(s30.pnl)
+    perf.roi_30d = set(s30.roi)
+    perf.pnl_30d = set(s30.pnl)
     perf.win_rate_30d = set(s30.win_rate)
     perf.max_drawdown_30d = set(s30.mdd)
     perf.sharpe_ratio_30d = set(s30.sharpe)
@@ -252,8 +254,8 @@ export function servingStatsToPerformance(byTf: {
     perf.total_positions_30d = set(s30.total_positions)
   }
   if (s90) {
-    perf.roi_90d = num(s90.roi)
-    perf.pnl = num(s90.pnl)
+    perf.roi_90d = set(s90.roi)
+    perf.pnl = set(s90.pnl)
     perf.win_rate = set(s90.win_rate)
     perf.max_drawdown = set(s90.mdd)
     perf.sharpe_ratio = set(s90.sharpe)
@@ -302,44 +304,61 @@ export function applyServingScoresToPerformance(
 }
 
 /** Merge a serving module's roi + pnl series into [{date, roi, pnl}] (legacy
- *  EquityCurve point), de-duped by day and sorted — same logic as CoreCharts. */
+ *  EquityCurve point), de-duped by day and sorted — same logic as CoreCharts.
+ *  The legacy consumers require both values, so incomplete points are omitted
+ *  rather than silently converting an unknown field to zero. */
 function mergeRoiPnl(series: Series | undefined): TfChartPoint[] {
   if (!series) return []
   const roi = series.roi ?? series.roi_trading ?? []
   const pnl = series.pnl ?? series.cumulative_pnl ?? series.pnl_trading ?? []
   const accountValue = series.account_value ?? series.equity ?? []
-  const byDate = new Map<string, TfChartPoint>()
+  type PartialPoint = { date: string; roi: number | null; pnl: number | null }
+  const byDate = new Map<string, PartialPoint>()
   for (const p of roi) {
+    const value = numOrNull(p.value)
+    if (value == null) continue
     const date = p.ts.slice(0, 10)
-    byDate.set(date, { date, roi: p.value, pnl: byDate.get(date)?.pnl ?? 0 })
-  }
-  for (const p of pnl) {
-    const date = p.ts.slice(0, 10)
-    const row = byDate.get(date) ?? { date, roi: 0, pnl: 0 }
-    row.pnl = p.value
+    const row = byDate.get(date) ?? { date, roi: null, pnl: null }
+    row.roi = value
     byDate.set(date, row)
   }
-  const points = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
+  for (const p of pnl) {
+    const value = numOrNull(p.value)
+    if (value == null) continue
+    const date = p.ts.slice(0, 10)
+    const row = byDate.get(date) ?? { date, roi: null, pnl: null }
+    row.pnl = value
+    byDate.set(date, row)
+  }
 
   // Some sources (e.g. hyperliquid) expose only a pnl + account_value series and
-  // NO roi series — every point above defaulted roi:0, which silently poisoned
-  // the Copy-Trade Simulator (always +0.0%) and the Daily-Returns histogram
-  // (every day bucketed at 0%). Derive roi from pnl against the deployed
+  // no matching roi observation. Derive roi from pnl against the deployed
   // principal at each point: base_t = account_value_t − pnl_t (net capital,
   // deposit-aware — a plain account_value_0 base blows up when the account
-  // started tiny then took a large deposit). Only when a genuine roi series is
-  // truly absent — never to overwrite real (possibly flat) roi values.
-  if (roi.length === 0 && pnl.length > 0 && accountValue.length > 0) {
-    const avByDate = new Map<string, number>()
-    for (const p of accountValue) avByDate.set(p.ts.slice(0, 10), p.value)
-    for (const row of points) {
-      const av = avByDate.get(row.date)
-      if (av == null) continue
-      const base = av - row.pnl
-      if (base > 0) row.roi = (row.pnl / base) * 100
-    }
+  // started tiny then took a large deposit). Exact source observations always
+  // win, including a measured zero; derivation only fills a missing same-day ROI.
+  const avByDate = new Map<string, number>()
+  for (const p of accountValue) {
+    const value = numOrNull(p.value)
+    if (value != null) avByDate.set(p.ts.slice(0, 10), value)
   }
-  return points
+  for (const row of byDate.values()) {
+    if (row.roi != null || row.pnl == null) continue
+    const accountValueAtDate = avByDate.get(row.date)
+    if (accountValueAtDate == null) continue
+    const base = accountValueAtDate - row.pnl
+    if (base > 0) row.roi = (row.pnl / base) * 100
+  }
+
+  return Array.from(byDate.values())
+    .filter(
+      (point): point is TfChartPoint =>
+        point.roi != null &&
+        Number.isFinite(point.roi) &&
+        point.pnl != null &&
+        Number.isFinite(point.pnl)
+    )
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 /** Per-timeframe serving series → legacy EquityCurveData ({7D,30D,90D}). */

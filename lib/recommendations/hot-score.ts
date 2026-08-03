@@ -103,9 +103,11 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
       'source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate, followers'
     )
     .eq('season_id', '90D')
+    .not('rank', 'is', null)
     .not('arena_score', 'is', null)
     .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
+    .order('rank', { ascending: true, nullsFirst: false })
     .limit(300)
 
   if (ranksErr || !ranks || ranks.length === 0) {

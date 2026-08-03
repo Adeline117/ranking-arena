@@ -4,17 +4,17 @@
  * Two end-of-season housekeeping phases:
  *
  *   • rerankAllRows() — fix rank-drift after the incremental upsert. Calls
- *     rerank_leaderboard(p_season_id) RPC; falls back to inline ORDER BY +
- *     batched UPSERT if the RPC isn't installed (fresh databases).
+ *     the transaction-scoped rerank_public_eligible_leaderboard RPC and fails
+ *     closed when that required finalizer is unavailable.
  *
  *   • cleanupStaleRows() — delete old computed rows only when their SOURCE
  *     currently has a fresh source-data watermark. A wholly stale source keeps
  *     its last-good rows so the public board can serve them with an honest
  *     stale flag.
  *
- * Both are LOW-risk: each runs late, neither blocks the upsert, both are
- * skip-on-deadline. Extracted from route.ts as part of the computeSeason
- * main-loop split (TASKS.md "Open follow-ups").
+ * Re-ranking and per-platform cleanup finalize the current publication cohort:
+ * their failures must propagate. Legacy stale-row cleanup is deliberately
+ * different post-publication maintenance and remains best-effort.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -26,45 +26,37 @@ const logger = createLogger('compute-leaderboard')
 
 const STALE_ROW_AGE_MS = 5 * 24 * 60 * 60 * 1000
 
+async function runDatabaseOperation<T>(
+  context: string,
+  operation: () => PromiseLike<T>
+): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    throw new Error(`${context}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 /**
- * Re-rank every row for the given season so `rank` matches `arena_score`
- * DESC ordering. Tries the rerank_leaderboard RPC first, falls back to an
- * inline SELECT + batched UPSERT if the RPC is missing (Postgres error
- * code 42883 = "function does not exist"). Non-critical: any failure is
- * logged and swallowed so the cron returns success.
+ * Atomically assign ranks to the database-defined public-eligible cohort and
+ * clear rank from every ineligible row. The required RPC owns one snapshot,
+ * one authority lookup, and one set-based UPDATE. A client-side fallback
+ * cannot reproduce that transaction boundary and therefore must not publish.
  */
 export async function rerankAllRows(supabase: SupabaseClient, season: Period): Promise<void> {
-  try {
-    const { error: rerankErr } = await supabase.rpc('rerank_leaderboard', { p_season_id: season })
-    if (!rerankErr) return
-
-    if (rerankErr.code === '42883') {
-      // RPC not available — re-rank inline (slower but correct)
-      const { data: allRows } = await supabase
-        .from('leaderboard_ranks')
-        .select('id, arena_score')
-        .eq('season_id', season)
-        .order('arena_score', { ascending: false, nullsFirst: false })
-      if (allRows?.length) {
-        const rerankUpdates = allRows.map((r: { id: string }, idx: number) => ({
-          id: r.id,
-          rank: idx + 1,
-        }))
-        // Batch size 100 (down from 500) to reduce lock hold time — large upserts
-        // hold row locks that block concurrent SSR SELECT queries on leaderboard_ranks.
-        for (let i = 0; i < rerankUpdates.length; i += 100) {
-          await supabase
-            .from('leaderboard_ranks')
-            .upsert(rerankUpdates.slice(i, i + 100), { onConflict: 'id' })
-        }
-        logger.info(`${season}: re-ranked ${rerankUpdates.length} rows (inline fallback)`)
-      }
-      return
-    }
-
-    logger.warn(`${season}: re-rank failed: ${rerankErr.message}`)
-  } catch (e) {
-    logger.warn(`${season}: re-rank exception (non-critical):`, e)
+  const { data: rerankedRows, error: rerankErr } = await runDatabaseOperation(
+    `[${season}] rerank RPC threw`,
+    () => supabase.rpc('rerank_public_eligible_leaderboard', { p_season_id: season })
+  )
+  if (rerankErr) {
+    throw new Error(
+      `[${season}] required eligibility-aware rerank RPC failed (${rerankErr.code ?? 'unknown'}): ${
+        rerankErr.message
+      }`
+    )
+  }
+  if (!Number.isSafeInteger(rerankedRows) || rerankedRows < 0) {
+    throw new Error(`[${season}] eligibility-aware rerank RPC returned an invalid result`)
   }
 }
 
@@ -75,44 +67,59 @@ export async function rerankAllRows(supabase: SupabaseClient, season: Period): P
  * last-good board.
  *
  * Limits to 5000 rows per cron cycle so a backlog can't blow the time
- * budget; the next cron picks up where this one left off.
+ * budget; the next cron picks up where this one left off. This helper is
+ * best-effort maintenance only: callers must never treat its result as proof
+ * that the current publication cohort was finalized.
  */
 export async function cleanupStaleRows(supabase: SupabaseClient, season: Period): Promise<number> {
-  const sourceCutoff = new Date(Date.now() - RANKING_SOURCE_STALE_MS).toISOString()
-  const { data: freshSourceRows, error: freshnessError } = await supabase
-    .from('leaderboard_source_freshness')
-    .select('source')
-    .eq('season_id', season)
-    .gte('source_as_of', sourceCutoff)
+  try {
+    const sourceCutoff = new Date(Date.now() - RANKING_SOURCE_STALE_MS).toISOString()
+    const { data: freshSourceRows, error: freshnessError } = await supabase
+      .from('leaderboard_source_freshness')
+      .select('source')
+      .eq('season_id', season)
+      .gte('source_as_of', sourceCutoff)
 
-  // Missing/unreadable provenance must never authorize deletion.
-  if (freshnessError || !freshSourceRows?.length) return 0
-  const freshSources = new Set(
-    freshSourceRows.map((row: { source: string }) => row.source).filter(Boolean)
-  )
+    // Missing/unreadable provenance must never authorize deletion.
+    if (freshnessError || !freshSourceRows?.length) return 0
+    const freshSources = new Set(
+      freshSourceRows.map((row: { source: string }) => row.source).filter(Boolean)
+    )
 
-  const cutoff = new Date(Date.now() - STALE_ROW_AGE_MS).toISOString()
-  const { data: staleRows, error: staleErr } = await supabase
-    .from('leaderboard_ranks')
-    .select('id,source')
-    .eq('season_id', season)
-    .lt('computed_at', cutoff)
-    .limit(5000)
-
-  if (staleErr || !staleRows || staleRows.length === 0) return 0
-
-  const staleIds = staleRows
-    .filter((row: { source: string }) => freshSources.has(row.source))
-    .map((row: { id: string }) => row.id)
-  if (staleIds.length === 0) return 0
-
-  for (let i = 0; i < staleIds.length; i += 500) {
-    await supabase
+    const cutoff = new Date(Date.now() - STALE_ROW_AGE_MS).toISOString()
+    const { data: staleRows, error: staleErr } = await supabase
       .from('leaderboard_ranks')
-      .delete()
-      .in('id', staleIds.slice(i, i + 500))
+      .select('id,source')
+      .eq('season_id', season)
+      .lt('computed_at', cutoff)
+      .limit(5000)
+
+    if (staleErr || !staleRows || staleRows.length === 0) return 0
+
+    const staleIds = staleRows
+      .filter((row: { source: string }) => freshSources.has(row.source))
+      .map((row: { id: string }) => row.id)
+    if (staleIds.length === 0) return 0
+
+    let deleted = 0
+    for (let i = 0; i < staleIds.length; i += 500) {
+      const batch = staleIds.slice(i, i + 500)
+      const { error } = await supabase.from('leaderboard_ranks').delete().in('id', batch)
+      if (error) {
+        logger.warn(`[${season}] best-effort stale-row delete failed: ${error.message}`)
+        return deleted
+      }
+      deleted += batch.length
+    }
+    return deleted
+  } catch (error) {
+    logger.warn(
+      `[${season}] best-effort stale-row cleanup threw: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+    return 0
   }
-  return staleIds.length
 }
 
 /**
@@ -135,53 +142,35 @@ export async function atomicPlatformCleanup(
 
   for (const platform of freshPlatforms) {
     const traderIds = scoredTradersByPlatform.get(platform)
-    if (!traderIds || traderIds.length === 0) continue
-
-    try {
-      const { data, error } = await supabase.rpc('cleanup_stale_platform_rows', {
-        p_season_id: season,
-        p_source: platform,
-        p_keep_trader_ids: traderIds,
-      })
-
-      if (error) {
-        // RPC not available yet — fall back to manual delete
-        if (error.code === '42883') {
-          const { data: existing } = await supabase
-            .from('leaderboard_ranks')
-            .select('id, source_trader_id')
-            .eq('season_id', season)
-            .eq('source', platform)
-
-          if (existing) {
-            const keepSet = new Set(traderIds)
-            const toDelete = existing
-              .filter((r: { source_trader_id: string }) => !keepSet.has(r.source_trader_id))
-              .map((r: { id: string }) => r.id)
-
-            for (let i = 0; i < toDelete.length; i += 500) {
-              await supabase
-                .from('leaderboard_ranks')
-                .delete()
-                .in('id', toDelete.slice(i, i + 500))
-            }
-            totalDeleted += toDelete.length
-          }
-        } else {
-          logger.warn(`${season}: cleanup RPC failed for ${platform}: ${error.message}`)
-        }
-      } else {
-        const deleted = typeof data === 'number' ? data : 0
-        if (deleted > 0) {
-          logger.info(`${season}: cleaned ${deleted} zombie rows from ${platform}`)
-        }
-        totalDeleted += deleted
-      }
-    } catch (e) {
-      logger.warn(
-        `${season}: atomicPlatformCleanup failed for ${platform}: ${e instanceof Error ? e.message : String(e)}`
+    if (traderIds === undefined) {
+      throw new Error(
+        `[${season}] atomic cleanup missing publication cohort for fresh platform ${platform}`
       )
     }
+    // An explicit empty keep-set is authoritative: the source was evaluated
+    // and published zero eligible rows, so cleanup must remove its old rows.
+    // A missing map key is the ambiguous/error case handled above.
+
+    const { data, error } = await runDatabaseOperation(
+      `[${season}] atomic cleanup RPC threw for ${platform}`,
+      () =>
+        supabase.rpc('cleanup_stale_platform_rows', {
+          p_season_id: season,
+          p_source: platform,
+          p_keep_trader_ids: traderIds,
+        })
+    )
+
+    if (!error) {
+      if (typeof data !== 'number' || !Number.isSafeInteger(data) || data < 0) {
+        throw new Error(`[${season}] atomic cleanup RPC returned an invalid count for ${platform}`)
+      }
+      if (data > 0) logger.info(`${season}: cleaned ${data} zombie rows from ${platform}`)
+      totalDeleted += data
+      continue
+    }
+
+    throw new Error(`[${season}] atomic cleanup RPC failed for ${platform}: ${error.message}`)
   }
 
   return totalDeleted

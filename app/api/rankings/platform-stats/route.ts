@@ -17,6 +17,8 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { logger } from '@/lib/logger'
 import {
   isPublicRankingSourceAllowed,
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
   publicRankingCacheKey,
 } from '@/lib/rankings/publication-policy'
 
@@ -74,14 +76,15 @@ export async function GET(request: NextRequest) {
           }))
       },
       'cold', // 1-hour Redis TTL
-      ['rankings', 'platform-stats']
+      [PUBLIC_RANKING_REDIS_TAG, 'platform-stats'],
+      { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
     )
 
     return NextResponse.json(
       { platforms: platformStats, season: '90D' },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
+          'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
         },
       }
     )

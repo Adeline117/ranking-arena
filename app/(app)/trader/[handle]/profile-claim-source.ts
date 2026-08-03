@@ -8,6 +8,38 @@ export interface ExactTraderClaimData {
   profile?: VerifiedTraderProfileData
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function exactString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value === value.trim() ? value : null
+}
+
+/** Runtime boundary for the no-store authorization probe. */
+export function parseExactTraderClaimEnvelope(value: unknown): ExactTraderClaimData | null {
+  const envelope = record(value)
+  const data = record(envelope?.data)
+  const traderId = exactString(data?.trader_id)
+  const source = exactString(data?.source)
+  if (envelope?.success !== true || !data || !traderId || !source) return null
+  if (typeof data.is_verified !== 'boolean') return null
+  if (data.owner_id !== undefined && data.owner_id !== null && !exactString(data.owner_id)) {
+    return null
+  }
+  if (data.profile !== undefined && data.profile !== null && !record(data.profile)) return null
+
+  return {
+    trader_id: traderId,
+    source,
+    is_verified: data.is_verified,
+    owner_id: data.owner_id as string | null | undefined,
+    profile: (data.profile as VerifiedTraderProfileData | null | undefined) ?? undefined,
+  }
+}
+
 interface TraderClaimSourcesInput {
   traderId: string
   source: string

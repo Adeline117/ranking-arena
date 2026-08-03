@@ -1,13 +1,13 @@
 'use client'
 
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
 import { getAffiliateReferral } from '@/lib/config/affiliate'
 import { sendTrackingEvent } from '@/lib/tracking'
+import { linkedAccountDisplayLabel } from './linked-account-view'
 
 export interface ExchangeLink {
   platform: string
@@ -50,15 +50,16 @@ export default function ExchangeLinksBar({
       const url = copyUrl || dexUrl
       if (!url) return null
 
-      const name = EXCHANGE_NAMES[acc.platform.toLowerCase()] || acc.platform
+      const name = linkedAccountDisplayLabel(acc, allAccounts)
       const isCopyTrade = !!copyUrl
       const referral = getAffiliateReferral(acc.platform)
 
       // Highlight when this account is the active tab
-      const isActive =
-        activeAccount && activeAccount !== 'all'
-          ? activeAccount === `${acc.platform}:${acc.traderKey}`
-          : acc.platform === primary.platform && acc.traderKey === primary.traderKey
+      const isActive = Boolean(
+        activeAccount &&
+        activeAccount !== 'all' &&
+        activeAccount === `${acc.platform}:${acc.traderKey}`
+      )
 
       return { acc, url, name, isCopyTrade, referral, isActive }
     })
@@ -75,6 +76,7 @@ export default function ExchangeLinksBar({
 
   return (
     <Box
+      data-testid="exchange-links-bar"
       style={{
         display: 'flex',
         gap: 8,

@@ -109,21 +109,80 @@ function pickDefaultPeriod(
   return { period: '90D', inception: false }
 }
 
+function periodToTimeframe(period: Period): 7 | 30 | 90 {
+  return Number(period.replace('D', '')) as 7 | 30 | 90
+}
+
+function canRequestTimeframe(
+  capability: SourceCapability | null,
+  traderKind: TraderFirstScreen['traderKind'],
+  period: Period,
+  inception: boolean
+): boolean {
+  if (inception) return traderKind === 'bot' && capability?.inceptionTf === true
+  const key = String(periodToTimeframe(period)) as '7' | '30' | '90'
+  // A missing capability is unknown (the RPC may have timed out), while an
+  // explicit `absent` is authoritative and must never reach the endpoint.
+  return capability?.timeframes[key] !== 'absent'
+}
+
 export default function ServingProfilePanel({ firstScreen, capability }: ServingProfilePanelProps) {
   const { t } = useLanguage()
   const { source, exchangeTraderId } = firstScreen
 
-  const initialPeriod = useMemo(
-    () => pickDefaultPeriod(capability, firstScreen.entries?.map((e) => e.timeframe) ?? []),
-    [capability, firstScreen.entries]
+  const entryTimeframes = useMemo(
+    () => [...new Set(firstScreen.entries?.map((entry) => entry.timeframe) ?? [])].sort(),
+    [firstScreen.entries]
   )
-  const [period, setPeriod] = useState<Period>(initialPeriod.period)
-  const [inceptionSelected, setInceptionSelected] = useState(initialPeriod.inception)
-  const tf: ServingTimeframe = inceptionSelected
-    ? 'inception'
-    : (Number(period.replace('D', '')) as 7 | 30 | 90)
 
-  const core = useTraderCore({ source, exchangeTraderId, tf })
+  const initialPeriod = useMemo(
+    () => pickDefaultPeriod(capability, entryTimeframes),
+    [capability, entryTimeframes]
+  )
+  const timeframeScope = JSON.stringify([
+    source,
+    exchangeTraderId,
+    firstScreen.traderKind,
+    capability?.timeframes['7'] ?? null,
+    capability?.timeframes['30'] ?? null,
+    capability?.timeframes['90'] ?? null,
+    capability?.inceptionTf ?? null,
+    entryTimeframes,
+  ])
+  const [timeframeSelection, setTimeframeSelection] = useState<{
+    scope: string
+    period: Period
+    inception: boolean
+  } | null>(null)
+  const selectedForCurrentScope =
+    timeframeSelection?.scope === timeframeScope &&
+    canRequestTimeframe(
+      capability,
+      firstScreen.traderKind,
+      timeframeSelection.period,
+      timeframeSelection.inception
+    )
+      ? timeframeSelection
+      : null
+  // Scope the user's choice to the exact subject + timeframe capability. On
+  // a linked-account switch, the new default is used during the first render,
+  // before any query hook can observe the old subject's timeframe.
+  const period = selectedForCurrentScope?.period ?? initialPeriod.period
+  const inceptionSelected = selectedForCurrentScope?.inception ?? initialPeriod.inception
+  const tf: ServingTimeframe = inceptionSelected ? 'inception' : periodToTimeframe(period)
+  const timeframeRequestEnabled = canRequestTimeframe(
+    capability,
+    firstScreen.traderKind,
+    period,
+    inceptionSelected
+  )
+
+  const core = useTraderCore({
+    source,
+    exchangeTraderId,
+    tf,
+    enabled: timeframeRequestEnabled,
+  })
 
   // Bot profile header (spec §1.3) — only fetched for bot traders.
   const isBot = firstScreen.traderKind === 'bot'
@@ -211,18 +270,33 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
       <PeriodSelector
         period={period}
         onPeriodChange={(p) => {
-          setInceptionSelected(false)
-          setPeriod(p)
+          if (!canRequestTimeframe(capability, firstScreen.traderKind, p, false)) return
+          setTimeframeSelection({ scope: timeframeScope, period: p, inception: false })
         }}
         source={source}
         lastUpdated={core.modules?.provenance.asOf}
         availability={availability}
         showInception={showInception}
         inceptionSelected={inceptionSelected}
-        onInceptionSelect={() => setInceptionSelected(true)}
+        onInceptionSelect={() => {
+          if (!showInception) return
+          setTimeframeSelection({ scope: timeframeScope, period, inception: true })
+        }}
       />
 
-      {core.modules ? (
+      {!timeframeRequestEnabled ? (
+        <Box
+          style={{
+            padding: tokens.spacing[6],
+            borderRadius: tokens.radius.lg,
+            border: '1px dashed ' + tokens.colors.border.primary,
+          }}
+        >
+          <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
+            {t('tfNotProvided')}
+          </Text>
+        </Box>
+      ) : core.modules ? (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
           {core.isPendingUpstream && (
             <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
@@ -295,13 +369,15 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
       )}
 
       {/* ── Record sub-tabs (spec §2.4-3) — shared with the default three-tab. ── */}
-      <ServingRecordsSection
-        source={source}
-        exchangeTraderId={exchangeTraderId}
-        capability={capability}
-        tf={tf}
-        exchangeName={capability?.exchangeName}
-      />
+      {timeframeRequestEnabled && (
+        <ServingRecordsSection
+          source={source}
+          exchangeTraderId={exchangeTraderId}
+          capability={capability}
+          tf={tf}
+          exchangeName={capability?.exchangeName}
+        />
+      )}
     </Box>
   )
 }

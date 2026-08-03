@@ -30,7 +30,6 @@ export default function HotContent({ initialPosts }: HotContentProps) {
     t,
     language: _language,
     localizedName,
-    email,
     loggedIn,
     accessToken,
     loadingPosts,
@@ -46,6 +45,8 @@ export default function HotContent({ initialPosts }: HotContentProps) {
     setActiveHotTab,
     groups,
     loadingGroups,
+    groupsError,
+    refreshGroups,
     openPost,
     comments,
     loadingComments,
@@ -316,6 +317,8 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                       <HotGroupsList
                         groups={groups}
                         loading={loadingGroups}
+                        error={!!groupsError}
+                        onRetry={() => void refreshGroups()}
                         localizedName={localizedName}
                         t={t}
                       />

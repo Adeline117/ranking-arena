@@ -64,7 +64,7 @@ function getSupabase() {
  */
 export async function getPersonalRecommendations(
   userId: string,
-  limit = 20,
+  limit = 20
 ): Promise<PersonalRecommendation[]> {
   const supabase = getSupabase()
 
@@ -87,9 +87,7 @@ export async function getPersonalRecommendations(
     .map(([ex]) => ex)
 
   // 3. Build exclusion set (already followed)
-  const followedSet = new Set(
-    followedTraders.map(t => `${t.source}:${t.source_trader_id}`),
-  )
+  const followedSet = new Set(followedTraders.map((t) => `${t.source}:${t.source_trader_id}`))
 
   const recommendations: PersonalRecommendation[] = []
 
@@ -136,7 +134,7 @@ export async function getPersonalRecommendations(
 
 async function getUserFollowedTraders(
   supabase: ReturnType<typeof getSupabase>,
-  userId: string,
+  userId: string
 ): Promise<FollowedTrader[]> {
   try {
     // user_follows tracks user-to-user follows; we need to find if the followed
@@ -160,6 +158,7 @@ async function getUserFollowedTraders(
       .from('leaderboard_ranks')
       .select('source, source_trader_id, arena_score, roi')
       .eq('season_id', '90D')
+      .not('rank', 'is', null)
       .in('source_trader_id', followingIds)
       .limit(50)
 
@@ -173,7 +172,7 @@ async function getUserFollowedTraders(
 async function findSimilarTraders(
   supabase: ReturnType<typeof getSupabase>,
   baseTrader: FollowedTrader,
-  limit: number,
+  limit: number
 ): Promise<RankRow[]> {
   const baseRoi = baseTrader.roi ?? 0
   const roiMin = baseRoi * 0.7
@@ -183,6 +182,7 @@ async function findSimilarTraders(
     .from('leaderboard_ranks')
     .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate')
     .eq('season_id', '90D')
+    .not('rank', 'is', null)
     .eq('source', baseTrader.source)
     .gte('roi', roiMin)
     .lte('roi', roiMax)
@@ -190,6 +190,7 @@ async function findSimilarTraders(
     .not('arena_score', 'is', null)
     .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
+    .order('rank', { ascending: true, nullsFirst: false })
     .limit(limit)
 
   return (data || []) as unknown as RankRow[]
@@ -198,7 +199,7 @@ async function findSimilarTraders(
 async function getTopFromExchanges(
   supabase: ReturnType<typeof getSupabase>,
   exchanges: string[],
-  limit: number,
+  limit: number
 ): Promise<RankRow[]> {
   if (exchanges.length === 0) return []
 
@@ -206,10 +207,12 @@ async function getTopFromExchanges(
     .from('leaderboard_ranks')
     .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate')
     .eq('season_id', '90D')
+    .not('rank', 'is', null)
     .in('source', exchanges)
     .not('arena_score', 'is', null)
     .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
+    .order('rank', { ascending: true, nullsFirst: false })
     .limit(limit)
 
   return (data || []) as unknown as RankRow[]
@@ -217,18 +220,20 @@ async function getTopFromExchanges(
 
 async function getTopPerformersFallback(
   supabase: ReturnType<typeof getSupabase>,
-  limit: number,
+  limit: number
 ): Promise<PersonalRecommendation[]> {
   const { data } = await supabase
     .from('leaderboard_ranks')
     .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate')
     .eq('season_id', '90D')
+    .not('rank', 'is', null)
     .not('arena_score', 'is', null)
     .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
+    .order('rank', { ascending: true, nullsFirst: false })
     .limit(limit)
 
-  return ((data || []) as unknown as RankRow[]).map(t => ({
+  return ((data || []) as unknown as RankRow[]).map((t) => ({
     ...t,
     reason: 'top_performer' as const,
     reason_detail: `Top arena score on ${t.source}`,

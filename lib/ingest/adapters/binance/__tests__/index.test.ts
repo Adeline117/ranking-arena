@@ -326,4 +326,42 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     expect(invalidCapSession.page.goto).not.toHaveBeenCalled()
     expect(neverFetch).not.toHaveBeenCalled()
   })
+
+  it('yields replayable history before rejecting an unproven page-cap stop', async () => {
+    const rows = Array.from({ length: 50 }, (_, index) => ({
+      id: `position-${index}`,
+      closed: Date.parse('2026-07-20T00:00:00.000Z') - index,
+    }))
+    const { session: fetchSession } = session(async () => ({
+      status: 200,
+      json: { data: { list: rows } },
+    }))
+
+    const captured = []
+    let failure: unknown = null
+    try {
+      for await (const page of binanceAdapter.getHistory(
+        fetchSession,
+        source({ history_max_pages: 1 }),
+        'portfolio-1',
+        'position_history',
+        '2026-07-01T00:00:00.000Z'
+      )) {
+        captured.push(page)
+      }
+    } catch (error) {
+      failure = error
+    }
+
+    expect(captured).toHaveLength(1)
+    expect(captured[0].payload).toMatchObject({
+      portfolioId: 'portfolio-1',
+      sort: 'CLOSING',
+    })
+    expect(failure).toEqual(
+      expect.objectContaining({
+        message: '[binance] position_history CLOSING reached page cap 1 without terminal proof',
+      })
+    )
+  })
 })

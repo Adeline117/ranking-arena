@@ -7,6 +7,7 @@ import {
   parseBitgetProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { parsedPositionHistoryRowSchema } from '../../../core/schemas'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -241,11 +242,152 @@ describe('parseBitgetHistory (live-captured fixtures, 2026-06-11)', () => {
     expect(first.entryPrice).toBe(Number(first.raw.openAvgPrice))
     expect(first.exitPrice).toBe(Number(first.raw.closeAvgPrice))
     expect(first.realizedPnl).toBe(Number(first.raw.netProfit))
+    expect(first.sourceFactId).toBe(String(first.raw.orderNo))
+    expect(first.sourceLifecycleMarker).toBe(String(first.raw.closeTime))
+    expect(first.sourceReturn).toBe(Number(first.raw.returnRate))
+    expect(first.fieldSources).toEqual({
+      sourceFactId: { fieldPaths: ['data.rows[].orderNo'] },
+      sourceLifecycleMarker: { fieldPaths: ['data.rows[].closeTime'] },
+      sourceReturn: { fieldPaths: ['data.rows[].returnRate'] },
+      openedAt: { fieldPaths: ['data.rows[].openTime'] },
+      closedAt: { fieldPaths: ['data.rows[].closeTime'] },
+      symbol: { fieldPaths: ['data.rows[].symbolDisplayName'] },
+      side: { fieldPaths: ['data.rows[].position'] },
+      leverage: { fieldPaths: ['data.rows[].openLevel'] },
+      size: { fieldPaths: ['data.rows[].closeDealCount'] },
+      entryPrice: { fieldPaths: ['data.rows[].openAvgPrice'] },
+      exitPrice: { fieldPaths: ['data.rows[].closeAvgPrice'] },
+      realizedPnl: { fieldPaths: ['data.rows[].netProfit'] },
+    })
+    expect(first.limitations).toEqual([])
+    expect(first).not.toHaveProperty('pnlTrustState')
+    expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
     // orderNo-keyed dedupe is deterministic and unique per row
     expect(new Set(rows.map((r) => r.dedupeHash)).size).toBe(20)
     const again = parseBitgetHistory(fixture('position-history-p1.json'), 'position_history', ctx)
     expect(again[0].dedupeHash).toBe(first.dedupeHash)
   })
+
+  it('keeps realized PnL unknown when the reviewed netProfit field is absent', () => {
+    const raw = fixture('position-history-p1.json') as {
+      data: { rows: Array<Record<string, unknown>> }
+    }
+    raw.data.rows[0] = {
+      ...raw.data.rows[0],
+      netProfit: null,
+      achievedProfits: '999.99',
+    }
+
+    const rows = parseBitgetHistory(raw, 'position_history', ctx)
+    const first = rows[0]
+    if (first.kind !== 'position_history') throw new Error('wrong kind')
+    expect(first.realizedPnl).toBeNull()
+    expect(first.raw.achievedProfits).toBe('999.99')
+    expect(first.fieldSources).not.toHaveProperty('realizedPnl')
+    expect(first.limitations).toContain('source_realized_pnl_missing')
+    expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
+  })
+
+  it('rejects unsafe numeric ids and keeps whitespace numerics unknown instead of inventing zero', () => {
+    const raw = fixture('position-history-p1.json') as {
+      data: { rows: Array<Record<string, unknown>> }
+    }
+    raw.data.rows[0] = {
+      ...raw.data.rows[0],
+      orderNo: Number.MAX_SAFE_INTEGER + 1,
+      openTime: '   ',
+      returnRate: '   ',
+      netProfit: '   ',
+    }
+
+    const rows = parseBitgetHistory(raw, 'position_history', ctx)
+    const first = rows[0]
+    if (first.kind !== 'position_history') throw new Error('wrong kind')
+    expect(first.sourceFactId).toBeNull()
+    expect(first.openedAt).toBeNull()
+    expect(first.sourceReturn).toBeNull()
+    expect(first.realizedPnl).toBeNull()
+    expect(first.fieldSources).not.toHaveProperty('sourceFactId')
+    expect(first.fieldSources).not.toHaveProperty('openedAt')
+    expect(first.fieldSources).not.toHaveProperty('sourceReturn')
+    expect(first.fieldSources).not.toHaveProperty('realizedPnl')
+    expect(first.limitations).toEqual(
+      expect.arrayContaining([
+        'source_fact_id_missing',
+        'source_return_missing',
+        'source_realized_pnl_missing',
+      ])
+    )
+    expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
+  })
+
+  it('preserves genuine numeric and numeric-string zero return/PnL evidence', () => {
+    const raw = fixture('position-history-p1.json') as {
+      data: { rows: Array<Record<string, unknown>> }
+    }
+    raw.data.rows[0] = { ...raw.data.rows[0], returnRate: 0, netProfit: '0' }
+
+    const rows = parseBitgetHistory(raw, 'position_history', ctx)
+    const first = rows[0]
+    if (first.kind !== 'position_history') throw new Error('wrong kind')
+    expect(first.sourceReturn).toBe(0)
+    expect(first.realizedPnl).toBe(0)
+    expect(first.fieldSources?.sourceReturn).toEqual({ fieldPaths: ['data.rows[].returnRate'] })
+    expect(first.fieldSources?.realizedPnl).toEqual({ fieldPaths: ['data.rows[].netProfit'] })
+    expect(first.limitations).not.toContain('source_return_missing')
+    expect(first.limitations).not.toContain('source_realized_pnl_missing')
+    expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
+  })
+
+  it.each([
+    ['boolean', true],
+    ['array', []],
+    ['object', {}],
+  ])('rejects %s values as numeric source evidence', (_case, invalidValue) => {
+    const raw = fixture('position-history-p1.json') as {
+      data: { rows: Array<Record<string, unknown>> }
+    }
+    raw.data.rows[0] = {
+      ...raw.data.rows[0],
+      returnRate: invalidValue,
+      netProfit: invalidValue,
+    }
+
+    const rows = parseBitgetHistory(raw, 'position_history', ctx)
+    const first = rows[0]
+    if (first.kind !== 'position_history') throw new Error('wrong kind')
+    expect(first.sourceReturn).toBeNull()
+    expect(first.realizedPnl).toBeNull()
+    expect(first.limitations).toEqual(
+      expect.arrayContaining(['source_return_missing', 'source_realized_pnl_missing'])
+    )
+    expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
+  })
+
+  it.each([
+    ['empty string', ''],
+    ['whitespace', '   '],
+    ['zero sentinel', 0],
+  ])(
+    'preserves a %s closeTime as a partial row without false epoch evidence',
+    (_case, closeTime) => {
+      const raw = fixture('position-history-p1.json') as {
+        data: { rows: Array<Record<string, unknown>> }
+      }
+      raw.data.rows[0] = { ...raw.data.rows[0], closeTime }
+
+      const rows = parseBitgetHistory(raw, 'position_history', ctx)
+      const first = rows[0]
+      if (first.kind !== 'position_history') throw new Error('wrong kind')
+      expect(first.closedAt).toBeNull()
+      expect(first.sourceLifecycleMarker).toBeNull()
+      expect(first.fieldSources).not.toHaveProperty('sourceLifecycleMarker')
+      expect(first.fieldSources).not.toHaveProperty('closedAt')
+      expect(first.limitations).toContain('source_lifecycle_marker_missing')
+      expect(first.limitations).toContain('source_lifecycle_marker_partial')
+      expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
+    }
+  )
 
   it('parses copiers rows from trader/followerList with scrape-time ts', () => {
     const rows = parseBitgetHistory(fixture('copiers-p1.json'), 'copiers', ctx)

@@ -43,6 +43,7 @@ import { RankingFilters } from './RankingFilters'
 // Import consolidated types from RankingTableTypes (single source of truth for UI Trader type)
 import {
   type Trader,
+  type PublishedRankTrader,
   type ColumnKey,
   type ViewMode,
   DEFAULT_VISIBLE_COLUMNS,
@@ -50,6 +51,7 @@ import {
   MOBILE_CARD_MEDIA_QUERY,
   getInitialRankingViewMode,
   getStoredColumns,
+  selectPublishedRankTraders,
 } from './RankingTableTypes'
 
 // Re-export for backward compatibility (many components import { Trader } from './RankingTable')
@@ -159,7 +161,10 @@ function RankingTableInner(props: {
   // During loading state, show immediate (empty/skeleton) data.
   // When traders arrive, React renders the deferred value in a lower-priority pass,
   // keeping the main thread free for higher-priority interactions (TBT reduction).
-  const traders = useDeferredValue(tradersRaw)
+  const deferredTraders = useDeferredValue(tradersRaw)
+  // Defense in depth: an unranked/invalid row belongs on a profile or partial
+  // data surface, never in a ranking UI. Do not synthesize rank from position.
+  const traders = useMemo(() => selectPublishedRankTraders(deferredTraders), [deferredTraders])
 
   // Load ranking-table.css asynchronously (animations, hover effects)
   useRankingTableStyles()
@@ -377,11 +382,17 @@ function RankingTableInner(props: {
   // content. Without this, every 5-min polling refresh triggers a full sort
   // + filter pass + downstream re-render cascade even when nothing changed.
   const tradersFingerprint = React.useMemo(
-    () =>
-      traders.map((t) => `${t.id}:${t.arena_score ?? ''}:${t.roi ?? ''}:${t.pnl ?? ''}`).join('|'),
+    // Include the complete published row. The former four-field fingerprint
+    // silently reused stale ranks, movement arrows, filters, and non-default
+    // sort metrics when a poll changed them without changing score/ROI/PnL.
+    () => JSON.stringify(traders),
     [traders]
   )
-  const prevSortedRef = React.useRef<{ fp: string; key: string; data: Trader[] } | null>(null)
+  const prevSortedRef = React.useRef<{
+    fp: string
+    key: string
+    data: PublishedRankTrader[]
+  } | null>(null)
 
   const sortedTraders = React.useMemo(() => {
     // Cache key includes all the factors that affect the output. If same as
@@ -484,10 +495,11 @@ function RankingTableInner(props: {
           break
       }
       // Null always goes to the bottom regardless of sort direction
-      if (aRaw === null && bRaw === null) return 0
+      if (aRaw === null && bRaw === null) return a.rank - b.rank
       if (aRaw === null) return 1
       if (bRaw === null) return -1
-      return sortDir === 'desc' ? bRaw - aRaw : aRaw - bRaw
+      const metricOrder = sortDir === 'desc' ? bRaw - aRaw : aRaw - bRaw
+      return metricOrder || a.rank - b.rank
     })
     prevSortedRef.current = { fp: tradersFingerprint, key, data: sorted }
     return sorted
@@ -584,10 +596,6 @@ function RankingTableInner(props: {
   const startIndex = serverTotalCount != null ? 0 : (currentPage - 1) * itemsPerPage
   const endIndex = serverTotalCount != null ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
-  // Rank offset: in server-side pagination, traders array is already one page,
-  // but rank display must account for which page we're on.
-  const rankOffset = serverTotalCount != null ? (currentPage - 1) * itemsPerPage : startIndex
-
   // Equity-trend sparkline for the DESKTOP table ROI cell. Non-blocking, one POST
   // per page of visible rows, streams into equitySeries. Mirrors the card-view
   // rank-history fetch (never N+1, failure leaves the numeric fallback intact).
@@ -1278,8 +1286,7 @@ function RankingTableInner(props: {
                   }}
                 >
                   {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
-                    const positionRank = rankOffset + idx + 1
-                    const rank = positionRank
+                    const rank = trader.rank
                     const series =
                       rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
                     return (
@@ -1409,8 +1416,7 @@ function RankingTableInner(props: {
                   {...kbContainerProps}
                 >
                   {paginatedTraders.map((trader, idx) => {
-                    const positionRank = rankOffset + idx + 1
-                    const rank = positionRank
+                    const rank = trader.rank
                     return (
                       <div
                         key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}

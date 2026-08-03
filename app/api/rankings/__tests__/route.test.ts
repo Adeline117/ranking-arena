@@ -52,9 +52,14 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 
 const mockTieredGetOrSet = jest.fn()
 const mockTieredGet = jest.fn()
+const mockReadSharedCacheWriteFence = jest.fn()
 jest.mock('@/lib/cache/redis-layer', () => ({
   tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
   tieredGet: (...args: unknown[]) => mockTieredGet(...args),
+}))
+
+jest.mock('@/lib/cache', () => ({
+  readSharedCacheWriteFence: (...args: unknown[]) => mockReadSharedCacheWriteFence(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -129,6 +134,10 @@ describe('GET /api/rankings', () => {
     jest.clearAllMocks()
     mockTieredGetOrSet.mockImplementation(async (_key: string, fn: () => Promise<unknown>) => fn())
     mockTieredGet.mockResolvedValue({ data: null })
+    mockReadSharedCacheWriteFence.mockResolvedValue({
+      key: 'public-rankings:write-fence:v1',
+      token: '7',
+    })
     // Default: Supabase query returns empty results
     mockSupabaseQuery.mockReturnValue(makeChainableQuery())
   })
@@ -416,6 +425,11 @@ describe('GET /api/rankings', () => {
         'in',
         '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
       )
+      expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
+      expect(rankingQuery?.order.mock.calls.slice(0, 2)).toEqual([
+        ['roi', { ascending: false, nullsFirst: false }],
+        ['rank', { ascending: true, nullsFirst: false }],
+      ])
       expect(freshnessQuery?.not).toHaveBeenCalledWith(
         'source',
         'in',
@@ -515,8 +529,12 @@ describe('GET /api/rankings', () => {
 
     expect(res.status).toBe(200)
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:precomputed:composite:all:v2',
-      'hot'
+      'public-rank-policy-v6:precomputed:composite:all:v2',
+      'hot',
+      {
+        skipMemory: true,
+        writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+      }
     )
   })
 
@@ -547,8 +565,12 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v4:precomputed:composite:all:v2',
-      'hot'
+      'public-rank-policy-v6:precomputed:composite:all:v2',
+      'hot',
+      {
+        skipMemory: true,
+        writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+      }
     )
     expect(data.traders).toEqual([first, last])
     expect(data.totalCount).toBe(3)
@@ -592,10 +614,14 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGetOrSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v4:api:rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v6:api:rankings:v3:/),
       expect.any(Function),
       'hot',
-      ['rankings']
+      ['rankings:public-rank-policy-v6'],
+      {
+        skipMemory: true,
+        writeFenceKey: 'public-rankings:write-fence:v1',
+      }
     )
     expect(data.traders).toEqual([first, last])
     expect(data).toEqual(

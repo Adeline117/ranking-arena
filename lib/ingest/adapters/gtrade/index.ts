@@ -322,6 +322,9 @@ const gtradeAdapter: SourceAdapter = {
       if (outcome.state === 'failed') {
         throw new Error(`[gtrade] position history fetch failed: ${outcome.reason}`)
       }
+      if (!outcome.snapshot.meta.complete) {
+        throw new Error(`[gtrade] position history incomplete: ${outcome.reason}`)
+      }
       const unmatched = unmatchedGtradeCloseKeys(outcome.snapshot.trades, cursor)
       if (unmatched.length > 0) {
         throw new Error(

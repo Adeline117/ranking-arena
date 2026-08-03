@@ -4,6 +4,7 @@ import {
   PUBLIC_RANKING_MAX_COMPUTED_AGE_MS,
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   PUBLIC_RANKING_QUARANTINED_SOURCES,
+  PUBLIC_RANKING_REDIS_TAG,
   PUBLIC_RANKING_SOURCE_QUARANTINES,
   filterPublicRankingRows,
   filterPublicRankingSources,
@@ -36,7 +37,8 @@ function eligibleRow(overrides: Record<string, unknown> = {}) {
 
 describe('public ranking publication policy', () => {
   it('binds the cache epoch to the current ranking-authority contract', () => {
-    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v4')
+    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v6')
+    expect(PUBLIC_RANKING_REDIS_TAG).toBe('rankings:public-rank-policy-v6')
     expect(PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toBe(48 * 60 * 60 * 1000)
     expect(PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toBe(5 * 60 * 1000)
     expect(PUBLIC_RANKING_SOURCE_QUARANTINES).toEqual([
@@ -307,7 +309,7 @@ describe('public ranking publication policy', () => {
 
   it('epochs ordinary public ranking cache keys', () => {
     expect(publicRankingCacheKey('leaderboard:v3:90D')).toBe(
-      'public-rank-policy-v4:leaderboard:v3:90D'
+      'public-rank-policy-v6:leaderboard:v3:90D'
     )
   })
 

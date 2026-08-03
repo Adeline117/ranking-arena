@@ -128,9 +128,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
               .select('source_trader_id, handle, source, roi, followers')
               .eq('source', profile.source)
               .eq('season_id', '90D')
+              .not('rank', 'is', null)
               .neq('handle', handle)
               .not('arena_score', 'is', null)
               .order('arena_score', { ascending: false })
+              .order('rank', { ascending: true, nullsFirst: false })
               .limit(5)
             return similar || []
           })(),

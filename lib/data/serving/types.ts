@@ -57,6 +57,10 @@ export interface TraderFirstScreen {
  *  server component cannot read searchParams and resolves without a platform
  *  hint; the client validates + re-fetches the requested account here). */
 export interface TraderFirstScreenResponse {
+  /** Exact decoded selector that reached this transport boundary. */
+  request: { platform: string; handle: string }
+  /** Canonical serving identity resolved from the requested selector. */
+  subject: { platform: string; traderKey: string }
   firstScreen: TraderFirstScreen
   capability: SourceCapability | null
   /** Active read-only API authorization: account data is first-party verified. */

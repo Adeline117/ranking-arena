@@ -11,17 +11,17 @@
  * pick the wrong account. TraderProfileClient detects the mismatch and
  * re-fetches the requested account here, header numbers included.
  *
- * 404 when the handle does not resolve on the requested serving source — a
- * stale/forged ?platform= link must NEVER replace a valid server-resolved
- * account (the client falls back to the server's pick on 404).
+ * A legacy source returns a request-bound `source_not_serving` 404 proof; only
+ * that proof permits the client to query the legacy detail boundary. A missing
+ * trader on an already-serving source is a generic 404 and stays fail-closed.
  */
 
 import { NextRequest } from 'next/server'
 import { unstable_cache } from 'next/cache'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
-import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess } from '@/lib/api/response'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
+import { error as apiError, success as apiSuccess } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
@@ -83,9 +83,25 @@ export async function GET(
       if (!parsedSource.success) throw ApiError.validation('Invalid source parameter')
       const source = parsedSource.data
 
-      // Only serving sources have a first screen; a legacy/unknown source hint
-      // is a not-found, not an error (client falls back to the server account).
-      if ((await getDataMode(source)) !== 'serving') throw ApiError.notFound('Trader not found')
+      // A legacy source and a missing trader on an already-serving source are
+      // materially different. Only this exact, request-bound reason authorizes
+      // the client to try the legacy detail boundary; a generic 404 must stay
+      // closed so cut-over sources cannot resurrect stale legacy rows.
+      if ((await getDataMode(source)) !== 'serving') {
+        const response = apiError(
+          'Source does not publish a serving first screen',
+          404,
+          ErrorCode.NOT_FOUND,
+          {
+            reason: 'source_not_serving',
+            request: { platform: source, handle: decodedHandle },
+          }
+        )
+        for (const [name, value] of Object.entries(METRIC_AUTHORITY_NO_STORE_HEADERS)) {
+          response.headers.set(name, value)
+        }
+        return response
+      }
 
       // arena_resolve_trader already constrains the row to the requested source
       // via `s.slug = p_source OR s.meta->>'legacy_platform' = p_source`, so a
@@ -125,6 +141,8 @@ export async function GET(
 
       return apiSuccess<TraderFirstScreenResponse>(
         {
+          request: { platform: source, handle: decodedHandle },
+          subject: { platform: resolved.source, traderKey: resolved.exchangeTraderId },
           firstScreen,
           capability: capabilities[resolved.source] ?? null,
           is_verified_data: verifiedKeys.has(

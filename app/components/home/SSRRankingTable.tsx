@@ -39,10 +39,9 @@ function RankBadge({ rank }: { rank: number }) {
 
 interface Props {
   traders: InitialTrader[]
-  startRank?: number
 }
 
-export default async function SSRRankingTable({ traders, startRank = 0 }: Props) {
+export default async function SSRRankingTable({ traders }: Props) {
   // Keep the cacheable shell language-independent. The client tree localizes
   // after hydration, matching the rest of the homepage's static SSR strategy.
   const { t } = getStaticTranslation()
@@ -68,8 +67,8 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
       </div>
 
       <div className="ssr-ranking-body">
-        {traders.map((trader, idx) => {
-          const rank = startRank + idx + 1
+        {traders.map((trader) => {
+          const rank = trader.rank
           const roi = trader.roi ?? 0
           const score =
             trader.arena_score != null && Number.isFinite(Number(trader.arena_score))

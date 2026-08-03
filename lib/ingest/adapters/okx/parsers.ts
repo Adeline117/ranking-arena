@@ -21,6 +21,8 @@ import type {
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
   ParsedPosition,
+  ParsedPositionHistoryFieldSources,
+  ParsedPositionHistoryLimitation,
   ParsedProfile,
   ParsedStats,
   RankingTimeframe,
@@ -30,7 +32,9 @@ import type {
 type Dict = Record<string, unknown>
 
 function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null
+  if (v === null || v === undefined) return null
+  if (typeof v !== 'number' && typeof v !== 'string') return null
+  if (typeof v === 'string' && v.trim().length === 0) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
@@ -48,7 +52,33 @@ function str(v: unknown): string | null {
 /** ms-epoch string → ISO; "" / 0 / garbage → null. */
 function iso(v: unknown): string | null {
   const n = num(v)
-  return n === null || n <= 0 ? null : new Date(n).toISOString()
+  if (n === null || n <= 0) return null
+  const parsed = new Date(n)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
+function sourceIdentity(v: unknown): string | null {
+  if (typeof v === 'string') {
+    return v.length > 0 && v === v.trim() ? v : null
+  }
+  return typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : null
+}
+
+function sourceMarker(v: unknown): string | null {
+  if (typeof v === 'string') {
+    const normalized = v.trim()
+    return normalized.length > 0 ? normalized : null
+  }
+  return typeof v === 'number' && Number.isFinite(v) ? String(v) : null
+}
+
+function claimPositionField(
+  sources: ParsedPositionHistoryFieldSources,
+  field: keyof ParsedPositionHistoryFieldSources,
+  value: unknown,
+  ...fieldPaths: [string, ...string[]]
+): void {
+  if (value !== null && value !== undefined) sources[field] = { fieldPaths }
 }
 
 /** Deterministic natural-key hash for idempotent history upserts. */
@@ -240,24 +270,92 @@ export function parseOkxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[
 
 /** Closed lead positions; subPosId is the stable natural key. */
 export function parseOkxPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedHistoryRow[] {
+  const rows = dataRows(raw)
+  const traderIdentity = sourceIdentity((raw as Dict | null)?.historyTraderIdentity)
+  if (rows.length > 0 && traderIdentity === null) {
+    throw new Error('[okx] position history is missing trader identity')
+  }
   const out: ParsedHistoryRow[] = []
-  for (const item of dataRows(raw)) {
+  for (const item of rows) {
     const symbol = str(item.instId)
     if (!symbol) continue
+    const subPositionId = sourceIdentity(item.subPosId)
+    const sourceFactId =
+      traderIdentity !== null && subPositionId !== null
+        ? JSON.stringify([traderIdentity, subPositionId])
+        : null
+    const sourceReturn = num(item.pnlRatio)
+    const openedAt = iso(item.openTime)
+    const closedAt = iso(item.closeTime)
+    const sourceLifecycleMarker = closedAt === null ? null : sourceMarker(item.closeTime)
+    const parsedSide = str(item.posSide)
+    const leverage = num(item.lever)
+    const size = num(item.subPos)
+    const entryPrice = num(item.openAvgPx)
+    const exitPrice = num(item.closeAvgPx)
+    const realizedPnl = num(item.pnl)
+    const fieldSources: ParsedPositionHistoryFieldSources = {}
+    claimPositionField(
+      fieldSources,
+      'sourceFactId',
+      sourceFactId,
+      'historyTraderIdentity',
+      'data[].subPosId'
+    )
+    claimPositionField(
+      fieldSources,
+      'sourceLifecycleMarker',
+      sourceLifecycleMarker,
+      'data[].closeTime'
+    )
+    claimPositionField(fieldSources, 'sourceReturn', sourceReturn, 'data[].pnlRatio')
+    claimPositionField(fieldSources, 'openedAt', openedAt, 'data[].openTime')
+    claimPositionField(fieldSources, 'closedAt', closedAt, 'data[].closeTime')
+    claimPositionField(fieldSources, 'symbol', symbol, 'data[].instId')
+    claimPositionField(fieldSources, 'side', parsedSide, 'data[].posSide')
+    claimPositionField(fieldSources, 'leverage', leverage, 'data[].lever')
+    claimPositionField(fieldSources, 'size', size, 'data[].subPos')
+    claimPositionField(fieldSources, 'entryPrice', entryPrice, 'data[].openAvgPx')
+    claimPositionField(fieldSources, 'exitPrice', exitPrice, 'data[].closeAvgPx')
+    claimPositionField(fieldSources, 'realizedPnl', realizedPnl, 'data[].pnl')
+    const limitations: ParsedPositionHistoryLimitation[] = []
+    if (sourceFactId === null) limitations.push('source_fact_id_missing')
+    if (sourceLifecycleMarker === null) limitations.push('source_lifecycle_marker_missing')
+    if (closedAt === null) limitations.push('source_lifecycle_marker_partial')
+    if (sourceReturn === null) limitations.push('source_return_missing')
+    if (realizedPnl === null) limitations.push('source_realized_pnl_missing')
     out.push({
       kind: 'position_history',
-      openedAt: iso(item.openTime),
-      closedAt: iso(item.closeTime),
+      openedAt,
+      closedAt,
       symbol,
-      side: str(item.posSide),
-      leverage: num(item.lever),
-      size: num(item.subPos),
-      entryPrice: num(item.openAvgPx),
-      exitPrice: num(item.closeAvgPx),
-      realizedPnl: num(item.pnl),
-      dedupeHash: item.subPosId
-        ? dedupeHash('okx_ph', item.subPosId)
-        : dedupeHash('okx_ph', symbol, item.openTime, item.closeTime, item.subPos),
+      side: parsedSide,
+      leverage,
+      size,
+      entryPrice,
+      exitPrice,
+      realizedPnl,
+      sourceFactId,
+      sourceLifecycleMarker,
+      sourceReturn,
+      fieldSources,
+      limitations,
+      dedupeHash:
+        subPositionId !== null
+          ? dedupeHash('okx_ph', traderIdentity, subPositionId)
+          : dedupeHash(
+              'okx_ph',
+              'fallback',
+              traderIdentity,
+              symbol,
+              parsedSide,
+              openedAt,
+              closedAt,
+              size,
+              entryPrice,
+              exitPrice,
+              realizedPnl
+            ),
       raw: item,
     })
   }

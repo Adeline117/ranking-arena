@@ -656,10 +656,12 @@ export async function getSimilarTraders(
       .select('source_trader_id, roi, handle, avatar_url')
       .eq('source', source.source)
       .eq('season_id', '90D')
+      .not('rank', 'is', null)
       .neq('source_trader_id', source.source_trader_id)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .gte('roi', minRoi)
       .lte('roi', maxRoi)
+      .order('rank', { ascending: true, nullsFirst: false })
       .limit(50)
 
     if (!similarRows || similarRows.length === 0) {
@@ -668,9 +670,11 @@ export async function getSimilarTraders(
         .select('source_trader_id, roi, handle, avatar_url')
         .eq('source', source.source)
         .eq('season_id', '90D')
+        .not('rank', 'is', null)
         .neq('source_trader_id', source.source_trader_id)
         .or('is_outlier.is.null,is_outlier.eq.false')
         .order('roi', { ascending: false })
+        .order('rank', { ascending: true, nullsFirst: false })
         .limit(limit)
       if (fallbackError)
         createLogger('trader-data').warn(

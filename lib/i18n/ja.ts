@@ -99,7 +99,7 @@ const ja = {
   loggedInShowAll: 'ログイン済み：すべてのおすすめを表示',
   notLoggedInShowLimited: '未ログイン：最初の10件のみ表示',
   groupRecommendations: 'おすすめグループ',
-  hotGroups: '人気グループ',
+  hotGroups: '最近アクティブなグループ',
   groupRecommendationsComingSoon: 'グループのおすすめは近日公開',
   hotList: '人気リスト',
   loggedInShowAllHot: 'ログイン済み：すべて表示',
@@ -2251,10 +2251,8 @@ const ja = {
   imageLoadFailed: '画像の読み込みに失敗しました',
 
   youAreOffline: 'オフラインです',
-  checkNetworkAndRetryOffline:
-    'ネットワーク接続を確認してもう一度お試しください。キャッシュされた一部のコンテンツは引き続きアクセスできる場合があります。',
+  checkNetworkAndRetryOffline: 'ネットワーク接続を確認してから、もう一度お試しください。',
   retryConnection: '接続を再試行',
-  cachedLeaderboard: '最終キャッシュランキング',
   arenaTagline: 'Arena - 暗号資産トレーダーランキング',
 
   onboardingTitle: 'Arenaへようこそ',
@@ -2450,7 +2448,7 @@ const ja = {
     'このプラットフォームのデータは一時的に利用できません。以下の履歴データは古い場合があります。',
   rankTrend: 'ランク推移（7日）',
   drawdownChart: 'ドローダウン',
-  dailyReturnsDistribution: '日次リターン分布',
+  dailyReturnsDistribution: '累積ROIの日次変化（パーセントポイント）',
   estimatedFromRoi: 'ROIから推定',
 
   unlockFullPortfolio: 'フルポートフォリオをロック解除',
@@ -4901,13 +4899,24 @@ const ja = {
   traderTradingStyleLabel: 'トレードスタイル',
   traderAccumulatingData: 'データ蓄積中...',
   traderFullscreen: 'フルスクリーン',
+  traderLinkedAccountEvidence: '連携アカウントの根拠',
   traderCombinedPerformance: '総合パフォーマンス',
   traderAccountsCount: 'アカウント',
   traderCombinedPnl: '合計損益',
   traderBestRoi: '最高ROI',
   traderWeightedScore: '加重スコア',
   traderWeightedScoreTooltip:
-    '絶対損益で加重平均。取引量が多いアカウントほど重みが大きくなります。',
+    'すべての連携アカウントに信頼できる比較可能なスコアと共通の加重基準がある場合のみ利用できます。',
+  traderAggregateUnavailable:
+    'すべてのアカウントに完全で比較可能な証拠が揃うまで、アカウント横断の合計は不明として扱います。',
+  traderAccountMetricsPartial:
+    'アカウント別の値は鮮度と完全性が不明な部分的な90日スナップショットです。参考情報のみで、集計スコアやランキングには使用しません。',
+  traderAccountPnlUnavailable:
+    '検証済みの決済通貨と取得原価がないため、アカウントの損益は合算しません。',
+  linkedAccountsChecking: '連携アカウントを確認中…',
+  linkedAccountsUnavailable: '連携アカウントの状態を一時的に確認できません',
+  traderAccountDataChecking: 'このアカウントの詳細を検証しています…',
+  traderAccountDataUnavailable: 'このアカウントの検証済み詳細は一時的に利用できません。',
   traderCompareAccounts: 'アカウント比較',
   traderPrimaryAccount: 'メインアカウント',
   traderMetric: '指標',
@@ -4994,7 +5003,7 @@ const ja = {
   popularSearches: '人気の検索',
   recentSearches: '検索履歴',
   clearButton: 'クリア',
-  linkedAccountAll: '全体',
+  linkedAccountAll: '全アカウント',
   winRatePercent: '勝率',
   radarProfit: '収益',
   radarRisk: 'リスク',
@@ -5266,7 +5275,7 @@ const ja = {
   // ProGate アップセル — 価格アンカー + 機能別デフォルト特典
   proPriceAnchor: '{price}/月から · 7日間無料トライアル',
   gateBenefitLinkedMultiAccount: '取引所アカウントを無制限に連携',
-  gateBenefitLinkedUnifiedPnl: '全アカウント横断の損益集計',
+  gateBenefitLinkedUnifiedPnl: '連携アカウントの切替とアカウント別の根拠',
   gateBenefitLinkedAutoSync: '残高とポジションを自動同期',
   gateBenefitGroupExclusive: 'Pro 限定グループに参加',
   gateBenefitGroupSignals: 'リアルタイムの売買シグナル',

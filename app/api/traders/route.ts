@@ -15,7 +15,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
-import { getOrSetWithLock } from '@/lib/cache'
+import { getOrSetWithLock, readSharedCacheWriteFence, set as setCache } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
@@ -36,6 +36,8 @@ import {
 } from '@/lib/rankings/source-freshness'
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
   filterPublicRankingSources,
   isPublicRankingSourceQuarantined,
   publicRankingCacheKey,
@@ -44,6 +46,7 @@ import {
 } from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('traders-api')
+const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
 
 export const runtime = 'nodejs'
 export const preferredRegion = ['iad1', 'sfo1', 'hnd1']
@@ -67,15 +70,38 @@ const tradersQuerySchema = z.object({
   page: z.coerce.number().int().min(0).optional(),
 })
 
-// In-memory cache for available sources. Keep this shorter than a normal capture
-// cycle so a newly visible or withdrawn source reaches filters promptly.
-const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>()
-const SOURCES_TTL = 5 * 60 * 1000
-const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
-
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
 const LEADERBOARD_COLUMNS =
   'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+
+interface TradersCacheKeyParams {
+  timeRange: Period
+  exchangeFilter: string | null
+  categoryFilter: string | null
+  sortBy: string
+  order: 'asc' | 'desc'
+  cursor: number | null
+  limit: number
+  useLegacyPaging: boolean
+  page: number
+}
+
+function tradersResponseCacheKey(params: TradersCacheKeyParams): string {
+  const {
+    timeRange,
+    exchangeFilter,
+    categoryFilter,
+    sortBy,
+    order,
+    cursor,
+    limit,
+    useLegacyPaging,
+    page,
+  } = params
+  return publicRankingCacheKey(
+    `leaderboard:v3:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${sortBy}:${order}:${cursor ?? 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+  )
+}
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -102,49 +128,55 @@ export const GET = withPublic(
     const effectiveSortBy = sortBy || 'arena_score'
 
     if (isPublicRankingSourceQuarantined(exchangeFilter)) {
-      return NextResponse.json({
-        traders: [],
-        timeRange,
-        totalCount: 0,
-        rankingMode: 'arena_score',
-        lastUpdated: null,
-        isStale: true,
-        dataAgeMinutes: null,
-        source_freshness: [],
-        nextCursor: null,
-        hasMore: false,
-        page: useLegacyPaging ? Math.max(0, page) : undefined,
-        limit,
-        availableSources: [],
-        ranking_visibility: 'partial',
-        ranking_visibility_reason: 'publication_policy_filtered',
-        ranking_visibility_reasons: ['quarantined_source_requested'],
-      })
+      return NextResponse.json(
+        {
+          traders: [],
+          timeRange,
+          totalCount: 0,
+          rankingMode: 'arena_score',
+          lastUpdated: null,
+          isStale: true,
+          dataAgeMinutes: null,
+          source_freshness: [],
+          nextCursor: null,
+          hasMore: false,
+          page: useLegacyPaging ? Math.max(0, page) : undefined,
+          limit,
+          availableSources: [],
+          ranking_visibility: 'partial',
+          ranking_visibility_reason: 'publication_policy_filtered',
+          ranking_visibility_reasons: ['quarantined_source_requested'],
+        },
+        { headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL } }
+      )
     }
 
     // Cache key
-    const cacheKey = publicRankingCacheKey(
-      `leaderboard:v3:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
-    )
+    const cacheParams: TradersCacheKeyParams = {
+      timeRange,
+      exchangeFilter: exchangeFilter ?? null,
+      categoryFilter: categoryFilter ?? null,
+      sortBy: effectiveSortBy,
+      order,
+      cursor: cursor ? safeParseInt(cursor, 0) : null,
+      limit,
+      useLegacyPaging,
+      page: useLegacyPaging ? Math.max(0, page) : 0,
+    }
+    const cacheKey = tradersResponseCacheKey(cacheParams)
 
     const cachedData = sanitizePublicRankingSourcePayload(
       await getOrSetWithLock(
         cacheKey,
         async () =>
-          sanitizePublicRankingSourcePayload(
-            await fetchFromLeaderboard(supabase, {
-              timeRange,
-              exchangeFilter: exchangeFilter ?? null,
-              categoryFilter: categoryFilter ?? null,
-              sortBy: effectiveSortBy,
-              order,
-              cursor: cursor ? safeParseInt(cursor, 0) : null,
-              limit,
-              useLegacyPaging,
-              page: useLegacyPaging ? Math.max(0, page) : 0,
-            })
-          ),
-        { ttl: 300, lockTtl: 10 }
+          sanitizePublicRankingSourcePayload(await fetchFromLeaderboard(supabase, cacheParams)),
+        {
+          ttl: 300,
+          lockTtl: 10,
+          tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+          skipMemory: true,
+          writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+        }
       )
     )
 
@@ -153,7 +185,9 @@ export const GET = withPublic(
 
     // Data is already sanitized before caching (in the fetcher below)
     const response = NextResponse.json(cachedData)
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    // The Redis generation is actively invalidated by publication; an opaque
+    // CDN SWR object is not. Keep the response fleet-coherent via Redis only.
+    response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
     // Expose data age for monitoring and frontend staleness indicators
     if (cachedData?.dataAgeMinutes != null) {
       response.headers.set('X-Data-Age-Minutes', String(cachedData.dataAgeMinutes))
@@ -176,6 +210,47 @@ const SORT_COLUMN: Record<string, string> = {
   sortino_ratio: 'sortino_ratio',
   // NOTE: no `alpha` — leaderboard_ranks has no such column; ?sort=alpha used to
   // reach query.order('alpha') → PostgREST 42703 500 (audit 2026-07-03).
+}
+
+/**
+ * Warm the exact default `/api/traders` Redis response consumed by clients.
+ * Publication callers use skipMemory so a process-local write can never count
+ * as a fleet-visible warmup.
+ */
+export async function warmDefaultPublicTradersCache(
+  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
+  timeRange: Period,
+  limit = 50
+): Promise<number> {
+  const writeFence = await readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
+  if (!writeFence) {
+    throw new Error(`[${timeRange}] public traders cache write fence was not available`)
+  }
+  const params: TradersCacheKeyParams = {
+    timeRange,
+    exchangeFilter: null,
+    categoryFilter: null,
+    sortBy: 'arena_score',
+    order: 'desc',
+    cursor: null,
+    limit,
+    useLegacyPaging: false,
+    page: 0,
+  }
+  const result = sanitizePublicRankingSourcePayload(await fetchFromLeaderboard(supabase, params))
+  if (!result.traders.length) {
+    throw new Error(`[${timeRange}] public traders cache warmup returned no ranked rows`)
+  }
+  const written = await setCache(tradersResponseCacheKey(params), result, {
+    ttl: 300,
+    tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+    skipMemory: true,
+    writeFence,
+  })
+  if (!written) {
+    throw new Error(`[${timeRange}] public traders Redis cache write was not confirmed`)
+  }
+  return result.traders.length
 }
 
 async function fetchFromLeaderboard(
@@ -213,6 +288,7 @@ async function fetchFromLeaderboard(
     .from('leaderboard_ranks')
     .select(LEADERBOARD_COLUMNS)
     .eq('season_id', timeRange)
+    .not('rank', 'is', null)
 
   if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
     query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
@@ -254,11 +330,12 @@ async function fetchFromLeaderboard(
   } else {
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
-  // Deterministic tiebreak: ~1800 of ~9600 rows share an arena_score (ties of 4
-  // near the top). Without a secondary key Postgres does not guarantee stable
-  // order among equal scores, so offset pagination could duplicate/skip a tied
-  // row at a page boundary and ranks would visibly jump on refresh.
-  query = query.order('source_trader_id', { ascending: true })
+  // Persisted rank is the publication authority's deterministic tie-break.
+  // The rerank writer resolves equal arena_score rows into rank order, and the
+  // rank cursor continues that same order. A source_trader_id tie-break here
+  // disagrees with the writer and can permanently skip a tied row at a page
+  // boundary. Non-default metric sorts use rank as their final stable key too.
+  query = query.order('rank', { ascending: true, nullsFirst: false })
 
   // Pagination — one raw page per request, true rank order.
   // The platform-diversity cap was REMOVED (owner decision 2026-07-11): capping
@@ -305,14 +382,17 @@ async function fetchFromLeaderboard(
     exchangeFilter ? { source: exchangeFilter } : categoryFilter ? { sources: categorySources } : {}
   )
   const pageStart = useLegacyPaging ? page * limit : 0
-  const totalCount = cachedTotal ?? pageStart + (data?.length || 0)
+  const rankedRows = ((data || []) as Array<Record<string, unknown>>).filter(
+    (row) => row.rank != null
+  )
+  const totalCount = cachedTotal ?? pageStart + rankedRows.length
 
   // Verified-data set (A1): traders with an active read-only API-key
   // authorization → ✓ Verified badge (vs scraped "Tracked"). Cached, O(1) lookup.
   const verifiedKeys = await getVerifiedTraderKeys(supabase)
 
   // Map to trader response format (compatible with existing frontend)
-  const traders = (data || []).map((row: Record<string, unknown>) => ({
+  const traders = rankedRows.map((row) => ({
     id: row.source_trader_id as string,
     handle: (row.handle as string) || null,
     roi: row.roi != null ? Number(row.roi) : null,
@@ -401,26 +481,15 @@ async function fetchFromLeaderboard(
   const nextCursor = lastTrader ? lastTrader.rank : null
   const hasMore = useLegacyPaging ? (page + 1) * limit < totalCount : traders.length === limit
 
-  // Available sources (for UI filter) — cached in-memory with 5-min TTL
-  const sourcesCacheKey = publicRankingCacheKey(timeRange)
-  const sourceCacheEntry = availableSourcesCache.get(sourcesCacheKey)
-  let availableSources: string[]
-  if (sourceCacheEntry && Date.now() - sourceCacheEntry.ts < SOURCES_TTL) {
-    availableSources = filterPublicRankingSources(sourceCacheEntry.sources)
-  } else {
-    // Extract distinct sources from the current page, then supplement them from
-    // the same score-visible cache generation used by totalCount.
-    const allSourceSet = new Set<string>()
-    for (const r of data || []) allSourceSet.add((r as { source: string }).source)
-    for (const source of publicSources) {
-      allSourceSet.add(source)
-    }
-    availableSources = filterPublicRankingSources([...allSourceSet])
-    if (availableSourcesCache.size >= SOURCES_CACHE_MAX) {
-      availableSourcesCache.clear()
-    }
-    availableSourcesCache.set(sourcesCacheKey, { sources: availableSources, ts: Date.now() })
+  // Derive filter metadata from this request's rank/count generation. A
+  // process-local source list can survive publication and poison a newly
+  // fenced full-response payload with old filter options.
+  const allSourceSet = new Set<string>()
+  for (const r of data || []) allSourceSet.add((r as { source: string }).source)
+  for (const source of publicSources) {
+    allSourceSet.add(source)
   }
+  const availableSources = filterPublicRankingSources([...allSourceSet])
 
   const relevantSources = exchangeFilter
     ? [exchangeFilter]

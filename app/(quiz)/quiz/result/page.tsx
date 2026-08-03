@@ -68,22 +68,26 @@ async function getRecommendedTraders(typeId: PersonalityTypeId): Promise<Recomme
       .from('leaderboard_ranks')
       .select('source, source_trader_id, handle, avatar_url, roi, arena_score, win_rate, pnl, rank')
       .eq('season_id', '90D')
+      .not('rank', 'is', null)
       .not(query.orderBy, 'is', null)
       .order(query.orderBy, { ascending: query.ascending })
+      .order('rank', { ascending: true, nullsFirst: false })
       .limit(3)
 
     if (!data?.length) return []
 
-    return data.map((row) => ({
-      handle: row.handle || row.source_trader_id || '',
-      name: row.handle || row.source_trader_id || 'Unknown',
-      avatar_url: row.avatar_url || null,
-      platform: row.source || '',
-      roi_90d: row.roi ?? null,
-      arena_score: row.arena_score ?? null,
-      win_rate: row.win_rate ?? null,
-      pnl_90d: row.pnl ?? null,
-    }))
+    return data
+      .filter((row) => row.rank != null)
+      .map((row) => ({
+        handle: row.handle || row.source_trader_id || '',
+        name: row.handle || row.source_trader_id || 'Unknown',
+        avatar_url: row.avatar_url || null,
+        platform: row.source || '',
+        roi_90d: row.roi ?? null,
+        arena_score: row.arena_score ?? null,
+        win_rate: row.win_rate ?? null,
+        pnl_90d: row.pnl ?? null,
+      }))
   } catch {
     return []
   }

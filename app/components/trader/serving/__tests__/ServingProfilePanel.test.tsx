@@ -1,6 +1,7 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import ServingProfilePanel from '../ServingProfilePanel'
+import ServingRecordsSection from '../ServingRecordsSection'
 import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import type {
   SourceCapability,
@@ -14,7 +15,24 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 jest.mock('@/lib/hooks/useTraderCore', () => ({ useTraderCore: jest.fn() }))
 jest.mock('@/lib/hooks/useBotHeader', () => ({ useBotHeader: () => ({ bot: null }) }))
 jest.mock('@/app/components/trader/performance/PeriodSelector', () => ({
-  PeriodSelector: () => null,
+  PeriodSelector: ({
+    period,
+    inceptionSelected,
+    onPeriodChange,
+    onInceptionSelect,
+  }: {
+    period: '7D' | '30D' | '90D'
+    inceptionSelected?: boolean
+    onPeriodChange: (period: '7D' | '30D' | '90D') => void
+    onInceptionSelect?: () => void
+  }) => (
+    <div data-testid="period-selector" data-period={period} data-inception={inceptionSelected}>
+      <button onClick={() => onPeriodChange('7D')}>select-7D</button>
+      <button onClick={() => onPeriodChange('30D')}>select-30D</button>
+      <button onClick={() => onPeriodChange('90D')}>select-90D</button>
+      <button onClick={onInceptionSelect}>select-inception</button>
+    </div>
+  ),
 }))
 jest.mock('../SignalChips', () => () => null)
 jest.mock('../TraderMetaStrip', () => () => null)
@@ -26,7 +44,7 @@ jest.mock('../AssetPreference', () => () => null)
 jest.mock('../HoldingDistribution', () => () => null)
 jest.mock('../AbilityRadar', () => () => null)
 jest.mock('../ModuleDegraded', () => () => null)
-jest.mock('../ServingRecordsSection', () => () => null)
+jest.mock('../ServingRecordsSection', () => jest.fn(() => <div data-testid="records-section" />))
 jest.mock('../BotHeaderCard', () => () => null)
 jest.mock('@/app/components/common/ProvenanceFooter', () => () => null)
 jest.mock('@/app/components/ranking/AntiGamingBadge', () => () => null)
@@ -86,6 +104,10 @@ function mockCore(extras: Record<string, unknown>) {
     refetch: jest.fn(),
   })
 }
+
+beforeEach(() => {
+  jest.clearAllMocks()
+})
 
 describe('ServingProfilePanel GMX metric disclosure', () => {
   it('labels visible PnL and ROI only when the exact v2 contracts are present', () => {
@@ -161,5 +183,95 @@ describe('ServingProfilePanel GMX metric disclosure', () => {
     expect(screen.queryByText('metricPnl')).not.toBeInTheDocument()
     expect(screen.queryByText('gmxRealizedNetPnlLabel')).not.toBeInTheDocument()
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+})
+
+describe('ServingProfilePanel timeframe identity', () => {
+  it('drops the previous subject period before querying a narrower linked account', () => {
+    mockCore({})
+    const view = render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'select-7D' }))
+    expect(useTraderCore).toHaveBeenLastCalledWith({
+      source: 'gmx',
+      exchangeTraderId: '0x123',
+      tf: 7,
+      enabled: true,
+    })
+
+    const linkedFirstScreen: TraderFirstScreen = {
+      ...firstScreen,
+      source: 'hyperliquid_perp',
+      exchangeTraderId: 'linked-account',
+    }
+    const thirtyDayOnly: SourceCapability = {
+      ...capability,
+      timeframes: { '7': 'absent', '30': 'native', '90': 'absent' },
+    }
+    view.rerender(
+      <ServingProfilePanel firstScreen={linkedFirstScreen} capability={thirtyDayOnly} />
+    )
+
+    expect(screen.getByTestId('period-selector')).toHaveAttribute('data-period', '30D')
+    expect(useTraderCore).toHaveBeenLastCalledWith({
+      source: 'hyperliquid_perp',
+      exchangeTraderId: 'linked-account',
+      tf: 30,
+      enabled: true,
+    })
+    expect(useTraderCore).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'hyperliquid_perp',
+        exchangeTraderId: 'linked-account',
+        tf: 7,
+      })
+    )
+  })
+
+  it('drops a selected period when the current subject capability no longer supports it', () => {
+    mockCore({})
+    const view = render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'select-7D' }))
+    expect(screen.getByTestId('period-selector')).toHaveAttribute('data-period', '7D')
+    ;(useTraderCore as jest.Mock).mockClear()
+
+    view.rerender(
+      <ServingProfilePanel
+        firstScreen={firstScreen}
+        capability={{
+          ...capability,
+          timeframes: { '7': 'absent', '30': 'native', '90': 'absent' },
+        }}
+      />
+    )
+
+    expect(screen.getByTestId('period-selector')).toHaveAttribute('data-period', '30D')
+    expect(useTraderCore).toHaveBeenCalledTimes(1)
+    expect(useTraderCore).toHaveBeenLastCalledWith({
+      source: 'gmx',
+      exchangeTraderId: '0x123',
+      tf: 30,
+      enabled: true,
+    })
+  })
+
+  it('disables core and record requests when every timeframe is explicitly absent', () => {
+    mockCore({})
+    const noTimeframes: SourceCapability = {
+      ...capability,
+      timeframes: { '7': 'absent', '30': 'absent', '90': 'absent' },
+    }
+
+    render(<ServingProfilePanel firstScreen={firstScreen} capability={noTimeframes} />)
+
+    expect(useTraderCore).toHaveBeenLastCalledWith({
+      source: 'gmx',
+      exchangeTraderId: '0x123',
+      tf: 90,
+      enabled: false,
+    })
+    expect(screen.getByText('tfNotProvided')).toBeInTheDocument()
+    expect(ServingRecordsSection).not.toHaveBeenCalled()
   })
 })

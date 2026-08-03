@@ -11,11 +11,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getReadReplica } from '@/lib/supabase/read-replica'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getPool } from '@/lib/db'
+import { readSharedCacheWriteFence } from '@/lib/cache'
 import { tieredSet } from '@/lib/cache/redis-layer'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import {
+  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+  PUBLIC_RANKING_REDIS_TAG,
+  publicRankingCacheKey,
+} from '@/lib/rankings/publication-policy'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { ARENA_CONFIG } from '@/lib/utils/arena-score'
@@ -78,9 +83,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const startTime = Date.now()
-    // Use read replica for light queries (display names); heavy snapshot queries
-    // use the pg pool directly so we can control statement_timeout.
-    const supabase = getReadReplica() as SupabaseClient
+    // Use the primary for display-name metadata. Heavy snapshot queries use the
+    // pg pool directly so we can control statement_timeout. Redis generation
+    // commits must derive all rows and metadata from primary; replica lag after
+    // publication would otherwise bless old evidence as new.
+    const supabase = getSupabaseAdmin() as SupabaseClient
     const plog = await PipelineLogger.start('precompute-composite')
 
     // Safety timeout: ensure plog gets closed before Vercel kills the function at maxDuration (300s).
@@ -96,6 +103,11 @@ export async function GET(request: NextRequest) {
     }, 280_000) // 280s safety margin for 300s maxDuration
 
     try {
+      // Capture before any leaderboard read. A concurrent publication advances
+      // this generation, causing every eventual composite write to fail closed.
+      const writeFence = await readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
+      if (!writeFence) throw new Error('Composite cache write fence was not available')
+
       /**
        * Fetch top 2000 traders for a window using raw SQL via pg pool.
        * This bypasses PostgREST's 30s statement_timeout — we SET LOCAL to 90s.
@@ -128,10 +140,11 @@ export async function GET(request: NextRequest) {
              ON freshness.season_id = ranks.season_id
             AND freshness.source = ranks.source
            WHERE ranks.season_id = $1
+             AND ranks.rank IS NOT NULL
              AND ranks.arena_score > 0
              AND ranks.roi IS NOT NULL
              AND (ranks.is_outlier IS NULL OR ranks.is_outlier = false)
-           ORDER BY ranks.arena_score DESC NULLS LAST
+           ORDER BY ranks.arena_score DESC NULLS LAST, ranks.rank ASC, ranks.id ASC
            LIMIT 2500`,
             [seasonId]
           )
@@ -234,8 +247,9 @@ export async function GET(request: NextRequest) {
         entries.push({ key, platform, trader_key, compositeScore, primaryRow })
       }
 
-      // Sort by composite score desc
-      entries.sort((a, b) => b.compositeScore - a.compositeScore)
+      // Stable identity tie-break prevents equal composite scores from drifting
+      // across recomputes or inheriting database insertion order.
+      entries.sort((a, b) => b.compositeScore - a.compositeScore || a.key.localeCompare(b.key))
 
       // Batch fetch display names
       const traderIds = [...new Set(entries.slice(0, 1000).map((e) => e.trader_key))]
@@ -351,10 +365,14 @@ export async function GET(request: NextRequest) {
       }
 
       // Store the full composite result
-      await tieredSet(publicRankingCacheKey('precomputed:composite:all:v2'), compositeData, 'hot', [
-        'rankings',
-        'composite',
-      ])
+      const fullCacheWritten = await tieredSet(
+        publicRankingCacheKey('precomputed:composite:all:v2'),
+        compositeData,
+        'hot',
+        [PUBLIC_RANKING_REDIS_TAG, 'composite'],
+        { skipMemory: true, writeFence }
+      )
+      if (!fullCacheWritten) throw new Error('Composite all-cache generation was rejected')
 
       // Also store per-category composites for faster filtered queries
       const categories = ['futures', 'spot', 'onchain'] as const
@@ -373,12 +391,16 @@ export async function GET(request: NextRequest) {
             source_freshness: catFreshness.sources,
             availableSources: catSources.sort(),
           }
-          await tieredSet(
+          const categoryCacheWritten = await tieredSet(
             publicRankingCacheKey(`precomputed:composite:${cat}:v2`),
             catData,
             'hot',
-            ['rankings', 'composite']
+            [PUBLIC_RANKING_REDIS_TAG, 'composite'],
+            { skipMemory: true, writeFence }
           )
+          if (!categoryCacheWritten) {
+            throw new Error(`Composite ${cat}-cache generation was rejected`)
+          }
         }
       }
 

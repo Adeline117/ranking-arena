@@ -2,13 +2,21 @@
  * 缓存管理器
  * 统一管理 Upstash Redis 缓存，支持分布式部署环境
  * 当 Redis 不可用时自动回退到内存缓存
- * 
+ *
  * 注意：在客户端环境下只使用内存缓存，不加载 Redis
  */
 
 import { dataLogger } from '@/lib/utils/logger'
 import { getMemoryCache } from './memory-fallback'
 import { getSharedRedis, recordRedisError, isRedisAvailable, pingRedis } from './redis-client'
+import {
+  compareAndDeleteSharedCacheLock,
+  createSharedCacheLockToken,
+  readSharedCacheWriteFence,
+  setSharedCacheEntryIfFenceMatches,
+  type SharedCacheWriteFence,
+  type SharedCacheWriteLock,
+} from './write-fence'
 import type { CacheEntry as TieredCacheEntry } from './redis-layer'
 import type { ZodSchema } from 'zod'
 
@@ -23,6 +31,13 @@ interface CacheOptions {
   tags?: string[]
   /** 是否跳过内存缓存 */
   skipMemory?: boolean
+  /**
+   * Captured publication generation. `null` explicitly means the generation
+   * could not be proven and therefore no cache layer may be written.
+   */
+  writeFence?: SharedCacheWriteFence | null
+  /** Internal distributed-lock commit guard. */
+  writeLock?: SharedCacheWriteLock | null
 }
 
 /**
@@ -113,17 +128,23 @@ export function resetCacheStats(): void {
 // ============================================
 
 /**
- * 从缓存获取数据
- * L1 内存 → L2 Redis，命中 Redis 后回填内存
+ * 从缓存获取数据。
+ * 默认 L1 内存 → L2 Redis；共享发布读取可用 skipMemory 绕过实例 L1。
  */
-export async function get<T>(key: string): Promise<T | null> {
+export async function get<T>(
+  key: string,
+  options: Pick<CacheOptions, 'skipMemory'> = {}
+): Promise<T | null> {
   const memoryCache = getMemoryCache()
+  const skipMemory = options.skipMemory === true
 
   // L1: 内存缓存（零延迟，无网络往返）
-  const memoryData = memoryCache.get<T>(key)
-  if (memoryData !== null) {
-    stats.hits++
-    return memoryData
+  if (!skipMemory) {
+    const memoryData = memoryCache.get<T>(key)
+    if (memoryData !== null) {
+      stats.hits++
+      return memoryData
+    }
   }
 
   // L2: Redis
@@ -134,8 +155,9 @@ export async function get<T>(key: string): Promise<T | null> {
       if (raw !== null) {
         stats.hits++
         const data = unwrapCacheEntry<T>(raw)
-        // 回填内存缓存（加速后续访问）
-        memoryCache.set(key, data, 60)
+        // Shared-authority reads must remain visible across instances after a
+        // Redis tag invalidation, so they never backfill process memory.
+        if (!skipMemory) memoryCache.set(key, data, 60)
         return data
       }
     } catch (error) {
@@ -155,19 +177,34 @@ export async function get<T>(key: string): Promise<T | null> {
 export async function set<T>(key: string, value: T, options: CacheOptions = {}): Promise<boolean> {
   const redis = await getRedis()
   const memoryCache = getMemoryCache()
-  const { ttl = 120, tags, skipMemory = false } = options
+  const { ttl = 120, tags = [], skipMemory = false, writeFence, writeLock } = options
+  const commitGuarded = writeFence !== undefined || writeLock !== undefined
 
-  // 1. 写入内存缓存（始终成功）
-  if (!skipMemory) {
+  // Ordinary caches retain memory fallback. A fence-guarded generation must
+  // first be confirmed by shared Redis or it must remain invisible everywhere.
+  if (!commitGuarded && !skipMemory) {
     memoryCache.set(key, value, ttl)
   }
 
-  // 2. 尝试写入 Redis (single pipeline for SET + tags)
   // Wrap in CacheEntry envelope for format compatibility with redis-layer.ts
   if (redis) {
     try {
       const entry = wrapCacheEntry(value, ttl)
-      if (tags && tags.length > 0) {
+      if (commitGuarded) {
+        if (writeFence === null || writeLock === null) return false
+        if (!writeFence && !writeLock) return false
+        const written = await setSharedCacheEntryIfFenceMatches(
+          redis,
+          key,
+          JSON.stringify(entry),
+          ttl,
+          tags,
+          writeFence ?? undefined,
+          writeLock ?? undefined
+        )
+        if (!written) return false
+        if (!skipMemory) memoryCache.set(key, value, ttl)
+      } else if (tags.length > 0) {
         // Pipeline: SET + SADD + EXPIRE in one round-trip
         const pipeline = redis.pipeline()
         pipeline.set(key, entry, { ex: ttl })
@@ -184,12 +221,12 @@ export async function set<T>(key: string, value: T, options: CacheOptions = {}):
     } catch (error) {
       handleRedisError(error)
       dataLogger.error('Upstash Redis 写入失败:', { key, error })
-      // 内存缓存已写入，返回 true
-      return !skipMemory
+      // A fenced write can never degrade to an unversioned local generation.
+      return !commitGuarded && !skipMemory
     }
   }
 
-  return !skipMemory
+  return !commitGuarded && !skipMemory
 }
 
 /**
@@ -300,7 +337,7 @@ export async function getOrSet<T>(
   options: CacheOptions & { staleTtl?: number; schema?: ZodSchema<T> } = {}
 ): Promise<T> {
   // 尝试从缓存获取
-  const cached = await get<T>(key)
+  const cached = await get<T>(key, { skipMemory: options.skipMemory })
   if (cached !== null) {
     // Optional Zod schema validation on deserialized cache (prevents schema drift)
     if (options.schema) {
@@ -310,7 +347,11 @@ export async function getOrSet<T>(
           errors: result.error.issues.slice(0, 3),
         })
         // Evict invalid cache entry
-        del(key).catch(err => dataLogger.warn(`[Cache] Failed to evict invalid cache entry for ${key}`, { error: String(err) }))
+        del(key).catch((err) =>
+          dataLogger.warn(`[Cache] Failed to evict invalid cache entry for ${key}`, {
+            error: String(err),
+          })
+        )
       } else {
         return result.data
       }
@@ -320,16 +361,26 @@ export async function getOrSet<T>(
   }
 
   // If staleTtl is set, check memory for stale data and revalidate in background
-  if (options.staleTtl) {
+  if (options.staleTtl && !options.skipMemory) {
     const memoryCache = getMemoryCache()
     // getMemoryCache().get checks expiry — use the raw map for stale check
     const staleData = memoryCache.get<T>(`stale:${key}`)
     if (staleData !== null) {
       // Serve stale, refresh in background
-      fetcher().then(fresh => {
-        set(key, fresh, options).catch(err => dataLogger.warn(`[Cache] Stale revalidation set failed for ${key}`, { error: String(err) }))
-        memoryCache.set(`stale:${key}`, fresh, (options.ttl || 120) + options.staleTtl!)
-      }).catch(err => dataLogger.warn(`[Cache] Stale revalidation fetch failed for ${key}`, { error: String(err) }))
+      fetcher()
+        .then((fresh) => {
+          set(key, fresh, options).catch((err) =>
+            dataLogger.warn(`[Cache] Stale revalidation set failed for ${key}`, {
+              error: String(err),
+            })
+          )
+          memoryCache.set(`stale:${key}`, fresh, (options.ttl || 120) + options.staleTtl!)
+        })
+        .catch((err) =>
+          dataLogger.warn(`[Cache] Stale revalidation fetch failed for ${key}`, {
+            error: String(err),
+          })
+        )
       return staleData
     }
   }
@@ -359,27 +410,52 @@ export async function getOrSet<T>(
  * - TTL 抖动防止同时过期
  * - 最大等待时间限制
  */
+type LockedCacheOptions = CacheOptions & {
+  lockTtl?: number
+  maxWaitMs?: number
+  retryDelayMs?: number
+  ttlJitter?: boolean
+  /** Capture this generation before the first cache read or source fetch. */
+  writeFenceKey?: string
+}
+
+async function capturedFenceAdvanced(
+  writeFenceKey: string | undefined,
+  capturedFence: SharedCacheWriteFence | null | undefined
+): Promise<boolean> {
+  if (!writeFenceKey || !capturedFence) return false
+  const currentFence = await readSharedCacheWriteFence(writeFenceKey)
+  return (
+    currentFence === null ||
+    currentFence.key !== capturedFence.key ||
+    currentFence.token !== capturedFence.token
+  )
+}
+
 export async function getOrSetWithLock<T>(
   key: string,
   fetcher: () => Promise<T>,
-  options: CacheOptions & {
-    lockTtl?: number
-    maxWaitMs?: number
-    retryDelayMs?: number
-    ttlJitter?: boolean
-  } = {}
+  options: LockedCacheOptions = {}
+): Promise<T> {
+  return getOrSetWithLockAttempt(key, fetcher, options, false)
+}
+
+async function getOrSetWithLockAttempt<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  options: LockedCacheOptions,
+  fenceRetryAttempted: boolean
 ): Promise<T> {
   const redis = await getRedis()
-  const {
-    ttl = 120,
-    lockTtl = 10,
-    maxWaitMs = 5000,
-    retryDelayMs = 50,
-    ttlJitter = true,
-  } = options
+  const { ttl = 120, lockTtl = 10, maxWaitMs = 5000, retryDelayMs = 50, ttlJitter = true } = options
+  const writeFence = options.writeFenceKey
+    ? await readSharedCacheWriteFence(options.writeFenceKey)
+    : options.writeFence
+  const guardedOptions: CacheOptions = { ...options, writeFence }
+  const sharedReadsAllowed = !options.writeFenceKey || writeFence !== null
 
   // 尝试从缓存获取
-  const cached = await get<T>(key)
+  const cached = sharedReadsAllowed ? await get<T>(key, { skipMemory: options.skipMemory }) : null
   if (cached !== null) {
     return cached
   }
@@ -390,11 +466,15 @@ export async function getOrSetWithLock<T>(
   // 如果 Redis 不可用，直接获取数据并缓存到内存
   if (!redis) {
     const data = await fetcher()
-    await set(key, data, { ...options, ttl: actualTtl })
+    await set(key, data, { ...guardedOptions, ttl: actualTtl })
     return data
   }
 
-  const lockKey = `lock:${key}`
+  const fenceLockSuffix = options.writeFenceKey
+    ? `:fence:${writeFence?.token ?? 'unavailable'}`
+    : ''
+  const lockKey = `lock:${key}${fenceLockSuffix}`
+  const lockOwnerToken = createSharedCacheLockToken()
   const startTime = Date.now()
   let attempt = 0
 
@@ -402,59 +482,108 @@ export async function getOrSetWithLock<T>(
   while (Date.now() - startTime < maxWaitMs) {
     attempt++
 
+    let lockAcquired = false
     try {
       // 尝试获取锁（使用 NX 选项）
-      const lockAcquired = await redis.set(lockKey, '1', {
+      const lockResult = await redis.set(lockKey, lockOwnerToken, {
         ex: lockTtl,
         nx: true,
       })
-
-      if (lockAcquired) {
-        try {
-          // 双重检查：获得锁后再次检查缓存
-          const doubleCheck = await get<T>(key)
-          if (doubleCheck !== null) {
-            return doubleCheck
-          }
-
-          // 获得锁，获取数据
-          const data = await fetcher()
-          await set(key, data, { ...options, ttl: actualTtl })
-          return data
-        } finally {
-          // 释放锁
-          await redis.del(lockKey).catch(err => dataLogger.warn(`[Cache] Lock release failed for ${lockKey}`, { error: String(err) }))
-        }
-      }
-
-      // 未获得锁，检查缓存是否已被其他进程填充
-      const retryCache = await get<T>(key)
-      if (retryCache !== null) {
-        return retryCache
-      }
+      lockAcquired = lockResult === 'OK'
     } catch (lockError) {
       // Redis error (e.g. rate limit exceeded) — fall back to direct fetch
-      dataLogger.warn(`[Cache] Redis lock error for ${key}, falling back to direct fetch:`, lockError)
+      dataLogger.warn(
+        `[Cache] Redis lock error for ${key}, falling back to direct fetch:`,
+        lockError
+      )
       const data = await fetcher()
-      // Try memory cache only
-      const memCache = getMemoryCache()
-      memCache.set(key, data, actualTtl)
+      // The lock state is uncertain, so this response may be served but must
+      // not overwrite a cache committed by a proven owner.
+      const written = await set(key, data, {
+        ...guardedOptions,
+        ttl: actualTtl,
+        writeLock: null,
+      })
+      if (!written && (await capturedFenceAdvanced(options.writeFenceKey, writeFence))) {
+        if (fenceRetryAttempted) {
+          throw new Error(`[Cache] Publication changed repeatedly while reading ${key}`)
+        }
+        return getOrSetWithLockAttempt(key, fetcher, options, true)
+      }
       return data
+    }
+
+    if (lockAcquired) {
+      let retryAfterFenceAdvance = false
+      try {
+        // 双重检查：获得锁后再次检查缓存
+        const doubleCheck = sharedReadsAllowed
+          ? await get<T>(key, { skipMemory: options.skipMemory })
+          : null
+        if (doubleCheck !== null) {
+          return doubleCheck
+        }
+
+        // Fetcher failures must propagate after releasing the lock. Keeping
+        // this outside the Redis-acquire catch prevents executing a source
+        // mutation twice after an application error.
+        const data = await fetcher()
+        const written = await set(key, data, {
+          ...guardedOptions,
+          ttl: actualTtl,
+          writeLock: { key: lockKey, ownerToken: lockOwnerToken },
+        })
+        retryAfterFenceAdvance =
+          !written && (await capturedFenceAdvanced(options.writeFenceKey, writeFence))
+        if (!retryAfterFenceAdvance) return data
+      } finally {
+        // Only the current owner may release the lock. An expired owner must
+        // never delete a replacement acquired by another request.
+        await compareAndDeleteSharedCacheLock(redis, lockKey, lockOwnerToken).catch((err) =>
+          dataLogger.warn(`[Cache] Lock release failed for ${lockKey}`, { error: String(err) })
+        )
+      }
+
+      if (fenceRetryAttempted) {
+        throw new Error(`[Cache] Publication changed repeatedly while reading ${key}`)
+      }
+      return getOrSetWithLockAttempt(key, fetcher, options, true)
+    }
+
+    // 未获得锁，检查缓存是否已被其他进程填充
+    const retryCache = sharedReadsAllowed
+      ? await get<T>(key, { skipMemory: options.skipMemory })
+      : null
+    if (retryCache !== null) {
+      return retryCache
     }
 
     // 指数退避等待
     const backoffMs = Math.min(retryDelayMs * Math.pow(2, attempt - 1), 1000)
     const jitter = Math.random() * backoffMs * 0.3 // 30% 抖动
-    await new Promise(resolve => setTimeout(resolve, backoffMs + jitter))
+    await new Promise((resolve) => setTimeout(resolve, backoffMs + jitter))
   }
 
   // 超时：执行兜底获取（避免完全失败）
   dataLogger.warn(`[Cache] Lock timeout for ${key}, executing without lock`)
   const data = await fetcher()
-  // 异步缓存，不阻塞返回
-  set(key, data, { ...options, ttl: actualTtl }).catch((err) => {
-    dataLogger.warn(`[Cache] Failed to set cache after lock timeout for ${key}: ${err instanceof Error ? err.message : String(err)}`)
-  })
+  const timeoutWrite = set(key, data, { ...guardedOptions, ttl: actualTtl, writeLock: null })
+  if (options.writeFenceKey) {
+    const written = await timeoutWrite
+    if (!written && (await capturedFenceAdvanced(options.writeFenceKey, writeFence))) {
+      if (fenceRetryAttempted) {
+        throw new Error(`[Cache] Publication changed repeatedly while reading ${key}`)
+      }
+      return getOrSetWithLockAttempt(key, fetcher, options, true)
+    }
+  } else {
+    // Ordinary caches keep the previous non-blocking timeout fallback.
+    timeoutWrite.catch((err) => {
+      dataLogger.warn(
+        `[Cache] Failed to set cache after lock timeout for ${key}: ${err instanceof Error ? err.message : String(err)}`
+      )
+    })
+  }
   return data
 }
 
@@ -553,7 +682,7 @@ export async function mget<T>(keys: string[]): Promise<(T | null)[]> {
     const redis = await getRedis()
     if (redis) {
       try {
-        const missKeys = missIndices.map(i => keys[i])
+        const missKeys = missIndices.map((i) => keys[i])
         const redisResults = await redis.mget<(T | TieredCacheEntry<T> | null)[]>(...missKeys)
         for (let j = 0; j < missIndices.length; j++) {
           const raw = redisResults[j]
@@ -658,6 +787,8 @@ export function forceMemoryOnly(enabled: boolean): void {
 
 export { CacheKey, CachePattern, CACHE_TTL, CACHE_PREFIX } from './keys'
 export { MemoryCache, getMemoryCache, resetMemoryCache } from './memory-fallback'
+export { advanceSharedCacheWriteFenceAndDeleteTag, readSharedCacheWriteFence } from './write-fence'
+export type { SharedCacheWriteFence, SharedCacheWriteLock } from './write-fence'
 
 // ============================================
 // 简单客户端缓存 API（兼容旧代码）

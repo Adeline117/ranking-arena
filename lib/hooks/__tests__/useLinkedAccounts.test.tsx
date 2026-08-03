@@ -104,16 +104,37 @@ describe('useLinkedAccounts public identity boundary', () => {
       wrapper: Wrapper,
     })
     await waitFor(() => expect(view.result.current.hasMultipleAccounts).toBe(true))
+    expect(view.result.current.authoritativeReady).toBe(true)
 
     view.rerender({ platform: 'bybit', traderKey: 'b' })
     expect(view.result.current.linkedAccounts).toEqual([])
     expect(view.result.current.hasMultipleAccounts).toBe(false)
+    expect(view.result.current.authoritativeReady).toBe(false)
 
     await act(async () => {
       pendingB.resolve(response(payload(subject('bybit', 'b'), [])))
       await pendingB.promise
     })
-    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
+    expect(view.result.current.linkedAccounts).toEqual([])
+  })
+
+  it('distinguishes a disabled query from an authoritative empty response', async () => {
+    const view = renderHook(({ platform, traderKey }) => useLinkedAccounts(platform, traderKey), {
+      initialProps: { platform: undefined, traderKey: undefined },
+      wrapper: Wrapper,
+    })
+
+    expect(view.result.current.authoritativeReady).toBe(false)
+    expect(view.result.current.isLoading).toBe(false)
+    expect(view.result.current.linkedAccounts).toEqual([])
+    expect(mockFetch).not.toHaveBeenCalled()
+
+    mockFetch.mockResolvedValue(response(payload(subject('bybit', 'a'), [])))
+    view.rerender({ platform: 'bybit', traderKey: 'a' })
+
+    expect(view.result.current.authoritativeReady).toBe(false)
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
     expect(view.result.current.linkedAccounts).toEqual([])
   })
 
@@ -121,7 +142,7 @@ describe('useLinkedAccounts public identity boundary', () => {
     mockFetch.mockResolvedValue(response(payload(subject('bybit', 'a'), [])))
     const view = renderHook(() => useLinkedAccounts('bybit', 'a'), { wrapper: Wrapper })
 
-    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
     expect(view.result.current.linkedAccounts).toEqual([])
     expect(mockFetch).toHaveBeenCalledTimes(1)
     expect(mockFetch.mock.calls[0][0]).toContain('contract=2')
@@ -140,12 +161,13 @@ describe('useLinkedAccounts public identity boundary', () => {
     const view = renderHook(() => useLinkedAccounts('bybit', 'a'), { wrapper: Wrapper })
     expect(view.result.current.linkedAccounts).toEqual([])
     expect(view.result.current.isLoading).toBe(true)
+    expect(view.result.current.authoritativeReady).toBe(false)
 
     await act(async () => {
       live.resolve(response(payload(subject('bybit', 'a'), [])))
       await live.promise
     })
-    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
     expect(view.result.current.linkedAccounts).toEqual([])
   })
 
@@ -160,6 +182,73 @@ describe('useLinkedAccounts public identity boundary', () => {
 
     const view = renderHook(() => useLinkedAccounts('bybit', 'a'), { wrapper: Wrapper })
     await waitFor(() => expect(view.result.current.error).toBeTruthy())
+    expect(view.result.current.linkedAccounts).toEqual([])
+    expect(view.result.current.hasMultipleAccounts).toBe(false)
+    expect(view.result.current.authoritativeReady).toBe(false)
+  })
+
+  it('withdraws authoritative data while a successful account is revalidating', async () => {
+    const revalidation = deferred<Response>()
+    mockFetch
+      .mockResolvedValueOnce(
+        response(
+          payload(subject('bybit', 'a'), [
+            account('bybit', 'a'),
+            account('okx', 'linked-account', { isPrimary: false }),
+          ])
+        )
+      )
+      .mockReturnValueOnce(revalidation.promise)
+
+    const view = renderHook(() => useLinkedAccounts('bybit', 'a'), { wrapper: Wrapper })
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
+    expect(view.result.current.hasMultipleAccounts).toBe(true)
+
+    act(() => {
+      void queryClient.refetchQueries({
+        queryKey: ['linked-accounts-v2', 'bybit', 'a'],
+        exact: true,
+      })
+    })
+
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(false))
+    expect(view.result.current.isLoading).toBe(true)
+    expect(view.result.current.linkedAccounts).toEqual([])
+    expect(view.result.current.hasMultipleAccounts).toBe(false)
+
+    await act(async () => {
+      revalidation.resolve(response(payload(subject('bybit', 'a'), [])))
+      await revalidation.promise
+    })
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
+    expect(view.result.current.linkedAccounts).toEqual([])
+  })
+
+  it('withdraws previously authoritative data after a live revalidation error', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        response(
+          payload(subject('bybit', 'a'), [
+            account('bybit', 'a'),
+            account('okx', 'linked-account', { isPrimary: false }),
+          ])
+        )
+      )
+      .mockRejectedValue(new Error('network unavailable'))
+
+    const view = renderHook(() => useLinkedAccounts('bybit', 'a'), { wrapper: Wrapper })
+    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
+    expect(view.result.current.hasMultipleAccounts).toBe(true)
+
+    act(() => {
+      void queryClient.refetchQueries({
+        queryKey: ['linked-accounts-v2', 'bybit', 'a'],
+        exact: true,
+      })
+    })
+
+    await waitFor(() => expect(view.result.current.error).toBeTruthy())
+    expect(view.result.current.authoritativeReady).toBe(false)
     expect(view.result.current.linkedAccounts).toEqual([])
     expect(view.result.current.hasMultipleAccounts).toBe(false)
   })
@@ -186,6 +275,7 @@ describe('useLinkedAccounts public identity boundary', () => {
 
     await waitFor(() => expect(view.result.current.linkedAccounts).toEqual([]))
     expect(view.result.current.isLoading).toBe(true)
+    expect(view.result.current.authoritativeReady).toBe(false)
   })
 
   it('rejects a valid-shaped response bound to another trader', async () => {

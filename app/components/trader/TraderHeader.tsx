@@ -68,6 +68,8 @@ interface TraderHeaderProps {
   linkedAccountCount?: number
   /** Platforms of linked accounts (for showing exchange badges) */
   linkedPlatforms?: string[]
+  /** Aggregate "All accounts" scope; suppresses every single-account badge. */
+  isAggregateView?: boolean
   /** Data source type: 'authorized' | 'public_api' | 'enrichment' | 'historical' */
   dataSource?: 'authorized' | 'public_api' | 'enrichment' | 'historical' | null
   /** Whether this trader has an active authorization (API key or wallet bound) */
@@ -110,6 +112,7 @@ export default function TraderHeader({
   claimedAvatarUrl,
   linkedAccountCount,
   linkedPlatforms,
+  isAggregateView = false,
   platform,
   traderKey,
   dataSource,
@@ -207,7 +210,13 @@ export default function TraderHeader({
   // copiers removed — only show platform internal followers
   if (aum !== undefined && aum > 0) subtitleParts.push(`${t('aumLabel')} ${formatAum(aum)}`)
   if (activeDays !== null && activeDays >= 7) subtitleParts.push(formatActiveDays(activeDays, t))
-  if (rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()]) {
+  if (
+    !isAggregateView &&
+    rank != null &&
+    rank > 0 &&
+    source &&
+    EXCHANGE_NAMES[source.toLowerCase()]
+  ) {
     subtitleParts.push(
       t('rankedOnExchange')
         .replace('{rank}', rank.toLocaleString('en-US'))
@@ -283,60 +292,62 @@ export default function TraderHeader({
               {displayNameProp || formatDisplayName(handle, source)}
             </Text>
 
-            <button
-              onClick={copyHandle}
-              title={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
-              aria-label={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 4,
-                minWidth: 44,
-                minHeight: 44,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: handleCopied ? tokens.colors.accent.success : tokens.colors.text.tertiary,
-                transition: 'color 0.2s ease',
-                flexShrink: 0,
-              }}
-            >
-              {handleCopied ? (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-              )}
-            </button>
+            {!isAggregateView && (
+              <button
+                onClick={copyHandle}
+                title={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
+                aria-label={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  minWidth: 44,
+                  minHeight: 44,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: handleCopied ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+                  transition: 'color 0.2s ease',
+                  flexShrink: 0,
+                }}
+              >
+                {handleCopied ? (
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : (
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                )}
+              </button>
+            )}
 
             {/* Inline badges: verified + exchange + score + confidence + rank
              * percentile + trading style + bot + data-source + web3 + trend
              * sparkline + linked exchanges. Extracted to TraderHeaderBadges.tsx. */}
             <TraderHeaderBadges
-              source={source}
+              source={isAggregateView ? undefined : source}
               isRegistered={isRegistered}
               isVerifiedTrader={isVerifiedTrader}
               isBot={isBot}
@@ -418,22 +429,26 @@ export default function TraderHeader({
         </Box>
       </Box>
 
-      {/* Action buttons — Follow + Share (exchange links moved to ExchangeLinksBar below) */}
-      <TraderHeaderActions
-        traderId={traderId}
-        registeredUserId={registeredUserId}
-        handle={handle}
-        source={source}
-        displayName={displayNameProp}
-        effectiveAvatarUrl={effectiveAvatarUrl}
-        isOwnProfile={isOwnProfile}
-        isRegistered={isRegistered}
-        userId={userId}
-        rank={rank}
-        roi90d={roi90d}
-        arenaScore={arenaScore}
-        onFollowChange={(delta) => setFollowerCount((prev) => Math.max(0, prev + delta))}
-      />
+      {/* Every control below mutates or shares one exact account. Aggregate and
+          unresolved scopes intentionally expose no implicit-primary actions. */}
+      {!isAggregateView && (
+        <TraderHeaderActions
+          traderId={traderId}
+          registeredUserId={registeredUserId}
+          handle={handle}
+          routeKey={traderKey}
+          source={source}
+          displayName={displayNameProp}
+          effectiveAvatarUrl={effectiveAvatarUrl}
+          isOwnProfile={isOwnProfile}
+          isRegistered={isRegistered}
+          userId={userId}
+          rank={rank}
+          roi90d={roi90d}
+          arenaScore={arenaScore}
+          onFollowChange={(delta) => setFollowerCount((prev) => Math.max(0, prev + delta))}
+        />
+      )}
     </Box>
   )
 }

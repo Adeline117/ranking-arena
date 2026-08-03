@@ -56,6 +56,11 @@ import {
   parseOkxPositions,
   parseOkxProfile,
 } from './parsers'
+import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import { okxPositionHistoryTerminalVerifier } from './history-terminal'
 
 const API_BASE = 'https://www.okx.com/api/v5/copytrading'
 const PAGE_LIMIT = 20 // public-lead-traders hard max
@@ -151,6 +156,15 @@ const okxAdapter: SourceAdapter = {
       return supportsSwapRecords(src)
     }
     return true
+  },
+
+  historyTerminalVerifier(src, kind) {
+    return src.slug === 'okx_futures' &&
+      kind === 'position_history' &&
+      supportsSwapRecords(src) &&
+      base(src) === API_BASE
+      ? okxPositionHistoryTerminalVerifier
+      : null
   },
 
   /**
@@ -283,14 +297,14 @@ const okxAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     const it = instType(src)
     if (kind === 'copiers') {
       assertSourceSurfaceSupported(okxAdapter, src, 'copiers')
       const url = `${base(src)}/public-copy-traders?instType=${it}&uniqueCode=${exchangeTraderId}`
       const data = await fetchData(session, url)
       yield { pageIndex: 1, payload: { data }, url, fetchedAt: new Date().toISOString() }
-      return
+      return undefined
     }
     if (kind !== 'position_history') {
       throw new Error(`[okx] history surface ${kind} not supported`)
@@ -304,23 +318,49 @@ const okxAdapter: SourceAdapter = {
     for (let page = 1; page <= maxPages; page++) {
       const url =
         `${base(src)}/public-subpositions-history?instType=${it}` +
-        `&uniqueCode=${exchangeTraderId}&limit=100` +
-        (after ? `&after=${after}` : '')
+        `&uniqueCode=${encodeURIComponent(exchangeTraderId)}&limit=100` +
+        (after ? `&after=${encodeURIComponent(after)}` : '')
       const data = await fetchData(session, url)
-      if (data.length === 0) break
-
-      yield { pageIndex: page, payload: { data }, url, fetchedAt: new Date().toISOString() }
+      yield {
+        pageIndex: page,
+        payload: { data, historyTraderIdentity: exchangeTraderId },
+        url,
+        fetchedAt: new Date().toISOString(),
+      }
+      if (data.length === 0) {
+        return {
+          contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+          observations: [{ segment_id: 'default', reason: 'empty_page', page_ordinal: page }],
+        }
+      }
 
       const last = data[data.length - 1]
       const lastId = String(last.subPosId ?? '')
-      if (!lastId) break
+      if (!lastId) {
+        throw new Error('[okx] position history page is missing the pagination subPosId')
+      }
       if (Number.isFinite(cursorMs)) {
-        const oldest = Number(last.openTime)
-        // Overlap reached: this page already dips into stored history.
-        if (Number.isFinite(oldest) && oldest <= cursorMs) break
+        // The persisted position-history cursor is a close timestamp. Compare
+        // it with the same source field; using openTime can stop early for a
+        // long-lived position that opened before, but closed after, the
+        // checkpoint.
+        const closeTimes = data
+          .map((row) => Number(row.closeTime))
+          .filter((closeTime) => Number.isFinite(closeTime) && closeTime > 0)
+        const oldest = closeTimes.length > 0 ? Math.min(...closeTimes) : Number.NaN
+        // Overlap reached: this page already dips into stored close history.
+        if (Number.isFinite(oldest) && oldest <= cursorMs) {
+          return {
+            contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+            observations: [{ segment_id: 'default', reason: 'cursor_overlap', page_ordinal: page }],
+          }
+        }
       }
       after = lastId
     }
+    throw new Error(
+      `[okx] position history reached page cap ${maxPages} without exhaustion or cursor overlap`
+    )
   },
 
   parseLeaderboard: parseOkxLeaderboardPage,

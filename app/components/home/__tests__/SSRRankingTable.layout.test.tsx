@@ -13,6 +13,7 @@ const traders: InitialTrader[] = [
   {
     id: 'alpha-id',
     handle: 'Alpha Trader',
+    rank: 7,
     roi: 42.5,
     pnl: 125000,
     win_rate: 61.2,
@@ -29,6 +30,7 @@ const traders: InitialTrader[] = [
   {
     id: 'wallet-id',
     handle: 'Wallet Holder',
+    rank: 11,
     roi: -4.25,
     pnl: -420,
     win_rate: null,
@@ -62,6 +64,8 @@ describe('SSRRankingTable responsive layout', () => {
     const firstRow = links[0]
     expect(firstRow).toHaveClass('ssr-ranking-entry', 'ssr-ranking-grid')
     expect(firstRow).toHaveAttribute('href', '/trader/alpha-id?platform=binance_futures')
+    expect(firstRow).toHaveAccessibleName(expect.stringContaining('Rank 7:'))
+    expect(within(firstRow).getByText('7')).toBeInTheDocument()
     expect(within(firstRow).getByText('88')).toBeInTheDocument()
     expect(firstRow.querySelector('.ssr-rank-cell')).not.toBeNull()
     expect(firstRow.querySelector('.ssr-trader-cell')).not.toBeNull()

@@ -116,6 +116,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     { id: string; name: string; name_en?: string | null; member_count: number }[]
   >([])
   const [loadingGroups, setLoadingGroups] = useState(false)
+  const [groupsError, setGroupsError] = useState<Error | null>(null)
+  const loadGroupsAbortRef = useRef<AbortController | null>(null)
 
   const latestPostTime = useRef<string>('')
 
@@ -342,39 +344,84 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     }
   }, [loadPosts])
 
-  // Load groups when groups tab is active
-  useEffect(() => {
+  const loadGroups = useCallback(async () => {
     if (activeHotTab !== 'groups') return
-    const loadGroups = async () => {
-      setLoadingGroups(true)
-      try {
-        const res = await fetch('/api/groups?sort_by=activity&limit=30')
-        const json = await res.json()
-        const data = json.data?.groups || json.groups || json.data || []
-        setGroups(
-          data.map((g: Record<string, unknown>) => ({
-            id: (g.id as string) || '',
-            name: (g.name as string) || '',
-            name_en: (g.name_en as string | null) || null,
-            member_count: (g.member_count as number) || 0,
-          }))
-        )
-      } catch (error) {
-        // Ignore navigation-interrupted fetches (route change aborts the in-flight
-        // request → AbortError or "TypeError: Failed to fetch"). These are not real
-        // errors and were spamming the console during normal navigation.
-        const msg = error instanceof Error ? error.message : ''
-        const interrupted =
-          (error instanceof DOMException && error.name === 'AbortError') ||
-          /Failed to fetch|aborted/i.test(msg)
-        if (!interrupted) logger.error('Groups load error:', error)
-        setGroups([])
-      } finally {
+
+    loadGroupsAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadGroupsAbortRef.current = controller
+    setLoadingGroups(true)
+    setGroupsError(null)
+
+    try {
+      const res = await fetch('/api/groups?sort_by=activity&limit=30', {
+        signal: controller.signal,
+      })
+      if (controller.signal.aborted) return
+      if (!res.ok) throw new Error(`Groups request failed (${res.status})`)
+
+      const json = (await res.json()) as {
+        groups?: unknown
+        data?: unknown | { groups?: unknown }
+      }
+      if (controller.signal.aborted) return
+      const nestedData =
+        json.data && typeof json.data === 'object' && !Array.isArray(json.data)
+          ? (json.data as { groups?: unknown }).groups
+          : undefined
+      const rawGroups = nestedData ?? json.groups ?? json.data
+      if (!Array.isArray(rawGroups)) {
+        throw new Error('Groups response did not contain a groups array')
+      }
+
+      const nextGroups = rawGroups.flatMap((value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+        const group = value as Record<string, unknown>
+        if (
+          typeof group.id !== 'string' ||
+          group.id.length === 0 ||
+          typeof group.name !== 'string' ||
+          group.name.length === 0 ||
+          !Number.isSafeInteger(group.member_count) ||
+          Number(group.member_count) < 0
+        ) {
+          return []
+        }
+        return [
+          {
+            id: group.id,
+            name: group.name,
+            name_en: typeof group.name_en === 'string' ? group.name_en : null,
+            member_count: Number(group.member_count),
+          },
+        ]
+      })
+      setGroups(nextGroups)
+    } catch (error) {
+      if (controller.signal.aborted) return
+      logger.error('Groups load error:', error)
+      setGroupsError(error instanceof Error ? error : new Error('Failed to load groups'))
+    } finally {
+      if (!controller.signal.aborted && loadGroupsAbortRef.current === controller) {
         setLoadingGroups(false)
       }
     }
-    loadGroups()
   }, [activeHotTab])
+
+  // Load groups when the groups tab becomes active and cancel the request when
+  // the user leaves the tab or the page unmounts.
+  useEffect(() => {
+    if (activeHotTab !== 'groups') {
+      loadGroupsAbortRef.current?.abort()
+      loadGroupsAbortRef.current = null
+      return
+    }
+    void loadGroups()
+    return () => {
+      loadGroupsAbortRef.current?.abort()
+      loadGroupsAbortRef.current = null
+    }
+  }, [activeHotTab, loadGroups])
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
@@ -1103,6 +1150,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     // Groups
     groups,
     loadingGroups,
+    groupsError,
+    refreshGroups: loadGroups,
 
     // Post detail modal
     openPost,

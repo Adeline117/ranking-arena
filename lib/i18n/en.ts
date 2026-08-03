@@ -99,7 +99,7 @@ const en = {
   loggedInShowAll: 'Logged in: Show all recommendations',
   notLoggedInShowLimited: 'Not logged in: Show first 10 only',
   groupRecommendations: 'Group Recommendations',
-  hotGroups: 'Hot Groups',
+  hotGroups: 'Recently Active Groups',
   groupRecommendationsComingSoon: 'Group recommendations coming soon',
   hotList: 'Hot List',
   loggedInShowAllHot: 'Logged in: Show all',
@@ -444,7 +444,7 @@ const en = {
   // ProGate upsell — price anchor + per-feature default benefits
   proPriceAnchor: 'From {price}/mo · 7-day free trial',
   gateBenefitLinkedMultiAccount: 'Link unlimited exchange accounts',
-  gateBenefitLinkedUnifiedPnl: 'Unified PnL across all accounts',
+  gateBenefitLinkedUnifiedPnl: 'Linked-account switching with per-account evidence',
   gateBenefitLinkedAutoSync: 'Auto-sync balances & positions',
   gateBenefitGroupExclusive: 'Access Pro-exclusive groups',
   gateBenefitGroupSignals: 'Real-time trade signals & calls',
@@ -2441,10 +2441,8 @@ const en = {
 
   // Offline page
   youAreOffline: 'You Are Offline',
-  checkNetworkAndRetryOffline:
-    'Please check your network connection and try again. Some cached content may still be accessible.',
+  checkNetworkAndRetryOffline: 'Check your network connection, then try again.',
   retryConnection: 'Retry Connection',
-  cachedLeaderboard: 'Last Cached Leaderboard',
   arenaTagline: 'Arena - Crypto Trader Leaderboard',
 
   // Onboarding page
@@ -2657,7 +2655,7 @@ const en = {
     'Data for this platform is temporarily unavailable. Historical data shown below may be outdated.',
   rankTrend: 'Rank trend (7d)',
   drawdownChart: 'Drawdown',
-  dailyReturnsDistribution: 'Daily Returns Distribution',
+  dailyReturnsDistribution: 'Daily Cumulative ROI Change (percentage points)',
   estimatedFromRoi: 'Estimated from ROI',
 
   // PortfolioTable
@@ -5258,13 +5256,24 @@ const en = {
   traderTradingStyleLabel: 'Trading Style',
   traderAccumulatingData: 'Accumulating data...',
   traderFullscreen: 'Fullscreen',
+  traderLinkedAccountEvidence: 'Linked account evidence',
   traderCombinedPerformance: 'Combined Performance',
   traderAccountsCount: 'accounts',
   traderCombinedPnl: 'Combined PnL',
   traderBestRoi: 'Best ROI',
   traderWeightedScore: 'Weighted Score',
   traderWeightedScoreTooltip:
-    'Weighted average by absolute PnL. Accounts with higher trading volume contribute more to the combined score.',
+    'Available only when every linked account has a trusted comparable score and a common weighting basis.',
+  traderAggregateUnavailable:
+    'Cross-account totals stay unknown until every account has complete, comparable evidence.',
+  traderAccountMetricsPartial:
+    'Per-account values are partial 90D snapshots with unknown freshness/completeness. They are informational only and excluded from aggregate scores and ranks.',
+  traderAccountPnlUnavailable:
+    'Account PnL cannot be combined without a verified settlement currency and cost basis.',
+  linkedAccountsChecking: 'Verifying linked accounts…',
+  linkedAccountsUnavailable: 'Linked account status is temporarily unavailable',
+  traderAccountDataChecking: 'Verifying this account’s detail…',
+  traderAccountDataUnavailable: 'This account’s verified detail is temporarily unavailable.',
   traderCompareAccounts: 'Compare Accounts',
   traderPrimaryAccount: 'Primary Account',
   traderMetric: 'Metric',
@@ -5357,7 +5366,7 @@ const en = {
   popularSearches: 'Popular searches',
   recentSearches: 'Recent Searches',
   clearButton: 'Clear',
-  linkedAccountAll: 'All',
+  linkedAccountAll: 'All accounts',
   winRatePercent: 'Win%',
   radarProfit: 'Profit',
   radarRisk: 'Risk',

@@ -22,7 +22,9 @@ function isTrader(value: unknown): value is Trader {
     isNullableString(value.handle) &&
     isNullableString(value.avatar_url) &&
     isNullableNumber(value.roi) &&
-    isNullableNumber(value.arena_score)
+    isNullableNumber(value.arena_score) &&
+    Number.isSafeInteger(value.rank) &&
+    Number(value.rank) > 0
   )
 }
 

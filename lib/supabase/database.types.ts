@@ -11995,6 +11995,14 @@ export type Database = {
           trader_count: number
         }[]
       }
+      get_popular_tokens_v2: {
+        Args: {
+          expected_generation: number
+          lookback_days: number
+          max_tokens: number
+        }
+        Returns: Json
+      }
       get_post_penalty: {
         Args: {
           p_dislike_count: number
@@ -12018,6 +12026,19 @@ export type Database = {
         }[]
       }
       get_time_decay: { Args: { p_hours: number }; Returns: number }
+      get_token_ranking_publication_head: {
+        Args: never
+        Returns: {
+          daily_row_count: number
+          generation_seq: number
+          popular_row_count: number
+          published_at: string | null
+          published_at_epoch_ms: number | null
+          source_as_of: string | null
+          source_through_date: string | null
+          window_through_date: string | null
+        }[]
+      }
       get_token_trader_rankings: {
         Args: {
           lookback_days?: number
@@ -12030,10 +12051,21 @@ export type Database = {
           source_trader_id: string
           token_avg_pnl_pct: number
           token_pnl: number
+          token_rank: number
           token_trade_count: number
           token_win_rate: number
           total_count: number
         }[]
+      }
+      get_token_trader_rankings_v2: {
+        Args: {
+          expected_generation: number
+          lookback_days: number
+          max_traders: number
+          row_offset: number
+          token_symbol: string
+        }
+        Returns: Json
       }
       get_top_trust_ratio: {
         Args: { p_season_id?: string; p_top_n?: number }
@@ -12726,6 +12758,14 @@ export type Database = {
       refresh_hot_scores: { Args: never; Returns: undefined }
       refresh_hot_scores_incremental: { Args: never; Returns: number }
       refresh_leaderboard_count_cache: { Args: never; Returns: undefined }
+      refresh_leaderboard_count_cache_for_seasons: {
+        Args: { p_season_ids: string[] }
+        Returns: undefined
+      }
+      refresh_public_rank_count_cache_for_seasons: {
+        Args: { p_season_ids: string[] }
+        Returns: undefined
+      }
       refresh_materialized_views: { Args: never; Returns: undefined }
       refresh_popular_tokens_mv: { Args: never; Returns: undefined }
       refresh_source_capabilities_mv: { Args: never; Returns: undefined }
@@ -12751,6 +12791,10 @@ export type Database = {
         Returns: boolean
       }
       release_stale_locks: { Args: never; Returns: number }
+      rerank_public_eligible_leaderboard: {
+        Args: { p_season_id: string }
+        Returns: number
+      }
       rerank_leaderboard: { Args: { p_season_id: string }; Returns: number }
       reserve_lifetime_membership_spot_atomic: {
         Args: {

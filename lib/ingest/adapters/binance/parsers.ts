@@ -21,6 +21,8 @@ import type {
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
   ParsedPosition,
+  ParsedPositionHistoryFieldSources,
+  ParsedPositionHistoryLimitation,
   ParsedProfile,
   ParsedStats,
   Timeframe,
@@ -29,7 +31,9 @@ import type {
 type Dict = Record<string, unknown>
 
 function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null
+  if (v === null || v === undefined) return null
+  if (typeof v !== 'number' && typeof v !== 'string') return null
+  if (typeof v === 'string' && v.trim().length === 0) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
@@ -41,7 +45,33 @@ function int(v: unknown): number | null {
 
 function iso(msEpoch: unknown): string | null {
   const ms = num(msEpoch)
-  return ms === null ? null : new Date(ms).toISOString()
+  if (ms === null || ms <= 0) return null
+  const parsed = new Date(ms)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
+function sourceIdentity(v: unknown): string | null {
+  if (typeof v === 'string') {
+    return v.length > 0 && v === v.trim() ? v : null
+  }
+  return typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : null
+}
+
+function sourceMarker(v: unknown): string | null {
+  if (typeof v === 'string') {
+    const normalized = v.trim()
+    return normalized.length > 0 ? normalized : null
+  }
+  return typeof v === 'number' && Number.isFinite(v) ? String(v) : null
+}
+
+function claimPositionField(
+  sources: ParsedPositionHistoryFieldSources,
+  field: keyof ParsedPositionHistoryFieldSources,
+  value: unknown,
+  ...fieldPaths: [string, ...string[]]
+): void {
+  if (value !== null && value !== undefined) sources[field] = { fieldPaths }
 }
 
 function dataOf(payload: unknown): Dict | null {
@@ -309,23 +339,97 @@ interface HistoryWrapper {
  * same dedupe hash.
  */
 function parsePositionHistory(wrapper: HistoryWrapper): ParsedHistoryRow[] {
-  const pid = String(wrapper.portfolioId ?? '')
+  const pid = sourceIdentity(wrapper.portfolioId)
   const out: ParsedHistoryRow[] = []
   for (const item of listOf(wrapper.response)) {
     if (!item.symbol) continue
     const symbol = String(item.symbol)
+    const rowId = sourceIdentity(item.id)
+    const sideIdentity = sourceMarker(item.side)
+    const sourceFactId =
+      pid !== null && rowId !== null && sideIdentity !== null
+        ? JSON.stringify([pid, rowId, symbol, sideIdentity])
+        : null
+    const sourceLifecycleMarker = sourceMarker(item.status)
+    const sourceReturn = num(item.roi)
+    const openedAt = iso(item.opened)
+    const closedAt = iso(item.closed)
+    const parsedSide = side(item.side)
+    const leverage = num(item.leverage)
+    const size = num(item.closedVolume)
+    const entryPrice = num(item.avgCost)
+    const exitPrice = num(item.avgClosePrice)
+    const realizedPnl = num(item.closingPnl)
+    const fieldSources: ParsedPositionHistoryFieldSources = {}
+    claimPositionField(
+      fieldSources,
+      'sourceFactId',
+      sourceFactId,
+      'portfolioId',
+      'response.data.list[].id',
+      'response.data.list[].symbol',
+      'response.data.list[].side'
+    )
+    claimPositionField(
+      fieldSources,
+      'sourceLifecycleMarker',
+      sourceLifecycleMarker,
+      'response.data.list[].status'
+    )
+    claimPositionField(fieldSources, 'sourceReturn', sourceReturn, 'response.data.list[].roi')
+    claimPositionField(fieldSources, 'openedAt', openedAt, 'response.data.list[].opened')
+    claimPositionField(fieldSources, 'closedAt', closedAt, 'response.data.list[].closed')
+    claimPositionField(fieldSources, 'symbol', symbol, 'response.data.list[].symbol')
+    claimPositionField(fieldSources, 'side', parsedSide, 'response.data.list[].side')
+    claimPositionField(fieldSources, 'leverage', leverage, 'response.data.list[].leverage')
+    claimPositionField(fieldSources, 'size', size, 'response.data.list[].closedVolume')
+    claimPositionField(fieldSources, 'entryPrice', entryPrice, 'response.data.list[].avgCost')
+    claimPositionField(fieldSources, 'exitPrice', exitPrice, 'response.data.list[].avgClosePrice')
+    claimPositionField(fieldSources, 'realizedPnl', realizedPnl, 'response.data.list[].closingPnl')
+    const limitations: ParsedPositionHistoryLimitation[] = []
+    if (sourceFactId === null) limitations.push('source_fact_id_missing')
+    if (sourceLifecycleMarker === null) {
+      limitations.push('source_lifecycle_marker_missing')
+    } else if (sourceLifecycleMarker === 'Partially Closed') {
+      limitations.push('source_lifecycle_marker_partial')
+    } else if (sourceLifecycleMarker !== 'All Closed') {
+      limitations.push('source_lifecycle_marker_unrecognized')
+    }
+    if (sourceReturn === null) limitations.push('source_return_missing')
+    if (realizedPnl === null) limitations.push('source_realized_pnl_missing')
     out.push({
       kind: 'position_history',
-      openedAt: iso(item.opened),
-      closedAt: iso(item.closed),
+      openedAt,
+      closedAt,
       symbol,
-      side: side(item.side),
-      leverage: num(item.leverage),
-      size: num(item.closedVolume), // closed volume in base-asset units
-      entryPrice: num(item.avgCost),
-      exitPrice: num(item.avgClosePrice),
-      realizedPnl: num(item.closingPnl),
-      dedupeHash: dedupeHash('binance_ph', pid, item.id, symbol, item.side),
+      side: parsedSide,
+      leverage,
+      size, // closed volume in base-asset units
+      entryPrice,
+      exitPrice,
+      realizedPnl,
+      sourceFactId,
+      sourceLifecycleMarker,
+      sourceReturn,
+      fieldSources,
+      limitations,
+      dedupeHash:
+        sourceFactId !== null
+          ? dedupeHash('binance_ph', pid, rowId, symbol, sideIdentity)
+          : dedupeHash(
+              'binance_ph',
+              'fallback',
+              pid,
+              rowId,
+              symbol,
+              sideIdentity ?? parsedSide,
+              openedAt,
+              closedAt,
+              size,
+              entryPrice,
+              exitPrice,
+              realizedPnl
+            ),
       raw: item,
     })
   }

@@ -15,6 +15,7 @@ import {
   parseOkxProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { parsedPositionHistoryRowSchema } from '../../../core/schemas'
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -26,6 +27,15 @@ const ctx: ParseCtx = {
   tfLabelMap: {},
   scrapedAt: '2026-06-12T00:00:00.000Z',
   meta: {},
+}
+
+const HISTORY_TRADER_IDENTITY = 'F503A5D5F1F6989F'
+
+function historyFixture(): Record<string, unknown> {
+  return {
+    ...fixture('history-page.json'),
+    historyTraderIdentity: HISTORY_TRADER_IDENTITY,
+  }
 }
 
 describe('parseOkxLeaderboardPage', () => {
@@ -122,7 +132,7 @@ describe('parseOkxPositions', () => {
 
 describe('parseOkxHistory', () => {
   it('position_history: subPosId natural key; empty closeTime → null, never 0', () => {
-    const rows = parseOkxHistory(fixture('history-page.json'), 'position_history', ctx)
+    const rows = parseOkxHistory(historyFixture(), 'position_history', ctx)
     expect(rows).toHaveLength(3)
     expect(rows[0]).toMatchObject({
       kind: 'position_history',
@@ -135,10 +145,161 @@ describe('parseOkxHistory', () => {
     if (rows[0].kind === 'position_history') {
       expect(rows[0].exitPrice).toBeCloseTo(73_769.5, 1) // closeAvgPx still present
       expect(rows[0].realizedPnl).toBeCloseTo(5140.49648, 4)
+      expect(rows[0].sourceFactId).toBe(
+        JSON.stringify([HISTORY_TRADER_IDENTITY, String(rows[0].raw.subPosId)])
+      )
+      expect(rows[0].sourceLifecycleMarker).toBeNull()
+      expect(rows[0].sourceReturn).toBe(Number(rows[0].raw.pnlRatio))
+      expect(rows[0].fieldSources).toEqual({
+        sourceFactId: { fieldPaths: ['historyTraderIdentity', 'data[].subPosId'] },
+        sourceReturn: { fieldPaths: ['data[].pnlRatio'] },
+        openedAt: { fieldPaths: ['data[].openTime'] },
+        symbol: { fieldPaths: ['data[].instId'] },
+        side: { fieldPaths: ['data[].posSide'] },
+        leverage: { fieldPaths: ['data[].lever'] },
+        size: { fieldPaths: ['data[].subPos'] },
+        entryPrice: { fieldPaths: ['data[].openAvgPx'] },
+        exitPrice: { fieldPaths: ['data[].closeAvgPx'] },
+        realizedPnl: { fieldPaths: ['data[].pnl'] },
+      })
+      expect(rows[0].limitations).toContain('source_lifecycle_marker_missing')
+      expect(rows[0].limitations).toContain('source_lifecycle_marker_partial')
+      expect(rows[0].fieldSources).not.toHaveProperty('closedAt')
+      expect(rows[0]).not.toHaveProperty('provenance')
+      expect(() => parsedPositionHistoryRowSchema.parse(rows[0])).not.toThrow()
     }
     expect(rows[0].dedupeHash).toBe(
-      parseOkxHistory(fixture('history-page.json'), 'position_history', ctx)[0].dedupeHash
+      parseOkxHistory(historyFixture(), 'position_history', ctx)[0].dedupeHash
     ) // deterministic
+  })
+
+  it('keeps a non-empty closeTime as a raw marker without adapter trust claims', () => {
+    const rows = parseOkxHistory(historyFixture(), 'position_history', ctx)
+    const closed = rows.find(
+      (row) => row.kind === 'position_history' && typeof row.sourceLifecycleMarker === 'string'
+    )
+    if (!closed || closed.kind !== 'position_history') throw new Error('missing closed row')
+
+    expect(closed.closedAt).not.toBeNull()
+    expect(closed.fieldSources?.closedAt).toEqual({ fieldPaths: ['data[].closeTime'] })
+    expect(closed.limitations).not.toContain('source_lifecycle_marker_partial')
+    expect(closed).not.toHaveProperty('lifecycleState')
+    expect(() => parsedPositionHistoryRowSchema.parse(closed)).not.toThrow()
+  })
+
+  it('keeps whitespace numerics and closeTime zero unknown instead of inventing zero or lifecycle evidence', () => {
+    const raw = historyFixture() as {
+      data: Array<Record<string, unknown>>
+      historyTraderIdentity: string
+    }
+    raw.data = [
+      {
+        ...raw.data[1],
+        subPosId: Number.MAX_SAFE_INTEGER + 1,
+        openTime: '   ',
+        closeTime: 0,
+        pnlRatio: '   ',
+        pnl: '   ',
+      },
+    ]
+    const rows = parseOkxHistory(raw, 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.sourceFactId).toBeNull()
+    expect(row.openedAt).toBeNull()
+    expect(row.closedAt).toBeNull()
+    expect(row.sourceLifecycleMarker).toBeNull()
+    expect(row.sourceReturn).toBeNull()
+    expect(row.realizedPnl).toBeNull()
+    expect(row.fieldSources).not.toHaveProperty('sourceFactId')
+    expect(row.fieldSources).not.toHaveProperty('openedAt')
+    expect(row.fieldSources).not.toHaveProperty('closedAt')
+    expect(row.fieldSources).not.toHaveProperty('sourceLifecycleMarker')
+    expect(row.fieldSources).not.toHaveProperty('sourceReturn')
+    expect(row.fieldSources).not.toHaveProperty('realizedPnl')
+    expect(row.limitations).toEqual(
+      expect.arrayContaining([
+        'source_fact_id_missing',
+        'source_lifecycle_marker_missing',
+        'source_lifecycle_marker_partial',
+        'source_return_missing',
+        'source_realized_pnl_missing',
+      ])
+    )
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it('preserves genuine numeric and numeric-string zero return/PnL evidence', () => {
+    const raw = historyFixture() as {
+      data: Array<Record<string, unknown>>
+      historyTraderIdentity: string
+    }
+    raw.data = [{ ...raw.data[1], pnlRatio: 0, pnl: '0' }]
+    const rows = parseOkxHistory(raw, 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.sourceReturn).toBe(0)
+    expect(row.realizedPnl).toBe(0)
+    expect(row.fieldSources?.sourceReturn).toEqual({ fieldPaths: ['data[].pnlRatio'] })
+    expect(row.fieldSources?.realizedPnl).toEqual({ fieldPaths: ['data[].pnl'] })
+    expect(row.limitations).not.toContain('source_return_missing')
+    expect(row.limitations).not.toContain('source_realized_pnl_missing')
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it.each([
+    ['boolean', true],
+    ['array', []],
+    ['object', {}],
+  ])('rejects %s values as numeric source evidence', (_case, invalidValue) => {
+    const raw = historyFixture() as {
+      data: Array<Record<string, unknown>>
+      historyTraderIdentity: string
+    }
+    raw.data = [{ ...raw.data[1], pnlRatio: invalidValue, pnl: invalidValue }]
+    const rows = parseOkxHistory(raw, 'position_history', ctx)
+    const row = rows[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+
+    expect(row.sourceReturn).toBeNull()
+    expect(row.realizedPnl).toBeNull()
+    expect(row.limitations).toEqual(
+      expect.arrayContaining(['source_return_missing', 'source_realized_pnl_missing'])
+    )
+    expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+  })
+
+  it('uses normalized id branching and keeps blank-id fallback rows distinct', () => {
+    const raw = historyFixture() as {
+      data: Array<Record<string, unknown>>
+      historyTraderIdentity: string
+    }
+    const base = raw.data[1]
+    raw.data = [
+      { ...base, subPosId: '   ', openTime: 1780000000000, closeTime: 1780000001000 },
+      { ...base, subPosId: '   ', openTime: 1780000002000, closeTime: 1780000003000 },
+    ]
+    const rows = parseOkxHistory(raw, 'position_history', ctx)
+    const positionRows = rows.filter((row) => row.kind === 'position_history')
+
+    expect(positionRows[0].sourceFactId).toBeNull()
+    expect(positionRows[1].sourceFactId).toBeNull()
+    expect(positionRows[0].dedupeHash).not.toBe(positionRows[1].dedupeHash)
+    for (const row of positionRows) {
+      expect(() => parsedPositionHistoryRowSchema.parse(row)).not.toThrow()
+    }
+  })
+
+  it('binds subPosId dedupe to the trader identity', () => {
+    const first = parseOkxHistory(historyFixture(), 'position_history', ctx)[0]
+    const second = parseOkxHistory(
+      { ...historyFixture(), historyTraderIdentity: '0000000000000002' },
+      'position_history',
+      ctx
+    )[0]
+    expect(first.dedupeHash).not.toBe(second.dedupeHash)
   })
 
   it('copiers: top-10 list with derived copy duration; aggregate rides in raw', () => {

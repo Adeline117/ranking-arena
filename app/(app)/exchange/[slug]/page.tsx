@@ -14,8 +14,9 @@ import {
   type ExchangeSchemaInput,
 } from '@/lib/seo/structured-data'
 
-// ISR: regenerate exchange pages every 30 minutes
-export const revalidate = 1800
+// Request-rendered so an in-flight pre-publication ISR render cannot repopulate
+// stale ranked traders after the publisher revalidates this path.
+export const dynamic = 'force-dynamic'
 
 export function generateStaticParams() {
   return TOP_EXCHANGE_SLUGS.map((slug) => ({ slug }))
@@ -73,36 +74,41 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
       .select('handle, source_trader_id, arena_score, roi, pnl, rank')
       .eq('source', sourceKey)
       .eq('season_id', '90D')
+      .not('rank', 'is', null)
       .not('arena_score', 'is', null)
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .order('arena_score', { ascending: false, nullsFirst: false })
+      .order('rank', { ascending: true, nullsFirst: false })
       .limit(10),
     supabase
       .from('leaderboard_ranks')
       .select('*', { count: 'estimated', head: true })
       .eq('source', sourceKey)
       .eq('season_id', '90D')
+      .not('rank', 'is', null)
       .not('arena_score', 'is', null)
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false'),
   ])
 
-  const topTraders = (topResult.data || []).map((t, i) => {
-    const sourceTraderId = (t.source_trader_id as string) || ''
-    // Prefer the real handle; fall back to the wallet address (never a fabricated
-    // "Trader N" that would link to a non-existent /trader/Trader%20N page).
-    const linkTarget = (t.handle as string) || sourceTraderId
-    return {
-      displayName: linkTarget ? formatDisplayName(linkTarget, sourceKey) : `#${i + 1}`,
-      linkTarget,
-      sourceTraderId,
-      arena_score: t.arena_score as number | null,
-      roi: t.roi as number | null,
-      pnl: t.pnl as number | null,
-      rank: i + 1,
-    }
-  })
+  const topTraders = (topResult.data || [])
+    .filter((t) => t.rank != null)
+    .map((t, i) => {
+      const sourceTraderId = (t.source_trader_id as string) || ''
+      // Prefer the real handle; fall back to the wallet address (never a fabricated
+      // "Trader N" that would link to a non-existent /trader/Trader%20N page).
+      const linkTarget = (t.handle as string) || sourceTraderId
+      return {
+        displayName: linkTarget ? formatDisplayName(linkTarget, sourceKey) : `#${i + 1}`,
+        linkTarget,
+        sourceTraderId,
+        arena_score: t.arena_score as number | null,
+        roi: t.roi as number | null,
+        pnl: t.pnl as number | null,
+        rank: Number(t.rank),
+      }
+    })
 
   return {
     displayName: config.name,

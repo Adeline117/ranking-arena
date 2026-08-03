@@ -6,6 +6,7 @@ import { t } from '@/lib/i18n'
 import { TraderAvatar } from './shared/TraderDisplay'
 import { formatROI, formatDisplayName } from './utils'
 import type { Trader } from './RankingTable'
+import { selectTopPublishedRankTraders } from './RankingTableTypes'
 import { tokens } from '@/lib/design-tokens'
 
 function CopyButton({ text }: { text: string }) {
@@ -141,9 +142,8 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
 }
 
 export default function HeroSection({ traders }: { traders: Trader[] }) {
-  if (!traders || traders.length < 3) return null
-
-  const top3 = traders.slice(0, 3)
+  const top3 = selectTopPublishedRankTraders(traders)
+  if (top3.length < 3) return null
 
   return (
     <>
@@ -161,8 +161,8 @@ export default function HeroSection({ traders }: { traders: Trader[] }) {
         }
       `}</style>
       <div className="hero-top3-grid">
-        {top3.map((trader, i) => (
-          <TopTraderCard key={trader.id} trader={trader} rank={i + 1} />
+        {top3.map((trader) => (
+          <TopTraderCard key={trader.id} trader={trader} rank={trader.rank} />
         ))}
       </div>
     </>

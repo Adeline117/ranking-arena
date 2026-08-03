@@ -27,6 +27,19 @@ import type { VerifiedTraderProfileData } from '@/app/components/trader/Verified
 /** Valid equity curve period keys. */
 type EquityCurvePeriod = keyof EquityCurveData
 
+export function deriveDailyRoiPointChanges(
+  curve: Array<{ date: string; roi: number }>
+): Array<{ date: string; returnPct: number }> {
+  const changes: Array<{ date: string; returnPct: number }> = []
+  for (let index = 1; index < curve.length; index += 1) {
+    const current = curve[index]
+    const previous = curve[index - 1]
+    if (!Number.isFinite(current.roi) || !Number.isFinite(previous.roi)) continue
+    changes.push({ date: current.date, returnPct: current.roi - previous.roi })
+  }
+  return changes
+}
+
 const AdvancedMetricsCard = dynamic(() => import('@/app/components/trader/AdvancedMetricsCard'), {
   ssr: false,
 })
@@ -106,6 +119,9 @@ export interface OverviewTabProps {
   activeAccount: string
   aggregatedData: AggregatedData | null
   linkedAccounts: LinkedAccountData[]
+  /** Prevents primary-account modules from appearing as aggregate or unresolved data. */
+  suppressAccountContent: boolean
+  accountContentStatus: 'checking' | 'unavailable'
 
   // Auth/claim state
   currentUserId: string | null
@@ -115,7 +131,7 @@ export interface OverviewTabProps {
   claimedUser: { handle: string } | null | undefined
 }
 
-const OverviewTab = React.memo(function OverviewTab({
+export const OverviewTab = React.memo(function OverviewTab({
   data,
   traderProfile,
   traderPerformance,
@@ -127,6 +143,8 @@ const OverviewTab = React.memo(function OverviewTab({
   activeAccount,
   aggregatedData,
   linkedAccounts,
+  suppressAccountContent,
+  accountContentStatus,
   currentUserId,
   isVerifiedClaimOwner,
   isVerifiedTrader,
@@ -134,13 +152,16 @@ const OverviewTab = React.memo(function OverviewTab({
   claimedUser,
 }: OverviewTabProps) {
   const { t } = useLanguage()
+  const isAggregateView = hasMultipleAccounts && activeAccount === 'all'
+  const showSimilarTraders = !suppressAccountContent && traderSimilar.length > 0
+  const showSidebar = showSimilarTraders || features.social
 
   return (
     <Box
       className="profile-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: traderSimilar.length > 0 ? '1fr 300px' : '1fr',
+        gridTemplateColumns: showSidebar ? '1fr 300px' : '1fr',
         gap: tokens.spacing[6],
         maxWidth: '100%',
         overflow: 'hidden',
@@ -152,7 +173,7 @@ const OverviewTab = React.memo(function OverviewTab({
         style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6], minWidth: 0 }}
       >
         {/* Aggregated stats card (only when "All" tab is active and user has 2+ accounts) */}
-        {hasMultipleAccounts && activeAccount === 'all' && aggregatedData && (
+        {isAggregateView && aggregatedData && (
           <AggregatedStats
             combinedPnl={aggregatedData.combinedPnl}
             bestRoi={aggregatedData.bestRoi}
@@ -173,59 +194,11 @@ const OverviewTab = React.memo(function OverviewTab({
           />
         )}
 
-        {traderPerformance ? (
-          <OverviewPerformanceCard
-            performance={traderPerformance as ExtendedPerformance}
-            equityCurve={traderEquityCurve?.['90D']}
-            allEquityCurves={traderEquityCurve}
-            source={(traderProfile?.source as string) || data.source}
-            positionSummary={positionSummary}
-          />
-        ) : (
+        {suppressAccountContent && (!isAggregateView || !aggregatedData) && (
           <Box
+            role="status"
             style={{
-              padding: `${tokens.spacing[6]} ${tokens.spacing[5]}`,
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.xl,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: tokens.spacing[2],
-            }}
-          >
-            <svg
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              style={{ color: 'var(--color-text-tertiary)', opacity: 0.3 }}
-            >
-              <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M7 16l4-8 4 4 4-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <Text size="sm" color="tertiary">
-              {t('traderPerformanceUnavailable')}
-            </Text>
-          </Box>
-        )}
-
-        {/* Equity Curve Chart */}
-        {traderEquityCurve ? (
-          <SectionErrorBoundary>
-            <EquityCurveSection
-              equityCurve={traderEquityCurve}
-              traderHandle={(traderProfile?.handle as string) || data.handle}
-              delay={0}
-            />
-          </SectionErrorBoundary>
-        ) : (
-          <Box
-            style={{
-              padding: tokens.spacing[6],
+              padding: tokens.spacing[5],
               textAlign: 'center',
               color: tokens.colors.text.tertiary,
               background: tokens.colors.bg.secondary,
@@ -234,233 +207,311 @@ const OverviewTab = React.memo(function OverviewTab({
             }}
           >
             <Text size="sm" color="tertiary">
-              {t('noChartDataAvailable')}
+              {t(
+                accountContentStatus === 'checking'
+                  ? 'traderAccountDataChecking'
+                  : 'traderAccountDataUnavailable'
+              )}
             </Text>
           </Box>
         )}
 
-        {/* Drawdown Chart */}
-        {(() => {
-          const curve =
-            traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ?? traderEquityCurve?.['90D']
-          if (!curve || curve.length <= 2) return null
-          return (
-            <Box
-              className="glass-card"
-              style={{
-                padding: tokens.spacing[5],
-                background: tokens.colors.bg.secondary,
-                borderRadius: tokens.radius.xl,
-                border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
-              }}
-            >
-              <Text
-                size="sm"
-                weight="bold"
-                style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}
-              >
-                {t('drawdownChart')} ({selectedPeriod})
-              </Text>
-              <SectionErrorBoundary>
-                <DrawdownChart equityCurve={curve} />
-              </SectionErrorBoundary>
-            </Box>
-          )
-        })()}
-
-        {/* Copy-Trade Simulator */}
-        {(() => {
-          const simCurve =
-            traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ?? traderEquityCurve?.['90D']
-          if (!simCurve || simCurve.length <= 2) return null
-          return (
-            <SectionErrorBoundary>
-              <CopyTradeSimulator equityCurve={simCurve} />
-            </SectionErrorBoundary>
-          )
-        })()}
-
-        {/* Daily Returns Distribution */}
-        {(() => {
-          const curve =
-            traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ?? traderEquityCurve?.['90D']
-          if (!curve || curve.length <= 5) return null
-          const dailyReturns = curve
-            .slice(1)
-            .map((point: { date: string; roi: number }, i: number) => ({
-              date: point.date,
-              returnPct:
-                Math.abs(curve[i].roi ?? 0) > 0.001
-                  ? ((point.roi - curve[i].roi) / Math.abs(curve[i].roi)) * 100
-                  : point.roi - curve[i].roi,
-            }))
-            .filter((d: { returnPct: number }) => Number.isFinite(d.returnPct))
-          if (dailyReturns.length <= 5) return null
-          return (
-            <Box
-              className="glass-card"
-              style={{
-                padding: tokens.spacing[5],
-                background: tokens.colors.bg.secondary,
-                borderRadius: tokens.radius.xl,
-                border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
-              }}
-            >
-              <Text
-                size="sm"
-                weight="bold"
-                style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}
-              >
-                {t('dailyReturnsDistribution')} ({selectedPeriod})
-              </Text>
-              <SectionErrorBoundary>
-                <DailyReturnsChart data={dailyReturns} />
-              </SectionErrorBoundary>
-            </Box>
-          )
-        })()}
-
-        {/* Advanced Metrics */}
-        {(() => {
-          const perf = traderPerformance as Record<string, unknown> | null
-          const sortino = (perf?.sortino_ratio as number | null) ?? data.sortino_ratio ?? null
-          const calmar = (perf?.calmar_ratio as number | null) ?? data.calmar_ratio ?? null
-          const profitFactor = (perf?.profit_factor as number | null) ?? data.profit_factor ?? null
-          const avgHolding =
-            (perf?.avg_holding_time_hours as number | null) ?? data.avg_holding_hours ?? null
-          const avgProfitVal = (perf?.avg_profit as number | null) ?? null
-          const avgLossVal = (perf?.avg_loss as number | null) ?? null
-          const lWin = (perf?.largest_win as number | null) ?? null
-          const lLoss = (perf?.largest_loss as number | null) ?? null
-          if (
-            sortino == null &&
-            calmar == null &&
-            profitFactor == null &&
-            avgProfitVal == null &&
-            lWin == null
-          )
-            return null
-          return (
-            <AdvancedMetricsCard
-              metrics={{
-                sortino_ratio: sortino,
-                calmar_ratio: calmar,
-                profit_factor: profitFactor,
-                recovery_factor: null,
-                max_consecutive_wins: null,
-                max_consecutive_losses: null,
-                avg_holding_hours: avgHolding,
-                volatility_pct: null,
-                downside_volatility_pct: null,
-              }}
-              avgProfit={avgProfitVal}
-              avgLoss={avgLossVal}
-              largestWin={lWin}
-              largestLoss={lLoss}
-            />
-          )
-        })()}
-
-        {/* Trading Style Radar */}
-        {(data.profitability_score != null ||
-          data.risk_control_score != null ||
-          data.execution_score != null) && (
-          <Box
-            className="glass-card"
-            style={{
-              padding: tokens.spacing[5],
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.xl,
-              border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
-            }}
-          >
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: 'var(--color-text-secondary)',
-                marginBottom: tokens.spacing[3],
-                textAlign: 'center',
-              }}
-            >
-              {t('traderTradingStyleLabel')}
-            </Text>
-            <SectionErrorBoundary>
-              <TradingStyleRadar
-                profitability={data.profitability_score}
-                riskControl={data.risk_control_score}
-                execution={data.execution_score}
-                winRate={data.win_rate}
-                maxDrawdown={data.max_drawdown}
+        {!suppressAccountContent && (
+          <>
+            {traderPerformance ? (
+              <OverviewPerformanceCard
+                performance={traderPerformance as ExtendedPerformance}
+                equityCurve={traderEquityCurve?.['90D']}
+                allEquityCurves={traderEquityCurve}
+                source={(traderProfile?.source as string) || data.source}
+                positionSummary={positionSummary}
               />
-            </SectionErrorBoundary>
-          </Box>
-        )}
+            ) : (
+              <Box
+                style={{
+                  padding: `${tokens.spacing[6]} ${tokens.spacing[5]}`,
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: tokens.radius.xl,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                }}
+              >
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  style={{ color: 'var(--color-text-tertiary)', opacity: 0.3 }}
+                >
+                  <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 16l4-8 4 4 4-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <Text size="sm" color="tertiary">
+                  {t('traderPerformanceUnavailable')}
+                </Text>
+              </Box>
+            )}
 
-        {/* Verified trader edit OR Claim CTA */}
-        {isVerifiedClaimOwner ? (
-          <VerifiedTraderEditor
-            traderId={data.source_trader_id}
-            source={data.source}
-            currentData={verifiedTraderProfile ?? {}}
-            onSaved={() => window.location.reload()}
-          />
-        ) : (
-          !isVerifiedTrader &&
-          !claimedUser && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '10px 16px',
-                background: 'var(--color-bg-secondary)',
-                borderRadius: 8,
-                border: '1px solid var(--color-border-primary)',
-                fontSize: 13,
-              }}
-            >
-              <span style={{ color: 'var(--color-text-secondary)', flex: 1 }}>
-                {t('claimYourProfileShort')}
-              </span>
-              {currentUserId ? (
-                <ClaimTraderButton
-                  traderId={(traderProfile?.id as string) || data.source_trader_id}
-                  handle={(traderProfile?.handle as string) || data.handle}
-                  userId={currentUserId}
-                  source={(traderProfile?.source as string) || data.source}
+            {/* Equity Curve Chart */}
+            {traderEquityCurve ? (
+              <SectionErrorBoundary>
+                <EquityCurveSection
+                  equityCurve={traderEquityCurve}
+                  traderHandle={(traderProfile?.handle as string) || data.handle}
+                  delay={0}
                 />
-              ) : (
-                <a
-                  href={buildTraderClaimLoginHref({
-                    traderId: data.source_trader_id,
-                    source: data.source,
-                    handle: data.handle,
-                  })}
+              </SectionErrorBoundary>
+            ) : (
+              <Box
+                style={{
+                  padding: tokens.spacing[6],
+                  textAlign: 'center',
+                  color: tokens.colors.text.tertiary,
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: tokens.radius.xl,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                }}
+              >
+                <Text size="sm" color="tertiary">
+                  {t('noChartDataAvailable')}
+                </Text>
+              </Box>
+            )}
+
+            {/* Drawdown Chart */}
+            {(() => {
+              const curve =
+                traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
+                traderEquityCurve?.['90D']
+              if (!curve || curve.length <= 2) return null
+              return (
+                <Box
+                  className="glass-card"
                   style={{
-                    padding: '6px 16px',
-                    borderRadius: 6,
-                    background: 'var(--color-brand)',
-                    color: 'white',
-                    fontWeight: 600,
-                    fontSize: 12,
-                    textDecoration: 'none',
-                    whiteSpace: 'nowrap',
+                    padding: tokens.spacing[5],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.xl,
+                    border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
                   }}
                 >
-                  {t('loginToClaim')}
-                </a>
-              )}
-            </div>
-          )
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    style={{
+                      color: 'var(--color-text-secondary)',
+                      marginBottom: tokens.spacing[3],
+                    }}
+                  >
+                    {t('drawdownChart')} ({selectedPeriod})
+                  </Text>
+                  <SectionErrorBoundary>
+                    <DrawdownChart equityCurve={curve} />
+                  </SectionErrorBoundary>
+                </Box>
+              )
+            })()}
+
+            {/* Copy-Trade Simulator */}
+            {(() => {
+              const simCurve =
+                traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
+                traderEquityCurve?.['90D']
+              if (!simCurve || simCurve.length <= 2) return null
+              return (
+                <SectionErrorBoundary>
+                  <CopyTradeSimulator equityCurve={simCurve} />
+                </SectionErrorBoundary>
+              )
+            })()}
+
+            {/* Daily Returns Distribution */}
+            {(() => {
+              const curve =
+                traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
+                traderEquityCurve?.['90D']
+              if (!curve || curve.length <= 5) return null
+              // The series is cumulative ROI, not account value. A ratio of
+              // consecutive cumulative percentages fabricates returns (10→11
+              // would become 10%). Publish the exact percentage-point delta.
+              const dailyReturns = deriveDailyRoiPointChanges(curve)
+              if (dailyReturns.length <= 5) return null
+              return (
+                <Box
+                  className="glass-card"
+                  style={{
+                    padding: tokens.spacing[5],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.xl,
+                    border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
+                  }}
+                >
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    style={{
+                      color: 'var(--color-text-secondary)',
+                      marginBottom: tokens.spacing[3],
+                    }}
+                  >
+                    {t('dailyReturnsDistribution')} ({selectedPeriod})
+                  </Text>
+                  <SectionErrorBoundary>
+                    <DailyReturnsChart data={dailyReturns} />
+                  </SectionErrorBoundary>
+                </Box>
+              )
+            })()}
+
+            {/* Advanced Metrics */}
+            {(() => {
+              const perf = traderPerformance as Record<string, unknown> | null
+              const sortino = (perf?.sortino_ratio as number | null) ?? data.sortino_ratio ?? null
+              const calmar = (perf?.calmar_ratio as number | null) ?? data.calmar_ratio ?? null
+              const profitFactor =
+                (perf?.profit_factor as number | null) ?? data.profit_factor ?? null
+              const avgHolding =
+                (perf?.avg_holding_time_hours as number | null) ?? data.avg_holding_hours ?? null
+              const avgProfitVal = (perf?.avg_profit as number | null) ?? null
+              const avgLossVal = (perf?.avg_loss as number | null) ?? null
+              const lWin = (perf?.largest_win as number | null) ?? null
+              const lLoss = (perf?.largest_loss as number | null) ?? null
+              if (
+                sortino == null &&
+                calmar == null &&
+                profitFactor == null &&
+                avgProfitVal == null &&
+                lWin == null
+              )
+                return null
+              return (
+                <AdvancedMetricsCard
+                  metrics={{
+                    sortino_ratio: sortino,
+                    calmar_ratio: calmar,
+                    profit_factor: profitFactor,
+                    recovery_factor: null,
+                    max_consecutive_wins: null,
+                    max_consecutive_losses: null,
+                    avg_holding_hours: avgHolding,
+                    volatility_pct: null,
+                    downside_volatility_pct: null,
+                  }}
+                  avgProfit={avgProfitVal}
+                  avgLoss={avgLossVal}
+                  largestWin={lWin}
+                  largestLoss={lLoss}
+                />
+              )
+            })()}
+
+            {/* Trading Style Radar */}
+            {(data.profitability_score != null ||
+              data.risk_control_score != null ||
+              data.execution_score != null) && (
+              <Box
+                className="glass-card"
+                style={{
+                  padding: tokens.spacing[5],
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: tokens.radius.xl,
+                  border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
+                }}
+              >
+                <Text
+                  size="sm"
+                  weight="bold"
+                  style={{
+                    color: 'var(--color-text-secondary)',
+                    marginBottom: tokens.spacing[3],
+                    textAlign: 'center',
+                  }}
+                >
+                  {t('traderTradingStyleLabel')}
+                </Text>
+                <SectionErrorBoundary>
+                  <TradingStyleRadar
+                    profitability={data.profitability_score}
+                    riskControl={data.risk_control_score}
+                    execution={data.execution_score}
+                    winRate={data.win_rate}
+                    maxDrawdown={data.max_drawdown}
+                  />
+                </SectionErrorBoundary>
+              </Box>
+            )}
+
+            {/* Verified trader edit OR Claim CTA */}
+            {isVerifiedClaimOwner ? (
+              <VerifiedTraderEditor
+                traderId={data.source_trader_id}
+                source={data.source}
+                currentData={verifiedTraderProfile ?? {}}
+                onSaved={() => window.location.reload()}
+              />
+            ) : (
+              !isVerifiedTrader &&
+              !claimedUser && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 16px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: 8,
+                    border: '1px solid var(--color-border-primary)',
+                    fontSize: 13,
+                  }}
+                >
+                  <span style={{ color: 'var(--color-text-secondary)', flex: 1 }}>
+                    {t('claimYourProfileShort')}
+                  </span>
+                  {currentUserId ? (
+                    <ClaimTraderButton
+                      traderId={(traderProfile?.id as string) || data.source_trader_id}
+                      handle={(traderProfile?.handle as string) || data.handle}
+                      userId={currentUserId}
+                      source={(traderProfile?.source as string) || data.source}
+                    />
+                  ) : (
+                    <a
+                      href={buildTraderClaimLoginHref({
+                        traderId: data.source_trader_id,
+                        source: data.source,
+                        handle: data.handle,
+                      })}
+                      style={{
+                        padding: '6px 16px',
+                        borderRadius: 6,
+                        background: 'var(--color-brand)',
+                        color: 'white',
+                        fontWeight: 600,
+                        fontSize: 12,
+                        textDecoration: 'none',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {t('loginToClaim')}
+                    </a>
+                  )}
+                </div>
+              )
+            )}
+          </>
         )}
       </Box>
 
-      {(traderSimilar.length > 0 || features.social) && (
+      {showSidebar && (
         <Box
           style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6], minWidth: 0 }}
         >
-          {traderSimilar.length > 0 && (
+          {showSimilarTraders && (
             <SectionErrorBoundary>
               <SimilarTraders traders={traderSimilar} />
             </SectionErrorBoundary>

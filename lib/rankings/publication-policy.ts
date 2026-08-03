@@ -10,7 +10,21 @@
 
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 
-export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v4'
+// v6: publication-fenced writes and shared-only reads. Rotate every ranking
+// key so orphaned v5 payloads whose legacy tag TTL expired cannot bypass the
+// new atomic generation invalidation contract.
+export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v6'
+/**
+ * Redis tag index for the current public ranking epoch. This must rotate with
+ * the key epoch so an older rolling-deploy writer cannot shorten or recreate
+ * the tag that owns current publication keys.
+ */
+export const PUBLIC_RANKING_REDIS_TAG = `rankings:${PUBLIC_RANKING_CACHE_EPOCH}`
+/**
+ * Opaque Redis generation used to reject cache writes from reads that began
+ * before the current leaderboard publication invalidated the shared surface.
+ */
+export const PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY = 'public-rankings:write-fence:v1'
 export const PUBLIC_RANKING_MAX_COMPUTED_AGE_MS = 48 * 60 * 60 * 1000
 export const PUBLIC_RANKING_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
