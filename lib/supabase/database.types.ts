@@ -4586,6 +4586,30 @@ export type Database = {
           },
         ]
       }
+      post_create_operation_results: {
+        Row: {
+          actor_id: string
+          created_at: string
+          intent_fingerprint: string
+          operation_id: string
+          result: Json
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          intent_fingerprint: string
+          operation_id: string
+          result: Json
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          intent_fingerprint?: string
+          operation_id?: string
+          result?: Json
+        }
+        Relationships: []
+      }
       post_emoji_reactions: {
         Row: {
           created_at: string | null
@@ -11657,6 +11681,27 @@ export type Database = {
           p_reference_id: string | null
           p_title: string
           p_type: string
+        }
+        Returns: Json
+      }
+      create_post_atomic: {
+        Args: {
+          p_actor_id: string
+          p_content: string
+          p_content_warning: string | null
+          p_group_id: string | null
+          p_hashtag_tags: string[]
+          p_images: string[]
+          p_is_sensitive: boolean
+          p_language: string
+          p_mention_handles: string[]
+          p_operation_id: string
+          p_poll_duration_hours: number | null
+          p_poll_enabled: boolean
+          p_poll_option_texts: string[] | null
+          p_poll_type: string | null
+          p_title: string
+          p_visibility: string
         }
         Returns: Json
       }
