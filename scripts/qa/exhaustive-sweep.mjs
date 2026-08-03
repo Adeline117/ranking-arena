@@ -929,7 +929,7 @@ async function main() {
       const key = sample?.trader_key
       const source = sample?.platform
       if (!key || !source) return null
-      return `/trader/${encodeURIComponent(key)}?source=${encodeURIComponent(source)}`
+      return `/trader/${encodeURIComponent(key)}?platform=${encodeURIComponent(source)}`
     })
     await addDynamic('/wrapped/[handle]', async () => {
       const sample = await rankingSample()

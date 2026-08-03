@@ -30,13 +30,14 @@ test('the dynamic trader sample participates in the locale sweep', () => {
 
 test('the authenticated write sweep has no retired trader fallback', () => {
   assert.doesNotMatch(authSource, /\/trader\/soul/)
-  assert.match(authSource, /\?source=\$\{encodeURIComponent\(t0r\.platform\)\}/)
+  assert.match(authSource, /\?platform=\$\{encodeURIComponent\(t0r\.platform\)\}/)
   assert.match(authSource, /不回退历史 fixture/)
 })
 
 test('the visual audit resolves public entities and reports missing samples', () => {
   assert.doesNotMatch(visualSource, /\/trader\/soul|\/u\/arena_bot/)
   assert.match(visualSource, /addDynamic\('\/trader\/\[handle\]'/)
+  assert.match(visualSource, /\?platform=\$\{encodeURIComponent\(source\)\}/)
   assert.match(visualSource, /addDynamic\('\/u\/\[handle\]'/)
   assert.match(visualSource, /显式跳过/)
 })
@@ -54,12 +55,13 @@ test('the exhaustive audit resolves every public dynamic entity without dead fix
   ]) {
     assert.match(exhaustiveSource, new RegExp(`addDynamic\\('${route}'`))
   }
+  assert.match(exhaustiveSource, /\?platform=\$\{encodeURIComponent\(source\)\}/)
   assert.match(exhaustiveSource, /dynamic skips/)
 })
 
 test('the trader 500 regression samples live futures and on-chain identities', () => {
-  assert.doesNotMatch(traderRegressionSource, /\/trader\/soul|Anointed-Connect|\?platform=/)
+  assert.doesNotMatch(traderRegressionSource, /\/trader\/soul|Anointed-Connect/)
   assert.match(traderRegressionSource, /loadRankingSample\(request, 'futures'\)/)
   assert.match(traderRegressionSource, /loadRankingSample\(request, 'onchain'\)/)
-  assert.match(traderRegressionSource, /\?source=\$\{encodeURIComponent\(trader\.source\)\}/)
+  assert.match(traderRegressionSource, /\?platform=\$\{encodeURIComponent\(trader\.source\)\}/)
 })

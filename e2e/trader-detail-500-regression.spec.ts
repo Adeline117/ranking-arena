@@ -60,7 +60,7 @@ test.describe('Trader Detail 500 Regression', () => {
   test('direct URL — on-chain trader loads (not 500)', async ({ page, request }) => {
     const trader = await loadRankingSample(request, 'onchain')
     const response = await page.goto(
-      `/trader/${encodeURIComponent(trader.key)}?source=${encodeURIComponent(trader.source)}`,
+      `/trader/${encodeURIComponent(trader.key)}?platform=${encodeURIComponent(trader.source)}`,
       {
         timeout: 30_000,
         waitUntil: 'domcontentloaded',
@@ -73,10 +73,10 @@ test.describe('Trader Detail 500 Regression', () => {
     expect(title).not.toContain("couldn't load")
   })
 
-  test('direct URL with ?source= param loads (not 500)', async ({ page, request }) => {
+  test('direct URL with ?platform= param loads (not 500)', async ({ page, request }) => {
     const trader = await loadRankingSample(request, 'futures')
     const response = await page.goto(
-      `/trader/${encodeURIComponent(trader.key)}?source=${encodeURIComponent(trader.source)}`,
+      `/trader/${encodeURIComponent(trader.key)}?platform=${encodeURIComponent(trader.source)}`,
       {
         timeout: 30_000,
         waitUntil: 'domcontentloaded',

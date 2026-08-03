@@ -138,7 +138,7 @@ async function main() {
       typeof t0r?.platform === 'string' &&
       t0r.platform
     ) {
-      traderPath = `/trader/${encodeURIComponent(t0r.trader_key)}?source=${encodeURIComponent(t0r.platform)}`
+      traderPath = `/trader/${encodeURIComponent(t0r.trader_key)}?platform=${encodeURIComponent(t0r.platform)}`
     }
   } catch (error) {
     note(`SKIP 当前 trader 样本请求失败: ${String(error?.message || error).slice(0, 120)}`)
