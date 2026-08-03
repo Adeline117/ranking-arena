@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { PARSED_POSITION_HISTORY_LIMITATIONS } from './types'
 
 const finite = z.number().finite()
 const nullableFinite = finite.nullable()
@@ -109,20 +110,140 @@ export const parsedPositionSchema = z.object({
   raw: z.record(z.string(), z.unknown()),
 })
 
-export const parsedPositionHistoryRowSchema = z.object({
-  kind: z.literal('position_history'),
-  openedAt: isoTs.nullable(),
-  closedAt: isoTs.nullable(),
-  symbol: z.string().min(1),
-  side: z.string().nullable(),
-  leverage: nullableFinite,
-  size: nullableFinite,
-  entryPrice: nullableFinite,
-  exitPrice: nullableFinite,
-  realizedPnl: nullableFinite,
-  dedupeHash: z.string().min(1),
-  raw: z.record(z.string(), z.unknown()),
-})
+const canonicalClaimString = z
+  .string()
+  .min(1)
+  .superRefine((value, ctx) => {
+    if (value !== value.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'claim strings must be canonical without edge whitespace',
+      })
+    }
+  })
+
+const parsedPositionHistoryFieldSourceSchema = z
+  .object({
+    fieldPaths: z
+      .array(canonicalClaimString)
+      .min(1)
+      .superRefine((paths, ctx) => {
+        if (new Set(paths).size !== paths.length) {
+          ctx.addIssue({ code: 'custom', message: 'field paths must be unique' })
+        }
+      }),
+  })
+  .strict()
+
+const parsedPositionHistoryFieldSourcesSchema = z
+  .object({
+    sourceFactId: parsedPositionHistoryFieldSourceSchema.optional(),
+    sourceLifecycleMarker: parsedPositionHistoryFieldSourceSchema.optional(),
+    sourceReturn: parsedPositionHistoryFieldSourceSchema.optional(),
+    openedAt: parsedPositionHistoryFieldSourceSchema.optional(),
+    closedAt: parsedPositionHistoryFieldSourceSchema.optional(),
+    symbol: parsedPositionHistoryFieldSourceSchema.optional(),
+    side: parsedPositionHistoryFieldSourceSchema.optional(),
+    leverage: parsedPositionHistoryFieldSourceSchema.optional(),
+    size: parsedPositionHistoryFieldSourceSchema.optional(),
+    entryPrice: parsedPositionHistoryFieldSourceSchema.optional(),
+    exitPrice: parsedPositionHistoryFieldSourceSchema.optional(),
+    realizedPnl: parsedPositionHistoryFieldSourceSchema.optional(),
+  })
+  .strict()
+
+const parsedPositionHistoryLimitationsSchema = z
+  .array(z.enum(PARSED_POSITION_HISTORY_LIMITATIONS))
+  .superRefine((limitations, ctx) => {
+    if (new Set(limitations).size !== limitations.length) {
+      ctx.addIssue({ code: 'custom', message: 'limitations must be unique' })
+    }
+  })
+
+const parsedPositionHistoryClaimFields = [
+  'sourceFactId',
+  'sourceLifecycleMarker',
+  'sourceReturn',
+  'openedAt',
+  'closedAt',
+  'symbol',
+  'side',
+  'leverage',
+  'size',
+  'entryPrice',
+  'exitPrice',
+  'realizedPnl',
+] as const
+
+export const parsedPositionHistoryRowSchema = z
+  .object({
+    kind: z.literal('position_history'),
+    openedAt: isoTs.nullable(),
+    closedAt: isoTs.nullable(),
+    symbol: z.string().min(1),
+    side: z.string().nullable(),
+    leverage: nullableFinite,
+    size: nullableFinite,
+    entryPrice: nullableFinite,
+    exitPrice: nullableFinite,
+    realizedPnl: nullableFinite,
+    sourceFactId: canonicalClaimString.nullable().optional(),
+    sourceLifecycleMarker: canonicalClaimString.nullable().optional(),
+    sourceReturn: nullableFinite.optional(),
+    fieldSources: parsedPositionHistoryFieldSourcesSchema.optional(),
+    limitations: parsedPositionHistoryLimitationsSchema.optional(),
+    dedupeHash: z.string().min(1),
+    raw: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+  .superRefine((row, ctx) => {
+    // Adapters may migrate to this claim substrate incrementally. Once a row
+    // opts in, every parsed value and its source location must agree both ways.
+    // The path remains an untrusted parser claim: the acquisition framework
+    // must still exact-match it against a reviewed source contract.
+    const usesClaimSubstrate =
+      row.sourceFactId !== undefined ||
+      row.sourceLifecycleMarker !== undefined ||
+      row.sourceReturn !== undefined ||
+      row.fieldSources !== undefined ||
+      row.limitations !== undefined
+    if (usesClaimSubstrate) {
+      for (const field of parsedPositionHistoryClaimFields) {
+        const valuePresent = row[field] !== null && row[field] !== undefined
+        const sourcePresent = row.fieldSources?.[field] !== undefined
+        if (valuePresent !== sourcePresent) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['fieldSources', field],
+            message: `field source must exactly match whether ${field} is present`,
+          })
+        }
+      }
+
+      // Objective "missing" limitations must independently agree both ways
+      // with the values they describe; a path claim is not a completeness
+      // verdict.
+      const limitations = new Set(row.limitations ?? [])
+      const missingClaims = [
+        ['sourceFactId', 'source_fact_id_missing'],
+        ['sourceLifecycleMarker', 'source_lifecycle_marker_missing'],
+        ['sourceReturn', 'source_return_missing'],
+        ['realizedPnl', 'source_realized_pnl_missing'],
+      ] as const
+
+      for (const [field, limitation] of missingClaims) {
+        const valueMissing = row[field] === null || row[field] === undefined
+        const limitationDeclared = limitations.has(limitation)
+        if (valueMissing !== limitationDeclared) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['limitations'],
+            message: `${limitation} must exactly match whether ${field} is missing`,
+          })
+        }
+      }
+    }
+  })
 
 export const parsedOrderRowSchema = z.object({
   kind: z.literal('orders'),
@@ -157,7 +278,7 @@ export const parsedCopierRowSchema = z.object({
   raw: z.record(z.string(), z.unknown()),
 })
 
-export const parsedHistoryRowSchema = z.discriminatedUnion('kind', [
+export const parsedHistoryRowSchema = z.union([
   parsedPositionHistoryRowSchema,
   parsedOrderRowSchema,
   parsedTransferRowSchema,
