@@ -151,48 +151,81 @@ export function ImageUploader({
               <Box
                 style={{
                   position: 'absolute',
-                  top: 0,
-                  right: 0,
+                  top: tokens.spacing[1],
+                  right: tokens.spacing[1],
                   display: 'flex',
                   gap: 2,
                 }}
               >
                 <button
+                  type="button"
+                  aria-label={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
                   onClick={() => onInsertImage(image.url)}
                   title={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: tokens.touchTarget.min,
+                    height: tokens.touchTarget.min,
                     border: 'none',
-                    background: 'var(--color-accent-primary)',
+                    borderRadius: tokens.radius.sm,
+                    background: 'transparent',
                     color: tokens.colors.white,
                     cursor: 'pointer',
-                    fontSize: 12,
+                    padding: tokens.spacing[2],
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  {'\u21b5'}
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: tokens.radius.sm,
+                      background: 'var(--color-accent-primary)',
+                      fontSize: tokens.typography.fontSize.xs,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {'\u21b5'}
+                  </span>
                 </button>
                 <button
-                  aria-label="Close"
+                  type="button"
+                  aria-label={t('delete')}
                   onClick={() => onRemoveImage(index)}
                   title={t('delete')}
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: tokens.touchTarget.min,
+                    height: tokens.touchTarget.min,
                     border: 'none',
-                    background: 'var(--color-accent-error)',
+                    borderRadius: tokens.radius.sm,
+                    background: 'transparent',
                     color: tokens.colors.white,
                     cursor: 'pointer',
-                    fontSize: 14,
+                    padding: tokens.spacing[2],
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  {'\u00d7'}
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: tokens.radius.sm,
+                      background: 'var(--color-accent-error)',
+                      fontSize: tokens.typography.fontSize.base,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {'\u00d7'}
+                  </span>
                 </button>
               </Box>
             </Box>
