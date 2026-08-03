@@ -4756,6 +4756,7 @@ export type Database = {
           comment_count: number | null
           comments_last_hour: number | null
           content: string
+          content_version: number
           content_warning: string | null
           created_at: string
           delete_reason: string | null
@@ -4804,6 +4805,7 @@ export type Database = {
           comment_count?: number | null
           comments_last_hour?: number | null
           content?: string
+          content_version?: number
           content_warning?: string | null
           created_at?: string
           delete_reason?: string | null
@@ -4852,6 +4854,7 @@ export type Database = {
           comment_count?: number | null
           comments_last_hour?: number | null
           content?: string
+          content_version?: number
           content_warning?: string | null
           created_at?: string
           delete_reason?: string | null
@@ -10449,6 +10452,18 @@ export type Database = {
           p_alert_id: string | null
           p_source: string | null
           p_trader_id: string | null
+        }
+        Returns: Json
+      }
+      edit_post_atomic: {
+        Args: {
+          p_actor_id: string
+          p_content: string
+          p_expected_version: number
+          p_images: string[] | null
+          p_post_id: string
+          p_title: string
+          p_update_images: boolean
         }
         Returns: Json
       }
