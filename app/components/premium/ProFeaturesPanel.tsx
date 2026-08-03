@@ -15,36 +15,70 @@ const StarIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 )
 
-
 const ChartIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
     <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
 const FilterIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
 const CompareIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <rect x="3" y="3" width="7" height="18" rx="1" />
     <rect x="14" y="3" width="7" height="18" rx="1" />
   </svg>
 )
 
 const BellIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
     <path d="M13.73 21a2 2 0 0 1-3.46 0" />
   </svg>
 )
 
 const UsersIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
     <circle cx="9" cy="7" r="4" />
     <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -98,23 +132,53 @@ interface ProFeaturesPanelProps {
   showTitle?: boolean
 }
 
-export default function ProFeaturesPanel({ compact = false, showTitle = true }: ProFeaturesPanelProps) {
+export default function ProFeaturesPanel({
+  compact = false,
+  showTitle = true,
+}: ProFeaturesPanelProps) {
   const router = useRouter()
   const { t } = useLanguage()
-  const { isPro, isLoading: _isLoading } = useSubscription()
+  const { isPro, isLoading, error, refresh } = useSubscription()
 
-  const features = getProFeatures(t).filter(f => {
+  const features = getProFeatures(t).filter((f) => {
     // Hide pro_groups when social features are off
     if (f.key === 'pro_groups') return featureFlags.social
     return true
   })
 
-  const handleFeatureClick = (feature: typeof features[0]) => {
+  const handleFeatureClick = (feature: (typeof features)[0]) => {
     if (!isPro) {
       router.push('/pricing')
       return
     }
     router.push(feature.href)
+  }
+
+  if (isLoading) return null
+  if (error) {
+    return (
+      <Box
+        role="alert"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+          padding: tokens.spacing[4],
+          background: 'var(--color-bg-secondary)',
+          border: '1px solid var(--color-border-primary)',
+          borderRadius: tokens.radius.xl,
+          textAlign: 'center',
+        }}
+      >
+        <Text size="xs" color="tertiary">
+          {t('loadFailed')}
+        </Text>
+        <Button variant="secondary" onClick={refresh}>
+          {t('retry')}
+        </Button>
+      </Box>
+    )
   }
 
   return (
@@ -153,8 +217,8 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
                   padding: '3px 8px',
                   borderRadius: tokens.radius.full,
                   background: 'var(--color-pro-badge-bg)',
-                  fontSize: 10,
-                  fontWeight: 700,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.bold,
                   color: tokens.colors.white,
                 }}
               >
@@ -235,7 +299,14 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
 
               {/* 箭头 */}
               <Box style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width={16}
+                  height={16}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </Box>
@@ -282,9 +353,9 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
 export function ProFeaturesMini() {
   const router = useRouter()
   const { t } = useLanguage()
-  const { isPro } = useSubscription()
+  const { isPro, isLoading, error } = useSubscription()
 
-  if (isPro) return null
+  if (isPro || isLoading || error) return null
 
   return (
     <Box
@@ -315,7 +386,14 @@ export function ProFeaturesMini() {
       <Text size="xs" weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
         {t('unlockProLabel')}
       </Text>
-      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--color-pro-gradient-start)" strokeWidth="2">
+      <svg
+        width={12}
+        height={12}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--color-pro-gradient-start)"
+        strokeWidth="2"
+      >
         <path d="M9 18l6-6-6-6" />
       </svg>
     </Box>

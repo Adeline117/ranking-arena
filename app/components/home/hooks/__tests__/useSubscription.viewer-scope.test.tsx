@@ -7,32 +7,22 @@ import {
   synchronizeViewerScope,
   type ViewerKey,
 } from '@/lib/auth/viewer-scope'
+import type { UserSubscription } from '@/lib/premium'
 import { clearSubscriptionCache, useSubscription } from '../useSubscription'
 
 const mockUseAuthSession = jest.fn()
-const mockGetSession = jest.fn()
-const mockOnAuthStateChange = jest.fn()
-const mockFrom = jest.fn()
-const mockSubscriptionResult = jest.fn()
-const mockProfileResult = jest.fn()
-const mockUnsubscribe = jest.fn()
+const mockFetchVerifiedSubscription = jest.fn()
 const mockLoggerError = jest.fn()
 
 jest.mock('@/lib/premium/hooks', () => ({ BETA_PRO_FEATURES_FREE: false }))
 jest.mock('@/lib/hooks/useAuthSession', () => ({
   useAuthSession: () => mockUseAuthSession(),
 }))
+jest.mock('@/lib/premium/subscription-client', () => ({
+  fetchVerifiedSubscription: (...args: unknown[]) => mockFetchVerifiedSubscription(...args),
+}))
 jest.mock('@/lib/logger', () => ({
   logger: { error: (...args: unknown[]) => mockLoggerError(...args) },
-}))
-jest.mock('@/lib/supabase/client', () => ({
-  supabase: {
-    auth: {
-      getSession: (...args: unknown[]) => mockGetSession(...args),
-      onAuthStateChange: (...args: unknown[]) => mockOnAuthStateChange(...args),
-    },
-    from: (...args: unknown[]) => mockFrom(...args),
-  },
 }))
 
 const ACTOR_A = '11111111-1111-4111-8111-111111111111'
@@ -45,11 +35,6 @@ type MockAuth = {
   sessionGeneration: number
 }
 
-type QueryResult = {
-  data: Record<string, unknown> | null
-  error: unknown
-}
-
 function authFor(userId: string, sessionGeneration: number): MockAuth {
   return {
     accessToken: `token-${userId}-${sessionGeneration}`,
@@ -59,10 +44,22 @@ function authFor(userId: string, sessionGeneration: number): MockAuth {
   }
 }
 
-function sessionResult(userId: string | null, error: unknown = null) {
+function subscriptionFor(userId: string, tier: 'free' | 'pro'): UserSubscription {
   return {
-    data: { session: userId ? { user: { id: userId } } : null },
-    error,
+    userId,
+    tier,
+    status: 'active',
+    startDate: '2026-07-01T00:00:00.000Z',
+    endDate: null,
+    trialEndDate: null,
+    autoRenew: tier === 'pro',
+    usage: {
+      apiCallsToday: 0,
+      comparisonReportsThisMonth: 0,
+      exportsThisMonth: 0,
+      currentFollows: 0,
+      currentCustomRankings: 0,
+    },
   }
 }
 
@@ -72,10 +69,6 @@ function deferred<T>() {
     resolve = done
   })
   return { promise, resolve }
-}
-
-function queryResult(data: Record<string, unknown> | null, error: unknown = null): QueryResult {
-  return { data, error }
 }
 
 function StrictModeWrapper({ children }: { children: ReactNode }) {
@@ -92,111 +85,72 @@ describe('useSubscription viewer ownership', () => {
     const scope = synchronizeViewerScope(true, ACTOR_A)
     currentAuth = authFor(ACTOR_A, scope.sessionGeneration)
     mockUseAuthSession.mockImplementation(() => currentAuth)
-    mockGetSession.mockImplementation(() => Promise.resolve(sessionResult(currentAuth.userId)))
-    mockOnAuthStateChange.mockReturnValue({
-      data: { subscription: { unsubscribe: mockUnsubscribe } },
-    })
-    mockSubscriptionResult.mockResolvedValue(queryResult(null))
-    mockProfileResult.mockResolvedValue(queryResult({ subscription_tier: 'free' }))
-    mockFrom.mockImplementation((table: string) => {
-      let queryUserId = ''
-      const builder: Record<string, jest.Mock> = {}
-      builder.select = jest.fn(() => builder)
-      builder.eq = jest.fn((column: string, value: string) => {
-        if (column === 'user_id' || column === 'id') queryUserId = value
-        return builder
-      })
-      builder.in = jest.fn(() => builder)
-      builder.order = jest.fn(() => builder)
-      builder.limit = jest.fn(() => builder)
-      builder.maybeSingle = jest.fn(() =>
-        table === 'subscriptions'
-          ? mockSubscriptionResult(queryUserId)
-          : mockProfileResult(queryUserId)
-      )
-      return builder
-    })
+    mockFetchVerifiedSubscription.mockImplementation((_accessToken: string, userId: string) =>
+      Promise.resolve(subscriptionFor(userId, 'free'))
+    )
   })
 
-  it('drops an A query completion after B owns the hook and cache', async () => {
-    const subscriptionA = deferred<QueryResult>()
-    mockSubscriptionResult.mockImplementation((userId: string) =>
-      userId === ACTOR_A ? subscriptionA.promise : Promise.resolve(queryResult(null))
+  it('drops an A authority completion after B owns the hook and cache', async () => {
+    const subscriptionA = deferred<UserSubscription>()
+    mockFetchVerifiedSubscription.mockImplementation((_accessToken: string, userId: string) =>
+      userId === ACTOR_A ? subscriptionA.promise : Promise.resolve(subscriptionFor(ACTOR_B, 'free'))
     )
-    mockProfileResult.mockResolvedValue(queryResult({ subscription_tier: 'free' }))
     const view = renderHook(() => useSubscription())
-    await waitFor(() => expect(mockSubscriptionResult).toHaveBeenCalledWith(ACTOR_A))
+    await waitFor(() =>
+      expect(mockFetchVerifiedSubscription).toHaveBeenCalledWith(currentAuth.accessToken, ACTOR_A)
+    )
 
     const scopeB = synchronizeViewerScope(true, ACTOR_B)
     currentAuth = authFor(ACTOR_B, scopeB.sessionGeneration)
     view.rerender()
     expect(view.result.current).toEqual(
-      expect.objectContaining({ isPro: false, isLoading: true, tier: 'free' })
+      expect.objectContaining({ isPro: false, isLoading: true, tier: 'free', error: null })
     )
-    await waitFor(() => expect(mockSubscriptionResult).toHaveBeenCalledWith(ACTOR_B))
+    await waitFor(() =>
+      expect(mockFetchVerifiedSubscription).toHaveBeenCalledWith(currentAuth.accessToken, ACTOR_B)
+    )
     await waitFor(() =>
       expect(view.result.current).toEqual(
-        expect.objectContaining({ isPro: false, isLoading: false, tier: 'free' })
+        expect.objectContaining({ isPro: false, isLoading: false, tier: 'free', error: null })
       )
     )
 
-    await act(async () => subscriptionA.resolve(queryResult({ tier: 'pro', status: 'active' })))
+    await act(async () => subscriptionA.resolve(subscriptionFor(ACTOR_A, 'pro')))
+    expect(view.result.current).toEqual(
+      expect.objectContaining({ isPro: false, isLoading: false, tier: 'free', error: null })
+    )
+  })
+
+  it('reports unknown authority instead of inventing Free after a failed first read', async () => {
+    mockFetchVerifiedSubscription.mockRejectedValue(new Error('HTTP 503'))
+    const view = renderHook(() => useSubscription())
+
+    await waitFor(() => expect(view.result.current.error).toMatch(/Unable to verify/))
     expect(view.result.current).toEqual(
       expect.objectContaining({ isPro: false, isLoading: false, tier: 'free' })
     )
-    expect(mockProfileResult).toHaveBeenCalledTimes(1)
-    expect(mockProfileResult).toHaveBeenCalledWith(ACTOR_B)
-  })
-
-  it('drops a stale getSession completion before it can query or publish', async () => {
-    const sessionA = deferred<ReturnType<typeof sessionResult>>()
-    mockGetSession
-      .mockReturnValueOnce(sessionA.promise)
-      .mockResolvedValueOnce(sessionResult(ACTOR_B))
-    const view = renderHook(() => useSubscription())
-    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
-
-    const scopeB = synchronizeViewerScope(true, ACTOR_B)
-    currentAuth = authFor(ACTOR_B, scopeB.sessionGeneration)
-    view.rerender()
-    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
-
-    await act(async () => sessionA.resolve(sessionResult(ACTOR_A)))
-    expect(view.result.current.isPro).toBe(false)
-    expect(mockSubscriptionResult).toHaveBeenCalledTimes(1)
-    expect(mockSubscriptionResult).toHaveBeenCalledWith(ACTOR_B)
-  })
-
-  it('fails closed when either subscription or profile query reports an error', async () => {
-    mockSubscriptionResult.mockResolvedValueOnce(
-      queryResult(null, { code: 'SUBSCRIPTION_QUERY_FAILED' })
-    )
-    const first = renderHook(() => useSubscription())
-    await waitFor(() => expect(first.result.current.isLoading).toBe(false))
-    expect(first.result.current).toEqual(expect.objectContaining({ isPro: false, tier: 'free' }))
-    expect(mockProfileResult).not.toHaveBeenCalled()
-    first.unmount()
-
-    clearSubscriptionCache()
-    mockGetSession.mockClear()
-    mockSubscriptionResult.mockReset()
-    mockProfileResult.mockReset()
-    mockSubscriptionResult.mockResolvedValue(queryResult({ tier: 'pro', status: 'active' }))
-    mockProfileResult.mockResolvedValue(queryResult(null, { code: 'PROFILE_QUERY_FAILED' }))
-    const second = renderHook(() => useSubscription())
-    await waitFor(() => expect(second.result.current.isLoading).toBe(false))
-    expect(second.result.current).toEqual(expect.objectContaining({ isPro: false, tier: 'free' }))
     expect(mockLoggerError).toHaveBeenCalled()
   })
 
+  it('preserves same-viewer last-good Pro when a forced refresh fails', async () => {
+    const view = renderHook(() => useSubscription())
+    mockFetchVerifiedSubscription.mockResolvedValueOnce(subscriptionFor(ACTOR_A, 'pro'))
+    act(() => view.result.current.refresh())
+    await waitFor(() => expect(view.result.current.isPro).toBe(true))
+
+    mockFetchVerifiedSubscription.mockRejectedValueOnce(new Error('HTTP 503'))
+    act(() => view.result.current.refresh())
+
+    await waitFor(() => expect(view.result.current.error).toMatch(/Unable to verify/))
+    expect(view.result.current).toEqual(
+      expect.objectContaining({ isPro: true, isLoading: false, tier: 'pro' })
+    )
+  })
+
   it('does not reuse a cache entry across an A-to-A session generation', async () => {
-    mockSubscriptionResult
-      .mockResolvedValueOnce(queryResult({ tier: 'pro', status: 'active' }))
-      .mockResolvedValueOnce(queryResult(null))
-    mockProfileResult
-      .mockResolvedValueOnce(queryResult({ subscription_tier: 'free' }))
-      .mockResolvedValueOnce(queryResult({ subscription_tier: 'free' }))
+    mockFetchVerifiedSubscription
+      .mockResolvedValueOnce(subscriptionFor(ACTOR_A, 'pro'))
+      .mockResolvedValueOnce(subscriptionFor(ACTOR_A, 'free'))
     const view = renderHook(() => useSubscription())
     await waitFor(() => expect(view.result.current.isPro).toBe(true))
 
@@ -205,52 +159,49 @@ describe('useSubscription viewer ownership', () => {
     currentAuth = authFor(ACTOR_A, nextScope.sessionGeneration)
     view.rerender()
     expect(view.result.current).toEqual(
-      expect.objectContaining({ isPro: false, isLoading: true, tier: 'free' })
+      expect.objectContaining({ isPro: false, isLoading: true, tier: 'free', error: null })
     )
     await waitFor(() => expect(view.result.current.isLoading).toBe(false))
     expect(view.result.current.isPro).toBe(false)
-    expect(mockSubscriptionResult).toHaveBeenCalledTimes(2)
+    expect(mockFetchVerifiedSubscription).toHaveBeenCalledTimes(2)
   })
 
   it('survives StrictMode replay and rejects a completion after the true unmount', async () => {
-    const afterUnmount = deferred<QueryResult>()
+    const afterUnmount = deferred<UserSubscription>()
     let phase: 'initial' | 'refresh' | 'after-unmount' = 'initial'
-    mockSubscriptionResult.mockImplementation(() => {
-      if (phase === 'initial') return Promise.resolve(queryResult(null))
-      if (phase === 'refresh') {
-        return Promise.resolve(queryResult({ tier: 'pro', status: 'active' }))
-      }
+    mockFetchVerifiedSubscription.mockImplementation(() => {
+      if (phase === 'initial') return Promise.resolve(subscriptionFor(ACTOR_A, 'free'))
+      if (phase === 'refresh') return Promise.resolve(subscriptionFor(ACTOR_A, 'pro'))
       return afterUnmount.promise
     })
-    mockProfileResult.mockResolvedValue(queryResult({ subscription_tier: 'free' }))
 
     const view = renderHook(() => useSubscription(), { wrapper: StrictModeWrapper })
     await waitFor(() => expect(view.result.current.isLoading).toBe(false))
     expect(view.result.current.isPro).toBe(false)
-    expect(mockSubscriptionResult).toHaveBeenCalled()
+    expect(mockFetchVerifiedSubscription).toHaveBeenCalled()
 
     phase = 'refresh'
     act(() => view.result.current.refresh())
     await waitFor(() => expect(view.result.current.isPro).toBe(true))
 
     phase = 'after-unmount'
-    const callsBeforePending = mockSubscriptionResult.mock.calls.length
+    const callsBeforePending = mockFetchVerifiedSubscription.mock.calls.length
     act(() => view.result.current.refresh())
     await waitFor(() =>
-      expect(mockSubscriptionResult.mock.calls.length).toBeGreaterThan(callsBeforePending)
+      expect(mockFetchVerifiedSubscription.mock.calls.length).toBeGreaterThan(callsBeforePending)
     )
     view.unmount()
-    await act(async () => afterUnmount.resolve(queryResult({ tier: 'free', status: 'active' })))
+    await act(async () => afterUnmount.resolve(subscriptionFor(ACTOR_A, 'free')))
 
-    const callsBeforeRemount = mockSubscriptionResult.mock.calls.length
+    const callsBeforeRemount = mockFetchVerifiedSubscription.mock.calls.length
     const remount = renderHook(() => useSubscription())
     await waitFor(() => expect(remount.result.current.isLoading).toBe(false))
     expect(remount.result.current.isPro).toBe(true)
-    expect(mockSubscriptionResult).toHaveBeenCalledTimes(callsBeforeRemount)
+    expect(mockFetchVerifiedSubscription).toHaveBeenCalledTimes(callsBeforeRemount)
   })
 
   it('immediately fails closed when the current viewer becomes pending', async () => {
-    mockSubscriptionResult.mockResolvedValue(queryResult({ tier: 'pro', status: 'active' }))
+    mockFetchVerifiedSubscription.mockResolvedValue(subscriptionFor(ACTOR_A, 'pro'))
     const view = renderHook(() => useSubscription())
     await waitFor(() => expect(view.result.current.isPro).toBe(true))
 
@@ -263,7 +214,7 @@ describe('useSubscription viewer ownership', () => {
     }
     view.rerender()
     expect(view.result.current).toEqual(
-      expect.objectContaining({ isPro: false, isLoading: true, tier: 'free' })
+      expect.objectContaining({ isPro: false, isLoading: true, tier: 'free', error: null })
     )
   })
 })

@@ -7,6 +7,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import ProGate from '../ProGate'
 
 const mockPush = jest.fn()
+const mockRefresh = jest.fn()
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }))
@@ -15,7 +16,12 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key, language: 'en' }),
 }))
 
-const subscriptionState = { isPro: false, isLoading: false }
+const subscriptionState: {
+  isPro: boolean
+  isLoading: boolean
+  error: string | null
+  refresh: () => void
+} = { isPro: false, isLoading: false, error: null, refresh: mockRefresh }
 jest.mock('../../home/hooks/useSubscription', () => ({
   useSubscription: () => subscriptionState,
 }))
@@ -24,7 +30,9 @@ describe('ProGate', () => {
   beforeEach(() => {
     subscriptionState.isPro = false
     subscriptionState.isLoading = false
+    subscriptionState.error = null
     mockPush.mockClear()
+    mockRefresh.mockClear()
   })
 
   it('renders children ungated for Pro users', () => {
@@ -59,6 +67,21 @@ describe('ProGate', () => {
     expect(screen.getByText('proFeatureBlurred')).toBeInTheDocument()
     fireEvent.click(screen.getByText('startFreeTrial'))
     expect(mockPush).toHaveBeenCalledWith('/pricing')
+  })
+
+  it('shows a retry state instead of a false upsell when authority is unavailable', () => {
+    subscriptionState.error = 'unavailable'
+    render(
+      <ProGate variant="inline">
+        <div>secret content</div>
+      </ProGate>
+    )
+
+    expect(screen.queryByText('secret content')).not.toBeInTheDocument()
+    expect(screen.queryByText('startFreeTrial')).not.toBeInTheDocument()
+    expect(screen.getByText('loadFailed')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('retry'))
+    expect(mockRefresh).toHaveBeenCalledTimes(1)
   })
 
   it('blur variant keeps children visible (blurred) with overlaid upsell', () => {

@@ -6,9 +6,7 @@ import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { isViewerScopeCurrent, type ViewerScope } from '@/lib/auth/viewer-scope'
 import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
-
-// Lazy-load Supabase to keep it out of the initial client bundle
-const getSupabase = () => import('@/lib/supabase/client').then((m) => m.supabase)
+import { fetchVerifiedSubscription } from '@/lib/premium/subscription-client'
 
 // 缓存配置
 const CACHE_TTL = 5 * 60 * 1000 // 5 分钟缓存
@@ -16,7 +14,7 @@ const cache: {
   ownerKey: string | null
   userId: string | null
   isPro: boolean
-  tier: string
+  tier: 'free' | 'pro'
   timestamp: number
 } = {
   ownerKey: null,
@@ -29,7 +27,8 @@ const cache: {
 type SubscriptionState = {
   isPro: boolean
   isLoading: boolean
-  tier: string
+  tier: 'free' | 'pro'
+  error: string | null
 }
 
 function subscriptionOwnerKey(scope: ViewerScope): string {
@@ -54,11 +53,11 @@ function resetCache(): void {
 
 /**
  * 简单的订阅状态 hook - 带缓存机制
- * 检查 subscriptions 表和 user_profiles.subscription_tier
+ * 只读取 /api/subscription 返回的服务端权威结果
  * 缓存有效期 5 分钟，减少重复请求
  *
  * When BETA_PRO_FEATURES_FREE is true, returns isPro: true immediately
- * without making any Supabase queries (all hooks still called to satisfy rules-of-hooks).
+ * without making an authority request (all hooks still called to satisfy rules-of-hooks).
  */
 export function useSubscription() {
   const auth = useAuthSession()
@@ -77,6 +76,7 @@ export function useSubscription() {
       isPro: BETA_PRO_FEATURES_FREE,
       isLoading: !BETA_PRO_FEATURES_FREE,
       tier: BETA_PRO_FEATURES_FREE ? 'pro' : 'free',
+      error: null,
     }
   )
   const mountedRef = useRef(true)
@@ -107,7 +107,7 @@ export function useSubscription() {
 
   const checkSubscription = useCallback(
     async (forceRefresh = false) => {
-      // During beta, skip all Supabase queries
+      // During beta, skip the subscription authority request.
       if (BETA_PRO_FEATURES_FREE) return
 
       const expectedScope = viewerScope
@@ -120,28 +120,21 @@ export function useSubscription() {
 
       if (!requestIsCurrent()) return
       if (expectedScope.viewerKey === 'pending') {
-        setSubscriptionState({ isPro: false, isLoading: true, tier: 'free' })
+        setSubscriptionState({ isPro: false, isLoading: true, tier: 'free', error: null })
         return
       }
       if (expectedScope.viewerKey === 'anon' || !expectedScope.userId) {
         resetCache()
-        setSubscriptionState({ isPro: false, isLoading: false, tier: 'free' })
+        setSubscriptionState({ isPro: false, isLoading: false, tier: 'free', error: null })
         return
       }
 
       const expectedUserId = expectedScope.userId
       try {
-        // Use getSession() — reads from local storage instead of making a network request
-        const supabase = await getSupabase()
-        if (!requestIsCurrent()) return
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession()
-        if (!requestIsCurrent()) return
-        if (sessionError) throw sessionError
-        if (session?.user.id !== expectedUserId) {
-          throw new Error('Subscription session did not match the current viewer')
+        setSubscriptionState((previous) => ({ ...previous, isLoading: true, error: null }))
+        const expectedAccessToken = auth.accessToken
+        if (!expectedAccessToken) {
+          throw new Error('Subscription access token is missing for the current viewer')
         }
 
         // 检查缓存是否有效
@@ -155,49 +148,16 @@ export function useSubscription() {
           setSubscriptionState({
             isPro: cache.isPro,
             isLoading: false,
-            tier: cache.tier,
+            tier: cache.tier === 'pro' ? 'pro' : 'free',
+            error: null,
           })
           return
         }
 
-        // 方法1: 检查 subscriptions 表（优先）
-        const { data: subscription, error: subscriptionError } = await supabase
-          .from('subscriptions')
-          .select('tier, status')
-          .eq('user_id', expectedUserId)
-          .in('status', ['active', 'trialing']) // 包括试用状态
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        const subscription = await fetchVerifiedSubscription(expectedAccessToken, expectedUserId)
         if (!requestIsCurrent()) return
-        if (subscriptionError) throw subscriptionError
-
-        // 方法2: 检查 user_profiles.subscription_tier 作为备用
-        const { data: profile, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('subscription_tier')
-          .eq('id', expectedUserId)
-          .maybeSingle()
-        if (!requestIsCurrent()) return
-        if (profileError) throw profileError
-
-        // 优先使用 subscriptions 表的结果，如果没有则使用 user_profiles
-        let finalTier: 'free' | 'pro' = 'free'
-        let isPro = false
-
-        if (
-          subscription &&
-          (subscription.tier === 'pro' ||
-            subscription.status === 'active' ||
-            subscription.status === 'trialing')
-        ) {
-          finalTier = subscription.tier as 'free' | 'pro'
-          isPro = finalTier === 'pro'
-        } else if (profile?.subscription_tier === 'pro') {
-          // subscriptions 表可能还没更新（webhook 延迟），使用 user_profiles 作为备用
-          finalTier = 'pro'
-          isPro = true
-        }
+        const finalTier = subscription.tier
+        const isPro = finalTier === 'pro'
 
         if (!requestIsCurrent()) return
         // 更新缓存；cache identity includes the exact viewer/session owner.
@@ -206,19 +166,35 @@ export function useSubscription() {
         cache.isPro = isPro
         cache.tier = finalTier
         cache.timestamp = now
-        setSubscriptionState({ isPro, isLoading: false, tier: finalTier })
+        setSubscriptionState({ isPro, isLoading: false, tier: finalTier, error: null })
       } catch (error) {
         if (!requestIsCurrent()) return
         logger.error('Error checking subscription:', error)
-        if (cache.ownerKey === expectedOwnerKey) resetCache()
-        setSubscriptionState({ isPro: false, isLoading: false, tier: 'free' })
+        const authorityError = 'Unable to verify subscription. Retry to refresh your access.'
+        if (cache.ownerKey === expectedOwnerKey && cache.userId === expectedUserId) {
+          setSubscriptionState({
+            isPro: cache.isPro,
+            isLoading: false,
+            tier: cache.tier === 'pro' ? 'pro' : 'free',
+            error: authorityError,
+          })
+        } else {
+          // No same-viewer last-good state exists. Keep the entitlement unknown
+          // instead of inventing a successful Free response.
+          setSubscriptionState({
+            isPro: false,
+            isLoading: false,
+            tier: 'free',
+            error: authorityError,
+          })
+        }
       } finally {
         if (requestIsCurrent()) {
           setSubscriptionState((previous) => ({ ...previous, isLoading: false }))
         }
       }
     },
-    [isCurrentScope, ownerKey, setSubscriptionState, viewerScope]
+    [auth.accessToken, isCurrentScope, ownerKey, setSubscriptionState, viewerScope]
   )
 
   // 强制刷新订阅状态（用于支付成功后）
@@ -230,38 +206,8 @@ export function useSubscription() {
     // During beta, no need to check subscription or listen to auth changes
     if (BETA_PRO_FEATURES_FREE) return
 
-    const expectedScope = viewerScope
-    const expectedOwnerKey = ownerKey
-    let active = true
-    const effectIsCurrent = () => active && isCurrentScope(expectedScope, expectedOwnerKey)
     void checkSubscription()
-
-    // 监听登录状态变化 (lazy-load supabase)
-    let authSub: { unsubscribe: () => void } | null = null
-    void getSupabase()
-      .then((supabase) => {
-        if (!effectIsCurrent()) return
-        const { data } = supabase.auth.onAuthStateChange((event) => {
-          // 登录或登出时强制刷新
-          if (effectIsCurrent() && (event === 'SIGNED_IN' || event === 'SIGNED_OUT')) {
-            void checkSubscription(true)
-          }
-        })
-        if (!effectIsCurrent()) {
-          data.subscription.unsubscribe()
-          return
-        }
-        authSub = data.subscription
-      })
-      .catch((error) => {
-        if (effectIsCurrent()) logger.error('Error subscribing to auth state:', error)
-      })
-
-    return () => {
-      active = false
-      authSub?.unsubscribe()
-    }
-  }, [checkSubscription, isCurrentScope, ownerKey, viewerScope])
+  }, [checkSubscription])
 
   // isFeaturesUnlocked: beta 期间全员解锁；正式收费后等于 isPro
   // During open beta, treat all users as Pro so no UI gates are shown
@@ -270,6 +216,7 @@ export function useSubscription() {
     isPro: effectiveIsPro,
     isLoading: subscriptionState.isLoading,
     tier: subscriptionState.tier,
+    error: subscriptionState.error,
     refresh,
     isFeaturesUnlocked: effectiveIsPro,
   }
