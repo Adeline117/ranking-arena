@@ -1,9 +1,14 @@
-import type { SourceRow } from '../../../core/types'
+import type { RawPage, SourceRow } from '../../../core/types'
 import type { FetchSession } from '../../../fetch/types'
 import {
   supportsSourceSurface,
   UnsupportedSourceSurfaceError,
 } from '../../../core/surface-capabilities'
+import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  captureHistoryAcquisition,
+  type HistoryTerminalClaim,
+} from '../../../history-acquisition'
 import { okxAdapter } from '../index'
 
 const UNIQUE_CODE = 'F503A5D5F1F6989F'
@@ -55,6 +60,12 @@ function ok(data: unknown[] = []): Response {
   } as Response
 }
 
+function historyVerifier(src: SourceRow) {
+  const verifier = okxAdapter.historyTerminalVerifier?.(src, 'position_history')
+  if (!verifier) throw new Error('expected the reviewed OKX position-history verifier')
+  return verifier
+}
+
 describe('OKX product-specific record contracts', () => {
   const originalFetch = global.fetch
 
@@ -70,6 +81,24 @@ describe('OKX product-specific record contracts', () => {
     expect(supportsSourceSurface(okxAdapter, spot, 'positions')).toBe(false)
     expect(supportsSourceSurface(okxAdapter, spot, 'positionHistory')).toBe(false)
     expect(supportsSourceSurface(okxAdapter, spot, 'copiers')).toBe(false)
+    expect(okxAdapter.historyTerminalVerifier?.(spot, 'position_history')).toBeNull()
+  })
+
+  it('selects terminal verification only for the reviewed production endpoint', () => {
+    const futures = source('futures', 'SWAP')
+    expect(okxAdapter.historyTerminalVerifier?.(futures, 'position_history')).toMatchObject({
+      contract: 'arena.ingest.history-terminal-verifier.okx.position_history@1',
+    })
+    expect(okxAdapter.historyTerminalVerifier?.(futures, 'orders')).toBeNull()
+    expect(
+      okxAdapter.historyTerminalVerifier?.(
+        {
+          ...futures,
+          meta: { ...futures.meta, endpoints: { base: 'https://proxy.example.test' } },
+        },
+        'position_history'
+      )
+    ).toBeNull()
   })
 
   it('requires both the futures product dimension and SWAP instType', () => {
@@ -183,21 +212,139 @@ describe('OKX product-specific record contracts', () => {
       return ok(pages[urls.length - 1] ?? [])
     }) as unknown as typeof fetch
 
-    const captured = []
-    for await (const page of okxAdapter.getHistory(
-      session(),
-      source('futures', 'SWAP'),
-      UNIQUE_CODE,
-      'position_history',
-      new Date(cursor).toISOString()
-    )) {
-      captured.push(page)
-    }
+    const futures = source('futures', 'SWAP')
+    const acquisition = await captureHistoryAcquisition({
+      source: futures,
+      traderId: 99,
+      exchangeTraderId: UNIQUE_CODE,
+      kind: 'position_history',
+      cursor: new Date(cursor).toISOString(),
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: okxAdapter.getHistory(
+        session(),
+        futures,
+        UNIQUE_CODE,
+        'position_history',
+        new Date(cursor).toISOString()
+      ),
+      terminalVerifier: historyVerifier(futures),
+    })
 
-    expect(captured).toHaveLength(2)
-    expect(captured[0].payload).toMatchObject({ historyTraderIdentity: UNIQUE_CODE })
+    expect(acquisition.pages).toHaveLength(2)
+    expect(acquisition.pages[0].payload).toMatchObject({ historyTraderIdentity: UNIQUE_CODE })
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      scan_terminal_state: 'cursor_overlap',
+      overlap_event_at: '2026-06-30T00:00:00.000Z',
+    })
     expect(urls).toHaveLength(2)
     expect(urls[1]).toContain('after=newer-close')
+  })
+
+  it('captures the terminal empty response and verifies exhaustion', async () => {
+    global.fetch = jest.fn(async () => ok()) as unknown as typeof fetch
+    const futures = source('futures', 'SWAP')
+
+    const acquisition = await captureHistoryAcquisition({
+      source: futures,
+      traderId: 99,
+      exchangeTraderId: UNIQUE_CODE,
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: okxAdapter.getHistory(session(), futures, UNIQUE_CODE, 'position_history', null),
+      terminalVerifier: historyVerifier(futures),
+    })
+
+    expect(acquisition.pages).toHaveLength(1)
+    expect(acquisition.pages[0].payload).toEqual({
+      data: [],
+      historyTraderIdentity: UNIQUE_CODE,
+    })
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [{ segment_id: 'default', reason: 'empty_page', page_ordinal: 1 }],
+      scan_terminal_state: 'exhausted',
+    })
+  })
+
+  it('rejects a terminal claim when the captured request chain has extra query inputs', async () => {
+    const futures = source('futures', 'SWAP')
+    const fetchedAt = new Date().toISOString()
+    async function* forgedStream(): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
+      yield {
+        pageIndex: 1,
+        payload: {
+          data: [
+            {
+              subPosId: 'row-1',
+              closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
+            },
+          ],
+          historyTraderIdentity: UNIQUE_CODE,
+        },
+        url:
+          'https://www.okx.com/api/v5/copytrading/public-subpositions-history' +
+          `?instType=SWAP&uniqueCode=${UNIQUE_CODE}&limit=100&limit=100`,
+        fetchedAt,
+      }
+      return {
+        contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+        observations: [{ segment_id: 'default', reason: 'cursor_overlap', page_ordinal: 1 }],
+      }
+    }
+
+    const acquisition = await captureHistoryAcquisition({
+      source: futures,
+      traderId: 99,
+      exchangeTraderId: UNIQUE_CODE,
+      kind: 'position_history',
+      cursor: '2026-07-01T00:00:00.000Z',
+      attemptStartedAt: new Date(Date.parse(fetchedAt) - 1_000).toISOString(),
+      stream: forgedStream(),
+      terminalVerifier: historyVerifier(futures),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
+    })
+  })
+
+  it('rejects an adapter overlap claim when any captured close time is malformed', async () => {
+    global.fetch = jest.fn(async () =>
+      ok([
+        { subPosId: 'bad-time', closeTime: 'not-an-epoch' },
+        {
+          subPosId: 'cursor-overlap',
+          closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
+        },
+      ])
+    ) as unknown as typeof fetch
+    const futures = source('futures', 'SWAP')
+
+    const acquisition = await captureHistoryAcquisition({
+      source: futures,
+      traderId: 99,
+      exchangeTraderId: UNIQUE_CODE,
+      kind: 'position_history',
+      cursor: '2026-07-01T00:00:00.000Z',
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: okxAdapter.getHistory(
+        session(),
+        futures,
+        UNIQUE_CODE,
+        'position_history',
+        '2026-07-01T00:00:00.000Z'
+      ),
+      terminalVerifier: historyVerifier(futures),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+    })
   })
 
   it('yields replayable pages before rejecting an unproven page-cap stop', async () => {

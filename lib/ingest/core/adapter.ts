@@ -33,6 +33,7 @@ import type { FetchSession } from '../fetch/types'
 import type { AnyLeaderboardCapture } from '../fetch/capture'
 import type { AttemptBoundLeaderboardAcquisitionContract } from '../acquisition-attempts'
 import type { ProfileQualityReject } from './profile-quality'
+import type { SelectedHistoryTerminalVerifier } from '../history-acquisition'
 
 /** Lets expensive adapters defer deep enrichment off interactive/series paths. */
 export type ProfileFetchIntent = 'scheduled_full' | 'series_only' | 'interactive_deferred'
@@ -124,6 +125,16 @@ export interface SourceAdapter {
     cursor: string | null,
     traderMeta?: Record<string, unknown> | null
   ): AsyncIterable<RawPage>
+
+  /**
+   * Reviewed, versioned verifier selected for one concrete history surface.
+   * A terminal claim remains unknown when this is absent; returning a claim
+   * alone can never authorize completeness.
+   */
+  historyTerminalVerifier?(
+    src: SourceRow,
+    kind: HistoryKind
+  ): SelectedHistoryTerminalVerifier | null
 
   // ── Pure parsers ──
   parseLeaderboard(raw: unknown, ctx: ParseCtx): ParsedLeaderboardPage
