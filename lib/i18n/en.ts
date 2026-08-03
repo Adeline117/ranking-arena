@@ -316,6 +316,7 @@ const en = {
   publishSuccess: 'Published successfully!',
   noPermissionPublish: 'No permission to publish',
   pleaseEnterTitle: 'Please enter a title',
+  pleaseEnterContent: 'Please enter content or add an image',
   imageInserted: 'Image inserted into content',
   uploadSuccess: 'Successfully uploaded {count} images',
   maxImages: 'Maximum 9 images allowed',

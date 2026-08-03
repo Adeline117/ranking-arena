@@ -305,6 +305,7 @@ const ja = {
   publishSuccess: '公開しました！',
   noPermissionPublish: '公開する権限がありません',
   pleaseEnterTitle: 'タイトルを入力してください',
+  pleaseEnterContent: '内容を入力するか、画像を追加してください',
   imageInserted: '画像がコンテンツに挿入されました',
   uploadSuccess: '{count}枚の画像をアップロードしました',
   maxImages: '画像は最大9枚までです',

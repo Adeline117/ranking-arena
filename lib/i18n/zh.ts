@@ -309,6 +309,7 @@ const zh = {
   publishSuccess: '发布成功！',
   noPermissionPublish: '无权发布',
   pleaseEnterTitle: '请输入标题',
+  pleaseEnterContent: '请输入内容或添加图片',
   imageInserted: '图片已插入到内容',
   uploadSuccess: '成功上传 {count} 张图片',
   maxImages: '最多上传9张图片',

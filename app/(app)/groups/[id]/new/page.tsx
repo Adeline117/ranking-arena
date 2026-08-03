@@ -484,6 +484,18 @@ export default function NewGroupPostPage(): React.ReactElement {
       return
     }
 
+    const unincludedImageMarkdown = images
+      .filter((image) => !content.includes(image.url))
+      .map((image) => `![image](${image.url})`)
+      .join('\n')
+    const finalContent = unincludedImageMarkdown
+      ? `${content}\n\n${unincludedImageMarkdown}`
+      : content
+    if (!finalContent.trim()) {
+      showToast(t('pleaseEnterContent'), 'warning')
+      return
+    }
+
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
@@ -511,14 +523,6 @@ export default function NewGroupPostPage(): React.ReactElement {
     submitRef.current = true
     setLoading(true)
     try {
-      let finalContent = content
-      if (images.length > 0) {
-        const unincludedImages = images.filter((img) => !content.includes(img.url))
-        if (unincludedImages.length > 0) {
-          finalContent += '\n\n' + unincludedImages.map((img) => `![image](${img.url})`).join('\n')
-        }
-      }
-
       const operation = bindPostCreateOperation(
         {
           title,

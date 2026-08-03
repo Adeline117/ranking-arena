@@ -54,7 +54,6 @@ export default function NewPostPage() {
   const publishOperationRef = useRef<BoundPostCreateOperation | null>(null)
   const [cursorPosition, setCursorPosition] = useState<number | null>(null)
 
-  const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -88,7 +87,6 @@ export default function NewPostPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
     })
   }, [])
@@ -493,6 +491,18 @@ export default function NewPostPage() {
       return
     }
 
+    const unincludedImageMarkdown = images
+      .filter((image) => !content.includes(image.url))
+      .map((image) => `![image](${image.url})`)
+      .join('\n')
+    const finalContent = unincludedImageMarkdown
+      ? `${content}\n\n${unincludedImageMarkdown}`
+      : content
+    if (!finalContent.trim()) {
+      showToast(t('pleaseEnterContent'), 'warning')
+      return
+    }
+
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/login'
@@ -528,14 +538,6 @@ export default function NewPostPage() {
       if (!profile || profile.handle !== decodedHandle) {
         showToast(t('noPermission'), 'error')
         return
-      }
-
-      let finalContent = content
-      if (images.length > 0) {
-        const unincludedImages = images.filter((img) => !content.includes(img.url))
-        if (unincludedImages.length > 0) {
-          finalContent += '\n\n' + unincludedImages.map((img) => `![image](${img.url})`).join('\n')
-        }
       }
 
       const operation = bindPostCreateOperation(

@@ -314,6 +314,7 @@ const ko = {
   publishSuccess: '게시 성공!',
   noPermissionPublish: '게시 권한이 없습니다',
   pleaseEnterTitle: '제목을 입력해 주세요',
+  pleaseEnterContent: '내용을 입력하거나 이미지를 추가해 주세요',
   imageInserted: '이미지가 내용에 삽입되었습니다',
   uploadSuccess: '{count}장의 이미지가 업로드되었습니다',
   maxImages: '최대 9장의 이미지만 허용됩니다',
