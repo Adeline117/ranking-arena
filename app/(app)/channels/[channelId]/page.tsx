@@ -23,6 +23,11 @@ import type {
 } from '@/app/(app)/messages/[conversationId]/components/types'
 import { ChannelMessageReactionOperationLedger } from './channel-message-reaction-operation'
 import { readChannelMessageReactionAcknowledgement } from './channel-message-reaction-client'
+import {
+  ChannelMessageSendOperationLedger,
+  type ChannelMessageSendIntent,
+} from './channel-message-send-operation'
+import { readChannelMessageSendAcknowledgement } from './channel-message-send-client'
 
 type ChannelMessage = {
   id: string
@@ -38,6 +43,7 @@ type ChannelMessage = {
   reactions?: MessageReaction[]
   _status?: 'sending' | 'sent' | 'failed'
   _tempId?: string
+  _sendIntent?: ChannelMessageSendIntent
 }
 
 type Member = {
@@ -101,6 +107,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   // One in-flight mutation per message prevents two distinct emoji responses
   // from overwriting each other's full aggregate acknowledgement out of order.
   const reactionInFlightRef = useRef<Set<string>>(new Set())
+  const sendOperationsRef = useRef(new ChannelMessageSendOperationLedger())
+  // React state is not a synchronous exclusion primitive. This scope-bound set
+  // closes the same-tick double-click/Enter race before operation acquisition.
+  const sendInFlightRef = useRef<Set<string>>(new Set())
   const messagesRef = useRef(messages)
   const userIdRef = useRef(userId)
   const channelIdRef = useRef(channelId)
@@ -143,6 +153,12 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         })
     }
   }, [params])
+
+  useEffect(() => {
+    // A dynamic-route transition can reuse this component. Never let an old
+    // channel's pending state disable the new viewer/channel composer.
+    setSending(false)
+  }, [channelId, userId])
 
   const loadChannel = useCallback(async () => {
     if (!channelId || !accessToken) return
@@ -412,9 +428,126 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     return m?.avatar_url || null
   }
 
-  const handleSend = async () => {
+  const submitChannelMessage = async (
+    intent: ChannelMessageSendIntent,
+    replyPreview: ReplyPreview | null,
+    existingTempId?: string
+  ) => {
+    const operationActorId = intent.actorId
+    const operationChannelId = intent.channelId
+    const operationAccessToken = accessToken
+    if (!operationAccessToken || userId !== operationActorId || channelId !== operationChannelId) {
+      return
+    }
+
+    const inFlightKey = `${operationActorId}\u0000${operationChannelId}`
+    if (sendInFlightRef.current.has(inFlightKey)) return
+    sendInFlightRef.current.add(inFlightKey)
+    setSending(true)
+
+    const tempId = existingTempId ?? `temp_${Date.now()}`
+    const optimistic: ChannelMessage = {
+      id: tempId,
+      channel_id: operationChannelId,
+      sender_id: operationActorId,
+      content: intent.content,
+      media_url: intent.mediaUrl,
+      media_type: intent.mediaType,
+      media_name: intent.mediaName,
+      created_at: new Date().toISOString(),
+      reply_to_id: intent.replyToId,
+      reply_preview: replyPreview,
+      _status: 'sending',
+      _tempId: tempId,
+      _sendIntent: intent,
+    }
+    if (existingTempId) {
+      setMessages((prev) =>
+        prev.map((message) => (message._tempId === tempId ? optimistic : message))
+      )
+    } else {
+      setMessages((prev) => [...prev, optimistic])
+    }
+
+    const isCurrent = () =>
+      mountedRef.current &&
+      userIdRef.current === operationActorId &&
+      channelIdRef.current === operationChannelId
+    let timeout: ReturnType<typeof setTimeout> | undefined
+
+    try {
+      const acquired = await sendOperationsRef.current.acquire(intent)
+      const sendRequest = acquired.operation
+      if (!isCurrent()) return
+
+      const controller = new AbortController()
+      timeout = setTimeout(() => controller.abort(), 20_000)
+      const res = await globalThis.fetch(`/api/channels/${operationChannelId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${operationAccessToken}`,
+          ...getCsrfHeaders(),
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          operation_id: sendRequest.operationId,
+          content: intent.content,
+          media_url: intent.mediaUrl,
+          media_type: intent.mediaType,
+          media_name: intent.mediaName,
+          reply_to_id: intent.replyToId,
+        }),
+      })
+      const data: unknown = await res.json().catch(() => null)
+      if (!isCurrent()) return
+
+      const acknowledgement = res.ok
+        ? readChannelMessageSendAcknowledgement(data, {
+            ...intent,
+            operationId: sendRequest.operationId,
+          })
+        : null
+      if (acknowledgement) {
+        sendOperationsRef.current.complete(sendRequest)
+        setMessages((prev) =>
+          prev.map((message) =>
+            message._tempId === tempId
+              ? {
+                  ...acknowledgement.message,
+                  reply_preview: replyPreview,
+                  _status: 'sent',
+                }
+              : message
+          )
+        )
+        return
+      }
+
+      // A 4xx is a definitive denial. A timeout, 5xx, or malformed 2xx may
+      // have committed, so preserve the exact operation ID for the retry UI.
+      if (!res.ok && res.status >= 400 && res.status < 500) {
+        sendOperationsRef.current.complete(sendRequest)
+      }
+      throw new Error('send failed')
+    } catch {
+      if (!isCurrent()) return
+      setMessages((prev) =>
+        prev.map((message) =>
+          message._tempId === tempId ? { ...message, _status: 'failed' } : message
+        )
+      )
+      showToast(t('sendFailed'), 'error')
+    } finally {
+      if (timeout) clearTimeout(timeout)
+      sendInFlightRef.current.delete(inFlightKey)
+      if (isCurrent()) setSending(false)
+    }
+  }
+
+  const handleSend = () => {
     const hasContent = newMessage.trim() || pendingAttachment
-    if (!hasContent || !userId || !channelId || sending) return
+    if (!hasContent || !userId || !channelId || !accessToken) return
 
     const content = newMessage.trim()
     if (content.length > 2000) {
@@ -422,78 +555,26 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       return
     }
 
-    // Snapshot + clear the reply target so the composer resets immediately
-    const replyTo = replyingTo
-    setReplyingTo(null)
-
-    const tempId = `temp_${Date.now()}`
-    const optimistic: ChannelMessage = {
-      id: tempId,
-      channel_id: channelId,
-      sender_id: userId,
-      content: content || (pendingAttachment ? `[${pendingAttachment.type}]` : ''),
-      media_url: pendingAttachment?.url,
-      media_type: pendingAttachment?.type,
-      media_name: pendingAttachment?.originalName,
-      created_at: new Date().toISOString(),
-      reply_to_id: replyTo?.id ?? null,
-      reply_preview: replyTo
-        ? { sender_id: replyTo.sender_id, content: (replyTo.content || '').slice(0, 120) }
-        : null,
-      _status: 'sending',
-      _tempId: tempId,
-    }
-
-    setMessages((prev) => [...prev, optimistic])
-    setNewMessage('')
     const attachment = pendingAttachment
-    setPendingAttachment(null)
-    inputRef.current?.focus()
-    setSending(true)
-
-    try {
-      const body: Record<string, unknown> = {
-        content: content || `[${attachment?.type || 'file'}]`,
-      }
-      if (attachment) {
-        body.media_url = attachment.url
-        body.media_type = attachment.type
-        body.media_name = attachment.originalName
-      }
-      if (replyTo) {
-        body.reply_to_id = replyTo.id
-      }
-      const res = await globalThis.fetch(`/api/channels/${channelId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (res.ok && data.message) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m._tempId === tempId
-              ? { ...data.message, reply_preview: optimistic.reply_preview, _status: 'sent' }
-              : m
-          )
-        )
-      } else {
-        setMessages((prev) =>
-          prev.map((m) => (m._tempId === tempId ? { ...m, _status: 'failed' } : m))
-        )
-        showToast(data.error || t('sendFailed'), 'error')
-      }
-    } catch {
-      setMessages((prev) =>
-        prev.map((m) => (m._tempId === tempId ? { ...m, _status: 'failed' } : m))
-      )
-    } finally {
-      setSending(false)
+    const replyTo = replyingTo
+    const intent: ChannelMessageSendIntent = {
+      actorId: userId,
+      channelId,
+      content: content || `[${attachment?.type || 'file'}]`,
+      mediaUrl: attachment?.url ?? null,
+      mediaType: attachment?.type ?? null,
+      mediaName: attachment?.originalName ?? null,
+      replyToId: replyTo?.id ?? null,
     }
+    const replyPreview = replyTo
+      ? { sender_id: replyTo.sender_id, content: (replyTo.content || '').slice(0, 120) }
+      : null
+
+    setNewMessage('')
+    setPendingAttachment(null)
+    setReplyingTo(null)
+    inputRef.current?.focus()
+    void submitChannelMessage(intent, replyPreview)
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -992,7 +1073,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                     style={{
                       marginTop: 3,
                       opacity: 0.5,
-                      fontSize: 11,
+                      fontSize: tokens.typography.fontSize.xs,
                       paddingLeft: isMine ? 0 : 36,
                     }}
                   >
@@ -1000,12 +1081,31 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                   </Text>
                 )}
                 {msg._status === 'failed' && (
-                  <Text
-                    size="xs"
-                    style={{ color: tokens.colors.accent.error, marginTop: 3, fontSize: 11 }}
+                  <button
+                    type="button"
+                    disabled={sending || !msg._sendIntent || !msg._tempId}
+                    aria-label={`${t('sendFailed')}. ${t('retry')}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (!msg._sendIntent || !msg._tempId) return
+                      void submitChannelMessage(
+                        msg._sendIntent,
+                        msg.reply_preview ?? null,
+                        msg._tempId
+                      )
+                    }}
+                    style={{
+                      marginTop: 3,
+                      padding: 0,
+                      border: 0,
+                      background: 'transparent',
+                      color: tokens.colors.accent.error,
+                      fontSize: tokens.typography.fontSize.xs,
+                      cursor: sending ? 'not-allowed' : 'pointer',
+                    }}
                   >
-                    {t('sendFailed')}
-                  </Text>
+                    {t('sendFailed')} · {t('retry')}
+                  </button>
                 )}
               </Box>
             )

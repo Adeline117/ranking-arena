@@ -19,6 +19,7 @@ const sendFailureReasons = new Set([
   'CHANNEL_NOT_GROUP',
   'MEMBERSHIP_NOT_FOUND',
   'INVALID_REPLY_TARGET',
+  'OPERATION_CONFLICT',
 ])
 
 type SentChannelMessage = {
@@ -38,9 +39,11 @@ type SendChannelMessageAcknowledgement =
       success: true
       actorId: string
       channelId: string
+      operationId: string
       message: SentChannelMessage
       readAt: string
       replyAuthorId: string | null
+      applied: boolean
     }
   | { success: false; reason: string }
 
@@ -113,8 +116,10 @@ function readSendChannelMessageAcknowledgement(
     result.success !== true ||
     !hasExactKeys(result, [
       'actor_id',
+      'applied',
       'channel_id',
       'message',
+      'operation_id',
       'read_at',
       'reply_author_id',
       'success',
@@ -125,14 +130,17 @@ function readSendChannelMessageAcknowledgement(
 
   const actorId = channelIdSchema.safeParse(result.actor_id)
   const channelId = channelIdSchema.safeParse(result.channel_id)
+  const operationId = channelIdSchema.safeParse(result.operation_id)
   const replyAuthorId =
     result.reply_author_id === null ? null : channelIdSchema.safeParse(result.reply_author_id)
   const message = readSentChannelMessage(result.message)
   if (
     !actorId.success ||
     !channelId.success ||
+    !operationId.success ||
     (replyAuthorId !== null && !replyAuthorId.success) ||
     !message ||
+    typeof result.applied !== 'boolean' ||
     !isTimestamp(result.read_at)
   ) {
     return null
@@ -142,9 +150,11 @@ function readSendChannelMessageAcknowledgement(
     success: true,
     actorId: actorId.data,
     channelId: channelId.data,
+    operationId: operationId.data,
     message,
     readAt: result.read_at,
     replyAuthorId: replyAuthorId === null ? null : replyAuthorId.data,
+    applied: result.applied,
   }
 }
 
@@ -180,13 +190,15 @@ export async function POST(
     const channelId = parsedChannelId.data
     const actorId = user.id.toLowerCase()
     const content = parsedBody.data.content
+    const operationId = parsedBody.data.operation_id
     const mediaUrl = parsedBody.data.media_url ?? null
     const mediaType = mediaUrl ? parsedBody.data.media_type || 'file' : null
     const mediaName = mediaUrl ? parsedBody.data.media_name || null : null
     const replyToId = parsedBody.data.reply_to_id ?? null
     const supabase = getSupabaseAdmin()
 
-    const { data, error } = await supabase.rpc('send_channel_message_atomic', {
+    const { data, error } = await supabase.rpc('send_channel_message_idempotent', {
+      p_operation_id: operationId,
       p_channel_id: channelId,
       p_sender_id: actorId,
       p_content: content,
@@ -227,6 +239,11 @@ export async function POST(
             { error: 'Reply target is no longer available' },
             { status: 400 }
           )
+        case 'OPERATION_CONFLICT':
+          return NextResponse.json(
+            { error: 'Operation conflicts with another send' },
+            { status: 409 }
+          )
         default:
           logger.error('Atomic channel-message send returned an unknown denial')
           return NextResponse.json({ error: 'Failed to send' }, { status: 500 })
@@ -237,6 +254,7 @@ export async function POST(
     if (
       acknowledgement.actorId !== actorId ||
       acknowledgement.channelId !== channelId ||
+      acknowledgement.operationId !== operationId ||
       message.channel_id !== channelId ||
       message.sender_id !== actorId ||
       message.content !== content ||
@@ -274,7 +292,16 @@ export async function POST(
       )
     }
 
-    return NextResponse.json({ message })
+    return NextResponse.json({
+      success: true,
+      data: {
+        operationId: acknowledgement.operationId,
+        actorId: acknowledgement.actorId,
+        channelId: acknowledgement.channelId,
+        message,
+        replayed: !acknowledgement.applied,
+      },
+    })
   } catch (error) {
     logger.error('SEND_MESSAGE failed', {
       error: error instanceof Error ? error.message : String(error),

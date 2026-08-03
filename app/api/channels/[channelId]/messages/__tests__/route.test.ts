@@ -53,6 +53,7 @@ const replyAuthorId = '22222222-2222-4222-8222-222222222222'
 const channelId = '33333333-3333-4333-8333-333333333333'
 const messageId = '44444444-4444-4444-8444-444444444444'
 const replyId = '55555555-5555-4555-8555-555555555555'
+const operationId = '66666666-6666-4666-8666-666666666666'
 
 function context(id = channelId) {
   return { params: Promise.resolve({ channelId: id }) }
@@ -62,7 +63,13 @@ function request(body: unknown, malformed = false) {
   return {
     json: malformed
       ? jest.fn().mockRejectedValue(new SyntaxError('invalid JSON'))
-      : jest.fn().mockResolvedValue(body),
+      : jest
+          .fn()
+          .mockResolvedValue(
+            body && typeof body === 'object' && !Array.isArray(body)
+              ? { operation_id: operationId, ...body }
+              : body
+          ),
   } as never
 }
 
@@ -81,8 +88,10 @@ const sentMessage = {
 function acknowledgement(
   overrides: Partial<{
     actor_id: unknown
+    applied: unknown
     channel_id: unknown
     message: unknown
+    operation_id: unknown
     read_at: unknown
     reply_author_id: unknown
     success: unknown
@@ -91,8 +100,10 @@ function acknowledgement(
   return {
     success: true,
     actor_id: actorId,
+    applied: true,
     channel_id: channelId,
     message: sentMessage,
+    operation_id: operationId,
     reply_author_id: null,
     read_at: '2026-07-29T20:00:00.100Z',
     ...overrides,
@@ -123,9 +134,19 @@ describe('POST /api/channels/[channelId]/messages', () => {
     const response = await POST(request({ content: '  hello channel  ' }), context())
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ message: sentMessage })
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        operationId,
+        actorId,
+        channelId,
+        message: sentMessage,
+        replayed: false,
+      },
+    })
     expect(mockRpc).toHaveBeenCalledTimes(1)
-    expect(mockRpc).toHaveBeenCalledWith('send_channel_message_atomic', {
+    expect(mockRpc).toHaveBeenCalledWith('send_channel_message_idempotent', {
+      p_operation_id: operationId,
       p_channel_id: channelId,
       p_sender_id: actorId,
       p_content: 'hello channel',
@@ -165,8 +186,12 @@ describe('POST /api/channels/[channelId]/messages', () => {
     await Promise.resolve()
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ message })
-    expect(mockRpc).toHaveBeenCalledWith('send_channel_message_atomic', {
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: { operationId, actorId, channelId, message, replayed: false },
+    })
+    expect(mockRpc).toHaveBeenCalledWith('send_channel_message_idempotent', {
+      p_operation_id: operationId,
       p_channel_id: channelId,
       p_sender_id: actorId,
       p_content: '',
@@ -191,6 +216,25 @@ describe('POST /api/channels/[channelId]/messages', () => {
       },
       'Channel reply notification'
     )
+  })
+
+  it('returns an exact replay acknowledgement without inventing a second message', async () => {
+    rpcResult(acknowledgement({ applied: false }))
+
+    const response = await POST(request({ content: 'hello channel' }), context())
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        operationId,
+        actorId,
+        channelId,
+        message: sentMessage,
+        replayed: true,
+      },
+    })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
   })
 
   it('requires authentication before parsing input or calling the RPC', async () => {
@@ -219,6 +263,7 @@ describe('POST /api/channels/[channelId]/messages', () => {
 
   it.each([
     {},
+    { operation_id: 'not-a-uuid', content: 'hello' },
     { content: '   ' },
     { content: 'x'.repeat(2_001) },
     { content: 'hello', extra: true },
@@ -244,6 +289,7 @@ describe('POST /api/channels/[channelId]/messages', () => {
     ['CHANNEL_NOT_GROUP', 400, 'Channel does not support group messages'],
     ['MEMBERSHIP_NOT_FOUND', 403, 'Not a member'],
     ['INVALID_REPLY_TARGET', 400, 'Reply target is no longer available'],
+    ['OPERATION_CONFLICT', 409, 'Operation conflicts with another send'],
   ])('maps the exact %s denial without a fallback insert', async (reason, status, error) => {
     rpcResult({ success: false, reason })
 
@@ -271,6 +317,8 @@ describe('POST /api/channels/[channelId]/messages', () => {
     { success: false, reason: 'UNKNOWN' },
     { success: false, reason: 'MEMBERSHIP_NOT_FOUND', extra: true },
     acknowledgement({ actor_id: 'not-a-uuid' }),
+    acknowledgement({ operation_id: 'not-a-uuid' }),
+    acknowledgement({ applied: 'true' }),
     acknowledgement({ channel_id: 'not-a-uuid' }),
     acknowledgement({ read_at: 'not-a-timestamp' }),
     acknowledgement({ reply_author_id: 'not-a-uuid' }),
@@ -278,6 +326,7 @@ describe('POST /api/channels/[channelId]/messages', () => {
     acknowledgement({ message: { ...sentMessage, extra: true } }),
     acknowledgement({ message: { ...sentMessage, created_at: 'not-a-timestamp' } }),
     acknowledgement({ message: { ...sentMessage, reply_to_id: 'not-a-uuid' } }),
+    { ...acknowledgement(), extra: true },
     acknowledgement({
       message: { ...sentMessage, media_type: 'image', media_url: null },
     }),
@@ -294,6 +343,7 @@ describe('POST /api/channels/[channelId]/messages', () => {
 
   it.each([
     acknowledgement({ actor_id: replyAuthorId }),
+    acknowledgement({ operation_id: replyAuthorId }),
     acknowledgement({ channel_id: replyAuthorId }),
     acknowledgement({ message: { ...sentMessage, channel_id: replyAuthorId } }),
     acknowledgement({ message: { ...sentMessage, sender_id: replyAuthorId } }),

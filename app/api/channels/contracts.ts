@@ -83,6 +83,7 @@ const channelMessageMediaUrlSchema = z
 
 export const sendChannelMessageInputSchema = z
   .object({
+    operation_id: channelIdSchema,
     content: z.string().trim().max(2_000).optional().default(''),
     media_url: channelMessageMediaUrlSchema.nullable().optional(),
     media_type: z.enum(['image', 'video', 'file']).nullable().optional(),

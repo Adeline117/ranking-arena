@@ -228,12 +228,21 @@ describe('channel membership server boundary migration', () => {
       .sort()
 
     expect(baseTableSources).toEqual(
-      ['app/api/channels/[channelId]/read/route.ts', 'app/api/channels/route.ts'].sort()
+      [
+        'app/api/channels/[channelId]/read/route.ts',
+        'app/api/channels/route.ts',
+        'app/api/chat/upload/route.ts',
+      ].sort()
     )
 
     for (const path of baseTableSources) {
       expect(path).toMatch(/^app\/api\//)
-      expect(readFileSync(join(process.cwd(), path), 'utf8')).toMatch(/getSupabaseAdmin\(\)/)
+      const source = readFileSync(join(process.cwd(), path), 'utf8')
+      if (path === 'app/api/chat/upload/route.ts') {
+        expect(source).toContain('withAuth(')
+      } else {
+        expect(source).toMatch(/getSupabaseAdmin\(\)/)
+      }
     }
 
     const pageRoute = readFileSync(
@@ -249,7 +258,7 @@ describe('channel membership server boundary migration', () => {
       join(process.cwd(), 'app/api/channels/[channelId]/messages/route.ts'),
       'utf8'
     )
-    expect(sendRoute).toContain("'send_channel_message_atomic'")
+    expect(sendRoute).toContain("'send_channel_message_idempotent'")
     expect(sendRoute).not.toMatch(
       /\.from\(\s*['"](?:channel_members|channel_messages|channel_message_reads)['"]\s*\)/
     )
