@@ -250,6 +250,9 @@ export default function NewPostPage() {
     setVideoUploadProgress(0)
 
     try {
+      const uploadToken = await tokenRefreshCoordinator.getValidToken()
+      if (!uploadToken) throw new Error(t('pleaseLogin'))
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('userId', userId)
@@ -307,6 +310,7 @@ export default function NewPostPage() {
           xhr.addEventListener('abort', onAbort)
 
           xhr.open('POST', '/api/posts/upload-video')
+          xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
 
           const csrfHeaders = getCsrfHeaders()
           Object.entries(csrfHeaders).forEach(([key, value]) => {

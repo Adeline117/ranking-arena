@@ -29,6 +29,7 @@ import { PollEditor } from './components/PollEditor'
 import { ImageUploader } from './components/ImageUploader'
 import { VideoUploader } from './components/VideoUploader'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 export default function NewGroupPostPage(): React.ReactElement {
   if (!features.social) redirect('/')
@@ -268,6 +269,12 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
 
+      const uploadToken = await tokenRefreshCoordinator.getValidToken()
+      if (!uploadToken) {
+        showToast(t('pleaseLogin'), 'warning')
+        return
+      }
+
       setUploading(true)
       setUploadProgress(0)
       const newImages: UploadedImage[] = []
@@ -298,6 +305,7 @@ export default function NewGroupPostPage(): React.ReactElement {
           const data = await new Promise<{ url: string; fileName: string }>((resolve, reject) => {
             const xhr = new XMLHttpRequest()
             xhr.open('POST', '/api/posts/upload-image')
+            xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
             const csrfHeaders = getCsrfHeaders()
             Object.entries(csrfHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v as string))
 
@@ -405,6 +413,9 @@ export default function NewGroupPostPage(): React.ReactElement {
       setVideoUploadProgress(0)
 
       try {
+        const uploadToken = await tokenRefreshCoordinator.getValidToken()
+        if (!uploadToken) throw new Error(t('pleaseLogin'))
+
         const formData = new FormData()
         formData.append('file', file)
         formData.append('userId', userId)
@@ -456,6 +467,7 @@ export default function NewGroupPostPage(): React.ReactElement {
             xhr.addEventListener('abort', onAbort)
 
             xhr.open('POST', '/api/posts/upload-video')
+            xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
             Object.entries(getCsrfHeaders()).forEach(([key, value]) => {
               if (value) xhr.setRequestHeader(key, value)
             })
