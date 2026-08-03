@@ -6,7 +6,7 @@
  */
 
 import type { Job } from 'bullmq'
-import { getIngestPool, ingestClientConnect, type IngestQueryExecutor } from '@/lib/ingest/db'
+import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getLatestPassedNativeCohort, type NativeCohortTrader } from '@/lib/ingest/native-cohort'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
@@ -40,6 +40,7 @@ import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
 } from '../consumed-region-context'
+import { runHistoryTransaction } from '../history-transaction'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
@@ -103,48 +104,6 @@ function historyKinds(adapter: SourceAdapter, src: SourceRow): HistoryKind[] {
   if (supportsSourceSurface(adapter, src, 'transfers')) kinds.push('transfers')
   if (supportsSourceSurface(adapter, src, 'copiers')) kinds.push('copiers')
   return kinds
-}
-
-async function runHistoryTransaction<T>(
-  operation: (transaction: IngestQueryExecutor) => Promise<T>
-): Promise<T> {
-  const client = await ingestClientConnect()
-  let transactionOpen = false
-  let commitAttempted = false
-  let destroyClient = false
-  try {
-    await client.query('BEGIN')
-    transactionOpen = true
-    const result = await operation(client)
-    commitAttempted = true
-    await client.query('COMMIT')
-    transactionOpen = false
-    return result
-  } catch (cause) {
-    if (commitAttempted) {
-      destroyClient = true
-      throw cause
-    }
-    let failure: unknown = cause
-    if (transactionOpen) {
-      try {
-        await client.query('ROLLBACK')
-        transactionOpen = false
-      } catch (rollbackCause) {
-        destroyClient = true
-        failure = new AggregateError(
-          [
-            cause instanceof Error ? cause : new Error(String(cause)),
-            rollbackCause instanceof Error ? rollbackCause : new Error(String(rollbackCause)),
-          ],
-          '[tier-b] history transaction and rollback both failed'
-        )
-      }
-    }
-    throw failure
-  } finally {
-    client.release(destroyClient)
-  }
 }
 
 async function persistPositionHistory(
