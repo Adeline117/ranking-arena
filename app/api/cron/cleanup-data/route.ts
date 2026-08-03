@@ -306,35 +306,6 @@ export async function GET(request: NextRequest) {
         skippedSteps.push('pipeline_rejected_writes')
       }
 
-      // Cleanup old stripe_events (>30 days) — Stripe retries within 3 days max
-      let stripeEventsCleaned = 0
-      if (hasTimeBudget()) {
-        try {
-          const stripeEventsCutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
-          const { count, error: stripeErr } = await supabase
-            .from('stripe_events')
-            .delete({ count: 'exact' })
-            .lt('processed_at', stripeEventsCutoff)
-            .limit(DELETE_BATCH_SIZE)
-          if (stripeErr) {
-            if (!stripeErr.message?.includes('does not exist')) {
-              logger.warn(`[cleanup-data] stripe_events cleanup error: ${stripeErr.message}`)
-            }
-          } else {
-            stripeEventsCleaned = count ?? 0
-            if (stripeEventsCleaned > 0) {
-              logger.info(
-                `[cleanup-data] Cleaned up ${stripeEventsCleaned} old stripe_events (>30d)`
-              )
-            }
-          }
-        } catch (err) {
-          logger.warn(`[cleanup-data] stripe_events cleanup failed: ${err}`)
-        }
-      } else {
-        skippedSteps.push('stripe_events')
-      }
-
       // Cleanup old liquidations (>180 days) — market sentiment data only
       let liquidationsCleaned = 0
       if (hasTimeBudget()) {
@@ -476,7 +447,6 @@ export async function GET(request: NextRequest) {
         pipelineLogsCleaned +
         traderActivitiesCleaned +
         authSyncLogsCleaned +
-        stripeEventsCleaned +
         liquidationsCleaned +
         pipelineStateCleaned +
         searchAnalyticsCleaned +
@@ -495,7 +465,6 @@ export async function GET(request: NextRequest) {
         pipelineLogsCleaned,
         traderActivitiesCleaned,
         authSyncLogsCleaned,
-        stripeEventsCleaned,
         liquidationsCleaned,
         pipelineStateCleaned,
         skippedSteps: skippedSteps.length > 0 ? skippedSteps : undefined,

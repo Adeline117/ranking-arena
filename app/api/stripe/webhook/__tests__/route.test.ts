@@ -76,6 +76,7 @@ import { constructWebhookEvent } from '@/lib/stripe'
 import { POST } from '../route'
 
 const constructEventMock = constructWebhookEvent as jest.Mock
+const leaseToken = '11111111-1111-4111-8111-111111111111'
 
 function createRequest(signature: string | null = 'valid-signature'): NextRequest {
   const headers = new Headers()
@@ -116,9 +117,19 @@ describe('POST /api/stripe/webhook', () => {
       STRIPE_WEBHOOK_SECRET: 'whsec_test_xxx',
     }
     constructEventMock.mockReturnValue(event())
-    mockRpc.mockImplementation((name: string) => {
-      if (name === 'claim_stripe_event') return Promise.resolve({ data: 'claimed', error: null })
-      if (name === 'finish_stripe_event') return Promise.resolve({ data: true, error: null })
+    mockRpc.mockImplementation((name: string, args: Record<string, unknown>) => {
+      if (name === 'claim_stripe_event_v2') {
+        return Promise.resolve({
+          data: { status: 'claimed', leaseToken },
+          error: null,
+        })
+      }
+      if (name === 'finish_stripe_event_v2') {
+        return Promise.resolve({
+          data: { status: args.p_succeeded === true ? 'processed' : 'retry_scheduled' },
+          error: null,
+        })
+      }
       throw new Error(`Unexpected RPC ${name}`)
     })
   })
@@ -145,6 +156,28 @@ describe('POST /api/stripe/webhook', () => {
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
+  it('fails closed when the signed event mode does not match the configured key', async () => {
+    constructEventMock.mockReturnValue({ ...event(), livemode: false })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Stripe event mode mismatch' })
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('rejects a claim RPC failure without dispatching a handler', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '57014', message: 'statement timeout' },
+    })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+  })
+
   it('marks an event processed only after its handler succeeds', async () => {
     const response = await POST(createRequest())
 
@@ -157,16 +190,20 @@ describe('POST /api/stripe/webhook', () => {
     })
     expect(mockRpc.mock.calls).toEqual([
       [
-        'claim_stripe_event',
+        'claim_stripe_event_v2',
         {
           p_event_id: 'evt_test_retryable',
           p_event_type: 'checkout.session.completed',
+          p_livemode: true,
         },
       ],
       [
-        'finish_stripe_event',
+        'finish_stripe_event_v2',
         {
           p_event_id: 'evt_test_retryable',
+          p_event_type: 'checkout.session.completed',
+          p_livemode: true,
+          p_lease_token: leaseToken,
           p_succeeded: true,
           p_error: null,
         },
@@ -175,7 +212,7 @@ describe('POST /api/stripe/webhook', () => {
   })
 
   it('skips only events that reached the processed state', async () => {
-    mockRpc.mockResolvedValueOnce({ data: 'processed', error: null })
+    mockRpc.mockResolvedValueOnce({ data: { status: 'processed' }, error: null })
 
     const response = await POST(createRequest())
 
@@ -185,12 +222,118 @@ describe('POST /api/stripe/webhook', () => {
   })
 
   it('returns non-2xx for a concurrent processing claim so Stripe retries', async () => {
-    mockRpc.mockResolvedValueOnce({ data: 'busy', error: null })
+    mockRpc.mockResolvedValueOnce({ data: { status: 'busy' }, error: null })
 
     const response = await POST(createRequest())
 
     expect(response.status).toBe(500)
     expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the same event identity arrives with a different type', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { status: 'identity_conflict' }, error: null })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a claimed response without a valid lease token', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: { status: 'claimed', leaseToken: 'not-a-lease' },
+      error: null,
+    })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    null,
+    { status: 'claimed', leaseToken, unexpected: true },
+    { status: 'processed', leaseToken },
+    { status: 'unknown' },
+  ])('rejects a malformed or over-broad claim acknowledgement: %p', async (claim) => {
+    mockRpc.mockResolvedValueOnce({ data: claim, error: null })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+  })
+
+  it('passes test mode through the exact claim and fenced completion identity', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_xxx'
+    constructEventMock.mockReturnValue({ ...event(), livemode: false })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenNthCalledWith(1, 'claim_stripe_event_v2', {
+      p_event_id: 'evt_test_retryable',
+      p_event_type: 'checkout.session.completed',
+      p_livemode: false,
+    })
+    expect(mockRpc).toHaveBeenNthCalledWith(2, 'finish_stripe_event_v2', {
+      p_event_id: 'evt_test_retryable',
+      p_event_type: 'checkout.session.completed',
+      p_livemode: false,
+      p_lease_token: leaseToken,
+      p_succeeded: true,
+      p_error: null,
+    })
+  })
+
+  it('does not acknowledge work when its completion lease was lost', async () => {
+    mockRpc.mockImplementation((name: string, args: Record<string, unknown>) => {
+      if (name === 'claim_stripe_event_v2') {
+        return Promise.resolve({
+          data: { status: 'claimed', leaseToken },
+          error: null,
+        })
+      }
+      if (name === 'finish_stripe_event_v2' && args.p_succeeded === true) {
+        return Promise.resolve({ data: { status: 'lease_lost' }, error: null })
+      }
+      if (name === 'finish_stripe_event_v2') {
+        return Promise.resolve({ data: { status: 'lease_lost' }, error: null })
+      }
+      throw new Error(`Unexpected RPC ${name}`)
+    })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenLastCalledWith('finish_stripe_event_v2', {
+      p_event_id: 'evt_test_retryable',
+      p_event_type: 'checkout.session.completed',
+      p_livemode: true,
+      p_lease_token: leaseToken,
+      p_succeeded: false,
+      p_error: 'Stripe event success state was not persisted',
+    })
+  })
+
+  it.each([
+    null,
+    { status: 'processed', unexpected: true },
+    { status: 'retry_scheduled' },
+    { status: 'unknown' },
+  ])('does not acknowledge a malformed success completion: %p', async (finished) => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'claimed', leaseToken }, error: null })
+      .mockResolvedValueOnce({ data: finished, error: null })
+      .mockResolvedValueOnce({ data: { status: 'lease_lost' }, error: null })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledTimes(1)
   })
 
   it('marks a failed handler retryable and succeeds on the next delivery', async () => {
@@ -204,13 +347,19 @@ describe('POST /api/stripe/webhook', () => {
     expect(first.status).toBe(500)
     expect(second.status).toBe(200)
     expect(mockHandleCheckoutComplete).toHaveBeenCalledTimes(2)
-    expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event', {
+    expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event_v2', {
       p_event_id: 'evt_test_retryable',
+      p_event_type: 'checkout.session.completed',
+      p_livemode: true,
+      p_lease_token: leaseToken,
       p_succeeded: false,
       p_error: 'temporary database outage',
     })
-    expect(mockRpc).toHaveBeenLastCalledWith('finish_stripe_event', {
+    expect(mockRpc).toHaveBeenLastCalledWith('finish_stripe_event_v2', {
       p_event_id: 'evt_test_retryable',
+      p_event_type: 'checkout.session.completed',
+      p_livemode: true,
+      p_lease_token: leaseToken,
       p_succeeded: true,
       p_error: null,
     })
@@ -241,8 +390,11 @@ describe('POST /api/stripe/webhook', () => {
       { id: 'evt_test_retryable', created: 1_800_000_000, livemode: true }
     )
     expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
-    expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event', {
+    expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event_v2', {
       p_event_id: 'evt_test_retryable',
+      p_event_type: 'checkout.session.completed',
+      p_livemode: true,
+      p_lease_token: leaseToken,
       p_succeeded: false,
       p_error: 'Failed to mark tip completed',
     })

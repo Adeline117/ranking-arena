@@ -6,6 +6,7 @@ const migrationName = '20260803153000_stripe_webhook_event_lease_and_retention_a
 const migration = readFileSync(resolve(root, 'supabase/migrations', migrationName), 'utf8')
 const runner = readFileSync(resolve(root, 'scripts/maintenance/apply-launch-migrations.sh'), 'utf8')
 const pg17 = readFileSync(resolve(root, 'scripts/qa/stripe-webhook-event-leases.pg17.sh'), 'utf8')
+const cleanupRoute = readFileSync(resolve(root, 'app/api/cron/cleanup-data/route.ts'), 'utf8')
 
 function functionBody(name: string): string {
   const marker = new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\(`)
@@ -30,6 +31,11 @@ describe('Stripe webhook event lease and retention authority', () => {
     expect(pg17).toContain('historical Stripe event was deleted')
     expect(pg17).toMatch(/assert_sql_failure \\\s+direct_service_update/)
     expect(pg17).toMatch(/assert_sql_failure \\\s+direct_service_truncate/)
+  })
+
+  it('keeps the runtime cleanup job away from the permanent event ledger', () => {
+    expect(cleanupRoute).not.toContain("from('stripe_events')")
+    expect(cleanupRoute).not.toContain('stripeEventsCleaned')
   })
 
   it('deduplicates the exact event ID and test/live mode tuple', () => {
