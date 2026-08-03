@@ -27,6 +27,7 @@ import {
   MentionAutocomplete,
   useMentionAutocomplete,
 } from '@/app/components/post/components/MentionAutocomplete'
+import { moveMarkdownImage, removeMarkdownImage } from '@/lib/posts/markdown-images'
 
 interface UploadedImage {
   url: string
@@ -504,65 +505,22 @@ export default function EditPostPage() {
 
   // 移动图片在内容中的位置（上移或下移）
   const moveImageInContent = (url: string, direction: 'up' | 'down') => {
-    const regex = /!\[image\]\([^)]+\)/g
-    const matches: { match: string; start: number; end: number }[] = []
-    let m
-    while ((m = regex.exec(content)) !== null) {
-      matches.push({ match: m[0], start: m.index, end: m.index + m[0].length })
-    }
-
-    const currentIndex = matches.findIndex((m) => m.match.includes(url))
-    if (currentIndex === -1) return
-
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
-    if (targetIndex < 0 || targetIndex >= matches.length) {
+    const result = moveMarkdownImage(content, url, direction)
+    if (result.status === 'missing') return
+    if (result.status === 'boundary') {
       showToast(direction === 'up' ? t('alreadyAtTop') : t('alreadyAtBottom'), 'info')
       return
     }
 
-    const current = matches[currentIndex]
-    const target = matches[targetIndex]
-
-    let newContent = content
-    const placeholder1 = `__PLACEHOLDER_1__`
-    const placeholder2 = `__PLACEHOLDER_2__`
-
-    if (direction === 'up') {
-      newContent =
-        newContent.slice(0, target.start) +
-        placeholder1 +
-        newContent.slice(target.end, current.start) +
-        placeholder2 +
-        newContent.slice(current.end)
-      newContent = newContent.replace(placeholder1, current.match)
-      newContent = newContent.replace(placeholder2, target.match)
-    } else {
-      newContent =
-        newContent.slice(0, current.start) +
-        placeholder1 +
-        newContent.slice(current.end, target.start) +
-        placeholder2 +
-        newContent.slice(target.end)
-      newContent = newContent.replace(placeholder1, target.match)
-      newContent = newContent.replace(placeholder2, current.match)
-    }
-
-    setContent(newContent)
+    setContent(result.content)
     showToast(direction === 'up' ? t('imageMovedUp') : t('imageMovedDown'), 'success')
   }
 
   // 从内容中移除图片
   const removeImageFromContent = (url: string) => {
-    const imagePattern = new RegExp(
-      `\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`,
-      'g'
-    )
-    setContent((prev) =>
-      prev
-        .replace(imagePattern, '\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim()
-    )
+    const result = removeMarkdownImage(content, url)
+    if (!result.removed) return
+    setContent(result.content)
     showToast(t('imageRemovedFromContent'), 'info')
   }
 
