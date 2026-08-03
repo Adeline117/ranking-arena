@@ -232,6 +232,55 @@ function UpsellCard({
   )
 }
 
+function SubscriptionErrorCard({
+  minHeight,
+  onRetry,
+  t,
+}: {
+  minHeight?: number
+  onRetry: () => void
+  t: (key: string) => string
+}) {
+  return (
+    <Box
+      role="alert"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: tokens.spacing[3],
+        minHeight,
+        padding: `${tokens.spacing[5]} ${tokens.spacing[6]}`,
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--color-border-primary)',
+        borderRadius: tokens.radius.xl,
+        textAlign: 'center',
+      }}
+    >
+      <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
+        {t('loadFailed')}
+      </Text>
+      <button
+        type="button"
+        className="tap-target"
+        onClick={onRetry}
+        style={{
+          padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+          background: 'var(--color-accent-primary)',
+          color: tokens.colors.white,
+          border: 'none',
+          borderRadius: tokens.radius.md,
+          fontWeight: tokens.typography.fontWeight.semibold,
+          cursor: 'pointer',
+        }}
+      >
+        {t('retry')}
+      </button>
+    </Box>
+  )
+}
+
 /**
  * Controlled upsell modal for callback-style gate sites (onProRequired
  * handlers) where ProGate can't wrap a trigger element. Same card, same
@@ -274,11 +323,15 @@ export default function ProGate({
 }: ProGateProps) {
   const { t } = useLanguage()
   const router = useRouter()
-  const { isPro, isLoading } = useSubscription()
+  const { isPro, isLoading, error, refresh } = useSubscription()
   const [modalOpen, setModalOpen] = useState(false)
   const upsellText = description ?? t(featureKey)
   // Caller-supplied benefits win; otherwise auto-frame from the featureKey map.
   const resolvedBenefits = resolveBenefits(featureKey, benefits, t)
+
+  if (error) {
+    return <SubscriptionErrorCard minHeight={fallbackHeight} onRetry={refresh} t={t} />
+  }
 
   // Pro users and the loading window render ungated — a transient paywall
   // flash for paying users is worse than a delayed gate for free users.
