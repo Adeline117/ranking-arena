@@ -254,8 +254,17 @@ export function parseLbankProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * posiDirection enum unverified → side null (raw preserved).
  */
 export function parseLbankPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = data(raw)
-  if (!Array.isArray(list)) return []
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[lbank] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== 200) {
+    throw new TypeError(`[lbank] position response failed with code ${String(envelope.code)}`)
+  }
+  const list = envelope.data
+  if (!Array.isArray(list)) {
+    throw new TypeError('[lbank] malformed position response data')
+  }
   const out: ParsedPosition[] = []
   for (const item of list as Dict[]) {
     if (!item.instrumentID) continue

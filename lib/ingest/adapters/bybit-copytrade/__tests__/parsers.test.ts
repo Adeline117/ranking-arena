@@ -223,11 +223,23 @@ describe('parseBybitCopytradePositions', () => {
     expect(positions[1].size).toBe(11442) // POL qty matches rendered UI
   })
 
-  it('returns [] for protected traders (openTradeInfoProtection)', () => {
+  it('returns [] only for an explicit successful empty snapshot', () => {
     expect(
-      parseBybitCopytradePositions({ result: { data: [], openTradeInfoProtection: 1 } }, ctx)
+      parseBybitCopytradePositions(
+        { retCode: 0, result: { data: [], openTradeInfoProtection: 0 } },
+        ctx
+      )
     ).toEqual([])
-    expect(parseBybitCopytradePositions({}, ctx)).toEqual([])
+  })
+
+  it('rejects protected and malformed responses instead of clearing last-good positions', () => {
+    expect(() =>
+      parseBybitCopytradePositions(
+        { retCode: 0, result: { data: [], openTradeInfoProtection: 1 } },
+        ctx
+      )
+    ).toThrow('visibility-protected')
+    expect(() => parseBybitCopytradePositions({}, ctx)).toThrow('position response failed')
   })
 })
 

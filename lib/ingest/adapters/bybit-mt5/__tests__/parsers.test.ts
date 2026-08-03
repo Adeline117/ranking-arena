@@ -151,8 +151,16 @@ describe('parseBybitMt5Positions', () => {
   })
 
   it('returns [] for an empty list', () => {
-    expect(parseBybitMt5Positions({ result: { openPositionList: [] } }, ctx)).toEqual([])
-    expect(parseBybitMt5Positions({}, ctx)).toEqual([])
+    expect(parseBybitMt5Positions({ retCode: 0, result: { openPositionList: [] } }, ctx)).toEqual(
+      []
+    )
+  })
+
+  it('rejects error and malformed envelopes instead of clearing last-good positions', () => {
+    expect(() => parseBybitMt5Positions({ retCode: 10001, result: null }, ctx)).toThrow(
+      'position response failed'
+    )
+    expect(() => parseBybitMt5Positions({}, ctx)).toThrow('position response failed')
   })
 })
 

@@ -248,8 +248,19 @@ export function parseOkxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 // ── Positions (public-current-subpositions) ──
 
 export function parseOkxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TypeError('[okx] malformed position response envelope')
+  }
+  const envelope = raw as Dict
+  if (envelope.code !== '0') {
+    throw new TypeError(`[okx] position response failed with code ${String(envelope.code)}`)
+  }
+  if (!Array.isArray(envelope.data)) {
+    throw new TypeError('[okx] malformed position response data')
+  }
+
   const out: ParsedPosition[] = []
-  for (const item of dataRows(raw)) {
+  for (const item of envelope.data as Dict[]) {
     const symbol = str(item.instId)
     if (!symbol) continue
     out.push({

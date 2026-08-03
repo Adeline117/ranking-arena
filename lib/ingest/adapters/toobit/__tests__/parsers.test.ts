@@ -117,19 +117,13 @@ describe('parseToobitProfile', () => {
 })
 
 describe('parseToobitPositions', () => {
-  it('parses open positions; MASKED rows ("****" symbol) are skipped', () => {
-    const positions = parseToobitPositions(fixture('positions.json'), ctx)
-    const fixtureRows = (fixture('positions.json') as { data: unknown[] }).data
-    // the captured leader masks position details — at least one row drops
-    expect(positions.length).toBeLessThan(fixtureRows.length)
-    for (const p of positions) {
-      expect(p.symbol).not.toBe('****')
-      expect(['long', 'short', null]).toContain(p.side)
-    }
+  it('rejects the captured visibility-masked snapshot instead of clearing last-good rows', () => {
+    expect(() => parseToobitPositions(fixture('positions.json'), ctx)).toThrow('visibility-masked')
   })
 
-  it('masked scalars decode to null, never NaN', () => {
+  it('rejects a partially masked row instead of replacing known values with null', () => {
     const doctored = {
+      code: 200,
       data: [
         {
           symbolId: 'BTC-SWAP-USDT',
@@ -143,16 +137,37 @@ describe('parseToobitPositions', () => {
         },
       ],
     }
-    const [p] = parseToobitPositions(doctored, ctx)
+    expect(() => parseToobitPositions(doctored, ctx)).toThrow('visibility-masked')
+  })
+
+  it('parses an unmasked snapshot and allows an explicit successful empty list', () => {
+    const [p] = parseToobitPositions(
+      {
+        code: 200,
+        data: [
+          {
+            symbolId: 'BTC-SWAP-USDT',
+            isLong: 0,
+            leverage: '50',
+            positionQuantity: '7',
+            openPrice: '65000',
+            markPrice: '65100',
+            profit: '-22.57',
+          },
+        ],
+      },
+      ctx
+    )
     expect(p).toMatchObject({
       symbol: 'BTC-SWAP-USDT',
       side: 'short',
       leverage: 50,
       size: 7,
-      entryPrice: null,
-      markPrice: null,
+      entryPrice: 65000,
+      markPrice: 65100,
     })
     expect(p.unrealizedPnl).toBeCloseTo(-22.57, 2)
+    expect(parseToobitPositions({ code: 200, data: [] }, ctx)).toEqual([])
   })
 })
 
