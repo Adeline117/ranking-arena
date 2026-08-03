@@ -643,7 +643,7 @@ export async function captureHistoryAcquisition(
       })
       .strict()
       .parse({
-        source: input.source,
+        source: { id: input.source.id, slug: input.source.slug },
         traderId: input.traderId,
         exchangeTraderId: input.exchangeTraderId,
         kind: input.kind,
