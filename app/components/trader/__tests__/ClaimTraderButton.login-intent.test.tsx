@@ -1,21 +1,89 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const mockPush = jest.fn()
-const mockGetSession = jest.fn()
 const mockShowToast = jest.fn()
 const mockShowConfirm = jest.fn()
+const mockAuthedFetch = jest.fn()
+const VIEWER_A = '11111111-1111-4111-8111-111111111111'
+const VIEWER_B = '22222222-2222-4222-8222-222222222222'
+
+type MockAuth = {
+  accessToken: string | null
+  authChecked: boolean
+  email: string | null
+  loading: boolean
+  sessionGeneration: number
+  userId: string | null
+  viewerKey: 'anon' | `user:${string}`
+}
+
+function signedIn(userId: string, token: string, generation: number): MockAuth {
+  return {
+    accessToken: token,
+    authChecked: true,
+    email: null,
+    loading: false,
+    sessionGeneration: generation,
+    userId,
+    viewerKey: `user:${userId}`,
+  }
+}
+
+function signedOut(generation: number): MockAuth {
+  return {
+    accessToken: null,
+    authChecked: true,
+    email: null,
+    loading: false,
+    sessionGeneration: generation,
+    userId: null,
+    viewerKey: 'anon',
+  }
+}
+
+let mockAuth: MockAuth = signedOut(1)
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }))
 
-jest.mock('@/lib/supabase/client', () => ({
-  supabase: {
-    auth: {
-      getSession: (...args: unknown[]) => mockGetSession(...args),
-    },
+jest.mock('@/lib/hooks/useAuthSession', () => ({
+  useAuthSession: () => mockAuth,
+}))
+
+jest.mock('@/app/(app)/settings/hooks/settings-viewer-scope', () => ({
+  captureSettingsViewer: (auth: MockAuth) => {
+    if (
+      auth.loading ||
+      !auth.authChecked ||
+      !auth.userId ||
+      !auth.accessToken ||
+      auth.viewerKey !== `user:${auth.userId}`
+    ) {
+      return null
+    }
+    return {
+      accessToken: auth.accessToken,
+      email: auth.email,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+      viewerKey: auth.viewerKey,
+    }
   },
+  isSettingsViewerCurrent: (
+    viewer: { sessionGeneration: number; userId: string; viewerKey: string },
+    auth: MockAuth
+  ) =>
+    auth.authChecked &&
+    !auth.loading &&
+    auth.userId === viewer.userId &&
+    auth.viewerKey === viewer.viewerKey &&
+    auth.sessionGeneration === viewer.sessionGeneration,
+}))
+
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -48,10 +116,33 @@ jest.mock('@/app/components/base', () => ({
 
 import ClaimTraderButton from '../ClaimTraderButton'
 
+function claimStatusResponse(userId: string) {
+  return {
+    data: {
+      success: true,
+      data: {
+        claim: null,
+        is_verified: false,
+        linked_traders: [] as Array<{ user_id: string }>,
+      },
+    },
+    ok: true,
+    status: 200,
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('ClaimTraderButton login intent', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockGetSession.mockResolvedValue({ data: { session: null } })
+    mockAuth = signedOut(1)
     mockShowConfirm.mockResolvedValue(true)
   })
 
@@ -60,7 +151,7 @@ describe('ClaimTraderButton login intent', () => {
       <ClaimTraderButton
         traderId="account/42"
         handle="Alice Trader"
-        userId="stale-viewer"
+        userId={VIEWER_A}
         source="binance"
       />
     )
@@ -80,7 +171,7 @@ describe('ClaimTraderButton login intent', () => {
       <ClaimTraderButton
         traderId="0xabc"
         handle="Wallet Trader"
-        userId="stale-viewer"
+        userId={VIEWER_A}
         source="hyperliquid"
       />
     )
@@ -92,5 +183,91 @@ describe('ClaimTraderButton login intent', () => {
         '/login?returnUrl=%2Fclaim%3Ftrader%3D0xabc%26source%3Dhyperliquid%26handle%3DWallet%2BTrader%26step%3Dverify'
       )
     )
+  })
+
+  it('does not redirect after a confirmation opened by the previous viewer', async () => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 2)
+    mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_A))
+    const confirmation = deferred<boolean>()
+    mockShowConfirm.mockReturnValue(confirmation.promise)
+    const view = render(
+      <ClaimTraderButton
+        traderId="account/42"
+        handle="Alice Trader"
+        userId={VIEWER_A}
+        source="binance"
+      />
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'claimTrader' }))
+    await waitFor(() => expect(mockShowConfirm).toHaveBeenCalledTimes(1))
+
+    mockAuth = signedIn(VIEWER_B, 'access-token-b', 3)
+    mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_B))
+    view.rerender(
+      <ClaimTraderButton
+        traderId="account/42"
+        handle="Alice Trader"
+        userId={VIEWER_B}
+        source="binance"
+      />
+    )
+
+    await act(async () => {
+      confirmation.resolve(true)
+      await confirmation.promise
+    })
+
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('opens only one CEX confirmation for a same-tick double click', async () => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 4)
+    mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_A))
+    const confirmation = deferred<boolean>()
+    mockShowConfirm.mockReturnValue(confirmation.promise)
+    render(
+      <ClaimTraderButton
+        traderId="account/42"
+        handle="Alice Trader"
+        userId={VIEWER_A}
+        source="binance"
+      />
+    )
+
+    const button = await screen.findByRole('button', { name: 'claimTrader' })
+    act(() => {
+      button.click()
+      button.click()
+    })
+
+    expect(mockShowConfirm).toHaveBeenCalledTimes(1)
+    expect(button).toBeDisabled()
+    await act(async () => confirmation.resolve(false))
+  })
+
+  it('navigates only once for a same-tick DEX double click', async () => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 5)
+    mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_A))
+    render(
+      <ClaimTraderButton
+        traderId="0xabc"
+        handle="Wallet Trader"
+        userId={VIEWER_A}
+        source="hyperliquid"
+      />
+    )
+
+    const button = await screen.findByRole('button', { name: 'claimTrader' })
+    act(() => {
+      button.click()
+      button.click()
+    })
+
+    expect(mockPush).toHaveBeenCalledTimes(1)
+    expect(mockPush).toHaveBeenCalledWith(
+      '/claim?trader=0xabc&source=hyperliquid&handle=Wallet+Trader&step=verify'
+    )
+    expect(button).toBeDisabled()
   })
 })

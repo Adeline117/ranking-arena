@@ -1,14 +1,70 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
-const mockGetSession = jest.fn()
+const mockAuthedFetch = jest.fn()
+const VIEWER_A = '11111111-1111-4111-8111-111111111111'
+const VIEWER_B = '22222222-2222-4222-8222-222222222222'
 
-jest.mock('@/lib/supabase/client', () => ({
-  supabase: {
-    auth: {
-      getSession: (...args: unknown[]) => mockGetSession(...args),
-    },
+type MockAuth = {
+  accessToken: string | null
+  authChecked: boolean
+  email: string | null
+  loading: boolean
+  sessionGeneration: number
+  userId: string | null
+  viewerKey: 'anon' | `user:${string}`
+}
+
+function signedIn(userId: string, token: string, generation: number): MockAuth {
+  return {
+    accessToken: token,
+    authChecked: true,
+    email: null,
+    loading: false,
+    sessionGeneration: generation,
+    userId,
+    viewerKey: `user:${userId}`,
+  }
+}
+
+let mockAuth: MockAuth = signedIn(VIEWER_A, 'access-token-a', 1)
+
+jest.mock('@/lib/hooks/useAuthSession', () => ({
+  useAuthSession: () => mockAuth,
+}))
+
+jest.mock('@/app/(app)/settings/hooks/settings-viewer-scope', () => ({
+  captureSettingsViewer: (auth: MockAuth) => {
+    if (
+      auth.loading ||
+      !auth.authChecked ||
+      !auth.userId ||
+      !auth.accessToken ||
+      auth.viewerKey !== `user:${auth.userId}`
+    ) {
+      return null
+    }
+    return {
+      accessToken: auth.accessToken,
+      email: auth.email,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+      viewerKey: auth.viewerKey,
+    }
   },
+  isSettingsViewerCurrent: (
+    viewer: { sessionGeneration: number; userId: string; viewerKey: string },
+    auth: MockAuth
+  ) =>
+    auth.authChecked &&
+    !auth.loading &&
+    auth.userId === viewer.userId &&
+    auth.viewerKey === viewer.viewerKey &&
+    auth.sessionGeneration === viewer.sessionGeneration,
+}))
+
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -41,66 +97,90 @@ jest.mock('@/app/components/base', () => ({
 
 import ClaimTraderButton from '../ClaimTraderButton'
 
-const originalFetch = global.fetch
 const checksumEvm = '0xAbCdEf0123456789aBCdEf0123456789AbCdEf01'
 const canonicalEvm = checksumEvm.toLowerCase()
 const solanaTrader = '7YWHMfk9JZe0LMJ9aWbKQR1FV5G7e2SGZts6Dwr5BzKp'
 
-function claimStatusResponse(data: {
-  claim: { trader_id: string; source: string; status: string } | null
-  is_verified?: boolean
-  linked_traders?: Array<{ trader_id: string; source: string }>
-}) {
+function claimStatusResponse(
+  userId: string,
+  data: {
+    claim: { trader_id: string; source: string; status: string } | null
+    is_verified?: boolean
+    linked_traders?: Array<{ trader_id: string; source: string }>
+  }
+) {
   return {
+    data: {
+      success: true,
+      data: {
+        claim: data.claim ? { ...data.claim, user_id: userId } : null,
+        is_verified: data.is_verified ?? false,
+        linked_traders: (data.linked_traders ?? []).map((trader) => ({
+          ...trader,
+          user_id: userId,
+        })),
+      },
+    },
     ok: true,
     status: 200,
-    json: async () => ({ success: true, data }),
   }
 }
 
-function renderClaimButton(traderId: string, source: string) {
+type MockFetchResult = ReturnType<typeof claimStatusResponse>
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
+function renderClaimButton(traderId: string, source: string, userId = VIEWER_A) {
   return render(
-    <ClaimTraderButton traderId={traderId} handle="Trader" userId="user-1" source={source} />
+    <ClaimTraderButton traderId={traderId} handle="Trader" userId={userId} source={source} />
   )
 }
 
 describe('ClaimTraderButton claim identity scope', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockGetSession.mockResolvedValue({
-      data: { session: { access_token: 'access-token' } },
-    })
-  })
-
-  afterAll(() => {
-    global.fetch = originalFetch
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 1)
   })
 
   it('keeps the current trader actionable when a different trader is under review', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(
-      claimStatusResponse({
+    mockAuthedFetch.mockResolvedValue(
+      claimStatusResponse(VIEWER_A, {
         claim: { trader_id: 'trader-b', source: 'binance', status: 'reviewing' },
         linked_traders: [{ trader_id: 'trader-b', source: 'binance' }],
       })
     )
-    global.fetch = fetchMock as typeof fetch
 
     renderClaimButton('trader-a', 'binance')
 
     const button = await screen.findByRole('button', { name: 'linkToProfile' })
     expect(button).toBeEnabled()
-    expect(fetchMock).toHaveBeenCalledWith('/api/traders/claim?trader_id=trader-a&source=binance', {
-      headers: { Authorization: 'Bearer access-token' },
-    })
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/traders/claim?trader_id=trader-a&source=binance',
+      'GET',
+      'access-token-a',
+      undefined,
+      15_000,
+      expect.objectContaining({
+        expectedUserId: VIEWER_A,
+        expectedSessionGeneration: 1,
+        signal: expect.any(AbortSignal),
+      })
+    )
   })
 
   it('reads the standard response envelope and disables a matching review claim', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      claimStatusResponse({
+    mockAuthedFetch.mockResolvedValue(
+      claimStatusResponse(VIEWER_A, {
         claim: { trader_id: 'trader-a', source: 'binance', status: 'reviewing' },
         linked_traders: [],
       })
-    ) as typeof fetch
+    )
 
     renderClaimButton('trader-a', 'BINANCE')
 
@@ -108,16 +188,15 @@ describe('ClaimTraderButton claim identity scope', () => {
   })
 
   it('matches EVM case-insensitively but preserves Solana Base58 identity case', async () => {
-    const fetchMock = jest
-      .fn()
+    mockAuthedFetch
       .mockResolvedValueOnce(
-        claimStatusResponse({
+        claimStatusResponse(VIEWER_A, {
           claim: { trader_id: canonicalEvm, source: 'hyperliquid', status: 'reviewing' },
           linked_traders: [],
         })
       )
       .mockResolvedValueOnce(
-        claimStatusResponse({
+        claimStatusResponse(VIEWER_A, {
           claim: {
             trader_id: solanaTrader.toLowerCase(),
             source: 'drift',
@@ -126,14 +205,74 @@ describe('ClaimTraderButton claim identity scope', () => {
           linked_traders: [],
         })
       )
-    global.fetch = fetchMock as typeof fetch
 
     const evm = renderClaimButton(checksumEvm, 'hyperliquid')
     expect(await screen.findByRole('button', { name: 'claimSubmitted' })).toBeDisabled()
     evm.unmount()
 
     renderClaimButton(solanaTrader, 'drift')
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('button', { name: 'claimTrader' })).toBeEnabled()
+  })
+
+  it('never applies the previous viewer claim status to the replacement viewer', async () => {
+    const firstStatus = deferred<MockFetchResult>()
+    mockAuthedFetch.mockReturnValueOnce(firstStatus.promise).mockResolvedValueOnce(
+      claimStatusResponse(VIEWER_B, {
+        claim: null,
+        linked_traders: [],
+      })
+    )
+    const view = renderClaimButton('trader-a', 'binance')
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+    const firstStatusSignal = mockAuthedFetch.mock.calls[0]?.[5]?.signal as AbortSignal
+    expect(firstStatusSignal.aborted).toBe(false)
+
+    mockAuth = signedIn(VIEWER_B, 'access-token-b', 2)
+    view.rerender(
+      <ClaimTraderButton traderId="trader-a" handle="Trader" userId={VIEWER_B} source="binance" />
+    )
+    expect(firstStatusSignal.aborted).toBe(true)
+    expect(await screen.findByRole('button', { name: 'claimTrader' })).toBeEnabled()
+
+    await act(async () => {
+      firstStatus.resolve(
+        claimStatusResponse(VIEWER_A, {
+          claim: { trader_id: 'trader-a', source: 'binance', status: 'reviewing' },
+          linked_traders: [],
+        })
+      )
+      await firstStatus.promise
+    })
+
     expect(screen.getByRole('button', { name: 'claimTrader' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'claimSubmitted' })).not.toBeInTheDocument()
+  })
+
+  it('never exposes an actionable claim button while status is unknown or failed', async () => {
+    const pendingStatus = deferred<MockFetchResult>()
+    mockAuthedFetch.mockReturnValueOnce(pendingStatus.promise)
+    renderClaimButton('trader-a', 'binance')
+
+    expect(screen.getByRole('button', { name: 'loading' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'claimTrader' })).not.toBeInTheDocument()
+
+    await act(async () =>
+      pendingStatus.resolve({
+        ok: false,
+        status: 503,
+        data: {
+          success: false,
+          data: {
+            claim: null,
+            is_verified: false,
+            linked_traders: [],
+          },
+        },
+      })
+    )
+
+    expect(await screen.findByRole('button', { name: 'operationFailed' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'claimTrader' })).not.toBeInTheDocument()
   })
 })
