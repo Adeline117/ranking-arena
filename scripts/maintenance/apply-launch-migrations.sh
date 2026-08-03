@@ -213,6 +213,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729182500_atomic_post_pin_state.sql
   20260729183000_atomic_trader_alert_mutation.sql
   20260729183500_atomic_post_edit.sql
+  20260729184500_atomic_post_create.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
