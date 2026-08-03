@@ -26,6 +26,7 @@ import {
 } from '@/lib/ingest/history-acquisition'
 import {
   EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+  POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   POSITION_HISTORY_RAW_JOB_TYPE,
   type IngestTransactionRunner,
   writePositionHistoryRawArtifact,
@@ -196,9 +197,15 @@ describe('writePositionHistoryRawArtifact', () => {
     })
     expect(database.pointers[0].meta).toMatchObject({
       data_contract: input.artifact.contract,
+      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
       exchange_trader_id: 'portfolio-1',
+      attempt_started_at: attemptStartedAt,
+      starting_cursor: null,
+      capture_config: { caller_page_cap: null },
+      observed_at: fetchedAt,
       terminal_evidence_state: 'verified',
       scan_terminal_state: 'exhausted',
+      termination: input.artifact.termination,
       raw_integrity: {
         serialization_contract: 'arena.strict-canonical-json@1',
         hash_scope: 'json_utf8',
@@ -226,6 +233,29 @@ describe('writePositionHistoryRawArtifact', () => {
         String(sql).startsWith('INSERT INTO arena.raw_objects')
       )
     ).toHaveLength(1)
+  })
+
+  it('replays only the exact legacy audit metadata without upgrading it', async () => {
+    const input = await artifactInput()
+    const database = databaseHarness()
+    const first = await writePositionHistoryRawArtifact(input, database.runTransaction)
+    const meta = database.pointers[0].meta as Record<string, unknown>
+    delete meta.history_evidence_contract
+    delete meta.attempt_started_at
+    delete meta.starting_cursor
+    delete meta.capture_config
+    delete meta.observed_at
+    delete meta.termination
+
+    await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).resolves.toEqual(
+      first
+    )
+    expect(database.pointers[0].meta).not.toHaveProperty('history_evidence_contract')
+
+    meta.page_count = 2
+    await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).rejects.toThrow(
+      'database pointer 41 does not match the artifact'
+    )
   })
 
   it('rejects a same-path Storage collision with different canonical JSON before pointer I/O', async () => {
@@ -297,8 +327,15 @@ describe('writePositionHistoryRawArtifact', () => {
       blocker_reasons: ['upstream_error'],
     })
     expect(database.pointers[0].meta).toMatchObject({
+      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      observed_at: fetchedAt,
       terminal_evidence_state: 'upstream_error',
       scan_terminal_state: 'partial',
+      termination: {
+        evidence_state: 'upstream_error',
+        scan_terminal_state: 'partial',
+        blocker_reasons: ['upstream_error'],
+      },
     })
   })
 })
