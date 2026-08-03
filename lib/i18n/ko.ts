@@ -6087,6 +6087,12 @@ const ko = {
   tabCopiers: '카피어',
   recordsEmpty: '표시할 기록이 없습니다',
   recordsLoadMore: '더 보기',
+  historyCompletenessPartialTitle: '일부 거래 내역',
+  historyCompletenessPartialDescription:
+    '수집된 미리보기만 표시됩니다. 전체 범위는 검증되지 않았으며 순위에 사용되지 않습니다.',
+  historyCompletenessUnknownTitle: '거래 내역 완전성 알 수 없음',
+  historyCompletenessUnknownDescription:
+    '이 페이지에는 전체 거래 내역 증거가 연결되어 있지 않습니다. 이 기록은 순위에 사용되지 않습니다.',
   assetPreference: '자산 선호도',
   assetOther: '기타',
   metaLastTrade: '최근 거래',

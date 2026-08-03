@@ -30,6 +30,7 @@ import {
 } from '@/lib/ingest/core/profile-coverage'
 import type { ProfileQualityReject } from '@/lib/ingest/core/profile-quality'
 import type { ParseCtx, ParsedHistoryRow } from '@/lib/ingest/core/types'
+import type { HistoryCompleteness } from '@/lib/data/serving/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import {
@@ -234,8 +235,8 @@ function historyRowsForRender(
 /**
  * Heavy-tab surfaces (spec §2.4-3): positions / position_history / orders /
  * transfers / copiers — fetched only when the user opens that tab. Same
- * render-before-persist contract: Redis result key {rows, nextCursor, asOf}
- * first, then arena.* persistence + profile_cache.
+ * render-before-persist contract: Redis result key {rows, nextCursor, asOf,
+ * completeness?} first, then arena.* persistence + profile_cache.
  *
  * Copier PII rule (spec §6): copierLabel never leaves the worker — the
  * Redis rows are stripped before publish; full rows (with label, for
@@ -289,6 +290,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
     let rows: Record<string, unknown>[] = []
     let rawPayload: unknown = null
     let rawPersisted = false
+    let historyCompleteness: HistoryCompleteness | undefined
 
     if (surface === 'positions') {
       const bundle = await adapter.getPositions(session, src, exchangeTraderId, traderMeta)
@@ -328,6 +330,18 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
           throw acquisition.error
         }
 
+        const termination = acquisition.artifact.termination
+        // Tier-C is an interactive preview lane. Even a verifier-confirmed
+        // one-page exhaustion does not prove the requested 7/30/90-day window,
+        // so the render contract must remain partial and rank-ineligible.
+        historyCompleteness = {
+          state: 'partial',
+          reason: 'interactive_preview',
+          evidenceState: termination.evidence_state,
+          scanTerminalState: termination.scan_terminal_state,
+          blockerReasons: [...termination.blocker_reasons],
+        }
+
         let storageDurable = false
         const renderAndPublish: IngestTransactionRunner = async (persistRawPointer) => {
           // The writer calls this only after the immutable artifact is in
@@ -339,7 +353,12 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
           rows = historyRowsForRender(parsed, kind)
           await redis.set(
             resultKey,
-            JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
+            JSON.stringify({
+              rows,
+              nextCursor: null,
+              asOf: scrapedAt,
+              completeness: historyCompleteness,
+            }),
             'EX',
             120
           )
@@ -458,7 +477,12 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         timeframe,
         surface,
         src.profile_cache_ttl_seconds,
-        JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
+        JSON.stringify({
+          rows,
+          nextCursor: null,
+          asOf: scrapedAt,
+          ...(historyCompleteness ? { completeness: historyCompleteness } : {}),
+        }),
       ]
     )
 

@@ -90,11 +90,53 @@ export type TraderCoreResponse =
 
 export type RecordKind = 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
 
+/**
+ * Trust state for closed-position history. `complete` is deliberately narrow:
+ * callers may only emit it after binding terminal acquisition evidence to the
+ * served page. Preview/on-demand reads stay `partial`; legacy warm reads whose
+ * evidence is not yet joined stay `unknown`.
+ */
+export type HistoryCompletenessState = 'complete' | 'partial' | 'unknown'
+
+export type HistoryCompletenessReason =
+  | 'verified_terminal_history'
+  | 'interactive_preview'
+  | 'history_evidence_not_bound'
+
+export type HistoryEvidenceState =
+  | 'verified'
+  | 'missing'
+  | 'invalid'
+  | 'verifier_missing'
+  | 'rejected'
+  | 'caller_limited'
+  | 'upstream_error'
+
+export type HistoryScanTerminalState = 'exhausted' | 'cursor_overlap' | 'partial' | 'unknown'
+
+export type HistoryCompletenessBlockerReason =
+  | 'terminal_claim_missing'
+  | 'terminal_claim_invalid'
+  | 'terminal_verifier_missing'
+  | 'terminal_claim_rejected'
+  | 'caller_limit'
+  | 'upstream_error'
+
+export interface HistoryCompleteness {
+  state: HistoryCompletenessState
+  reason: HistoryCompletenessReason
+  evidenceState?: HistoryEvidenceState
+  scanTerminalState?: HistoryScanTerminalState
+  blockerReasons?: HistoryCompletenessBlockerReason[]
+}
+
 export interface RecordsPage<T = Record<string, unknown>> {
   rows: T[]
   nextCursor: string | null
   provenance: Provenance
   cacheState: CoreCacheState
+  /** Present for position_history. Omitted for non-history record surfaces. */
+  completeness?: HistoryCompleteness
 }
 
 /** Copier data is AGGREGATE-ONLY — no row-level identifiers, ever (spec §6). */

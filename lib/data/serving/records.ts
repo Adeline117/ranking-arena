@@ -10,9 +10,48 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { money } from '@/lib/utils/money'
 import { logRpcError } from './log-rpc-error'
-import type { CopierAggregate, RecordKind, RecordsPage, ServingCurrency } from './types'
+import type {
+  CopierAggregate,
+  HistoryCompleteness,
+  HistoryCompletenessBlockerReason,
+  HistoryCompletenessReason,
+  HistoryEvidenceState,
+  HistoryScanTerminalState,
+  RecordKind,
+  RecordsPage,
+  ServingCurrency,
+} from './types'
 
 const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
+
+const HISTORY_COMPLETENESS_REASONS: ReadonlySet<HistoryCompletenessReason> = new Set([
+  'verified_terminal_history',
+  'interactive_preview',
+  'history_evidence_not_bound',
+])
+const HISTORY_EVIDENCE_STATES: ReadonlySet<HistoryEvidenceState> = new Set([
+  'verified',
+  'missing',
+  'invalid',
+  'verifier_missing',
+  'rejected',
+  'caller_limited',
+  'upstream_error',
+])
+const HISTORY_SCAN_TERMINAL_STATES: ReadonlySet<HistoryScanTerminalState> = new Set([
+  'exhausted',
+  'cursor_overlap',
+  'partial',
+  'unknown',
+])
+const HISTORY_BLOCKER_REASONS: ReadonlySet<HistoryCompletenessBlockerReason> = new Set([
+  'terminal_claim_missing',
+  'terminal_claim_invalid',
+  'terminal_verifier_missing',
+  'terminal_claim_rejected',
+  'caller_limit',
+  'upstream_error',
+])
 
 function asCurrency(v: unknown): ServingCurrency {
   return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : 'USDT'
@@ -35,6 +74,76 @@ export function sanitizeRecordRow(row: Record<string, unknown>): Record<string, 
     if (!BANNED_ROW_KEYS.has(key)) out[key] = value
   }
   return out
+}
+
+function unknownHistoryCompleteness(): HistoryCompleteness {
+  return { state: 'unknown', reason: 'history_evidence_not_bound' }
+}
+
+/** Parse trust metadata at the RPC/Redis boundary and reject contradictory
+ * `complete` claims. This prevents an unverified payload from opening a rank
+ * or UI trust gate merely by setting state=complete. */
+function parseHistoryCompleteness(value: unknown): HistoryCompleteness | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const candidate = value as Record<string, unknown>
+  if (
+    candidate.state !== 'complete' &&
+    candidate.state !== 'partial' &&
+    candidate.state !== 'unknown'
+  ) {
+    return null
+  }
+  if (
+    typeof candidate.reason !== 'string' ||
+    !HISTORY_COMPLETENESS_REASONS.has(candidate.reason as HistoryCompletenessReason)
+  ) {
+    return null
+  }
+  if (
+    (candidate.state === 'partial' && candidate.reason !== 'interactive_preview') ||
+    (candidate.state === 'unknown' && candidate.reason !== 'history_evidence_not_bound')
+  ) {
+    return null
+  }
+
+  const evidenceState =
+    typeof candidate.evidenceState === 'string' &&
+    HISTORY_EVIDENCE_STATES.has(candidate.evidenceState as HistoryEvidenceState)
+      ? (candidate.evidenceState as HistoryEvidenceState)
+      : undefined
+  const scanTerminalState =
+    typeof candidate.scanTerminalState === 'string' &&
+    HISTORY_SCAN_TERMINAL_STATES.has(candidate.scanTerminalState as HistoryScanTerminalState)
+      ? (candidate.scanTerminalState as HistoryScanTerminalState)
+      : undefined
+  const blockerReasons = Array.isArray(candidate.blockerReasons)
+    ? candidate.blockerReasons.every(
+        (reason) =>
+          typeof reason === 'string' &&
+          HISTORY_BLOCKER_REASONS.has(reason as HistoryCompletenessBlockerReason)
+      )
+      ? (candidate.blockerReasons as HistoryCompletenessBlockerReason[])
+      : null
+    : undefined
+  if (blockerReasons === null) return null
+
+  if (
+    candidate.state === 'complete' &&
+    (candidate.reason !== 'verified_terminal_history' ||
+      evidenceState !== 'verified' ||
+      (scanTerminalState !== 'exhausted' && scanTerminalState !== 'cursor_overlap') ||
+      (blockerReasons?.length ?? 0) > 0)
+  ) {
+    return null
+  }
+
+  return {
+    state: candidate.state,
+    reason: candidate.reason as HistoryCompletenessReason,
+    ...(evidenceState ? { evidenceState } : {}),
+    ...(scanTerminalState ? { scanTerminalState } : {}),
+    ...(blockerReasons ? { blockerReasons } : {}),
+  }
 }
 
 export async function getRecordsPage(
@@ -65,6 +174,7 @@ export async function getRecordsPage(
       asOf: typeof d.asOf === 'string' ? d.asOf : new Date().toISOString(),
     },
     cacheState: 'warm',
+    ...(kind === 'position_history' ? { completeness: unknownHistoryCompleteness() } : {}),
   }
 }
 
@@ -110,17 +220,43 @@ export async function getCopierAggregate(
 /** Map a Tier-C record-surface result payload into a RecordsPage. */
 export function recordsPageFromTierC(
   source: string,
+  kind: Exclude<RecordKind, 'copiers'>,
   payload: Record<string, unknown>
 ): RecordsPage | null {
   const rows = Array.isArray(payload.rows) ? (payload.rows as Record<string, unknown>[]) : null
   if (!rows) return null
+  const parsedCompleteness = parseHistoryCompleteness(payload.completeness)
+  const previewCompleteness: HistoryCompleteness | undefined =
+    kind === 'position_history'
+      ? {
+          state: 'partial',
+          reason: 'interactive_preview',
+          ...(parsedCompleteness?.evidenceState
+            ? { evidenceState: parsedCompleteness.evidenceState }
+            : {}),
+          ...(parsedCompleteness?.scanTerminalState
+            ? { scanTerminalState: parsedCompleteness.scanTerminalState }
+            : {}),
+          ...(parsedCompleteness?.blockerReasons
+            ? { blockerReasons: parsedCompleteness.blockerReasons }
+            : {}),
+        }
+      : undefined
   return {
     rows: rows.map(sanitizeRecordRow),
-    nextCursor: typeof payload.nextCursor === 'string' ? payload.nextCursor : null,
+    // Tier-C history is a bounded preview and may never advertise pagination,
+    // even if an old or malformed worker payload supplies a cursor.
+    nextCursor:
+      kind === 'position_history'
+        ? null
+        : typeof payload.nextCursor === 'string'
+          ? payload.nextCursor
+          : null,
     provenance: {
       source,
       asOf: typeof payload.asOf === 'string' ? payload.asOf : new Date().toISOString(),
     },
     cacheState: 'cold-fetched',
+    ...(previewCompleteness ? { completeness: previewCompleteness } : {}),
   }
 }

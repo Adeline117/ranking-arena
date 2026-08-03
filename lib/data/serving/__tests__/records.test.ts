@@ -88,6 +88,13 @@ describe('getRecordsPage', () => {
         nextCursor: '2026-06-01 00:00:00+00|abc',
         asOf: '2026-06-10T12:00:00Z',
         currency: 'USDT',
+        completeness: {
+          state: 'complete',
+          reason: 'verified_terminal_history',
+          evidenceState: 'verified',
+          scanTerminalState: 'exhausted',
+          blockerReasons: [],
+        },
       }),
       'bitget_futures',
       'abc',
@@ -102,6 +109,23 @@ describe('getRecordsPage', () => {
     expect(page!.nextCursor).toBe('2026-06-01 00:00:00+00|abc')
     expect(page!.cacheState).toBe('warm')
     expect(page!.provenance).toEqual({ source: 'bitget_futures', asOf: '2026-06-10T12:00:00Z' })
+    // The current RPC does not join the served rows to RAW terminal evidence;
+    // a self-asserted completeness field must therefore fail closed.
+    expect(page!.completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
+  })
+
+  it('does not attach history completeness to non-history record kinds', async () => {
+    const page = await getRecordsPage(
+      rpcClient({ rows: [], nextCursor: null, asOf: '2026-06-10T12:00:00Z' }),
+      'bitget_futures',
+      'abc',
+      'orders',
+      null
+    )
+    expect(page!.completeness).toBeUndefined()
   })
 
   it('returns null for unknown traders (RPC NULL) and on error', async () => {
@@ -113,17 +137,68 @@ describe('getRecordsPage', () => {
 })
 
 describe('recordsPageFromTierC', () => {
-  it('maps a worker result payload into a cold-fetched page', () => {
-    const page = recordsPageFromTierC('bitget_futures', {
+  it('maps Tier-C position history as a non-pageable partial preview', () => {
+    const page = recordsPageFromTierC('bitget_futures', 'position_history', {
       rows: [{ symbol: 'BTCUSDT', copier_label: 'leak' }],
-      nextCursor: null,
+      nextCursor: 'must-not-escape',
       asOf: '2026-06-10T12:00:00Z',
+      completeness: {
+        state: 'partial',
+        reason: 'interactive_preview',
+        evidenceState: 'caller_limited',
+        scanTerminalState: 'partial',
+        blockerReasons: ['caller_limit'],
+      },
     })
     expect(page!.cacheState).toBe('cold-fetched')
     expect(page!.rows).toEqual([{ symbol: 'BTCUSDT' }])
+    expect(page!.nextCursor).toBeNull()
+    expect(page!.completeness).toEqual({
+      state: 'partial',
+      reason: 'interactive_preview',
+      evidenceState: 'caller_limited',
+      scanTerminalState: 'partial',
+      blockerReasons: ['caller_limit'],
+    })
+  })
+
+  it('keeps old or contradictory Tier-C position-history payloads partial', () => {
+    const oldPage = recordsPageFromTierC('bitget_futures', 'position_history', { rows: [] })
+    const forgedComplete = recordsPageFromTierC('bitget_futures', 'position_history', {
+      rows: [],
+      completeness: {
+        state: 'complete',
+        reason: 'interactive_preview',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+      },
+    })
+
+    expect(oldPage!.completeness).toEqual({
+      state: 'partial',
+      reason: 'interactive_preview',
+    })
+    expect(forgedComplete!.completeness).toEqual({
+      state: 'partial',
+      reason: 'interactive_preview',
+    })
+  })
+
+  it('leaves non-history Tier-C pagination and completeness unchanged', () => {
+    const page = recordsPageFromTierC('bitget_futures', 'orders', {
+      rows: [],
+      nextCursor: 'orders-next',
+      completeness: {
+        state: 'partial',
+        reason: 'interactive_preview',
+      },
+    })
+
+    expect(page!.nextCursor).toBe('orders-next')
+    expect(page!.completeness).toBeUndefined()
   })
 
   it('returns null when the payload has no rows array', () => {
-    expect(recordsPageFromTierC('s', { stats: [] })).toBeNull()
+    expect(recordsPageFromTierC('s', 'position_history', { stats: [] })).toBeNull()
   })
 })

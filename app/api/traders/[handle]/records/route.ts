@@ -101,7 +101,7 @@ export async function GET(
         surface: kind,
       })
       if (payload) {
-        const fetched = recordsPageFromTierC(resolved.source, payload)
+        const fetched = recordsPageFromTierC(resolved.source, kind, payload)
         if (fetched) {
           return apiSuccess<RecordsPage>(fetched, 200, { 'Cache-Control': 'no-store' })
         }
@@ -112,6 +112,14 @@ export async function GET(
         nextCursor: null,
         provenance: page?.provenance ?? { source: resolved.source, asOf: new Date().toISOString() },
         cacheState: 'pending',
+        ...(kind === 'position_history'
+          ? {
+              completeness: page?.completeness ?? {
+                state: 'unknown' as const,
+                reason: 'history_evidence_not_bound' as const,
+              },
+            }
+          : {}),
       }
       return apiSuccess<RecordsPage>(pending, 200, { 'Cache-Control': 'no-store' })
     },

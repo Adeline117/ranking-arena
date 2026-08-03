@@ -20,6 +20,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderRecords, useCopierAggregate } from '@/lib/hooks/useTraderRecords'
 import RecordsTable, { type RecordColumn } from './RecordsTable'
 import CopierAggregatePanel from './CopierAggregatePanel'
+import HistoryCompletenessNotice from './HistoryCompletenessNotice'
 import ModuleDegraded from './ModuleDegraded'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import type { RecordKind, ServingTimeframe, SourceCapability } from '@/lib/data/serving/types'
@@ -123,6 +124,9 @@ function RecordKindPanel({
   }
   return (
     <Box>
+      {kind === 'position_history' && (
+        <HistoryCompletenessNotice completeness={records.completeness} />
+      )}
       <RecordsTable
         columns={RECORD_COLUMNS[kind]}
         rows={records.rows}

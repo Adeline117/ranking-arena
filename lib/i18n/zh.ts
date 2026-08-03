@@ -6051,6 +6051,11 @@ const zh = {
   tabCopiers: '跟单者',
   recordsEmpty: '暂无记录',
   recordsLoadMore: '加载更多',
+  historyCompletenessPartialTitle: '历史记录不完整',
+  historyCompletenessPartialDescription:
+    '当前仅展示已获取的预览记录，完整覆盖尚未验证；这些记录不参与排名。',
+  historyCompletenessUnknownTitle: '历史完整度未知',
+  historyCompletenessUnknownDescription: '当前页面尚未绑定完整历史证据；这些记录不参与排名。',
   assetPreference: '资产偏好',
   assetOther: '其他',
   metaLastTrade: '最近交易',
