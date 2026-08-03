@@ -1170,6 +1170,7 @@ export default function TraderProfileClient({
   const effStats = useThreeTab ? servingTab.traderStats : traderStats
   const effPortfolio = useThreeTab ? servingTab.traderPortfolio : traderPortfolio
   const effPositionHistory = useThreeTab ? servingTab.traderPositionHistory : traderPositionHistory
+  const effHistoryCompleteness = useThreeTab ? servingTab.historyCompleteness : null
   const effEquityCurve = useThreeTab ? servingTab.traderEquityCurve : traderEquityCurve
   const effAssetBreakdown = useThreeTab ? servingTab.traderAssetBreakdown : traderAssetBreakdown
   // U2-12: serving sources have no similarTraders in traderData (the /core path
@@ -1712,6 +1713,7 @@ export default function TraderProfileClient({
                         assetBreakdown={effAssetBreakdown}
                         equityCurve={effEquityCurve}
                         positionHistory={effPositionHistory}
+                        historyCompleteness={effHistoryCompleteness}
                         isPro={isPro}
                         onUnlock={handlePricingRedirect}
                       />
@@ -1732,6 +1734,7 @@ export default function TraderProfileClient({
                       visited
                       portfolio={effPortfolio}
                       positionHistory={effPositionHistory}
+                      historyCompleteness={effHistoryCompleteness}
                       source={visibleData.source}
                       isPro={isPro}
                       onUnlock={handlePricingRedirect}

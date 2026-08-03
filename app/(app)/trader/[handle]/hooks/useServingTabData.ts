@@ -28,7 +28,12 @@ import {
   type AssetBreakdownByTf,
 } from '@/lib/data/serving/legacy-adapter'
 import { promoteExtrasMetrics, EXTRAS_PROMOTABLE_KEYS } from '@/lib/constants/metric-registry'
-import type { TraderFirstScreen, SourceCapability, ServingCurrency } from '@/lib/data/serving/types'
+import type {
+  HistoryCompleteness,
+  TraderFirstScreen,
+  SourceCapability,
+  ServingCurrency,
+} from '@/lib/data/serving/types'
 import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
@@ -45,6 +50,8 @@ export interface ServingTabData {
   traderStats: TraderStats
   traderPortfolio: PortfolioItem[]
   traderPositionHistory: PositionHistoryEntry[]
+  /** Fail-closed evidence state for the exact serving history rows. */
+  historyCompleteness: HistoryCompleteness | null
   /** 90d core extras + currency for the §2.3 lead-meta strip (TraderMetaStrip):
    *  last-trade / copier-cap / margin-balance etc. NULL-collapses when absent. */
   metaExtras: Record<string, unknown>
@@ -103,6 +110,7 @@ export function useServingTabData(
   const m90 = c90.modules
   const posRows = positions.rows
   const histRows = posHistory.rows
+  const historyCompleteness = posHistory.completeness
 
   const { nickname, avatarSrc, entries, scores } = input
 
@@ -215,6 +223,7 @@ export function useServingTabData(
       traderStats: servingToStats(m90?.stats ?? null, m90?.extras ?? null),
       traderPortfolio: positionsToPortfolio(posRows ?? []),
       traderPositionHistory: historyToPositionHistory(histRows ?? []),
+      historyCompleteness,
       metaExtras: mergedExtras,
       currency: m90?.currency ?? 'USD',
       gridStats: promoteExtrasMetrics(mergedGridStats, mergedExtras),
@@ -238,6 +247,7 @@ export function useServingTabData(
     m90,
     posRows,
     histRows,
+    historyCompleteness,
     capability,
     c7.isLoading,
     c30.isLoading,
