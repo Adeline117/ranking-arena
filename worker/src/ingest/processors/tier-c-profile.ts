@@ -29,19 +29,26 @@ import {
   IncompleteProfileWindowError,
 } from '@/lib/ingest/core/profile-coverage'
 import type { ProfileQualityReject } from '@/lib/ingest/core/profile-quality'
-import type { ParseCtx } from '@/lib/ingest/core/types'
+import type { ParseCtx, ParsedHistoryRow } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
-import { writeRawObject } from '@/lib/ingest/raw'
+import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
+import {
+  writePositionHistoryRawArtifact,
+  writeRawObject,
+  type IngestTransactionRunner,
+} from '@/lib/ingest/raw'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import {
   getHistoryCursor,
   publishHistoryRows,
+  publishHistoryRowsInTransaction,
   publishPositions,
   publishProfile,
   resolveTraderId,
 } from '@/lib/ingest/serving/publish'
 import { getIngestPool } from '@/lib/ingest/db'
 import { tierCResultKey, type TierCJobData } from '../queues'
+import { runHistoryTransaction } from '../history-transaction'
 
 const RESULT_TTL_SECONDS = 120
 
@@ -208,6 +215,22 @@ export async function processTierC(
   }
 }
 
+function historyRowsForRender(
+  parsed: ParsedHistoryRow[],
+  kind: import('@/lib/ingest/core/types').HistoryKind
+): Record<string, unknown>[] {
+  // PII strip for the render path (spec §6) — aggregates only for copiers.
+  return parsed.map((row) => {
+    if (row.kind !== kind) throw new Error(`[tier-c] history row kind does not match ${kind}`)
+    if (row.kind === 'copiers') {
+      const { copierLabel: _pii, raw: _raw, ...rest } = row
+      return rest
+    }
+    const { raw: _raw, ...rest } = row
+    return rest
+  })
+}
+
 /**
  * Heavy-tab surfaces (spec §2.4-3): positions / position_history / orders /
  * transfers / copiers — fetched only when the user opens that tab. Same
@@ -284,88 +307,129 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
       await publishPositions(src, traderId, positions, asOf)
     } else {
       const kind = surface as import('@/lib/ingest/core/types').HistoryKind
-
       const cursor = await getHistoryCursor(traderId, kind)
-      const pages: import('@/lib/ingest/core/types').RawPage[] = []
-      let fetchError: unknown = null
-      let callerLimited = false
-      // On-demand view needs the freshest page or two; deeper pagination is
-      // served from arena.* by the records route, not by re-fetching.
-      try {
-        for await (const page of adapter.getHistory(
-          session,
-          src,
+      if (kind === 'position_history') {
+        const acquisition = await captureHistoryAcquisition({
+          source: src,
+          traderId,
           exchangeTraderId,
           kind,
           cursor,
-          traderMeta
-        )) {
-          pages.push(page)
-          if (pages.length >= 2) {
-            callerLimited = true
-            break
-          }
+          attemptStartedAt: new Date().toISOString(),
+          callerPageCap: 2,
+          stream: adapter.getHistory(session, src, exchangeTraderId, kind, cursor, traderMeta),
+          terminalVerifier: adapter.historyTerminalVerifier?.(src, kind) ?? undefined,
+        })
+        rawPayload = acquisition.pages
+        const rawInput = { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId }
+
+        if (acquisition.error !== null) {
+          await writePositionHistoryRawArtifact(rawInput, runHistoryTransaction)
+          throw acquisition.error
         }
-      } catch (error) {
-        fetchError = error
+
+        let storageDurable = false
+        const renderAndPublish: IngestTransactionRunner = async (persistRawPointer) => {
+          // The writer calls this only after the immutable artifact is in
+          // Storage. Tier-C remains preview-only and never advances a cursor.
+          storageDurable = true
+          const parsed = acquisition.pages.flatMap((page) =>
+            adapter.parseHistory(page.payload, kind, ctx)
+          )
+          rows = historyRowsForRender(parsed, kind)
+          await redis.set(
+            resultKey,
+            JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
+            'EX',
+            120
+          )
+          return runHistoryTransaction(async (transaction) => {
+            const receipt = await persistRawPointer(transaction)
+            await publishHistoryRowsInTransaction(transaction, src, traderId, kind, parsed, null)
+            return receipt
+          })
+        }
+
+        try {
+          await writePositionHistoryRawArtifact(rawInput, renderAndPublish)
+        } catch (cause) {
+          if (storageDurable) {
+            try {
+              await writePositionHistoryRawArtifact(rawInput, runHistoryTransaction)
+            } catch (rawCause) {
+              throw new AggregateError(
+                [
+                  cause instanceof Error ? cause : new Error(String(cause)),
+                  rawCause instanceof Error ? rawCause : new Error(String(rawCause)),
+                ],
+                '[tier-c] history publication failure and RAW audit persistence both failed'
+              )
+            }
+          }
+          throw cause
+        }
+        rawPersisted = true
+      } else {
+        const pages: import('@/lib/ingest/core/types').RawPage[] = []
+        let fetchError: unknown = null
+        let callerLimited = false
+        // On-demand view needs the freshest page or two; deeper pagination is
+        // served from arena.* by the records route, not by re-fetching.
+        try {
+          for await (const page of adapter.getHistory(
+            session,
+            src,
+            exchangeTraderId,
+            kind,
+            cursor,
+            traderMeta
+          )) {
+            pages.push(page)
+            if (pages.length >= 2) {
+              callerLimited = true
+              break
+            }
+          }
+        } catch (error) {
+          fetchError = error
+        }
+        rawPayload = pages
+
+        // Non-ranking history surfaces retain the compatibility RAW path.
+        await writeRawObject({
+          sourceId: src.id,
+          sourceSlug: src.slug,
+          jobType: 'tier_c',
+          traderId,
+          timeframe,
+          payload: rawPayload,
+          meta: {
+            surface,
+            caller_limited: callerLimited,
+            fetch_failed: fetchError !== null,
+          },
+        })
+        rawPersisted = true
+        if (fetchError !== null) throw fetchError
+
+        const parsed = pages.flatMap((page) => adapter.parseHistory(page.payload, kind, ctx))
+        rows = historyRowsForRender(parsed, kind)
+
+        await redis.set(
+          resultKey,
+          JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
+          'EX',
+          120
+        )
+
+        await publishHistoryRows(
+          src,
+          traderId,
+          kind,
+          parsed,
+          callerLimited ? null : nextHistoryCursor(parsed, cursor)
+        )
       }
-      rawPayload = pages
-
-      // Evidence first: parser/publication failures must leave a replayable
-      // account of every source page received before the checkpoint stayed put.
-      await writeRawObject({
-        sourceId: src.id,
-        sourceSlug: src.slug,
-        jobType: 'tier_c',
-        traderId,
-        timeframe,
-        payload: rawPayload,
-        meta: {
-          surface,
-          caller_limited: callerLimited,
-          fetch_failed: fetchError !== null,
-        },
-      })
-      rawPersisted = true
-      if (fetchError !== null) throw fetchError
-
-      const parsed = pages.flatMap((p) => adapter.parseHistory(p.payload, kind, ctx))
-
-      // PII strip for the render path (spec §6) — aggregates only for copiers.
-      rows =
-        kind === 'copiers'
-          ? parsed.map((r) => {
-              const {
-                copierLabel: _pii,
-                raw: _raw,
-                ...rest
-              } = r as unknown as Record<string, unknown> & {
-                copierLabel?: unknown
-                raw?: unknown
-              }
-              return rest
-            })
-          : parsed.map((r) => {
-              const { raw: _raw, ...rest } = r as unknown as Record<string, unknown> & {
-                raw?: unknown
-              }
-              return rest
-            })
-
-      await redis.set(
-        resultKey,
-        JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
-        'EX',
-        120
-      )
-
-      await publishHistoryRows(
-        src,
-        traderId,
-        kind,
-        parsed,
-        callerLimited ? null : nextHistoryCursor(parsed, cursor)
-      )
     }
 
     // Persist path (after render): RAW + profile_cache for warm re-reads.
