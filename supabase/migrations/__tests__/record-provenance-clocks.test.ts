@@ -237,5 +237,31 @@ describe('record provenance clock authority', () => {
     ]) {
       expect(proof).toContain(marker)
     }
+
+    // PostgreSQL three-valued logic must not let a missing JSON key make an
+    // assertion evaluate to NULL (and therefore silently pass an IF guard).
+    for (const key of ['asOf', 'sourceAsOf', 'observedAt', 'publishedAt']) {
+      expect(proof).toContain(`v_payload->'${key}' IS DISTINCT FROM 'null'::jsonb`)
+    }
+    expect(proof).not.toMatch(
+      /v_payload->'(?:asOf|sourceAsOf|observedAt|publishedAt)'\s*(?:<>|=)\s*'null'::jsonb/
+    )
+
+    expect(proof).toContain('function_metadata_fingerprint()')
+    expect(proof).toContain('rpc_output_fingerprint()')
+    expect(proof).toContain('pg_catalog.pg_get_functiondef(function_row.oid)')
+    expect(proof.match(/\bEXCEPT\b/g)).toHaveLength(2)
+    for (const replaySurface of [
+      'missingDelayPositions',
+      'invalidDelayPositions',
+      'negativeDelayPositions',
+      'emptyPositions',
+      'orders',
+      'transfers',
+      'humanCopier',
+      'noEvidenceBot',
+    ]) {
+      expect(proof).toContain(`'${replaySurface}'`)
+    }
   })
 })
