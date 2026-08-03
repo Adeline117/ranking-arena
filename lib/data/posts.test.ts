@@ -13,7 +13,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   getPosts,
   getPostById,
-  createPost,
   updatePost,
   deletePost,
   getUserPostReaction,
@@ -213,47 +212,6 @@ describe('getPostById', () => {
       p_actor_id: 'viewer1',
     })
     expect(mockSupabase.in).not.toHaveBeenCalled()
-  })
-})
-
-describe('createPost', () => {
-  test('should create a new post', async () => {
-    const mockSupabase = createMockSupabase()
-    const mockPost = {
-      id: 'newpost1',
-      title: 'New Post',
-      content: 'New content',
-      author_id: 'user1',
-      author_handle: 'testUser',
-    }
-
-    mockSupabase.single.mockResolvedValueOnce({ data: mockPost, error: null })
-
-    const result = await createPost(
-      mockSupabase as unknown as SupabaseClient,
-      'user1',
-      'testUser',
-      {
-        title: 'New Post',
-        content: 'New content',
-      }
-    )
-
-    expect(result.title).toBe('New Post')
-    expect(mockSupabase.insert).toHaveBeenCalled()
-  })
-
-  test('should throw error on creation failure', async () => {
-    const mockSupabase = createMockSupabase()
-
-    mockSupabase.single.mockResolvedValueOnce({ data: null, error: new Error('Creation failed') })
-
-    await expect(
-      createPost(mockSupabase as unknown as SupabaseClient, 'user1', 'testUser', {
-        title: 'Test',
-        content: 'Test',
-      })
-    ).rejects.toThrow()
   })
 })
 

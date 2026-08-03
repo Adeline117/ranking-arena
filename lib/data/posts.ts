@@ -115,19 +115,6 @@ export interface PostWithAuthor extends Post {
   images?: string[] | null
 }
 
-export interface CreatePostInput {
-  title: string
-  content: string
-  group_id?: string
-  poll_enabled?: boolean
-  visibility?: PostVisibility
-  is_sensitive?: boolean
-  content_warning?: string
-  language?: string
-  /** Pre-fetched reputation — skips DB lookup when provided */
-  authorReputation?: { score: number; verified: boolean }
-}
-
 export interface PostListOptions {
   limit?: number
   offset?: number
@@ -617,65 +604,6 @@ export async function getPostById(
   }
 
   return toPostWithAuthor(readablePost, authorProfileMap.get(readablePost.author_id), originalPost)
-}
-
-/**
- * 创建帖子
- */
-export async function createPost(
-  supabase: SupabaseClient,
-  userId: string,
-  userHandle: string,
-  input: CreatePostInput
-): Promise<Post> {
-  // Use pre-fetched reputation or fetch from DB
-  let authorScore = input.authorReputation?.score ?? 0
-  let authorVerified = input.authorReputation?.verified ?? false
-  if (!input.authorReputation) {
-    try {
-      const result = await supabase
-        .from('user_profiles')
-        .select('reputation_score, is_verified_trader')
-        .eq('id', userId)
-        .maybeSingle()
-      authorScore = result?.data?.reputation_score ?? 0
-      authorVerified = result?.data?.is_verified_trader ?? false
-    } catch (err) {
-      logger.warn(
-        '[posts] reputation score lookup failed, using default 0:',
-        err instanceof Error ? err.message : String(err)
-      )
-    }
-  }
-
-  const detectedLanguage =
-    input.language || detectPostLanguage((input.title ? input.title + ' ' : '') + input.content)
-
-  const { data, error } = await supabase
-    .from('posts')
-    .insert({
-      title: input.title ? (await loadSanitize())(input.title) : input.title,
-      content: (await loadSanitize())(input.content),
-      author_id: userId,
-      author_handle: userHandle,
-      group_id: input.group_id || null,
-      poll_enabled: input.poll_enabled || false,
-      author_arena_score: authorScore,
-      author_is_verified: authorVerified,
-      visibility: input.visibility || (input.group_id ? 'group' : 'public'),
-      is_sensitive: input.is_sensitive || false,
-      content_warning: input.content_warning || null,
-      language: detectedLanguage,
-    })
-    .select()
-    .single()
-
-  if (error) throw error
-
-  // M-6: Invalidate post list caches after creation
-  await invalidatePostListCache()
-
-  return data
 }
 
 /**

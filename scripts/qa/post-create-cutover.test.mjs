@@ -10,8 +10,6 @@ const DIRECT_POST_CREATE_ALLOWLIST = [
   'app/api/cron/auto-post-market-summary/route.ts',
   'app/api/cron/auto-post-weekly-recap/route.ts',
   'app/api/posts/[id]/repost/route.ts',
-  // Legacy server helper: unused by production callers and closed to browser roles by postdeploy ACL.
-  'lib/data/posts.ts',
 ]
 
 const directTableReference = /\.from\s*\(\s*['"](?:posts|polls)['"]\s*\)/
