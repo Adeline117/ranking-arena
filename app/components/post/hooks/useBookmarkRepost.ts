@@ -163,9 +163,8 @@ export function useBookmarkRepost({
       } finally {
         setRepostLoading((prev) => ({ ...prev, [postId]: false }))
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t/getPosts/getOpenPost are excluded; stable refs or read at call time
     },
-    [accessToken, currentUserId, showToast]
+    [accessToken, currentUserId, getOpenPost, getPosts, showToast, t]
   )
 
   // Batch load bookmark status for a list of post IDs
