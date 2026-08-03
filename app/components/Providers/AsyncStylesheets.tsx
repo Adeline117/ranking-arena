@@ -12,11 +12,8 @@ import { useEffect } from 'react'
  * 3. Uses requestIdleCallback to avoid blocking the main thread
  */
 
-// responsive.css is loaded by the root layout's print-media trick (app/layout.tsx)
-// which works without JS and fires earlier than post-hydration. No need to
-// duplicate it here — the loadStylesheet() dedup check would catch it anyway,
-// but removing the entry avoids the unnecessary querySelector probe.
-const PRIORITY_STYLESHEETS: string[] = []
+// responsive.css is render-blocking in the root layout. Its breakpoint rules
+// define final geometry and must never be deferred behind hydration.
 const DEFERRED_STYLESHEETS = ['/styles/animations.css']
 
 function loadStylesheet(href: string): Promise<void> {
@@ -38,19 +35,10 @@ function loadStylesheet(href: string): Promise<void> {
 
 export function AsyncStylesheets() {
   useEffect(() => {
-    // Priority: responsive.css (layout breakpoints) — load immediately after hydration.
-    // Critical grid columns are in critical-css.ts but responsive.css has mobile overrides
-    // that prevent CLS on small screens.
-    PRIORITY_STYLESHEETS.forEach(href => {
-      loadStylesheet(href).catch(_err => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-      })
-    })
-
     // Deferred: animations.css (purely decorative) — load well after LCP
     const loadDeferred = () => {
-      DEFERRED_STYLESHEETS.forEach(href => {
-        loadStylesheet(href).catch(_err => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-        })
+      DEFERRED_STYLESHEETS.forEach((href) => {
+        void loadStylesheet(href).catch(() => undefined)
       })
     }
 
@@ -72,8 +60,7 @@ export function AsyncStylesheets() {
  */
 export function TraderPageStylesheets() {
   useEffect(() => {
-    loadStylesheet('/styles/trader-animations.css').catch(_err => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-    })
+    void loadStylesheet('/styles/trader-animations.css').catch(() => undefined)
   }, [])
 
   return null

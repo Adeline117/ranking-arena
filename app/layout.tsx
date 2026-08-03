@@ -195,14 +195,13 @@ export default function RootLayout({
             {...(hint.crossOrigin && { crossOrigin: hint.crossOrigin })}
           />
         ))}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var a=document.createElement('link');a.rel='stylesheet';a.href='/styles/responsive.css';a.media='print';a.onload=function(){a.media='all'};document.head.appendChild(a)})()`,
-          }}
-        />
+        {/* Responsive rules define the page's final information architecture,
+            so they must be present before first paint. Loading this file with
+            media="print" previously exposed the unstyled, single-column DOM on
+            slow connections and then reflowed it when onload switched to all. */}
+        {/* eslint-disable-next-line @next/next/no-css-tags */}
+        <link rel="stylesheet" href="/styles/responsive.css" data-arena-responsive-critical />
         <noscript>
-          {/* eslint-disable-next-line @next/next/no-css-tags */}
-          <link rel="stylesheet" href="/styles/responsive.css" />
           {/* eslint-disable-next-line @next/next/no-css-tags */}
           <link rel="stylesheet" href="/styles/animations.css" />
           <div

@@ -20,8 +20,8 @@
    #ssr-topnav stays visible permanently. */
 
 /*
- * Performance Optimization: CSS files moved to async loading
- * - responsive.css: Critical styles inlined in critical-css.ts, rest loaded async
+ * CSS loading policy
+ * - responsive.css: Render-blocking because it defines final breakpoint geometry
  * - animations.css: Loaded async after LCP via layout.tsx
  * - trader-animations.css: Only loaded on /trader/[handle] pages
  */
