@@ -212,6 +212,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729182000_durable_channel_message_send.sql
   20260729182500_atomic_post_pin_state.sql
   20260729183000_atomic_trader_alert_mutation.sql
+  20260729183500_atomic_post_edit.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
@@ -243,6 +244,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260729152000_close_leaderboard_rank_direct_writes.sql
   20260729153500_close_legacy_leaderboard_rank_writer_rpcs.sql
   20260729154000_close_leaderboard_publication_authority.sql
+  20260729184000_close_post_direct_writes.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
