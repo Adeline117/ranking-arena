@@ -38,6 +38,13 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain('readPostMediaUploadError(responseBody)')
   })
 
+  it('keeps preview links consistent and rejects unsafe markdown image targets', () => {
+    expect(page).toContain('linkifyTagsAndMentions(part')
+    expect(page).toContain('const normalizedUrl = normalizeHttpUrl(match[2])')
+    expect(page).toContain('if (!normalizedUrl) continue')
+    expect(page).toContain("window.open(part.url, '_blank', 'noopener,noreferrer')")
+  })
+
   it('has no dormant duplicate editor that can restore direct database writes', () => {
     for (const relativePath of [
       'app/(app)/post/[id]/edit/_hooks/useEditPost.ts',

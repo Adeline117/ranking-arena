@@ -22,6 +22,7 @@ import {
   readPostImageUploadAcknowledgement,
   readPostMediaUploadError,
 } from '@/lib/posts/post-media-upload-contract'
+import { linkifyTagsAndMentions } from '@/lib/utils/content'
 
 interface UploadedImage {
   url: string
@@ -49,7 +50,6 @@ function renderContentWithControls(
   text: string,
   onMoveImage: (url: string, direction: 'up' | 'down') => void,
   onRemoveImage: (url: string) => void,
-  imageCount: number,
   t: (key: string) => string
 ) {
   if (!text) return null
@@ -68,11 +68,13 @@ function renderContentWithControls(
   let match
   let imgIdx = 0
   while ((match = imageRegex.exec(text)) !== null) {
+    const normalizedUrl = normalizeHttpUrl(match[2])
+    if (!normalizedUrl) continue
     imageMatches.push({
       start: match.index,
       end: match.index + match[0].length,
       alt: match[1],
-      url: match[2],
+      url: normalizedUrl,
       imageIndex: imgIdx++,
     })
   }
@@ -100,7 +102,7 @@ function renderContentWithControls(
           </a>
         )
       }
-      return part
+      return linkifyTagsAndMentions(part, `edit-preview-${index}`)
     })
   }
 
@@ -146,7 +148,7 @@ function renderContentWithControls(
   return parts.map((part, index) => {
     if (part.type === 'image') {
       const isFirst = part.imageIndex === 0
-      const isLast = part.imageIndex === imageCount - 1
+      const isLast = part.imageIndex === imageMatches.length - 1
       return (
         <span
           key={index}
@@ -167,7 +169,8 @@ function renderContentWithControls(
             }}
             onClick={(e) => {
               e.stopPropagation()
-              window.open(part.url, '_blank')
+              const openedWindow = window.open(part.url, '_blank', 'noopener,noreferrer')
+              if (openedWindow) openedWindow.opener = null
             }}
             unoptimized
           />
@@ -275,7 +278,7 @@ function renderContentWithControls(
         </a>
       )
     }
-    return <span key={index}>{part.content}</span>
+    return <span key={index}>{linkifyTagsAndMentions(part.content, `edit-preview-${index}`)}</span>
   })
 }
 
@@ -938,13 +941,7 @@ export default function EditPostPage() {
                   {t('previewMode')}
                 </Box>
                 {content ? (
-                  renderContentWithControls(
-                    content,
-                    moveImageInContent,
-                    removeImageFromContent,
-                    (content.match(/!\[image\]\([^)]+\)/g) || []).length,
-                    t
-                  )
+                  renderContentWithControls(content, moveImageInContent, removeImageFromContent, t)
                 ) : (
                   <Text color="tertiary">{t('previewPlaceholder')}</Text>
                 )}
