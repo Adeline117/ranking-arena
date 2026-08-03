@@ -23,8 +23,15 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT } from './history-terminal'
 
 type Dict = Record<string, unknown>
+
+function unwrapHistoryPage(raw: unknown): unknown {
+  return (raw as Dict)?.contract === BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT
+    ? (raw as Dict).response
+    : raw
+}
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined) return null
@@ -451,11 +458,12 @@ export function parseBitgetHistory(
   kind: HistoryKind,
   ctx: ParseCtx
 ): ParsedHistoryRow[] {
+  const response = unwrapHistoryPage(raw)
   switch (kind) {
     case 'position_history':
-      return parseBitgetPositionHistory(raw, ctx)
+      return parseBitgetPositionHistory(response, ctx)
     case 'copiers':
-      return parseBitgetCopiers(raw, ctx)
+      return parseBitgetCopiers(response, ctx)
     default:
       // orders: no public endpoint; transfers: 余额历史 removed from the UTA
       // UI and all candidates are auth-gated (verified 2026-06-11).
