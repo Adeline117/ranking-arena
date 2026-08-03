@@ -23,6 +23,10 @@ import {
   readPostMediaUploadError,
 } from '@/lib/posts/post-media-upload-contract'
 import { linkifyTagsAndMentions } from '@/lib/utils/content'
+import {
+  MentionAutocomplete,
+  useMentionAutocomplete,
+} from '@/app/components/post/components/MentionAutocomplete'
 
 interface UploadedImage {
   url: string
@@ -292,6 +296,7 @@ export default function EditPostPage() {
   const { t } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const mentionAutocomplete = useMentionAutocomplete()
 
   const [userId, setUserId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
@@ -570,6 +575,7 @@ export default function EditPostPage() {
   const handleTextareaSelect = () => {
     if (textareaRef.current) {
       setCursorPosition(textareaRef.current.selectionStart)
+      mentionAutocomplete.handleTextChange(textareaRef.current.value, textareaRef.current)
     }
   }
 
@@ -947,43 +953,67 @@ export default function EditPostPage() {
                 )}
               </Box>
             ) : (
-              <textarea
-                ref={textareaRef}
-                placeholder={t('enterContent')}
-                value={content}
-                onChange={(e) => {
-                  setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))
-                  handleTextareaSelect()
-                }}
-                onSelect={handleTextareaSelect}
-                onClick={handleTextareaSelect}
-                onKeyUp={handleTextareaSelect}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && title.trim() && !saving) {
-                    e.preventDefault()
-                    handleSubmit()
-                  }
-                }}
-                maxLength={CONTENT_MAX_LENGTH}
-                rows={12}
-                style={{
-                  width: '100%',
-                  padding: tokens.spacing[4],
-                  borderRadius: tokens.radius.md,
-                  border:
-                    '1px solid ' +
-                    (content.length > CONTENT_MAX_LENGTH
-                      ? tokens.colors.accent.error
-                      : tokens.colors.border.primary),
-                  background: tokens.colors.bg.secondary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  outline: 'none',
-                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                  resize: 'vertical',
-                  lineHeight: 1.6,
-                }}
-              />
+              <div style={{ position: 'relative' }}>
+                <textarea
+                  ref={textareaRef}
+                  placeholder={t('enterContent')}
+                  value={content}
+                  onChange={(e) => {
+                    setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))
+                    handleTextareaSelect()
+                  }}
+                  onSelect={handleTextareaSelect}
+                  onClick={handleTextareaSelect}
+                  onKeyUp={handleTextareaSelect}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && title.trim() && !saving) {
+                      e.preventDefault()
+                      handleSubmit()
+                    }
+                  }}
+                  maxLength={CONTENT_MAX_LENGTH}
+                  rows={12}
+                  style={{
+                    width: '100%',
+                    padding: tokens.spacing[4],
+                    borderRadius: tokens.radius.md,
+                    border:
+                      '1px solid ' +
+                      (content.length > CONTENT_MAX_LENGTH
+                        ? tokens.colors.accent.error
+                        : tokens.colors.border.primary),
+                    background: tokens.colors.bg.secondary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.base,
+                    outline: 'none',
+                    fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                    resize: 'vertical',
+                    lineHeight: 1.6,
+                  }}
+                />
+                {mentionAutocomplete.showMention && (
+                  <MentionAutocomplete
+                    text={content}
+                    cursorPosition={mentionAutocomplete.cursorPos}
+                    accessToken={null}
+                    onClose={mentionAutocomplete.closeMention}
+                    onSelect={(selectedHandle, start, end) => {
+                      const nextContent =
+                        content.slice(0, start) + `@${selectedHandle} ` + content.slice(end)
+                      mentionAutocomplete.closeMention()
+                      if (nextContent.length > CONTENT_MAX_LENGTH) return
+
+                      const nextCursor = start + selectedHandle.length + 2
+                      setContent(nextContent)
+                      setCursorPosition(nextCursor)
+                      setTimeout(() => {
+                        textareaRef.current?.focus()
+                        textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
+                      }, 0)
+                    }}
+                  />
+                )}
+              </div>
             )}
           </Box>
 

@@ -45,6 +45,13 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain("window.open(part.url, '_blank', 'noopener,noreferrer')")
   })
 
+  it('offers the shared keyboard-safe mention picker while editing', () => {
+    expect(page).toContain('useMentionAutocomplete()')
+    expect(page).toContain('mentionAutocomplete.handleTextChange(')
+    expect(page).toContain('<MentionAutocomplete')
+    expect(page).toContain('textareaRef.current?.setSelectionRange(nextCursor, nextCursor)')
+  })
+
   it('has no dormant duplicate editor that can restore direct database writes', () => {
     for (const relativePath of [
       'app/(app)/post/[id]/edit/_hooks/useEditPost.ts',
