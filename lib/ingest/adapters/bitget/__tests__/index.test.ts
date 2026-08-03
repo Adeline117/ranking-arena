@@ -1,5 +1,6 @@
 import type { SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
+import { captureHistoryAcquisition } from '../../../history-acquisition'
 import { bitgetAdapter } from '../index'
 
 const TRADER_ID = 'bitget-trader-1'
@@ -47,19 +48,50 @@ function session(response: unknown): FetchSession {
   } as FetchSession
 }
 
+function positionRows(count: number) {
+  const closeBase = Date.parse('2026-07-20T00:00:00.000Z')
+  return Array.from({ length: count }, (_, index) => ({
+    orderNo: `order-${index}`,
+    closeTime: closeBase - index,
+  }))
+}
+
 function fullPositionPage(nextFlag: boolean): unknown {
   return {
+    code: '00000',
     data: {
-      rows: Array.from({ length: 20 }, (_, index) => ({
-        orderNo: `order-${index}`,
-        closeTime: Date.parse('2026-07-20T00:00:00.000Z') - index,
-      })),
+      rows: positionRows(20),
       nextFlag,
     },
   }
 }
 
+function historyVerifier() {
+  const verifier = bitgetAdapter.historyTerminalVerifier?.(src, 'position_history')
+  if (!verifier) throw new Error('expected the reviewed Bitget position-history verifier')
+  return verifier
+}
+
 describe('Bitget history termination', () => {
+  it('selects terminal verification only for the reviewed futures endpoint', () => {
+    expect(bitgetAdapter.historyTerminalVerifier?.(src, 'position_history')).toMatchObject({
+      contract: 'arena.ingest.history-terminal-verifier.bitget.position_history@1',
+    })
+    expect(bitgetAdapter.historyTerminalVerifier?.(src, 'copiers')).toBeNull()
+    expect(
+      bitgetAdapter.historyTerminalVerifier?.(
+        {
+          ...src,
+          meta: {
+            ...src.meta,
+            endpoints: { positionHistory: 'https://proxy.example.test/history' },
+          },
+        },
+        'position_history'
+      )
+    ).toBeNull()
+  })
+
   it('yields replayable data before rejecting an unproven page-cap stop', async () => {
     const captured = []
     let failure: unknown = null
@@ -86,17 +118,175 @@ describe('Bitget history termination', () => {
   })
 
   it('accepts an explicit upstream end marker on a full final page', async () => {
-    const captured = []
-    for await (const page of bitgetAdapter.getHistory(
-      session(fullPositionPage(false)),
-      src,
-      TRADER_ID,
-      'position_history',
-      null
-    )) {
-      captured.push(page)
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 44,
+      exchangeTraderId: TRADER_ID,
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: bitgetAdapter.getHistory(
+        session(fullPositionPage(false)),
+        src,
+        TRADER_ID,
+        'position_history',
+        null
+      ),
+      terminalVerifier: historyVerifier(),
+    })
+
+    expect(acquisition.pages).toHaveLength(1)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [{ segment_id: 'default', reason: 'reported_end', page_ordinal: 1 }],
+      scan_terminal_state: 'exhausted',
+    })
+  })
+
+  it('captures an empty success page before verifying exhaustion', async () => {
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 44,
+      exchangeTraderId: TRADER_ID,
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: bitgetAdapter.getHistory(
+        session({ code: '00000', data: { rows: [] } }),
+        src,
+        TRADER_ID,
+        'position_history',
+        null
+      ),
+      terminalVerifier: historyVerifier(),
+    })
+
+    expect(acquisition.pages).toHaveLength(1)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [{ segment_id: 'default', reason: 'empty_page', page_ordinal: 1 }],
+      scan_terminal_state: 'exhausted',
+    })
+  })
+
+  it('verifies an unambiguous short page as exhausted', async () => {
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 44,
+      exchangeTraderId: TRADER_ID,
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: bitgetAdapter.getHistory(
+        session({ code: '00000', data: { rows: positionRows(3) } }),
+        src,
+        TRADER_ID,
+        'position_history',
+        null
+      ),
+      terminalVerifier: historyVerifier(),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [{ segment_id: 'default', reason: 'short_page', page_ordinal: 1 }],
+      scan_terminal_state: 'exhausted',
+    })
+  })
+
+  it('verifies cursor overlap from the oldest close on a full ordered page', async () => {
+    const cursor = '2026-07-19T23:59:59.990Z'
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 44,
+      exchangeTraderId: TRADER_ID,
+      kind: 'position_history',
+      cursor,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: bitgetAdapter.getHistory(
+        session(fullPositionPage(true)),
+        src,
+        TRADER_ID,
+        'position_history',
+        cursor
+      ),
+      terminalVerifier: historyVerifier(),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [{ segment_id: 'default', reason: 'cursor_overlap', page_ordinal: 1 }],
+      scan_terminal_state: 'cursor_overlap',
+      overlap_event_at: '2026-07-19T23:59:59.981Z',
+    })
+  })
+
+  it('rejects a short page that still reports a continuation', async () => {
+    const iterator = bitgetAdapter
+      .getHistory(
+        session({ code: '00000', data: { rows: positionRows(3), nextFlag: true } }),
+        src,
+        TRADER_ID,
+        'position_history',
+        null
+      )
+      [Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toMatchObject({ done: false })
+    await expect(iterator.next()).rejects.toThrow('short page still claims continuation')
+  })
+
+  it('yields the API error envelope before rejecting it as terminal evidence', async () => {
+    const iterator = bitgetAdapter
+      .getHistory(
+        session({ code: '40017', msg: 'request failed', data: null }),
+        src,
+        TRADER_ID,
+        'position_history',
+        null
+      )
+      [Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toMatchObject({
+      done: false,
+      value: { payload: { response: { code: '40017' } } },
+    })
+    await expect(iterator.next()).rejects.toThrow('returned a non-success API envelope')
+  })
+
+  it('rejects an overlap claim when one captured close time is malformed', async () => {
+    const closeBase = Date.parse('2026-07-20T00:00:00.000Z')
+    const response = {
+      code: '00000',
+      data: {
+        rows: Array.from({ length: 20 }, (_, index) => ({
+          orderNo: `order-${index}`,
+          closeTime: index === 0 ? 'not-an-epoch' : closeBase - index,
+        })),
+        nextFlag: true,
+      },
     }
 
-    expect(captured).toHaveLength(1)
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 44,
+      exchangeTraderId: TRADER_ID,
+      kind: 'position_history',
+      cursor: '2026-07-20T00:00:00.000Z',
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: bitgetAdapter.getHistory(
+        session(response),
+        src,
+        TRADER_ID,
+        'position_history',
+        '2026-07-20T00:00:00.000Z'
+      ),
+      terminalVerifier: historyVerifier(),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+    })
   })
 })

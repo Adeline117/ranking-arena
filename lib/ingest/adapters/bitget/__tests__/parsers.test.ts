@@ -8,6 +8,7 @@ import {
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 import { parsedPositionHistoryRowSchema } from '../../../core/schemas'
+import { BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT } from '../history-terminal'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -266,6 +267,23 @@ describe('parseBitgetHistory (live-captured fixtures, 2026-06-11)', () => {
     expect(new Set(rows.map((r) => r.dedupeHash)).size).toBe(20)
     const again = parseBitgetHistory(fixture('position-history-p1.json'), 'position_history', ctx)
     expect(again[0].dedupeHash).toBe(first.dedupeHash)
+  })
+
+  it('replays the evidence envelope without changing source-row semantics', () => {
+    const response = fixture('position-history-p1.json')
+    const legacy = parseBitgetHistory(response, 'position_history', ctx)
+    const wrapped = parseBitgetHistory(
+      {
+        contract: BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
+        historyTraderIdentity: 'bitget-trader-1',
+        request: { pageNo: 1, pageSize: 20, traderUid: 'bitget-trader-1' },
+        response,
+      },
+      'position_history',
+      ctx
+    )
+
+    expect(wrapped).toEqual(legacy)
   })
 
   it('keeps realized PnL unknown when the reviewed netProfit field is absent', () => {
