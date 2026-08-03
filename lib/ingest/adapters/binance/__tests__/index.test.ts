@@ -84,6 +84,12 @@ function historyEnvelope(rows: unknown[], total: number): Record<string, unknown
   return { code: '000000', success: true, data: { list: rows, total } }
 }
 
+function historyVerifier(src: SourceRow) {
+  const verifier = binanceAdapter.historyTerminalVerifier?.(src, 'position_history')
+  if (!verifier) throw new Error('expected the reviewed Binance position-history verifier')
+  return verifier
+}
+
 describe('Binance evidence-preserving leaderboard capture', () => {
   it.each([
     ['leaderboard-p1.json', 'futures', 9_806],
@@ -370,19 +376,37 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     )
   })
 
+  it('selects terminal verification only for the reviewed futures endpoint', () => {
+    const futures = source()
+    expect(binanceAdapter.historyTerminalVerifier?.(futures, 'position_history')).toMatchObject({
+      contract: 'arena.ingest.history-terminal-verifier.binance.position_history@1',
+    })
+    expect(binanceAdapter.historyTerminalVerifier?.(futures, 'orders')).toBeNull()
+    expect(
+      binanceAdapter.historyTerminalVerifier?.(source({ boardKey: 'spot' }), 'position_history')
+    ).toBeNull()
+    expect(
+      binanceAdapter.historyTerminalVerifier?.(
+        source({ endpoints: { positionHistory: 'https://proxy.example.test/history' } }),
+        'position_history'
+      )
+    ).toBeNull()
+  })
+
   it('returns separate CLOSING and OPENING terminal observations on first sight', async () => {
     const requestSorts: unknown[] = []
-    const row = {
-      id: 'position-1',
-      symbol: 'BTCUSDT',
-      side: 'Long',
-      status: 'All Closed',
-      opened: Date.parse('2026-07-01T00:00:00.000Z'),
-      closed: Date.parse('2026-07-02T00:00:00.000Z'),
-    }
+    const closing = fixture('position-history-closing-p1.json')
+    const opening = fixture('position-history-opening-p1.json')
+    ;(closing.data as Record<string, unknown>).total = (
+      (closing.data as Record<string, unknown>).list as unknown[]
+    ).length
+    ;(opening.data as Record<string, unknown>).total = (
+      (opening.data as Record<string, unknown>).list as unknown[]
+    ).length
     const { session: fetchSession } = session(async (request) => {
-      requestSorts.push((request.body as Record<string, unknown>).sort)
-      return { status: 200, json: historyEnvelope([row], 1) }
+      const sort = (request.body as Record<string, unknown>).sort
+      requestSorts.push(sort)
+      return { status: 200, json: sort === 'CLOSING' ? closing : opening }
     })
     const src = source()
 
@@ -394,17 +418,94 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       cursor: null,
       attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
       stream: binanceAdapter.getHistory(fetchSession, src, 'portfolio-1', 'position_history', null),
+      terminalVerifier: historyVerifier(src),
     })
 
     expect(requestSorts).toEqual(['CLOSING', 'OPENING'])
     expect(acquisition.pages).toHaveLength(2)
     expect(acquisition.artifact.termination).toMatchObject({
-      evidence_state: 'verifier_missing',
+      evidence_state: 'verified',
       claim_observations: [
         { segment_id: 'closing', reason: 'reported_end', page_ordinal: 1 },
         { segment_id: 'opening', reason: 'reported_end', page_ordinal: 2 },
       ],
+      scan_terminal_state: 'exhausted',
+    })
+  })
+
+  it('verifies an incremental CLOSING cursor overlap without an OPENING segment', async () => {
+    const closeBase = Date.parse('2026-07-20T00:00:00.000Z')
+    const rows = Array.from({ length: 50 }, (_, index) => ({
+      id: `position-${index}`,
+      symbol: 'BTCUSDT',
+      side: 'Long',
+      status: 'All Closed',
+      opened: closeBase - index - 60_000,
+      closed: closeBase - index,
+    }))
+    const cursor = new Date(closeBase - 25).toISOString()
+    const src = source({ history_max_pages: 1 })
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(
+        session(async () => ({ status: 200, json: historyEnvelope(rows, 100) })).session,
+        src,
+        'portfolio-1',
+        'position_history',
+        cursor
+      ),
+      terminalVerifier: historyVerifier(src),
+    })
+
+    expect(acquisition.pages).toHaveLength(1)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [{ segment_id: 'closing', reason: 'cursor_overlap', page_ordinal: 1 }],
+      scan_terminal_state: 'cursor_overlap',
+      overlap_event_at: new Date(closeBase - 49).toISOString(),
+    })
+  })
+
+  it('rejects a dual-sort proof when CLOSING and OPENING identify different facts', async () => {
+    const closeTime = Date.parse('2026-07-02T00:00:00.000Z')
+    const row = (id: string) => ({
+      id,
+      symbol: 'BTCUSDT',
+      side: 'Long',
+      status: 'All Closed',
+      opened: closeTime - 60_000,
+      closed: closeTime,
+    })
+    const src = source()
+    const fetchSession = session(async (request) => {
+      const sort = (request.body as Record<string, unknown>).sort
+      return {
+        status: 200,
+        json: historyEnvelope([row(sort === 'CLOSING' ? 'closing-id' : 'opening-id')], 1),
+      }
+    }).session
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(fetchSession, src, 'portfolio-1', 'position_history', null),
+      terminalVerifier: historyVerifier(src),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
       scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
     })
   })
 

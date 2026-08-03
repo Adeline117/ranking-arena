@@ -61,6 +61,7 @@ import {
   BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
   BINANCE_POSITION_HISTORY_URL,
 } from './history-contract'
+import { binancePositionHistoryTerminalVerifier } from './history-terminal'
 
 const BAPI = 'https://www.binance.com/bapi/futures/v1'
 const FUT = `${BAPI}/friendly/future/copy-trade`
@@ -231,6 +232,16 @@ const binanceAdapter: SourceAdapter = {
     orders: true, // futures Latest Records; spot trade history (fills)
     transfers: true, // futures only
     copiers: true, // both boards (PII rules apply downstream)
+  },
+
+  historyTerminalVerifier(src, kind) {
+    return src.slug === 'binance_futures' &&
+      src.product_type === 'futures' &&
+      boardKeyOf(src) === 'futures' &&
+      kind === 'position_history' &&
+      endpoint(src, 'positionHistory') === BINANCE_POSITION_HISTORY_URL
+      ? binancePositionHistoryTerminalVerifier
+      : null
   },
 
   async captureLeaderboard(
