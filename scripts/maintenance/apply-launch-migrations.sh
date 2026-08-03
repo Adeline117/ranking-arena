@@ -209,6 +209,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729180500_idempotent_channel_message_reactions.sql
   20260729181000_atomic_bookmark_folder_save.sql
   20260729181500_admitted_account_recovery_deadline.sql
+  20260729182000_durable_channel_message_send.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
