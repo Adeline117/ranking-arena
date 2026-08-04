@@ -60,3 +60,19 @@ The branch is accepted only after conflict-marker/diff checks, focused backup,
 writer-boundary, records/Tier-C, migration/NFT and token-containment tests,
 application and worker type checks, and the relevant offline QA contracts pass.
 Production/staging database execution remains a separate explicit gate.
+
+## Current CI interpretation
+
+- Frozen main `046a44d33` preflight is blocked by the `brace-expansion`
+  GHSA-rgw5-rvv9-x895 dependency finding; remediation is owned by a separate
+  dependency change and is not silently folded into this integration.
+- `types-live` failures caused by missing Actions `DATABASE_URL`,
+  `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are credential-context
+  failures. This branch retains V1's explicit disabled/fail-closed
+  production-secret jobs; it does not weaken them to make CI green.
+- The Playwright smoke itself passed; its workflow failed while uploading an
+  artifact because storage quota was exhausted. Treat that as control-plane
+  evidence loss, not a product-smoke failure, and do not call the workflow green
+  until artifact retention is repaired.
+- PR 253 has six real conflicts with main and is superseded for integration
+  review by this combined branch after the `5ed4718b6` containment forward-port.
