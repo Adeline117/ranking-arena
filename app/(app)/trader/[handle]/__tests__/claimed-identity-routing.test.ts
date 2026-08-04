@@ -15,11 +15,12 @@ describe('claimed trader routing contract', () => {
   const verifiedProfileRoute = source('app/api/traders/verified/route.ts')
 
   it('never resolves claim ownership from a source-blind URL handle', () => {
-    expect(page).not.toContain('cachedFindUserHandleByTrader(decodedHandle)')
+    expect(page).not.toContain('findUserHandleByTraderFresh(decodedHandle)')
     expect(page).toContain(
-      'cachedFindUserHandleByTrader(servingResolved.source, servingResolved.exchangeTraderId)'
+      'findUserHandleByTraderFresh(servingResolved.source, servingResolved.exchangeTraderId)'
     )
-    expect(page).toContain('cachedFindUserHandleByTrader(resolved.platform, resolved.traderKey)')
+    expect(page).toContain('findUserHandleByTraderFresh(resolved.platform, resolved.traderKey)')
+    expect(page).not.toContain("['trader-user-handle-by-source-and-id-v2']")
   })
 
   it('injects the exact claimed trader profile into the partial editor', () => {
@@ -31,6 +32,10 @@ describe('claimed trader routing contract', () => {
     expect(client).toContain('!claimDataError')
     expect(client).toContain('parseExactTraderClaimEnvelope(claimResponse)')
     expect(client).toContain('staleTime: 0')
+    expect(client).toContain('gcTime: 0')
+    expect(client).toContain("refetchOnMount: 'always'")
+    expect(client).toContain("fetcher(claimUrl!, { cache: 'no-store' })")
+    expect(client).not.toContain('bundledClaimMatchesVisibleIdentity')
     expect(client).toContain('retry: false')
     expect(client).toContain('exactClaim: freshExactClaim')
     expect(overview).toContain('verifiedTraderProfile: VerifiedTraderProfileData | null')

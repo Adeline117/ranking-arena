@@ -10,6 +10,8 @@ import { getSupabaseAdmin, success, handleError, checkRateLimit, RateLimitPreset
 
 function noStore(response: NextResponse): NextResponse {
   response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+  response.headers.set('CDN-Cache-Control', 'no-store')
+  response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
   response.headers.set('Pragma', 'no-cache')
   return response
 }

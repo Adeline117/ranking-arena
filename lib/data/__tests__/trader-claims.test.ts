@@ -4,7 +4,6 @@
 
 const mockSendNotification = jest.fn()
 const mockInvalidateLinkedTraderCache = jest.fn()
-const mockEnqueueFirstPartySync = jest.fn()
 
 jest.mock('@/lib/data/notifications', () => ({
   sendNotification: (...args: unknown[]) => mockSendNotification(...args),
@@ -12,10 +11,6 @@ jest.mock('@/lib/data/notifications', () => ({
 
 jest.mock('@/lib/data/linked-traders', () => ({
   invalidateLinkedTraderCache: (...args: unknown[]) => mockInvalidateLinkedTraderCache(...args),
-}))
-
-jest.mock('@/lib/ingest/first-party/enqueue', () => ({
-  enqueueFirstPartySync: (...args: unknown[]) => mockEnqueueFirstPartySync(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -38,6 +33,24 @@ import type { Database } from '@/lib/supabase/database.types'
 const CLAIM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const REVIEWER_ID = '22222222-2222-4222-8222-222222222222'
+const V2_TRADER_ID = '0x1111111111111111111111111111111111111111'
+const V2_ATTESTATION = {
+  challenge_id: 'a'.repeat(64),
+  challenge_issued_at: '2026-07-16T09:58:00.000Z',
+  verified_at: '2026-07-16T10:00:00.000Z',
+  message_sha256: 'b'.repeat(64),
+  signature_sha256: 'c'.repeat(64),
+}
+const V2_PROOF = {
+  proof_version: 'arena-wallet-claim@2',
+  challenge_id: V2_ATTESTATION.challenge_id,
+  domain: 'www.arenafi.org',
+  challenge_issued_at: V2_ATTESTATION.challenge_issued_at,
+  challenge_expires_at: '2026-07-16T10:03:00.000Z',
+  verified_at: V2_ATTESTATION.verified_at,
+  message_sha256: V2_ATTESTATION.message_sha256,
+  signature_sha256: V2_ATTESTATION.signature_sha256,
+}
 
 function claim(overrides: Partial<TraderClaim> = {}): TraderClaim {
   return {
@@ -47,6 +60,7 @@ function claim(overrides: Partial<TraderClaim> = {}): TraderClaim {
     source: 'binance_futures',
     verification_method: 'api_key',
     verification_data: null,
+    submission_version: 1,
     status: 'verified',
     reject_reason: null,
     reviewed_by: REVIEWER_ID,
@@ -56,6 +70,22 @@ function claim(overrides: Partial<TraderClaim> = {}): TraderClaim {
     updated_at: '2026-07-16T10:00:00.000Z',
     ...overrides,
   }
+}
+
+function v2Claim(overrides: Partial<TraderClaim> = {}): TraderClaim {
+  return claim({
+    trader_id: V2_TRADER_ID,
+    source: 'hyperliquid',
+    verification_method: 'signature',
+    verification_data: V2_PROOF,
+    submission_version: 2,
+    status: 'reviewing',
+    reject_reason: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    verified_at: null,
+    ...overrides,
+  })
 }
 
 function verifiedTrader(overrides: Partial<VerifiedTrader> = {}): VerifiedTrader {
@@ -85,11 +115,16 @@ function verifiedTrader(overrides: Partial<VerifiedTrader> = {}): VerifiedTrader
 
 function activationPayload(overrides: Record<string, unknown> = {}) {
   return {
-    claim: claim(),
+    claim: v2Claim({
+      status: 'verified',
+      reviewed_by: REVIEWER_ID,
+      reviewed_at: '2026-07-16T10:00:00.000Z',
+      verified_at: '2026-07-16T10:00:00.000Z',
+    }),
     linked_trader_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     primary_link_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     linked_count: 1,
-    authorization_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    authorization_id: null,
     arena_trader_id: 42,
     ...overrides,
   }
@@ -277,20 +312,12 @@ describe('trader claim atomic mutations', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockInvalidateLinkedTraderCache.mockResolvedValue(undefined)
-    mockEnqueueFirstPartySync.mockResolvedValue(true)
   })
 
   it.each(['object', 'singleton array'])(
     'submits through the atomic RPC (%s response)',
     async (shape) => {
-      const submitted = claim({
-        status: 'reviewing',
-        verification_data: { uid_hash: 'proof' },
-        reject_reason: null,
-        reviewed_by: null,
-        reviewed_at: null,
-        verified_at: null,
-      })
+      const submitted = v2Claim()
       mockRpc.mockResolvedValue({
         data: shape === 'object' ? submitted : [submitted],
         error: null,
@@ -298,19 +325,21 @@ describe('trader claim atomic mutations', () => {
 
       await expect(
         submitClaim(client, USER_ID, {
-          trader_id: 'trader-1',
-          source: 'binance_futures',
-          verification_method: 'api_key',
-          verification_data: { uid_hash: 'proof' },
+          trader_id: V2_TRADER_ID,
+          source: 'hyperliquid',
+          ...V2_ATTESTATION,
         })
       ).resolves.toEqual(submitted)
 
-      expect(mockRpc).toHaveBeenCalledWith('submit_trader_claim', {
+      expect(mockRpc).toHaveBeenCalledWith('submit_trader_claim_v2', {
         p_user_id: USER_ID,
-        p_trader_id: 'trader-1',
-        p_source: 'binance_futures',
-        p_verification_method: 'api_key',
-        p_verification_data: { uid_hash: 'proof' },
+        p_trader_id: V2_TRADER_ID,
+        p_source: 'hyperliquid',
+        p_challenge_id: V2_ATTESTATION.challenge_id,
+        p_challenge_issued_at: V2_ATTESTATION.challenge_issued_at,
+        p_verified_at: V2_ATTESTATION.verified_at,
+        p_message_digest: V2_ATTESTATION.message_sha256,
+        p_signature_digest: V2_ATTESTATION.signature_sha256,
       })
       expect(mockFrom).not.toHaveBeenCalled()
     }
@@ -319,21 +348,21 @@ describe('trader claim atomic mutations', () => {
   it.each([
     null,
     [],
-    [claim(), claim()],
-    claim({ status: 'verified' }),
-    claim({ status: 'reviewing', user_id: 'different-user' }),
-    claim({ status: 'reviewing', verification_data: null }),
+    [v2Claim(), v2Claim()],
+    v2Claim({ status: 'verified' }),
+    v2Claim({ user_id: 'different-user' }),
+    v2Claim({ verification_data: null }),
+    v2Claim({ submission_version: 1 }),
   ])('rejects a malformed submit acknowledgement without side effects', async (data) => {
     mockRpc.mockResolvedValue({ data, error: null })
 
     await expect(
       submitClaim(client, USER_ID, {
-        trader_id: 'trader-1',
-        source: 'binance_futures',
-        verification_method: 'api_key',
-        verification_data: { uid_hash: 'proof' },
+        trader_id: V2_TRADER_ID,
+        source: 'hyperliquid',
+        ...V2_ATTESTATION,
       })
-    ).rejects.toThrow('Invalid submit_trader_claim response')
+    ).rejects.toThrow('Invalid submit_trader_claim_v2 response')
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockSendNotification).not.toHaveBeenCalled()
   })
@@ -344,10 +373,9 @@ describe('trader claim atomic mutations', () => {
 
     await expect(
       submitClaim(client, USER_ID, {
-        trader_id: 'trader-1',
-        source: 'binance_futures',
-        verification_method: 'api_key',
-        verification_data: { uid_hash: 'proof' },
+        trader_id: V2_TRADER_ID,
+        source: 'hyperliquid',
+        ...V2_ATTESTATION,
       })
     ).rejects.toBe(rpcError)
     expect(mockFrom).not.toHaveBeenCalled()
@@ -361,13 +389,12 @@ describe('trader claim atomic mutations', () => {
       status: 'verified',
     })
 
-    expect(mockRpc).toHaveBeenCalledWith('activate_trader_claim', {
+    expect(mockRpc).toHaveBeenCalledWith('activate_trader_claim_v2', {
       p_claim_id: CLAIM_ID,
       p_reviewer_id: REVIEWER_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
-    expect(mockEnqueueFirstPartySync).toHaveBeenCalledWith('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
     expect(mockSendNotification).toHaveBeenCalledWith(
       client,
       expect.objectContaining({ user_id: USER_ID, title: 'Claim approved' }),
@@ -376,15 +403,17 @@ describe('trader claim atomic mutations', () => {
     expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
       mockInvalidateLinkedTraderCache.mock.invocationCallOrder[0]
     )
-    expect(mockInvalidateLinkedTraderCache.mock.invocationCallOrder[0]).toBeLessThan(
-      mockEnqueueFirstPartySync.mock.invocationCallOrder[0]
-    )
   })
 
-  it('does not enqueue a first-party sync for a signature claim', async () => {
+  it('accepts only the V2 signature activation acknowledgement', async () => {
     mockRpc.mockResolvedValue({
       data: activationPayload({
-        claim: claim({ verification_method: 'signature', source: 'hyperliquid' }),
+        claim: v2Claim({
+          status: 'verified',
+          reviewed_by: REVIEWER_ID,
+          reviewed_at: '2026-07-16T10:00:00.000Z',
+          verified_at: '2026-07-16T10:00:00.000Z',
+        }),
         authorization_id: null,
       }),
       error: null,
@@ -393,7 +422,6 @@ describe('trader claim atomic mutations', () => {
     await reviewClaim(client, CLAIM_ID, REVIEWER_ID, true)
 
     expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
-    expect(mockEnqueueFirstPartySync).not.toHaveBeenCalled()
     expect(mockSendNotification).toHaveBeenCalled()
   })
 
@@ -405,7 +433,6 @@ describe('trader claim atomic mutations', () => {
 
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
-    expect(mockEnqueueFirstPartySync).not.toHaveBeenCalled()
     expect(mockSendNotification).not.toHaveBeenCalled()
   })
 
@@ -413,49 +440,42 @@ describe('trader claim atomic mutations', () => {
     null,
     {},
     activationPayload({ linked_count: 0 }),
-    activationPayload({ authorization_id: null }),
-    activationPayload({ claim: claim({ status: 'reviewing' }) }),
+    activationPayload({ authorization_id: 'legacy-authorization' }),
+    activationPayload({ claim: v2Claim() }),
+    activationPayload({
+      claim: claim({ status: 'verified', submission_version: 1 }),
+      authorization_id: 'legacy-authorization',
+    }),
   ])('rejects a malformed activation acknowledgement without side effects', async (data) => {
     mockRpc.mockResolvedValue({ data, error: null })
 
     await expect(activateClaim(client, CLAIM_ID, REVIEWER_ID)).rejects.toThrow(
-      'Invalid activate_trader_claim response'
+      'Invalid activate_trader_claim_v2 response'
     )
     expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
-    expect(mockEnqueueFirstPartySync).not.toHaveBeenCalled()
     expect(mockSendNotification).not.toHaveBeenCalled()
   })
 
   it('rejects only a pending or reviewing claim and then notifies', async () => {
-    const rejected = claim({
+    const rejected = v2Claim({
       status: 'rejected',
       reject_reason: 'ownership proof failed',
+      reviewed_by: REVIEWER_ID,
+      reviewed_at: '2026-07-16T10:00:00.000Z',
       verified_at: null,
     })
-    const result = Promise.resolve({ data: rejected, error: null })
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn(() => builder)
-    builder.eq = jest.fn(() => builder)
-    builder.in = jest.fn(() => builder)
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn(() => result)
-    mockFrom.mockReturnValue(builder)
+    mockRpc.mockResolvedValue({ data: rejected, error: null })
 
     await expect(
       reviewClaim(client, CLAIM_ID, REVIEWER_ID, false, 'ownership proof failed')
     ).resolves.toEqual(rejected)
 
-    expect(mockRpc).not.toHaveBeenCalled()
-    expect(mockFrom).toHaveBeenCalledWith('trader_claims')
-    expect(builder.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'rejected',
-        reviewed_by: REVIEWER_ID,
-        reject_reason: 'ownership proof failed',
-      })
-    )
-    expect(builder.eq).toHaveBeenCalledWith('id', CLAIM_ID)
-    expect(builder.in).toHaveBeenCalledWith('status', ['pending', 'reviewing'])
+    expect(mockRpc).toHaveBeenCalledWith('reject_trader_claim_v2', {
+      p_claim_id: CLAIM_ID,
+      p_reviewer_id: REVIEWER_ID,
+      p_reject_reason: 'ownership proof failed',
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
     expect(mockSendNotification).toHaveBeenCalledWith(
       client,
       expect.objectContaining({ title: 'Claim rejected' }),
@@ -464,14 +484,7 @@ describe('trader claim atomic mutations', () => {
   })
 
   it('cannot reject a terminal or concurrently reviewed claim', async () => {
-    const result = Promise.resolve({ data: null, error: null })
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn(() => builder)
-    builder.eq = jest.fn(() => builder)
-    builder.in = jest.fn(() => builder)
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn(() => result)
-    mockFrom.mockReturnValue(builder)
+    mockRpc.mockResolvedValue({ data: null, error: null })
 
     await expect(reviewClaim(client, CLAIM_ID, REVIEWER_ID, false)).rejects.toMatchObject({
       code: 'P0002',
@@ -489,6 +502,7 @@ describe('trader-claims types', () => {
       source: 'binance_futures',
       verification_method: 'api_key',
       verification_data: null,
+      submission_version: 1,
       status: 'pending',
       reject_reason: null,
       reviewed_by: null,

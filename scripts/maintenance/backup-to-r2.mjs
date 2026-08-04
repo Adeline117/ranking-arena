@@ -13,13 +13,25 @@
  */
 
 import { execFileSync } from 'child_process'
-import { randomBytes } from 'node:crypto'
-import { createReadStream, unlinkSync } from 'fs'
-import { resolve } from 'path'
-import { pathToFileURL } from 'url'
+import { createHash, randomBytes } from 'node:crypto'
 import {
-  S3Client,
+  closeSync,
+  constants as fsConstants,
+  createReadStream,
+  fstatSync,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  realpathSync,
+  rmSync,
+  unlinkSync,
+} from 'fs'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
+import { fileURLToPath } from 'url'
+import {
   HeadObjectCommand,
+  S3Client,
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from '@aws-sdk/client-s3'
@@ -225,17 +237,51 @@ export async function uploadAndAttestBackupArtifact({
   client,
   bucket,
   key,
+  body,
   localPath,
   size,
   metadata,
   UploadClass = Upload,
 }) {
+  const uploaded = await uploadBackupArtifact({
+    client,
+    bucket,
+    key,
+    body,
+    localPath,
+    size,
+    metadata,
+    UploadClass,
+  })
+  return attestUploadedBackupArtifact({
+    client,
+    bucket,
+    key,
+    size,
+    metadata,
+    uploadETag: uploaded.ETag,
+  })
+}
+
+export async function uploadBackupArtifact({
+  client,
+  bucket,
+  key,
+  body,
+  localPath,
+  size,
+  metadata,
+  UploadClass = Upload,
+}) {
+  if (!body && !localPath) {
+    throw new Error('multipart upload requires a sealed body or local path')
+  }
   const uploader = new UploadClass({
     client,
     params: {
       Bucket: bucket,
       Key: key,
-      Body: createReadStream(localPath),
+      Body: body ?? createReadStream(localPath),
       ContentType: 'application/gzip',
       ContentLength: size,
       Metadata: metadata,
@@ -248,19 +294,29 @@ export async function uploadAndAttestBackupArtifact({
   if (!normalizeETag(uploaded?.ETag)) {
     throw new Error('multipart upload did not return an ETag identity')
   }
+  return uploaded
+}
 
+export async function attestUploadedBackupArtifact({
+  client,
+  bucket,
+  key,
+  size,
+  metadata,
+  uploadETag,
+}) {
   const head = await client.send(
     new HeadObjectCommand({
       Bucket: bucket,
       Key: key,
-      IfMatch: uploaded.ETag,
+      IfMatch: uploadETag,
     })
   )
   return assertUploadedBackupObject({
     key,
     expectedSize: size,
     expectedMetadata: metadata,
-    uploadETag: uploaded.ETag,
+    uploadETag,
     head,
   })
 }
@@ -306,27 +362,84 @@ export function runPgDumpPipeline({
   }
   const completionSentinel = arenaBackupCompletionSentinel(completionToken)
 
-  execFileSync(
-    '/bin/bash',
-    [
-      '-o',
-      'pipefail',
-      '-c',
-      'output=$1; sentinel=$2; shift 2; { "$@" && printf "%s" "$sentinel"; } | /usr/bin/gzip -c > "$output"',
-      'arena-backup-pipeline',
-      outputPath,
-      completionSentinel,
-      pgDumpPath,
-      ...pgDumpArgs,
-      `--restrict-key=${completionToken}`,
-      connectionUrl,
-    ],
-    {
-      env: pgDumpEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: timeoutMs,
-    }
+  const outputFd = openExclusiveRegularFile(outputPath)
+  try {
+    execFileSync(
+      '/bin/bash',
+      [
+        '-o',
+        'pipefail',
+        '-c',
+        'sentinel=$1; shift; { "$@" && printf "%s" "$sentinel"; } | /usr/bin/gzip -c',
+        'arena-backup-pipeline',
+        completionSentinel,
+        pgDumpPath,
+        ...pgDumpArgs,
+        `--restrict-key=${completionToken}`,
+        connectionUrl,
+      ],
+      {
+        env: pgDumpEnv,
+        stdio: ['ignore', outputFd, 'pipe'],
+        timeout: timeoutMs,
+      }
+    )
+  } finally {
+    closeSync(outputFd)
+  }
+}
+
+function openExclusiveRegularFile(path) {
+  const noFollow = fsConstants.O_NOFOLLOW ?? 0
+  const fd = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow
+  return openSync(path, fd, 0o600)
+}
+
+function sameFileIdentity(left, right) {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mode === right.mode &&
+    left.nlink === right.nlink &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
   )
+}
+
+function readSealedFileState(fd, localPath, expected) {
+  const descriptor = fstatSync(fd, { bigint: true })
+  const pathname = lstatSync(localPath, { bigint: true })
+  if (!descriptor.isFile() || !pathname.isFile() || descriptor.nlink !== 1n) {
+    throw new Error('backup artifact must be one exclusively owned regular file')
+  }
+  if (!sameFileIdentity(descriptor, pathname)) {
+    throw new Error('backup artifact pathname identity changed')
+  }
+  if (expected && !sameFileIdentity(descriptor, expected)) {
+    throw new Error('sealed backup artifact changed after validation')
+  }
+  return descriptor
+}
+
+async function sha256FileDescriptor(fd, size) {
+  const hash = createHash('sha256')
+  const stream = createReadStream('', {
+    fd,
+    autoClose: false,
+    start: 0,
+    end: size - 1,
+  })
+  for await (const chunk of stream) hash.update(chunk)
+  return hash.digest('hex')
+}
+
+export function createBackupWorkspace(filename) {
+  if (basename(filename) !== filename || !IMMUTABLE_BACKUP_FILENAME_PATTERN.test(filename)) {
+    throw new Error('backup filename is invalid')
+  }
+  const directory = mkdtempSync(join(tmpdir(), 'arena-backup-'))
+  return { directory, localPath: join(directory, filename) }
 }
 
 /**
@@ -340,14 +453,51 @@ export async function produceAndCommitBackup({
   minimumBytes,
   completionToken,
   upload,
+  verifyUpload,
   prune,
 }) {
   await produce()
-  const size = await assertBackupArtifact(localPath, minimumBytes, { completionToken })
-  await upload(size)
-  unlinkSync(localPath)
-  await prune()
-  return size
+  const noFollow = fsConstants.O_NOFOLLOW ?? 0
+  const fd = openSync(localPath, fsConstants.O_RDONLY | noFollow)
+  let body
+  try {
+    const sealedState = readSealedFileState(fd, localPath)
+    const size = await assertBackupArtifact(localPath, minimumBytes, { completionToken })
+    if (sealedState.size !== BigInt(size)) {
+      throw new Error('validated backup size disagrees with sealed file')
+    }
+    readSealedFileState(fd, localPath, sealedState)
+    const sha256 = await sha256FileDescriptor(fd, size)
+    readSealedFileState(fd, localPath, sealedState)
+
+    body = createReadStream('', {
+      fd,
+      autoClose: false,
+      start: 0,
+      end: size - 1,
+    })
+    const evidence = Object.freeze({ size, sha256, body })
+    const uploadResult = await upload(evidence)
+    if (!body.readableEnded) {
+      throw new Error('backup upload returned before consuming the sealed artifact')
+    }
+    readSealedFileState(fd, localPath, sealedState)
+    if (typeof verifyUpload !== 'function') {
+      throw new Error('post-upload HEAD verification is required')
+    }
+    await verifyUpload(evidence, uploadResult)
+    readSealedFileState(fd, localPath, sealedState)
+    unlinkSync(localPath)
+    await prune()
+    return size
+  } finally {
+    if (body && !body.destroyed && !body.readableEnded) body.destroy()
+    try {
+      closeSync(fd)
+    } catch (error) {
+      if (error?.code !== 'EBADF') throw error
+    }
+  }
 }
 
 async function run() {
@@ -383,7 +533,9 @@ async function run() {
   console.log(`[backup] Starting ${modeLabel} backup — ${now.toISOString()}`)
 
   const selectionArgs = schemaMode ? backupSchemas.flatMap((s) => ['-n', s]) : [] // full mode dumps everything
-  const { localPath, r2Key } = identity
+  const { filename, r2Key } = identity
+  const workspace = createBackupWorkspace(filename)
+  const { localPath } = workspace
 
   try {
     // pg_dump → gzip (PostgreSQL 17 匹配 Supabase 服务器)
@@ -397,7 +549,7 @@ async function run() {
     const { connectionUrl, password } = preparePgDumpConnection(DATABASE_URL)
     const minimumBytes = COMPLETE_BACKUP_MIN_BYTES
     const completionToken = randomBytes(32).toString('hex')
-    const metadata = buildBackupMetadata({ now, mode, completionToken })
+    const baseMetadata = buildBackupMetadata({ now, mode, completionToken })
     await produceAndCommitBackup({
       produce: () =>
         runPgDumpPipeline({
@@ -411,17 +563,33 @@ async function run() {
       localPath,
       minimumBytes,
       completionToken,
-      upload: async (size) => {
+      upload: async ({ size, sha256, body }) => {
         const sizeMB = (size / 1024 / 1024).toFixed(1)
         console.log(`[backup] Dump complete: ${sizeMB} MB`)
         console.log(`[backup] Uploading to R2: ${R2_BUCKET}/${r2Key}`)
-        const remote = await uploadAndAttestBackupArtifact({
+        const metadata = {
+          ...baseMetadata,
+          'artifact-size': String(size),
+          'artifact-sha256': sha256,
+        }
+        const uploaded = await uploadBackupArtifact({
           client: s3,
           bucket: R2_BUCKET,
           key: r2Key,
-          localPath,
+          body,
           size,
           metadata,
+        })
+        return { metadata, uploadETag: uploaded.ETag, sizeMB }
+      },
+      verifyUpload: async ({ size }, { metadata, uploadETag, sizeMB }) => {
+        const remote = await attestUploadedBackupArtifact({
+          client: s3,
+          bucket: R2_BUCKET,
+          key: r2Key,
+          size,
+          metadata,
+          uploadETag,
         })
         console.log(
           `[backup] ✓ Uploaded and attested: ${r2Key} (${sizeMB} MB, ETag ${remote.ETag})`
@@ -431,10 +599,9 @@ async function run() {
     })
   } catch (err) {
     console.error(`[backup] ✗ Failed:`, err.message)
-    try {
-      unlinkSync(localPath)
-    } catch {}
-    process.exit(1)
+    process.exitCode = 1
+  } finally {
+    rmSync(workspace.directory, { force: true, recursive: true })
   }
 }
 
@@ -498,7 +665,7 @@ async function pruneOldBackups() {
 }
 
 const isDirectRun =
-  process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 if (isDirectRun) {
   run()
 }

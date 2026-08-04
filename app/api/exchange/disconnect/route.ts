@@ -10,6 +10,7 @@
 
 import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { disconnectApiKey, isDisconnectableAccountExchange } from '@/lib/services/api-key-binder'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('exchange-disconnect')
@@ -28,35 +29,39 @@ export const DELETE = withApiMiddleware(
     }
 
     // 解析请求体
-    const body = await request.json()
-    const { exchange } = body
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return createErrorResponse('Invalid JSON body', 400)
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return createErrorResponse('Invalid JSON body', 400)
+    }
+    const { exchange } = body as { exchange?: unknown }
 
-    if (!exchange) {
+    if (typeof exchange !== 'string' || exchange.trim().length === 0) {
       return createErrorResponse('Missing required parameter: exchange', 400)
     }
+    const normalizedExchange = exchange.trim().toLowerCase()
 
-    // 验证 exchange 参数
-    const validExchanges = ['binance', 'bybit', 'bitget', 'mexc', 'okx', 'kucoin', 'coinex', 'gmx']
-    if (!validExchanges.includes(exchange.toLowerCase())) {
+    // Keep only exact historical base CEX keys disconnectable. In particular,
+    // wallet sources (for example GMX) and guessed aliases never reach the RPC.
+    if (!isDisconnectableAccountExchange(normalizedExchange)) {
       return createErrorResponse('Invalid exchange parameter', 400)
     }
 
-    // 软删除：设置为非活跃
-    const { error: updateError } = await getSupabaseAdmin()
-      .from('user_exchange_connections')
-      .update({
-        is_active: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id)
-      .eq('exchange', exchange.toLowerCase())
+    const result = await disconnectApiKey(getSupabaseAdmin(), user.id, normalizedExchange)
 
-    if (updateError) {
-      logger.error('Failed to disconnect', { error: updateError, userId: user.id, exchange })
+    if (!result.success) {
+      if (result.errorCode === 'not_found') {
+        return createErrorResponse('Exchange connection not found', 404)
+      }
+      logger.error('Failed to disconnect', { userId: user.id, exchange: normalizedExchange })
       return createErrorResponse('Failed to disconnect', 500)
     }
 
-    logger.info('用户断开交易所连接', { userId: user.id, exchange })
+    logger.info('用户断开交易所连接', { userId: user.id, exchange: normalizedExchange })
 
     return {
       success: true,

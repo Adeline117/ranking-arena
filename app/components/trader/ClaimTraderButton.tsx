@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '../base'
 import { useToast } from '../ui/Toast'
-import { useDialog } from '../ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
+import { claimMethodForSource } from '@/lib/constants/trader-claim-platforms'
 import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 import {
   buildTraderClaimLoginHref,
@@ -26,26 +26,6 @@ interface ClaimTraderButtonProps {
   handle: string
   userId: string
   source?: string // 'binance', 'bybit', etc.
-}
-
-/**
- * DEX platforms whose traders are identified by wallet address.
- * These use wallet signature verification instead of API key.
- */
-const DEX_WALLET_PLATFORMS = [
-  'hyperliquid',
-  'gmx',
-  'gains',
-  'aevo',
-  'kwenta',
-  'vertex',
-  'dydx',
-  'jupiter_perps',
-  'drift',
-]
-
-function isDexPlatform(source: string): boolean {
-  return DEX_WALLET_PLATFORMS.some((p) => source.toLowerCase().startsWith(p))
 }
 
 type ClaimOperation = {
@@ -140,7 +120,6 @@ function ViewerScopedClaimTraderButton({
 }) {
   const router = useRouter()
   const { showToast } = useToast()
-  const { showConfirm } = useDialog()
   const { t } = useLanguage()
   const auth = useAuthSession()
   const authRef = useRef(auth)
@@ -158,6 +137,7 @@ function ViewerScopedClaimTraderButton({
   )
   const claimIdentity = { traderId, source, handle }
   const claimReturnPath = buildTraderClaimReturnPath(claimIdentity)
+  const claimMethod = claimMethodForSource(source)
 
   const operationIsCurrent = (
     operation: ClaimOperation,
@@ -276,35 +256,15 @@ function ViewerScopedClaimTraderButton({
       if (isSettingsViewerCurrent(operation.viewer, authRef.current)) setStartingClaim(false)
     }
 
-    // For DEX platforms, redirect to the claim page with wallet flow
-    if (isDexPlatform(source)) {
+    if (claimMethod === 'signature') {
       if (operationIsCurrent(operation, confirmOperationRef)) router.push(claimReturnPath)
       return
     }
 
-    const confirmTitle = hasVerifiedAccounts ? t('confirmLink') : t('confirmClaim')
-    const confirmDesc = hasVerifiedAccounts
-      ? t('confirmLinkDesc').replace('{handle}', handle)
-      : `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
-
-    let confirmed = false
-    try {
-      confirmed = await showConfirm(confirmTitle, confirmDesc)
-    } catch {
-      if (operationIsCurrent(operation, confirmOperationRef)) {
-        showToast(t('operationFailed'), 'error')
-      }
-      cancelClaimStart()
-      return
+    if (operationIsCurrent(operation, confirmOperationRef)) {
+      showToast(t('claimSourceUnsupportedBody'), 'warning')
     }
-    if (!operationIsCurrent(operation, confirmOperationRef)) return
-    if (!confirmed) {
-      cancelClaimStart()
-      return
-    }
-
-    // For CEX platforms, redirect to claim page with API key flow
-    router.push(claimReturnPath)
+    cancelClaimStart()
   }
 
   const authPending = !viewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
@@ -334,14 +294,20 @@ function ViewerScopedClaimTraderButton({
   }
 
   // If user already has verified accounts, show "Link to Profile" instead of "Claim"
-  const buttonLabel = hasVerifiedAccounts ? t('linkToProfile') : t('claimTrader')
+  const buttonLabel =
+    claimMethod === 'unsupported'
+      ? t('claimSourceUnsupportedTitle')
+      : hasVerifiedAccounts
+        ? t('linkToProfile')
+        : t('claimTrader')
 
   return (
     <Button
       variant="primary"
       size="sm"
       onClick={handleClaim}
-      disabled={authPending || startingClaim}
+      disabled={authPending || startingClaim || claimMethod === 'unsupported'}
+      title={claimMethod === 'unsupported' ? t('claimSourceUnsupportedBody') : undefined}
     >
       {buttonLabel}
     </Button>

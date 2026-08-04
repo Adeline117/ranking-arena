@@ -123,6 +123,17 @@ const PUBLIC_API_ROUTES = new Set([
   'trader/onchain-enrich',
   // 已退役（恒 410 Gone）
   'pipeline/ingest',
+  'exchange/connect',
+  'exchange/oauth/authorize',
+  'exchange/oauth/callback',
+  'exchange/oauth/refresh',
+  'trader/bind-api-key',
+  'trader/sync',
+  // Legacy credential-derived projections are fixed 410 responses. They never
+  // inspect the request, credentials, portfolio rows, or any exchange service.
+  'portfolio/positions',
+  'portfolio/snapshots',
+  'portfolio/sync',
 ])
 
 function walk(dir, out = []) {

@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 
 const mockPush = jest.fn()
 const mockShowToast = jest.fn()
-const mockShowConfirm = jest.fn()
 const mockAuthedFetch = jest.fn()
 const VIEWER_A = '11111111-1111-4111-8111-111111111111'
 const VIEWER_B = '22222222-2222-4222-8222-222222222222'
@@ -94,10 +93,6 @@ jest.mock('@/app/components/ui/Toast', () => ({
   useToast: () => ({ showToast: mockShowToast }),
 }))
 
-jest.mock('@/app/components/ui/Dialog', () => ({
-  useDialog: () => ({ showConfirm: mockShowConfirm }),
-}))
-
 jest.mock('@/app/components/base', () => ({
   Button: ({
     children,
@@ -131,22 +126,13 @@ function claimStatusResponse(userId: string) {
   }
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise
-  })
-  return { promise, resolve }
-}
-
 describe('ClaimTraderButton login intent', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockAuth = signedOut(1)
-    mockShowConfirm.mockResolvedValue(true)
   })
 
-  it('does not send a signed-out CEX claimant back to the trader page or homepage', async () => {
+  it('disables unsupported CEX claims without opening a login flow', async () => {
     render(
       <ClaimTraderButton
         traderId="account/42"
@@ -156,14 +142,9 @@ describe('ClaimTraderButton login intent', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'claimTrader' }))
-
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith(
-        '/login?returnUrl=%2Fclaim%3Ftrader%3Daccount%252F42%26source%3Dbinance%26handle%3DAlice%2BTrader%26step%3Dverify'
-      )
-    )
-    expect(mockShowToast).toHaveBeenCalledWith('pleaseLoginFirst', 'warning')
+    expect(screen.getByRole('button', { name: 'claimSourceUnsupportedTitle' })).toBeDisabled()
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
   })
 
   it('uses the same exact login handoff for a signed-out wallet claim', async () => {
@@ -185,47 +166,25 @@ describe('ClaimTraderButton login intent', () => {
     )
   })
 
-  it('does not redirect after a confirmation opened by the previous viewer', async () => {
+  it('does not expose a wallet action scoped to a different authenticated viewer', async () => {
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 2)
-    mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_A))
-    const confirmation = deferred<boolean>()
-    mockShowConfirm.mockReturnValue(confirmation.promise)
-    const view = render(
+    render(
       <ClaimTraderButton
-        traderId="account/42"
-        handle="Alice Trader"
-        userId={VIEWER_A}
-        source="binance"
-      />
-    )
-
-    fireEvent.click(await screen.findByRole('button', { name: 'claimTrader' }))
-    await waitFor(() => expect(mockShowConfirm).toHaveBeenCalledTimes(1))
-
-    mockAuth = signedIn(VIEWER_B, 'access-token-b', 3)
-    mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_B))
-    view.rerender(
-      <ClaimTraderButton
-        traderId="account/42"
-        handle="Alice Trader"
+        traderId="0xabc"
+        handle="Wallet Trader"
         userId={VIEWER_B}
-        source="binance"
+        source="hyperliquid"
       />
     )
 
-    await act(async () => {
-      confirmation.resolve(true)
-      await confirmation.promise
-    })
-
+    expect(screen.getByRole('button', { name: 'claimTrader' })).toBeDisabled()
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
     expect(mockPush).not.toHaveBeenCalled()
   })
 
-  it('opens only one CEX confirmation for a same-tick double click', async () => {
+  it('keeps unsupported CEX claims inert under repeated clicks', async () => {
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 4)
     mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_A))
-    const confirmation = deferred<boolean>()
-    mockShowConfirm.mockReturnValue(confirmation.promise)
     render(
       <ClaimTraderButton
         traderId="account/42"
@@ -235,15 +194,15 @@ describe('ClaimTraderButton login intent', () => {
       />
     )
 
-    const button = await screen.findByRole('button', { name: 'claimTrader' })
+    const button = await screen.findByRole('button', { name: 'claimSourceUnsupportedTitle' })
     act(() => {
       button.click()
       button.click()
     })
 
-    expect(mockShowConfirm).toHaveBeenCalledTimes(1)
     expect(button).toBeDisabled()
-    await act(async () => confirmation.resolve(false))
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
   })
 
   it('navigates only once for a same-tick DEX double click', async () => {

@@ -24,13 +24,27 @@ import {
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
 
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
+
 /**
  * GET /api/traders/verified?trader_id=xxx&source=yyy
  * Public: check if a trader is verified
  */
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const supabase = getSupabaseAdmin()
@@ -39,30 +53,32 @@ export async function GET(request: NextRequest) {
     const source = searchParams.get('source')
 
     if (!traderId || !source) {
-      return success({ is_verified: false, verified_trader: null })
+      return withPrivateNoStore(success({ is_verified: false, verified_trader: null }))
     }
 
     const verified = await getVerifiedTrader(supabase, traderId, source)
 
-    return success({
-      is_verified: !!verified,
-      verified_trader: verified
-        ? {
-            display_name: verified.display_name,
-            bio: verified.bio,
-            avatar_url: verified.avatar_url,
-            twitter_url: verified.twitter_url,
-            telegram_url: verified.telegram_url,
-            discord_url: verified.discord_url,
-            website_url: verified.website_url,
-            profile_version: verified.profile_version,
-            verified_at: verified.verified_at,
-            verification_method: verified.verification_method,
-          }
-        : null,
-    })
+    return withPrivateNoStore(
+      success({
+        is_verified: !!verified,
+        verified_trader: verified
+          ? {
+              display_name: verified.display_name,
+              bio: verified.bio,
+              avatar_url: verified.avatar_url,
+              twitter_url: verified.twitter_url,
+              telegram_url: verified.telegram_url,
+              discord_url: verified.discord_url,
+              website_url: verified.website_url,
+              profile_version: verified.profile_version,
+              verified_at: verified.verified_at,
+              verification_method: verified.verification_method,
+            }
+          : null,
+      })
+    )
   } catch (error: unknown) {
-    return handleError(error, 'verified trader GET')
+    return withPrivateNoStore(handleError(error, 'verified trader GET'))
   }
 }
 
@@ -72,7 +88,7 @@ export async function GET(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -144,16 +160,18 @@ export async function PUT(request: NextRequest) {
       throw ApiError.forbidden('You do not own this verified trader profile')
     }
 
-    return success({ verified_trader: updated })
+    return withPrivateNoStore(success({ verified_trader: updated }))
   } catch (error: unknown) {
     if (isVerifiedTraderProfileConflict(error)) {
-      return handleError(
-        new ApiError('Profile changed since it was loaded; your draft was not saved', {
-          code: ErrorCode.DUPLICATE_ACTION,
-        }),
-        'verified trader PUT'
+      return withPrivateNoStore(
+        handleError(
+          new ApiError('Profile changed since it was loaded; your draft was not saved', {
+            code: ErrorCode.DUPLICATE_ACTION,
+          }),
+          'verified trader PUT'
+        )
       )
     }
-    return handleError(error, 'verified trader PUT')
+    return withPrivateNoStore(handleError(error, 'verified trader PUT'))
   }
 }

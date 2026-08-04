@@ -12,7 +12,7 @@ import ErrorState from '@/app/components/ui/ErrorState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { EXCHANGE_CONFIGS, type ExchangeId } from './exchange-configs'
+import { EXCHANGE_CONFIGS, v1ExchangeBindingSelection } from './exchange-configs'
 
 function ApiKeyAuthContent() {
   const searchParams = useSearchParams()
@@ -20,11 +20,11 @@ function ApiKeyAuthContent() {
   const push = router.push
   const { t, language } = useLanguage()
   const { showToast } = useToast()
-  const exchangeParam = searchParams.get('exchange') as ExchangeId | null
+  const exchangeParam = searchParams.get('exchange')
+  const selectedExchange = v1ExchangeBindingSelection(exchangeParam)
 
   const [userId, setUserId] = useState<string | null>(null)
   const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [selectedExchange, setSelectedExchange] = useState<ExchangeId | null>(exchangeParam)
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
@@ -69,12 +69,10 @@ function ApiKeyAuthContent() {
   // exchange), funnel them back to the single entry point (the method chooser)
   // instead of showing a second, parallel exchange picker.
   useEffect(() => {
-    if (exchangeParam && exchangeParam in EXCHANGE_CONFIGS) {
-      setSelectedExchange(exchangeParam)
-    } else {
+    if (!selectedExchange) {
       router.replace('/exchange/auth')
     }
-  }, [exchangeParam, router])
+  }, [router, selectedExchange])
 
   const handlePaste = async (field: 'apiKey' | 'apiSecret' | 'passphrase') => {
     try {
@@ -89,12 +87,13 @@ function ApiKeyAuthContent() {
   }
 
   const handleSubmit = async () => {
-    if (!selectedExchange || !apiKey || !apiSecret) {
+    const supportedExchange = v1ExchangeBindingSelection(selectedExchange)
+    if (!supportedExchange || !apiKey || !apiSecret) {
       setError(t('fillAllRequired'))
       return
     }
 
-    const config = EXCHANGE_CONFIGS[selectedExchange]
+    const config = EXCHANGE_CONFIGS[supportedExchange]
     if (config.needsPassphrase && !passphrase) {
       setError(t('fillPassphrase'))
       return
@@ -118,7 +117,7 @@ function ApiKeyAuthContent() {
         return
       }
 
-      const response = await fetch('/api/exchange/connect', {
+      const response = await fetch('/api/trader/authorize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +125,7 @@ function ApiKeyAuthContent() {
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
-          exchange: selectedExchange,
+          platform: supportedExchange,
           apiKey,
           apiSecret,
           passphrase: config.needsPassphrase ? passphrase : undefined,

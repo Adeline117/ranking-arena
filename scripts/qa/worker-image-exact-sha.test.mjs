@@ -55,31 +55,15 @@ test('builds a deployable worker image whenever deterministic runtime inputs cha
   assert.match(deployGate, /steps\.worker_fleet\.outcome == 'success'/)
 })
 
-test('manual image builds remain exact origin/main through alias promotion', () => {
-  const deriveStart = imageWorkflow.indexOf('- name: Derive deterministic worker release ID')
-  const smokeStart = imageWorkflow.indexOf(
-    '- name: Smoke quarantine digest — stamp + actual module loads'
-  )
-  const recheckStart = imageWorkflow.indexOf(
-    '- name: Recheck manual dispatch exact main before promotion'
-  )
-  const promoteStart = imageWorkflow.indexOf(
-    '- name: Promote verified digest to release and SHA aliases'
+test('worker image publication has no arbitrary-ref manual trigger', () => {
+  const trigger = imageWorkflow.slice(
+    imageWorkflow.indexOf('on:'),
+    imageWorkflow.indexOf('concurrency:')
   )
 
-  const manualConditions = imageWorkflow.match(/if: github\.event_name == 'workflow_dispatch'/g)
-  assert.equal(manualConditions?.length, 2)
-  assert.ok(
-    imageWorkflow.indexOf('- name: Require manual dispatch to target exact origin/main') <
-      deriveStart,
-    'manual exact-main gate must precede release derivation'
-  )
-  assert.ok(recheckStart > smokeStart, 'manual exact-main recheck must follow digest smoke')
-  assert.ok(recheckStart < promoteStart, 'manual exact-main recheck must precede alias promotion')
-  assert.equal(imageWorkflow.match(/refs\/heads\/main:refs\/remotes\/origin\/main/g)?.length, 2)
-  assert.equal(imageWorkflow.match(/\[ "\$GITHUB_SHA" != "\$main_sha" \]/g)?.length, 2)
-  assert.match(imageWorkflow, /manual worker image source is not exact origin\/main/)
-  assert.match(imageWorkflow, /manual worker image source stopped being exact origin\/main/)
+  assert.doesNotMatch(trigger, /workflow_dispatch/)
+  assert.doesNotMatch(imageWorkflow, /github\.event_name == 'workflow_dispatch'/)
+  assert.doesNotMatch(imageWorkflow, /manual worker image source/)
 })
 
 test('publishes only a quarantine tag until digest-level smoke succeeds', () => {
@@ -133,5 +117,5 @@ test('promotes the verified digest without overwriting conflicting formal aliase
   assert.match(promote, /promoted_digest="\$\(inspect_digest "\$ref"\)"/)
   assert.match(promote, /worker-image-release\.json/)
   assert.match(promote, /digest_ref/)
-  assert.match(imageWorkflow, /actions\/upload-artifact@v4/)
+  assert.match(imageWorkflow, /actions\/upload-artifact@[0-9a-f]{40}/)
 })

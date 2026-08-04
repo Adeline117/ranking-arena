@@ -8,13 +8,21 @@
 # 安全：连接用**只读角色 arena_backup_ro**(pg_read_all_data + BYPASSRLS)而非主
 # service DATABASE_URL——GH secret 泄露最坏只能读(可 exfiltrate)、不能写(不可
 # 破坏/勒索)。已实测 ro 角色读 arena.trader_stats=415544 行与主 URL 一致(完整)。
+#
+# SECURITY SUSPENDED (V1 NO-GO): main currently has no enforceable protection,
+# so scheduled default-branch code must not receive database, R2, or alerting
+# credentials. Every job is fixed false below. Restore only after those values
+# are environment-only, the environment has a required reviewer, and main is
+# protected against direct writes; then obtain a fresh qualified backup first.
 
 name: DB Backup to R2
+
+permissions:
+  contents: read
 
 on:
   schedule:
     - cron: '30 15 * * *' # 每日 15:30 UTC（错峰 Mac Mini 本地 03:30）
-  workflow_dispatch: {}
 
 concurrency:
   group: backup-db
@@ -22,11 +30,15 @@ concurrency:
 
 jobs:
   backup:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -51,11 +63,30 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: node scripts/maintenance/backup-to-r2.mjs
 
+  notify:
+    needs: backup
+    # Resume condition: ${{ always() && needs.backup.result != 'success' }}
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Alert on failure
-        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: |
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-              -d "text=🚨 [GH Actions] DB 备份失败（arena+public → R2）—— 人工查 workflow 日志" || true
+          set -euo pipefail
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo '::error::TELEGRAM_BOT_TOKEN is missing; backup failure alert cannot be delivered'
+            exit 1
           fi
+          if [ -z "$TELEGRAM_ALERT_CHAT_ID" ]; then
+            echo '::error::TELEGRAM_ALERT_CHAT_ID is missing; backup failure alert cannot be delivered'
+            exit 1
+          fi
+          response="$(curl --fail-with-body --silent --show-error \
+            --connect-timeout 5 --max-time 15 -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=$TELEGRAM_ALERT_CHAT_ID" \
+            -d "text=🚨 [GH Actions] DB 备份失败（arena+public → R2）—— 人工查 workflow 日志")"
+          jq -e '.ok == true' <<<"$response" >/dev/null

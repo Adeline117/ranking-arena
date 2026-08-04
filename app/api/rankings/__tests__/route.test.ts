@@ -53,6 +53,7 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 const mockTieredGetOrSet = jest.fn()
 const mockTieredGet = jest.fn()
 const mockReadSharedCacheWriteFence = jest.fn()
+const mockGetCanonicalPublicRanking = jest.fn()
 jest.mock('@/lib/cache/redis-layer', () => ({
   tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
   tieredGet: (...args: unknown[]) => mockTieredGet(...args),
@@ -61,6 +62,14 @@ jest.mock('@/lib/cache/redis-layer', () => ({
 jest.mock('@/lib/cache', () => ({
   readSharedCacheWriteFence: (...args: unknown[]) => mockReadSharedCacheWriteFence(...args),
 }))
+
+jest.mock('@/lib/rankings/canonical-public-cache', () => {
+  const actual = jest.requireActual('@/lib/rankings/canonical-public-cache')
+  return {
+    ...actual,
+    getCanonicalPublicRanking: (...args: unknown[]) => mockGetCanonicalPublicRanking(...args),
+  }
+})
 
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
@@ -138,6 +147,15 @@ describe('GET /api/rankings', () => {
       key: 'public-rankings:write-fence:v1',
       token: '7',
     })
+    mockGetCanonicalPublicRanking.mockImplementation(
+      async ({ load }: { load: (context: unknown) => Promise<unknown> }) => ({
+        payload: await load({
+          signal: new AbortController().signal,
+          writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+        }),
+        source: 'fresh',
+      })
+    )
     // Default: Supabase query returns empty results
     mockSupabaseQuery.mockReturnValue(makeChainableQuery())
   })
@@ -160,6 +178,16 @@ describe('GET /api/rankings', () => {
 
     expect(res.status).toBe(400)
     expect(body.error).toMatch(/window/i)
+  })
+
+  it('rejects the unimplemented cursor instead of silently repeating page zero', async () => {
+    const req = new NextRequest('http://localhost/api/rankings?window=90d&cursor=score%3Aid')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.error).toMatch(/cursor.*not supported/i)
+    expect(mockSupabaseQuery).not.toHaveBeenCalled()
   })
 
   it('returns 400 for invalid category', async () => {
@@ -249,7 +277,7 @@ describe('GET /api/rankings', () => {
       is_stale: false,
       availableSources: ['binance_futures'],
     }
-    mockTieredGetOrSet.mockResolvedValue(mockResult)
+    mockGetCanonicalPublicRanking.mockResolvedValue({ payload: mockResult, source: 'live' })
 
     const req = new NextRequest('http://localhost/api/rankings?window=90d')
     const res = await GET(req)
@@ -264,14 +292,17 @@ describe('GET /api/rankings', () => {
   })
 
   it('accepts valid category filter', async () => {
-    mockTieredGetOrSet.mockResolvedValue({
-      traders: [],
-      window: '30D',
-      totalcount: 0,
-      total_count: 0,
-      as_of: new Date().toISOString(),
-      is_stale: false,
-      availableSources: [],
+    mockGetCanonicalPublicRanking.mockResolvedValue({
+      payload: {
+        traders: [],
+        window: '30D',
+        totalcount: 0,
+        total_count: 0,
+        as_of: new Date().toISOString(),
+        is_stale: false,
+        availableSources: [],
+      },
+      source: 'live',
     })
 
     const req = new NextRequest('http://localhost/api/rankings?window=30d&category=futures')
@@ -299,14 +330,17 @@ describe('GET /api/rankings', () => {
 
   it('clamps limit to max 500', async () => {
     // The route clamps limit to 500 internally. We verify no error is thrown.
-    mockTieredGetOrSet.mockResolvedValue({
-      traders: [],
-      window: '90D',
-      totalcount: 0,
-      total_count: 0,
-      as_of: new Date().toISOString(),
-      is_stale: false,
-      availableSources: [],
+    mockGetCanonicalPublicRanking.mockResolvedValue({
+      payload: {
+        traders: [],
+        window: '90D',
+        totalcount: 0,
+        total_count: 0,
+        as_of: new Date().toISOString(),
+        is_stale: false,
+        availableSources: [],
+      },
+      source: 'live',
     })
 
     const req = new NextRequest('http://localhost/api/rankings?window=90d&limit=9999')
@@ -437,6 +471,8 @@ describe('GET /api/rankings', () => {
       )
       expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
       expect(freshnessQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+      expect(rankingQuery?.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal))
+      expect(freshnessQuery?.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal))
     } finally {
       jest.useRealTimers()
     }
@@ -513,15 +549,16 @@ describe('GET /api/rankings', () => {
   // --- Composite Window ---
 
   it('accepts composite window', async () => {
-    mockTieredGet.mockResolvedValue({ data: null })
-    mockTieredGetOrSet.mockResolvedValue({
-      traders: [],
-      window: 'COMPOSITE',
-      totalcount: 0,
-      total_count: 0,
-      as_of: new Date().toISOString(),
-      is_stale: false,
-      availableSources: [],
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [],
+        window: 'COMPOSITE',
+        totalcount: 0,
+        total_count: 0,
+        as_of: new Date().toISOString(),
+        is_stale: false,
+        availableSources: [],
+      },
     })
 
     const req = new NextRequest('http://localhost/api/rankings?window=composite')
@@ -587,25 +624,77 @@ describe('GET /api/rankings', () => {
     ])
   })
 
+  it('caps a precomputed composite canonical payload at 500 while preserving its total', async () => {
+    const traders = Array.from({ length: 1_000 }, (_, index) => ({
+      platform: 'binance_futures',
+      trader_key: `trader-${index + 1}`,
+      rank: index + 1,
+    }))
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders,
+        window: 'COMPOSITE',
+        totalcount: 1_000,
+        total_count: 1_000,
+        availableSources: ['binance_futures'],
+      },
+    })
+
+    const res = await GET(
+      new NextRequest('http://localhost/api/rankings?window=composite&limit=500')
+    )
+    const body = await res.json()
+    const data = body.data ?? body
+
+    expect(data.traders).toHaveLength(500)
+    expect(data.totalCount).toBe(1_000)
+    expect(data.hasMore).toBe(true)
+  })
+
+  it('queries a category composite directly instead of subsetting the global precompute', async () => {
+    const generation = '2026-07-18T11:55:00.000Z'
+    mockSupabaseQuery.mockImplementation((table: string) => {
+      if (table === 'leaderboard_count_cache') {
+        return makeChainableQuery({
+          data: [{ source: '_all_gt0', total_count: 0, updated_at: generation }],
+          error: null,
+          count: 1,
+        })
+      }
+      return makeChainableQuery({ data: [], error: null, count: 0 })
+    })
+
+    const res = await GET(
+      new NextRequest('http://localhost/api/rankings?window=composite&category=futures')
+    )
+
+    expect(res.status).toBe(200)
+    expect(mockTieredGet).not.toHaveBeenCalled()
+    expect(mockSupabaseQuery).toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
   it('sanitizes a polluted hot-cache page without dropping safe rows after it', async () => {
     const first = { platform: 'binance_futures', trader_key: 'first' }
     const last = { platform: 'hyperliquid', trader_key: 'last' }
-    mockTieredGetOrSet.mockResolvedValue({
-      traders: [first, { platform: 'okx_web3_solana', trader_key: 'blocked' }, last],
-      window: '90D',
-      totalCount: 999,
-      totalcount: 999,
-      total_count: 999,
-      hasMore: true,
-      next_cursor: 'blocked-cursor',
-      as_of: 'blocked-aggregate-watermark',
-      is_stale: false,
-      availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
-      source_freshness: [
-        { source: 'binance_futures', updated_at: 'safe' },
-        { source: 'okx_web3_solana', updated_at: 'blocked' },
-        { source: 'hyperliquid', updated_at: 'safe' },
-      ],
+    mockGetCanonicalPublicRanking.mockResolvedValue({
+      payload: {
+        traders: [first, { platform: 'okx_web3_solana', trader_key: 'blocked' }, last],
+        window: '90D',
+        totalCount: 999,
+        totalcount: 999,
+        total_count: 999,
+        hasMore: true,
+        next_cursor: 'blocked-cursor',
+        as_of: 'blocked-aggregate-watermark',
+        is_stale: false,
+        availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
+        source_freshness: [
+          { source: 'binance_futures', updated_at: 'safe' },
+          { source: 'okx_web3_solana', updated_at: 'blocked' },
+          { source: 'hyperliquid', updated_at: 'safe' },
+        ],
+      },
+      source: 'live',
     })
 
     const req = new NextRequest('http://localhost/api/rankings?window=90d')
@@ -613,15 +702,13 @@ describe('GET /api/rankings', () => {
     const body = await res.json()
     const data = body.data ?? body
 
-    expect(mockTieredGetOrSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v6:api:rankings:v3:/),
-      expect.any(Function),
-      'hot',
-      ['rankings:public-rank-policy-v6'],
-      {
-        skipMemory: true,
-        writeFenceKey: 'public-rankings:write-fence:v1',
-      }
+    expect(mockGetCanonicalPublicRanking).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keys: {
+          liveKey: 'public-rank-policy-v6:canonical:v1:api:rankings:90d:all:live',
+          lkgKey: 'public-rank-policy-v6:canonical:v1:api:rankings:90d:all:lkg',
+        },
+      })
     )
     expect(data.traders).toEqual([first, last])
     expect(data).toEqual(
@@ -662,16 +749,31 @@ describe('GET /api/rankings', () => {
 
   // --- Error Handling ---
 
-  it('returns 500 when an internal error occurs', async () => {
-    mockTieredGetOrSet.mockRejectedValue(new Error('DB connection failed'))
-    mockTieredGet.mockResolvedValue({ data: null })
+  it('does not publish a canonical ranking when count authority fails', async () => {
+    mockSupabaseQuery.mockImplementation((table: string) => {
+      if (table === 'leaderboard_count_cache') {
+        return makeChainableQuery({
+          data: null,
+          error: { message: 'count unavailable' },
+          count: 0,
+        })
+      }
+      return makeChainableQuery({ data: [], error: null, count: 0 })
+    })
 
     const req = new NextRequest('http://localhost/api/rankings?window=90d')
     const res = await GET(req)
-    const body = await res.json()
 
-    expect(res.status).toBe(500)
-    // Error response — the exact message depends on middleware locale
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(503)
+  })
+
+  it('returns 503 when dependencies fail and no canonical LKG exists', async () => {
+    mockGetCanonicalPublicRanking.mockRejectedValue(new Error('DB connection failed'))
+
+    const req = new NextRequest('http://localhost/api/rankings?window=90d')
+    const res = await GET(req)
+    await res.json()
+
+    expect(res.status).toBe(503)
   })
 })

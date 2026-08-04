@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import EmptyState from '@/app/components/ui/EmptyState'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import { authedFetch } from '@/lib/api/client'
+import { trackEvent } from '@/lib/analytics/track'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import {
   captureSettingsViewer,
@@ -419,6 +420,13 @@ function ViewerScopedAlertConfig({
       }
       const savedAlertId = savedAlert.id
       setAlert((current) => ({ ...current, id: savedAlertId }))
+      if (alertSnapshot.id === undefined) {
+        trackEvent('create_trader_alert', {
+          traderId,
+          source: source || '',
+          step: 'persisted',
+        })
+      }
       showToastRef.current(tRef.current('alertEnabled'), 'success')
     } catch (error) {
       if (!operationIsCurrent(operation, saveOperationRef)) return

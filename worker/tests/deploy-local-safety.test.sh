@@ -135,6 +135,8 @@ write_function_wrapper() {
       "${LOSE_LOCK_AT_ROLLBACK_PHASE:-}"
     printf 'export FAKE_MODULE_STATUS=%q\n' "${FAKE_MODULE_STATUS:-0}"
     printf 'export FAKE_PREFLIGHT_STATUS=%q\n' "${FAKE_PREFLIGHT_STATUS:-0}"
+    printf 'export FAKE_RESIDUAL_INGEST_PROCESS=%q\n' \
+      "${FAKE_RESIDUAL_INGEST_PROCESS:-0}"
     declare -f fail emit_test_archive fake_npm_ci fake_git_environment fake_git_provenance \
       "$function_name"
     printf '%s "$@"\n' "$function_name"
@@ -292,6 +294,10 @@ install_common_fake_functions() {
   ssh() { fail "local deployment must never invoke SSH: $*"; }
   scp() { fail "local deployment must never invoke SCP: $*"; }
   rsync() { fail "local deployment must never invoke rsync: $*"; }
+  docker() {
+    [ "${1:-}" = ps ] || fail "unexpected fake Docker invocation: $*"
+    return 0
+  }
   kill() {
     local signal="${1:-}" pid="${2:-}"
     if [ "$signal" = -0 ] && [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
@@ -312,7 +318,12 @@ install_common_fake_functions() {
       *'-axo pid=,ppid='*)
         printf '%s\n' '1 0' '4242 1' '4243 4242'
         ;;
-      *'-axo pid=,command='*) printf '%s\n' '1 /sbin/launchd' ;;
+      *'-axo pid=,command='*)
+        printf '%s\n' '1 /sbin/launchd'
+        if [ "${FAKE_RESIDUAL_INGEST_PROCESS:-0}" = 1 ]; then
+          printf '%s\n' '777 /usr/bin/node /tmp/release/worker/src/ingest-worker.ts'
+        fi
+        ;;
       *'-p 4243'*) printf '%s\n' 4242 ;;
       *'-p 4343'*) printf '%s\n' 4242 ;;
       *'-p 4242'*) printf '%s\n' 1 ;;
@@ -377,6 +388,13 @@ install_common_fake_functions() {
         [ -e "$ACTIVE_CWD_FILE.absent" ] && return 0
         return 46
         ;;
+      *arena-stopped-recovery-zero-owner@1*)
+        while IFS= read -r _; do :; done
+        [ -e "$ACTIVE_CWD_FILE.stopped" ] || [ -e "$ACTIVE_CWD_FILE.absent" ]
+        ;;
+      *arena-stopped-recovery-zero-dump-owner@1*|*arena-stopped-recovery-stopped-dumps@1*)
+        return 0
+        ;;
       *'const appName'*pm_cwd*|*'const apps'*pm_cwd*)
         while IFS= read -r _; do :; done
         if [ -n "${FINAL_REDIS_MARKER_FILE:-}" ] && \
@@ -387,7 +405,12 @@ install_common_fake_functions() {
             [ -n "${LOCK_LOST_FILE:-}" ] && : > "$LOCK_LOST_FILE"
           fi
         fi
-        [ ! -e "$ACTIVE_CWD_FILE.stopped" ] || return 41
+        if [ -e "$ACTIVE_CWD_FILE.stopped" ] && [ -s "$ACTIVE_CWD_FILE" ]; then
+          printf '0\037stopped\037%s\037%s\037%s/worker/src/ingest-worker.ts\037%s\037[]\037["--max-old-space-size=2560","--import","%s/node_modules/tsx/dist/loader.mjs"]\037fork_mode\0371\n' \
+            "$(<"$ACTIVE_CWD_FILE")" "$FAKE_NODE_PATH" "$(<"$ACTIVE_CWD_FILE")" \
+            "${FAKE_PM2_RESTARTS:-0}" "$(<"$ACTIVE_CWD_FILE")"
+          return 0
+        fi
         if [ "${FAIL_BASELINE_DURING_STABILITY:-0}" = 1 ] && \
           [ -n "${BASELINE_RECOVERY_STARTED_FILE:-}" ] && \
           [ -e "$BASELINE_RECOVERY_STARTED_FILE" ]; then
@@ -532,6 +555,9 @@ install_common_fake_functions() {
       jlist)
         if [ -e "$ACTIVE_CWD_FILE.absent" ]; then
           printf '%s\n' '[]'
+        elif [ -e "$ACTIVE_CWD_FILE.stopped" ]; then
+          printf '[{"name":"arena-ingest-worker","pid":0,"pm2_env":{"status":"stopped","pm_cwd":"%s","exec_interpreter":"%s","pm_exec_path":"%s/worker/src/ingest-worker.ts","restart_time":%s,"args":[],"node_args":["--max-old-space-size=2560","--import","%s/node_modules/tsx/dist/loader.mjs"],"exec_mode":"fork_mode","instances":1}}]\n' \
+            "$active" "$FAKE_NODE_PATH" "$active" "${FAKE_PM2_RESTARTS:-0}" "$active"
         else
           printf '[{"name":"arena-ingest-worker","pid":4242,"pm2_env":{"status":"online","pm_cwd":"%s","exec_interpreter":"%s","pm_exec_path":"%s/worker/src/ingest-worker.ts","restart_time":%s,"args":[],"node_args":["--max-old-space-size=2560","--import","%s/node_modules/tsx/dist/loader.mjs"],"exec_mode":"fork_mode","instances":1}}]\n' \
             "$active" "$FAKE_NODE_PATH" "$active" "${FAKE_PM2_RESTARTS:-0}" "$active"
@@ -539,7 +565,11 @@ install_common_fake_functions() {
         ;;
       describe|show|status) return 0 ;;
       pid)
-        if [ -e "$ACTIVE_CWD_FILE.absent" ]; then printf '%s\n' 0; else printf '%s\n' 4242; fi
+        if [ -e "$ACTIVE_CWD_FILE.absent" ] || [ -e "$ACTIVE_CWD_FILE.stopped" ]; then
+          printf '%s\n' 0
+        else
+          printf '%s\n' 4242
+        fi
         ;;
       stop)
         if [ "${FAIL_PM2_STOP_BEFORE_MUTATION:-0}" = 1 ]; then
@@ -610,13 +640,20 @@ install_common_fake_functions() {
     esac
   }
 
-  export -f git npm npx df ssh scp rsync kill ps fake_node fake_pm2 fake_npm_ci fail \
+  export -f git npm npx df ssh scp rsync docker kill ps fake_node fake_pm2 fake_npm_ci fail \
     emit_test_archive
 }
 
 run_fake_deploy() {
-  local tmp="$1"
+  local tmp="$1" status
   shift
+  invoke_fake_deploy() {
+    if [ "${ARENA_RECOVER_TEST:-0}" = 1 ]; then
+      "$@" bash "$DEPLOY_SCRIPT" "--target-sha=$TEST_SHA" --recover-from-stopped
+    else
+      "$@" bash "$DEPLOY_SCRIPT" "--target-sha=$TEST_SHA"
+    fi
+  }
   # A one-second legacy default can expire on a shell `SECONDS` boundary before
   # the first discovery attempt runs. Ordinary behavior tests get one full
   # retry window; the dedicated deadline test overrides this with 4 seconds.
@@ -638,7 +675,10 @@ run_fake_deploy() {
   GIT_DIR="$tmp/hostile-git-dir" GIT_WORK_TREE="$tmp/hostile-worktree" \
   GIT_OBJECT_DIRECTORY="$tmp/hostile-objects" \
   GIT_ALTERNATE_OBJECT_DIRECTORIES="$tmp/hostile-alternates" \
-  "$@" bash "$DEPLOY_SCRIPT" "--target-sha=$TEST_SHA"
+  invoke_fake_deploy "$@"
+  status=$?
+  unset -f invoke_fake_deploy
+  return "$status"
 }
 
 block_for_archive() {
@@ -977,6 +1017,165 @@ test_deploy_lock_and_signal_recovery_contract() {
   assert_contains "$deploy" 'recover_previous_release' \
     'post-stop EXIT and signal failures must share centralized rollback'
   echo 'ok - atomic local lock and signal-safe centralized rollback are required'
+}
+
+test_incident_hold_refuses_before_candidate_or_pm2() {
+  local tmp old_dir output status events
+  tmp="$(mktemp -d)"
+  tmp="$(cd "$tmp" && pwd -P)"
+  old_dir="$tmp/releases/$OLD_SHA-$OLD_RELEASE"
+  export EVENT_LOG="$tmp/events" ACTIVE_CWD_FILE="$tmp/active-cwd"
+  export OLD_CWD="$old_dir" CANDIDATE_FAILED_FILE="$tmp/candidate-failed"
+  : > "$EVENT_LOG"
+  printf '%s\n' "$old_dir" > "$ACTIVE_CWD_FILE"
+  make_old_release "$tmp/releases" "$tmp/shared" "$old_dir"
+  install_common_fake_functions
+  install_fake_command_wrappers "$tmp"
+  printf '%s\n' 'incident-no-go' > "$tmp/shared/.arena-ingest/ingest-deploy.hold"
+
+  set +e
+  output="$(run_fake_deploy "$tmp" 2>&1)"
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] || fail 'an armed local incident hold must refuse deployment'
+  assert_contains "$output" 'local ingest deploy is blocked by incident hold' \
+    'incident hold refusal must be explicit'
+  events="$(<"$EVENT_LOG")"
+  assert_not_contains "$events" 'npm cwd=' 'incident hold must precede candidate install'
+  assert_not_contains "$events" 'pm2 ' 'incident hold must precede every PM2 operation'
+  [ ! -e "$tmp/releases/.arena-ingest-deploy-lock-test" ] || \
+    fail 'incident hold must precede deploy-lock mutation'
+  rm -rf "$tmp"
+  echo 'ok - local incident hold blocks deploy before candidate or PM2 mutation'
+}
+
+arm_stopped_recovery_fixture() {
+  local tmp="$1" expires nonce
+  : > "$ACTIVE_CWD_FILE.stopped"
+  printf '%s\n' 'incident-no-go' > "$tmp/shared/.arena-ingest/ingest-deploy.hold"
+  printf '%s\n' 'incident-compatibility-guard' > \
+    "$tmp/releases/.arena-ingest-deploy-blocked"
+  expires=$(( $(date +%s) + 600 ))
+  nonce="$(printf 'b%.0s' {1..64})"
+  printf '%s\n' \
+    'arena.ingest-recover-from-stopped@1' \
+    "target_sha=$TEST_SHA" \
+    "expires_epoch=$expires" \
+    "nonce=$nonce" \
+    > "$tmp/shared/.arena-ingest/recover-from-stopped.go"
+  chmod 600 "$tmp/shared/.arena-ingest/recover-from-stopped.go"
+}
+
+prepare_stopped_recovery_test() {
+  local tmp="$1" old_dir="$2"
+  export EVENT_LOG="$tmp/events" ACTIVE_CWD_FILE="$tmp/active-cwd"
+  export OLD_CWD="$old_dir" CANDIDATE_FAILED_FILE="$tmp/candidate-failed"
+  : > "$EVENT_LOG"
+  printf '%s\n' "$old_dir" > "$ACTIVE_CWD_FILE"
+  make_old_release "$tmp/releases" "$tmp/shared" "$old_dir"
+  install_common_fake_functions
+  install_fake_command_wrappers "$tmp"
+}
+
+test_stopped_recovery_requires_one_time_confirmation() {
+  local tmp old_dir output status events
+  tmp="$(mktemp -d)"; tmp="$(cd "$tmp" && pwd -P)"
+  old_dir="$tmp/releases/$OLD_SHA-$OLD_RELEASE"
+  prepare_stopped_recovery_test "$tmp" "$old_dir"
+  : > "$ACTIVE_CWD_FILE.stopped"
+  printf '%s\n' incident > "$tmp/shared/.arena-ingest/ingest-deploy.hold"
+  printf '%s\n' compatibility > "$tmp/releases/.arena-ingest-deploy-blocked"
+
+  set +e
+  output="$(ARENA_RECOVER_TEST=1 run_fake_deploy "$tmp" 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'stopped recovery without a one-time confirmation must fail'
+  assert_contains "$output" 'requires a fresh owner-only mode-0600 confirmation' \
+    'missing stopped-recovery confirmation must be explicit'
+  events="$(<"$EVENT_LOG")"
+  assert_not_contains "$events" 'pm2 stop' 'missing confirmation must not stop PM2'
+  assert_not_contains "$events" 'pm2 save' 'missing confirmation must not rewrite PM2 dumps'
+  assert_not_contains "$events" 'npm cwd=' 'missing confirmation must precede candidate preparation'
+  [ -e "$tmp/shared/.arena-ingest/ingest-deploy.hold" ] || fail 'missing confirmation must retain primary hold'
+  [ -e "$tmp/releases/.arena-ingest-deploy-blocked" ] || fail 'missing confirmation must retain compatibility guard'
+  rm -rf "$tmp"
+  echo 'ok - local stopped recovery requires an unlogged one-time host confirmation'
+}
+
+test_stopped_recovery_rejects_residual_os_owner() {
+  local tmp old_dir output status
+  tmp="$(mktemp -d)"; tmp="$(cd "$tmp" && pwd -P)"
+  old_dir="$tmp/releases/$OLD_SHA-$OLD_RELEASE"
+  prepare_stopped_recovery_test "$tmp" "$old_dir"
+  arm_stopped_recovery_fixture "$tmp"
+  export FAKE_RESIDUAL_INGEST_PROCESS=1
+  install_fake_command_wrappers "$tmp"
+
+  set +e
+  output="$(ARENA_RECOVER_TEST=1 run_fake_deploy "$tmp" 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'a residual local ingest OS process must block stopped recovery'
+  assert_contains "$output" 'live ingest OS process' 'residual process refusal must be explicit'
+  [ -e "$tmp/shared/.arena-ingest/ingest-deploy.hold" ] || fail 'residual owner failure must keep primary hold armed'
+  [ -e "$tmp/releases/.arena-ingest-deploy-blocked" ] || fail 'residual owner failure must keep compatibility guard armed'
+  unset FAKE_RESIDUAL_INGEST_PROCESS
+  rm -rf "$tmp"
+  echo 'ok - local stopped recovery rejects residual OS ownership'
+}
+
+test_stopped_recovery_failure_stays_stopped_and_rearms_holds() {
+  local tmp old_dir output status events candidate_starts old_starts
+  tmp="$(mktemp -d)"; tmp="$(cd "$tmp" && pwd -P)"
+  old_dir="$tmp/releases/$OLD_SHA-$OLD_RELEASE"
+  prepare_stopped_recovery_test "$tmp" "$old_dir"
+  arm_stopped_recovery_fixture "$tmp"
+  export FAIL_FIRST_CANDIDATE_READY=1
+  install_fake_command_wrappers "$tmp"
+
+  set +e
+  output="$(ARENA_RECOVER_TEST=1 run_fake_deploy "$tmp" 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'failed stopped-recovery candidate must not report success'
+  assert_contains "$output" 'worker remains stopped and both holds remain armed' \
+    'failed stopped recovery must report zero-owner quarantine'
+  [ -e "$ACTIVE_CWD_FILE.stopped" ] || fail 'failed stopped recovery must leave PM2 stopped'
+  [ -e "$tmp/shared/.arena-ingest/ingest-deploy.hold" ] || fail 'failed stopped recovery must re-arm primary hold'
+  [ -e "$tmp/releases/.arena-ingest-deploy-blocked" ] || fail 'failed stopped recovery must retain compatibility guard'
+  events="$(<"$EVENT_LOG")"
+  candidate_starts="$(grep -c 'pm2 start ' <<<"$events" || true)"
+  old_starts="$(grep -c "pm2 start $old_dir" <<<"$events" || true)"
+  [ "$candidate_starts" -ge 1 ] || fail 'failure fixture must reach candidate start'
+  [ "$old_starts" -eq 0 ] || fail 'stopped recovery must never restart the old release'
+  [ "$(grep -c 'pm2 save --force' <<<"$events" || true)" -ge 4 ] || \
+    fail 'baseline and quarantine must each update both PM2 dump generations'
+  unset FAIL_FIRST_CANDIDATE_READY
+  rm -rf "$tmp"
+  echo 'ok - failed local stopped recovery remains stopped with both holds armed'
+}
+
+test_stopped_recovery_success_starts_only_proven_candidate() {
+  local tmp old_dir output events
+  tmp="$(mktemp -d)"; tmp="$(cd "$tmp" && pwd -P)"
+  old_dir="$tmp/releases/$OLD_SHA-$OLD_RELEASE"
+  prepare_stopped_recovery_test "$tmp" "$old_dir"
+  arm_stopped_recovery_fixture "$tmp"
+
+  output="$(ARENA_RECOVER_TEST=1 run_fake_deploy "$tmp" 2>&1)" || \
+    fail "valid local stopped recovery failed: $output"
+  assert_contains "$output" '✓ local deploy complete' 'successful recovery must prove the candidate'
+  [ ! -e "$ACTIVE_CWD_FILE.stopped" ] || fail 'successful recovery must leave the proven candidate online'
+  [ ! -e "$tmp/shared/.arena-ingest/ingest-deploy.hold" ] || fail 'successful recovery must consume primary hold'
+  [ ! -e "$tmp/releases/.arena-ingest-deploy-blocked" ] || fail 'successful recovery must clear transactional guard'
+  [ ! -e "$tmp/shared/.arena-ingest/recover-from-stopped.go" ] || fail 'successful recovery must consume GO file'
+  events="$(<"$EVENT_LOG")"
+  [ "$(grep -c "pm2 start $old_dir" <<<"$events" || true)" -eq 0 ] || \
+    fail 'successful stopped recovery must never start the old release'
+  rm -rf "$tmp"
+  echo 'ok - successful local stopped recovery starts only the exact proven candidate'
 }
 
 test_busy_lock_refuses_before_candidate_or_pm2_stop() {
@@ -2170,6 +2369,11 @@ test_archive_invocation_has_no_ui_paths
 test_release_owned_dependencies_and_secret_scope
 test_all_candidate_gates_precede_pm2_stop
 test_deploy_lock_and_signal_recovery_contract
+test_incident_hold_refuses_before_candidate_or_pm2
+test_stopped_recovery_requires_one_time_confirmation
+test_stopped_recovery_rejects_residual_os_owner
+test_stopped_recovery_failure_stays_stopped_and_rearms_holds
+test_stopped_recovery_success_starts_only_proven_candidate
 test_busy_lock_refuses_before_candidate_or_pm2_stop
 test_runtime_mismatch_fails_before_pm2_stop
 test_disk_module_and_database_failures_precede_pm2_stop

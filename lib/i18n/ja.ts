@@ -111,8 +111,8 @@ const ja = {
   overview: '概要',
   writeComment: 'コメントを書く...',
   bindExchangeAccount: '取引所アカウントを連携',
-  bindExchangeDescription: '連携後、詳細な取引統計を確認できます',
-  bindExchangeAccountFull: '取引所アカウントを連携すると、詳細な取引統計を確認できます',
+  bindExchangeDescription: '非公開の読み取り専用取引所アカウント接続を保存します',
+  bindExchangeAccountFull: '読み取り専用の取引所接続を保存し、接続状態を手動で確認・更新できます。',
   bindExchange: '連携',
   goToSettings: '設定へ移動',
   connected: '接続済み',
@@ -123,14 +123,13 @@ const ja = {
   disconnectFailed: '接続解除に失敗しました',
   disconnected: '接続解除済み',
   pleaseLogin: 'ログインしてください',
-  syncSuccess: 'データの同期に成功しました！',
+  syncSuccess: '接続状態を更新しました。',
   syncError: '同期に失敗しました',
   lastSync: '最終同期：',
   syncErrorMsg: '同期エラー：',
-  clickToBind:
-    'ボタンをクリックして{exchange}のログインページに移動します。ログイン成功後、システムが自動的に取引データを取得します。',
-  bindSuccess: '連携に成功しました！データが同期されました。',
-  bindSuccessSyncing: '連携に成功しました！データを同期中...',
+  clickToBind: 'Arenaの{exchange} API Keyガイドを開き、読み取り専用のアカウント接続を保存します。',
+  bindSuccess: '読み取り専用のアカウント接続を保存しました。',
+  bindSuccessSyncing: '読み取り専用のアカウント接続を保存しました。',
   completeBind: '完了',
   binding: '連携中...',
   bindTip:
@@ -330,7 +329,8 @@ const ja = {
   languageKo: '韓国語',
   filterByLanguage: '言語でフィルター',
   apiKeyBindTitle: 'API Keyで取引所を連携',
-  apiKeyBindDesc: '以下の手順に従って、読み取り専用のAPI Keyを作成し、取引データを安全に同期します',
+  apiKeyBindDesc:
+    'プライベートなアカウント接続用の読み取り専用API Keyを作成します。ランキングプロフィールの認証や公開には使用されません。',
   selectExchange: '取引所を選択',
   operationStepsLabel: '手順',
   estimatedTime: '約2分',
@@ -2963,7 +2963,7 @@ const ja = {
 
   bindExchangeBannerTitle: '取引所アカウントを接続',
   bindExchangeBannerDesc:
-    '読み取り専用APIで実際のポジションと実績をポートフォリオに同期します（リーダーボードのトレーダーID申請とは別です）',
+    '非公開の読み取り専用接続を保存し、状態を手動で確認します。ポートフォリオやランキングプロフィールは公開されません。',
   goToBind: '接続',
 
   searchDropdownResults: '検索結果',
@@ -3354,16 +3354,16 @@ const ja = {
   adminReportNsfw: '不適切',
   adminReportOther2: 'その他',
 
-  authorizeTitle: 'リアル取引データを認証',
+  authorizeTitle: '読み取り専用の取引所接続を保存',
   authorizeDesc:
-    '認証後、あなたのリアルな取引データがリーダーボードにリアルタイムで表示され、より高い信頼性と注目を得られます。',
-  authorizeBenefits: '特典：',
-  authorizeRealTimePositions: 'リアルタイムポジション表示',
-  authorizeSuccess: '認証に成功しました！設定にリダイレクトします...',
+    '非公開のアカウント接続を保存します。リーダーボードのプロフィールを認証・公開するものではありません。',
+  authorizeBenefits: '接続範囲：',
+  authorizeRealTimePositions: '読み取り専用のアカウントアクセス',
+  authorizeSuccess: '接続を保存しました！設定にリダイレクトします...',
   authorizeSecurityNote:
     'API認証情報はAES-256で暗号化して保存され、取引データの読み取りのみに使用されます。取引操作は一切行えません。読み取り専用のAPI Key作成をお勧めします。',
-  authorizeSubmitSuccess: '認証に成功しました！',
-  authorizeSubmitButton: 'データ表示を認証',
+  authorizeSubmitSuccess: '接続を保存しました！',
+  authorizeSubmitButton: '接続を保存',
   authorizeStep1: '取引所アカウントにログインしてAPI管理に移動',
   authorizeStep2: '権限：「読み取り」権限のみチェック、取引や出金は有効にしない',
   authorizeStep3: '任意：セキュリティ向上のためIPホワイトリストを設定',
@@ -3611,13 +3611,13 @@ const ja = {
 
   pleaseLoginTitle: 'ログインしてください',
   loginToAuthorize: '取引アカウントを認証するにはログインが必要です',
-  authorizeRealData: 'リアル取引データを認証',
-  authBenefitsTitle: '特典：',
-  authBenefitRealtime: 'リアルタイムポジション表示',
-  authBenefitWeight: 'ランキングウェイトの向上',
-  authBenefitBadge: '公式認証バッジ',
-  authBenefitPriority: '優先おすすめ',
-  authSuccessRedirecting: '認証に成功しました！設定にリダイレクトします...',
+  authorizeRealData: '読み取り専用の取引所接続を保存',
+  authBenefitsTitle: '接続範囲：',
+  authBenefitRealtime: '読み取り専用のアカウントアクセス',
+  authBenefitWeight: 'ランキングウェイトへの影響なし',
+  authBenefitBadge: '認証バッジの付与なし',
+  authBenefitPriority: '公開プロフィールへの掲載なし',
+  authSuccessRedirecting: '接続を保存しました！設定にリダイレクトします...',
   connectExchange: '取引所を接続',
   apiKey: 'API Key',
   apiSecret: 'API Secret',
@@ -4323,6 +4323,12 @@ const ja = {
 
   portfolioPageTitle: 'ポートフォリオ',
   portfolioTitle: 'ポートフォリオ',
+  portfolioLegacyCleanup: '旧接続のクリーンアップ',
+  portfolioLegacyTitle: '旧ポートフォリオ接続は V1 で廃止されました',
+  portfolioLegacyDescription:
+    '新規接続と同期は無効です。既存の暗号化済み認証情報は Arena 上のコピーを削除するためだけに表示され、V1 のランキングやプロフィール認証には使用されません。各取引所でも旧キーを失効またはローテーションしてください。',
+  portfolioLegacySuccessor: 'V1 の非公開接続フローを開く',
+  portfolioLegacyEmpty: '旧ポートフォリオ接続は残っていません。',
   portfolioConnectExchange: '取引所を接続',
   portfolioEmptyTitle: '取引所を接続してポートフォリオを追跡',
   portfolioConnectedExchanges: '接続済みの取引所',
@@ -4646,8 +4652,24 @@ const ja = {
   statusActiveIncidents: '発生中の障害',
   statusNoIncidents: '発生中の障害はありません',
   statusNoIncidentsDesc: '監視中のすべてのサービスとデータフィードは正常に稼働しています。',
-  statusServices: 'サービス',
+  statusServices: 'コア API と依存関係',
+  statusCoreApiNote:
+    '公開 /api/rankings と /api/traders は、上記の API・データベース・鮮度オーソリティに依存します。オーソリティが利用できない場合、正常とは推定しません。',
   statusDataFreshness: 'データ鮮度',
+  statusSourceBoardCoverage: 'ランキングソースボードのカバレッジ',
+  statusBoardsVisible: '想定 {expected} ボード中 {visible} ボードが表示可能',
+  statusRankingSourceFreshness: 'ランキングソースの鮮度',
+  statusSourcesFresh: '{fresh}/{total} ソースが新鮮',
+  statusLatestPublication: '最新の成功した {season} 公開',
+  statusRankingAuthority: 'ランキング鮮度・公開オーソリティ',
+  statusAuthorityUnavailable: '不明 — オーソリティ利用不可',
+  statusKnownLimitations: '既知の制約',
+  statusLimitationCadence:
+    'ランキングは {leaderboard} ごとに再計算され、上流ボードは通常 {sources} ごとに更新されます。個別ソースは異なる場合があります。',
+  statusLimitationCoverage:
+    'カバレッジと利用可能な指標はソースごとに異なります。欠損・古い・未証明の時間枠はフェイルクローズします。',
+  statusLimitationAvailability:
+    'ここでの可用性は現在のスナップショットであり、過去の稼働率、SLA、リアルタイム性の保証ではありません。',
   statusUnableToLoad: 'ステータスを読み込めません',
   statusLastChecked: '最終確認 {ago}',
   statusAutoRefresh: '30秒ごとに自動更新',
@@ -4690,23 +4712,26 @@ const ja = {
   claimWalletExpired: '署名の有効期限が切れました。もう一度署名してください。',
 
   // Claim - API key verification
-  claimApiKeyVerifyTitle: 'APIキー所有権の確認',
+  claimApiKeyVerifyTitle: 'CEXアカウントを接続',
   claimApiKeyVerifyDesc:
-    '取引所のAPIキーとシークレットを入力して、このトレーダーアカウントの所有者であることを確認してください。読み取り専用権限のみ使用します。',
-  claimApiKeyMismatch: 'このAPIキーはこのトレーダーアカウントに属していません。',
+    '読み取り専用APIキーはファーストパーティのアカウント同期専用です。公開ランキングのプロフィール所有権を証明できず、V1申請には使えません。',
+  claimApiKeyMismatch: 'APIキーをこの取引所アカウントと照合できませんでした。',
   claimWalletToVerifyLabel: '検証するウォレット：',
   claimExchangeErrorPrefix: '取引所からの応答：',
-  claimApiKeySuccess: 'APIキー認証に成功しました！',
+  claimApiKeySuccess: 'CEXアカウント接続を確認しました！',
 
   // Claim - Methods
-  claimVerifyMethodApi: 'APIキー',
+  claimVerifyMethodApi: 'CEXアカウント接続',
   claimVerifyMethodWallet: 'ウォレット署名',
   claimVerifyAndClaim: '認証して認領',
   claimFormSafeNote:
-    '読み取り専用APIキー（取引や出金権限なし）のみ必要です。キーはAES-256-GCMで暗号化され、ログに記録されません。',
+    '読み取り専用CEXキーは暗号化され、ファーストパーティ同期にのみ使用されます。V1ランキング申請の証明にはなりません。',
   claimSupportedExchanges: '対応取引所',
-  claimDexPlatforms: 'DEXプラットフォーム（ウォレット認証）',
-  claimCexPlatforms: 'CEXプラットフォーム（APIキー認証）',
+  claimDexPlatforms: 'V1申請（Hyperliquid・GMXウォレット）',
+  claimCexPlatforms: 'CEXアカウント接続（V1申請ではありません）',
+  claimSourceUnsupportedTitle: 'このソースの申請はまだ利用できません',
+  claimSourceUnsupportedBody:
+    'V1プロフィール申請はHyperliquidとGMXのウォレット署名のみ対応します。CEX APIキーはアカウント同期用で、公開ランキングプロフィールの所有権証明にはなりません。',
 
   // Claim page
   claimPageTitle: 'Arenaでトレーダープロフィールを申請',
@@ -4722,22 +4747,20 @@ const ja = {
   change: '変更',
   redirectingToProfile: 'プロフィールにリダイレクト中...',
   claimReadOnlyWarning:
-    'セキュリティのため、読み取り専用のAPIキーをご使用ください。取引権限は不要です。',
-  claimSolanaWalletRequired:
-    '確認のためにSolanaウォレット（Phantomなど）をインストールしてください。',
+    'CEX APIキーはファーストパーティ同期専用で、V1プロフィール申請の証明には使えません。',
   claimPageFaqTitle: 'よくある質問',
   claimPageFaqWhat: 'プロフィールの申請とは？',
   claimPageFaqWhatAnswer:
     '申請とは、Arenaのトレーダープロフィールの本人であることを確認するものです。認証されると、バッジが付与され、プロフィールの編集や限定機能へのアクセスが可能になります。',
   claimPageFaqHow: '本人確認の方法は？',
   claimPageFaqHowAnswer:
-    'CEXトレーダー（Binance、Bybit、OKXなど）は読み取り専用APIキーを提供します。DEXトレーダー（Hyperliquid、GMXなど）はウォレットでメッセージに署名します。どちらの方法でも、取引アカウントの所有権を確認できます。 認証後、簡単な手動レビュー(通常24時間以内)を経てバッジが有効になります。',
-  claimPageFaqExchanges: '対応している取引所は？',
+    'V1ではHyperliquidまたはGMXのプロフィールを選び、同じウォレットでサーバー発行の正確なchallengeに署名します。署名後も手動審査が完了するまでバッジは有効になりません。',
+  claimPageFaqExchanges: 'V1申請に対応するソースは？',
   claimPageFaqExchangesAnswer:
-    'CEX: Binance、Bybit、OKX、Bitget、Gate.io、HTX。DEX: Hyperliquid、GMX、Gains、Aevo、Kwenta、Vertex、dYdX、Jupiter Perps、Drift。',
-  claimPageFaqSafe: 'APIキーの提供は安全ですか？',
+    'HyperliquidとGMXのみです。Binance、Bybit、OKXなどのCEX APIキーは別のアカウント同期には使えますが、ランキングプロフィール申請には使えません。',
+  claimPageFaqSafe: 'CEX APIキーでプロフィールを申請できますか？',
   claimPageFaqSafeAnswer:
-    'はい。読み取り専用APIキー（取引や出金権限なし）のみ必要です。キーはAES-256-GCMで暗号化され、ログに記録されません。',
+    'できません。CEXのアカウントUIDと公開ランキングのプロフィール識別子が同一だと証明できないため、V1は安全側に拒否します。',
   claimPageCta: 'プロフィールを検索',
   claimPageSeoTitle: 'クリプトトレーダープロフィールを申請 | Arena',
   claimPageSeoDesc:
@@ -5102,7 +5125,7 @@ const ja = {
   dataSourceDerived: '派生データ',
   dataSourceHistorical: '履歴データ',
   dataSourceVerifiedTooltip:
-    'このトレーダーは本人確認済みで、リアルタイムデータへのアクセスを許可しています',
+    'このデータには審査済みの本人確認と口座直結の来歴があります。鮮度は表示時刻を確認してください。',
   dataSourcePublicTooltip: '公開取引所APIからのデータ',
   bindApiKey: 'APIキーをバインド',
   connectWallet: 'ウォレットを接続',
@@ -5797,10 +5820,10 @@ const ja = {
   provenanceSource: 'データ提供元',
   provenanceTracked: '追跡データ',
   provenanceTrackedTip:
-    '指標は取引所の公開ランキングから取得したもので、API による独立した検証はされていません。読み取り専用 API キーを接続すると ✓ 認証済み バッジを獲得できます。',
+    '指標は取引所の公開ランキングから取得しています。別の非公開 CEX 接続で、このプロフィールが認証・変更・公開されることはありません。',
   provenanceVerified: '認証済み',
   provenanceVerifiedTip:
-    '読み取り専用 API で約定を確認——数値は取引所口座から直接取得したもので、スクレイピングではありません。',
+    '口座直結データは本人対応の審査後にのみ公開されます。鮮度は表示時刻に従います。',
   provenanceAsOf: '更新',
   recordProvenanceSourceAsOf: '提供元データ基準',
   recordProvenanceObservedAt: 'Arena 取得時刻',
@@ -6441,7 +6464,8 @@ const ja = {
   wauSub: '過去7日間に実際のハートビートがあるユーザー',
   newSignups7d: '新規登録（7日）',
   activation7d: '7日間の活性化',
-  activationSub: '対象 {eligible} 人中 {activated} 人が2日以上利用',
+  activationSub: '対象 {eligible} 人中 {activated} 人が2つのUTC日付で詳細閲覧と追跡を完了',
+  activationMeasuredSince: 'アクティベーションV2は{time}から計測し、それ以前の活動は除外します。',
   journeyFunnel: 'B2C ジャーニー（ユニーク人数）',
   collectionSince: 'ファーストパーティーイベントは {time} 以降を収集し、それ以前は遡及しません。',
   collectionPending: 'イベントはまだ未受信です。0は過去の利用者ゼロを意味しません。',

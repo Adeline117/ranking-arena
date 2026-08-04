@@ -1,509 +1,216 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
-// MobileBottomNav is rendered by root layout — do not duplicate here
-import dynamic from 'next/dynamic'
 import PageHeader from '@/app/components/ui/PageHeader'
 import ErrorState from '@/app/components/ui/ErrorState'
-import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
-import PositionList from '@/app/components/portfolio/PositionList'
-
-// Lazy load: modal only opens on user action; analytics is below-the-fold
-const AddExchangeModal = dynamic(() => import('@/app/components/portfolio/AddExchangeModal'), {
-  ssr: false,
-})
-const PortfolioAnalytics = dynamic(() => import('@/app/components/portfolio/PortfolioAnalytics'), {
-  ssr: false,
-})
-import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
 import { logger } from '@/lib/logger'
+import { supabase } from '@/lib/supabase/client'
 
-interface Portfolio {
+interface LegacyPortfolioConnection {
   id: string
   exchange: string
-  label: string
+  label: string | null
   created_at: string
 }
 
-interface Position {
-  id: string
-  symbol: string
-  side: 'long' | 'short'
-  entry_price: number
-  mark_price: number
-  size: number
-  pnl: number
-  pnl_pct: number
-  leverage: number
-  updated_at: string
-  user_portfolios?: { exchange: string; label: string }
-}
-
-interface Snapshot {
-  total_equity: number
-  total_pnl: number
-  total_pnl_pct: number
-  snapshot_at: string
-}
-
-async function readListResponse<T>(response: Response, endpoint: string): Promise<T[]> {
-  if (!response.ok) {
-    throw new Error(`${endpoint} returned HTTP ${response.status}`)
-  }
-
-  const payload = (await response.json()) as { data?: unknown } | null
-  if (!Array.isArray(payload?.data)) {
-    throw new Error(`${endpoint} returned an invalid portfolio payload`)
-  }
-
-  return payload.data as T[]
-}
-
 export default function PortfolioPage() {
-  const router = useRouter()
-  const push = router.push
-  const { showToast } = useToast()
+  const { push } = useRouter()
   const { showConfirm } = useDialog()
+  const { showToast } = useToast()
   const { t } = useLanguage()
-  const [loading, setLoading] = useState(true)
-  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [token, setToken] = useState<string | null>(null)
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([])
-  const [positions, setPositions] = useState<Position[]>([])
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
-  const [hasSuccessfulLoad, setHasSuccessfulLoad] = useState(false)
+  const [connections, setConnections] = useState<LegacyPortfolioConnection[]>([])
+  const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [syncingId, setSyncingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const loadAuth = useCallback(async () => {
-    setAuthStatus('loading')
-    const result = await bootstrapClientAuth(supabase.auth)
-
-    if (result.status === 'signed-out') {
-      push('/login?redirect=/portfolio')
-      return
-    }
-    if (result.status === 'error' || !result.session?.access_token) {
-      setAuthStatus('error')
-      return
-    }
-
-    setToken(result.session.access_token)
-    setAuthStatus('ready')
-  }, [push])
-
-  useEffect(() => {
-    void loadAuth()
-  }, [loadAuth])
-
-  const fetchHeaders = useCallback((): Record<string, string> => {
-    if (!token) return { ...getCsrfHeaders() }
-    return { Authorization: `Bearer ${token}`, ...getCsrfHeaders() }
-  }, [token])
-
-  // Load portfolios + positions in parallel with request dedup
-  const lastFetchRef = useRef<number>(0)
-  const loadInFlightRef = useRef(false)
-  const loadAll = useCallback(
-    async (force = false) => {
-      if (!token) return
-      if (loadInFlightRef.current) return
-      // Skip if fetched < 30s ago (dedup rapid remounts)
-      if (!force && Date.now() - lastFetchRef.current < 30_000) return
-      lastFetchRef.current = Date.now()
-      loadInFlightRef.current = true
-      setLoading(true)
-      const headers = { Authorization: `Bearer ${token}` }
-      try {
-        const [pRes, posRes, snapRes] = await Promise.all([
-          fetch('/api/portfolio', { headers }),
-          fetch('/api/portfolio/positions', { headers }),
-          fetch('/api/portfolio/snapshots', { headers }),
-        ])
-        const [nextPortfolios, nextPositions, nextSnapshots] = await Promise.all([
-          readListResponse<Portfolio>(pRes, '/api/portfolio'),
-          readListResponse<Position>(posRes, '/api/portfolio/positions'),
-          readListResponse<Snapshot>(snapRes, '/api/portfolio/snapshots'),
-        ])
-
-        // Treat the three endpoints as one snapshot. A partial refresh must not
-        // replace last-good data with misleading empty/$0 sections.
-        setPortfolios(nextPortfolios)
-        setPositions(nextPositions)
-        setSnapshots(nextSnapshots)
-        setHasSuccessfulLoad(true)
-        setLoadFailed(false)
-      } catch (error) {
-        logger.error('Failed to refresh portfolio:', error)
-        setLoadFailed(true)
-        showToast(t('portfolioLoadFailed'), 'error')
-      } finally {
-        loadInFlightRef.current = false
-        setLoading(false)
-      }
-    },
-    [showToast, t, token]
-  )
-
-  useEffect(() => {
-    loadAll()
-  }, [loadAll])
-
-  const handleAddExchange = async (data: {
-    exchange: string
-    api_key: string
-    api_secret: string
-    api_passphrase?: string
-    label: string
-  }) => {
-    const res = await fetch('/api/portfolio', {
-      method: 'POST',
-      headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    if (!res.ok) {
-      const json = await res.json()
-      throw new Error(json.error || t('portfolioAddFailed'))
-    }
-    showToast(t('portfolioConnectSuccess'), 'success')
-    await loadAll(true)
-  }
-
-  const handleSync = async (portfolioId: string) => {
-    if (!token || syncingId) return
-    setSyncingId(portfolioId)
+  const loadConnections = useCallback(async (accessToken: string) => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/portfolio/sync', {
-        method: 'POST',
-        headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ portfolio_id: portfolioId }),
+      const response = await fetch('/api/portfolio', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
       })
-      const json = (await res.json().catch(() => null)) as {
-        data?: { synced?: boolean; reason?: string }
-      } | null
-      const reason = json?.data?.reason
-      // Map stable server reason codes → localized copy.
-      const reasonKey: Record<string, string> = {
-        geo_unavailable: 'portfolioSyncGeoUnavailable',
-        passphrase_required: 'portfolioSyncPassphraseRequired',
-        unsupported: 'portfolioSyncUnsupported',
-        keys_unreadable: 'portfolioSyncKeysUnreadable',
-        exchange_error: 'portfolioSyncExchangeError',
+      const payload = (await response.json().catch(() => null)) as { data?: unknown } | null
+      if (!response.ok || !Array.isArray(payload?.data)) {
+        throw new Error(`Legacy portfolio inventory returned HTTP ${response.status}`)
       }
-      if (!res.ok) {
-        showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'error')
-        return
-      }
-      if (json?.data?.synced === false) {
-        // Soft outcome (geo/passphrase/unsupported) — inform, don't error.
-        showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'info')
-        return
-      }
-      await loadAll(true)
-      showToast(t('portfolioSyncSuccess'), 'success')
-    } catch {
-      showToast(t('portfolioNetworkError'), 'error')
+      setConnections(payload.data as LegacyPortfolioConnection[])
+      setLoadFailed(false)
+    } catch (error) {
+      logger.error('Failed to load legacy portfolio inventory:', error)
+      setLoadFailed(true)
     } finally {
-      setSyncingId(null)
+      setLoading(false)
     }
-  }
+  }, [])
 
-  const handleDelete = async (portfolioId: string) => {
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const result = await bootstrapClientAuth(supabase.auth)
+      if (cancelled) return
+      if (result.status !== 'authenticated') {
+        if (result.status === 'signed-out') {
+          push('/login?redirect=/portfolio')
+          return
+        }
+        setLoadFailed(true)
+        setLoading(false)
+        return
+      }
+      const accessToken = result.session?.access_token
+      if (!accessToken) {
+        setLoadFailed(true)
+        setLoading(false)
+        return
+      }
+      setToken(accessToken)
+      await loadConnections(accessToken)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [loadConnections, push])
+
+  const removeConnection = async (connection: LegacyPortfolioConnection) => {
     if (!token || deletingId) return
     const confirmed = await showConfirm(t('portfolioRemoveExchange'), t('portfolioRemoveConfirm'))
     if (!confirmed) return
-    setDeletingId(portfolioId)
+
+    setDeletingId(connection.id)
     try {
-      const res = await fetch(`/api/portfolio?id=${portfolioId}`, {
+      const response = await fetch(`/api/portfolio?id=${connection.id}`, {
         method: 'DELETE',
-        headers: fetchHeaders(),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...getCsrfHeaders(),
+        },
+        cache: 'no-store',
       })
-      if (!res.ok) {
-        showToast(t('portfolioRemoveFailed'), 'error')
-        return
-      }
-      await loadAll(true)
+      if (!response.ok) throw new Error(`Legacy portfolio delete returned ${response.status}`)
+      setConnections((current) => current.filter(({ id }) => id !== connection.id))
       showToast(t('portfolioRemoved'), 'success')
-    } catch {
-      showToast(t('portfolioNetworkError'), 'error')
+    } catch (error) {
+      logger.error('Failed to remove legacy portfolio connection:', error)
+      showToast(t('portfolioRemoveFailed'), 'error')
     } finally {
       setDeletingId(null)
     }
   }
 
-  // Totals from positions
-  const totalPnl = positions.reduce((sum, p) => sum + Number(p.pnl), 0)
-  const totalEquity = positions.reduce((sum, p) => sum + Number(p.size) * Number(p.mark_price), 0)
-  const totalPnlPct = totalEquity > 0 ? (totalPnl / totalEquity) * 100 : 0
-  const isInitialLoad = loading && !hasSuccessfulLoad
+  return (
+    <main style={styles.page}>
+      <div style={styles.container}>
+        <PageHeader title={t('portfolioLegacyCleanup')} compact />
 
-  if (authStatus === 'error') {
-    return (
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <PageHeader title={t('portfolioTitle')} compact />
+        <section style={styles.notice} aria-labelledby="legacy-portfolio-notice">
+          <h2 id="legacy-portfolio-notice" style={styles.noticeTitle}>
+            {t('portfolioLegacyTitle')}
+          </h2>
+          <p style={styles.copy}>{t('portfolioLegacyDescription')}</p>
+          <Link href="/exchange/auth" style={styles.link}>
+            {t('portfolioLegacySuccessor')}
+          </Link>
+        </section>
+
+        {loadFailed ? (
           <ErrorState
-            title={t('somethingWentWrong')}
-            description={t('loadFailedRetryShort')}
-            retry={() => void loadAuth()}
+            title={t('failedToLoad')}
+            description={t('portfolioLoadFailed')}
+            retry={() => token && void loadConnections(token)}
             variant="compact"
           />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <PageHeader
-            title={t('portfolioTitle')}
-            compact
-            actions={
-              <button style={styles.addBtn} onClick={() => setShowAddModal(true)}>
-                + {t('portfolioConnectExchange')}
-              </button>
-            }
-          />
-
-          {loadFailed && (
-            <ErrorState
-              title={t('failedToLoad')}
-              description={t('portfolioLoadFailed')}
-              retry={() => void loadAll(true)}
-              variant="compact"
-            />
-          )}
-
-          {/* First-run: no connected exchange yet → a focused connect prompt
-              instead of hollow $0.00 metric cards + "no positions". */}
-          {hasSuccessfulLoad && portfolios.length === 0 ? (
-            <div style={styles.emptyState}>
-              <div style={styles.emptyIcon} aria-hidden="true">
-                📊
+        ) : loading ? (
+          <p role="status" style={styles.copy}>
+            {t('loading')}
+          </p>
+        ) : connections.length === 0 ? (
+          <p role="status" style={styles.empty}>
+            {t('portfolioLegacyEmpty')}
+          </p>
+        ) : (
+          <section aria-label={t('portfolioConnectedExchanges')} style={styles.list}>
+            {connections.map((connection) => (
+              <div key={connection.id} style={styles.row}>
+                <div>
+                  <strong style={styles.exchange}>{connection.exchange}</strong>
+                  {connection.label && connection.label !== connection.exchange ? (
+                    <span style={styles.label}>{connection.label}</span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  style={styles.remove}
+                  disabled={deletingId !== null}
+                  onClick={() => void removeConnection(connection)}
+                >
+                  {deletingId === connection.id ? t('loading') : t('portfolioRemove')}
+                </button>
               </div>
-              <h2 style={styles.emptyTitle}>{t('portfolioEmptyTitle')}</h2>
-              <p style={styles.emptyDesc}>{t('apiKeyReadOnlyHint')}</p>
-              <button style={styles.addBtn} onClick={() => setShowAddModal(true)}>
-                + {t('portfolioConnectExchange')}
-              </button>
-            </div>
-          ) : hasSuccessfulLoad || isInitialLoad ? (
-            <PortfolioOverview
-              totalEquity={totalEquity}
-              totalPnl={totalPnl}
-              totalPnlPct={totalPnlPct}
-              snapshots={snapshots}
-              isLoading={isInitialLoad}
-            />
-          ) : null}
-
-          {/* Connected exchanges */}
-          {portfolios.length > 0 && (
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>{t('portfolioConnectedExchanges')}</h2>
-              <div style={styles.exchangeList}>
-                {portfolios.map((p) => (
-                  <div key={p.id} style={styles.exchangeCard}>
-                    <div style={styles.exchangeInfo}>
-                      <span style={styles.exchangeName}>
-                        {p.exchange.charAt(0).toUpperCase() + p.exchange.slice(1)}
-                      </span>
-                      {p.label !== p.exchange && (
-                        <span style={styles.exchangeLabel}>{p.label}</span>
-                      )}
-                    </div>
-                    <div style={styles.exchangeActions}>
-                      <button
-                        style={{ ...styles.syncBtn, opacity: syncingId === p.id ? 0.6 : 1 }}
-                        onClick={() => handleSync(p.id)}
-                        disabled={!!syncingId}
-                      >
-                        {syncingId === p.id ? t('portfolioSyncing') : t('portfolioSync')}
-                      </button>
-                      <button
-                        style={{ ...styles.deleteBtn, opacity: deletingId === p.id ? 0.6 : 1 }}
-                        onClick={() => handleDelete(p.id)}
-                        disabled={!!deletingId}
-                      >
-                        {deletingId === p.id ? '...' : t('portfolioRemove')}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Analytics Dashboard */}
-          {hasSuccessfulLoad && positions.length > 0 && (
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>{t('portfolioAnalytics')}</h2>
-              <PortfolioAnalytics positions={positions} snapshots={snapshots} />
-            </div>
-          )}
-
-          {/* Positions — hidden on the first-run empty state (handled above) */}
-          {(isInitialLoad || (hasSuccessfulLoad && portfolios.length > 0)) && (
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>{t('openPositions')}</h2>
-              <PositionList positions={positions} isLoading={isInitialLoad} />
-            </div>
-          )}
-        </div>
+            ))}
+          </section>
+        )}
       </div>
-      {/* MobileBottomNav rendered in root layout */}
-
-      <AddExchangeModal
-        open={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSubmit={handleAddExchange}
-      />
-    </>
+    </main>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-    gap: '12px',
-    padding: '48px 24px',
-    borderRadius: '16px',
-    backgroundColor: 'var(--color-bg-secondary)',
-    border: '1px solid var(--color-border-primary)',
-  },
-  emptyIcon: {
-    fontSize: '40px',
-    lineHeight: 1,
-  },
-  emptyTitle: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: 700,
-    color: 'var(--color-text-primary)',
-  },
-  emptyDesc: {
-    margin: 0,
-    maxWidth: '420px',
-    fontSize: '14px',
-    lineHeight: 1.5,
-    color: 'var(--color-text-secondary)',
-  },
+const styles: Record<string, CSSProperties> = {
   page: {
     minHeight: '100vh',
-    backgroundColor: 'var(--color-bg-primary)',
-    // Was 60px, which stacked with the container's 24px top padding (~84px gap
-    // before the H1). Other (app) pages rely on the container padding alone.
-    paddingTop: '0',
+    background: 'var(--color-bg-primary)',
     paddingBottom: '80px',
   },
   container: {
-    maxWidth: '960px',
+    width: 'min(760px, calc(100% - 32px))',
     margin: '0 auto',
-    padding: '24px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
+    padding: '24px 0',
+    display: 'grid',
+    gap: '20px',
   },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '12px',
-  },
-  title: {
-    margin: 0,
-    fontSize: '24px',
-    fontWeight: 700,
-    color: 'var(--color-text-primary)',
-  },
-  addBtn: {
-    padding: '10px 20px',
-    borderRadius: '10px',
-    border: 'none',
-    backgroundColor: 'var(--color-brand)',
-    color: 'var(--color-on-accent, #fff)',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-  },
-  section: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  sectionTitle: {
-    margin: 0,
-    fontSize: '16px',
-    fontWeight: 600,
-    color: 'var(--color-text-primary)',
-  },
-  exchangeList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  exchangeCard: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    backgroundColor: 'var(--color-bg-secondary)',
+  notice: {
+    padding: '20px',
     border: '1px solid var(--color-border-primary)',
-    flexWrap: 'wrap',
-    gap: '8px',
+    borderRadius: '14px',
+    background: 'var(--color-bg-secondary)',
   },
-  exchangeInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  exchangeName: {
-    fontWeight: 600,
-    color: 'var(--color-text-primary)',
-    fontSize: '14px',
-  },
-  exchangeLabel: {
-    fontSize: '12px',
+  noticeTitle: { margin: '0 0 8px', fontSize: '18px' },
+  copy: { margin: '0 0 12px', color: 'var(--color-text-secondary)', lineHeight: 1.6 },
+  link: { color: 'var(--color-accent-primary)', fontWeight: 600 },
+  empty: {
+    margin: 0,
+    padding: '24px',
+    textAlign: 'center',
     color: 'var(--color-text-secondary)',
+    border: '1px dashed var(--color-border-primary)',
+    borderRadius: '12px',
   },
-  exchangeActions: {
+  list: { display: 'grid', gap: '10px' },
+  row: {
     display: 'flex',
-    gap: '8px',
-  },
-  syncBtn: {
-    padding: '6px 14px',
-    borderRadius: '8px',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '16px',
+    padding: '14px 16px',
     border: '1px solid var(--color-border-primary)',
-    backgroundColor: 'transparent',
-    color: 'var(--color-brand)',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
+    borderRadius: '12px',
   },
-  deleteBtn: {
-    padding: '6px 14px',
-    borderRadius: '8px',
-    border: '1px solid var(--color-border-primary)',
-    backgroundColor: 'transparent',
+  exchange: { textTransform: 'capitalize' },
+  label: { marginLeft: '8px', color: 'var(--color-text-secondary)' },
+  remove: {
+    border: '1px solid var(--color-error)',
     color: 'var(--color-error)',
-    fontSize: '13px',
-    fontWeight: 500,
+    background: 'transparent',
+    borderRadius: '8px',
+    padding: '8px 12px',
     cursor: 'pointer',
   },
 }

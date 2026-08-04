@@ -4,15 +4,13 @@ import { useCallback, useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ErrorState from '@/app/components/ui/ErrorState'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
-import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { t as staticT } from '@/lib/i18n'
 import { EXCHANGE_BIND_LIST } from './api-key/exchange-configs'
-import { readCurrentOAuthAccessToken, requestExchangeOAuthUrl } from './oauth-client'
 
 // Single source of truth: display names + OAuth capability live in exchange-configs.
 const EXCHANGES = EXCHANGE_BIND_LIST
@@ -25,13 +23,10 @@ function ExchangeAuthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const push = router.push
-  const { showToast } = useToast()
   const { t } = useLanguage()
   const exchangeParam = searchParams.get('exchange')
   const [authScope, setAuthScope] = useState<ExchangeAuthScope | null>(null)
   const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const loadAuth = useCallback(async () => {
     setAuthStatus('loading')
@@ -59,29 +54,6 @@ function ExchangeAuthContent() {
   useEffect(() => {
     void loadAuth()
   }, [loadAuth])
-
-  const handleOAuth = async (exchange: string) => {
-    if (!authScope) {
-      showToast(t('pleaseLogin'), 'warning')
-      router.push('/login?redirect=/exchange')
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const accessToken = await readCurrentOAuthAccessToken(
-        () => supabase.auth.getSession(),
-        authScope.userId
-      )
-      // 重定向到交易所 OAuth 页面
-      window.location.href = await requestExchangeOAuthUrl(exchange, accessToken)
-    } catch (_err: unknown) {
-      setError(t('authorizationFailed'))
-      setLoading(false)
-    }
-  }
 
   const handleApiKey = (exchange: string) => {
     router.push(`/exchange/auth/api-key?exchange=${exchange}`)
@@ -139,22 +111,6 @@ function ExchangeAuthContent() {
           {t('bindExchangeAccount')}
         </Text>
 
-        {error && (
-          <Box
-            style={{
-              padding: tokens.spacing[4],
-              borderRadius: tokens.radius.md,
-              background: `${alpha(tokens.colors.accent.error, 13)}`,
-              border: `1px solid ${tokens.colors.accent.error}`,
-              marginBottom: tokens.spacing[4],
-            }}
-          >
-            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-              {error}
-            </Text>
-          </Box>
-        )}
-
         {selectedExchange ? (
           <Box
             bg="secondary"
@@ -182,22 +138,9 @@ function ExchangeAuthContent() {
             </Text>
 
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-              {selectedExchange.oauthSupported ? (
-                <Button
-                  variant="primary"
-                  onClick={() => handleOAuth(selectedExchange.id)}
-                  disabled={loading}
-                  fullWidth
-                >
-                  {loading
-                    ? t('authorizing')
-                    : t('useOAuthAuthorize').replace('{exchange}', selectedExchange.name)}
-                </Button>
-              ) : (
-                <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {t('oauthNotSupported').replace('{exchange}', selectedExchange.name)}
-                </Text>
-              )}
+              <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+                {t('oauthNotSupported').replace('{exchange}', selectedExchange.name)}
+              </Text>
 
               <Button
                 variant="secondary"

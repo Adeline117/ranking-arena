@@ -58,11 +58,12 @@ function noStoreLinkedMembership<T extends Response>(response: T): T {
   return response
 }
 
-function requestCarriesLinkedMembership(request: NextRequest): boolean {
+function requestCarriesIdentityMembership(request: NextRequest): boolean {
   const includes = (request.nextUrl.searchParams.get('include') || '')
     .split(',')
     .map((value) => value.trim().toLowerCase())
   return (
+    includes.includes('claim') ||
     includes.includes('aggregate') ||
     request.nextUrl.searchParams.get('e2e_fixture') === 'linked_accounts'
   )
@@ -414,7 +415,7 @@ export async function GET(
         response.headers.set('X-Arena-Consistency-Proof', 'live-loader-v1')
         return response
       }
-      if (includes.includes('aggregate')) {
+      if (includes.includes('claim') || includes.includes('aggregate')) {
         return noStoreLinkedMembership(response)
       }
       return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
@@ -423,5 +424,5 @@ export async function GET(
   )
 
   const response = await handler(request)
-  return requestCarriesLinkedMembership(request) ? noStoreLinkedMembership(response) : response
+  return requestCarriesIdentityMembership(request) ? noStoreLinkedMembership(response) : response
 }

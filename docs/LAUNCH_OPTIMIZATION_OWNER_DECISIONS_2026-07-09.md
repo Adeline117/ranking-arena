@@ -39,6 +39,11 @@ read 120/min + route-level)。**核实后有意不减层**:每种减法都换来
 
 ## ★ 加密模块统一(per-user 密钥)—— 需你批一次凭据重加密迁移
 
+> 2026-08-03 更新：本节记录的是当时状态，已被 V1 收口方案部分取代。
+> `lib/exchange/secure-encryption.ts` 及 legacy portfolio 同步入口已删除；存量
+> portfolio 密文被保留但隔离，只允许用户查看非敏感元数据并删除。当前受支持的
+> Binance/Bybit/Bitget 授权统一经 `lib/exchange/authorization-credentials.ts`。
+
 本轮已修**正确性**根因(verify-ownership 格式错配 + sync 密码列错位,见下"已完成"),
 但**未做**把 3 个加密模块(`lib/exchange/encryption`、`lib/crypto/encryption`、
 `lib/exchange/secure-encryption`)收敛成单一模块 + 引入 per-user 密钥。原因:per-user 密钥

@@ -151,17 +151,17 @@ describe('ClaimTraderButton claim identity scope', () => {
   it('keeps the current trader actionable when a different trader is under review', async () => {
     mockAuthedFetch.mockResolvedValue(
       claimStatusResponse(VIEWER_A, {
-        claim: { trader_id: 'trader-b', source: 'binance', status: 'reviewing' },
-        linked_traders: [{ trader_id: 'trader-b', source: 'binance' }],
+        claim: { trader_id: 'trader-b', source: 'hyperliquid', status: 'reviewing' },
+        linked_traders: [{ trader_id: 'trader-b', source: 'hyperliquid' }],
       })
     )
 
-    renderClaimButton('trader-a', 'binance')
+    renderClaimButton('trader-a', 'hyperliquid')
 
     const button = await screen.findByRole('button', { name: 'linkToProfile' })
     expect(button).toBeEnabled()
     expect(mockAuthedFetch).toHaveBeenCalledWith(
-      '/api/traders/claim?trader_id=trader-a&source=binance',
+      '/api/traders/claim?trader_id=trader-a&source=hyperliquid',
       'GET',
       'access-token-a',
       undefined,
@@ -171,6 +171,23 @@ describe('ClaimTraderButton claim identity scope', () => {
         expectedSessionGeneration: 1,
         signal: expect.any(AbortSignal),
       })
+    )
+  })
+
+  it('keeps unsupported CEX profile claims visibly unavailable', async () => {
+    mockAuthedFetch.mockResolvedValue(claimStatusResponse(VIEWER_A, { claim: null }))
+
+    renderClaimButton('trader-a', 'binance')
+
+    const button = await screen.findByRole('button', { name: 'claimSourceUnsupportedTitle' })
+    expect(button).toBeDisabled()
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/traders/claim?trader_id=trader-a&source=binance',
+      'GET',
+      'access-token-a',
+      undefined,
+      15_000,
+      expect.objectContaining({ expectedUserId: VIEWER_A })
     )
   })
 
@@ -212,7 +229,9 @@ describe('ClaimTraderButton claim identity scope', () => {
 
     renderClaimButton(solanaTrader, 'drift')
     await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
-    expect(await screen.findByRole('button', { name: 'claimTrader' })).toBeEnabled()
+    expect(
+      await screen.findByRole('button', { name: 'claimSourceUnsupportedTitle' })
+    ).toBeDisabled()
   })
 
   it('never applies the previous viewer claim status to the replacement viewer', async () => {
@@ -223,14 +242,19 @@ describe('ClaimTraderButton claim identity scope', () => {
         linked_traders: [],
       })
     )
-    const view = renderClaimButton('trader-a', 'binance')
+    const view = renderClaimButton('trader-a', 'hyperliquid')
     await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
     const firstStatusSignal = mockAuthedFetch.mock.calls[0]?.[5]?.signal as AbortSignal
     expect(firstStatusSignal.aborted).toBe(false)
 
     mockAuth = signedIn(VIEWER_B, 'access-token-b', 2)
     view.rerender(
-      <ClaimTraderButton traderId="trader-a" handle="Trader" userId={VIEWER_B} source="binance" />
+      <ClaimTraderButton
+        traderId="trader-a"
+        handle="Trader"
+        userId={VIEWER_B}
+        source="hyperliquid"
+      />
     )
     expect(firstStatusSignal.aborted).toBe(true)
     expect(await screen.findByRole('button', { name: 'claimTrader' })).toBeEnabled()
@@ -252,7 +276,7 @@ describe('ClaimTraderButton claim identity scope', () => {
   it('never exposes an actionable claim button while status is unknown or failed', async () => {
     const pendingStatus = deferred<MockFetchResult>()
     mockAuthedFetch.mockReturnValueOnce(pendingStatus.promise)
-    renderClaimButton('trader-a', 'binance')
+    renderClaimButton('trader-a', 'hyperliquid')
 
     expect(screen.getByRole('button', { name: 'loading' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'claimTrader' })).not.toBeInTheDocument()

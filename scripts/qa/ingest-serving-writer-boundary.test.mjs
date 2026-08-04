@@ -55,11 +55,31 @@ const retiredPositionHistoryPublisher = /\bpublishTierBVerifiedPositionHistoryIn
 const REVIEWED_POSITION_HISTORY_AUTHORITY = 'lib/ingest/verified-position-history.ts'
 const reviewedPositionHistoryAuthoritySql =
   /SELECT\s+arena\s*\.\s*publish_verified_position_history\s*\(\s*\$1::bigint\s*,\s*\$2::text\s*,\s*\$3::bigint\s*,\s*\$4::text\s*\)\s+AS\s+receipt/i
+const dynamicArenaSqlWriter = new RegExp(
+  String.raw`\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|COPY|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?(?:"arena"|arena)\s*\.\s*\$\{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\}`,
+  'gi'
+)
+const quotedPositionHistory = /(['"`])position_history\1/i
+const legacyPublicPositionHistoryRelation = String.raw`(?:(?:"public"|public)\s*\.\s*)?(?:"trader_position_history"|trader_position_history)(?![A-Za-z0-9_$])`
+const directLegacyPublicPositionHistoryAccess = new RegExp(
+  String.raw`\b(?:FROM|JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|COPY|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?${legacyPublicPositionHistoryRelation}`,
+  'i'
+)
+const directLegacyPublicPositionHistoryWriter = new RegExp(
+  String.raw`\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|COPY|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?${legacyPublicPositionHistoryRelation}`,
+  'i'
+)
+const legacyPublicPositionHistoryQueryBuilder =
+  /\.from\s*\(\s*(['"`])trader_position_history\1\s*\)/i
+const legacyPublicPositionHistoryQueryBuilderWriter =
+  /\.from\s*\(\s*(['"`])trader_position_history\1\s*\)\s*\.\s*(?:insert|upsert|update|delete)\s*\(/i
+const legacyPublicPositionHistoryLiteral = /(['"`])trader_position_history\1/i
 const genericHistoryPublisherCall = /\bpublishHistoryRows(?:InTransaction)?\s*\(/m
 const REVIEWED_GENERIC_HISTORY_CALLERS = new Set([
   'lib/ingest/serving/publish.ts',
   'scripts/ingest-test-surfaces.ts',
 ])
+const OPERATOR_ONLY_LEGACY_HISTORY_READERS = new Set()
 
 function hasArenaBotsWriter(source) {
   return (
@@ -70,6 +90,7 @@ function hasArenaBotsWriter(source) {
 function hasPositionHistoryBypass(source) {
   return (
     directPositionHistoryWriter.test(source) ||
+    hasDynamicPositionHistoryWriter(source) ||
     positionHistoryQueryBuilderWriter.test(source) ||
     retiredPositionHistorySqlReference.test(source) ||
     retiredPositionHistoryRpc.test(source) ||
@@ -89,6 +110,67 @@ function isReviewedPositionHistoryAuthority(file, source) {
     !retiredPositionHistoryRpc.test(source) &&
     !retiredPositionHistoryPublisher.test(source)
   )
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function hasDynamicPositionHistoryWriter(source) {
+  dynamicArenaSqlWriter.lastIndex = 0
+  for (const match of source.matchAll(dynamicArenaSqlWriter)) {
+    const tableVariable = escapeRegExp(match[1])
+    const loop = new RegExp(
+      String.raw`\bfor\s*\(\s*(?:const|let|var)\s+${tableVariable}\s+of\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\)`,
+      'g'
+    )
+    for (const loopMatch of source.matchAll(loop)) {
+      const collection = escapeRegExp(loopMatch[1])
+      const arrayBinding = new RegExp(
+        String.raw`\b(?:const|let|var)\s+${collection}\s*=\s*\[([\s\S]*?)\]`,
+        'm'
+      ).exec(source)
+      if (arrayBinding && quotedPositionHistory.test(arrayBinding[1])) return true
+    }
+
+    const directBinding = new RegExp(
+      String.raw`\b(?:const|let|var)\s+${tableVariable}\s*=\s*(['"\x60])position_history\1`,
+      'i'
+    )
+    if (directBinding.test(source)) return true
+  }
+  return false
+}
+
+function hasLegacyPublicPositionHistoryAccess(source) {
+  return (
+    directLegacyPublicPositionHistoryAccess.test(source) ||
+    legacyPublicPositionHistoryQueryBuilder.test(source) ||
+    legacyPublicPositionHistoryLiteral.test(source)
+  )
+}
+
+function hasLegacyPublicPositionHistoryWriter(source) {
+  return (
+    directLegacyPublicPositionHistoryWriter.test(source) ||
+    legacyPublicPositionHistoryQueryBuilderWriter.test(source)
+  )
+}
+
+function positionHistoryOffenseReasons(source, file) {
+  const reasons = []
+  if (hasPositionHistoryBypass(source) && !isReviewedPositionHistoryAuthority(file, source)) {
+    reasons.push('arena-writer-or-retired-publisher')
+  }
+  if (hasLegacyPublicPositionHistoryWriter(source)) {
+    reasons.push('public-legacy-writer')
+  } else if (
+    hasLegacyPublicPositionHistoryAccess(source) &&
+    !OPERATOR_ONLY_LEGACY_HISTORY_READERS.has(file)
+  ) {
+    reasons.push('public-legacy-reader')
+  }
+  return reasons
 }
 
 function productionSources(directory) {
@@ -152,7 +234,7 @@ test('repository production TS/JS has no arena.bots writer or legacy publisher',
   )
 })
 
-test('position-history bypass detector covers direct DML and the retired RPC helper', () => {
+test('position-history bypass detector covers direct and dynamic DML plus the retired RPC', () => {
   for (const writer of [
     'INSERT INTO arena.position_history (trader_id) VALUES (1)',
     'UPDATE ONLY "arena" . "position_history" SET raw = $1',
@@ -168,6 +250,12 @@ test('position-history bypass detector covers direct DML and the retired RPC hel
     "client.rpc('publish_verified_position_history', input)",
     'client\n  .rpc(\n    "publish_verified_position_history",\n    input\n  )',
     'client.rpc(`publish_verified_position_history`, input)',
+    [
+      "const tables = ['order_records', 'position_history', 'transfer_history']",
+      'for (const table of tables) {',
+      '  client.query(`DELETE FROM arena.${table} h WHERE h.ts < now()`)',
+      '}',
+    ].join('\n'),
   ]) {
     assert.equal(hasPositionHistoryBypass(writer), true, `writer fixture was missed: ${writer}`)
   }
@@ -176,7 +264,12 @@ test('position-history bypass detector covers direct DML and the retired RPC hel
     'SELECT * FROM position_history',
     "client.from('position_history').select('*')",
     "client.rpc('get_position_history_publication_checkpoint', input)",
-    "client.from('trader_position_history').update({ raw: null })",
+    [
+      "const tables = ['order_records', 'transfer_history']",
+      'for (const table of tables) {',
+      '  client.query(`DELETE FROM arena.${table} h WHERE h.ts < now()`)',
+      '}',
+    ].join('\n'),
   ]) {
     assert.equal(
       hasPositionHistoryBypass(reader),
@@ -211,16 +304,66 @@ test('only the reviewed module may call the exact four-argument @2 authority', (
   )
 })
 
-test('repository production TS/JS has no direct or retired position-history writer', () => {
+test('public legacy position history rejects every runtime read/write path', () => {
+  for (const violation of [
+    'SELECT * FROM public.trader_position_history',
+    'SELECT h.* FROM traders t JOIN trader_position_history h ON true',
+    'INSERT INTO public.trader_position_history (source) VALUES ($1)',
+    'UPDATE ONLY public.trader_position_history SET raw = NULL',
+    'DELETE FROM "public" . "trader_position_history" WHERE id = $1',
+    "client.from('trader_position_history').select('*')",
+    "client.schema('public').from('trader_position_history').insert(rows)",
+    "client.from('trader_position_history').update({ raw: null })",
+    'client\n  .from(`trader_position_history`)\n  .delete()',
+  ]) {
+    assert.notDeepEqual(
+      positionHistoryOffenseReasons(violation, 'lib/runtime-history-access.ts'),
+      [],
+      `public legacy access fixture was missed: ${violation}`
+    )
+  }
+
+  for (const canonicalReader of [
+    'SELECT * FROM arena.position_history',
+    'SELECT ph.* FROM arena.position_history ph WHERE ph.trader_id = $1',
+  ]) {
+    assert.deepEqual(
+      positionHistoryOffenseReasons(canonicalReader, 'lib/runtime-history-access.ts'),
+      [],
+      `canonical arena reader was misclassified: ${canonicalReader}`
+    )
+  }
+})
+
+test('operator-only legacy read allowlist is exact and never permits a writer', () => {
+  const legacyReader = "client.from('trader_position_history').select('*')"
+  const legacyWriter = "client.from('trader_position_history').update({ raw: null })"
+
+  for (const file of OPERATOR_ONLY_LEGACY_HISTORY_READERS) {
+    assert.deepEqual(positionHistoryOffenseReasons(legacyReader, file), [])
+    assert.deepEqual(positionHistoryOffenseReasons(legacyWriter, file), ['public-legacy-writer'])
+  }
+  assert.deepEqual(positionHistoryOffenseReasons(legacyReader, 'scripts/check_tables_v2.mjs'), [
+    'public-legacy-reader',
+  ])
+  assert.deepEqual(
+    positionHistoryOffenseReasons(
+      'DELETE FROM arena.position_history WHERE closed_at < now()',
+      'scripts/maintenance/backup-to-r2.mjs'
+    ),
+    ['arena-writer-or-retired-publisher']
+  )
+})
+
+test('repository production TS/JS has no canonical writer or unreviewed public legacy access', () => {
   const offenders = []
   for (const sourceRoot of SOURCE_ROOTS) {
     const absoluteRoot = resolve(ROOT, sourceRoot)
     if (!existsSync(absoluteRoot)) continue
     for (const file of productionSources(absoluteRoot)) {
       const source = readFileSync(resolve(ROOT, file), 'utf8')
-      if (hasPositionHistoryBypass(source) && !isReviewedPositionHistoryAuthority(file, source)) {
-        offenders.push(file)
-      }
+      const reasons = positionHistoryOffenseReasons(source, file)
+      if (reasons.length > 0) offenders.push(`${file} [${reasons.join(', ')}]`)
     }
   }
   assert.deepEqual(
@@ -228,6 +371,26 @@ test('repository production TS/JS has no direct or retired position-history writ
     [],
     `position_history requires parser-conservation publication; bypasses found: ${offenders.join(', ')}`
   )
+})
+
+test('repository legacy reads are limited to the exact operator-only inventory', () => {
+  const legacyAccesses = []
+  const legacyWriters = []
+  for (const sourceRoot of SOURCE_ROOTS) {
+    const absoluteRoot = resolve(ROOT, sourceRoot)
+    if (!existsSync(absoluteRoot)) continue
+    for (const file of productionSources(absoluteRoot)) {
+      const source = readFileSync(resolve(ROOT, file), 'utf8')
+      if (hasLegacyPublicPositionHistoryAccess(source)) legacyAccesses.push(file)
+      if (hasLegacyPublicPositionHistoryWriter(source)) legacyWriters.push(file)
+    }
+  }
+  assert.deepEqual(
+    legacyAccesses.sort(),
+    [...OPERATOR_ONLY_LEGACY_HISTORY_READERS].sort(),
+    `public.trader_position_history access inventory changed: ${legacyAccesses.join(', ')}`
+  )
+  assert.deepEqual(legacyWriters, [], 'operator-only legacy access must remain read-only')
 })
 
 test('generic history publication remains confined to reviewed non-position call sites', () => {
