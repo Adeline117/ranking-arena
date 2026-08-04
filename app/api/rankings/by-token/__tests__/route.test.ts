@@ -259,7 +259,7 @@ describe('GET /api/rankings/by-token', () => {
     expectPrivateNoStore(response)
   })
 
-  it('maps a 55000 not-published read to retryable 503', async () => {
+  it('maps a 55000 not-published read to a long-lived verification hold', async () => {
     mockGetPopularTokenRankingSnapshot.mockRejectedValue(
       rankingError('not_published', { databaseCode: '55000' })
     )
@@ -267,9 +267,9 @@ describe('GET /api/rankings/by-token', () => {
     const response = await GET(request('?action=popular-tokens'))
 
     expect(response.status).toBe(503)
-    expect(response.headers.get('retry-after')).toBe('1')
+    expect(response.headers.get('retry-after')).toBe('3600')
     expect(await response.json()).toEqual({
-      error: 'Token rankings have not been published yet',
+      error: 'Token rankings are withheld while verified authority snapshots are rebuilt',
       code: 'TOKEN_RANKING_NOT_PUBLISHED',
     })
     expectPrivateNoStore(response)
