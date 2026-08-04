@@ -23,11 +23,31 @@ jest.mock('next/server', () => {
     url: string
     method: string
     _body: unknown
+    body: ReadableStream<Uint8Array> | null
+    headers: Headers
 
-    constructor(url: string, init?: { method?: string; body?: unknown }) {
+    constructor(
+      url: string,
+      init?: { method?: string; body?: unknown; headers?: Record<string, string> }
+    ) {
       this.url = url
       this.method = init?.method ?? 'POST'
       this._body = init?.body
+      this.headers = new Headers(init?.headers)
+      const rawBody =
+        typeof init?.body === 'string' ? init.body : (JSON.stringify(init?.body) ?? '')
+      const bytes = new TextEncoder().encode(rawBody)
+      let consumed = false
+      this.body = {
+        getReader: () => ({
+          cancel: async () => undefined,
+          read: async () => {
+            if (consumed) return { done: true as const, value: undefined }
+            consumed = true
+            return { done: false as const, value: bytes }
+          },
+        }),
+      } as ReadableStream<Uint8Array>
     }
 
     async json() {
@@ -45,7 +65,6 @@ const mockUser = {
 const mockSupabaseRpc = jest.fn()
 const mockResolveTrader = jest.fn()
 const mockResolveExchangeUid = jest.fn()
-const mockIsCexVerifiable = jest.fn()
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
@@ -64,7 +83,6 @@ jest.mock('@/lib/data/unified', () => ({
 }))
 
 jest.mock('@/lib/validators/exchange-uid-resolver', () => ({
-  isCexVerifiable: (...args: unknown[]) => mockIsCexVerifiable(...args),
   resolveExchangeUid: (...args: unknown[]) => mockResolveExchangeUid(...args),
 }))
 
@@ -104,24 +122,28 @@ function atomicSaveResult(
 }
 
 function request(overrides: Record<string, unknown> = {}) {
+  return rawRequest({
+    exchange: 'binance_futures',
+    traderId: 'account-42',
+    source: 'binance_futures',
+    apiKey: 'read-only-key',
+    apiSecret: 'read-only-secret',
+    ...overrides,
+  })
+}
+
+function rawRequest(body: unknown, headers?: Record<string, string>) {
   return new NextRequest('http://localhost/api/exchange/verify-ownership', {
     method: 'POST',
-    body: {
-      exchange: 'binance_futures',
-      traderId: 'account-42',
-      source: 'binance_futures',
-      apiKey: 'read-only-key',
-      apiSecret: 'read-only-secret',
-      ...overrides,
-    },
+    body,
+    headers,
   })
 }
 
 describe('POST /api/exchange/verify-ownership identity contract', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockIsCexVerifiable.mockReturnValue(true)
-    mockResolveTrader.mockResolvedValue({ traderKey: 'account-42' })
+    mockResolveTrader.mockResolvedValue({ platform: 'binance_futures', traderKey: 'account-42' })
     mockResolveExchangeUid.mockResolvedValue({
       success: true,
       uid: 'account-42',
@@ -170,6 +192,37 @@ describe('POST /api/exchange/verify-ownership identity contract', () => {
     })
   })
 
+  it('returns the canonical resolved trader identity instead of echoing a requested handle', async () => {
+    mockResolveTrader.mockResolvedValue({
+      platform: 'binance_futures',
+      traderKey: 'account-42',
+    })
+
+    const response = await POST(request({ traderId: 'Alice Trader' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mockResolveTrader).toHaveBeenCalledWith(expect.anything(), {
+      handle: 'Alice Trader',
+      platform: 'binance_futures',
+    })
+    expect(body.data).toMatchObject({
+      source: 'binance_futures',
+      traderId: 'account-42',
+      verifiedUid: 'account-42',
+    })
+  })
+
+  it('fails closed when trader resolution crosses the requested source', async () => {
+    mockResolveTrader.mockResolvedValue({ platform: 'binance_spot', traderKey: 'account-42' })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(mockResolveExchangeUid).not.toHaveBeenCalled()
+    expect(mockSupabaseRpc).not.toHaveBeenCalled()
+  })
+
   it('rejects an exchange that does not match the selected trader source', async () => {
     const response = await POST(request({ exchange: 'bybit' }))
     const body = await response.json()
@@ -179,6 +232,46 @@ describe('POST /api/exchange/verify-ownership identity contract', () => {
     expect(mockResolveTrader).not.toHaveBeenCalled()
     expect(mockSupabaseRpc).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['a null JSON body', null],
+    ['an array JSON body', []],
+    ['an extra request field', { extra: true }],
+    ['an oversized API key', { apiKey: 'k'.repeat(513) }],
+  ])('rejects %s before resolving a trader or credentials', async (_label, body) => {
+    const response = await POST(
+      body === null || Array.isArray(body) ? rawRequest(body) : request(body)
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockResolveTrader).not.toHaveBeenCalled()
+    expect(mockResolveExchangeUid).not.toHaveBeenCalled()
+    expect(mockSupabaseRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a declared oversized body', JSON.stringify({}), { 'content-length': String(4 * 1024 + 1) }],
+    ['an actually oversized body without a length header', `${' '.repeat(4 * 1024)}{}`, undefined],
+  ])('returns 413 for %s', async (_label, body, headers) => {
+    const response = await POST(rawRequest(body, headers))
+
+    expect(response.status).toBe(413)
+    expect(mockResolveTrader).not.toHaveBeenCalled()
+    expect(mockResolveExchangeUid).not.toHaveBeenCalled()
+    expect(mockSupabaseRpc).not.toHaveBeenCalled()
+  })
+
+  it.each(['binance_web3', 'bitget_cfd', 'binance_impersonator'])(
+    'rejects the non-verifiable source %s instead of matching a brand prefix',
+    async (source) => {
+      const response = await POST(request({ exchange: source, source }))
+
+      expect(response.status).toBe(400)
+      expect(mockResolveTrader).not.toHaveBeenCalled()
+      expect(mockResolveExchangeUid).not.toHaveBeenCalled()
+      expect(mockSupabaseRpc).not.toHaveBeenCalled()
+    }
+  )
 
   it('fails closed when the persisted connection acknowledgement is mismatched', async () => {
     mockSupabaseRpc.mockResolvedValue(
@@ -198,5 +291,27 @@ describe('POST /api/exchange/verify-ownership identity contract', () => {
     expect(response.status).toBe(500)
     expect(body.success).toBe(false)
     expect(body.error.message).toContain('failed to store credentials')
+  })
+
+  it.each([
+    ['the wrong exchange', { exchange: 'bybit' }],
+    ['an unverified write', { verified: false }],
+    ['an extra field', { verified_uid: 'account-42' }],
+  ])('fails closed when persistence acknowledges %s', async (_label, overrides) => {
+    mockSupabaseRpc.mockResolvedValue(
+      atomicSaveResult({
+        status: 'saved',
+        exchange: 'binance',
+        user_id: mockUser.id,
+        connection_id: '22222222-2222-4222-8222-222222222222',
+        generation: 1,
+        verified: true,
+        ...overrides,
+      } as PersistedConnection)
+    )
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
   })
 })

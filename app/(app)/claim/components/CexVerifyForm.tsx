@@ -9,9 +9,13 @@ import { Box, Text } from '@/app/components/base'
 import { trackEvent } from '@/lib/analytics/track'
 import { authedFetch } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
-import { SearchResult, CEX_PLATFORMS } from './types'
+import { SearchResult } from './types'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  readVerifyOwnershipAcknowledgement,
+  verifyOwnershipSourceRequiresPassphrase,
+} from '@/lib/exchange/ownership-verification-contract'
 import {
   captureSettingsViewer,
   isSettingsViewerCurrent,
@@ -44,35 +48,6 @@ function responseMessage(value: unknown, fallback: string): string {
     return value.error.message.trim()
   }
   return fallback
-}
-
-function connectionExchangeId(source: string): string {
-  return source
-    .trim()
-    .toLowerCase()
-    .replace(/_(futures|spot)$/, '')
-}
-
-function readVerifiedUid(
-  value: unknown,
-  expected: { source: string; traderId: string; userId: string }
-): string | null {
-  if (
-    !isRecord(value) ||
-    value.success !== true ||
-    value.verified !== true ||
-    typeof value.uid !== 'string' ||
-    !value.uid.trim() ||
-    !isRecord(value.data) ||
-    value.data.viewerId !== expected.userId ||
-    value.data.exchange !== connectionExchangeId(expected.source) ||
-    value.data.source !== expected.source.trim().toLowerCase() ||
-    value.data.traderId !== expected.traderId ||
-    value.data.verifiedUid !== value.uid.trim()
-  ) {
-    return null
-  }
-  return value.uid.trim()
 }
 
 function isClaimAcknowledgement(
@@ -127,8 +102,7 @@ function ViewerScopedCexVerifyForm({
   const [loading, setLoading] = useState(false)
   const [verifiedUid, setVerifiedUid] = useState<string | null>(null)
 
-  const platform = CEX_PLATFORMS.find((p) => trader.source.startsWith(p.value.split('_')[0]))
-  const needsPassphrase = platform?.requiresPassphrase ?? false
+  const needsPassphrase = verifyOwnershipSourceRequiresPassphrase(trader.source)
   const operationIsCurrent = (operation: ClaimOperation): boolean =>
     mountedRef.current &&
     operationRef.current === operation &&
@@ -206,18 +180,21 @@ function ViewerScopedCexVerifyForm({
           return
         }
 
-        const acknowledgedUid = verifyResult.ok
-          ? readVerifiedUid(verifyResult.data, {
-              source: trader.source,
-              traderId: trader.source_trader_id,
-              userId: operation.viewer.userId,
-            })
-          : null
+        const acknowledgedUid =
+          verifyResult.status === 200
+            ? readVerifyOwnershipAcknowledgement(verifyResult.data, {
+                source: trader.source,
+                traderId: trader.source_trader_id,
+                userId: operation.viewer.userId,
+              })
+            : null
         if (!acknowledgedUid) {
           // The exchange's raw (English) error is passed through — prefix it with
           // a localized "Exchange returned:" so a zh/ja/ko user knows the message
           // is upstream, not a mistranslation. Fall back to our own mismatch copy.
-          const message = responseMessage(verifyResult.data, '')
+          const responseDeclaresFailure =
+            !verifyResult.ok || (isRecord(verifyResult.data) && verifyResult.data.success === false)
+          const message = responseDeclaresFailure ? responseMessage(verifyResult.data, '') : ''
           showToast(
             message ? `${t('claimExchangeErrorPrefix')} ${message}` : t('claimApiKeyMismatch'),
             'error'

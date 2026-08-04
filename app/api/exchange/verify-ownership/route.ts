@@ -8,7 +8,7 @@
  *
  * Request body:
  * {
- *   exchange: 'binance',
+ *   exchange: string,  // must exactly match source after normalization
  *   traderId: string,  // trader's source_trader_id or handle
  *   source: string,    // platform name in Arena DB
  *   apiKey: string,
@@ -18,10 +18,18 @@
  */
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, forbidden, notFound, serverError } from '@/lib/api/response'
 import { exchangeApiConnectionSaveResultSchema } from '@/lib/exchange/api-key-lifecycle'
-import { resolveExchangeUid, isCexVerifiable } from '@/lib/validators/exchange-uid-resolver'
+import {
+  VERIFY_OWNERSHIP_MAX_PLATFORM_LENGTH,
+  VERIFY_OWNERSHIP_MAX_REQUEST_BYTES,
+  VERIFY_OWNERSHIP_MAX_VALUE_LENGTH,
+  VERIFY_OWNERSHIP_SOURCES,
+  verifyOwnershipConnectionExchange,
+} from '@/lib/exchange/ownership-verification-contract'
+import { resolveExchangeUid } from '@/lib/validators/exchange-uid-resolver'
 // Must use the SAME module the sync reader (app/api/exchange/sync) decrypts with.
 // lib/crypto/encryption outputs a base64 blob; lib/exchange/encryption outputs
 // iv:tag:ct colon-hex. Writing crypto-format here made sync hit its legacy-base64
@@ -33,88 +41,120 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('verify-ownership')
 
-function connectionExchangeId(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/_(futures|spot)$/, '')
-}
+const nonBlankCredentialSchema = z
+  .string()
+  .min(1)
+  .max(VERIFY_OWNERSHIP_MAX_VALUE_LENGTH)
+  .refine((value) => value.trim().length > 0)
 
-function comparisonExchangeId(value: string): string {
-  const exchange = connectionExchangeId(value)
-  if (exchange === 'gate') return 'gateio'
-  if (exchange === 'huobi') return 'htx'
-  return exchange
+const verifyOwnershipRequestSchema = z
+  .object({
+    exchange: z
+      .string()
+      .min(1)
+      .max(VERIFY_OWNERSHIP_MAX_PLATFORM_LENGTH)
+      .transform((value) => value.trim().toLowerCase())
+      .pipe(z.enum(VERIFY_OWNERSHIP_SOURCES)),
+    traderId: z
+      .string()
+      .min(1)
+      .max(VERIFY_OWNERSHIP_MAX_VALUE_LENGTH)
+      .transform((value) => value.trim())
+      .refine((value) => value.length > 0),
+    source: z
+      .string()
+      .min(1)
+      .max(VERIFY_OWNERSHIP_MAX_PLATFORM_LENGTH)
+      .transform((value) => value.trim().toLowerCase())
+      .pipe(z.enum(VERIFY_OWNERSHIP_SOURCES)),
+    apiKey: nonBlankCredentialSchema,
+    apiSecret: nonBlankCredentialSchema,
+    passphrase: nonBlankCredentialSchema.optional(),
+  })
+  .strict()
+  .refine((value) => value.exchange === value.source, {
+    message: 'Exchange does not match the trader source',
+  })
+
+type BoundedJsonResult =
+  | { ok: true; value: unknown }
+  | { ok: false; reason: 'invalid' | 'too_large' }
+
+async function readBoundedJson(request: Request): Promise<BoundedJsonResult> {
+  const declaredLength = request.headers.get('content-length')
+  if (declaredLength !== null) {
+    const bytes = Number(declaredLength)
+    if (!Number.isSafeInteger(bytes) || bytes < 0) return { ok: false, reason: 'invalid' }
+    if (bytes > VERIFY_OWNERSHIP_MAX_REQUEST_BYTES) return { ok: false, reason: 'too_large' }
+  }
+  if (!request.body) return { ok: false, reason: 'invalid' }
+
+  const reader = request.body.getReader()
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  let bytesRead = 0
+  let text = ''
+  try {
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      bytesRead += chunk.value.byteLength
+      if (bytesRead > VERIFY_OWNERSHIP_MAX_REQUEST_BYTES) {
+        await reader.cancel()
+        return { ok: false, reason: 'too_large' }
+      }
+      text += decoder.decode(chunk.value, { stream: true })
+    }
+    text += decoder.decode()
+    const value: unknown = JSON.parse(text)
+    return { ok: true, value }
+  } catch {
+    return { ok: false, reason: 'invalid' }
+  }
 }
 
 export const POST = withAuth(
   async ({ user, request }) => {
-    let body: Record<string, unknown>
-    try {
-      body = await request.json()
-    } catch {
+    const decodedBody = await readBoundedJson(request)
+    if (!decodedBody.ok && decodedBody.reason === 'too_large') {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+    }
+    if (!decodedBody.ok) {
       return badRequest('Invalid JSON body')
     }
 
-    const { exchange, traderId, source, apiKey, apiSecret, passphrase } = body as {
-      exchange?: string
-      traderId?: string
-      source?: string
-      apiKey?: string
-      apiSecret?: string
-      passphrase?: string
+    const parsedBody = verifyOwnershipRequestSchema.safeParse(decodedBody.value)
+    if (!parsedBody.success) {
+      return badRequest('Invalid ownership verification request')
     }
-
-    if (
-      typeof exchange !== 'string' ||
-      !exchange.trim() ||
-      typeof traderId !== 'string' ||
-      !traderId.trim() ||
-      typeof source !== 'string' ||
-      !source.trim()
-    ) {
-      return badRequest('Missing required parameters: exchange, traderId, source')
-    }
-
-    if (
-      typeof apiKey !== 'string' ||
-      !apiKey.trim() ||
-      typeof apiSecret !== 'string' ||
-      !apiSecret.trim()
-    ) {
-      return badRequest('Missing required parameters: apiKey, apiSecret')
-    }
-
-    const normalizedSource = source.trim().toLowerCase()
-    const requestedTraderId = traderId.trim()
-    const connectionExchange = connectionExchangeId(normalizedSource)
-    if (comparisonExchangeId(exchange) !== comparisonExchangeId(normalizedSource)) {
-      return badRequest('Exchange does not match the trader source')
-    }
-
-    // Validate this is a CEX platform that supports API key verification
-    if (!isCexVerifiable(normalizedSource)) {
-      return badRequest(
-        `Platform ${normalizedSource} does not support API key verification. Use wallet signature for DEX platforms.`
-      )
-    }
+    const { apiKey, apiSecret, passphrase, source, traderId } = parsedBody.data
+    const connectionExchange = verifyOwnershipConnectionExchange(source)
 
     // 2. Look up trader's source_trader_id from Arena DB (unified data layer)
     const adminSupabase = getSupabaseAdmin()
     const resolved = await resolveTrader(adminSupabase, {
-      handle: requestedTraderId,
-      platform: normalizedSource,
+      handle: traderId,
+      platform: source,
     })
-
-    const traderKey = resolved?.traderKey || requestedTraderId
 
     if (!resolved) {
       return notFound('Trader not found in Arena database')
     }
+    const traderKey = String(resolved.traderKey).trim()
+    if (
+      resolved.platform !== source ||
+      !traderKey ||
+      traderKey.length > VERIFY_OWNERSHIP_MAX_VALUE_LENGTH
+    ) {
+      logger.error('[verify-ownership] Trader resolver returned a mismatched identity', {
+        userId: user.id,
+        platform: source,
+      })
+      return serverError('Could not resolve the requested trader identity')
+    }
 
     // 3. Resolve the UID from the user's API credentials
     // NEVER log the API key or secret
-    const resolveResult = await resolveExchangeUid(normalizedSource, {
+    const resolveResult = await resolveExchangeUid(source, {
       apiKey,
       apiSecret,
       passphrase,
@@ -145,12 +185,12 @@ export const POST = withAuth(
 
     // 4. CRITICAL SECURITY CHECK: Compare resolved UID with trader's source_trader_id
     const resolvedUid = resolveResult.uid.trim()
-    const traderSourceId = String(traderKey).trim()
+    const traderSourceId = traderKey
 
     if (resolvedUid !== traderSourceId) {
       logger.warn('[verify-ownership] UID mismatch', {
         userId: user.id,
-        platform: normalizedSource,
+        platform: source,
         // Log only that there's a mismatch, NOT the actual UIDs for security
         match: false,
       })
@@ -228,7 +268,7 @@ export const POST = withAuth(
 
     logger.info('[verify-ownership] Verification passed', {
       userId: user.id,
-      platform: normalizedSource,
+      platform: source,
       match: true,
     })
 
@@ -239,8 +279,8 @@ export const POST = withAuth(
       data: {
         viewerId: parsedSave.data.user_id,
         exchange: parsedSave.data.exchange,
-        source: normalizedSource,
-        traderId: requestedTraderId,
+        source,
+        traderId: traderSourceId,
         verifiedUid: resolvedUid,
       },
       message: 'Account ownership verified successfully',

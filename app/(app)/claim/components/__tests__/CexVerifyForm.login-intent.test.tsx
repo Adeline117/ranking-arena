@@ -139,6 +139,7 @@ function ownershipAcknowledgement(
       traderId: overrides.traderId ?? 'account/42',
       verifiedUid: uid,
     },
+    message: 'Account ownership verified successfully',
   }
 }
 
@@ -262,6 +263,7 @@ describe('CexVerifyForm login intent', () => {
         trader_id: 'account/42',
         source: 'binance',
         verification_method: 'api_key',
+        verification_data: { verified_uid: 'account/42' },
       }),
       30_000,
       expect.objectContaining({
@@ -327,8 +329,46 @@ describe('CexVerifyForm login intent', () => {
     expect(mockTrackEvent).not.toHaveBeenCalled()
   })
 
-  it('starts only one ownership request for a same-tick double click', async () => {
+  it.each([
+    ['a non-200 success status', ownershipAcknowledgement(), 201],
+    [
+      'an acknowledgement with extra authority fields',
+      { ...ownershipAcknowledgement(), adminOverride: true },
+      200,
+    ],
+    ['a UID for another trader', ownershipAcknowledgement({ uid: 'account/99' }), 200],
+    [
+      'an acknowledgement for another exchange',
+      ownershipAcknowledgement({ exchange: 'bybit' }),
+      200,
+    ],
+    [
+      'an acknowledgement for another source',
+      ownershipAcknowledgement({ source: 'binance_futures' }),
+      200,
+    ],
+    [
+      'an acknowledgement for another requested trader',
+      ownershipAcknowledgement({ traderId: 'account/99' }),
+      200,
+    ],
+  ])('rejects %s', async (_label, acknowledgement, status) => {
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 7)
+    mockAuthedFetch.mockResolvedValueOnce(response(acknowledgement, status))
+    const onSuccess = jest.fn()
+    renderForm(onSuccess)
+    fillCredentials()
+
+    fireEvent.click(screen.getByRole('button', { name: 'claimVerifyAndClaim' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('claimApiKeyMismatch', 'error'))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+  })
+
+  it('starts only one ownership request for a same-tick double click', async () => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 8)
     const verification = deferred<MockFetchResult>()
     mockAuthedFetch.mockReturnValue(verification.promise)
     renderForm()
