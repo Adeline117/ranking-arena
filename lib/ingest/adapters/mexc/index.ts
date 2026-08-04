@@ -331,9 +331,14 @@ const mexcAdapter: SourceAdapter = {
         pageIndex,
         payload,
       }).candidates.length
-      if (candidateCount === 0) return
-      yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       const totalPage = Number((payload as { data?: { totalPage?: unknown } })?.data?.totalPage)
+      if (candidateCount === 0) {
+        if (Number.isSafeInteger(totalPage) && totalPage > pageIndex) {
+          throw new Error('[mexc] empty copier page still claims continuation')
+        }
+        return
+      }
+      yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       if (Number.isSafeInteger(totalPage) && totalPage > 0) {
         if (pageIndex >= totalPage) return
         continue

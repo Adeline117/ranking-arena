@@ -137,4 +137,12 @@ describe('KuCoin copier pagination', () => {
 
     await expect(copiers(fetchSession)).rejects.toThrow('kucoin returned a non-success envelope')
   })
+
+  it('rejects an empty page that still claims continuation', async () => {
+    const { fetchSession } = session([payload(0, 2)])
+
+    await expect(copiers(fetchSession)).rejects.toThrow(
+      'empty copier page still claims continuation'
+    )
+  })
 })

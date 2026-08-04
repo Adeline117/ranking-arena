@@ -261,12 +261,15 @@ const coinexAdapter: SourceAdapter = {
         pageIndex,
         payload,
       }).candidates.length
-      if (candidateCount === 0) return
-      yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       const hasNext = (payload as { data?: { has_next?: unknown } })?.data?.has_next
       if (typeof hasNext !== 'boolean') {
         throw new Error('[coinex] copiers returned an invalid has_next terminal marker')
       }
+      if (candidateCount === 0) {
+        if (hasNext) throw new Error('[coinex] empty copier page still claims continuation')
+        return
+      }
+      yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       if (!hasNext) return
     }
   },
