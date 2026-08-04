@@ -30,8 +30,8 @@
 | SLO 定义              | ✅   | `docs/SLO.md` 5 条(核心页/API/数据新鲜度/备份/写路径)                          |
 | 健康监控              | ✅   | 6 个 health 端点 + health-monitor(30min) + Telegram 告警                       |
 | 部署后验证 + 自动回滚 | ✅   | deploy-gate smoke + 失败自动 promote 回滚(2026-07-02)                          |
-| 备份                  | ✅   | R2 异地日备(14 天保留) + 新鲜度哨兵(>26h 告警，自身失败也告警)                 |
-| 灾难恢复              | 🟡   | 有备份 + 回滚锚点；季度恢复演练待做(SLO #4)                                    |
+| 备份                  | 🟡   | R2 arena+public 异地日备 + 严格 HEAD/新鲜度契约；auth 独立副本尚缺             |
+| 灾难恢复              | 🔴   | managed scratch 全恢复未通过；当前只能依赖 Supabase PITR（SLO #4）             |
 | 冗余/失败切换         | 🟡   | worker 双节点 + 心跳漂移哨兵；但 Mac Mini/VPS 单点仍在(→ PHASE2_INFRA_PLAN #2) |
 | 事故响应              | ✅   | 高质量 RUNBOOK + postmortem 制度(模板 + 5 起回填)                              |
 | 弹性(重试/熔断)       | ✅   | circuit breaker(cockatiel) + 重试 + 分布式锁 + BullMQ 3x                       |
@@ -68,14 +68,14 @@
 ## 缺口汇总（→ 指向已有计划）
 
 1. 代码 review / required checks 强制 —— 团队化时启用(`docs/RELEASE.md` recipe)
-2. 季度备份恢复演练 —— `docs/SLO.md` #4
+2. auth sidecar + canonical baseline + managed scratch 首次恢复验收，此后季度复演 —— `docs/SLO.md` #4
 3. 基础设施单点冗余 —— `docs/PHASE2_INFRA_PLAN.md` #2(要钱)
 4. 标准可观测性栈(时序 metrics/dashboard) —— `docs/PHASE2_INFRA_PLAN.md` #1(要钱)
 5. 输入校验 100% route 覆盖 —— 增量收敛
 
 ## 定性
 
-Arena 的**实际安全/可靠性控制已达到多数 SOC 2 CC/A/C/PI/P 准则的实质要求**，
-远超典型早期产品。剩余缺口集中在:(a)团队化流程强制(现单人 bypass)、
-(b)要钱的基础设施冗余与观测栈、(c)正式审计取证工具(Vanta/Drata)。
+此表是内部差距映射，不是 SOC 2 认证或生产验收证据。发布前仍需关闭 auth 独立
+备份与 managed scratch 恢复、required checks、基础设施冗余/观测和正式审计取证
+等缺口；任何一项都不能由“代码存在”替代实际演练证据。
 即:控制**能力**已具备，差的是**制度强制**与**第三方取证**——与整份差距报告结论一致。

@@ -29,19 +29,20 @@
   `-n` dump 整个 schema），抓完整 app 数据层，跳过 storage.objects(2.2GB 文件
   元数据，实体在 Supabase Storage)/auth 系统 schema。
 - GH Actions `backup-db.yml` 用 schema 模式 + 只读角色 arena_backup_ro——
-  这是**新的完整备份主通道**。实测 ro 角色读 arena.trader_stats=415544 行完整。
+  这是新的**应用数据备份主通道**。实测 ro 角色读 arena.trader_stats=415544 行完整。
 - 待办：Mac Mini crontab 的 `backup:r2` 也切 schema 模式（等 GH backup 证明
   schema 模式在真实数据量跑通后传播——验证优先）。
 
 ## 防再犯
 
 - [x] schema 模式备份（跟随 schema 而非硬编码表名）
-- [x] GH Actions 完整备份 + 只读角色（冗余 Mac Mini + 降爆炸半径）——实测 3.87GB 完整备份上 R2
+- [x] GH Actions 应用数据备份 + 只读角色（冗余 Mac Mini + 降爆炸半径）——实测 3.87GB arena+public 产物上 R2
 - [x] 备份完整性校验：新鲜度哨兵加"大小 <1GB 告警"（完整 3.9GB vs 残缺 381MB）
 - [x] Mac crontab 切 schema 模式（BACKUP_SCHEMAS=arena,public，与 GH 15:30 错峰 03:30）
 
-**结果**：两条完整备份（Mac 03:30 + GH Actions 15:30）错峰冗余，各 ~3.9GB 含 arena.\*
-主数据；哨兵同时守新鲜度 + 完整性。
+**结果**：两条应用数据备份（Mac 03:30 + GH Actions 15:30）错峰冗余，各
+~3.9GB 含 arena.\* 主数据。2026-08-03 复审确认它们不含 auth，且尚未通过
+managed scratch restore；因此该复盘只关闭“漏 arena 主数据”，不关闭全库灾备缺口。
 
 ## 教训
 
