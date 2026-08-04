@@ -184,4 +184,26 @@ describe('GET /api/v3 cache and publication boundaries', () => {
       }
     )
   })
+
+  it('quarantines legacy position history in trader responses', async () => {
+    const cachedDetail = {
+      trader: { platform: 'bybit', traderKey: 'cached-trader' },
+      positionHistory: [{ symbol: 'BTCUSDT', pnlUsd: 42 }],
+      historyCompleteness: { state: 'complete' },
+    }
+    mockGetTraderDetail.mockResolvedValueOnce(cachedDetail)
+
+    const response = await GET(
+      request('/api/v3?endpoint=trader&platform=bybit&trader_key=cached-trader')
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data.positionHistory).toEqual([])
+    expect(body.data.historyCompleteness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
+    expect(cachedDetail.positionHistory).toHaveLength(1)
+  })
 })
