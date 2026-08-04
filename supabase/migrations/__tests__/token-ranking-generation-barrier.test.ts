@@ -106,17 +106,30 @@ describe('token ranking generation barrier', () => {
     expect(normalized).toContain("notify pgrst, 'reload schema'")
   })
 
-  it('is the final ordered PREDEPLOY and keeps generated contracts synchronized', () => {
+  it('is an ordered PREDEPLOY barrier and keeps generated contracts synchronized', () => {
     const predeployStart = runner.indexOf('PREDEPLOY_MIGRATIONS=(')
     const predeployEnd = runner.indexOf('\n)', predeployStart) + 2
     const quarantineStart = runner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
-    const migrationIndex = runner.indexOf(migrationName, predeployStart)
+    const predeploy = runner.slice(predeployStart, predeployEnd)
+    const orderedTokenRankingMigrations = [
+      '20260729223000_rerank_public_eligible_rows_only.sql',
+      '20260729224000_rank_eligible_leaderboard_count_cache.sql',
+      '20260729225000_token_trader_rank_authority.sql',
+      migrationName,
+    ]
 
-    expect(migrationIndex).toBeGreaterThan(predeployStart)
-    expect(migrationIndex).toBeLessThan(quarantineStart)
-    expect(runner.slice(predeployStart, predeployEnd).trimEnd()).toMatch(
-      new RegExp(`${migrationName.replace('.', '\\.')}\\n\\)$`)
-    )
+    expect(predeployStart).toBeGreaterThanOrEqual(0)
+    expect(predeployEnd).toBeGreaterThan(predeployStart)
+    expect(quarantineStart).toBeGreaterThan(predeployEnd)
+
+    let previousMigrationIndex = -1
+    for (const orderedMigration of orderedTokenRankingMigrations) {
+      const orderedMigrationIndex = predeploy.indexOf(orderedMigration)
+      expect(orderedMigrationIndex).toBeGreaterThan(previousMigrationIndex)
+      previousMigrationIndex = orderedMigrationIndex
+    }
+    expect(predeploy.split(migrationName)).toHaveLength(2)
+
     expect(generatedTypes).toContain('get_token_ranking_publication_head: {')
     expect(generatedTypes).toContain('window_through_date: string | null')
     expect(generatedTypes).toContain('published_at_epoch_ms: number | null')
