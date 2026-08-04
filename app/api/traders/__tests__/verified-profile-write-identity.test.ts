@@ -59,6 +59,12 @@ function request(body: unknown): NextRequest {
   return { json: jest.fn().mockResolvedValue(body) } as unknown as NextRequest
 }
 
+function invalidJsonRequest(): NextRequest {
+  return {
+    json: jest.fn().mockRejectedValue(new SyntaxError('invalid JSON')),
+  } as unknown as NextRequest
+}
+
 const verified = {
   id: 'verified-b',
   user_id: 'user-1',
@@ -180,5 +186,114 @@ describe.each([
       success: false,
       error: expect.stringContaining('draft was not saved'),
     })
+  })
+})
+
+describe('claim profile PUT strict request contract', () => {
+  const validRequest = {
+    trader_id: 'trader-b',
+    source: 'binance_futures',
+    profile_version: 7,
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockUpdateVerifiedTrader.mockResolvedValue(verified)
+  })
+
+  it.each([null, [], 'profile', 42])('rejects a non-object body: %p', async (body) => {
+    const response = await updateClaimProfile(request(body))
+
+    expect(response.status).toBe(400)
+    expect(mockUpdateVerifiedTrader).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed JSON', async () => {
+    const response = await updateClaimProfile(invalidJsonRequest())
+
+    expect(response.status).toBe(400)
+    expect(mockUpdateVerifiedTrader).not.toHaveBeenCalled()
+  })
+
+  it('rejects unknown fields instead of silently ignoring them', async () => {
+    const response = await updateClaimProfile(
+      request({ ...validRequest, display_name: 'Valid', admin: true })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockUpdateVerifiedTrader).not.toHaveBeenCalled()
+  })
+
+  it.each([-1, 1.5, Number.MAX_SAFE_INTEGER])(
+    'rejects an invalid database revision: %p',
+    async (profileVersion) => {
+      const response = await updateClaimProfile(
+        request({ ...validRequest, profile_version: profileVersion, display_name: 'Valid' })
+      )
+
+      expect(response.status).toBe(400)
+      expect(mockUpdateVerifiedTrader).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ['display_name', 7],
+    ['bio', false],
+    ['avatar_url', { url: 'https://example.com/avatar.png' }],
+    ['twitter_url', 7],
+    ['telegram_url', false],
+    ['discord_url', ['https://discord.com/users/1']],
+    ['website_url', { href: 'https://example.com' }],
+    ['can_receive_messages', 'false'],
+  ])('rejects an invalid %s type instead of coercing it', async (field, value) => {
+    const response = await updateClaimProfile(request({ ...validRequest, [field]: value }))
+
+    expect(response.status).toBe(400)
+    expect(mockUpdateVerifiedTrader).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['discord_url', 'discord-user'],
+    ['discord_url', `https://discord.com/${'a'.repeat(4096)}`],
+    ['website_url', 'http://example.com'],
+  ])('rejects an invalid or oversized %s', async (field, value) => {
+    const response = await updateClaimProfile(request({ ...validRequest, [field]: value }))
+
+    expect(response.status).toBe(400)
+    expect(mockUpdateVerifiedTrader).not.toHaveBeenCalled()
+  })
+
+  it('preserves an explicit false boolean and normalized nullable values', async () => {
+    const response = await updateClaimProfile(
+      request({
+        ...validRequest,
+        display_name: '   ',
+        discord_url: ' https://discord.com/users/123 ',
+        can_receive_messages: false,
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockUpdateVerifiedTrader).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
+      { trader_id: 'trader-b', source: 'binance_futures' },
+      7,
+      {
+        display_name: null,
+        discord_url: 'https://discord.com/users/123',
+        can_receive_messages: false,
+      }
+    )
+  })
+
+  it('fails closed when the service does not acknowledge the next revision', async () => {
+    mockUpdateVerifiedTrader.mockResolvedValue({ ...verified, profile_version: 7 })
+
+    const response = await updateClaimProfile(
+      request({ ...validRequest, display_name: 'Must be acknowledged' })
+    )
+
+    expect(response.status).toBe(500)
   })
 })

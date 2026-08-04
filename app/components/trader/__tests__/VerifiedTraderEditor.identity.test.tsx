@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-const mockGetSession = jest.fn()
+const mockUseAuthSession = jest.fn()
 const mockShowToast = jest.fn()
 const mockOnSaved = jest.fn()
 
-jest.mock('@/lib/supabase/client', () => ({
-  supabase: { auth: { getSession: (...args: unknown[]) => mockGetSession(...args) } },
+jest.mock('@/lib/hooks/useAuthSession', () => ({
+  useAuthSession: () => mockUseAuthSession(),
 }))
 
 jest.mock('@/app/components/ui/Toast', () => ({
@@ -36,6 +36,24 @@ jest.mock('@/app/components/base', () => {
 })
 
 import VerifiedTraderEditor, { type VerifiedTraderProfileData } from '../VerifiedTraderEditor'
+import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
+
+function jwt(userId: string): string {
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
+}
+
+function setViewer(userId: string | null) {
+  const scope = synchronizeViewerScope(true, userId)
+  mockUseAuthSession.mockReturnValue({
+    accessToken: userId ? jwt(userId) : null,
+    authChecked: true,
+    loading: false,
+    sessionGeneration: scope.sessionGeneration,
+    userId,
+    viewerKey: scope.viewerKey,
+  })
+}
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -55,9 +73,14 @@ function profile(
 }
 
 function successfulResponse(
-  verifiedTrader: VerifiedTraderProfileData & { trader_id: string; source: string }
+  verifiedTrader: VerifiedTraderProfileData & {
+    trader_id: string
+    source: string
+    user_id?: string
+  }
 ): Response {
   const completeProfile = {
+    user_id: 'user-a',
     display_name: null,
     bio: null,
     twitter_url: null,
@@ -77,6 +100,7 @@ function responseForRequest(_input: unknown, init?: RequestInit): Response {
   const body = JSON.parse(String(init?.body)) as Record<string, unknown>
   const profileVersion = body.profile_version as number
   return successfulResponse({
+    user_id: 'user-a',
     profile_version: profileVersion + 1,
     trader_id: body.trader_id as string,
     source: body.source as string,
@@ -92,9 +116,8 @@ function responseForRequest(_input: unknown, init?: RequestInit): Response {
 describe('VerifiedTraderEditor identity contract', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockGetSession.mockResolvedValue({
-      data: { session: { access_token: 'access-token' } },
-    })
+    __resetViewerScopeForTests()
+    setViewer('user-a')
     global.fetch = jest.fn().mockImplementation(responseForRequest)
   })
 
@@ -123,6 +146,7 @@ describe('VerifiedTraderEditor identity contract', () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
     const [, init] = (global.fetch as jest.Mock).mock.calls[0]
+    expect(init.headers).toMatchObject({ Authorization: `Bearer ${jwt('user-a')}` })
     expect(JSON.parse(String(init.body))).toEqual({
       trader_id: 'account-42',
       source: 'binance_futures',
@@ -155,7 +179,7 @@ describe('VerifiedTraderEditor identity contract', () => {
     })
   })
 
-  it('does not request a session or write when nothing changed', () => {
+  it('does not write when nothing changed', () => {
     render(
       <VerifiedTraderEditor
         traderId="account-42"
@@ -167,7 +191,6 @@ describe('VerifiedTraderEditor identity contract', () => {
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
 
-    expect(mockGetSession).not.toHaveBeenCalled()
     expect(global.fetch).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
   })
@@ -387,12 +410,7 @@ describe('VerifiedTraderEditor identity contract', () => {
     })
   })
 
-  it('does not start an old identity write when its deferred session arrives late', async () => {
-    const oldSession = deferred<{
-      data: { session: { access_token: string } }
-    }>()
-    mockGetSession.mockReturnValueOnce(oldSession.promise)
-
+  it('does not let a replacement viewer write through the owner-bound editor', () => {
     const view = render(
       <VerifiedTraderEditor
         traderId="account-42"
@@ -404,27 +422,56 @@ describe('VerifiedTraderEditor identity contract', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
     fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
-      target: { value: 'Old save' },
+      target: { value: 'Must stay local' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
-    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
 
+    setViewer('user-b')
     view.rerender(
       <VerifiedTraderEditor
-        traderId="account-99"
-        source="bybit"
-        currentData={profile({ display_name: 'Account 99' })}
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Account 42' })}
         onSaved={mockOnSaved}
       />
     )
-    await act(async () =>
-      oldSession.resolve({ data: { session: { access_token: 'old-access-token' } } })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
 
     expect(global.fetch).not.toHaveBeenCalled()
     expect(mockOnSaved).not.toHaveBeenCalled()
-    expect(mockShowToast).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'verifiedTraderEditProfile' })).toBeInTheDocument()
+    expect(mockShowToast).toHaveBeenCalledWith('pleaseLoginFirst', 'warning')
+    expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Must stay local')
+  })
+
+  it('single-flights rapid saves before React commits the disabled state', async () => {
+    const pendingSave = deferred<Response>()
+    global.fetch = jest.fn().mockReturnValue(pendingSave.promise)
+    render(
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Before' })}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
+      target: { value: 'One request' },
+    })
+    const save = screen.getByRole('button', { name: 'verifiedTraderSaveChanges' })
+    fireEvent.click(save)
+    fireEvent.click(save)
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    await act(async () =>
+      pendingSave.resolve(
+        successfulResponse({
+          trader_id: 'account-42',
+          source: 'binance_futures',
+          profile_version: 1,
+          display_name: 'One request',
+        })
+      )
+    )
   })
 
   it('keeps the stale draft open when the database rejects its revision', async () => {
@@ -492,6 +539,44 @@ describe('VerifiedTraderEditor identity contract', () => {
     )
     expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Draft')
     expect(mockOnSaved).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['viewer', { user_id: 'user-b' }],
+    ['revision', { profile_version: 0 }],
+  ])('does not report success for a mismatched %s acknowledgement', async (_label, mismatch) => {
+    global.fetch = jest.fn().mockResolvedValue(
+      successfulResponse({
+        trader_id: 'account-42',
+        source: 'binance_futures',
+        profile_version: 1,
+        display_name: 'Draft',
+        ...mismatch,
+      })
+    )
+    render(
+      <VerifiedTraderEditor
+        traderId="account-42"
+        source="binance_futures"
+        currentData={profile({ display_name: 'Before' })}
+        onSaved={mockOnSaved}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderEditProfile' }))
+    fireEvent.change(screen.getByLabelText('verifiedTraderDisplayName'), {
+      target: { value: 'Draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'verifiedTraderSaveChanges' }))
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.stringContaining('verifiedTraderSaveFailed'),
+        'error'
+      )
+    )
+    expect(mockOnSaved).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('verifiedTraderDisplayName')).toHaveValue('Draft')
   })
 
   it('uses the acknowledged revision for a later save without a page reload', async () => {

@@ -11,8 +11,13 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureVerifiedProfileViewer,
+  isVerifiedProfileViewerCurrent,
+  type VerifiedProfileViewerSnapshot,
+} from './verified-profile-viewer-scope'
 
 export interface VerifiedTraderProfileData {
   profile_version: number
@@ -68,6 +73,7 @@ function isValidProfileVersion(value: unknown): value is number {
 
 function isProfileAcknowledgement(
   value: unknown,
+  viewerUserId: string,
   identity: { traderId: string; source: string },
   expectedVersion: number,
   updates: ProfileUpdates
@@ -75,11 +81,11 @@ function isProfileAcknowledgement(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const acknowledgement = value as Record<string, unknown>
   return (
+    acknowledgement.user_id === viewerUserId &&
     acknowledgement.trader_id === identity.traderId &&
     acknowledgement.source === identity.source &&
     isValidProfileVersion(acknowledgement.profile_version) &&
-    acknowledgement.profile_version >= expectedVersion &&
-    acknowledgement.profile_version <= expectedVersion + 1 &&
+    acknowledgement.profile_version === expectedVersion + 1 &&
     EDITABLE_PROFILE_FIELDS.every(
       (field) => acknowledgement[field] === null || typeof acknowledgement[field] === 'string'
     ) &&
@@ -121,6 +127,9 @@ export default function VerifiedTraderEditor({
 }: VerifiedTraderEditorProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
 
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -136,7 +145,21 @@ export default function VerifiedTraderEditor({
   const identityKey = `${source}\u0000${traderId}`
   const identityKeyRef = useRef(identityKey)
   const renderedIdentityKeyRef = useRef(identityKey)
-  const saveGenerationRef = useRef(0)
+  const mountedRef = useRef(false)
+  const ownerUserIdRef = useRef<string | null>(null)
+  const activeSaveRef = useRef<{
+    id: number
+    identityKey: string
+    viewer: VerifiedProfileViewerSnapshot
+  } | null>(null)
+  const nextSaveIdRef = useRef(0)
+
+  const renderedViewer = captureVerifiedProfileViewer(auth)
+  if (ownerUserIdRef.current === null && renderedViewer) {
+    // The owner-qualified editor is bound to the canonical viewer that first
+    // rendered it. A later account must wait for its own editor instance.
+    ownerUserIdRef.current = renderedViewer.userId
+  }
 
   // These refs intentionally track the newest render synchronously. A pending
   // request may settle before effects for a new identity or refreshed profile
@@ -145,13 +168,20 @@ export default function VerifiedTraderEditor({
   latestExternalVersionRef.current = externalVersion
   renderedIdentityKeyRef.current = identityKey
 
-  useEffect(
-    () => () => {
-      // A completed request must not fire a toast/onSaved after navigation.
-      saveGenerationRef.current += 1
-    },
-    []
-  )
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      activeSaveRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const operation = activeSaveRef.current
+    if (!operation || isVerifiedProfileViewerCurrent(operation.viewer, authRef.current)) return
+    activeSaveRef.current = null
+    setSaving(false)
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, auth.viewerKey])
 
   // Profile data commonly arrives after the editor first renders. Adopt it only
   // while closed; a background revalidation must not overwrite an active draft.
@@ -160,9 +190,8 @@ export default function VerifiedTraderEditor({
     const identityChanged = identityKeyRef.current !== identityKey
     if (identityChanged) {
       identityKeyRef.current = identityKey
-      // Invalidate every await still in flight for the previous identity.
       // The old request may still finish, but it must become a complete no-op.
-      saveGenerationRef.current += 1
+      activeSaveRef.current = null
       lastExternalValuesRef.current = externalValues
       lastExternalVersionRef.current = externalVersion
       initialValuesRef.current = externalValues
@@ -220,6 +249,7 @@ export default function VerifiedTraderEditor({
   }
 
   const handleSave = async () => {
+    if (activeSaveRef.current) return
     const updates = changedProfileFields(initialValuesRef.current, formValues)
     if (Object.keys(updates).length === 0) {
       resetToLatestProfile()
@@ -231,29 +261,31 @@ export default function VerifiedTraderEditor({
       return
     }
 
-    const saveIdentityKey = identityKey
-    const saveGeneration = ++saveGenerationRef.current
+    const viewer = captureVerifiedProfileViewer(authRef.current)
+    if (!viewer || viewer.userId !== ownerUserIdRef.current) {
+      showToast(t('pleaseLoginFirst'), 'warning')
+      return
+    }
+    const operation = {
+      id: ++nextSaveIdRef.current,
+      identityKey,
+      viewer,
+    }
+    activeSaveRef.current = operation
     const isCurrentSave = () =>
-      renderedIdentityKeyRef.current === saveIdentityKey &&
-      identityKeyRef.current === saveIdentityKey &&
-      saveGenerationRef.current === saveGeneration
+      mountedRef.current &&
+      activeSaveRef.current?.id === operation.id &&
+      renderedIdentityKeyRef.current === operation.identityKey &&
+      identityKeyRef.current === operation.identityKey &&
+      isVerifiedProfileViewerCurrent(operation.viewer, authRef.current)
 
     setSaving(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!isCurrentSave()) return
-      if (!session) {
-        showToast(t('pleaseLoginFirst'), 'warning')
-        return
-      }
-
       const res = await fetch('/api/traders/claim/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${operation.viewer.accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
@@ -282,7 +314,13 @@ export default function VerifiedTraderEditor({
           ? (acknowledgement as Record<string, unknown>).verified_trader
           : null
       if (
-        !isProfileAcknowledgement(verifiedTrader, { traderId, source }, expectedVersion, updates)
+        !isProfileAcknowledgement(
+          verifiedTrader,
+          operation.viewer.userId,
+          { traderId, source },
+          expectedVersion,
+          updates
+        )
       ) {
         throw new Error('Invalid profile save acknowledgement')
       }
@@ -305,8 +343,15 @@ export default function VerifiedTraderEditor({
       const msg = error instanceof Error ? error.message : ''
       showToast(`${t('verifiedTraderSaveFailed')} ${msg}`, 'error')
     } finally {
-      // An older response must not clear the spinner for a newer save.
-      if (isCurrentSave()) setSaving(false)
+      // An older response must not release or clear a newer save.
+      if (activeSaveRef.current?.id === operation.id) {
+        const shouldClearSaving =
+          mountedRef.current &&
+          renderedIdentityKeyRef.current === operation.identityKey &&
+          identityKeyRef.current === operation.identityKey
+        activeSaveRef.current = null
+        if (shouldClearSaving) setSaving(false)
+      }
     }
   }
 
@@ -353,7 +398,7 @@ export default function VerifiedTraderEditor({
   const labelStyle: React.CSSProperties = {
     display: 'block',
     marginBottom: tokens.spacing[1],
-    fontWeight: 500,
+    fontWeight: tokens.typography.fontWeight.medium,
     fontSize: tokens.typography.fontSize.xs,
     color: tokens.colors.text.secondary,
   }
@@ -371,7 +416,7 @@ export default function VerifiedTraderEditor({
       <Text
         style={{
           fontSize: tokens.typography.fontSize.md,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           marginBottom: tokens.spacing[3],
         }}
       >
@@ -441,10 +486,11 @@ export default function VerifiedTraderEditor({
           </label>
           <input
             id="vt-discord"
-            type="text"
+            type="url"
             value={formValues.discord_url}
             onChange={(e) => setProfileField('discord_url', e.target.value)}
-            placeholder="username#1234"
+            placeholder="https://discord.com/users/..."
+            maxLength={4096}
             style={inputStyle}
           />
         </Box>

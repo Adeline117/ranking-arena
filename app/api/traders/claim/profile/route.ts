@@ -14,7 +14,6 @@ import {
   handleError,
   checkRateLimit,
   RateLimitPresets,
-  validateString,
 } from '@/lib/api'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { isVerifiedTraderProfileConflict, updateVerifiedTrader } from '@/lib/data/trader-claims'
@@ -24,6 +23,94 @@ import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
 
 const logger = createLogger('claim-profile')
 
+const PROFILE_UPDATE_FIELDS = [
+  'display_name',
+  'bio',
+  'avatar_url',
+  'twitter_url',
+  'telegram_url',
+  'discord_url',
+  'website_url',
+  'can_receive_messages',
+] as const
+
+const PROFILE_REQUEST_FIELDS = new Set([
+  'trader_id',
+  'source',
+  'profile_version',
+  ...PROFILE_UPDATE_FIELDS,
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizedRequiredString(value: unknown, fieldName: string, maxLength: number): string {
+  if (typeof value !== 'string') throw ApiError.validation(`${fieldName} must be a string`)
+  const normalized = value.trim()
+  if (!normalized) throw ApiError.validation(`${fieldName} is required`)
+  if (normalized.length > maxLength) {
+    throw ApiError.validation(`${fieldName} must be ${maxLength} characters or less`)
+  }
+  return normalized
+}
+
+function normalizedNullableString(
+  value: unknown,
+  fieldName: string,
+  maxLength: number
+): string | null {
+  if (value === null) return null
+  if (typeof value !== 'string') {
+    throw ApiError.validation(`${fieldName} must be a string or null`)
+  }
+  const normalized = value.trim()
+  if (normalized.length > maxLength) {
+    throw ApiError.validation(`${fieldName} must be ${maxLength} characters or less`)
+  }
+  return normalized || null
+}
+
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:') return false
+    const host = parsed.hostname.toLowerCase()
+    return !(
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '[::1]' ||
+      host.endsWith('.local')
+    )
+  } catch {
+    return false
+  }
+}
+
+function normalizedNullableUrl(value: unknown, fieldName: string): string | null {
+  const normalized = normalizedNullableString(value, fieldName, 4096)
+  if (normalized && !isValidUrl(normalized)) {
+    throw ApiError.validation(`Invalid URL for ${fieldName}`)
+  }
+  return normalized
+}
+
+async function readProfileUpdateBody(request: NextRequest): Promise<Record<string, unknown>> {
+  let value: unknown
+  try {
+    value = await request.json()
+  } catch {
+    throw ApiError.validation('Request body must be valid JSON')
+  }
+  if (!isRecord(value)) throw ApiError.validation('Request body must be an object')
+  const unknownFields = Object.keys(value).filter((field) => !PROFILE_REQUEST_FIELDS.has(field))
+  if (unknownFields.length > 0) {
+    throw ApiError.validation('Unknown profile update fields', { fields: unknownFields })
+  }
+  return value
+}
+
 export async function PUT(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
@@ -31,24 +118,14 @@ export async function PUT(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
-    const body = await request.json()
-    const rawTraderId = validateString(body.trader_id, {
-      required: true,
-      maxLength: 512,
-      fieldName: 'trader_id',
-    })
-    const rawSource = validateString(body.source, {
-      required: true,
-      maxLength: 100,
-      fieldName: 'source',
-    })
-    if (!rawTraderId || !rawSource) {
-      throw ApiError.validation('trader_id and source are required')
-    }
+    const body = await readProfileUpdateBody(request)
+    const rawTraderId = normalizedRequiredString(body.trader_id, 'trader_id', 512)
+    const rawSource = normalizedRequiredString(body.source, 'source', 100)
     if (
       typeof body.profile_version !== 'number' ||
       !Number.isSafeInteger(body.profile_version) ||
-      body.profile_version < 0
+      body.profile_version < 0 ||
+      body.profile_version > 2_147_483_647
     ) {
       throw ApiError.validation('A valid profile_version is required')
     }
@@ -66,69 +143,33 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Sanitize inputs
     const updates: Record<string, string | null | boolean | undefined> = {}
 
     if (body.display_name !== undefined) {
-      const name = typeof body.display_name === 'string' ? body.display_name.trim() : null
-      if (name && name.length > 50) {
-        throw ApiError.validation('Display name must be 50 characters or less')
-      }
-      updates.display_name = name || null
+      updates.display_name = normalizedNullableString(body.display_name, 'display_name', 50)
     }
 
     if (body.bio !== undefined) {
-      const bio = typeof body.bio === 'string' ? body.bio.trim() : null
-      if (bio && bio.length > 280) {
-        throw ApiError.validation('Bio must be 280 characters or less')
-      }
-      updates.bio = bio || null
+      updates.bio = normalizedNullableString(body.bio, 'bio', 280)
     }
 
-    // URL validation helper — only allow https URLs, block internal hosts
-    function isValidUrl(url: string): boolean {
-      try {
-        const parsed = new URL(url)
-        if (parsed.protocol !== 'https:') return false
-        const host = parsed.hostname.toLowerCase()
-        if (
-          host === 'localhost' ||
-          host === '127.0.0.1' ||
-          host === '0.0.0.0' ||
-          host.endsWith('.local')
-        )
-          return false
-        return true
-      } catch {
-        return false
-      }
-    }
-
-    for (const field of ['twitter_url', 'telegram_url', 'website_url'] as const) {
+    for (const field of [
+      'avatar_url',
+      'twitter_url',
+      'telegram_url',
+      'discord_url',
+      'website_url',
+    ] as const) {
       if (body[field] !== undefined) {
-        const value = typeof body[field] === 'string' ? body[field].trim() : null
-        if (value && !isValidUrl(value)) {
-          throw ApiError.validation(`Invalid URL for ${field}`)
-        }
-        updates[field] = value || null
+        updates[field] = normalizedNullableUrl(body[field], field)
       }
-    }
-
-    if (body.discord_url !== undefined) {
-      const value = typeof body.discord_url === 'string' ? body.discord_url.trim() : null
-      updates.discord_url = value || null
-    }
-
-    if (body.avatar_url !== undefined) {
-      const value = typeof body.avatar_url === 'string' ? body.avatar_url.trim() : null
-      if (value && !isValidUrl(value)) {
-        throw ApiError.validation('Invalid avatar URL')
-      }
-      updates.avatar_url = value || null
     }
 
     if (body.can_receive_messages !== undefined) {
-      updates.can_receive_messages = !!body.can_receive_messages
+      if (typeof body.can_receive_messages !== 'boolean') {
+        throw ApiError.validation('can_receive_messages must be a boolean')
+      }
+      updates.can_receive_messages = body.can_receive_messages
     }
 
     if (Object.keys(updates).length === 0) {
@@ -149,6 +190,9 @@ export async function PUT(request: NextRequest) {
       updated.source !== source
     ) {
       throw ApiError.forbidden('You do not own this verified trader profile.')
+    }
+    if (updated.profile_version !== profileVersion + 1) {
+      throw new Error('Verified trader profile update returned an invalid revision acknowledgement')
     }
 
     logger.info('Verified trader profile updated', {
