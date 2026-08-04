@@ -11,9 +11,20 @@ export async function mintNFTForUser(userId: string, plan: string) {
   try {
     const { data: profile } = await getSupabase()
       .from('user_profiles')
-      .select('wallet_address')
+      .select('wallet_address, nft_token_id')
       .eq('id', userId)
       .single()
+
+    // Minting is an on-chain write with no contract-level dedupe, and Stripe
+    // redelivers webhook events for up to 72h. Without this guard a single
+    // retried checkout.session.completed mints a second membership NFT.
+    if (profile?.nft_token_id) {
+      logger.info('NFT already minted for user, skipping', {
+        userId,
+        tokenId: profile.nft_token_id,
+      })
+      return
+    }
 
     if (!profile?.wallet_address) {
       logger.info('User has no wallet address, NFT minting skipped', { userId })
