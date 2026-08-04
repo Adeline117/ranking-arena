@@ -140,6 +140,18 @@ function successResponse() {
   return { ok: true, status: 200, json: async () => ({ success: true }) }
 }
 
+function disconnectResponse(exchange = 'binance', extra: Record<string, unknown> = {}) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ success: true, exchange, ...extra }),
+  }
+}
+
+function emptyConnectionResponse() {
+  return { ok: true, status: 200, json: async () => ({ data: { connections: [] } }) }
+}
+
 describe('ExchangeConnectionManager viewer ownership', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -269,6 +281,31 @@ describe('ExchangeConnectionManager viewer ownership', () => {
     })
 
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/exchange/disconnect')).toBe(false)
+  })
+
+  it('reloads only after an exact exchange-bound disconnect acknowledgement', async () => {
+    mockShowConfirm.mockResolvedValue(true)
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(connectionResponse('viewer-a', 'viewer-a-secret'))
+      .mockResolvedValueOnce(disconnectResponse('bybit'))
+      .mockResolvedValueOnce(disconnectResponse())
+      .mockResolvedValueOnce(emptyConnectionResponse())
+    global.fetch = fetchMock as typeof fetch
+
+    render(<ExchangeConnectionManager userId="viewer-a" />)
+    expect(await screen.findByText(/viewer-a-secret/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'disconnect' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('disconnectFailed', 'error'))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'disconnect' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('disconnected', 'success'))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'disconnect' })).not.toBeInTheDocument()
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
   it('keeps the last-started same-viewer reload authoritative', async () => {

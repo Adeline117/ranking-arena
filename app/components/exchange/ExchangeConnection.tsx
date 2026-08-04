@@ -16,6 +16,10 @@ import {
   isExchangeViewerCurrent,
   type ExchangeViewerSnapshot,
 } from '@/lib/exchange/viewer-scope'
+import {
+  readExchangeDisconnectAcknowledgement,
+  readExchangeMutationError,
+} from '@/lib/exchange/connection-mutation-contract'
 
 interface ExchangeConnectionProps {
   userId: string
@@ -281,11 +285,11 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       })
       if (!mutationIsCurrent(operation)) return
 
-      const result = (await response.json()) as { error?: unknown }
+      const result: unknown = await response.json().catch(() => null)
       if (!mutationIsCurrent(operation)) return
 
-      if (!response.ok) {
-        showToast(typeof result.error === 'string' ? result.error : t('disconnectFailed'), 'error')
+      if (!response.ok || !readExchangeDisconnectAcknowledgement(result, exchange)) {
+        showToast(readExchangeMutationError(result) || t('disconnectFailed'), 'error')
         return
       }
 
