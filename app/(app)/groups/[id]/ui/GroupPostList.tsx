@@ -189,6 +189,7 @@ export default function GroupPostList(props: GroupPostListProps) {
             variant={sortMode === 'latest' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setSortMode('latest')}
+            aria-pressed={sortMode === 'latest'}
             style={{ minHeight: 44 }}
           >
             {t('latest')}
@@ -197,6 +198,7 @@ export default function GroupPostList(props: GroupPostListProps) {
             variant={sortMode === 'hot' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setSortMode('hot')}
+            aria-pressed={sortMode === 'hot'}
             style={{ minHeight: 44 }}
           >
             {t('hot')}
@@ -208,6 +210,7 @@ export default function GroupPostList(props: GroupPostListProps) {
             onClick={() => setViewMode('list')}
             title={t('listView')}
             aria-label={t('listView')}
+            aria-pressed={viewMode === 'list'}
             style={{
               width: 44,
               height: 44,
@@ -247,6 +250,7 @@ export default function GroupPostList(props: GroupPostListProps) {
             onClick={() => setViewMode('masonry')}
             title={t('masonryView')}
             aria-label={t('masonryView')}
+            aria-pressed={viewMode === 'masonry'}
             style={{
               width: 44,
               height: 44,

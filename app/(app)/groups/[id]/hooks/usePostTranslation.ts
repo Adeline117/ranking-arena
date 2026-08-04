@@ -91,11 +91,12 @@ function buildDescriptors(
   return descriptors
 }
 
-function pruneCache(cache: Map<string, string>): void {
-  while (cache.size > MAX_TRANSLATION_CACHE_ENTRIES) {
-    const oldest = cache.keys().next().value
-    if (typeof oldest !== 'string') return
-    cache.delete(oldest)
+function pruneCache(cache: Map<string, string>, protectedKeys: ReadonlySet<string>): void {
+  if (cache.size <= MAX_TRANSLATION_CACHE_ENTRIES) return
+
+  for (const key of cache.keys()) {
+    if (cache.size <= MAX_TRANSLATION_CACHE_ENTRIES) return
+    if (!protectedKeys.has(key)) cache.delete(key)
   }
 }
 
@@ -159,7 +160,7 @@ export function usePostTranslation({
     }
     // sourceIdentity snapshots every source field even when the posts array is reused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, language, ownerKey, posts, sourceIdentity, translatingEnabled])
+  }, [accessToken, language, ownerKey, sourceIdentity, translatingEnabled])
 
   const translatedPosts = useMemo<Record<string, TranslatedPost>>(() => {
     if (!scope) return {}
@@ -219,11 +220,9 @@ export function usePostTranslation({
     setLoadingKey(scope.key)
     let live = true
 
-    const isCurrent = () =>
-      live &&
-      activeRef.current === active &&
-      sequenceRef.current === active.sequence &&
-      !controller.signal.aborted
+    const ownsActiveRequest = () =>
+      live && activeRef.current === active && sequenceRef.current === active.sequence
+    const isCurrent = () => ownsActiveRequest() && !controller.signal.aborted
 
     void (async () => {
       try {
@@ -262,12 +261,20 @@ export function usePostTranslation({
         if (staged.size !== missing.length || !isCurrent()) return
 
         for (const [key, value] of staged) cacheRef.current.set(key, value)
-        pruneCache(cacheRef.current)
+        pruneCache(
+          cacheRef.current,
+          new Set(scope.descriptors.map((descriptor) => descriptor.cacheKey))
+        )
         setCacheRevision((revision) => revision + 1)
       } catch (error) {
-        if (isCurrent() && !isAbortError(error)) logger.warn('Group translation failed:', error)
+        if (ownsActiveRequest() && !controller.signal.aborted) {
+          controller.abort(new DOMException('Group translation batch failed', 'AbortError'))
+        }
+        if (ownsActiveRequest() && !isAbortError(error)) {
+          logger.warn('Group translation failed:', error)
+        }
       } finally {
-        if (isCurrent()) {
+        if (ownsActiveRequest()) {
           activeRef.current = null
           setLoadingKey(null)
         }

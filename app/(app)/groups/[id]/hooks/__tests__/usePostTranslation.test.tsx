@@ -149,6 +149,72 @@ describe('group post translation loading truth', () => {
     })
   })
 
+  it.each([
+    ['owner', { ownerKey: 'group-owner-b' }, 'new-owner'],
+    ['language', { language: 'zh' }, 'new-language'],
+  ] as const)(
+    'ignores a late response after the %s scope changes',
+    async (_name, change, prefix) => {
+      const first = deferred<ReturnType<typeof receipt>>()
+      mockRequestBatchTranslation
+        .mockReturnValueOnce(first.promise)
+        .mockImplementationOnce(async (items: readonly BatchTranslationItem[]) =>
+          receipt(items, prefix)
+        )
+
+      const { result, rerender } = renderHook(
+        (props: typeof baseProps) => usePostTranslation(props),
+        { initialProps: baseProps }
+      )
+      await waitFor(() => expect(mockRequestBatchTranslation).toHaveBeenCalledTimes(1))
+      const firstItems = mockRequestBatchTranslation.mock.calls[0]?.[0] as BatchTranslationItem[]
+      const firstSignal = mockRequestBatchTranslation.mock.calls[0]?.[2].signal as AbortSignal
+
+      rerender({ ...baseProps, ...change })
+      await waitFor(() => expect(mockRequestBatchTranslation).toHaveBeenCalledTimes(2))
+      await waitFor(() =>
+        expect(result.current.translatedPosts[POST_ID_1]?.title).toBe(
+          `${prefix}:${baseProps.posts[0].title}`
+        )
+      )
+      expect(firstSignal.aborted).toBe(true)
+
+      await act(async () => {
+        first.resolve(receipt(firstItems, 'old-scope'))
+        await first.promise
+      })
+      expect(result.current.translatedPosts[POST_ID_1]?.title).toBe(
+        `${prefix}:${baseProps.posts[0].title}`
+      )
+    }
+  )
+
+  it('keeps one in-flight request when a new posts array has the same source identity', async () => {
+    const pending = deferred<ReturnType<typeof receipt>>()
+    mockRequestBatchTranslation.mockReturnValueOnce(pending.promise)
+    const source = post()
+    const { result, rerender } = renderHook(
+      (props: typeof baseProps) => usePostTranslation(props),
+      { initialProps: { ...baseProps, posts: [source] } }
+    )
+
+    await waitFor(() => expect(mockRequestBatchTranslation).toHaveBeenCalledTimes(1))
+    const items = mockRequestBatchTranslation.mock.calls[0]?.[0] as BatchTranslationItem[]
+    const signal = mockRequestBatchTranslation.mock.calls[0]?.[2].signal as AbortSignal
+
+    rerender({ ...baseProps, posts: [{ ...source, like_count: 1, user_liked: true }] })
+    expect(mockRequestBatchTranslation).toHaveBeenCalledTimes(1)
+    expect(signal.aborted).toBe(false)
+    expect(result.current.translatingPosts).toBe(true)
+
+    await act(async () => {
+      pending.resolve(receipt(items, 'single-flight'))
+      await pending.promise
+    })
+    await waitFor(() => expect(result.current.translatingPosts).toBe(false))
+    expect(result.current.translatedPosts[POST_ID_1]?.title).toBe(`single-flight:${source.title}`)
+  })
+
   it('publishes no partial new scope until every bounded batch succeeds', async () => {
     const second = deferred<ReturnType<typeof receipt>>()
     mockRequestBatchTranslation
@@ -177,6 +243,67 @@ describe('group post translation loading truth', () => {
     })
     await waitFor(() => expect(result.current.translatingPosts).toBe(false))
     expect(Object.keys(result.current.translatedPosts)).toHaveLength(11)
+  })
+
+  it('aborts every sibling batch before clearing loading after one batch fails', async () => {
+    const sibling = deferred<ReturnType<typeof receipt>>()
+    const failed = deferred<ReturnType<typeof receipt>>()
+    mockRequestBatchTranslation
+      .mockReturnValueOnce(sibling.promise)
+      .mockReturnValueOnce(failed.promise)
+    const posts = Array.from({ length: 11 }, (_, index) =>
+      post(`00000000-0000-4000-8001-${String(index + 1).padStart(12, '0')}`, {
+        title: `title-${index}`,
+        content: `content-${index}`,
+      })
+    )
+    const { result } = renderHook(() => usePostTranslation({ ...baseProps, posts }))
+
+    await waitFor(() => expect(mockRequestBatchTranslation).toHaveBeenCalledTimes(2))
+    const siblingItems = mockRequestBatchTranslation.mock.calls[0]?.[0] as BatchTranslationItem[]
+    const siblingSignal = mockRequestBatchTranslation.mock.calls[0]?.[2].signal as AbortSignal
+    expect(result.current.translatingPosts).toBe(true)
+
+    await act(async () => {
+      failed.reject(new Error('second batch failed'))
+      await failed.promise.catch(() => undefined)
+    })
+
+    await waitFor(() => expect(result.current.translatingPosts).toBe(false))
+    expect(siblingSignal.aborted).toBe(true)
+    expect(result.current.translatedPosts).toEqual({})
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Group translation failed:',
+      expect.objectContaining({ message: 'second batch failed' })
+    )
+
+    await act(async () => {
+      sibling.resolve(receipt(siblingItems, 'late-sibling'))
+      await sibling.promise
+    })
+    expect(result.current.translatedPosts).toEqual({})
+  })
+
+  it('keeps every current-scope translation when the scope exceeds the cache target', async () => {
+    const posts = Array.from({ length: 201 }, (_, index) =>
+      post(`00000000-0000-4000-8002-${String(index + 1).padStart(12, '0')}`, {
+        title: `title-${index}`,
+        content: `content-${index}`,
+      })
+    )
+    const { result } = renderHook(() => usePostTranslation({ ...baseProps, posts }))
+
+    await waitFor(() => expect(result.current.translatingPosts).toBe(false))
+    expect(mockRequestBatchTranslation).toHaveBeenCalledTimes(21)
+    expect(Object.keys(result.current.translatedPosts)).toHaveLength(201)
+    expect(result.current.translatedPosts[posts[0].id]).toEqual({
+      title: 'translated:title-0',
+      content: 'translated:content-0',
+    })
+    expect(result.current.translatedPosts[posts[200].id]).toEqual({
+      title: 'translated:title-200',
+      content: 'translated:content-200',
+    })
   })
 
   it('preserves exact cached rows while a later appended-row translation fails', async () => {
