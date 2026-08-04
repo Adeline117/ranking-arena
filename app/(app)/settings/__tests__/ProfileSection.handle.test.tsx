@@ -91,4 +91,48 @@ describe('ProfileSection canonical handle behavior', () => {
 
     expect(screen.queryByText('validationHandleInvalidChars')).not.toBeInTheDocument()
   })
+
+  it('keeps profile image pickers keyboard reachable with visible touch-sized triggers', () => {
+    const onAvatarChange = jest.fn()
+    const onCoverChange = jest.fn()
+    const { container } = render(
+      <ProfileSection
+        {...baseProps}
+        onAvatarChange={onAvatarChange}
+        onCoverChange={onCoverChange}
+      />
+    )
+
+    const controls = [
+      {
+        input: screen.getByLabelText('changeAvatar'),
+        trigger: screen.getByText('changeAvatar').closest('label'),
+        onChange: onAvatarChange,
+      },
+      {
+        input: screen.getByLabelText('changeCover'),
+        trigger: screen.getByText('changeCover').closest('label'),
+        onChange: onCoverChange,
+      },
+    ]
+
+    for (const { input, trigger, onChange } of controls) {
+      expect(input).toHaveClass('sr-only', 'settings-profile-file-input')
+      expect(input).not.toHaveStyle({ display: 'none' })
+      expect(input).not.toHaveAttribute('tabindex', '-1')
+      expect(trigger).toHaveClass('settings-profile-file-trigger')
+      expect(trigger).toHaveStyle({ minHeight: '44px' })
+
+      input.focus()
+      expect(input).toHaveFocus()
+
+      const file = new File(['image'], 'profile.png', { type: 'image/png' })
+      fireEvent.change(input, { target: { files: [file] } })
+      expect(onChange).toHaveBeenCalledTimes(1)
+    }
+
+    expect(container.querySelector('style')?.textContent).toContain(
+      '.settings-profile-file-input:focus-visible + .settings-profile-file-trigger'
+    )
+  })
 })

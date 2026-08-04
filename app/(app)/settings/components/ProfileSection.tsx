@@ -94,16 +94,20 @@ export const ProfileSection = React.memo(function ProfileSection({
 
         <Box>
           <input
+            className="sr-only settings-profile-file-input"
             type="file"
             accept="image/jpeg,image/png,image/gif,image/webp"
             onChange={onAvatarChange}
-            style={{ display: 'none' }}
             id="avatar-input"
           />
           <label
+            className="settings-profile-file-trigger"
             htmlFor="avatar-input"
             style={{
-              display: 'inline-block',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: tokens.touchTarget.min,
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.md,
               border: `1px solid ${tokens.colors.border.primary}`,
@@ -155,16 +159,20 @@ export const ProfileSection = React.memo(function ProfileSection({
         </Box>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <input
+            className="sr-only settings-profile-file-input"
             type="file"
             accept="image/jpeg,image/png,image/gif,image/webp"
             onChange={onCoverChange}
-            style={{ display: 'none' }}
             id="cover-input"
           />
           <label
+            className="settings-profile-file-trigger"
             htmlFor="cover-input"
             style={{
-              display: 'inline-block',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: tokens.touchTarget.min,
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.md,
               border: `1px solid ${tokens.colors.border.primary}`,
@@ -302,6 +310,13 @@ export const ProfileSection = React.memo(function ProfileSection({
           </Text>
         </Box>
       </Box>
+
+      <style>{`
+        .settings-profile-file-input:focus-visible + .settings-profile-file-trigger {
+          outline: ${tokens.focusRing.width} solid ${tokens.colors.accent.brand};
+          outline-offset: ${tokens.focusRing.offset};
+        }
+      `}</style>
     </SectionCard>
   )
 })
