@@ -59,11 +59,14 @@ function FundingRatesLoadError({ title, description }: { title: string; descript
 export default function FundingRatesClient({
   rates,
   loadError = false,
+  degraded = false,
 }: {
   rates: FundingRateRow[]
   loadError?: boolean
+  degraded?: boolean
 }) {
   const { t } = useLanguage()
+  const router = useRouter()
   const [sortField, setSortField] = useState<SortField>('funding_rate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
@@ -149,6 +152,9 @@ export default function FundingRatesClient({
               textDecoration: 'underline',
               textDecorationThickness: '1px',
               textUnderlineOffset: 3,
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: tokens.touchTarget.min,
             }}
           >
             {t('market')}
@@ -204,6 +210,7 @@ export default function FundingRatesClient({
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.medium,
               cursor: 'pointer',
+              minHeight: tokens.touchTarget.min,
             }}
           >
             {t('all')}
@@ -232,6 +239,7 @@ export default function FundingRatesClient({
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: tokens.typography.fontWeight.medium,
                 cursor: 'pointer',
+                minHeight: tokens.touchTarget.min,
               }}
             >
               {PLATFORM_LABELS[p] || p}
@@ -251,10 +259,47 @@ export default function FundingRatesClient({
               color: tokens.colors.text.primary,
               fontSize: tokens.typography.fontSize.sm,
               minWidth: 160,
+              minHeight: tokens.touchTarget.min,
               marginLeft: 'auto',
             }}
           />
         </div>
+
+        {!loadError && degraded && (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: tokens.spacing[3],
+              padding: tokens.spacing[3],
+              marginBottom: tokens.spacing[4],
+              border: `1px solid ${tokens.colors.accent.warning}`,
+              borderRadius: tokens.radius.md,
+              color: tokens.colors.text.secondary,
+            }}
+          >
+            <span>{t('dataLoadIncomplete')}</span>
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              style={{
+                minWidth: tokens.touchTarget.min,
+                minHeight: tokens.touchTarget.min,
+                padding: `0 ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.md,
+                border: tokens.glass.border.light,
+                background: tokens.glass.bg.secondary,
+                color: tokens.colors.text.primary,
+                cursor: 'pointer',
+                fontWeight: tokens.typography.fontWeight.semibold,
+              }}
+            >
+              {t('retry')}
+            </button>
+          </div>
+        )}
 
         {/* Table */}
         {loadError ? (
@@ -264,6 +309,8 @@ export default function FundingRatesClient({
           />
         ) : rates.length === 0 ? (
           <EmptyState title={t('noFundingData')} description={t('marketDataPending')} />
+        ) : sorted.length === 0 ? (
+          <EmptyState title={t('noMatchingResults')} description={t('noResults')} />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table
@@ -312,6 +359,7 @@ export default function FundingRatesClient({
                         fontSize: tokens.typography.fontSize.xs,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
+                        height: tokens.touchTarget.min,
                       }}
                     >
                       {label}

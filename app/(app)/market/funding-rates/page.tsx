@@ -3,6 +3,13 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import FundingRatesClient from './FundingRatesClient'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
+import { createBudget, withTimeout } from '@/lib/utils/timeout'
+import {
+  dedupeLatestFundingRates,
+  hasUniqueFundingRateIdentities,
+  readFundingRateRows,
+  type FundingRateRow,
+} from './funding-rates-data'
 
 const logger = createLogger('funding-rates')
 
@@ -38,66 +45,96 @@ export const metadata: Metadata = {
 // revalidate actually takes effect and the DB hit leaves the hot path.
 export const revalidate = 900 // 15 minutes
 
-interface FundingRateRow {
-  platform: string
-  symbol: string
-  funding_rate: number
-  funding_time: string
-}
-
 interface FundingRatesLoadResult {
   rates: FundingRateRow[]
   loadError: boolean
+  degraded: boolean
+}
+
+export const FUNDING_RATES_TOTAL_TIMEOUT_MS = 4_000
+const FUNDING_RATES_RPC_TIMEOUT_MS = 1_750
+
+type AbortableQuery<T> = PromiseLike<T> & {
+  abortSignal?: (signal: AbortSignal) => PromiseLike<T>
+}
+
+async function settleFundingQuery<T>(
+  query: AbortableQuery<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  const controller = new AbortController()
+  const pending =
+    typeof query.abortSignal === 'function'
+      ? Promise.resolve(query.abortSignal(controller.signal))
+      : Promise.resolve(query)
+  try {
+    return await withTimeout(pending, timeoutMs, label)
+  } finally {
+    controller.abort()
+  }
 }
 
 async function getFundingRates(): Promise<FundingRatesLoadResult> {
   try {
     const supabase = getSupabaseAdmin()
+    const budget = createBudget(FUNDING_RATES_TOTAL_TIMEOUT_MS)
 
-    // Use DB-side deduplication via RPC (DISTINCT ON is far more efficient than
-    // fetching 200 rows and deduplicating in memory).
+    // Use DB-side deduplication via RPC (DISTINCT ON is more complete and more
+    // efficient than scanning a bounded fallback snapshot in application code).
     try {
-      const { data, error } = await supabase.rpc('get_latest_funding_rates')
-      if (!error && data) {
-        return { rates: data as FundingRateRow[], loadError: false }
+      const { data, error } = await settleFundingQuery(
+        supabase.rpc('get_latest_funding_rates'),
+        Math.min(FUNDING_RATES_RPC_TIMEOUT_MS, budget.remaining()),
+        'latest funding rates RPC'
+      )
+      const rows = !error ? readFundingRateRows(data) : null
+      if (rows && hasUniqueFundingRateIdentities(rows)) {
+        return { rates: rows, loadError: false, degraded: false }
       }
     } catch {
       // RPC not available, fall back to client-side dedup.
     }
 
     // Fallback: fetch and deduplicate in memory.
-    const { data, error } = await supabase
+    const remainingMs = budget.remaining()
+    const fallbackQuery = supabase
       .from('funding_rates')
       .select('platform, symbol, funding_rate, funding_time')
       .order('funding_time', { ascending: false })
       .limit(500)
+    const { data, error } = await settleFundingQuery(
+      fallbackQuery,
+      remainingMs,
+      'funding rates fallback'
+    )
 
     if (error) {
       logger.error('[funding-rates] fetch error:', error.message)
-      return { rates: [], loadError: true }
+      return { rates: [], loadError: true, degraded: false }
     }
 
-    const seen = new Set<string>()
-    const deduped: FundingRateRow[] = []
-    for (const row of data || []) {
-      const key = `${row.platform}:${row.symbol}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        deduped.push(row)
-      }
+    const rows = readFundingRateRows(data)
+    if (!rows) {
+      logger.error('[funding-rates] fetch error:', 'invalid funding rate response')
+      return { rates: [], loadError: true, degraded: false }
     }
-    return { rates: deduped, loadError: false }
+    return {
+      rates: dedupeLatestFundingRates(rows),
+      loadError: false,
+      degraded: true,
+    }
   } catch (error) {
     logger.error(
       '[funding-rates] fetch error:',
       error instanceof Error ? error.message : String(error)
     )
-    return { rates: [], loadError: true }
+    return { rates: [], loadError: true, degraded: false }
   }
 }
 
 export default async function FundingRatesPage() {
-  const { rates, loadError } = await getFundingRates()
+  const { rates, loadError, degraded } = await getFundingRates()
 
-  return <FundingRatesClient rates={rates} loadError={loadError} />
+  return <FundingRatesClient rates={rates} loadError={loadError} degraded={degraded} />
 }
