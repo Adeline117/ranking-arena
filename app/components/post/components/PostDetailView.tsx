@@ -12,6 +12,7 @@ import { AvatarLink, PostModal, CustomPollCard, PostDetailActions } from '.'
 import LevelBadge from '@/app/components/user/LevelBadge'
 import type { PostWithUserState } from '@/lib/types'
 import type { Comment } from '../hooks/usePostComments'
+import type { PostTranslationCommentBusyLanes } from '../hooks/usePostTranslation'
 import type { ReplyTarget, ReplyTargetSetter } from '../comments/reply-types'
 import type { PostCustomPollLoadState } from '@/lib/polls/post-vote-client-contract'
 
@@ -36,7 +37,12 @@ interface PostDetailViewProps {
   setShowingOriginal: (v: boolean) => void
   translatedContent: string | null
   translating: boolean
-  translatedListPosts: Record<string, { title?: string; body?: string }>
+  contentTranslationResolved: boolean
+  translatedTitle: string | null
+  translatingTitle: boolean
+  titleTranslationResolved: boolean
+  translatingComments: boolean
+  translatingCommentLanes: PostTranslationCommentBusyLanes
   removeImagesFromContent: (content: string) => string
   // Custom poll
   customPoll: {
@@ -103,7 +109,12 @@ export default function PostDetailView({
   setShowingOriginal,
   translatedContent,
   translating,
-  translatedListPosts,
+  contentTranslationResolved,
+  translatedTitle,
+  translatingTitle,
+  titleTranslationResolved,
+  translatingComments,
+  translatingCommentLanes,
   removeImagesFromContent,
   customPoll,
   customPollLoadState,
@@ -143,6 +154,18 @@ export default function PostDetailView({
   translatedComments,
   t,
 }: PostDetailViewProps) {
+  const titleSource = openPost.title?.trim() ?? ''
+  const bodySource = removeImagesFromContent(openPost.content ?? '')
+  const titleLaneResolved = !titleSource || titleTranslationResolved
+  const bodyLaneResolved = !bodySource || contentTranslationResolved
+  const hasTranslatedPart = Boolean(translatedTitle || translatedContent)
+  const detailTranslationReady = Boolean(hasTranslatedPart && titleLaneResolved && bodyLaneResolved)
+  const translationToggleBusy = translating || translatingTitle
+  // Title and body resolve on independent request lanes. Never expose a mixed
+  // source/translation snapshot: the translated view becomes visible only
+  // after every required lane has published for this exact post revision.
+  const displayOriginal = showingOriginal || !detailTranslationReady
+  const translatingCommentCount = Object.keys(translatingCommentLanes).length
   const content = (
     <>
       {openPost.group_name &&
@@ -175,14 +198,12 @@ export default function PostDetailView({
             fontWeight: tokens.typography.fontWeight.black,
             lineHeight: 1.25,
             color:
-              !showingOriginal && translatedListPosts[openPost.id]?.title
+              !displayOriginal && translatedTitle
                 ? tokens.colors.accent.translated
                 : tokens.colors.text.primary,
           }}
         >
-          {showingOriginal
-            ? openPost.title
-            : translatedListPosts[openPost.id]?.title || openPost.title}
+          {displayOriginal ? openPost.title : translatedTitle || openPost.title}
         </div>
         <AvatarLink
           handle={openPost.author_handle}
@@ -230,14 +251,14 @@ export default function PostDetailView({
           marginTop: 12,
           fontSize: tokens.typography.fontSize.base,
           color:
-            !showingOriginal && translatedContent
+            !displayOriginal && translatedContent
               ? tokens.colors.accent.translated
               : tokens.colors.text.primary,
           lineHeight: 1.7,
           whiteSpace: 'pre-wrap',
         }}
       >
-        {showingOriginal
+        {displayOriginal
           ? renderContentWithLinks(openPost.content || '')
           : renderContentWithLinks(translatedContent || openPost.content || '')}
       </div>
@@ -330,32 +351,41 @@ export default function PostDetailView({
       )}
 
       {/* Translation toggle */}
-      {(translatedContent || translatedListPosts[openPost.id]?.title || translating) && (
+      {(detailTranslationReady || translationToggleBusy) && (
         <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
-            onClick={() => setShowingOriginal(!showingOriginal)}
-            disabled={translating}
+            type="button"
+            onClick={() => setShowingOriginal(!displayOriginal)}
+            disabled={translationToggleBusy}
+            aria-busy={translationToggleBusy}
             style={{
-              padding: '4px 10px',
+              minWidth: 44,
+              minHeight: 44,
+              padding: '8px 12px',
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: tokens.typography.fontWeight.semibold,
               border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.sm,
               background: tokens.colors.bg.tertiary,
               color: tokens.colors.text.secondary,
-              cursor: translating ? 'wait' : 'pointer',
+              cursor: translationToggleBusy ? 'wait' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 4,
             }}
           >
-            {translating
+            {translationToggleBusy
               ? t('translating')
-              : showingOriginal
+              : displayOriginal
                 ? t('viewTranslation')
                 : t('viewOriginal')}
           </button>
-          {!showingOriginal && (
+          {translationToggleBusy && (
+            <span className="sr-only" role="status" aria-live="polite">
+              {t('translating')}
+            </span>
+          )}
+          {!displayOriginal && (
             // eslint-disable-next-line no-restricted-syntax -- off-scale by design
             <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
               {t('translatedByAI')}
@@ -407,12 +437,18 @@ export default function PostDetailView({
 
       {/* Comments */}
       <div
+        aria-busy={translatingComments}
         style={{
           marginTop: 16,
           borderTop: `1px solid ${tokens.colors.border.secondary}`,
           paddingTop: 16,
         }}
       >
+        {translatingComments && (
+          <span className="sr-only" role="status" aria-live="polite">
+            {t('translating')} {translatingCommentCount}
+          </span>
+        )}
         <CommentsModal
           postId={openPost.id}
           viewerKey={viewerKey}

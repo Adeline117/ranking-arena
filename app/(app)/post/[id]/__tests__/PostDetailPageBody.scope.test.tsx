@@ -8,6 +8,11 @@ import PostDetailPageBody from '../PostDetailPageBody'
 
 const mockRouter = { push: jest.fn() }
 const mockRenderedReactions: Array<string | null | undefined> = []
+const mockTranslateTitle = jest.fn()
+const mockTranslateContent = jest.fn()
+const mockTranslateComments = jest.fn()
+const mockCancelContentTranslation = jest.fn()
+const mockCancelActivePostTranslations = jest.fn()
 
 jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }))
 jest.mock('next/link', () => ({
@@ -87,6 +92,7 @@ describe('PostDetailPageBody scoped hydration', () => {
     mockUseAuthSession.mockReturnValue({
       accessToken: 'token-a',
       userId: 'user-a',
+      isLoggedIn: true,
       authChecked: true,
       viewerKey: 'user:user-a',
       sessionGeneration: 1,
@@ -123,8 +129,19 @@ describe('PostDetailPageBody scoped hydration', () => {
       showingOriginal: true,
       setShowingOriginal: jest.fn(),
       translating: false,
+      contentTranslationResolved: false,
+      translatedTitle: null,
+      translatingTitle: false,
+      titleTranslationResolved: false,
+      translatingComments: false,
+      translatingCommentLanes: {},
       removeImagesFromContent: (value: string) => value,
       translatedComments: {},
+      translateTitle: mockTranslateTitle,
+      translateContent: mockTranslateContent,
+      translateComments: mockTranslateComments,
+      cancelContentTranslation: mockCancelContentTranslation,
+      cancelActivePostTranslations: mockCancelActivePostTranslations,
     })
     mockUsePostActions.mockReturnValue({
       customPoll: null,
@@ -175,6 +192,71 @@ describe('PostDetailPageBody scoped hydration', () => {
     expect(screen.getByTestId('post-state')).toHaveAttribute('data-comments', '9')
   })
 
+  it('passes the complete owner scope and starts exact detail translation lanes', async () => {
+    mockAuthedFetch.mockResolvedValueOnce({ ok: false, status: 404, data: null })
+    render(<PostDetailPageBody post={initialPost as never} />)
+
+    await waitFor(() => {
+      expect(mockUsePostTranslation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accessToken: 'token-a',
+          authChecked: true,
+          isLoggedIn: true,
+          userId: 'user-a',
+          viewerKey: 'user:user-a',
+          sessionGeneration: 1,
+          language: 'en',
+          activePost: expect.objectContaining({ id: 'post-1', content: 'Body' }),
+          listPosts: [],
+          comments: [],
+        })
+      )
+      expect(mockTranslateTitle).toHaveBeenCalledWith('post-1', 'Post', 'en')
+      expect(mockTranslateContent).toHaveBeenCalledWith('post-1', 'Body', 'en')
+      expect(mockTranslateComments).toHaveBeenCalledWith([], 'en')
+    })
+  })
+
+  it('restarts exact detail translation after authentication restoration', async () => {
+    const auth = {
+      accessToken: null as string | null,
+      userId: null as string | null,
+      isLoggedIn: false,
+      authChecked: false,
+      viewerKey: 'pending',
+      sessionGeneration: 0,
+    }
+    mockUseAuthSession.mockImplementation(() => auth)
+    mockAuthedFetch.mockResolvedValue({ ok: false, status: 404, data: null })
+    const view = render(<PostDetailPageBody post={initialPost as never} />)
+    await waitFor(() => expect(mockTranslateContent).toHaveBeenCalled())
+    const callsBeforeAuth = mockTranslateContent.mock.calls.length
+
+    Object.assign(auth, {
+      accessToken: 'token-a',
+      userId: 'user-a',
+      isLoggedIn: true,
+      authChecked: true,
+      viewerKey: 'user:user-a',
+      sessionGeneration: 1,
+    })
+    view.rerender(<PostDetailPageBody post={initialPost as never} />)
+
+    await waitFor(() => {
+      expect(mockTranslateContent.mock.calls.length).toBeGreaterThan(callsBeforeAuth)
+      expect(mockUsePostTranslation).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          accessToken: 'token-a',
+          authChecked: true,
+          isLoggedIn: true,
+          userId: 'user-a',
+          viewerKey: 'user:user-a',
+          sessionGeneration: 1,
+        })
+      )
+    })
+  })
+
   it('fails empty for A reaction state on the first B render', async () => {
     mockAuthedFetch.mockResolvedValueOnce({
       ok: true,
@@ -192,6 +274,7 @@ describe('PostDetailPageBody scoped hydration', () => {
     mockUseAuthSession.mockReturnValue({
       accessToken: 'token-b',
       userId: 'user-b',
+      isLoggedIn: true,
       authChecked: true,
       viewerKey: 'user:user-b',
       sessionGeneration: 2,

@@ -172,16 +172,59 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
   const { comments, loadComments } = commentsHook
 
   // Translation hook (single post)
-  const translation = usePostTranslation({ accessToken, showToast, t })
+  const translation = usePostTranslation({
+    accessToken,
+    authChecked: auth.authChecked,
+    isLoggedIn: auth.isLoggedIn,
+    userId: auth.userId,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    language,
+    activePost: post,
+    listPosts: [],
+    comments,
+    showToast,
+    t,
+  })
   const {
-    translatedListPosts,
     translatedContent,
     showingOriginal,
     setShowingOriginal,
     translating,
+    contentTranslationResolved,
+    translatedTitle,
+    translatingTitle,
+    titleTranslationResolved,
+    translatingComments,
+    translatingCommentLanes,
     removeImagesFromContent,
     translatedComments,
+    translateTitle,
+    translateContent,
+    translateComments,
+    cancelActivePostTranslations,
   } = translation
+
+  useEffect(() => {
+    void translateTitle(post.id, post.title ?? '', language)
+    void translateComments(comments, language)
+    void translateContent(post.id, post.content ?? '', language)
+  }, [
+    accessToken,
+    auth.authChecked,
+    auth.isLoggedIn,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    comments,
+    language,
+    post.content,
+    post.id,
+    post.title,
+    translateComments,
+    translateContent,
+    translateTitle,
+  ])
 
   // Actions hook (single post)
   const actions = usePostActions({
@@ -325,7 +368,10 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
         <PostDetailView
           asPage
           openPost={post}
-          onClose={() => router.push('/hot')}
+          onClose={() => {
+            cancelActivePostTranslations()
+            router.push('/hot')
+          }}
           language={language}
           currentUserId={currentUserId}
           viewerKey={auth.viewerKey}
@@ -334,7 +380,12 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           setShowingOriginal={setShowingOriginal}
           translatedContent={translatedContent}
           translating={translating}
-          translatedListPosts={translatedListPosts}
+          contentTranslationResolved={contentTranslationResolved}
+          translatedTitle={translatedTitle}
+          translatingTitle={translatingTitle}
+          titleTranslationResolved={titleTranslationResolved}
+          translatingComments={translatingComments}
+          translatingCommentLanes={translatingCommentLanes}
           removeImagesFromContent={removeImagesFromContent}
           customPoll={actions.customPoll}
           customPollLoadState={actions.customPollLoadState}

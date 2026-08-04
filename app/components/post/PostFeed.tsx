@@ -277,23 +277,44 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { comments, setComments, loadComments } = commentsHook
 
   // Translation hook
-  const translation = usePostTranslation({ accessToken, showToast, t, language })
-  // Translation target: zh users get Chinese; everyone else (en/ja/ko) gets
-  // English — the translate API only supports en/zh, so ja/ko fall back to
-  // English (readable) instead of Chinese.
-  const translateTarget: 'zh' | 'en' = language === 'zh' ? 'zh' : 'en'
+  const translationComments = useMemo(() => (openPost ? comments : []), [comments, openPost])
+  const translation = usePostTranslation({
+    accessToken,
+    authChecked: auth.authChecked,
+    isLoggedIn: auth.isLoggedIn,
+    userId: auth.userId,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    language,
+    activePost: openPost,
+    listPosts: posts,
+    comments: translationComments,
+    showToast,
+    t,
+  })
+  const translateTarget = language
   const {
     translatedListPosts,
     translatedContent,
     showingOriginal,
     setShowingOriginal,
     translating,
-    isChineseText,
+    contentTranslationResolved,
+    translatedTitle,
+    translatingTitle,
+    titleTranslationResolved,
+    translatingList,
+    translatingListLanes,
+    translatingComments,
+    translatingCommentLanes,
     removeImagesFromContent,
+    translateTitle,
     translateContent,
     translateListPosts,
     translateComments,
-    setTranslatedContent,
+    cancelContentTranslation,
+    cancelTitleTranslation,
+    cancelActivePostTranslations,
     translatedComments,
   } = translation
 
@@ -595,19 +616,41 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     void loadComments(openPostId)
   }, [authInitialized, openPostId, loadComments])
 
-  // Translation effects — only for authenticated users (translate API requires auth)
+  // Every lane receives the exact current resource, including empty resources.
+  // The hook cancels superseded work and enforces the authenticated owner scope.
   useEffect(() => {
-    if (!accessToken) return
-    if (posts.length > 0) translateListPosts(posts, translateTarget)
-    if (comments.length > 0 && openPost) translateComments(comments, translateTarget)
+    if (openPost) {
+      // The detail title uses an isolated single-item failure domain. Starting
+      // it before the feed batch keeps the current post responsive even when
+      // an unrelated feed item fails its all-or-nothing translation batch.
+      void translateTitle(openPost.id, openPost.title ?? '', translateTarget)
+    } else {
+      cancelTitleTranslation()
+    }
+    void translateListPosts(posts, translateTarget)
+    void translateComments(translationComments, translateTarget)
+    if (openPost) {
+      void translateContent(openPost.id, openPost.content ?? '', translateTarget)
+    } else {
+      cancelContentTranslation()
+    }
   }, [
-    translateTarget,
-    posts,
-    translateListPosts,
-    comments,
-    openPost,
-    translateComments,
     accessToken,
+    auth.authChecked,
+    auth.isLoggedIn,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    cancelContentTranslation,
+    cancelTitleTranslation,
+    openPost,
+    posts,
+    translateComments,
+    translateContent,
+    translateListPosts,
+    translateTitle,
+    translateTarget,
+    translationComments,
   ])
 
   const sortedPosts = useMemo(() => {
@@ -621,45 +664,15 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
   const handleOpenPost = useCallback(
     (post: Post) => {
+      cancelActivePostTranslations()
       setOpenPost(post)
       setComments([])
-      setTranslatedContent(null)
       if (post.poll_id) actions.loadCustomPoll(post.id)
       else {
         actions.setSelectedPollOptions([])
       }
-      const contentIsChinese = post.content ? isChineseText(post.content) : false
-      const titleIsChinese = post.title ? isChineseText(post.title) : false
-      const needsContentTranslation =
-        post.content &&
-        ((translateTarget === 'en' && contentIsChinese) ||
-          (translateTarget === 'zh' && !contentIsChinese))
-      const needsTitleTranslation =
-        post.title &&
-        ((translateTarget === 'en' && titleIsChinese) ||
-          (translateTarget === 'zh' && !titleIsChinese))
-      const hasTranslatedTitle = !!translatedListPosts[post.id]?.title
-      if (needsContentTranslation || needsTitleTranslation || hasTranslatedTitle)
-        setShowingOriginal(false)
-      else setShowingOriginal(true)
-      if (accessToken && needsContentTranslation)
-        translateContent(post.id, post.content!, translateTarget)
-      if (accessToken && !hasTranslatedTitle && needsTitleTranslation)
-        translateListPosts([post], translateTarget)
     },
-    [
-      accessToken,
-      actions,
-      isChineseText,
-      setComments,
-      setOpenPost,
-      setShowingOriginal,
-      setTranslatedContent,
-      translateContent,
-      translatedListPosts,
-      translateListPosts,
-      translateTarget,
-    ]
+    [actions, cancelActivePostTranslations, setComments, setOpenPost]
   )
 
   if (loading)
@@ -928,9 +941,15 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         </div>
       )}
       <div
+        aria-busy={translatingList}
         style={props.layout === 'masonry' ? { columnGap: 12 } : undefined}
         className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''} ${props.layout === 'masonry' ? `mobile-view-${mobileViewMode}` : ''}`}
       >
+        {translatingList && (
+          <span className="sr-only" role="status" aria-live="polite">
+            {t('translating')}
+          </span>
+        )}
         {sortedPosts.map((p, idx) => (
           <SectionErrorBoundary key={p.id}>
             {/* content-visibility: auto on off-screen posts (20+) lets the browser
@@ -938,6 +957,9 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 without full virtualization. contain-intrinsic-size gives the browser
                 an estimated height so scrollbar doesn't jump. */}
             <div
+              aria-busy={Boolean(
+                translatingListLanes[p.id]?.title || translatingListLanes[p.id]?.body
+              )}
               style={
                 idx >= 20
                   ? { contentVisibility: 'auto', containIntrinsicSize: 'auto 200px' }
@@ -1053,7 +1075,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       {openPost && (
         <PostDetailView
           openPost={openPost}
-          onClose={() => setOpenPost(null)}
+          onClose={() => {
+            cancelActivePostTranslations()
+            setOpenPost(null)
+          }}
           language={language}
           currentUserId={currentUserId}
           viewerKey={auth.viewerKey}
@@ -1062,7 +1087,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           setShowingOriginal={setShowingOriginal}
           translatedContent={translatedContent}
           translating={translating}
-          translatedListPosts={translatedListPosts}
+          contentTranslationResolved={contentTranslationResolved}
+          translatedTitle={translatedTitle}
+          translatingTitle={translatingTitle}
+          titleTranslationResolved={titleTranslationResolved}
+          translatingComments={translatingComments}
+          translatingCommentLanes={translatingCommentLanes}
           removeImagesFromContent={removeImagesFromContent}
           customPoll={actions.customPoll}
           customPollLoadState={actions.customPollLoadState}
