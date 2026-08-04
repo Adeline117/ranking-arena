@@ -153,7 +153,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const hashtagReadAuthorityMigration = '20260803180000_hashtag_read_authority.sql'
   const postInteractionReadPrivacyMigration = '20260803183000_post_interaction_read_privacy.sql'
   const servingTraderResolverMigration = '20260804050500_harden_serving_trader_resolver.sql'
-  const bingxRankQuarantineMigration = '20260804051000_quarantine_bingx_rank_authority.sql'
+  const bingxRankQuarantineMigration = '20260804052500_quarantine_bingx_rank_authority.sql'
 
   assert.equal(predeploy.length, 130)
   assert.deepEqual(postdeploy, [
@@ -796,7 +796,7 @@ test('repeatable-read migrations promote isolation to the outer transaction', ()
 })
 
 test('read-committed migrations pin isolation on the outer transaction', () => {
-  const migration = '20260804051000_quarantine_bingx_rank_authority.sql'
+  const migration = '20260804052500_quarantine_bingx_rank_authority.sql'
   const body = readFileSync(resolve(ROOT, 'supabase/migrations', migration), 'utf8')
 
   assert.match(body, /^SET TRANSACTION ISOLATION LEVEL READ COMMITTED;$/m)

@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260804051000_quarantine_bingx_rank_authority.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20260804052500_quarantine_bingx_rank_authority.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql createdb; do

@@ -1,4 +1,4 @@
--- Migration: 20260804051000_quarantine_bingx_rank_authority.sql
+-- Migration: 20260804052500_quarantine_bingx_rank_authority.sql
 --
 -- BingX remains useful for discovery, profiles, RAW evidence, and record
 -- acquisition. It is not yet public rank authority: the current collection

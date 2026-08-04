@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const migrationName = '20260804051000_quarantine_bingx_rank_authority.sql'
+const migrationName = '20260804052500_quarantine_bingx_rank_authority.sql'
 const migration = readFileSync(join(process.cwd(), 'supabase/migrations', migrationName), 'utf8')
 const pg17 = readFileSync(
   join(process.cwd(), 'supabase/migrations/__tests__/bingx-rank-authority-quarantine.pg17.sh'),

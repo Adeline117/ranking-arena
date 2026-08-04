@@ -544,7 +544,7 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 13. `20260804045000_verified_position_history_raw_prerequisites.sql`
 14. `20260804050000_verified_position_history_publication_authority.sql`
 15. `20260804050500_harden_serving_trader_resolver.sql`
-16. `20260804051000_quarantine_bingx_rank_authority.sql`
+16. `20260804052500_quarantine_bingx_rank_authority.sql`
 
 必须使用以下有序流程：
 
@@ -613,7 +613,7 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
    条件；第四个迁移是跨页 generation read barrier；第五个核心 ranking migration
    将未绑定 authority snapshot 的旧 token publication 整体 fail closed。不得少应用
    其中任一迁移后发布应用。
-7. `20260804051000_quarantine_bingx_rank_authority.sql` exact ledger、live catalog 与 PostgREST reload 闭合后，通过同一获准数据库通道执行以下只读核验。结果必须全部为 `true`：
+7. `20260804052500_quarantine_bingx_rank_authority.sql` exact ledger、live catalog 与 PostgREST reload 闭合后，通过同一获准数据库通道执行以下只读核验。结果必须全部为 `true`：
 
    ```sql
    BEGIN TRANSACTION READ ONLY;
