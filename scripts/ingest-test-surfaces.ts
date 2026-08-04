@@ -19,11 +19,14 @@ async function main() {
   const { getAdapter } = await import('@/lib/ingest/core/adapter')
   const { getSourceBySlug, nativeRankingTimeframes } = await import('@/lib/ingest/sources')
   const { openSession } = await import('@/lib/ingest/fetch/fetcher')
-  const { writeRawObject } = await import('@/lib/ingest/raw')
+  const { writeCopierSnapshotRawArtifact, writeRawObject } = await import('@/lib/ingest/raw')
+  const { buildCopierSnapshotArtifact } = await import('@/lib/ingest/copier-snapshot-artifact')
   const { recordStagingRejects } = await import('@/lib/ingest/staging/rejects')
   const { validateStats } = await import('@/lib/ingest/staging/validate')
-  const { publishProfile, publishPositions, publishHistoryRows, getHistoryCursor } =
-    await import('@/lib/ingest/serving/publish')
+  const { publishProfile, publishPositions } = await import('@/lib/ingest/serving/publish')
+  const { publishCopierSnapshotInTransaction } =
+    await import('@/lib/ingest/serving/copier-snapshot-publish')
+  const { runHistoryTransaction } = await import('@/worker/src/ingest/history-transaction')
   const { getIngestPool, closeIngestPool } = await import('@/lib/ingest/db')
 
   const src = await getSourceBySlug(slug)
@@ -152,35 +155,70 @@ async function main() {
         console.log(`[positions] ${trader.exchange_trader_id}: ${positions.length} open`)
       }
 
-      // Compatibility histories only. Position history requires the immutable
-      // @2 acquisition + parser-conservation receipt path; this manual smoke
-      // script must never publish its bounded three-page sample as typed data.
-      for (const kind of ['copiers'] as const) {
-        if (!adapter.capabilities.copiers) continue
-        const cursor = await getHistoryCursor(trader.id, kind)
-        const rows: import('@/lib/ingest/core/types').ParsedHistoryRow[] = []
-        let pages = 0
-        for await (const page of adapter.getHistory(
-          session,
+      // Copier tables are complete snapshots, never cursor streams or bounded
+      // previews. This operator path uses the same canonical RAW + immutable
+      // private receipt sequence as Tier-B and cannot write copier_records.
+      if (adapter.capabilities.copiers) {
+        const kind = 'copiers' as const
+        const pages: import('@/lib/ingest/core/types').RawPage[] = []
+        let fetchError: unknown = null
+        try {
+          for await (const page of adapter.getHistory(
+            session,
+            src,
+            trader.exchange_trader_id,
+            kind,
+            null,
+            trader.meta
+          )) {
+            pages.push(page)
+          }
+        } catch (error) {
+          fetchError = error
+        }
+
+        if (fetchError !== null || pages.length === 0) {
+          await writeRawObject({
+            sourceId: src.id,
+            sourceSlug: src.slug,
+            jobType: 'history:copiers',
+            traderId: trader.id,
+            timeframe: null,
+            payload: pages,
+            meta: {
+              surface: 'copiers',
+              lane: 'tier_b',
+              fetch_failed: fetchError !== null,
+              capture_rejected: pages.length === 0 ? 'no_evidence_page' : null,
+            },
+          })
+          if (fetchError !== null) throw fetchError
+          throw new Error(`[copiers] ${trader.exchange_trader_id} returned no evidence page`)
+        }
+
+        const artifact = buildCopierSnapshotArtifact({
           src,
-          trader.exchange_trader_id,
-          kind,
-          cursor,
-          trader.meta
-        )) {
-          pages += 1
-          rows.push(...adapter.parseHistory(page.payload, kind, ctxOf()))
-          if (pages >= 3) break // smoke test: cap at 3 pages
-        }
-        let newest: string | null = null
-        for (const row of rows) {
-          if (row.kind !== kind) throw new Error(`history row kind does not match ${kind}`)
-          const ts = row.ts
-          if (ts && (newest === null || ts > newest)) newest = ts
-        }
-        const written = await publishHistoryRows(src, trader.id, kind, rows, newest)
+          traderId: trader.id,
+          exchangeTraderId: trader.exchange_trader_id,
+          lane: 'tier_b',
+          requestTimeframe: null,
+          pages,
+          callerLimited: false,
+        })
+        const rawReceipt = await writeCopierSnapshotRawArtifact({ artifact }, runHistoryTransaction)
+        const parseCtx = ctxOf()
+        const rows = pages.flatMap((page) => adapter.parseHistory(page.payload, kind, parseCtx))
+        const publication = await runHistoryTransaction((transaction) =>
+          publishCopierSnapshotInTransaction(transaction, {
+            artifact,
+            rawReceipt,
+            rows,
+          })
+        )
         console.log(
-          `[${kind}] ${trader.exchange_trader_id}: pages=${pages} parsed=${rows.length} written=${written} cursor=${cursor} → ${newest}`
+          `[copiers] ${trader.exchange_trader_id}: pages=${pages.length} ` +
+            `parsed=${rows.length} publication=${publication.publicationId} ` +
+            `replayed=${publication.replayed}`
         )
       }
     }
@@ -199,8 +237,12 @@ async function main() {
          WHERE t.source_id = $1) AS positions,
        (SELECT count(*) FROM arena.position_history ph JOIN arena.traders t ON t.id = ph.trader_id
          WHERE t.source_id = $1) AS position_history,
-       (SELECT count(*) FROM arena.copier_records cr JOIN arena.traders t ON t.id = cr.trader_id
-         WHERE t.source_id = $1) AS copier_records`,
+       (SELECT count(*) FROM arena.copier_snapshot_publications publication
+         WHERE publication.source_id = $1) AS copier_snapshot_publications,
+       (SELECT count(*) FROM arena.copier_snapshot_rows row
+          JOIN arena.copier_snapshot_publications publication
+            ON publication.publication_id = row.publication_id
+         WHERE publication.source_id = $1) AS copier_snapshot_rows`,
     [src.id]
   )
   console.log('serving rows:', verify.rows[0])

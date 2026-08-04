@@ -1586,13 +1586,16 @@ export async function publishPositions(
   }
 }
 
-type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history'>
+type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history' | 'copiers'>
 
 function assertCompatibilityHistoryKind(
   kind: HistoryKind
 ): asserts kind is CompatibilityHistoryKind {
   if (kind === 'position_history') {
     throw new Error('[history] position_history requires parser-conservation publication')
+  }
+  if (kind === 'copiers') {
+    throw new Error('[history] copiers require snapshot-receipt publication')
   }
 }
 
@@ -1672,39 +1675,6 @@ async function publishHistoryRowsTransactionInternal(
       ]
     )
     written = result.rowCount ?? 0
-  } else {
-    const result = await client.query(
-      `INSERT INTO arena.copier_records
-           (trader_id, ts, copier_label, copier_pnl, copier_invested,
-            copy_duration_days, currency, dedupe_hash, raw)
-         SELECT $1, r.ts::timestamptz, r.copier_label, r.copier_pnl,
-                r.copier_invested, r.copy_duration_days, $2, r.dedupe_hash, r.raw
-           FROM jsonb_to_recordset($3::jsonb) AS r(
-             ts text, copier_label text, copier_pnl numeric,
-             copier_invested numeric, copy_duration_days int,
-             dedupe_hash text, raw jsonb)
-         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
-      [
-        traderId,
-        src.currency,
-        JSON.stringify(
-          rows
-            .filter(
-              (r): r is Extract<ParsedHistoryRow, { kind: 'copiers' }> => r.kind === 'copiers'
-            )
-            .map((r) => ({
-              ts: r.ts,
-              copier_label: r.copierLabel,
-              copier_pnl: r.copierPnl,
-              copier_invested: r.copierInvested,
-              copy_duration_days: r.copyDurationDays,
-              dedupe_hash: r.dedupeHash,
-              raw: r.raw,
-            }))
-        ),
-      ]
-    )
-    written = result.rowCount ?? 0
   }
 
   if (newCursor !== null) {
@@ -1725,10 +1695,10 @@ async function publishHistoryRowsTransactionInternal(
 }
 
 /**
- * Query-only compatibility publication for non-position histories. The caller
+ * Query-only compatibility publication for orders and transfers. The caller
  * owns the transaction so RAW, typed rows, and the monotonic cursor may commit
- * or roll back as one unit. Position history requires parser-conservation
- * evidence and is rejected both by the type and the runtime guard.
+ * or roll back as one unit. Position history and copier snapshots each require
+ * their own evidence-bound publisher and are rejected by type and at runtime.
  */
 export async function publishHistoryRowsInTransaction(
   transaction: IngestQueryExecutor,
@@ -1742,7 +1712,7 @@ export async function publishHistoryRowsInTransaction(
 }
 
 /**
- * Non-position compatibility publish: idempotent upsert by dedupe_hash +
+ * Orders/transfers compatibility publish: idempotent upsert by dedupe_hash +
  * cursor update (spec §2.3 Histories). Returns rows actually written.
  */
 export async function publishHistoryRows(
