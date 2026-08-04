@@ -6,6 +6,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { MediaAttachment } from '../components/types'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { readChatUploadAcknowledgement } from '@/lib/chat/upload-contract'
 import {
   captureSettingsViewer,
   isSettingsViewerCurrent,
@@ -26,35 +27,6 @@ type UploadOperation = {
   controller: AbortController
   conversationId: string
   viewer: SettingsViewerSnapshot
-}
-
-function readUploadAcknowledgement(
-  value: unknown,
-  expected: {
-    conversationId: string
-    file: File
-  }
-): MediaAttachment | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const acknowledgement = value as Record<string, unknown>
-  if (
-    typeof acknowledgement.url !== 'string' ||
-    !acknowledgement.url ||
-    typeof acknowledgement.fileName !== 'string' ||
-    !acknowledgement.fileName.startsWith(`${expected.conversationId}/`) ||
-    acknowledgement.originalName !== expected.file.name ||
-    acknowledgement.fileSize !== expected.file.size ||
-    !['image', 'video', 'file'].includes(String(acknowledgement.category))
-  ) {
-    return null
-  }
-  return {
-    url: acknowledgement.url,
-    type: acknowledgement.category as MediaAttachment['type'],
-    fileName: acknowledgement.fileName,
-    originalName: expected.file.name,
-    fileSize: expected.file.size,
-  }
 }
 
 export function useFileUpload({ userId, accessToken, conversationId }: UseFileUploadOptions) {
@@ -151,8 +123,21 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
         const data: unknown = await res.json().catch(() => null)
         if (!operationIsCurrent(operation)) return null
         if (res.ok) {
-          const attachment = readUploadAcknowledgement(data, { conversationId, file })
-          if (!attachment) throw new Error('Invalid chat upload acknowledgement')
+          const acknowledgement = readChatUploadAcknowledgement(data, {
+            scopeId: conversationId,
+            originalName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            storageBaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+          })
+          if (!acknowledgement) throw new Error('Invalid chat upload acknowledgement')
+          const attachment: MediaAttachment = {
+            url: acknowledgement.url,
+            type: acknowledgement.category,
+            fileName: acknowledgement.fileName,
+            originalName: acknowledgement.originalName,
+            fileSize: acknowledgement.fileSize,
+          }
           if (publishPending) setPendingAttachment(attachment)
           return attachment
         } else {

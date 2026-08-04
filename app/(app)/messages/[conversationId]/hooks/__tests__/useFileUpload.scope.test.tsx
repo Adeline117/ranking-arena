@@ -5,6 +5,9 @@ const mockShowToast = jest.fn()
 const mockGetCsrfHeaders = jest.fn(() => ({ 'x-csrf-token': 'csrf-token' }))
 const VIEWER_A = '11111111-1111-4111-8111-111111111111'
 const VIEWER_B = '22222222-2222-4222-8222-222222222222'
+const CONVERSATION_A = '33333333-3333-4333-8333-333333333333'
+const CONVERSATION_B = '44444444-4444-4444-8444-444444444444'
+const STORAGE_URL = 'https://project.supabase.co'
 
 type MockAuth = {
   accessToken: string | null
@@ -89,6 +92,22 @@ function dropEvent(file: File): DragEvent {
   } as unknown as DragEvent
 }
 
+function uploadAcknowledgement(
+  conversationId: string,
+  file: File,
+  category: 'image' | 'video' | 'file'
+) {
+  const fileName = `${conversationId}/${category}/123-${file.name}`
+  return {
+    url: `${STORAGE_URL}/storage/v1/object/sign/chat/${fileName}?token=fresh`,
+    fileName,
+    originalName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
+    category,
+  }
+}
+
 let mockAuth = signedIn(VIEWER_A, 'access-token-a', 1)
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
@@ -117,33 +136,31 @@ import { useFileUpload } from '../useFileUpload'
 
 describe('useFileUpload viewer scope', () => {
   const originalFetch = globalThis.fetch
+  const originalStorageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 
   beforeEach(() => {
     jest.clearAllMocks()
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 1)
+    process.env.NEXT_PUBLIC_SUPABASE_URL = STORAGE_URL
   })
 
   afterEach(() => {
     globalThis.fetch = originalFetch
+    if (originalStorageUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = originalStorageUrl
   })
 
   it('uploads with the captured viewer token and does not trust a client user id', async () => {
     const file = new File(['image'], 'proof.png', { type: 'image/png' })
-    const fetchMock = jest.fn().mockResolvedValue(
-      jsonResponse({
-        url: 'https://cdn.example.com/proof.png',
-        fileName: 'conversation-a/image/proof.png',
-        originalName: file.name,
-        fileSize: file.size,
-        category: 'image',
-      })
-    )
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(jsonResponse(uploadAcknowledgement(CONVERSATION_A, file, 'image')))
     globalThis.fetch = fetchMock as typeof fetch
 
     const { result } = renderHook(() =>
       useFileUpload({
         accessToken: 'access-token-a',
-        conversationId: 'conversation-a',
+        conversationId: CONVERSATION_A,
         userId: VIEWER_A,
       })
     )
@@ -165,12 +182,12 @@ describe('useFileUpload viewer scope', () => {
     )
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit
     const body = request.body as FormData
-    expect(body.get('conversationId')).toBe('conversation-a')
+    expect(body.get('conversationId')).toBe(CONVERSATION_A)
     expect(body.has('userId')).toBe(false)
     expect(result.current.pendingAttachment).toEqual({
-      url: 'https://cdn.example.com/proof.png',
+      url: `${STORAGE_URL}/storage/v1/object/sign/chat/${CONVERSATION_A}/image/123-proof.png?token=fresh`,
       type: 'image',
-      fileName: 'conversation-a/image/proof.png',
+      fileName: `${CONVERSATION_A}/image/123-proof.png`,
       originalName: file.name,
       fileSize: file.size,
     })
@@ -189,7 +206,7 @@ describe('useFileUpload viewer scope', () => {
       {
         initialProps: {
           accessToken: 'access-token-a',
-          conversationId: 'conversation-a',
+          conversationId: CONVERSATION_A,
           userId: VIEWER_A,
         },
       }
@@ -205,21 +222,13 @@ describe('useFileUpload viewer scope', () => {
     mockAuth = signedIn(VIEWER_B, 'access-token-b', 2)
     rerender({
       accessToken: 'access-token-b',
-      conversationId: 'conversation-b',
+      conversationId: CONVERSATION_B,
       userId: VIEWER_B,
     })
     expect(signal.aborted).toBe(true)
 
     await act(async () => {
-      upload.resolve(
-        jsonResponse({
-          url: 'https://cdn.example.com/proof.png',
-          fileName: 'conversation-a/image/proof.png',
-          originalName: file.name,
-          fileSize: file.size,
-          category: 'image',
-        })
-      )
+      upload.resolve(jsonResponse(uploadAcknowledgement(CONVERSATION_A, file, 'image')))
       await request
     })
 
@@ -230,20 +239,16 @@ describe('useFileUpload viewer scope', () => {
 
   it('rejects an acknowledgement for a different conversation', async () => {
     const file = new File(['image'], 'proof.png', { type: 'image/png' })
-    globalThis.fetch = jest.fn().mockResolvedValue(
-      jsonResponse({
-        url: 'https://cdn.example.com/proof.png',
-        fileName: 'conversation-b/image/proof.png',
-        originalName: file.name,
-        fileSize: file.size,
-        category: 'image',
-      })
-    ) as typeof fetch
+    globalThis.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(uploadAcknowledgement(CONVERSATION_B, file, 'image'))
+      ) as typeof fetch
 
     const { result } = renderHook(() =>
       useFileUpload({
         accessToken: 'access-token-a',
-        conversationId: 'conversation-a',
+        conversationId: CONVERSATION_A,
         userId: VIEWER_A,
       })
     )
@@ -258,20 +263,16 @@ describe('useFileUpload viewer scope', () => {
 
   it('returns a voice attachment without publishing it in the composer', async () => {
     const file = new File(['voice'], 'voice.webm', { type: 'audio/webm' })
-    globalThis.fetch = jest.fn().mockResolvedValue(
-      jsonResponse({
-        url: 'https://cdn.example.com/voice.webm',
-        fileName: 'conversation-a/file/voice.webm',
-        originalName: file.name,
-        fileSize: file.size,
-        category: 'file',
-      })
-    ) as typeof fetch
+    globalThis.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(uploadAcknowledgement(CONVERSATION_A, file, 'file'))
+      ) as typeof fetch
 
     const { result } = renderHook(() =>
       useFileUpload({
         accessToken: 'access-token-a',
-        conversationId: 'conversation-a',
+        conversationId: CONVERSATION_A,
         userId: VIEWER_A,
       })
     )
@@ -282,9 +283,9 @@ describe('useFileUpload viewer scope', () => {
     })
 
     expect(attachment).toEqual({
-      url: 'https://cdn.example.com/voice.webm',
+      url: `${STORAGE_URL}/storage/v1/object/sign/chat/${CONVERSATION_A}/file/123-voice.webm?token=fresh`,
       type: 'file',
-      fileName: 'conversation-a/file/voice.webm',
+      fileName: `${CONVERSATION_A}/file/123-voice.webm`,
       originalName: file.name,
       fileSize: file.size,
     })
