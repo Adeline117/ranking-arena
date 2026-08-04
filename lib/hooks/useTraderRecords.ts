@@ -137,6 +137,10 @@ export function useTraderRecords({
     /** First page is still cold-fetching upstream (Tier-C pending). */
     isPendingUpstream: pages.length === 1 && pages[0].cacheState === 'pending',
     isLoading: query.isLoading,
+    /** No cached page exists, so the module has nothing truthful to preserve. */
+    isInitialError: query.isLoadingError,
+    /** A later page failed; keep the successful pages visible and retry in place. */
+    isFetchNextPageError: query.isFetchNextPageError,
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,

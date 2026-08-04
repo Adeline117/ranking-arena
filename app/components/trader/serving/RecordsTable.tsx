@@ -30,6 +30,7 @@ export interface RecordsTableProps {
   isLoading?: boolean
   hasNextPage?: boolean
   isFetchingNextPage?: boolean
+  hasLoadMoreError?: boolean
   onLoadMore?: () => void
   /** i18n key for the empty state. */
   emptyKey?: string
@@ -91,6 +92,7 @@ export default function RecordsTable({
   isLoading,
   hasNextPage,
   isFetchingNextPage,
+  hasLoadMoreError,
   onLoadMore,
   emptyKey = 'recordsEmpty',
 }: RecordsTableProps) {
@@ -120,6 +122,7 @@ export default function RecordsTable({
             {columns.map((col) => (
               <th
                 key={col.key}
+                scope="col"
                 style={{
                   textAlign: col.align ?? 'left',
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -162,9 +165,33 @@ export default function RecordsTable({
           })}
         </tbody>
       </table>
-      {hasNextPage && onLoadMore && (
-        <Box style={{ textAlign: 'center', padding: tokens.spacing[3] }}>
+      {(hasNextPage || hasLoadMoreError) && onLoadMore && (
+        <Box
+          aria-busy={isFetchingNextPage || undefined}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            padding: tokens.spacing[3],
+          }}
+        >
+          {hasLoadMoreError && (
+            <Text
+              key="load-more-error"
+              as="div"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              size="sm"
+              style={{ color: tokens.colors.accent.error, textAlign: 'center' }}
+            >
+              {t('loadMoreFailed')}
+            </Text>
+          )}
           <button
+            key="load-more-action"
+            type="button"
             onClick={onLoadMore}
             disabled={isFetchingNextPage}
             style={{
@@ -174,11 +201,16 @@ export default function RecordsTable({
               background: tokens.colors.bg.tertiary,
               color: tokens.colors.text.primary,
               fontSize: tokens.typography.fontSize.sm,
+              minHeight: 44,
               cursor: isFetchingNextPage ? 'wait' : 'pointer',
               opacity: isFetchingNextPage ? 0.6 : 1,
             }}
           >
-            {isFetchingNextPage ? t('loading') : t('recordsLoadMore')}
+            {isFetchingNextPage
+              ? t('loading')
+              : hasLoadMoreError
+                ? t('moduleRetry')
+                : t('recordsLoadMore')}
           </button>
         </Box>
       )}

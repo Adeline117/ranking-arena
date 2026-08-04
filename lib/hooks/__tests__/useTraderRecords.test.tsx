@@ -340,4 +340,95 @@ describe('useTraderRecords history completeness', () => {
     view.unmount()
     queryClient.clear()
   })
+
+  it('classifies a first-page failure as an initial error with no rows to preserve', async () => {
+    ;(fetcher as jest.Mock).mockRejectedValue(new Error('first page failed'))
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0, gcTime: Infinity } },
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.isInitialError).toBe(true))
+    expect(view.result.current.rows).toEqual([])
+    expect(view.result.current.isFetchNextPageError).toBe(false)
+    // Hook policy is retry: 2, so the original request plus two retries fail.
+    expect(fetcher).toHaveBeenCalledTimes(3)
+
+    view.unmount()
+    queryClient.clear()
+  })
+
+  it('preserves cached rows across a next-page failure and retries the same cursor', async () => {
+    let failNextPage = true
+    let nextPageAttempts = 0
+    ;(fetcher as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('cursor=next')) {
+        nextPageAttempts += 1
+        if (failNextPage) return Promise.reject(new Error('next page failed'))
+        return Promise.resolve(
+          recordsResponse(recordsPage({ rows: [{ id: 'second' }], nextCursor: null }))
+        )
+      }
+      return Promise.resolve(
+        recordsResponse(recordsPage({ rows: [{ id: 'first' }], nextCursor: 'next' }))
+      )
+    })
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0, gcTime: Infinity } },
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.rows).toEqual([{ id: 'first' }]))
+    await act(async () => {
+      await view.result.current.fetchNextPage()
+    })
+
+    await waitFor(() => expect(view.result.current.isFetchNextPageError).toBe(true))
+    expect(view.result.current.isInitialError).toBe(false)
+    expect(view.result.current.rows).toEqual([{ id: 'first' }])
+    expect(view.result.current.hasNextPage).toBe(true)
+    expect(nextPageAttempts).toBe(3)
+
+    failNextPage = false
+    await act(async () => {
+      await view.result.current.fetchNextPage()
+    })
+
+    await waitFor(() =>
+      expect(view.result.current.rows).toEqual([{ id: 'first' }, { id: 'second' }])
+    )
+    expect(view.result.current.isFetchNextPageError).toBe(false)
+    expect(nextPageAttempts).toBe(4)
+
+    view.unmount()
+    queryClient.clear()
+  })
 })

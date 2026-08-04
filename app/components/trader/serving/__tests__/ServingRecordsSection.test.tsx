@@ -1,6 +1,7 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ServingRecordsSection, { RECORD_COLUMNS } from '../ServingRecordsSection'
+import RecordsTable from '../RecordsTable'
 import { useCopierAggregate, useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import type { RecordKind, SourceCapability } from '@/lib/data/serving/types'
 
@@ -11,7 +12,7 @@ jest.mock('@/lib/hooks/useTraderRecords', () => ({
   useTraderRecords: jest.fn(),
   useCopierAggregate: jest.fn(),
 }))
-jest.mock('../RecordsTable', () => () => null)
+jest.mock('../RecordsTable', () => jest.fn(() => null))
 jest.mock('../CopierAggregatePanel', () => () => null)
 jest.mock('../ModuleDegraded', () => () => null)
 jest.mock('@/app/components/common/RecordProvenanceFooter', () => () => null)
@@ -46,6 +47,8 @@ describe('ServingRecordsSection selection scope', () => {
       completeness: null,
       isPendingUpstream: false,
       isLoading: false,
+      isInitialError: false,
+      isFetchNextPageError: false,
       isFetchingNextPage: false,
       hasNextPage: false,
       fetchNextPage: jest.fn(),
@@ -72,6 +75,73 @@ describe('ServingRecordsSection selection scope', () => {
       expect.objectContaining({ key: 'amount', format: 'money' })
     )
     expect(RECORD_COLUMNS.transfers).not.toContainEqual(expect.objectContaining({ key: 'asset' }))
+  })
+
+  it('preserves loaded rows and wires an inline retry for a next-page failure', () => {
+    const fetchNextPage = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [{ symbol: 'BTCUSDT' }],
+      provenance: null,
+      completeness: null,
+      isPendingUpstream: false,
+      isLoading: false,
+      isInitialError: false,
+      isFetchNextPageError: true,
+      isFetchingNextPage: false,
+      hasNextPage: true,
+      fetchNextPage,
+      error: new Error('later page failed'),
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['positions'])}
+        tf={90}
+      />
+    )
+
+    expect(RecordsTable).toHaveBeenCalled()
+    const props = (RecordsTable as jest.Mock).mock.calls.at(-1)?.[0]
+    expect(props).toEqual(
+      expect.objectContaining({
+        rows: [{ symbol: 'BTCUSDT' }],
+        hasLoadMoreError: true,
+        hasNextPage: true,
+      })
+    )
+    props.onLoadMore()
+    expect(fetchNextPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses module degradation only when the first page has no recoverable data', () => {
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [],
+      provenance: null,
+      completeness: null,
+      isPendingUpstream: false,
+      isLoading: false,
+      isInitialError: true,
+      isFetchNextPageError: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      error: new Error('first page failed'),
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['positions'])}
+        tf={90}
+      />
+    )
+
+    expect(RecordsTable).not.toHaveBeenCalled()
   })
 
   it('resets the active kind for a new subject and fails closed after capability shrinkage', () => {
