@@ -412,12 +412,15 @@ FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何�
    4. `20260729230000_token_ranking_generation_barrier.sql`
    5. `20260804043000_retire_legacy_token_rankings.sql`
    6. `20260804044000_freeze_legacy_position_history_relations.sql`
+   7. `20260804045000_quarantine_bingx_rank_authority.sql`
 
    第五个迁移必须把旧 Token 排名固定为未发布；第六个迁移必须把所有 ledger、
-   手工 cutover、分区和保留的 `tph_*` 关系收敛为只读取证档案。任一迁移失败、
-   超时、版本缺失或出现对象/权限漂移，立即 No-Go，不得跳过或手工放宽 ACL。
+   手工 cutover、分区和保留的 `tph_*` 关系收敛为只读取证档案；第七个迁移保留
+   BingX 采集、档案和 RAW 证据，但把 `bingx`、`bingx_futures`、`bingx_spot` 的
+   排名、新鲜度和计数面归档后清空，并把两个物理来源留在 active/shadow。任一迁移
+   失败、超时、版本缺失或出现对象/权限漂移，立即 No-Go，不得跳过或手工放宽 ACL。
 
-2. 等待两个迁移内的 `NOTIFY pgrst, 'reload schema'` 生效。生产 PostgREST 的唯一
+2. 等待相关迁移内的 `NOTIFY pgrst, 'reload schema'` 生效。生产 PostgREST 的唯一
    合法 Token head 是固定的 generation zero；它不能带任何伪造的发布时间或来源
    水位：
 
@@ -549,6 +552,45 @@ FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何�
    ) AS legacy_history_frozen
    FROM guarded_relation
    JOIN pg_catalog.pg_class AS relation ON relation.oid = guarded_relation.relation_oid;
+
+   SELECT count(*) = 2 AND bool_and(
+     source.status = 'active'
+     AND source.serving_mode = 'shadow'
+     AND source.meta->>'rank_visibility_contract' = 'bingx-ranking-quarantine@1'
+   ) AS bingx_collection_active_but_rank_shadowed
+   FROM arena.sources AS source
+   WHERE source.slug IN ('bingx_futures', 'bingx_spot');
+
+   SELECT
+     NOT EXISTS (
+       SELECT 1 FROM public.leaderboard_ranks
+       WHERE source IN ('bingx', 'bingx_futures', 'bingx_spot')
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM public.leaderboard_source_freshness
+       WHERE source IN ('bingx', 'bingx_futures', 'bingx_spot')
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM public.leaderboard_count_cache
+       WHERE source IN (
+         'bingx', 'bingx_futures', 'bingx_spot',
+         'bingx_gt0', 'bingx_futures_gt0', 'bingx_spot_gt0'
+       )
+     ) AS bingx_public_rank_surfaces_empty;
+
+   SELECT count(*) = 4 AND bool_and(convalidated) AS bingx_guards_validated
+   FROM pg_catalog.pg_constraint AS guard
+   WHERE guard.contype = 'c'
+     AND (
+       (guard.conrelid = 'arena.sources'::regclass
+        AND guard.conname = 'sources_block_unverified_bingx_serving')
+       OR (guard.conrelid = 'public.leaderboard_ranks'::regclass
+           AND guard.conname = 'leaderboard_ranks_block_unverified_bingx')
+       OR (guard.conrelid = 'public.leaderboard_source_freshness'::regclass
+           AND guard.conname = 'leaderboard_freshness_block_unverified_bingx')
+       OR (guard.conrelid = 'public.leaderboard_count_cache'::regclass
+           AND guard.conname = 'leaderboard_count_cache_block_unverified_bingx')
+     );
 
    ROLLBACK;
    ```
