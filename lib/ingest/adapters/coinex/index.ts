@@ -32,6 +32,16 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import {
+  COINEX_COPIER_HISTORY_URL,
+  coinexCopierHistoryUrl,
+  coinexCopierSnapshotVerifier,
+  validateCoinexCopierPage,
+} from './copier-snapshot'
+import {
   parseCoinexHistory,
   parseCoinexLeaderboardPage,
   parseCoinexPositions,
@@ -53,6 +63,29 @@ function endpoint(src: SourceRow, key: string, fallback: string): string {
   return endpoints[key] ?? fallback
 }
 
+function isCanonicalCoinexCopierSource(src: SourceRow): boolean {
+  return (
+    src.slug === 'coinex_futures' &&
+    src.status === 'active' &&
+    src.serving_mode === 'serving' &&
+    src.adapter_slug === 'coinex' &&
+    src.product_type === 'futures' &&
+    src.trader_kind_scope === 'human' &&
+    src.currency === 'USDT' &&
+    src.copier_table_depth === 'full' &&
+    endpoint(src, 'copiers', `${BASE}/followers`) === COINEX_COPIER_HISTORY_URL
+  )
+}
+
+function copierMaxPages(src: SourceRow): number {
+  const value = src.meta.copier_max_pages ?? 30
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || Object.is(parsed, -0)) {
+    throw new TypeError('[coinex] copier_max_pages must be a positive safe integer')
+  }
+  return parsed
+}
+
 /** One page load establishes cookies; everything after is same-origin JSON
  *  replay (spec §2.2). Bundled Chromium headless accepted (verified). */
 const warmedSessions = new WeakSet<FetchSession>()
@@ -62,9 +95,11 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   const page = await session.page()
   const url = src.leaderboard_url ?? 'https://www.coinex.com/en/copy-trading/traders'
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
+  } catch {
     // networkidle is best-effort — a busy page still yields valid cookies
-  })
+  }
   warmedSessions.add(session)
 }
 
@@ -77,6 +112,10 @@ const coinexAdapter: SourceAdapter = {
     orders: false, // no public order-level surface
     transfers: false, // no public balance-history surface
     copiers: true, // GET followers
+  },
+
+  verifyCopierSnapshot(src) {
+    return isCanonicalCoinexCopierSource(src) ? coinexCopierSnapshotVerifier : null
   },
 
   async *listLeaderboard(
@@ -203,7 +242,8 @@ const coinexAdapter: SourceAdapter = {
    * Lead History: newest-first numeric pages; stop on empty/short page, on
    * cursor overlap (oldest update_time ≤ cursor — the processor's dedupe
    * upserts make the overlap page idempotent), or at the safety cap.
-   * Followers: snapshot-style full pagination via has_next.
+   * Followers: exact snapshot pagination bound to the reported page/count/
+   * total/total_page/has_next tuple and a reviewed terminal verifier.
    */
   async *getHistory(
     session: FetchSession,
@@ -211,7 +251,7 @@ const coinexAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     if (kind !== 'position_history' && kind !== 'copiers') {
       throw new Error(`[coinex] history surface ${kind} not supported`)
     }
@@ -245,21 +285,61 @@ const coinexAdapter: SourceAdapter = {
       return
     }
 
-    // copiers
-    const url = endpoint(src, 'copiers', `${BASE}/followers`)
-    const maxPages = Number(src.meta.copier_max_pages) || 30
+    // copiers: exact reported-total pagination. Every response, including an
+    // explicit zero snapshot or malformed terminal candidate, is retained as
+    // RAW before its proof is evaluated.
+    const maxPages = copierMaxPages(src)
+    let stableTotal: number | null = null
+    let stableTotalPages: number | null = null
+    let rowsSeen = 0
+    const identities = new Set<string>()
+
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+      const url = coinexCopierHistoryUrl(exchangeTraderId, pageIndex)
       const payload = await replayJson(session, fetcher, {
-        url: `${url}?trader_id=${tid}&page=${pageIndex}&limit=${limit}`,
+        url,
         method: 'GET',
         headers: HEADERS,
       })
-      const rows = parseCoinexHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      const hasNext = Boolean((payload as { data?: { has_next?: unknown } })?.data?.has_next)
-      if (!hasNext || rows.length < limit) return
+
+      const page = validateCoinexCopierPage(payload, pageIndex)
+      if (page === null) {
+        throw new Error('[coinex] copiers returned a malformed exact page envelope')
+      }
+      if (stableTotal === null) stableTotal = page.total
+      else if (page.total !== stableTotal) {
+        throw new Error('[coinex] copiers changed total during pagination')
+      }
+      if (stableTotalPages === null) stableTotalPages = page.totalPages
+      else if (page.totalPages !== stableTotalPages) {
+        throw new Error('[coinex] copiers changed total_page during pagination')
+      }
+      for (const row of page.rows) {
+        const identity = row.follower_name
+        if (typeof identity !== 'string' || identities.has(identity)) {
+          throw new Error('[coinex] copiers returned a missing or duplicate identity')
+        }
+        identities.add(identity)
+      }
+      rowsSeen += page.rows.length
+
+      if (
+        rowsSeen === stableTotal &&
+        pageIndex === Math.max(1, stableTotalPages) &&
+        identities.size === stableTotal
+      ) {
+        return {
+          contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+          observations: [
+            { segment_id: 'default', reason: 'reported_end', page_ordinal: pageIndex },
+          ],
+        }
+      }
     }
+    throw new Error(
+      `[coinex] copiers reached page cap ${maxPages} before reported total ${String(stableTotal)}`
+    )
   },
 
   parseLeaderboard: parseCoinexLeaderboardPage,
