@@ -371,6 +371,7 @@ describe('OKX product-specific record contracts', () => {
     ['wrong symbol suffix', { instId: 'BTC-USDC-SWAP' }],
     ['wrong side', { posSide: 'Long' }],
     ['future openTime', { openTime: String(Date.parse(HISTORY_FETCHED_AT) + 1) }],
+    ['radix-prefixed openTime', { openTime: '0x1' }],
   ] as const)('rejects partial and closed rows with %s', (_label, overrides) => {
     for (const row of [
       partialPositionHistoryRow('bad-partial-domain', overrides),

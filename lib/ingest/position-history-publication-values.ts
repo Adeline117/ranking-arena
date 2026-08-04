@@ -89,10 +89,14 @@ export function nullablePositionHistoryFiniteNumber(
   return value
 }
 
-function positionHistorySourceEpochMilliseconds(value: unknown): number | null {
+export function positionHistorySourceEpochMilliseconds(value: unknown): number | null {
   if (
     (typeof value !== 'string' && typeof value !== 'number') ||
-    (typeof value === 'string' && (value.length === 0 || value.trim() !== value))
+    (typeof value === 'string' &&
+      (value.length === 0 ||
+        value.length > POSITION_HISTORY_NUMERIC_STRING_MAX_LENGTH ||
+        value.trim() !== value ||
+        !POSITION_HISTORY_DECIMAL_NUMBER.test(value)))
   ) {
     return null
   }

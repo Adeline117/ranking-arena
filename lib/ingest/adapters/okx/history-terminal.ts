@@ -2,6 +2,7 @@ import type {
   HistoryTerminalVerificationInput,
   SelectedHistoryTerminalVerifier,
 } from '../../history-acquisition'
+import { positionHistorySourceEpochMilliseconds } from '../../position-history-publication-values'
 
 export const OKX_POSITION_HISTORY_TERMINAL_VERIFIER_CONTRACT =
   'arena.ingest.history-terminal-verifier.okx.position_history@2' as const
@@ -35,23 +36,6 @@ function canonicalSourceId(value: unknown): string | null {
 function canonicalSourceText(value: unknown, maximumLength: number): string | null {
   if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) return null
   return unicodeCodePointLength(value) <= maximumLength ? value : null
-}
-
-function positiveEpochMs(value: unknown): number | null {
-  if (
-    (typeof value !== 'string' && typeof value !== 'number') ||
-    (typeof value === 'string' && (value.length === 0 || value.trim() !== value))
-  ) {
-    return null
-  }
-  const parsed = Number(value)
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null
-  try {
-    new Date(parsed).toISOString()
-    return parsed
-  } catch {
-    return null
-  }
 }
 
 function exactHistoryUrl(
@@ -126,7 +110,7 @@ export function classifyOkxPositionHistorySourceRow(
   if (!isRecord(value) || !Number.isFinite(fetchedAtMs)) return null
   const subPositionId = canonicalSourceId(value.subPosId)
   const instrumentId = canonicalSourceText(value.instId, 128)
-  const openTime = positiveEpochMs(value.openTime)
+  const openTime = positionHistorySourceEpochMilliseconds(value.openTime)
   if (
     subPositionId === null ||
     instrumentId === null ||
@@ -152,7 +136,7 @@ export function classifyOkxPositionHistorySourceRow(
     })
   }
 
-  const closeTime = positiveEpochMs(value.closeTime)
+  const closeTime = positionHistorySourceEpochMilliseconds(value.closeTime)
   if (closeTime === null || closeTime < openTime || closeTime > fetchedAtMs) return null
   return Object.freeze({
     classification: 'canonical_materialized' as const,

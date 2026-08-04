@@ -676,6 +676,19 @@ describe('Binance evidence-preserving leaderboard capture', () => {
         },
       ],
     ],
+    [
+      'a radix-prefixed lifecycle timestamp',
+      [
+        {
+          id: 'radix-position',
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: '0x1',
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+      ],
+    ],
   ] as const)('rejects terminal proof containing %s', async (_caseName, rows) => {
     const src = source()
     const acquisition = await captureHistoryAcquisition({

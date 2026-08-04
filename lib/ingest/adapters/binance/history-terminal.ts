@@ -3,6 +3,7 @@ import type {
   HistoryTerminalVerificationInput,
   SelectedHistoryTerminalVerifier,
 } from '../../history-acquisition'
+import { positionHistorySourceEpochMilliseconds } from '../../position-history-publication-values'
 import {
   BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
   BINANCE_POSITION_HISTORY_URL,
@@ -40,23 +41,6 @@ function canonicalSourceText(value: unknown): string | null {
 function exactUsdtPerpetualSymbol(value: unknown): string | null {
   const symbol = canonicalSourceText(value)
   return symbol !== null && symbol.length > 'USDT'.length && symbol.endsWith('USDT') ? symbol : null
-}
-
-function positiveEpochMs(value: unknown): number | null {
-  if (
-    (typeof value !== 'string' && typeof value !== 'number') ||
-    (typeof value === 'string' && (value.length === 0 || value.trim() !== value))
-  ) {
-    return null
-  }
-  const parsed = Number(value)
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null
-  try {
-    new Date(parsed).toISOString()
-    return parsed
-  } catch {
-    return null
-  }
 }
 
 function reportedTotal(value: unknown): number | null | undefined {
@@ -134,8 +118,8 @@ function validateSegment(
       const sourceId = canonicalSourceId(row.id)
       const symbol = exactUsdtPerpetualSymbol(row.symbol)
       const side = canonicalSourceText(row.side)
-      const openedAt = positiveEpochMs(row.opened)
-      const closedAt = positiveEpochMs(row.closed)
+      const openedAt = positionHistorySourceEpochMilliseconds(row.opened)
+      const closedAt = positionHistorySourceEpochMilliseconds(row.closed)
       if (
         sourceId === null ||
         row.type !== 'UM' ||

@@ -2,6 +2,7 @@ import type {
   HistoryTerminalVerificationInput,
   SelectedHistoryTerminalVerifier,
 } from '../../history-acquisition'
+import { positionHistorySourceEpochMilliseconds } from '../../position-history-publication-values'
 
 export const BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT = 'arena.ingest.bitget-history-page@1' as const
 export const BITGET_POSITION_HISTORY_TERMINAL_VERIFIER_CONTRACT =
@@ -27,23 +28,6 @@ function canonicalSourceId(value: unknown): string | null {
     return value.length > 0 && value.trim() === value ? value : null
   }
   return Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null
-}
-
-function positiveEpochMs(value: unknown): number | null {
-  if (
-    (typeof value !== 'string' && typeof value !== 'number') ||
-    (typeof value === 'string' && (value.length === 0 || value.trim() !== value))
-  ) {
-    return null
-  }
-  const parsed = Number(value)
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null
-  try {
-    new Date(parsed).toISOString()
-    return parsed
-  } catch {
-    return null
-  }
 }
 
 interface ValidatedBitgetPage {
@@ -104,7 +88,7 @@ function validatePages(input: HistoryTerminalVerificationInput): ValidatedBitget
     const closeTimes: number[] = []
     for (const row of rows) {
       const factId = canonicalSourceId(row.orderNo)
-      const closeTime = positiveEpochMs(row.closeTime)
+      const closeTime = positionHistorySourceEpochMilliseconds(row.closeTime)
       if (
         factId === null ||
         factIds.has(factId) ||

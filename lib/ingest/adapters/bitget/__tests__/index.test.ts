@@ -175,6 +175,37 @@ describe('Bitget history termination', () => {
     })
   })
 
+  it.each(['0x1', '0o1', '0b1'] as const)(
+    'rejects radix-prefixed closeTime %s as terminal evidence',
+    async (closeTime) => {
+      const acquisition = await captureHistoryAcquisition({
+        source: src,
+        traderId: 44,
+        exchangeTraderId: TRADER_ID,
+        kind: 'position_history',
+        cursor: null,
+        attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+        stream: bitgetAdapter.getHistory(
+          session({
+            code: '00000',
+            data: { rows: [{ orderNo: 'radix-order', closeTime }], nextFlag: false },
+          }),
+          src,
+          TRADER_ID,
+          'position_history',
+          null
+        ),
+        terminalVerifier: historyVerifier(),
+      })
+
+      expect(acquisition.artifact.termination).toMatchObject({
+        evidence_state: 'rejected',
+        scan_terminal_state: 'unknown',
+        blocker_reasons: ['terminal_claim_rejected'],
+      })
+    }
+  )
+
   it('captures an empty success page before verifying exhaustion', async () => {
     const acquisition = await captureHistoryAcquisition({
       source: src,
