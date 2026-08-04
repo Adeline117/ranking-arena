@@ -31,6 +31,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseCoinexHistory,
   parseCoinexLeaderboardPage,
@@ -254,11 +255,16 @@ const coinexAdapter: SourceAdapter = {
         method: 'GET',
         headers: HEADERS,
       })
-      const rows = parseCoinexHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
+      const candidateCount = extractCopierCandidateRecords({
+        src,
+        exchangeTraderId,
+        pageIndex,
+        payload,
+      }).candidates.length
+      if (candidateCount === 0) return
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       const hasNext = Boolean((payload as { data?: { has_next?: unknown } })?.data?.has_next)
-      if (!hasNext || rows.length < limit) return
+      if (!hasNext || candidateCount < limit) return
     }
   },
 
