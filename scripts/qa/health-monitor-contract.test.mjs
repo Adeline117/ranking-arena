@@ -8,17 +8,24 @@ import test from 'node:test'
 const root = path.resolve(import.meta.dirname, '../..')
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/health-monitor.yml'), 'utf8')
 
-function runBlock(stepName) {
+function stepBlock(stepName) {
   const stepStart = workflow.indexOf(`      - name: ${stepName}`)
   assert.notEqual(stepStart, -1, `missing workflow step: ${stepName}`)
+  const nextStep = workflow.indexOf('\n      - name:', stepStart + 1)
+  const nextUnnamedStep = workflow.indexOf('\n      - uses:', stepStart + 1)
+  const candidates = [nextStep, nextUnnamedStep].filter((position) => position !== -1)
+  const end = candidates.length === 0 ? workflow.length : Math.min(...candidates)
+  return workflow.slice(stepStart, end)
+}
+
+function runBlock(stepName) {
+  const step = stepBlock(stepName)
   const runMarker = '\n        run: |\n'
-  const runStart = workflow.indexOf(runMarker, stepStart)
+  const runStart = step.indexOf(runMarker)
   assert.notEqual(runStart, -1, `missing run block: ${stepName}`)
   const contentStart = runStart + runMarker.length
-  const nextStep = workflow.indexOf('\n      - name:', contentStart)
-  const end = nextStep === -1 ? workflow.length : nextStep
-  return workflow
-    .slice(contentStart, end)
+  return step
+    .slice(contentStart)
     .split('\n')
     .map((line) => line.replace(/^ {10}/, ''))
     .join('\n')
@@ -70,6 +77,33 @@ function createFakeGit(directory) {
   fs.chmodSync(fakeGit, 0o755)
 }
 
+function runHealthPreflight(cronSecret) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-health-preflight-'))
+  try {
+    const output = path.join(directory, 'github-output')
+    const summary = path.join(directory, 'summary.md')
+    fs.writeFileSync(output, '')
+    fs.writeFileSync(summary, '')
+    const result = spawnSync('bash', ['-c', runBlock('Validate health monitor configuration')], {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        CRON_SECRET: cronSecret,
+        GITHUB_OUTPUT: output,
+        GITHUB_STEP_SUMMARY: summary,
+      },
+    })
+    return {
+      ...result,
+      output: fs.readFileSync(output, 'utf8'),
+      summary: fs.readFileSync(summary, 'utf8'),
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
+
 function runHealthCheck({ body, http = '200', curlExit = '0' }) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-health-check-'))
   try {
@@ -99,6 +133,7 @@ function runHealthCheck({ body, http = '200', curlExit = '0' }) {
       ...result,
       output: fs.readFileSync(output, 'utf8'),
       message: fs.existsSync(message) ? fs.readFileSync(message, 'utf8') : '',
+      curlCalls: fs.readFileSync(curlLog, 'utf8'),
     }
   } finally {
     fs.rmSync(directory, { recursive: true, force: true })
@@ -235,6 +270,40 @@ function runTelegram({
   }
 }
 
+test('fails closed on a missing CRON_SECRET before checks or incident side effects', () => {
+  const missing = runHealthPreflight('')
+  assert.equal(missing.status, 1)
+  assert.equal(missing.output, 'configured=false\n')
+  assert.match(missing.summary, /Health monitor configuration invalid/)
+  assert.match(missing.summary, /CRON_SECRET/)
+  assert.match(missing.summary, /Production checks and incident notifications were skipped/)
+
+  const configured = runHealthPreflight('cron-secret-value-must-not-be-logged')
+  assert.equal(configured.status, 0)
+  assert.equal(configured.output, 'configured=true\n')
+  assert.equal(configured.summary, '')
+  assert.doesNotMatch(
+    `${configured.stdout}${configured.stderr}${configured.summary}`,
+    /cron-secret-value-must-not-be-logged/
+  )
+
+  assert.ok(
+    workflow.indexOf('- name: Validate health monitor configuration') <
+      workflow.indexOf('- uses: actions/checkout@v4')
+  )
+  for (const name of [
+    'Check pipeline health',
+    'Verify production main ancestry',
+    'Aggregate health result',
+    'Send Telegram alert on failure (2h dedup)',
+    'Open independent issue when Telegram delivery fails',
+    'Close independent issue after health recovery',
+    'Fail unhealthy health-monitor run',
+  ]) {
+    assert.match(stepBlock(name), /steps\.preflight\.outputs\.configured == 'true'/)
+  }
+})
+
 test('allowlists health status and keeps dynamic detail out of GitHub outputs', () => {
   const healthy = runHealthCheck({ body: JSON.stringify({ status: 'healthy' }) })
   assert.equal(healthy.status, 0)
@@ -257,16 +326,26 @@ test('allowlists health status and keeps dynamic detail out of GitHub outputs', 
   assert.doesNotMatch(injected.output, /injected|secret/)
 })
 
-test('turns transport, HTTP, and JSON failures into an explicit down result', () => {
+test('turns transport, non-auth HTTP, and JSON failures into an explicit down result', () => {
   for (const scenario of [
     { body: '', http: '000', curlExit: '28' },
-    { body: '{"error":"unauthorized"}', http: '401', curlExit: '0' },
+    { body: '{"error":"unavailable"}', http: '503', curlExit: '0' },
     { body: 'not json', http: '200', curlExit: '0' },
   ]) {
     const result = runHealthCheck(scenario)
     assert.equal(result.status, 0)
     assert.equal(result.output, 'status=down\n')
     assert.notEqual(result.message, '')
+  }
+})
+
+test('classifies pipeline 401 and 403 as monitor authentication configuration errors', () => {
+  for (const http of ['401', '403']) {
+    const result = runHealthCheck({ body: '{"error":"unauthorized"}', http })
+    assert.equal(result.status, 0)
+    assert.equal(result.output, 'status=configuration_error\n')
+    assert.match(result.message, /authentication configuration error/)
+    assert.equal(result.curlCalls, 'called\n')
   }
 })
 
@@ -328,6 +407,11 @@ test('aggregates pipeline and release checks without masking missing outputs', (
     { pipelineStatus: 'critical', releaseStatus: 'healthy', expected: 'critical' },
     { pipelineStatus: 'healthy', releaseStatus: 'degraded', expected: 'degraded' },
     { pipelineStatus: 'healthy', releaseStatus: 'divergent', expected: 'divergent' },
+    {
+      pipelineStatus: 'configuration_error',
+      releaseStatus: 'healthy',
+      expected: 'configuration_error',
+    },
     { pipelineStatus: '', releaseStatus: 'healthy', expected: 'down' },
     { pipelineStatus: 'healthy', releaseStatus: '', expected: 'down' },
   ]) {
@@ -384,7 +468,7 @@ test('restores and saves cache explicitly before failing unhealthy runs', () => 
   assert.match(workflow, /if: steps\.telegram\.outputs\.delivered == 'true'/)
   assert.match(
     workflow,
-    /- name: Fail unhealthy health-monitor run\n        if: always\(\) && steps\.aggregate\.outputs\.status != 'healthy'/
+    /- name: Fail unhealthy health-monitor run\n        if: always\(\) && steps\.preflight\.outputs\.configured == 'true' && steps\.aggregate\.outputs\.status != 'healthy'/
   )
   assert.match(runBlock('Fail unhealthy health-monitor run'), /exit 1/)
   assert.doesNotMatch(workflow, /uses: actions\/cache@v4/)
@@ -392,6 +476,7 @@ test('restores and saves cache explicitly before failing unhealthy runs', () => 
 
 test('keeps secrets and dynamic health data out of shell expression interpolation', () => {
   for (const name of [
+    'Validate health monitor configuration',
     'Check pipeline health',
     'Verify production main ancestry',
     'Aggregate health result',
@@ -411,13 +496,13 @@ test('uses a de-duplicated GitHub issue when the primary alert channel fails', (
   assert.match(workflow, /permissions:\n  contents: read\n  issues: write/)
   assert.match(
     workflow,
-    /- name: Open independent issue when Telegram delivery fails\n        if: always\(\) && steps\.aggregate\.outputs\.status != 'healthy'.*outcome != 'delivered'.*outcome != 'deduplicated'/
+    /- name: Open independent issue when Telegram delivery fails\n        if: always\(\) && steps\.preflight\.outputs\.configured == 'true' && steps\.aggregate\.outputs\.status != 'healthy' && steps\.aggregate\.outputs\.status != 'configuration_error'.*outcome != 'delivered'.*outcome != 'deduplicated'/
   )
   assert.match(workflow, /ISSUE_TITLE: '🛑 Arena production health is unhealthy'/)
   assert.match(workflow, /gh issue create --repo "\$GH_REPO"/)
   assert.match(
     workflow,
-    /- name: Close independent issue after health recovery\n        if: always\(\) && steps\.aggregate\.outputs\.status == 'healthy'/
+    /- name: Close independent issue after health recovery\n        if: always\(\) && steps\.preflight\.outputs\.configured == 'true' && steps\.aggregate\.outputs\.status == 'healthy'/
   )
   assert.match(workflow, /gh issue close "\$NUMBER" --repo "\$GH_REPO"/)
 })

@@ -151,13 +151,12 @@ const STRIPE_WEBHOOK_SECRET_PREVIOUS = isServer
   ? getEnv('STRIPE_WEBHOOK_SECRET_PREVIOUS', false)
   : undefined
 
-// Cron / Workers — required in production (protects 50+ endpoints)
+// Cron — required in production (protects scheduled and internal endpoints)
 const CRON_SECRET = isServer
   ? process.env.NODE_ENV === 'production'
     ? getEnv('CRON_SECRET', true)
     : getEnv('CRON_SECRET', false)
   : undefined
-const WORKER_SECRET = isServer ? getEnv('WORKER_SECRET', false) : undefined
 
 // ─── Weak secret detection (defense in depth) ──────────────────────────────
 if (isServer && process.env.NODE_ENV === 'production') {
@@ -240,20 +239,11 @@ export const env = {
   R2_BUCKET: getEnv('R2_BUCKET', false),
   R2_PUBLIC_URL: getEnv('R2_PUBLIC_URL', false),
 
-  // ── Cron / Workers ──
+  // ── Cron ──
   CRON_SECRET,
-  WORKER_SECRET,
-  WORKER_URL: getEnv('WORKER_URL', false, 'http://localhost:3000'),
-  WORKER_BATCH_SIZE: getEnvNumber('WORKER_BATCH_SIZE', 10),
-  WORKER_POLL_INTERVAL: getEnvNumber('WORKER_POLL_INTERVAL', 60000),
-
-  // ── Cloudflare Proxy ──
-  CLOUDFLARE_PROXY_URL: getEnv('CLOUDFLARE_PROXY_URL', false),
-  CLOUDFLARE_PROXY_SECRET: isServer ? getEnv('CLOUDFLARE_PROXY_SECRET', false) : undefined,
 
   // ── Feature Flags ──
   ENABLE_SMART_SCHEDULER: getEnvBool('ENABLE_SMART_SCHEDULER', false),
-  ENABLE_ANOMALY_DETECTION: getEnvBool('ENABLE_ANOMALY_DETECTION', false),
 
   // ── Smart Scheduler Config ──
   SMART_SCHEDULER_HOT_INTERVAL_MINUTES: getEnvNumber('SMART_SCHEDULER_HOT_INTERVAL_MINUTES', 30),

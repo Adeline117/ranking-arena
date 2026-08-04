@@ -51,7 +51,7 @@ const DATABASE_URL = process.env.DATABASE_URL
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY
-const R2_BUCKET = process.env.R2_BUCKET || 'arena-backups'
+const R2_BUCKET = process.env.R2_BUCKET
 
 const s3 = new S3Client({
   region: 'auto',
@@ -366,8 +366,10 @@ async function run() {
     console.error('Missing DATABASE_URL')
     process.exit(1)
   }
-  if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ACCOUNT_ID) {
-    console.error('Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)')
+  if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ACCOUNT_ID || !R2_BUCKET) {
+    console.error(
+      'Missing R2 configuration (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET)'
+    )
     process.exit(1)
   }
 

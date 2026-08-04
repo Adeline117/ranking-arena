@@ -9,10 +9,9 @@ on:
 permissions:
   contents: read
 
-# Per-SHA group, no cancel: 7 个并发会话高频直推 main，per-ref cancel-in-progress
-# 会让每个 run 都被下一次 push 取消——CI 在忙碌时段永远跑不完（2026-07-02 差距
-# 审计发现"CI 全红"的一半根因是 cancelled 而非 failure）。快速作业必须每个
-# commit 跑完才能充当部署门禁；E2E 成本高，在 job 级单独设 per-ref cancel。
+# Per-SHA group, no cancel: stacked PRs and reviewed main updates can overlap.
+# Fast merge-gate jobs must finish for every commit; E2E cost control remains
+# scoped to its job instead of cancelling repository-wide evidence.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
@@ -22,7 +21,7 @@ env:
 
 jobs:
   # PR 只证明本地 AST/fixture/脚本契约，完全不注入生产 secret，也不联网。
-  # 生产漂移是下面独立的 push-main job；PR 中尚未部署的 migration 不应拿
+  # 生产漂移是下面独立的 main-update job；PR 中尚未部署的 migration 不应拿
   # 当前生产 schema 做 diff。
   types-contract:
     name: Types generation contract (offline, no secrets)
@@ -243,9 +242,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --ignore-scripts
-      # The repository ruleset already requires this job. Keep the offline
-      # contract here as well as in its named job so PRs cannot merge while an
-      # older four-check ruleset is still being updated.
+      # Keep the offline contract here as well as in its named job. This remains
+      # defense in depth while platform-enforced required checks are unavailable
+      # on the repository's current private-plan configuration.
       - run: npm run gen:types:contract
       - name: Migration history shape ratchet
         run: npm run qa:migration-history-shape
@@ -260,6 +259,8 @@ jobs:
       - name: Backup freshness fail-closed contract
         run: node --test scripts/openclaw/backup-freshness-check.test.mjs
       - run: npm run lint
+      - name: Source policy gate
+        run: npm run qa:source-policy
       - name: Type-check application
         env:
           # The generated Database surface plus App Router graph now exceeds

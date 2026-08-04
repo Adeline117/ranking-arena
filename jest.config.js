@@ -11,7 +11,7 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
-    '^@vercel/analytics$': '<rootDir>/test/mocks/vercel-analytics.js',
+    '^@vercel/analytics$': '<rootDir>/__tests__/mocks/vercel-analytics.cjs',
     '^@/(.*)$': '<rootDir>/$1',
   },
   testPathIgnorePatterns: [

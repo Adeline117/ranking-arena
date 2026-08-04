@@ -17,7 +17,9 @@ Arena uses CCXT **only** for standardized market data:
 **NOT for**: Copy trading/leaderboard APIs — those use source adapters under
 `lib/ingest/adapters/` and the external BullMQ ingest worker.
 
-Key file: `lib/exchange/ccxt-client.ts` — lazy-loads ccxt to avoid 56MB cold start impact.
+Current CCXT boundaries are `worker/src/ingest/processors/first-party-sync.ts`,
+`lib/portfolio/exchange-sync.ts`, `app/api/market/candles/route.ts`, and
+`lib/utils/arbitrage.ts`. They lazy-load CCXT at runtime to protect cold starts.
 
 ## Supported Exchanges
 

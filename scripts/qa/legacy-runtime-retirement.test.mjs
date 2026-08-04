@@ -44,6 +44,9 @@ test('keeps retired legacy runtime roots and entrypoints deleted', () => {
     'scripts/backfill-risk-metrics-7d30d.ts',
     'scripts/backfill-sharpe-ratio.mjs',
     'scripts/check-data-distribution.mjs',
+    'scripts/check-migration-naming.sh',
+    'scripts/check-orphan-pages.sh',
+    'scripts/check-service-layer.sh',
     'scripts/check_enrichment.mjs',
     'scripts/check_seasons.mjs',
     'scripts/check_tables.mjs',
@@ -54,12 +57,30 @@ test('keeps retired legacy runtime roots and entrypoints deleted', () => {
     'scripts/dedup-hot-posts.mjs',
     'scripts/generate-trader-bios.ts',
     'scripts/get-schema.mjs',
+    'scripts/git-commit-safe.sh',
+    'scripts/git-push-safe.sh',
     'scripts/health-check.mjs',
+    'scripts/ingest-backfill-board-series.mts',
+    'scripts/ingest-test-tier-a.ts',
+    'scripts/lint-error-responses.sh',
+    'scripts/mobile-screenshot-test.mjs',
+    'scripts/monitor-enrichment.sh',
+    'scripts/monthly-deps-update.mjs',
     'scripts/onchain-enrich-web3.mts',
+    'scripts/pre-deploy-check.sh',
+    'scripts/qa-screenshot-rankings.mjs',
+    'scripts/qa-screenshot.mjs',
+    'scripts/qa-ui-check.mjs',
+    'scripts/screenshot-diagnose.ts',
+    'scripts/security/rotate-secrets.sh',
+    'scripts/seed-quality-content.ts',
     'scripts/show-trader-sources-schema.ts',
+    'scripts/sync-vps-key.sh',
+    'scripts/test-edbhandler-repro.mts',
     'scripts/validate-data.mjs',
     'scripts/vps-health-check.mjs',
     'scripts/arena-status-check.mjs',
+    'scripts/archive',
     'scripts/import',
     'scripts/library',
     'scripts/lib/base-importer.mjs',
@@ -147,6 +168,11 @@ test('keeps legacy registry and healthcheck configuration retired', () => {
     /['"](?:batch-fetch-traders|batch-enrich|pipeline-fetch|fetch-details|backfill-data|enrich-gmx|link-entities|verify-fetchers|snapshot-positions|auto-post-insights)['"]/
   )
   assert.doesNotMatch(packageJson, /@upstash\/qstash/)
+})
+
+test('does not hide regenerated legacy fetcher artifacts from repository checks', () => {
+  const ignoreRules = readFileSync(join(root, '.gitignore'), 'utf8')
+  assert.doesNotMatch(ignoreRules, /lib\/cron\/fetchers/)
 })
 
 test('keeps the VPS status check scoped and credential-safe', () => {

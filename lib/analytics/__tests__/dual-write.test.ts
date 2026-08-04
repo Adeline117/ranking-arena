@@ -1,96 +1,95 @@
 /**
- * Tests for dual-write adapter (Supabase + ClickHouse).
- * Verifies that ClickHouse failures never propagate to callers.
- *
- * NOTE: We test syncToClickHouse by observing its side-effects rather than
- * mocking the clickhouse module, because Jest resolves relative imports
- * from dual-write.ts and the test file to different module cache keys.
+ * Tests for the Supabase-primary / ClickHouse-secondary write boundary.
+ * The ClickHouse adapter is mocked explicitly so this suite can never open a
+ * socket, even when CLICKHOUSE_URL is present in the developer environment.
  */
+
+const mockClickHouseAvailable = jest.fn<() => boolean>()
+const mockInsertBatch =
+  jest.fn<(table: string, rows: Record<string, unknown>[]) => Promise<number>>()
+const mockInfo = jest.fn()
+const mockWarn = jest.fn()
 
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
   logger: {
     child: () => ({
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-    }),
-  },
-  default: {
-    child: () => ({
-      info: jest.fn(),
-      warn: jest.fn(),
+      info: (...args: unknown[]) => mockInfo(...args),
+      warn: (...args: unknown[]) => mockWarn(...args),
       error: jest.fn(),
     }),
   },
 }))
 
-jest.mock('@/lib/utils/logger', () => {
-  const inst = {
-    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-    child: () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
-  }
-  return {
-    __esModule: true,
-    logger: inst,
-    default: inst,
-    createLogger: jest.fn(() => inst),
-  }
-})
+jest.mock('../clickhouse', () => ({
+  __esModule: true,
+  isClickHouseAvailable: () => mockClickHouseAvailable(),
+  insertBatch: (table: string, rows: Record<string, unknown>[]) => mockInsertBatch(table, rows),
+}))
+
+// jest.setup.js replaces the public alias globally. Restore the real adapter
+// for this focused suite while retaining the explicit low-level client mock.
+jest.mock('@/lib/analytics/dual-write', () => jest.requireActual('@/lib/analytics/dual-write'))
 
 import { syncToClickHouse } from '../dual-write'
 
 describe('syncToClickHouse', () => {
-  const originalEnv = process.env
-
   beforeEach(() => {
     jest.clearAllMocks()
-    // ClickHouse is NOT available when env vars are missing (default test env)
-    process.env = { ...originalEnv }
-    delete process.env.CLICKHOUSE_URL
-    delete process.env.CLICKHOUSE_DATABASE
+    mockClickHouseAvailable.mockReturnValue(false)
+    mockInsertBatch.mockResolvedValue(0)
   })
 
-  afterAll(() => {
-    process.env = originalEnv
-  })
-
-  it('is a no-op when ClickHouse is not available (no env vars)', async () => {
-    // No CLICKHOUSE_URL set → isClickHouseAvailable() returns false → no-op
+  it('does not initialize the client when ClickHouse is not configured', async () => {
     await expect(
       syncToClickHouse('test_table', [{ id: '1', name: 'test' }])
     ).resolves.toBeUndefined()
+
+    expect(mockInsertBatch).not.toHaveBeenCalled()
   })
 
-  it('is a no-op when rows array is empty', async () => {
-    await expect(
-      syncToClickHouse('test_table', [])
-    ).resolves.toBeUndefined()
+  it('does not initialize the client for an empty batch', async () => {
+    mockClickHouseAvailable.mockReturnValue(true)
+
+    await expect(syncToClickHouse('test_table', [])).resolves.toBeUndefined()
+
+    expect(mockInsertBatch).not.toHaveBeenCalled()
   })
 
-  it('does not throw when ClickHouse is available but insertBatch fails', async () => {
-    // Set env to make isClickHouseAvailable() return true
-    process.env.CLICKHOUSE_URL = 'http://localhost:8123'
-    process.env.CLICKHOUSE_DATABASE = 'arena_test'
+  it('isolates a configured client initialization failure from the primary write path', async () => {
+    mockClickHouseAvailable.mockReturnValue(true)
+    mockInsertBatch.mockRejectedValueOnce(
+      new Error('ClickHouse is configured but the client could not be initialized')
+    )
 
-    // insertBatch will fail because @clickhouse/client is not installed in test env
-    // The try/catch in syncToClickHouse should swallow the error
-    await expect(
-      syncToClickHouse('metrics', [{ id: '1', value: 100 }])
-    ).resolves.toBeUndefined()
+    await expect(syncToClickHouse('metrics', [{ id: '1', value: 100 }])).resolves.toBeUndefined()
+
+    expect(mockWarn).toHaveBeenCalledWith(
+      'Failed to sync 1 rows to metrics:',
+      'ClickHouse is configured but the client could not be initialized'
+    )
   })
 
-  it('returns void (never throws) regardless of input', async () => {
-    // Verify the fire-and-forget contract
-    await expect(
-      syncToClickHouse('metrics', [{ id: '1' }])
-    ).resolves.toBeUndefined()
+  it('isolates an insert failure from the primary write path', async () => {
+    mockClickHouseAvailable.mockReturnValue(true)
+    mockInsertBatch.mockRejectedValueOnce(new Error('insert rejected'))
+
+    await expect(syncToClickHouse('metrics', [{ id: '1' }])).resolves.toBeUndefined()
+
+    expect(mockWarn).toHaveBeenCalledWith('Failed to sync 1 rows to metrics:', 'insert rejected')
   })
 
-  it('handles large batches without throwing', async () => {
-    const rows = Array.from({ length: 100 }, (_, i) => ({ id: String(i), value: i }))
-    await expect(
-      syncToClickHouse('metrics', rows)
-    ).resolves.toBeUndefined()
+  it('records the successful secondary-write count', async () => {
+    const rows = [
+      { id: '1', value: 1 },
+      { id: '2', value: 2 },
+    ]
+    mockClickHouseAvailable.mockReturnValue(true)
+    mockInsertBatch.mockResolvedValueOnce(rows.length)
+
+    await expect(syncToClickHouse('metrics', rows)).resolves.toBeUndefined()
+
+    expect(mockInsertBatch).toHaveBeenCalledWith('metrics', rows)
+    expect(mockInfo).toHaveBeenCalledWith('Synced 2 rows to metrics')
   })
 })

@@ -172,13 +172,13 @@ export async function POST(request: NextRequest) {
     }
 
     // BATCH INSERT all notifications in one query (chunks of 500 to avoid payload limits)
-    // service-layer-exempt: batch — this is a cron-style pipeline job, not a user-facing API.
-    // Uses table-name indirection to avoid pre-push hook grep (cron batch jobs are exempt per CLAUDE.md).
-    const NOTIF_TABLE = 'notifications' as const
+    // source-policy-exempt: notification-batch — this pipeline owns its batch
+    // deduplication and intentionally writes in chunks instead of emitting one
+    // fire-and-forget task per recipient.
     const BATCH_SIZE = 500
     for (let i = 0; i < notificationRows.length; i += BATCH_SIZE) {
       const batch = notificationRows.slice(i, i + BATCH_SIZE)
-      const { error: insertError } = await supabase.from(NOTIF_TABLE).insert(batch)
+      const { error: insertError } = await supabase.from('notifications').insert(batch)
       if (insertError) {
         logger.error('[Notifications] Batch insert error:', insertError)
       } else {

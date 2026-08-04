@@ -11,7 +11,6 @@
  * 用法：
  *   node scripts/pipeline-health-check.mjs           # 完整检查
  *   node scripts/pipeline-health-check.mjs --quick   # 快速检查（仅数据新鲜度）
- *   node scripts/pipeline-health-check.mjs --fix     # 生成修复脚本
  */
 
 import { readFileSync, readdirSync, existsSync } from 'fs'
@@ -298,7 +297,6 @@ function generateSuggestions() {
         platform: item.platform,
         priority: 'HIGH',
         action: `添加 try-catch 和 Sentry 日志到 ${item.platform}.ts`,
-        command: `claude -p "在 lib/cron/fetchers/${item.platform}.ts 中添加标准错误处理模板"`,
       })
     }
   }
@@ -311,7 +309,6 @@ function generateSuggestions() {
         platform: item.platform,
         priority: 'HIGH',
         action: `修复 ${item.platform} 数据抓取（${outageDuration}）`,
-        command: `/fix-pipeline ${item.platform}`,
       })
     }
   }
@@ -329,7 +326,6 @@ function generateSuggestions() {
       console.log('🔴 高优先级:')
       for (const s of highPriority) {
         console.log(`   - ${s.platform}: ${s.action}`)
-        console.log(`     运行: ${s.command}`)
       }
     }
 
@@ -345,54 +341,22 @@ function generateSuggestions() {
 }
 
 // ============================================
-// 4. 生成自动修复脚本
-// ============================================
-
-function generateFixScript() {
-  console.log('\n=== 4. 自动修复脚本 ===\n')
-
-  if (results.suggestions.length === 0) {
-    console.log('无需生成修复脚本。')
-    return
-  }
-
-  const script = `#!/bin/bash
-# Arena Pipeline 自动修复脚本
-# 生成时间: ${new Date().toISOString()}
-
-set -e
-
-${results.suggestions
-  .map(
-    (s) => `
-# 修复 ${s.platform}
-echo "修复 ${s.platform}..."
-${s.command}
-`
-  )
-  .join('\n')}
-
-echo "修复完成！"
-`
-
-  console.log('修复脚本已生成:\n')
-  console.log(script)
-}
-
-// ============================================
 // Main
 // ============================================
 
 async function main() {
   const args = process.argv.slice(2)
+  const unknownArgs = args.filter((arg) => arg !== '--quick')
+  if (unknownArgs.length > 0) {
+    throw new Error(`Unknown argument(s): ${unknownArgs.join(', ')}`)
+  }
   const quickMode = args.includes('--quick')
-  const fixMode = args.includes('--fix')
 
   console.log('╔══════════════════════════════════════════╗')
   console.log('║     Arena Pipeline 健康检查              ║')
   console.log('╚══════════════════════════════════════════╝')
   console.log(`时间: ${new Date().toISOString()}`)
-  console.log(`模式: ${quickMode ? '快速' : fixMode ? '修复' : '完整'}`)
+  console.log(`模式: ${quickMode ? '快速' : '完整'}`)
 
   if (!quickMode) {
     checkFetcherErrorHandling()
@@ -401,10 +365,6 @@ async function main() {
   await checkDataFreshness()
 
   generateSuggestions()
-
-  if (fixMode) {
-    generateFixScript()
-  }
 
   // 返回退出码
   const criticalCount = results.dataFreshness.filter((d) => d.status === 'CRITICAL').length

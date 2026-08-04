@@ -9,6 +9,24 @@
 
 ## [Unreleased]
 
+### Removed
+
+- 删除未被 hook 或 CI 读取的 `.tsc-legacy-errors.txt` 占位文件；TypeScript 回归现在
+  只有“修复或阻断”，不再保留伪豁免入口。
+- 删除只服务于 machine-local `pre-push`/共享 index 的 push、commit、orphan-page
+  包装脚本；隔离 worktree、标准 Git、PR 与 CI 成为唯一受支持交付路径。
+
+### Added
+
+- `qa:source-policy` 将 modal scroll-lock、notification writer、counter RPC、Stripe
+  幂等与 ILIKE escaping 规则迁入可单测的 tracked CI gate，并全量扫描 owned source。
+- 收紧 Supabase type-bypass debt baseline 到当前实测值（bare client 67、query
+  `as any` 12），后续回归不能再消费已清掉的历史预算。
+- ClickHouse 改为声明式服务端依赖与静态可分析的延迟加载；未配置时保持零开销，
+  已配置但初始化失败时显式报错，并只在 secondary dual-write 边界降级。
+- Web3 钱包入口改为经过审查的 Browser Wallet + WalletConnect 显式白名单；可选 peer
+  告警按“导入方 + 缺失请求”双重约束，避免全局吞掉真实模块缺失。
+
 ## [1.0.0] - 2026-07-02
 
 首个受追踪版本 = 企业级工程差距整改（详见 `docs/ENTERPRISE_GAP_ANALYSIS_2026-07.md`）。

@@ -10,10 +10,6 @@
  * - Idempotency / determinism checks
  */
 
-jest.mock('@/lib/features', () => ({
-  isFeatureEnabledForUser: jest.fn().mockReturnValue(false),
-}))
-
 import {
   calculateArenaScore,
   calculateArenaScoreV3Legacy,

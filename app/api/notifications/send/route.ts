@@ -18,20 +18,28 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getSupabaseAdmin,
-  handleError,
-} from '@/lib/api'
+import { getSupabaseAdmin, handleError } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { verifyServiceAuth as verifyServiceAuthShared } from '@/lib/auth/verify-service-auth'
+import { createNotification, type NotificationType } from '@/lib/data/notifications'
 
 export const dynamic = 'force-dynamic'
 
 const VALID_TYPES = [
-  'follow', 'like', 'comment', 'mention', 'system',
-  'copy_trade', 'trader_alert', 'message', 'post_reply',
-  'new_follower', 'group_update', 'ranking_change', 'referral_reward',
+  'follow',
+  'like',
+  'comment',
+  'mention',
+  'system',
+  'copy_trade',
+  'trader_alert',
+  'message',
+  'post_reply',
+  'new_follower',
+  'group_update',
+  'ranking_change',
+  'referral_reward',
 ]
 
 /**
@@ -78,35 +86,35 @@ export async function POST(request: NextRequest) {
 
     // 防止给自己发通知
     if (actor_id && actor_id === user_id) {
-      return NextResponse.json({ success: true, message: 'Skipped self-notification', skipped: true })
+      return NextResponse.json({
+        success: true,
+        message: 'Skipped self-notification',
+        skipped: true,
+      })
     }
 
     const supabase = getSupabaseAdmin()
 
-    const { data, error } = await supabase
-      .from('notifications')
-      .insert({
+    try {
+      const notification = await createNotification(supabase, {
         user_id,
-        type,
+        type: type as NotificationType,
         title: title.slice(0, 200),
         message: message.slice(0, 1000),
-        link: link?.slice(0, 500) || null,
-        actor_id: actor_id || null,
-        reference_id: reference_id || null,
+        link: typeof link === 'string' ? link.slice(0, 500) : undefined,
+        actor_id: typeof actor_id === 'string' ? actor_id : undefined,
+        reference_id: typeof reference_id === 'string' ? reference_id : undefined,
         read: false,
       })
-      .select('id')
-      .single()
 
-    if (error) {
+      return NextResponse.json({
+        success: true,
+        notification_id: notification.id,
+      })
+    } catch (error) {
       logger.error('[notifications/send] 创建通知Failed:', error)
       return NextResponse.json({ error: 'Failed to create notification' }, { status: 500 })
     }
-
-    return NextResponse.json({
-      success: true,
-      notification_id: data.id,
-    })
   } catch (error: unknown) {
     return handleError(error, 'notifications/send POST')
   }

@@ -324,7 +324,8 @@ Established 2026-06-29 (Waves 0–5 + three high-risk features). Reuse this when
    only then write dependent code. Never let parallel agents create/apply migrations.
 5. **Auth/payment code gets an adversarial security review BEFORE it ships.** (Passkey caught
    header-trusted rpID + non-atomic challenge consume this way.)
-6. **One fix = one commit = immediate push** (atomic, visible progress); pushes run the pre-push
-   tsc/lint gate. After each deploy run `scripts/post-deploy-check.sh`; any core URL 500 → roll back.
+6. **One fix = one reviewable commit.** Work on an owned feature branch, run
+   proportionate local checks, and deliver through a PR. CI is the merge gate;
+   Deploy Gate performs exact-SHA smoke after merge and rolls back on failure.
 7. **Decide the semantic-color question once.** Keep red/green (trader convention) and add a SHAPE
    cue (arrow/sign/marker) for color-blind safety — do NOT switch to blue/orange.

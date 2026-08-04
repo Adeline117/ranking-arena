@@ -4,13 +4,14 @@
  * 场景: 模拟正常流量 50-100 用户并发
  * 商业意义: 评估日常运营时的用户体验和服务器成本
  *
- * 运行: k6 run k6/load-test.js
- * 云端: k6 cloud k6/load-test.js
+ * 运行: k6 run -e BASE_URL=https://preview.example.com k6/load-test.js
+ * 云端: k6 cloud -e BASE_URL=https://preview.example.com k6/load-test.js
  */
 
 import http from 'k6/http'
 import { check, sleep, group } from 'k6'
 import { Rate, Trend, Counter } from 'k6/metrics'
+import { resolveLoadTestBaseUrl } from './config.js'
 
 // 自定义指标
 const errorRate = new Rate('errors')
@@ -38,9 +39,7 @@ export const options = {
   },
 }
 
-// Override with `-e BASE_URL=https://<preview>.vercel.app` for preview runs.
-// Default is production (stale `ranking-arena.vercel.app` corrected to the live host).
-const BASE_URL = __ENV.BASE_URL || 'https://www.arenafi.org'
+const BASE_URL = resolveLoadTestBaseUrl()
 
 // 模拟真实用户行为
 export default function main() {

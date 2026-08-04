@@ -285,7 +285,7 @@ scripts/                      # Operational CLI tools and maintenance
 
 supabase/migrations/          # Immutable PostgreSQL migration ledger
 
-cloudflare-worker/            # CF Worker proxy for geo-blocked exchange APIs
+cloudflare-worker/            # Quarantined proxy artifact pending external-traffic audit
 
 e2e/                          # Playwright E2E tests
 k6/                           # K6 load tests
@@ -304,7 +304,7 @@ Core tables (all with Row Level Security enabled):
 | `leaderboard_ranks`       | Precomputed ranked leaderboard; each season is normally rebuilt every 2h  |
 | `arena.trader_stats`      | Point-in-time performance per (trader, timeframe) — primary write table   |
 | `arena.traders`           | Trader identity registry, keyed by `(source_id, exchange_trader_id)`      |
-| `trader_sources`          | Trader source identities (legacy serving + enrichment)                    |
+| `trader_sources`          | Legacy serving identity, unique on `(source, source_trader_id)`           |
 | `trader_equity_curve`     | Historical equity curve data points per period                            |
 | `arena.position_history`  | Current ingest history facts; not rank-eligible without authority proof   |
 | `trader_position_history` | Frozen forensic archive; no application reads and never ranking authority |
@@ -312,7 +312,6 @@ Core tables (all with Row Level Security enabled):
 | `trader_asset_breakdown`  | Asset allocation analysis per period                                      |
 | `trader_daily_snapshots`  | Daily ROI/PnL rollups                                                     |
 | `trader_portfolio`        | Current open positions                                                    |
-| `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`           |
 
 ### User and Social
 
@@ -378,7 +377,6 @@ Optional variables for monitoring and proxy:
 
 | Variable                | Description                                    |
 | ----------------------- | ---------------------------------------------- |
-| `CLOUDFLARE_PROXY_URL`  | CF Worker proxy URL                            |
 | `VPS_PROXY_KEY`         | API key for VPS proxy authentication           |
 | `SENTRY_DSN`            | Sentry error tracking                          |
 | `HEALTHCHECKS_PING_URL` | Healthchecks.io ping URL for dead man's switch |
@@ -410,7 +408,6 @@ npm run test:e2e       # Playwright E2E tests
 ```bash
 node scripts/pipeline-health-check.mjs          # Full pipeline health check
 node scripts/pipeline-health-check.mjs --quick   # Quick data freshness check
-node scripts/pipeline-health-check.mjs --fix     # Generate fix scripts
 npx tsx scripts/ingest-queue-state.mts           # Queue and scheduler state
 npx tsx scripts/ingest-field-coverage-ledger.mts # Canonical-field coverage
 npx tsx scripts/ingest-shadow-diff.ts            # Shadow/canonical diff
@@ -418,12 +415,15 @@ npx tsx scripts/ingest-shadow-diff.ts            # Shadow/canonical diff
 
 ## Deployment
 
-The application is deployed on Vercel through the repository's CI deployment gate. A push to `main` must pass the required checks before the production deployment is created; a pushed commit alone is not proof that production advanced.
+The application is deployed on Vercel through the repository's CI deployment gate. A reviewed advancement of `main` must pass the required checks before the production deployment is created; a pushed commit alone is not proof that production advanced.
 
 ```bash
-vercel --prod          # Manual production deploy; verify the linked project first
-git push origin main   # Starts CI; deploy-gate promotes only after required checks pass
+git push origin <feature-branch> # Opens/updates the PR validation path
 ```
+
+After approval and merge, CI validates `main` and Deploy Gate is the sole normal
+production promoter. Use the break-glass procedure in `docs/RUNBOOK.md` only when
+that control plane is unavailable; do not run an unbound manual production deploy.
 
 All environment variables must be configured in the Vercel dashboard. The primary serverless function region is `hnd1` (Tokyo) to minimize latency to Asian exchange APIs and avoid geo-blocking.
 
@@ -439,7 +439,7 @@ Cron schedules are defined in `vercel.json`. The 40 production schedules call au
 | **SG VPS** (45.76.152.169) | Proxy :3456 + Playwright Scraper :3457 (PM2)                 |
 | **JP VPS** (149.28.27.242) | Polymarket + exchange proxy                                  |
 | **Mac Mini** (OpenClaw)    | Read-only health monitor, daily reports, weekly self-check   |
-| **Cloudflare Worker**      | Geo-block bypass proxy with ALLOWED_HOSTS whitelist          |
+| **Cloudflare artifact**    | Quarantined; no current repository consumer or deploy owner  |
 
 ### Monitoring
 

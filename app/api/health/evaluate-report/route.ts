@@ -1,7 +1,7 @@
 /**
  * GET /api/health/evaluate-report
  *
- * Receives code quality evaluation scores from pre-push hook.
+ * Compatibility endpoint for an authorized external quality evaluator.
  * Writes to pipeline_state and sends Telegram alert if score < 80.
  */
 

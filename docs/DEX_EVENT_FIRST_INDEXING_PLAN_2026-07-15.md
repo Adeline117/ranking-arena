@@ -195,10 +195,10 @@ reference-only、抓取时间和已知缺口。Solana skipped slot 是正常链�
 
 ### 3.3 文档漂移
 
-[`scripts/ONCHAIN_ENRICHMENT_README.md`](../scripts/ONCHAIN_ENRICHMENT_README.md) 仍描述旧脚本、
-旧表和旧 source（如 Aevo/dYdX/Drift/Jupiter 的历史富化设想），不能作为当前生产拓扑或覆盖率
-权威。桌面 `交易所细节.docx` 是 2026 年早期页面截图/说明基线，不是协议人口、链状态或当前
-生产契约的唯一权威：其中 Hyperliquid/GMX 没有截图，gTrade 唯一截图还直接反证“钱包不详”。
+旧 VPS on-chain enrichment 文档和脚本已随独立 cron owner 一并删除；它们描述的旧表和旧
+source（如 Aevo/dYdX/Drift/Jupiter 的历史富化设想）不得恢复为当前生产拓扑或覆盖率权威。
+桌面 `交易所细节.docx` 是 2026 年早期页面截图/说明基线，不是协议人口、链状态或当前生产
+契约的唯一权威：其中 Hyperliquid/GMX 没有截图，gTrade 唯一截图还直接反证“钱包不详”。
 [`ARENA_REBUILD_SPEC.md`](./ARENA_REBUILD_SPEC.md) 与
 [`EXCHANGE_FIELD_MAPPING.md`](./EXCHANGE_FIELD_MAPPING.md) 的旧人数、窗口和 GMX 缺失项必须按
 当前代码/官方资料纠偏。后续在事件管线首个生产 source 上线时，应同步重写或归档旧脚本文档。

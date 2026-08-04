@@ -11,7 +11,7 @@
 
 - worker 间歇性以 EDBHANDLEREXITED 崩溃，首次修复（d548744ff）用正则匹配错误
   文本做 band-aid，无效，继续崩
-- 复现测试 `scripts/test-edbhandler-repro.mts` 定位真因
+- 复现脚本定位真因；该一次性脚本现已退役，证据保留在根治提交 5926fc9ce 的历史中
 - 根治修复 5926fc9ce 部署两节点（Mac Mini + SG VPS）后稳定
 
 ## 根因
@@ -30,10 +30,10 @@ Node uncaughtException → 进程崩溃。
 
 ## 防再犯
 
-- [x] 复现测试入库（scripts/test-edbhandler-repro.mts）
+- [x] 建立并运行复现脚本（现已退役；见根治提交 5926fc9ce 的历史）
 - [x] ingestClientConnect() 作为唯一 connect 入口
 - [x] worker-heartbeat-check cron（≥2 live SHA 或心跳 stale 告警）
-- [ ] eslint/pre-push guard：裸 `pool.connect()` 禁令（可加入棘轮）
+- [x] tracked `qa:source-policy` 禁止 ingest runtime 新增裸 `pool.connect()`；CI 全量扫描
 
 ## 教训
 

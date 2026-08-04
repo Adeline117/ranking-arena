@@ -119,6 +119,20 @@ test('requires an explicit --key value and rejects ambiguous CLI combinations', 
   assert.throws(() => parseRestoreArgs(['--unknown']), /unknown argument/)
 })
 
+test('list mode refuses to guess the R2 bucket', async () => {
+  await assert.rejects(
+    runRestoreCli({
+      argv: ['--list'],
+      env: {
+        R2_ACCOUNT_ID: 'test-account',
+        R2_ACCESS_KEY_ID: 'test-access-key',
+        R2_SECRET_ACCESS_KEY: 'test-secret-key',
+      },
+    }),
+    /R2_BUCKET/
+  )
+})
+
 test('resolves an explicit key with HeadObject even when it is absent from a list page', async () => {
   const calls = []
   const expectedDate = new Date('2026-07-26T04:00:00.000Z')

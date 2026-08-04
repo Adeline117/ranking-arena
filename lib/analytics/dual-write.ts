@@ -1,8 +1,8 @@
 /**
  * Dual-write adapter: Supabase (primary) + ClickHouse (secondary)
  *
- * ClickHouse writes are fire-and-forget — failures are logged but never
- * block or fail Supabase operations.
+ * ClickHouse writes are isolated at this secondary-write boundary: failures
+ * are logged here and never block or fail Supabase operations.
  */
 
 import { logger } from '@/lib/logger'
@@ -14,7 +14,8 @@ const chLogger = logger.child('ClickHouse')
  * Sync a batch of rows to ClickHouse.
  *
  * - No-op if ClickHouse is not configured (env vars missing).
- * - Wraps in try/catch so failures never propagate to callers.
+ * - Catches explicit client initialization and insert failures so they never
+ *   propagate into the primary Supabase write path.
  * - Logs success count and any errors.
  *
  * @param table  - ClickHouse table name
@@ -31,7 +32,8 @@ export async function syncToClickHouse(
     const inserted = await insertBatch(table, rows)
     chLogger.info(`Synced ${inserted} rows to ${table}`)
   } catch (err) {
-    // ClickHouse failures must NOT block the Supabase write path
+    // ClickHouse failures must NOT block the Supabase write path. The low-level
+    // client rejects configured failures; this boundary owns the degradation.
     chLogger.warn(
       `Failed to sync ${rows.length} rows to ${table}:`,
       err instanceof Error ? err.message : String(err)

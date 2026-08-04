@@ -7,7 +7,7 @@
  * 2. fire-and-forget（不阻塞响应）
  * 3. 统一错误处理（日志 + 不影响主流程）
  *
- * 直接调用 .rpc('increment_*') / .rpc('decrement_*') 会被 pre-push hook 拦截。
+ * CI 的 changed-source policy 会阻止 API route 新增直接 counter RPC 调用。
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

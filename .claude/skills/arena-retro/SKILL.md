@@ -33,8 +33,8 @@ git log --since="7 days ago" --diff-filter=D --name-only --no-merges | sort -u
 ### 2. Pipeline Health (last 7 days)
 
 ```bash
-# Run pipeline report if available
-npx tsx scripts/pipeline-report.ts 2>/dev/null || echo "No pipeline report script"
+# Run the canonical authoritative pipeline report
+node scripts/openclaw/daily-pipeline-report.mjs
 
 # Check pipeline health API
 curl -s http://localhost:3000/api/health/pipeline 2>/dev/null | head -50

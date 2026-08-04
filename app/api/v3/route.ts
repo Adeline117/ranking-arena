@@ -1,4 +1,5 @@
-// service-layer-exempt: increment_api_key_usage is a custom RPC, not a counter service
+// source-policy-exempt: counter-rpc — increment_api_key_usage is atomic usage
+// metering, not a denormalized social counter.
 /**
  * Public API v3 — Developer-facing API with rate limiting and API key support.
  *

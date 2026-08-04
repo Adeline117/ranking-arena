@@ -65,12 +65,17 @@ git commit -m "fix: <exchange/component> — <one-line description of root cause
 # Example: "fix: gains upsert conflict key — use (uid, exchange, date) not (uid)"
 ```
 
-## Step 8: Push and Verify Deploy
+## Step 8: Push and Verify the Pull Request
 
 ```bash
-git push origin main
-# Monitor Vercel deploy — see skills/deploy/SKILL.md
+git push -u origin <feature-branch>
+gh pr create --fill
+# Monitor repository CI. A branch push is not a production deployment.
 ```
+
+After review and merge, the Deploy Gate owns normal production promotion and
+exact-SHA smoke checks. Use `docs/RUNBOOK.md` for an explicitly authorized
+break-glass recovery; never bypass the gate with an ad-hoc production deploy.
 
 ## Arena-Specific Issue Patterns
 
@@ -103,13 +108,6 @@ git push origin main
 
 ## End-of-Session Documentation
 
-After fixing, append to `docs/session-notes/YYYY-MM-DD.md`:
-
-```markdown
-## Fixed: <issue title>
-
-- Root cause: <one sentence>
-- Files changed: <list>
-- Verification: tsc ✓ lint ✓ tests ✓ build ✓
-- Remaining risk: <any known edge cases>
-```
+Record the root cause, verification, and remaining risk in the pull request.
+Update an indexed evergreen document only when the supported behavior or
+operator contract changed; do not create unindexed session-note files.

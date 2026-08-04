@@ -2,7 +2,9 @@
  * ClickHouse client module
  *
  * Provides a singleton ClickHouse client configured from environment variables.
- * Gracefully degrades when @clickhouse/client is not installed or env vars are missing.
+ * Stays dormant when ClickHouse is not configured. When it is configured,
+ * initialization failures are surfaced to the caller instead of silently
+ * disabling the integration.
  *
  * Required env vars:
  *   CLICKHOUSE_URL      - e.g. http://localhost:8123
@@ -18,16 +20,29 @@ import { logger } from '@/lib/logger'
 // ---------------------------------------------------------------------------
 
 interface ClickHouseClient {
-  query(params: { query: string; query_params?: Record<string, unknown>; format?: string }): Promise<{
+  query(params: {
+    query: string
+    query_params?: Record<string, unknown>
+    format?: string
+  }): Promise<{
     json<T = unknown>(): Promise<T>
     text(): Promise<string>
   }>
-  insert(params: {
-    table: string
-    values: unknown[]
-    format?: string
-  }): Promise<void>
+  insert(params: { table: string; values: unknown[]; format?: string }): Promise<void>
   close(): Promise<void>
+}
+
+interface ClickHouseClientModule {
+  createClient(options: Record<string, unknown>): ClickHouseClient
+}
+
+export class ClickHouseInitializationError extends Error {
+  readonly code = 'CLICKHOUSE_INITIALIZATION_FAILED'
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'ClickHouseInitializationError'
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -55,29 +70,24 @@ export function isClickHouseAvailable(): boolean {
 // Singleton client
 // ---------------------------------------------------------------------------
 
-let _client: ClickHouseClient | null = null
-let _initFailed = false
+let clientPromise: Promise<ClickHouseClient> | null = null
 
-/**
- * Returns the singleton ClickHouse client.
- * Returns null if env vars are missing or @clickhouse/client is not installed.
- */
-export function getClickHouseClient(): ClickHouseClient | null {
-  if (_client) return _client
-  if (_initFailed) return null
-  if (!isClickHouseAvailable()) return null
-
+async function initializeClickHouseClient(): Promise<ClickHouseClient> {
   try {
-    // Fully dynamic require — the variable indirection prevents Turbopack/webpack
-    // from statically resolving (and failing) when @clickhouse/client is not installed.
-    const pkgName = '@clickhouse/client'
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createClient } = require(pkgName) as {
-      createClient: (opts: Record<string, unknown>) => ClickHouseClient
+    // Keep the literal module specifier: webpack/Turbopack can analyze and trace
+    // the declared runtime dependency without generating a dynamic-require warning.
+    const clickHouseModule: unknown = await import('@clickhouse/client')
+    if (
+      typeof clickHouseModule !== 'object' ||
+      clickHouseModule === null ||
+      !('createClient' in clickHouseModule) ||
+      typeof clickHouseModule.createClient !== 'function'
+    ) {
+      throw new TypeError('@clickhouse/client does not export createClient')
     }
-
+    const { createClient } = clickHouseModule as ClickHouseClientModule
     const cfg = getConfig()
-    _client = createClient({
+    const client = createClient({
       url: cfg.url,
       username: cfg.username,
       password: cfg.password,
@@ -88,16 +98,28 @@ export function getClickHouseClient(): ClickHouseClient | null {
       keep_alive: { enabled: true },
     })
 
-    logger.info('[ClickHouse] Client initialized', { url: cfg.url, database: cfg.database })
-    return _client
-  } catch (err) {
-    _initFailed = true
-    logger.warn(
-      '[ClickHouse] Client init failed (package may not be installed):',
-      err instanceof Error ? err.message : String(err)
+    logger.info('[ClickHouse] Client initialized', { database: cfg.database })
+    return client
+  } catch (cause) {
+    const error = new ClickHouseInitializationError(
+      'ClickHouse is configured but the client could not be initialized',
+      { cause }
     )
-    return null
+    logger.error('[ClickHouse] Client initialization failed:', error.message)
+    throw error
   }
+}
+
+/**
+ * Returns the singleton ClickHouse client.
+ * Returns null without loading the client package when env vars are missing.
+ * Rejects with ClickHouseInitializationError when configured initialization fails.
+ */
+export async function getClickHouseClient(): Promise<ClickHouseClient | null> {
+  if (!isClickHouseAvailable()) return null
+
+  clientPromise ??= initializeClickHouseClient()
+  return clientPromise
 }
 
 // ---------------------------------------------------------------------------
@@ -110,13 +132,10 @@ export function getClickHouseClient(): ClickHouseClient | null {
  *
  * @returns Number of rows inserted, or 0 if unavailable/failed.
  */
-export async function insertBatch(
-  table: string,
-  rows: Record<string, unknown>[]
-): Promise<number> {
+export async function insertBatch(table: string, rows: Record<string, unknown>[]): Promise<number> {
   if (rows.length === 0) return 0
 
-  const client = getClickHouseClient()
+  const client = await getClickHouseClient()
   if (!client) return 0
 
   await client.insert({
@@ -136,7 +155,7 @@ export async function query<T = unknown>(
   sql: string,
   params?: Record<string, unknown>
 ): Promise<T[] | null> {
-  const client = getClickHouseClient()
+  const client = await getClickHouseClient()
   if (!client) return null
 
   const result = await client.query({

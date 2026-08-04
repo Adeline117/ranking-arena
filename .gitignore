@@ -100,7 +100,6 @@ infra/*/package-lock.json
 supabase/.temp/
 
 # Generated reports and artifacts
-playwright-report/
 data/generated/
 scripts/output/
 
@@ -113,12 +112,6 @@ ranking-arena.db
 /--version/
 /logs/
 scripts/monitoring/reports/
-
-# Compiled fetchers
-lib/cron/fetchers/*.js
-lib/cron/fetchers/*.js.map
-lib/cron/fetchers/*.d.ts
-lib/cron/fetchers/*.d.ts.map
 
 # Foundry (Smart Contract Development)
 /broadcast/

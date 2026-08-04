@@ -268,6 +268,7 @@ export async function createNotification(
     link?: string
     actor_id?: string
     reference_id?: string
+    read?: boolean
   }
 ): Promise<Notification> {
   const { data, error } = await supabase

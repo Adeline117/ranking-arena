@@ -4,7 +4,7 @@ Status: **Canonical**
 
 Owner: Engineering
 
-Last reviewed: 2026-08-03
+Last reviewed: 2026-08-04
 
 This document defines deployable units, dependency direction, and the target
 layout. Runtime topology remains defined by [ARCHITECTURE.md](./ARCHITECTURE.md),
@@ -12,18 +12,21 @@ while durable design decisions belong in [DECISIONS.md](./DECISIONS.md).
 
 ## Deployable units
 
-| Unit            | Paths                            | Responsibility                                          |
-| --------------- | -------------------------------- | ------------------------------------------------------- |
-| Web application | `app/`, `lib/`, `public/`        | Next.js UI, HTTP APIs, and scheduled request handlers   |
-| Ingest worker   | `worker/`, `lib/ingest/`         | Queue ownership, collection, validation, and publishing |
-| Edge proxy      | `cloudflare-worker/`             | Narrow geo-routing and proxy concerns                   |
-| Database        | `supabase/`                      | Immutable migration ledger, RLS, functions, and views   |
-| Smart contracts | `contracts/`, `script/`, `test/` | Foundry contracts, deployment scripts, and tests        |
-| Native shells   | `ios/`, `android/`, `appstore/`  | Capacitor packaging and store metadata                  |
-| Operations      | `infra/`, `scripts/`             | Host configuration and operator tooling                 |
+| Unit            | Paths                           | Responsibility                                          |
+| --------------- | ------------------------------- | ------------------------------------------------------- |
+| Web application | `app/`, `lib/`, `public/`       | Next.js UI, HTTP APIs, and scheduled request handlers   |
+| Ingest worker   | `worker/`, `lib/ingest/`        | Queue ownership, collection, validation, and publishing |
+| Database        | `supabase/`                     | Immutable migration ledger, RLS, functions, and views   |
+| Smart contracts | `contracts/`, `script/`         | Foundry contracts and deployment scripts                |
+| Native shells   | `ios/`, `android/`, `appstore/` | Capacitor packaging and store metadata                  |
+| Operations      | `infra/`, `scripts/`            | Host configuration and operator tooling                 |
 
 Each deployable unit must have a documented entry point, owning workflow, health
 check, and rollback path. A new top-level deployable requires an ADR.
+
+`cloudflare-worker/` is a quarantined compatibility artifact, not a current
+deployable. It remains only until an authorized external-traffic audit proves
+that it can be deleted; its README defines the reactivation gate.
 
 ## Dependency direction
 
@@ -65,13 +68,14 @@ app/                    Next.js routes, layouts, UI, and HTTP boundaries
 lib/                    Shared domain and platform modules
 worker/                 Long-running ingest process
 supabase/               Database migrations and configuration
-cloudflare-worker/      Independently deployed edge proxy
-contracts/ script/ test/ Foundry project
+cloudflare-worker/      Quarantined proxy artifact pending external audit
+contracts/ script/       Foundry project (no tracked first-party Forge tests yet)
 ios/ android/ appstore/ Native application shells
 infra/                  Declarative host/process infrastructure
 scripts/                CI, diagnostics, maintenance, and operator commands
+specs/                  Reviewed implementation specifications and templates
 e2e/ k6/                End-to-end and load tests
-__tests__/              Framework root-entrypoint contract tests
+__tests__/              Framework root-entrypoint contracts and test-only mocks
 docs/                   Current guidance, operational knowledge, and history
 .github/                Ownership, review policy, and CI/CD workflows
 ```

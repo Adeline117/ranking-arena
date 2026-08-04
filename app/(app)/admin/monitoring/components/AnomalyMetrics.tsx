@@ -47,10 +47,10 @@ export default function AnomalyMetrics({ data }: AnomalyMetricsProps) {
           }}
         >
           <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-            Anomaly Detection is currently disabled
+            Anomaly metrics are currently unavailable
           </Text>
           <Text size="xs" color="tertiary">
-            Set ENABLE_ANOMALY_DETECTION=true to enable automated data quality monitoring
+            Check the monitoring API status before relying on this panel
           </Text>
         </Box>
       </Card>

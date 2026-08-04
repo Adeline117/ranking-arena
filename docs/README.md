@@ -5,17 +5,19 @@
 | Document                                             | Description                                                 |
 | ---------------------------------------------------- | ----------------------------------------------------------- |
 | [ONBOARDING.md](./ONBOARDING.md)                     | New teammate? Start here. Setup, reading order, first task. |
+| [LOCAL_SETUP.md](./LOCAL_SETUP.md)                   | Supported local setup, environment, and verification path   |
 | [REPOSITORY_STRUCTURE.md](./REPOSITORY_STRUCTURE.md) | Deployable boundaries, dependency rules, and target layout  |
 
 ## Core
 
-| Document                                 | Description                                          |
-| ---------------------------------------- | ---------------------------------------------------- |
-| [../CLAUDE.md](../CLAUDE.md)             | Project constitution and dev guidelines (start here) |
-| [ARCHITECTURE.md](./ARCHITECTURE.md)     | System architecture diagrams and data flow           |
-| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Code style, commit format, PR process                |
-| [GIT_WORKFLOW.md](./GIT_WORKFLOW.md)     | Branch strategy and team collaboration workflow      |
-| [DECISIONS.md](./DECISIONS.md)           | Architecture Decision Records (ADRs)                 |
+| Document                                             | Description                                          |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| [../CLAUDE.md](../CLAUDE.md)                         | Project constitution and dev guidelines (start here) |
+| [ARCHITECTURE.md](./ARCHITECTURE.md)                 | System architecture diagrams and data flow           |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md)             | Code style, commit format, PR process                |
+| [GIT_WORKFLOW.md](./GIT_WORKFLOW.md)                 | Branch strategy and team collaboration workflow      |
+| [DECISIONS.md](./DECISIONS.md)                       | Architecture Decision Records (ADRs)                 |
+| [DOCUMENTATION_POLICY.md](./DOCUMENTATION_POLICY.md) | Documentation ownership and lifecycle contract       |
 
 ## API & Data
 
@@ -41,25 +43,31 @@
 
 ## Scraper & Pipeline
 
-| Document                   | Description                                           |
-| -------------------------- | ----------------------------------------------------- |
-| [SCRAPER.md](./SCRAPER.md) | Scraper architecture, VPS operations, troubleshooting |
+| Document                                         | Description                                                |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| [ADAPTER_ONBOARDING.md](./ADAPTER_ONBOARDING.md) | Source admission, fixtures, metric declarations, and gates |
+| [SCRAPER.md](./SCRAPER.md)                       | Scraper architecture, VPS operations, troubleshooting      |
 
 ## Security & Database
 
-| Document                                                   | Description                 |
-| ---------------------------------------------------------- | --------------------------- |
-| [RLS_POLICIES.md](./RLS_POLICIES.md)                       | Row Level Security policies |
-| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Security guidelines         |
+| Document                                                   | Description                                |
+| ---------------------------------------------------------- | ------------------------------------------ |
+| [RLS_POLICIES.md](./RLS_POLICIES.md)                       | Row Level Security policies                |
+| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Security guidelines                        |
+| [SOC2_CONTROL_MAPPING.md](./SOC2_CONTROL_MAPPING.md)       | Control ownership, evidence, and open gaps |
 
 ## Operations
 
-| Document                         | Description                       |
-| -------------------------------- | --------------------------------- |
-| [RUNBOOK.md](./RUNBOOK.md)       | Emergency operations manual       |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Deployment checklist and rollback |
-| [STAGING.md](./STAGING.md)       | Staging/preview deployments       |
-| [SLO.md](./SLO.md)               | Freshness budgets and SLOs        |
+| Document                                                 | Description                                       |
+| -------------------------------------------------------- | ------------------------------------------------- |
+| [RUNBOOK.md](./RUNBOOK.md)                               | Emergency operations manual                       |
+| [DEPLOYMENT.md](./DEPLOYMENT.md)                         | Application deployment checklist and rollback     |
+| [RELEASE.md](./RELEASE.md)                               | Versioning, release, and branch-protection policy |
+| [INGEST_WORKER_DEPLOY.md](./INGEST_WORKER_DEPLOY.md)     | Transactional worker deployment and recovery      |
+| [INGEST_WORKER_TOPOLOGY.md](./INGEST_WORKER_TOPOLOGY.md) | Worker ownership, regions, and runtime topology   |
+| [STRIPE_GO_LIVE.md](./STRIPE_GO_LIVE.md)                 | Payment production-readiness checklist            |
+| [STAGING.md](./STAGING.md)                               | Staging/preview deployments                       |
+| [SLO.md](./SLO.md)                                       | Freshness budgets and SLOs                        |
 
 ## Design & Principles
 

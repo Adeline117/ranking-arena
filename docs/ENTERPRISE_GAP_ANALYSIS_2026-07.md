@@ -1,5 +1,10 @@
 # Arena：vibe coding → 企业级工程 差距分析（2026-07-02）
 
+> **Status: point-in-time baseline; not current operating instructions.** 后续
+> CI/Deploy Gate、PR/CODEOWNERS、tracked hooks 与仓库边界整改已改变多项评分；
+> 当前控制状态以 `docs/REPOSITORY_STRUCTURE.md`、`docs/RELEASE.md`、
+> `docs/RUNBOOK.md` 和 `docs/SOC2_CONTROL_MAPPING.md` 为准。
+>
 > 三路并行仓库审计（测试/CI 门禁、安全/可靠性/可观测性、架构/代码健康/流程）
 >
 > - 外部行业标准调研的综合结论。作为分阶段提升路线图的依据。
@@ -122,7 +127,7 @@
 
 - **事实**（2026-07-02 已清理）：`undefined/` 目录（browse 会话变量未定义产物
   3.1M）、721KB `.lighthouse-report.json`、docs/ lighthouse json ——已移除并
-  gitignore；12 个无引用一次性脚本已归档 `scripts/archive/`。
+  gitignore；12 个无引用一次性脚本当时已归档，现已从活动树退役（见 git history）。
   未做：docs/ 带日期报告归档（7 个中 5 个是在用台账，收益为负，暂缓）。
 
 ## 二、已达或接近企业级的部分（审计确认，避免自我贬低）

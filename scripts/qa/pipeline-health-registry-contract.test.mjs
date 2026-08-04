@@ -27,3 +27,8 @@ test('pipeline health CLI fails closed on blind or malformed freshness', () => {
 test('pipeline health CLI does not query retired bot snapshots', () => {
   assert.doesNotMatch(source, /bot_snapshots|\/rankings\/bots/)
 })
+
+test('pipeline health CLI exposes diagnostics, not generated repair execution', () => {
+  assert.doesNotMatch(source, /--fix|generateFixScript|claude -p|\/fix-pipeline/)
+  assert.match(source, /Unknown argument/)
+})

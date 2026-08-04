@@ -21,10 +21,11 @@ function gitPath(relativePath) {
 
 const hooksDirectory = gitPath('hooks')
 if (hooksDirectory) {
-  const source = path.join(repositoryRoot, '.githooks', 'pre-commit')
-  const destination = path.join(hooksDirectory, 'pre-commit')
-
   await mkdir(hooksDirectory, { recursive: true })
-  await copyFile(source, destination)
-  await chmod(destination, 0o755)
+  for (const hookName of ['pre-commit', 'commit-msg']) {
+    const source = path.join(repositoryRoot, '.githooks', hookName)
+    const destination = path.join(hooksDirectory, hookName)
+    await copyFile(source, destination)
+    await chmod(destination, 0o755)
+  }
 }

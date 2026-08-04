@@ -27,8 +27,8 @@ node scripts/pipeline-health-check.mjs
 node scripts/pipeline-health-check.mjs --quick
 ```
 
-That command requires the Supabase URL and service-role key. `--fix` only prints
-remediation suggestions; it does not execute them.
+That command requires the Supabase URL and service-role key. It prints advisory
+remediation summaries but never generates or executes repair commands.
 
 ## Production boundary
 
@@ -39,20 +39,19 @@ on the allowlist are reported only and are never executed by the gate.
 
 ## Directory map
 
-| Path                                            | Purpose                                                    |
-| ----------------------------------------------- | ---------------------------------------------------------- |
-| `qa/`, `ci/`                                    | Architecture, contract, release, and deployment gates      |
-| `__tests__/`, `test-helpers/`, `fixtures/`      | Script tests and deterministic fixtures                    |
-| `maintenance/`                                  | Reviewed backup, restore, migration, and cache operations  |
-| `openclaw/`                                     | Alert-only sentinels and operational reports               |
-| `cron/`                                         | Retirement-only tombstones and uninstall/status helpers    |
-| `vps/`, `vps-deploy/`                           | Active regional worker/proxy checks and deployment tooling |
-| `git-hooks/`                                    | Version-controlled commit-message policy                   |
-| `lib/`                                          | Shared modules for current script families                 |
-| `flash-news/`, `social-seed/`                   | Domain-specific content utilities                          |
-| `clickhouse/`, `migration-reconcile/`           | Explicit schema and migration support                      |
-| `performance/`, `security/`, `email-templates/` | Specialized repository tooling and assets                  |
-| `archive/`                                      | Historical references; not supported production commands   |
+| Path                                       | Purpose                                                    |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `qa/`, `ci/`                               | Architecture, contract, release, and deployment gates      |
+| `__tests__/`, `test-helpers/`, `fixtures/` | Script tests and deterministic fixtures                    |
+| `maintenance/`                             | Reviewed backup, restore, migration, and cache operations  |
+| `openclaw/`                                | Alert-only sentinels and operational reports               |
+| `cron/`                                    | Retirement-only tombstones and uninstall/status helpers    |
+| `vps/`, `vps-deploy/`                      | Active regional worker/proxy checks and deployment tooling |
+| `../.githooks/`                            | Installed pre-commit and commit-message policies           |
+| `lib/`                                     | Shared modules for current script families                 |
+| `flash-news/`, `social-seed/`              | Domain-specific content utilities                          |
+| `clickhouse/`, `migration-reconcile/`      | Explicit schema and migration support                      |
+| `performance/`, `email-templates/`         | Specialized repository tooling and assets                  |
 
 The canonical data-ingestion implementation is the regional ingest worker and
 `lib/ingest`; retired ad-hoc `scripts/import` and local library collectors must

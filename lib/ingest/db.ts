@@ -123,7 +123,8 @@ export function getIngestPool(): Pool {
 /**
  * Checkout a pooled client WITH a checked-out error listener attached.
  *
- * ROOT FIX (2026-07-01, verified via scripts/test-edbhandler-repro.mts): when
+ * ROOT FIX (2026-07-01, verified by the retired reproduction harness preserved
+ * in commit 5926fc9ce): when
  * Supavisor closes a connection mid-transaction, the checked-out client emits
  * one-or-more 'error' events (messages vary: "terminating connection due to
  * administrator command", "(EDBHANDLEREXITED) connection to database closed",
