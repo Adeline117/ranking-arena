@@ -44,6 +44,9 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          # The combined App Router graph exceeds V8's ~2 GiB default heap on
+          # ubuntu-latest, as independently proven by the main CI Build job.
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Run Lighthouse CI
         run: |
