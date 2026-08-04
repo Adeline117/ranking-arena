@@ -92,6 +92,7 @@
     "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",
     "qa:hashtag-read-authority-pg17": "bash supabase/migrations/__tests__/hashtag-read-authority.pg17.sh",
     "qa:post-interaction-read-privacy-pg17": "bash supabase/migrations/__tests__/post-interaction-read-privacy.pg17.sh",
+    "qa:verified-position-history-pg17": "bash supabase/migrations/__tests__/verified-position-history-publication-authority.pg17.sh",
     "qa:stripe-webhook-event-leases-pg17": "bash scripts/qa/stripe-webhook-event-leases.pg17.sh",
     "qa:rank-staging-xid-pg17": "bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-only-writer.pg17.sh && bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-full-xid-epoch.pg17.sh && bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-only-writer-legacy-replay.pg17.sh",
     "qa:rank-publication-plan-pg17": "bash supabase/migrations/__tests__/leaderboard-rank-generation-publication-plan.pg17.sh",

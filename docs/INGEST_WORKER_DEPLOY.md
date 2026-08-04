@@ -9,6 +9,11 @@ ownership and monitoring semantics.
 
 - A production mutation deploys one explicit 40-character commit that is still
   the exact current `origin/main`.
+- A release that changes the verified position-history contracts must follow the
+  staged [verified position-history rollout](./VERIFIED_POSITION_HISTORY_ROLLOUT.md).
+  Its fixed order is RAW prerequisite, publication authority while the old
+  runtime serves, both exact-release workers, same-SHA Deploy Gate/application
+  promotion, and only then the 2C canary.
 - Reviewed worker bytes are identified by both `DEPLOYED_SHA` and the
   deterministic `WORKER_RELEASE_ID` derived from committed runtime inputs.
 - Never run `npm install` or `npm ci` in the live SG directory.
@@ -19,6 +24,28 @@ ownership and monitoring semantics.
 - A historical log line is not readiness evidence. Success requires a unique
   post-cutover marker followed by fresh ready, full SHA, and release-ID evidence.
 - Do not bypass the worker's production database release-readiness gate.
+
+## Verified position-history release sequencing
+
+For the reviewed position-history `@2` release, keep `origin/main` frozen and
+use the same 40-character current-main SHA for both migration files, both worker
+owners, and the application candidate. Do not start either reviewed worker
+after only the RAW prerequisite: it reads the publication tables before capture,
+and those tables do not exist until the publication-authority migration.
+
+After both migrations and their exact postflights pass, deploy `local` and
+`vps_sg` through the normal transactions while the previously proven 2C
+application remains in production. The pre-worker admission count must have
+been exactly zero. Do not deliberately trigger the canary until both owners have
+fresh exact SHA/release-ID heartbeats, attempt-bound capture enabled, and no
+duplicate, stale, failover, or mixed-release owner.
+
+Only then re-run the original Deploy Gate for that same SHA. Its protected
+worker-fleet check is the authority for application promotion; an earlier Gate
+run withholding promotion while either worker was missing is expected. Do not
+create a no-op commit, use the deploy-force escape path, or manually promote the
+Vercel candidate. Complete the exact `source_run_id` database/API/2C canary in
+the staged rollout before unfreezing `main`.
 
 ## Sole SG deployment channel
 
@@ -150,7 +177,8 @@ Do not restore the retired standalone `onchain-enrich-web3.mts` crontab entries.
 ## Failure handling
 
 - A normal failed workflow leaves a non-zero result and the script attempts
-  rollback while it owns the remote lease.
+  rollback while it owns the remote lease. That automatic complete-directory
+  restore is valid only while the attempted cutover has not proved success.
 - Do not manually delete, rename, or restart `/opt/arena-ingest`; doing so bypasses
   the transaction and can destroy the last consistent release pair.
 - Inspect the workflow and PM2 logs. If exact rollback evidence was obtained,
@@ -158,6 +186,11 @@ Do not restore the retired standalone `onchain-enrich-web3.mts` crontab entries.
 - If the script says rollback evidence is unavailable, freeze further deploys
   and perform supervised recovery with one operator. Preserve both live and
   backup directories before any change.
+- Once either worker has successfully cut over for a staged contract release—or
+  any verified publication has committed—do not manually return that owner to
+  an old SHA. Recovery must be a reviewed revert or forward commit that first
+  becomes the exact current `main`, followed by the controlled rollout for every
+  affected owner. Preserve the exact admission/publication evidence throughout.
 
 For a local `.arena-ingest-deploy-blocked` record, never delete the record merely
 to retry. First preserve it and inspect its marker, phase, lock token, old release,

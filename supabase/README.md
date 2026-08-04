@@ -79,12 +79,17 @@ npm run gen:types:check
 
 ## 编写迁移注意事项
 
-1. **幂等性**: 迁移应该可以安全地重复执行
+1. **幂等性与一次性例外**: 一般的 additive 迁移应可安全重复执行
 
    ```sql
    CREATE TABLE IF NOT EXISTS ...
    CREATE INDEX IF NOT EXISTS ...
    ```
+
+   但安全权威迁移可明确设计为一次性、fail-closed：对象已存在时故意失败，避免
+   漂移被 `IF NOT EXISTS` 隐藏。此类例外必须在迁移和专用 runbook 中写明，并依赖
+   单事务自动回滚、精确 ledger body hash 与 live catalog postflight。超时后不得盲目
+   重放；只有证明 ledger 行和该次全部对象都不存在，才可重试同一份已审查文件。
 
 2. **回滚**: 生产回滚使用新的前向补偿迁移；灾难场景才选择 PITR，不修改 ledger
 
@@ -108,6 +113,14 @@ SUPABASE_SECRET_KEY=<server-side secret key>
 已审查文件，migration name 使用该文件的 description。应用后核对精确 ledger
 记录、live object definition/privileges，并运行 `npm run qa:schema`；MCP
 不可用时暂停发布。
+
+Verified position-history 的两阶段 schema 与 app/worker 切换必须按
+[`docs/VERIFIED_POSITION_HISTORY_ROLLOUT.md`](../docs/VERIFIED_POSITION_HISTORY_ROLLOUT.md)
+执行；两个迁移文件不得合并到同一次 MCP 调用。固定顺序是 RAW prerequisite →
+publication authority（旧 app/worker 继续服务）→ `local` 与 `vps_sg` 同一
+current-main SHA worker → 重跑同 SHA Deploy Gate 并提升 app → 精确
+`source_run_id` 2C canary。成功切换后只能用成为 current `main` 的已审查
+revert/forward commit 恢复，不能手动部署旧 SHA。
 
 恢复 fresh replay 能力属于独立的 canonical-baseline 维护波次，必须先在空白
 PG17/shadow 项目验证；不要在日常功能迁移或生产事故中临时对账历史。

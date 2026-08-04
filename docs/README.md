@@ -49,11 +49,13 @@
 
 ## Operations
 
-| Document                         | Description                       |
-| -------------------------------- | --------------------------------- |
-| [RUNBOOK.md](./RUNBOOK.md)       | Emergency operations manual       |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Deployment checklist and rollback |
-| [STAGING.md](./STAGING.md)       | Staging/preview deployments       |
+| Document                                                                       | Description                              |
+| ------------------------------------------------------------------------------ | ---------------------------------------- |
+| [RUNBOOK.md](./RUNBOOK.md)                                                     | Emergency operations manual              |
+| [DEPLOYMENT.md](./DEPLOYMENT.md)                                               | Deployment checklist and rollback        |
+| [INGEST_WORKER_DEPLOY.md](./INGEST_WORKER_DEPLOY.md)                           | Transactional ingest-worker deployment   |
+| [VERIFIED_POSITION_HISTORY_ROLLOUT.md](./VERIFIED_POSITION_HISTORY_ROLLOUT.md) | Verified position-history staged rollout |
+| [STAGING.md](./STAGING.md)                                                     | Staging/preview deployments              |
 
 ## Design & Principles
 
