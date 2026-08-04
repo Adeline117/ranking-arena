@@ -143,6 +143,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729224000_rank_eligible_leaderboard_count_cache.sql
   20260729225000_token_trader_rank_authority.sql
   20260729230000_token_ranking_generation_barrier.sql
+  20260804045000_quarantine_bingx_rank_authority.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
@@ -299,6 +300,7 @@ validate_transactional_migration_file() {
   local commit_count
   local transaction_mode_count
   local repeatable_read_count
+  local read_committed_count
 
   [[ -f "$file" ]] || {
     echo "migration file is missing: $migration" >&2
@@ -310,13 +312,20 @@ validate_transactional_migration_file() {
   repeatable_read_count="$(
     grep -c '^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$' "$file" || true
   )"
+  read_committed_count="$(
+    grep -c '^SET TRANSACTION ISOLATION LEVEL READ COMMITTED;$' "$file" || true
+  )"
   transaction_mode_count="${transaction_mode_count:-0}"
   repeatable_read_count="${repeatable_read_count:-0}"
+  read_committed_count="${read_committed_count:-0}"
   if [[ "$begin_count" != "1" || "$commit_count" != "1" ]]; then
     echo "migration must contain one exact outer BEGIN/COMMIT: $migration" >&2
     exit 1
   fi
-  if ((transaction_mode_count != repeatable_read_count || repeatable_read_count > 1)); then
+  if ((
+    transaction_mode_count != repeatable_read_count + read_committed_count
+    || repeatable_read_count + read_committed_count > 1
+  )); then
     echo "migration has an unsupported transaction mode: $migration" >&2
     exit 1
   fi
@@ -325,14 +334,30 @@ validate_transactional_migration_file() {
 transaction_begin_for_migrations() {
   local migration
   local begin_statement='BEGIN;'
+  local isolation_level=''
 
   for migration in "$@"; do
     validate_transactional_migration_file "$migration"
     if grep -q '^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$' \
       "$MIGRATIONS_DIR/$migration"; then
-      begin_statement='BEGIN ISOLATION LEVEL REPEATABLE READ;'
+      if [[ -n "$isolation_level" && "$isolation_level" != 'REPEATABLE READ' ]]; then
+        echo "migration batch mixes incompatible transaction isolation levels" >&2
+        exit 1
+      fi
+      isolation_level='REPEATABLE READ'
+    elif grep -q '^SET TRANSACTION ISOLATION LEVEL READ COMMITTED;$' \
+      "$MIGRATIONS_DIR/$migration"; then
+      if [[ -n "$isolation_level" && "$isolation_level" != 'READ COMMITTED' ]]; then
+        echo "migration batch mixes incompatible transaction isolation levels" >&2
+        exit 1
+      fi
+      isolation_level='READ COMMITTED'
     fi
   done
+
+  if [[ -n "$isolation_level" ]]; then
+    begin_statement="BEGIN ISOLATION LEVEL $isolation_level;"
+  fi
 
   printf '%s' "$begin_statement"
 }
@@ -454,7 +479,7 @@ emit_migration() {
   # otherwise a dry run could change isolation too late or commit before the
   # runner emits its terminal ROLLBACK.
   perl -0pe \
-    's/(^|\n)BEGIN;\n/$1/; s/(^|\n)SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;\n/$1/; s/(^|\n)COMMIT;(?:\n|\z)/$1/' \
+    's/(^|\n)BEGIN;\n/$1/; s/(^|\n)SET TRANSACTION ISOLATION LEVEL (?:REPEATABLE READ|READ COMMITTED);\n/$1/; s/(^|\n)COMMIT;(?:\n|\z)/$1/' \
     "$file"
   printf '%s\n' \
     'SET LOCAL search_path TO DEFAULT;' \
