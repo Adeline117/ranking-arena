@@ -136,11 +136,11 @@ describe('copier PII rule (spec §6)', () => {
     })
   })
 
-  it('filters malformed copier distribution entries and non-finite aggregate values', async () => {
+  it('fails the whole copier histogram closed and rejects non-finite aggregate values', async () => {
     const aggregate = await getCopierAggregate(
       rpcClient({
         copierCount: Number.NaN,
-        copierCountMax: -1,
+        copierCountMax: 20,
         totalCopierPnl: Number.POSITIVE_INFINITY,
         currency: 'USDT',
         depth: 'full',
@@ -159,11 +159,55 @@ describe('copier PII rule (spec §6)', () => {
 
     expect(aggregate).toMatchObject({
       copierCount: null,
-      copierCountMax: null,
+      copierCountMax: 20,
       totalCopierPnl: null,
-      pnlDistribution: [{ bucket: 'valid', count: 2 }],
+      pnlDistribution: [],
       completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
+  })
+
+  it.each([
+    ['a non-record entry', [null, { bucket: '0~1000', count: 10 }]],
+    ['an unknown bucket', [{ bucket: 'private@example.invalid', count: 10 }]],
+    [
+      'a bucket below the privacy floor',
+      [
+        { bucket: '0~1000', count: 4 },
+        { bucket: '>10000', count: 10 },
+      ],
+    ],
+    [
+      'a duplicate bucket',
+      [
+        { bucket: '0~1000', count: 5 },
+        { bucket: '0~1000', count: 5 },
+      ],
+    ],
+    ['a cohort below the privacy floor', [{ bucket: '0~1000', count: 5 }]],
+    ['an unsafe count', [{ bucket: '0~1000', count: Number.MAX_SAFE_INTEGER + 1 }]],
+    [
+      'a fractional count',
+      [
+        { bucket: '0~1000', count: 5.5 },
+        { bucket: '>10000', count: 5 },
+      ],
+    ],
+    ['an unknown field', [{ bucket: '0~1000', count: 10, copierLabel: 'private@example.invalid' }]],
+  ])('fails the entire histogram closed for %s', async (_reason, pnlDistribution) => {
+    const aggregate = await getCopierAggregate(
+      rpcClient({
+        copierCount: 20,
+        totalCopierPnl: 12,
+        currency: 'USDT',
+        depth: 'full',
+        pnlDistribution,
+      }),
+      'bitget_futures',
+      'abc'
+    )
+
+    expect(aggregate).not.toBeNull()
+    expect(aggregate?.pnlDistribution).toEqual([])
   })
 
   it('getCopierAggregate returns aggregate-only fields', async () => {
@@ -176,8 +220,9 @@ describe('copier PII rule (spec §6)', () => {
         depth: 'full',
         asOf: '2026-06-10T12:00:00Z',
         pnlDistribution: [
-          { bucket: '0~1000', count: 20 },
-          { bucket: '>10000', count: 1 },
+          { bucket: '>10000', count: 5 },
+          { bucket: '0~1000', count: 18 },
+          { bucket: '<-1000', count: 5 },
         ],
       }),
       'bitget_futures',
@@ -188,8 +233,9 @@ describe('copier PII rule (spec §6)', () => {
       copierCountMax: null,
       totalCopierPnl: { value: 900.5, currency: 'USDT' },
       pnlDistribution: [
-        { bucket: '0~1000', count: 20 },
-        { bucket: '>10000', count: 1 },
+        { bucket: '<-1000', count: 5 },
+        { bucket: '0~1000', count: 18 },
+        { bucket: '>10000', count: 5 },
       ],
       depth: 'full',
       provenance: {
@@ -209,11 +255,14 @@ describe('copier PII rule (spec §6)', () => {
     async (currency) => {
       const aggregate = await getCopierAggregate(
         rpcClient({
-          copierCount: 2,
+          copierCount: 10,
           totalCopierPnl: 12,
           currency,
           depth: 'full',
-          pnlDistribution: [{ bucket: '0~1000', count: 2 }],
+          pnlDistribution: [
+            { bucket: '>10000', count: 5 },
+            { bucket: '<-1000', count: 5 },
+          ],
         }),
         'bitget_futures',
         'abc'
