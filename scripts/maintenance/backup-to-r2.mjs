@@ -17,13 +17,15 @@ import { resolve } from 'path'
 import { pathToFileURL } from 'url'
 import {
   S3Client,
-  PutObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
 import 'dotenv/config'
 import {
   assertBackupArtifact,
+  assertCompleteBackupObject,
   ARENA_BACKUP_COMPLETION_CONTRACT,
   arenaBackupCompletionSentinel,
   COMPLETE_BACKUP_MIN_BYTES,
@@ -39,6 +41,8 @@ export { assertBackupArtifact, COMPLETE_BACKUP_MIN_BYTES, IMMUTABLE_BACKUP_FILEN
 // the N newest regardless of age.
 const DAILY_RETENTION_DAYS = 14
 const FULL_BACKUPS_TO_KEEP = 3
+export const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024
+export const MULTIPART_QUEUE_SIZE = 4
 
 const DATABASE_URL = process.env.DATABASE_URL
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
@@ -134,6 +138,122 @@ export function backupDateFromKey(key) {
   const completeIdentity = parseCompleteBackupFilename(filename)
   if (completeIdentity) return completeIdentity.date
   return filename.match(LEGACY_BACKUP_FILENAME_PATTERN)?.[1] ?? ''
+}
+
+export function buildBackupMetadata({ now, mode, completionToken }) {
+  if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
+    throw new Error('backup metadata timestamp is invalid')
+  }
+  if (mode?.type !== 'schemas' && mode?.type !== 'full') {
+    throw new Error('backup metadata mode is invalid')
+  }
+  arenaBackupCompletionSentinel(completionToken)
+
+  let schemas = []
+  if (mode.type === 'schemas') {
+    if (!Array.isArray(mode.schemas)) throw new Error('backup metadata schemas are invalid')
+    schemas = normalizeCompleteBackupSchemas(mode.schemas.join(','))
+    if (schemas.length === 0) throw new Error('backup metadata schemas are invalid')
+  } else if (Array.isArray(mode.schemas) && mode.schemas.length > 0) {
+    throw new Error('full backup metadata cannot include schema selection')
+  }
+  return {
+    'backup-date': now.toISOString(),
+    'backup-type': mode.type === 'schemas' ? `schemas:${schemas.join('+')}` : 'full',
+    tables: mode.type === 'schemas' ? schemas.join(',') : 'all',
+    'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
+    'completion-token': completionToken,
+  }
+}
+
+function normalizeETag(value) {
+  if (typeof value !== 'string' || value.trim() === '') return ''
+  return value.trim().replace(/^"|"$/g, '')
+}
+
+export function assertUploadedBackupObject({
+  key,
+  expectedSize,
+  expectedMetadata,
+  uploadETag,
+  head,
+}) {
+  const object = assertCompleteBackupObject({
+    Key: key,
+    Size: head?.ContentLength,
+    ETag: head?.ETag,
+    Metadata: head?.Metadata,
+  })
+
+  if (object.Size !== expectedSize) {
+    throw new Error(
+      `uploaded backup size attestation failed: expected ${expectedSize}, received ${String(object.Size)}`
+    )
+  }
+  if (head.ContentType !== 'application/gzip') {
+    throw new Error('uploaded backup content type attestation failed')
+  }
+  if (!normalizeETag(uploadETag) || normalizeETag(uploadETag) !== normalizeETag(object.ETag)) {
+    throw new Error('uploaded backup ETag attestation failed')
+  }
+
+  const normalizedRemoteMetadata = Object.fromEntries(
+    Object.entries(head.Metadata ?? {}).map(([name, value]) => [
+      name.toLowerCase(),
+      String(value).trim(),
+    ])
+  )
+  for (const [name, value] of Object.entries(expectedMetadata)) {
+    if (normalizedRemoteMetadata[name.toLowerCase()] !== value) {
+      throw new Error(`uploaded backup metadata attestation failed: ${name}`)
+    }
+  }
+
+  return object
+}
+
+export async function uploadAndAttestBackupArtifact({
+  client,
+  bucket,
+  key,
+  localPath,
+  size,
+  metadata,
+  UploadClass = Upload,
+}) {
+  const uploader = new UploadClass({
+    client,
+    params: {
+      Bucket: bucket,
+      Key: key,
+      Body: createReadStream(localPath),
+      ContentType: 'application/gzip',
+      ContentLength: size,
+      Metadata: metadata,
+    },
+    queueSize: MULTIPART_QUEUE_SIZE,
+    partSize: MULTIPART_PART_SIZE_BYTES,
+    leavePartsOnError: false,
+  })
+  const uploaded = await uploader.done()
+  if (!normalizeETag(uploaded?.ETag)) {
+    throw new Error('multipart upload did not return an ETag identity')
+  }
+
+  const head = await client.send(
+    new HeadObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      IfMatch: uploaded.ETag,
+    })
+  )
+  return assertUploadedBackupObject({
+    key,
+    expectedSize: size,
+    expectedMetadata: metadata,
+    uploadETag: uploaded.ETag,
+    head,
+  })
 }
 
 /**
@@ -268,6 +388,7 @@ async function run() {
     const { connectionUrl, password } = preparePgDumpConnection(DATABASE_URL)
     const minimumBytes = COMPLETE_BACKUP_MIN_BYTES
     const completionToken = randomBytes(32).toString('hex')
+    const metadata = buildBackupMetadata({ now, mode, completionToken })
     await produceAndCommitBackup({
       produce: () =>
         runPgDumpPipeline({
@@ -285,23 +406,17 @@ async function run() {
         const sizeMB = (size / 1024 / 1024).toFixed(1)
         console.log(`[backup] Dump complete: ${sizeMB} MB`)
         console.log(`[backup] Uploading to R2: ${R2_BUCKET}/${r2Key}`)
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: R2_BUCKET,
-            Key: r2Key,
-            Body: createReadStream(localPath),
-            ContentType: 'application/gzip',
-            ContentLength: size,
-            Metadata: {
-              'backup-date': now.toISOString(),
-              'backup-type': schemaMode ? `schemas:${backupSchemas.join('+')}` : 'full',
-              tables: schemaMode ? backupSchemas.join(',') : 'all',
-              'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
-              'completion-token': completionToken,
-            },
-          })
+        const remote = await uploadAndAttestBackupArtifact({
+          client: s3,
+          bucket: R2_BUCKET,
+          key: r2Key,
+          localPath,
+          size,
+          metadata,
+        })
+        console.log(
+          `[backup] ✓ Uploaded and attested: ${r2Key} (${sizeMB} MB, ETag ${remote.ETag})`
         )
-        console.log(`[backup] ✓ Uploaded successfully: ${r2Key} (${sizeMB} MB)`)
       },
       prune: pruneOldBackups,
     })

@@ -9,15 +9,20 @@ import { arenaBackupCompletionSentinel } from './backup-restore-contract.mjs'
 
 import {
   assertBackupArtifact,
+  assertUploadedBackupObject,
   backupDateFromKey,
+  buildBackupMetadata,
   buildBackupArtifactIdentity,
   COMPLETE_BACKUP_MIN_BYTES,
   IMMUTABLE_BACKUP_FILENAME_PATTERN,
+  MULTIPART_PART_SIZE_BYTES,
+  MULTIPART_QUEUE_SIZE,
   normalizeCompleteBackupSchemas,
   parseBackupMode,
   preparePgDumpConnection,
   produceAndCommitBackup,
   runPgDumpPipeline,
+  uploadAndAttestBackupArtifact,
 } from './backup-to-r2.mjs'
 import { POSTGRES_CONNECTION_ENV_NAMES } from './postgres-cli-env.mjs'
 
@@ -153,6 +158,112 @@ test('builds unique timestamped artifact identities without credential-derived n
     }
   )
   assert.equal(JSON.stringify(first).includes('do-not-leak'), false)
+})
+
+test('uses managed multipart upload and attests the exact remote object through HEAD', async () => {
+  await withTempDir(async (directory) => {
+    const localPath = join(directory, 'artifact.sql.gz')
+    await writeFile(localPath, 'fixture')
+    const key = `db-backups/2026/08/arena-backup-20260804T070809123Z-${'b'.repeat(32)}-schemas.sql.gz`
+    const mode = parseBackupMode({ argv: [], schemasEnv: 'arena,public' })
+    const metadata = buildBackupMetadata({
+      now: new Date('2026-08-04T07:08:09.123Z'),
+      mode,
+      completionToken: COMPLETION_TOKEN,
+    })
+    const events = []
+    let uploadOptions
+
+    class FakeUpload {
+      constructor(options) {
+        uploadOptions = options
+      }
+
+      async done() {
+        events.push('multipart-done')
+        uploadOptions.params.Body.destroy()
+        return { ETag: '"multipart-etag-17"' }
+      }
+    }
+
+    const client = {
+      async send(command) {
+        events.push('head')
+        assert.deepEqual(command.input, {
+          Bucket: 'arena-test',
+          Key: key,
+          IfMatch: '"multipart-etag-17"',
+        })
+        return {
+          ContentLength: COMPLETE_BACKUP_MIN_BYTES,
+          ContentType: 'application/gzip',
+          ETag: '"multipart-etag-17"',
+          Metadata: metadata,
+        }
+      },
+    }
+
+    const remote = await uploadAndAttestBackupArtifact({
+      client,
+      bucket: 'arena-test',
+      key,
+      localPath,
+      size: COMPLETE_BACKUP_MIN_BYTES,
+      metadata,
+      UploadClass: FakeUpload,
+    })
+
+    assert.deepEqual(events, ['multipart-done', 'head'])
+    assert.equal(uploadOptions.queueSize, MULTIPART_QUEUE_SIZE)
+    assert.equal(uploadOptions.partSize, MULTIPART_PART_SIZE_BYTES)
+    assert.equal(uploadOptions.leavePartsOnError, false)
+    assert.equal(uploadOptions.params.ContentLength, COMPLETE_BACKUP_MIN_BYTES)
+    assert.equal(uploadOptions.params.ContentType, 'application/gzip')
+    assert.deepEqual(uploadOptions.params.Metadata, metadata)
+    assert.equal(remote.Size, COMPLETE_BACKUP_MIN_BYTES)
+  })
+})
+
+test('remote upload attestation rejects size, ETag, content-type, and metadata drift', () => {
+  const key = `db-backups/2026/08/arena-backup-20260804T070809123Z-${'c'.repeat(32)}-full.sql.gz`
+  const metadata = buildBackupMetadata({
+    now: new Date('2026-08-04T07:08:09.123Z'),
+    mode: { type: 'full', schemas: [] },
+    completionToken: COMPLETION_TOKEN,
+  })
+  const validHead = {
+    ContentLength: COMPLETE_BACKUP_MIN_BYTES,
+    ContentType: 'application/gzip',
+    ETag: '"remote-etag-2"',
+    Metadata: metadata,
+  }
+  const attest = (head, uploadETag = '"remote-etag-2"') =>
+    assertUploadedBackupObject({
+      key,
+      expectedSize: COMPLETE_BACKUP_MIN_BYTES,
+      expectedMetadata: metadata,
+      uploadETag,
+      head,
+    })
+
+  assert.doesNotThrow(() => attest(validHead))
+  assert.throws(
+    () => attest({ ...validHead, ContentLength: COMPLETE_BACKUP_MIN_BYTES + 1 }),
+    /size attestation failed/
+  )
+  assert.throws(() => attest(validHead, '"other-etag"'), /ETag attestation failed/)
+  assert.throws(
+    () => attest({ ...validHead, ContentType: 'application/octet-stream' }),
+    /content type attestation failed/
+  )
+  assert.throws(
+    () =>
+      attest({
+        ...validHead,
+        Metadata: { ...metadata, 'completion-token': 'd'.repeat(64) },
+      }),
+    /metadata attestation failed: completion-token/
+  )
 })
 
 test('moves an encoded authority password out of the pg_dump URL', () => {
@@ -593,6 +704,9 @@ test('the executable uses the safe pipeline and CI runs the behavioral contract'
   assert.match(source, /--restrict-key=/)
   assert.match(source, /'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT/)
   assert.match(source, /'completion-token': completionToken/)
+  assert.match(source, /new UploadClass\(/)
+  assert.match(source, /new HeadObjectCommand\(/)
+  assert.doesNotMatch(source, /PutObjectCommand/)
   assert.match(source, /cleanPostgresConnectionEnv\(/)
   assert.match(source, /parseBackupMode\(/)
   assert.doesNotMatch(source, /TRADER_TABLES|trader-tables/)

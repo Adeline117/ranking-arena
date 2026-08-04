@@ -70,6 +70,106 @@ export function arenaCompletionTokenFromMetadata(metadata) {
   return token
 }
 
+function normalizeBackupMetadata(metadata) {
+  return Object.fromEntries(
+    Object.entries(metadata ?? {}).map(([key, value]) => [key.toLowerCase(), String(value).trim()])
+  )
+}
+
+function metadataTokens(value, separator) {
+  return new Set(
+    value
+      .split(separator)
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean)
+  )
+}
+
+export function assertCompleteBackupMetadata(filenameMode, metadata) {
+  const normalized = normalizeBackupMetadata(metadata)
+  const backupType = normalized['backup-type']?.toLowerCase()
+  const tables = normalized.tables?.toLowerCase()
+
+  if (filenameMode === 'full') {
+    if (backupType !== 'full' || tables !== 'all') {
+      throw new Error('selected full backup is missing full/all completeness metadata')
+    }
+    return normalized
+  }
+
+  if (filenameMode !== 'schemas') {
+    throw new Error('selected backup filename mode is invalid')
+  }
+
+  const schemaMatch = backupType?.match(/^schemas:(.+)$/)
+  if (!schemaMatch || !tables) {
+    throw new Error('selected schemas backup is missing arena+public completeness metadata')
+  }
+  const typedSchemas = metadataTokens(schemaMatch[1], '+')
+  const tableSchemas = metadataTokens(tables, ',')
+  if (
+    !typedSchemas.has('arena') ||
+    !typedSchemas.has('public') ||
+    !tableSchemas.has('arena') ||
+    !tableSchemas.has('public')
+  ) {
+    throw new Error('selected schemas backup metadata does not include both arena and public')
+  }
+  return normalized
+}
+
+/**
+ * Shared R2 object boundary used by upload attestation, freshness monitoring,
+ * and restore selection. It proves an object is a complete application-schema
+ * or full-database artifact; it does not claim managed auth recovery coverage.
+ */
+export function assertCompleteBackupObject(object, minimumBytes = COMPLETE_BACKUP_MIN_BYTES) {
+  const keyMatch =
+    typeof object?.Key === 'string'
+      ? object.Key.match(/^db-backups\/(\d{4})\/(\d{2})\/([^/]+)$/)
+      : null
+  if (!keyMatch) {
+    throw new Error('selected R2 object is not a db-backups/*.sql.gz backup')
+  }
+  const filename = keyMatch[3]
+  const filenameIdentity = parseCompleteBackupFilename(filename)
+  if (!filenameIdentity) {
+    throw new Error('selected R2 object is not a complete schemas/full backup')
+  }
+  if (`${keyMatch[1]}${keyMatch[2]}` !== filenameIdentity.date.slice(0, 6)) {
+    throw new Error('selected backup key path does not match its filename date')
+  }
+  if (!Number.isSafeInteger(object.Size) || object.Size < minimumBytes) {
+    throw new Error(
+      `selected backup object is incomplete: ${String(object.Size)} bytes < required ${minimumBytes} bytes`
+    )
+  }
+  if (typeof object.ETag !== 'string' || object.ETag.trim() === '') {
+    throw new Error('selected backup object is missing an ETag identity')
+  }
+  const normalizedMetadata = assertCompleteBackupMetadata(filenameIdentity.mode, object.Metadata)
+  const completionToken = arenaCompletionTokenFromMetadata(object.Metadata)
+  if (filenameIdentity.format === 'immutable') {
+    if (!completionToken) {
+      throw new Error('immutable backup is missing completion metadata')
+    }
+    const timestamp = filenameIdentity.timestamp
+    const expectedBackupDate =
+      `${timestamp.slice(0, 4)}-${timestamp.slice(4, 6)}-${timestamp.slice(6, 8)}` +
+      `T${timestamp.slice(9, 11)}:${timestamp.slice(11, 13)}:${timestamp.slice(13, 15)}.` +
+      `${timestamp.slice(15, 18)}Z`
+    const parsedBackupDate = new Date(expectedBackupDate)
+    if (
+      !Number.isFinite(parsedBackupDate.getTime()) ||
+      parsedBackupDate.toISOString() !== expectedBackupDate ||
+      normalizedMetadata['backup-date'] !== expectedBackupDate
+    ) {
+      throw new Error('immutable backup filename and backup-date metadata do not match')
+    }
+  }
+  return object
+}
+
 /**
  * Keep PostgreSQL credentials out of CLI argv while preserving libpq URI
  * semantics. An explicit query-string password takes precedence over the

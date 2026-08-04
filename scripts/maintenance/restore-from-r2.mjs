@@ -28,9 +28,9 @@ import {
 } from '../attest-production-types-source.mjs'
 import {
   assertBackupArtifact,
+  assertCompleteBackupObject,
   COMPLETE_BACKUP_MIN_BYTES,
   arenaCompletionTokenFromMetadata,
-  parseCompleteBackupFilename,
   preparePostgresConnection,
 } from './backup-restore-contract.mjs'
 import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
@@ -224,69 +224,8 @@ export function formatTargetIdentity(identity) {
   return `${identity.user}@${identity.host}:${identity.port}/${identity.database}`
 }
 
-function normalizeBackupMetadata(metadata) {
-  return Object.fromEntries(
-    Object.entries(metadata ?? {}).map(([key, value]) => [key.toLowerCase(), String(value).trim()])
-  )
-}
-
-function metadataTokens(value, separator) {
-  return new Set(
-    value
-      .split(separator)
-      .map((token) => token.trim().toLowerCase())
-      .filter(Boolean)
-  )
-}
-
-function assertCompleteBackupMetadata(filenameMode, metadata) {
-  const normalized = normalizeBackupMetadata(metadata)
-  const backupType = normalized['backup-type']?.toLowerCase()
-  const tables = normalized.tables?.toLowerCase()
-
-  if (filenameMode === 'full') {
-    if (backupType !== 'full' || tables !== 'all') {
-      throw new Error('selected full backup is missing full/all completeness metadata')
-    }
-    return
-  }
-
-  const schemaMatch = backupType?.match(/^schemas:(.+)$/)
-  if (!schemaMatch || !tables) {
-    throw new Error('selected schemas backup is missing arena+public completeness metadata')
-  }
-  const typedSchemas = metadataTokens(schemaMatch[1], '+')
-  const tableSchemas = metadataTokens(tables, ',')
-  if (
-    !typedSchemas.has('arena') ||
-    !typedSchemas.has('public') ||
-    !tableSchemas.has('arena') ||
-    !tableSchemas.has('public')
-  ) {
-    throw new Error('selected schemas backup metadata does not include both arena and public')
-  }
-}
-
 export function assertRestorableObject(object, minimumBytes = COMPLETE_BACKUP_MIN_BYTES) {
-  if (!object?.Key?.startsWith('db-backups/') || !object.Key.endsWith('.sql.gz')) {
-    throw new Error('selected R2 object is not a db-backups/*.sql.gz backup')
-  }
-  const filename = object.Key.split('/').at(-1)
-  const filenameIdentity = parseCompleteBackupFilename(filename)
-  if (!filenameIdentity) {
-    throw new Error('selected R2 object is not a complete schemas/full backup')
-  }
-  if (!Number.isSafeInteger(object.Size) || object.Size < minimumBytes) {
-    throw new Error(
-      `selected backup object is incomplete: ${String(object.Size)} bytes < required ${minimumBytes} bytes`
-    )
-  }
-  if (typeof object.ETag !== 'string' || object.ETag.trim() === '') {
-    throw new Error('selected backup object is missing an ETag identity')
-  }
-  assertCompleteBackupMetadata(filenameIdentity.mode, object.Metadata)
-  arenaCompletionTokenFromMetadata(object.Metadata)
-  return object
+  return assertCompleteBackupObject(object, minimumBytes)
 }
 
 export async function listBackups(s3, bucket) {
