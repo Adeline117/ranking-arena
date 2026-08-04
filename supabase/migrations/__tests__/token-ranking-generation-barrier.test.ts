@@ -106,17 +106,17 @@ describe('token ranking generation barrier', () => {
     expect(normalized).toContain("notify pgrst, 'reload schema'")
   })
 
-  it('remains the final ordered predecessor and documents the retired live contract', () => {
+  it('remains ordered before later rank quarantines and documents the retired live contract', () => {
+    const bingxQuarantineName = '20260804045000_quarantine_bingx_rank_authority.sql'
     const predeployStart = runner.indexOf('PREDEPLOY_MIGRATIONS=(')
     const predeployEnd = runner.indexOf('\n)', predeployStart) + 2
-    const quarantineStart = runner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
     const migrationIndex = runner.indexOf(migrationName, predeployStart)
+    const bingxQuarantineIndex = runner.indexOf(bingxQuarantineName, migrationIndex)
 
     expect(migrationIndex).toBeGreaterThan(predeployStart)
-    expect(migrationIndex).toBeLessThan(quarantineStart)
-    expect(runner.slice(predeployStart, predeployEnd).trimEnd()).toMatch(
-      new RegExp(`${migrationName.replace('.', '\\.')}\\n\\)$`)
-    )
+    expect(migrationIndex).toBeLessThan(predeployEnd)
+    expect(bingxQuarantineIndex).toBeGreaterThan(migrationIndex)
+    expect(bingxQuarantineIndex).toBeLessThan(predeployEnd)
     expect(generatedTypes).toContain('get_token_ranking_publication_head: {')
     expect(generatedTypes).toContain('window_through_date: string | null')
     expect(generatedTypes).toContain('published_at_epoch_ms: number | null')
