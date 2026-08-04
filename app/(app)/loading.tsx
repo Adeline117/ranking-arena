@@ -5,15 +5,14 @@
  */
 export default function AppLoading() {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-primary, #0B0A10)' }}>
-      {/* Nav-height spacer */}
-      <div
-        style={{
-          height: 56,
-          background: 'var(--glass-bg, rgba(20,18,28,0.85))',
-          borderBottom: '1px solid var(--glass-border, rgba(255,255,255,0.08))',
-        }}
-      />
+    <div
+      aria-busy="true"
+      aria-label="Loading page content"
+      style={{
+        minHeight: 'calc(100vh - 56px)',
+        background: 'var(--bg-primary, #0B0A10)',
+      }}
+    >
       {/* Centered skeleton bars */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 16px' }}>
         {/* Title skeleton */}
