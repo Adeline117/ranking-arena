@@ -19,6 +19,7 @@ const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
+const mockWriteCopierSnapshotRawArtifact = jest.fn()
 const mockWritePositionHistoryRawArtifact = jest.fn()
 const mockPersistPositionHistoryRawPointer = jest.fn()
 const mockRecordStagingRejects = jest.fn()
@@ -28,6 +29,7 @@ const mockNextHistoryCursor = jest.fn()
 const mockGetHistoryCursor = jest.fn()
 const mockParseHistory = jest.fn()
 const mockPublishHistoryRows = jest.fn()
+const mockPublishCopierSnapshot = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockDbQuery = jest.fn()
 const mockIngestClientQuery = jest.fn()
@@ -59,8 +61,13 @@ jest.mock('@/lib/ingest/fetch/fetcher', () => ({
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
+  writeCopierSnapshotRawArtifact: (...args: unknown[]) =>
+    mockWriteCopierSnapshotRawArtifact(...args),
   writePositionHistoryRawArtifact: (...args: unknown[]) =>
     mockWritePositionHistoryRawArtifact(...args),
+}))
+jest.mock('@/lib/ingest/serving/copier-snapshot-publish', () => ({
+  publishCopierSnapshotInTransaction: (...args: unknown[]) => mockPublishCopierSnapshot(...args),
 }))
 jest.mock('@/lib/ingest/staging/validate', () => ({
   roiCrossCheckOk: (...args: unknown[]) => mockRoiCrossCheckOk(...args),
@@ -101,6 +108,8 @@ const src = {
   deep_profile_topn: 300,
   cadence_tier_b_seconds: 21_600,
   fetch_region: 'local',
+  copier_table_depth: 'full',
+  serving_mode: 'serving',
 } as SourceRow & { cadence_tier_b_seconds: number }
 
 const exchangeTraderId = '0x0000000000000000000000000000000000000001'
@@ -162,6 +171,17 @@ const orderRow: ParsedHistoryRow = {
   qty: 1,
   dedupeHash: 'order-1',
   raw: { id: 'order-1' },
+}
+
+const copierRow: Extract<ParsedHistoryRow, { kind: 'copiers' }> = {
+  kind: 'copiers',
+  ts: '2026-07-15T09:00:00.000Z',
+  copierLabel: 'private-user@example.com',
+  copierPnl: 125,
+  copierInvested: 1_000,
+  copyDurationDays: 30,
+  dedupeHash: 'copier-1',
+  raw: { userId: 'private-1' },
 }
 
 async function* positionHistoryStream(options: { failAfterPage?: boolean } = {}) {
@@ -308,6 +328,31 @@ function configureBinancePositionHistory(
   return binanceSource
 }
 
+function configureCopierHistory(): void {
+  mockProfileTimeframes.mockReturnValue([30])
+  mockParseProfile.mockReturnValue(profile(30, true))
+  mockGetAdapter.mockReturnValue({
+    capabilities: {
+      profile: true,
+      positionHistory: false,
+      orders: false,
+      transfers: false,
+      copiers: true,
+    },
+    getProfile: mockGetProfile,
+    getHistory: mockGetHistory,
+    parseProfile: mockParseProfile,
+    parseHistory: mockParseHistory,
+    validateProfile: mockValidateProfile,
+  })
+}
+
+function tierBProfileMarkerCalls(): unknown[][] {
+  return mockDbQuery.mock.calls.filter(([sql]) =>
+    String(sql).includes('INSERT INTO arena.ingest_cursors')
+  )
+}
+
 describe('Tier-B profile coverage accounting', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -344,6 +389,11 @@ describe('Tier-B profile coverage accounting', () => {
       storagePath: 'test/tier_b/raw.json.gz',
       contentHash: 'a'.repeat(64),
     })
+    mockWriteCopierSnapshotRawArtifact.mockResolvedValue({
+      id: 2_081_898,
+      storagePath: 'gtrade/copier_snapshot/tier_b/test.json.gz',
+      contentHash: 'c'.repeat(64),
+    })
     mockWritePositionHistoryRawArtifact.mockImplementation(
       async (
         _input: unknown,
@@ -366,6 +416,12 @@ describe('Tier-B profile coverage accounting', () => {
     mockGetHistoryCursor.mockResolvedValue(null)
     mockNextHistoryCursor.mockReturnValue('2026-07-15T11:00:00.000Z')
     mockPublishHistoryRows.mockResolvedValue(1)
+    mockPublishCopierSnapshot.mockResolvedValue({
+      publicationId: 3_001,
+      publishedAt: '2026-07-15T12:00:01.000Z',
+      parsedRowCount: 1,
+      replayed: false,
+    })
     mockGetLatestPassedNativeCohort.mockResolvedValue({
       traders: [
         {
@@ -582,6 +638,133 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockGetHistory).not.toHaveBeenCalled()
   })
 
+  it('commits a complete copier snapshot before marking the whole trader fresh', async () => {
+    configureCopierHistory()
+    mockGetHistory.mockImplementation(() => positionHistoryStream())
+    mockParseHistory.mockReturnValue([copierRow])
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      surfacesFetched: 1,
+      historyRowsWritten: 1,
+      errors: 0,
+    })
+
+    expect(mockGetHistory).toHaveBeenCalledWith(
+      expect.anything(),
+      src,
+      exchangeTraderId,
+      'copiers',
+      null,
+      null
+    )
+    expect(mockGetHistoryCursor).not.toHaveBeenCalled()
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    // Only the profile uses the generic RAW path. The copier snapshot has a
+    // strict-canonical artifact and a dedicated pointer contract.
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockWriteCopierSnapshotRawArtifact).toHaveBeenCalledTimes(1)
+    const [rawInput, rawRunner] = mockWriteCopierSnapshotRawArtifact.mock.calls[0]
+    expect(rawInput).toMatchObject({
+      artifact: {
+        contract: 'arena.ingest.copier-snapshot-artifact@1',
+        source: {
+          id: 34,
+          slug: 'gtrade',
+          currency: 'USDC',
+          copier_table_depth: 'full',
+          fetch_region: 'local',
+        },
+        trader: {
+          id: 42,
+          exchange_trader_id: exchangeTraderId,
+        },
+        lane: 'tier_b',
+        request_timeframe: null,
+        page_count: 1,
+        scan_terminal_state: 'stream_exhausted_unverified',
+        caller_limited: false,
+        source_reported_row_count: null,
+      },
+    })
+    expect(rawRunner).toEqual(expect.any(Function))
+    expect(mockPublishCopierSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.any(Function) }),
+      {
+        artifact: rawInput.artifact,
+        rawReceipt: {
+          id: 2_081_898,
+          storagePath: 'gtrade/copier_snapshot/tier_b/test.json.gz',
+          contentHash: 'c'.repeat(64),
+        },
+        rows: [copierRow],
+      }
+    )
+    expect(tierBProfileMarkerCalls()).toHaveLength(1)
+    expect(mockWriteCopierSnapshotRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
+      mockParseHistory.mock.invocationCallOrder[0]
+    )
+    expect(mockParseHistory.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishCopierSnapshot.mock.invocationCallOrder[0]
+    )
+    expect(mockPublishCopierSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDbQuery.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('does not count or mark a trader fresh when private copier publication fails', async () => {
+    configureCopierHistory()
+    mockGetHistory.mockImplementation(() => positionHistoryStream())
+    mockParseHistory.mockReturnValue([copierRow])
+    mockPublishCopierSnapshot.mockRejectedValue(new Error('private copier commit failed'))
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockWriteCopierSnapshotRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockPublishCopierSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'ROLLBACK'])
+  })
+
+  it('keeps a zero-page copier capture diagnostic-only and retryable', async () => {
+    configureCopierHistory()
+    mockGetHistory.mockImplementation(() => noHistoryEvidenceStream())
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'history:copiers',
+        traderId: 42,
+        timeframe: null,
+        payload: [],
+        meta: expect.objectContaining({
+          surface: 'copiers',
+          lane: 'tier_b',
+          fetch_failed: false,
+          capture_rejected: 'no_evidence_page',
+        }),
+      })
+    )
+    expect(mockWriteCopierSnapshotRawArtifact).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockGetHistoryCursor).not.toHaveBeenCalled()
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
+  })
+
   it('keeps terminal-verified position history RAW-only until parser evidence is receipt-bound', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
@@ -607,7 +790,7 @@ describe('Tier-B profile coverage accounting', () => {
     })
 
     await expect(processTierB(job)).resolves.toMatchObject({
-      tradersCrawled: 1,
+      tradersCrawled: 0,
       historyRowsWritten: 0,
       errors: 1,
     })
@@ -643,6 +826,7 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
     expect(mockIngestClientRelease).toHaveBeenCalledWith(false)
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
   })
 
   it('persists verified Binance history only as the outer @2 acquisition proof', async () => {
@@ -705,6 +889,7 @@ describe('Tier-B profile coverage accounting', () => {
     configureBinancePositionHistory({ openingPnl: '999' })
 
     await expect(processTierB(binanceJob)).resolves.toMatchObject({
+      tradersCrawled: 0,
       historyRowsWritten: 0,
       errors: 1,
     })
@@ -718,6 +903,7 @@ describe('Tier-B profile coverage accounting', () => {
     })
     expect(mockParseHistory).not.toHaveBeenCalled()
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
   })
 
   it('replays the exact outer @2 identity after an ambiguous COMMIT response', async () => {
@@ -777,7 +963,10 @@ describe('Tier-B profile coverage accounting', () => {
       new Error('pointer database unavailable')
     )
 
-    await expect(processTierB(binanceJob)).resolves.toMatchObject({ errors: 1 })
+    await expect(processTierB(binanceJob)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      errors: 1,
+    })
 
     expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
     expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
@@ -790,6 +979,7 @@ describe('Tier-B profile coverage accounting', () => {
       'ROLLBACK',
     ])
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
   })
 
   it('does not inherit a legacy overlap cursor into the @2 evidence genesis', async () => {
@@ -876,13 +1066,14 @@ describe('Tier-B profile coverage accounting', () => {
     })
 
     await expect(processTierB(job)).resolves.toMatchObject({
-      tradersCrawled: 1,
+      tradersCrawled: 0,
       historyRowsWritten: 0,
       errors: 1,
     })
 
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
   })
 
   it('keeps non-position histories on the legacy compatibility cursor path', async () => {
@@ -984,7 +1175,7 @@ describe('Tier-B profile coverage accounting', () => {
     })
 
     await expect(processTierB(job)).resolves.toMatchObject({
-      tradersCrawled: 1,
+      tradersCrawled: 0,
       historyRowsWritten: 0,
       errors: 1,
     })
@@ -1004,6 +1195,7 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
   })
 
   it('fails closed before invoking a page parser after Storage upload', async () => {
@@ -1030,7 +1222,7 @@ describe('Tier-B profile coverage accounting', () => {
     })
 
     await expect(processTierB(job)).resolves.toMatchObject({
-      tradersCrawled: 1,
+      tradersCrawled: 0,
       historyRowsWritten: 0,
       errors: 1,
     })
@@ -1040,6 +1232,7 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(tierBProfileMarkerCalls()).toHaveLength(0)
   })
 
   it('audits a bundle-wide quality reject before any validation or publication', async () => {
