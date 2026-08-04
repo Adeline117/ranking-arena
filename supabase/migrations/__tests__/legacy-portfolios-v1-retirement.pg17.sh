@@ -166,6 +166,19 @@ GRANT EXECUTE ON FUNCTION public.delete_legacy_portfolio_v1(uuid, uuid),
   public.export_legacy_portfolio_data_v1(uuid) TO dashboard_writer;
 SQL
 
+psql_cmd -q -c \
+  "CREATE FUNCTION public.delete_legacy_portfolio_v1(text) RETURNS boolean LANGUAGE sql AS 'SELECT false'"
+if psql_cmd -q -f "$MIGRATION" >"$TMP_ROOT/overload-preflight.log" 2>&1; then
+  echo "legacy portfolio retirement accepted an unknown overload" >&2
+  exit 1
+fi
+if ! grep -q 'unexpected legacy-portfolio function overloads' \
+  "$TMP_ROOT/overload-preflight.log"; then
+  cat "$TMP_ROOT/overload-preflight.log" >&2
+  exit 1
+fi
+psql_cmd -q -c 'DROP FUNCTION public.delete_legacy_portfolio_v1(text)'
+
 psql_cmd -q -f "$MIGRATION"
 psql_cmd -q -f "$MIGRATION"
 

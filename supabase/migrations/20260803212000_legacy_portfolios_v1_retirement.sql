@@ -23,6 +23,7 @@ DECLARE
   v_table_name text;
   v_missing_roles text[];
   v_missing_columns text[];
+  v_unexpected_overloads text[];
 BEGIN
   SELECT pg_catalog.array_agg(required_role ORDER BY required_role)
   INTO v_missing_roles
@@ -128,6 +129,45 @@ BEGIN
   ) THEN
     RAISE EXCEPTION
       'legacy portfolio children require validated portfolio_id -> id ON DELETE CASCADE foreign keys';
+  END IF;
+
+  WITH expected(proname, signature) AS (
+    VALUES
+      (
+        'delete_legacy_portfolio_v1'::name,
+        'public.delete_legacy_portfolio_v1(uuid,uuid)'::text
+      ),
+      (
+        'export_legacy_portfolio_data_v1'::name,
+        'public.export_legacy_portfolio_data_v1(uuid)'::text
+      )
+  )
+  SELECT pg_catalog.array_agg(
+    pg_catalog.format(
+      '%I(%s)',
+      procedure_row.proname,
+      pg_catalog.pg_get_function_identity_arguments(procedure_row.oid)
+    )
+    ORDER BY procedure_row.proname, procedure_row.oid
+  )
+  INTO v_unexpected_overloads
+  FROM pg_catalog.pg_proc AS procedure_row
+  JOIN pg_catalog.pg_namespace AS namespace_row
+    ON namespace_row.oid = procedure_row.pronamespace
+  WHERE namespace_row.nspname = 'public'
+    AND procedure_row.proname IN (SELECT expected.proname FROM expected)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM expected
+      WHERE expected.proname = procedure_row.proname
+        AND procedure_row.oid IS NOT DISTINCT FROM
+              pg_catalog.to_regprocedure(expected.signature)
+    );
+
+  IF v_unexpected_overloads IS NOT NULL THEN
+    RAISE EXCEPTION
+      'unexpected legacy-portfolio function overloads must be retired first: %',
+      v_unexpected_overloads;
   END IF;
 END
 $preflight$;
@@ -780,6 +820,41 @@ BEGIN
     WHERE procedure.oid = 'public.export_legacy_portfolio_data_v1(uuid)'::regprocedure
   ) IS DISTINCT FROM 'postgres' THEN
     RAISE EXCEPTION 'legacy portfolio export capability ACL or owner drift remains';
+  END IF;
+
+  IF EXISTS (
+    WITH expected(proname, signature) AS (
+      VALUES
+        (
+          'delete_legacy_portfolio_v1'::name,
+          'public.delete_legacy_portfolio_v1(uuid,uuid)'::text
+        ),
+        (
+          'export_legacy_portfolio_data_v1'::name,
+          'public.export_legacy_portfolio_data_v1(uuid)'::text
+        )
+    )
+    SELECT 1
+    FROM expected
+    WHERE pg_catalog.to_regprocedure(expected.signature) IS NULL
+
+    UNION ALL
+
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    JOIN pg_catalog.pg_namespace AS namespace_row
+      ON namespace_row.oid = procedure_row.pronamespace
+    WHERE namespace_row.nspname = 'public'
+      AND procedure_row.proname IN (SELECT expected.proname FROM expected)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM expected
+        WHERE expected.proname = procedure_row.proname
+          AND procedure_row.oid IS NOT DISTINCT FROM
+                pg_catalog.to_regprocedure(expected.signature)
+      )
+  ) THEN
+    RAISE EXCEPTION 'legacy portfolio overload inventory is not exact';
   END IF;
 
   IF (

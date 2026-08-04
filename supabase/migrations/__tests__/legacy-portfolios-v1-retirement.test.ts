@@ -64,6 +64,8 @@ describe('legacy portfolio V1 retirement', () => {
     expect(migration).toContain('v_snapshot_count > 250000')
     expect(migration).toContain("USING ERRCODE = '54000'")
     expect(migration).toContain('DO $revoke_unexpected_legacy_portfolio_function_acl$')
+    expect(migration).toContain('unexpected legacy-portfolio function overloads')
+    expect(migration).toContain('legacy portfolio overload inventory is not exact')
     expect(migration).toMatch(
       /GRANT EXECUTE ON FUNCTION public\.export_legacy_portfolio_data_v1\(uuid\)[\s\S]*TO service_role/
     )
