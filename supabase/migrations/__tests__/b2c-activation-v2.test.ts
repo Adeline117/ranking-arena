@@ -12,6 +12,8 @@ describe('B2C activation v2 contract', () => {
     expect(migration).toContain("'v2_detail_retention_two_utc_days'")
     expect(migration).toContain("'activation_measurement_started_at'")
     expect(migration).toContain('profile.created_at >= GREATEST(')
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.product_metric_epochs')
+    expect(migration).toContain('ON CONFLICT (metric_name) DO UPDATE')
   })
 
   it('requires product intent on two dates inside an exact 7x24h window', () => {
@@ -48,6 +50,14 @@ describe('B2C activation v2 contract', () => {
     expect(migration).toContain('has_table_privilege')
     expect(migration).toContain('has_function_privilege')
     expect(migration).toContain('pg_catalog.aclexplode')
+    expect(migration).toContain('DO $converge_metric_epoch_acl$')
+    expect(migration).toContain('DO $converge_metric_function_acl$')
+    expect(migration).toContain(
+      'ALTER FUNCTION public.b2c_product_metrics(integer) OWNER TO CURRENT_USER'
+    )
+    expect(migration).toContain('procedure.proowner = (')
+    expect(migration).toContain('unexpected public.b2c_product_metrics overloads')
+    expect(migration).toContain('b2c_product_metrics overload inventory is not exact')
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
   })

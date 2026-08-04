@@ -57,6 +57,7 @@ psql_cmd -q <<'SQL'
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN BYPASSRLS;
+CREATE ROLE hostile_metrics_reader NOLOGIN BYPASSRLS;
 CREATE SCHEMA auth;
 CREATE TABLE auth.users (id uuid PRIMARY KEY);
 CREATE TABLE public.user_profiles (
@@ -90,7 +91,86 @@ CREATE TABLE public.user_activity_days (
 );
 SQL
 
+# An unexpected same-name overload is an unreviewed PostgREST capability. The
+# migration must fail before creating any activation-v2 objects.
+psql_cmd -q <<'SQL'
+CREATE FUNCTION public.b2c_product_metrics(text)
+RETURNS jsonb LANGUAGE sql AS 'SELECT ''{}''::jsonb';
+SQL
+if psql_cmd -q -f "$MIGRATION" >"$TMP_ROOT/overload-preflight.log" 2>&1; then
+  echo "activation migration unexpectedly accepted an unknown overload" >&2
+  exit 1
+fi
+if ! grep -q 'unexpected public.b2c_product_metrics overloads' \
+  "$TMP_ROOT/overload-preflight.log"; then
+  cat "$TMP_ROOT/overload-preflight.log" >&2
+  exit 1
+fi
+psql_cmd -q -c 'DROP FUNCTION public.b2c_product_metrics(text)'
+
 psql_cmd -q -f "$MIGRATION"
+
+EPOCH_BEFORE_REPLAY="$(
+  psql_cmd -qAt -c \
+    "SELECT started_at::text FROM public.product_metric_epochs WHERE metric_name = 'activation_7d'"
+)"
+
+psql_cmd -q <<'SQL'
+GRANT ALL PRIVILEGES ON TABLE public.product_metric_epochs
+  TO hostile_metrics_reader;
+GRANT UPDATE (definition) ON TABLE public.product_metric_epochs
+  TO hostile_metrics_reader;
+GRANT EXECUTE ON FUNCTION public.b2c_product_metrics(integer)
+  TO hostile_metrics_reader;
+GRANT CREATE ON SCHEMA public TO hostile_metrics_reader;
+ALTER FUNCTION public.b2c_product_metrics(integer)
+  OWNER TO hostile_metrics_reader;
+REVOKE CREATE ON SCHEMA public FROM hostile_metrics_reader;
+SQL
+
+# Byte replay must preserve the epoch boundary while removing every custom ACL.
+psql_cmd -q -f "$MIGRATION"
+
+EPOCH_AFTER_REPLAY="$(
+  psql_cmd -qAt -c \
+    "SELECT started_at::text FROM public.product_metric_epochs WHERE metric_name = 'activation_7d'"
+)"
+if [[ "$EPOCH_BEFORE_REPLAY" != "$EPOCH_AFTER_REPLAY" ]]; then
+  echo "activation replay moved the measurement epoch" >&2
+  exit 1
+fi
+
+psql_cmd -q <<'SQL'
+DO $custom_acl_proof$
+BEGIN
+  IF pg_catalog.has_table_privilege(
+       'hostile_metrics_reader',
+       'public.product_metric_epochs',
+       'SELECT'
+     ) OR pg_catalog.has_column_privilege(
+       'hostile_metrics_reader',
+       'public.product_metric_epochs',
+       'definition',
+       'UPDATE'
+     ) OR pg_catalog.has_function_privilege(
+       'hostile_metrics_reader',
+       'public.b2c_product_metrics(integer)',
+       'EXECUTE'
+     ) OR (
+       SELECT procedure_row.proowner
+       FROM pg_catalog.pg_proc AS procedure_row
+       WHERE procedure_row.oid =
+             'public.b2c_product_metrics(integer)'::regprocedure
+     ) IS DISTINCT FROM (
+       SELECT relation.relowner
+       FROM pg_catalog.pg_class AS relation
+       WHERE relation.oid = 'public.product_metric_epochs'::regclass
+     ) THEN
+    RAISE EXCEPTION 'custom activation metric ACL or owner survived replay';
+  END IF;
+END
+$custom_acl_proof$;
+SQL
 
 psql_cmd -q <<'SQL'
 UPDATE public.product_metric_epochs

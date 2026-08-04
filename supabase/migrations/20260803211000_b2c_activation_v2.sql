@@ -11,7 +11,51 @@ SELECT pg_catalog.pg_advisory_xact_lock(
   pg_catalog.hashtextextended('public.b2c_product_metrics:v2', 0)
 );
 
-CREATE TABLE public.product_metric_epochs (
+DO $preflight$
+DECLARE
+  v_unexpected_overloads text[];
+  v_existing_relation regclass := pg_catalog.to_regclass(
+    'public.product_metric_epochs'
+  );
+BEGIN
+  IF pg_catalog.to_regrole('service_role') IS NULL
+     OR pg_catalog.to_regrole('anon') IS NULL
+     OR pg_catalog.to_regrole('authenticated') IS NULL THEN
+    RAISE EXCEPTION 'Supabase API roles are required for the activation metric contract';
+  END IF;
+
+  SELECT pg_catalog.array_agg(
+    pg_catalog.pg_get_function_identity_arguments(procedure_row.oid)
+    ORDER BY procedure_row.oid
+  )
+  INTO v_unexpected_overloads
+  FROM pg_catalog.pg_proc AS procedure_row
+  JOIN pg_catalog.pg_namespace AS namespace_row
+    ON namespace_row.oid = procedure_row.pronamespace
+  WHERE namespace_row.nspname = 'public'
+    AND procedure_row.proname = 'b2c_product_metrics'
+    AND procedure_row.oid IS DISTINCT FROM pg_catalog.to_regprocedure(
+      'public.b2c_product_metrics(integer)'
+    );
+
+  IF v_unexpected_overloads IS NOT NULL THEN
+    RAISE EXCEPTION
+      'unexpected public.b2c_product_metrics overloads must be retired first: %',
+      v_unexpected_overloads;
+  END IF;
+
+  IF v_existing_relation IS NOT NULL
+     AND CURRENT_USER IS DISTINCT FROM (
+       SELECT pg_catalog.pg_get_userbyid(relation.relowner)
+       FROM pg_catalog.pg_class AS relation
+       WHERE relation.oid = v_existing_relation
+     ) THEN
+    RAISE EXCEPTION 'migration role must own public.product_metric_epochs on replay';
+  END IF;
+END
+$preflight$;
+
+CREATE TABLE IF NOT EXISTS public.product_metric_epochs (
   metric_name text PRIMARY KEY,
   definition_version text NOT NULL,
   started_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
@@ -20,6 +64,24 @@ CREATE TABLE public.product_metric_epochs (
 );
 
 ALTER TABLE public.product_metric_epochs ENABLE ROW LEVEL SECURITY;
+
+DO $drop_metric_epoch_policy_drift$
+DECLARE
+  v_policy_name name;
+BEGIN
+  FOR v_policy_name IN
+    SELECT policy.polname
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'public.product_metric_epochs'::regclass
+    ORDER BY policy.polname
+  LOOP
+    EXECUTE pg_catalog.format(
+      'DROP POLICY %I ON public.product_metric_epochs',
+      v_policy_name
+    );
+  END LOOP;
+END
+$drop_metric_epoch_policy_drift$;
 
 CREATE POLICY "Service reads product metric epochs"
   ON public.product_metric_epochs
@@ -32,6 +94,66 @@ CREATE POLICY "Service reads product metric epochs"
 -- read them through the metric function, but it must not move or rewrite them.
 REVOKE ALL ON TABLE public.product_metric_epochs
   FROM PUBLIC, anon, authenticated, service_role;
+
+DO $converge_metric_epoch_acl$
+DECLARE
+  v_grantee oid;
+  v_role_sql text;
+  v_column_list text;
+BEGIN
+  SELECT pg_catalog.string_agg(
+    pg_catalog.format('%I', attribute.attname),
+    ', '
+    ORDER BY attribute.attnum
+  )
+  INTO STRICT v_column_list
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = 'public.product_metric_epochs'::regclass
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+
+  FOR v_grantee IN
+    SELECT DISTINCT acl_entry.grantee
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+    ) AS acl_entry
+    WHERE relation.oid = 'public.product_metric_epochs'::regclass
+      AND acl_entry.grantee <> relation.relowner
+    UNION
+    SELECT DISTINCT acl_entry.grantee
+    FROM pg_catalog.pg_attribute AS attribute
+    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+    JOIN pg_catalog.pg_class AS relation
+      ON relation.oid = attribute.attrelid
+    WHERE attribute.attrelid = 'public.product_metric_epochs'::regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND acl_entry.grantee <> relation.relowner
+  LOOP
+    v_role_sql := CASE
+      WHEN v_grantee = 0::oid THEN 'PUBLIC'
+      ELSE pg_catalog.format(
+        '%I',
+        (SELECT role_row.rolname FROM pg_catalog.pg_roles AS role_row
+         WHERE role_row.oid = v_grantee)
+      )
+    END;
+
+    EXECUTE pg_catalog.format(
+      'REVOKE ALL PRIVILEGES ON TABLE public.product_metric_epochs FROM %s',
+      v_role_sql
+    );
+    EXECUTE pg_catalog.format(
+      'REVOKE SELECT (%1$s), INSERT (%1$s), UPDATE (%1$s), REFERENCES (%1$s) '
+        || 'ON TABLE public.product_metric_epochs FROM %2$s',
+      v_column_list,
+      v_role_sql
+    );
+  END LOOP;
+END
+$converge_metric_epoch_acl$;
+
 GRANT SELECT ON TABLE public.product_metric_epochs TO service_role;
 
 INSERT INTO public.product_metric_epochs (
@@ -51,7 +173,10 @@ INSERT INTO public.product_metric_epochs (
       'create_trader_alert:persisted'
     )
   )
-);
+)
+ON CONFLICT (metric_name) DO UPDATE
+SET definition_version = EXCLUDED.definition_version,
+    definition = EXCLUDED.definition;
 
 CREATE OR REPLACE FUNCTION public.b2c_product_metrics(p_window_days integer DEFAULT 7)
 RETURNS jsonb
@@ -205,8 +330,46 @@ AS $function$
   );
 $function$;
 
+-- CREATE OR REPLACE preserves a historical function owner. Bind the definer
+-- capability back to the migration-owned epoch relation before converging its
+-- ACL so a previously substituted role cannot rewrite the metric after replay.
+ALTER FUNCTION public.b2c_product_metrics(integer) OWNER TO CURRENT_USER;
+
 REVOKE ALL ON FUNCTION public.b2c_product_metrics(integer)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
+
+DO $converge_metric_function_acl$
+DECLARE
+  v_function regprocedure := 'public.b2c_product_metrics(integer)'::regprocedure;
+  v_grantee oid;
+  v_role_sql text;
+BEGIN
+  FOR v_grantee IN
+    SELECT DISTINCT acl_entry.grantee
+    FROM pg_catalog.pg_proc AS procedure_row
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(procedure_row.proacl, pg_catalog.acldefault('f', procedure_row.proowner))
+    ) AS acl_entry
+    WHERE procedure_row.oid = v_function
+      AND acl_entry.grantee <> procedure_row.proowner
+  LOOP
+    v_role_sql := CASE
+      WHEN v_grantee = 0::oid THEN 'PUBLIC'
+      ELSE pg_catalog.format(
+        '%I',
+        (SELECT role_row.rolname FROM pg_catalog.pg_roles AS role_row
+         WHERE role_row.oid = v_grantee)
+      )
+    END;
+
+    EXECUTE pg_catalog.format(
+      'REVOKE ALL PRIVILEGES ON FUNCTION public.b2c_product_metrics(integer) FROM %s',
+      v_role_sql
+    );
+  END LOOP;
+END
+$converge_metric_function_acl$;
+
 GRANT EXECUTE ON FUNCTION public.b2c_product_metrics(integer) TO service_role;
 
 COMMENT ON TABLE public.product_metric_epochs IS
@@ -340,9 +503,66 @@ BEGIN
     WHERE procedure.oid = v_function
       AND procedure.prosecdef
       AND procedure.provolatile = 's'
+      AND procedure.proowner = (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = v_relation
+      )
       AND procedure.proconfig = ARRAY['search_path=pg_catalog, pg_temp']::text[]
   ) THEN
     RAISE EXCEPTION 'b2c_product_metrics function security contract is invalid';
+  END IF;
+
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_proc AS procedure
+    JOIN pg_catalog.pg_namespace AS namespace_row
+      ON namespace_row.oid = procedure.pronamespace
+    WHERE namespace_row.nspname = 'public'
+      AND procedure.proname = 'b2c_product_metrics'
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid = v_function
+  ) THEN
+    RAISE EXCEPTION 'b2c_product_metrics overload inventory is not exact';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+    ) AS acl_entry
+    WHERE relation.oid = v_relation
+      AND acl_entry.grantee <> relation.relowner
+      AND NOT (
+        acl_entry.grantee = v_service_role_oid
+        AND acl_entry.privilege_type = 'SELECT'
+        AND NOT acl_entry.is_grantable
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+    WHERE attribute.attrelid = v_relation
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(procedure.proacl, pg_catalog.acldefault('f', procedure.proowner))
+    ) AS acl_entry
+    WHERE procedure.oid = v_function
+      AND acl_entry.grantee <> procedure.proowner
+      AND NOT (
+        acl_entry.grantee = v_service_role_oid
+        AND acl_entry.privilege_type = 'EXECUTE'
+        AND NOT acl_entry.is_grantable
+      )
+  ) THEN
+    RAISE EXCEPTION 'activation metric direct ACL inventory is not exact';
   END IF;
 END
 $postflight$;
