@@ -96,6 +96,8 @@ describe('authedFetch viewer-bound retry', () => {
     expect(result).toMatchObject({ ok: true })
     expect(result.stale).toBeUndefined()
     expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect((global.fetch as jest.Mock).mock.calls[0][1].cache).toBe('no-store')
+    expect((global.fetch as jest.Mock).mock.calls[1][1].cache).toBe('no-store')
     expect((global.fetch as jest.Mock).mock.calls[1][1].headers.Authorization).toBe(
       `Bearer ${tokenA2}`
     )

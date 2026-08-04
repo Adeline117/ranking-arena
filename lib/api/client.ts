@@ -631,6 +631,7 @@ export async function authedFetch<T>(
           method,
           headers,
           body: body ? JSON.stringify(body) : undefined,
+          cache: 'no-store',
           signal: requestSignal,
         }),
         requestSignal
@@ -684,6 +685,7 @@ export async function authedFetch<T>(
               method,
               headers,
               body: body ? JSON.stringify(body) : undefined,
+              cache: 'no-store',
               signal: requestSignal,
             }),
             requestSignal
