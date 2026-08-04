@@ -7,14 +7,15 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { supabase } from '@/lib/supabase/client'
 import { usePremium } from '@/lib/premium/hooks'
+import { fetchVerifiedSubscription } from '@/lib/premium/subscription-client'
 import { clearSubscriptionCache } from '@/app/components/home/hooks/useSubscription'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
 import { getAuthSession, refreshAuthToken } from '@/lib/auth'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { readVerifiedCheckoutSession } from '@/lib/stripe/verify-session-client'
 
 // 图标组件
 const CheckCircleIcon = ({ size = 64 }: { size?: number }) => (
@@ -86,6 +87,7 @@ function PaymentSuccessContent() {
     sessionGeneration: auth.sessionGeneration,
     userId: auth.userId,
   })
+  const verificationRequestKeyRef = useRef<string | null>(null)
   authScopeRef.current = {
     viewerKey: auth.viewerKey,
     sessionGeneration: auth.sessionGeneration,
@@ -133,7 +135,8 @@ function PaymentSuccessContent() {
     setRetrying(false)
   }, [auth.authChecked, auth.email, scopeKey])
 
-  // 直接查询订阅状态（避免 React 状态闭包问题）
+  // Poll only the server's exact entitlement authority; never infer success
+  // from the legacy subscriptions/profile projections in the browser.
   const checkSubscriptionDirect = useCallback(async (): Promise<boolean> => {
     const capturedScope = captureRenderedScope()
     if (!auth.authChecked || !scopeIsCurrent(capturedScope)) return false
@@ -144,45 +147,8 @@ function PaymentSuccessContent() {
         return false
       }
 
-      // 优先通过 API 查询（使用 service role，不受 RLS 限制）
-      try {
-        const response = await fetch('/api/subscription', {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${session.accessToken}`,
-          },
-        })
-        if (!scopeIsCurrent(capturedScope)) return false
-        if (response.ok) {
-          const data = await response.json()
-          if (!scopeIsCurrent(capturedScope)) return false
-          if (data.subscription?.tier === 'pro') return true
-        }
-      } catch {
-        // Intentionally swallowed: subscription API check failed, falling back to direct Supabase query
-      }
-
-      // 降级：直接查 subscriptions 表（需要有效 JWT 才能通过 RLS）
-      if (!scopeIsCurrent(capturedScope)) return false
-      const { data: sub } = await supabase
-        .from('subscriptions')
-        .select('tier, status')
-        .eq('user_id', session.userId)
-        .in('status', ['active', 'trialing'])
-        .maybeSingle()
-
-      if (!scopeIsCurrent(capturedScope)) return false
-      if (sub?.tier === 'pro') return true
-
-      // 再查 user_profiles
-      if (!scopeIsCurrent(capturedScope)) return false
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier')
-        .eq('id', session.userId)
-        .maybeSingle()
-
-      return scopeIsCurrent(capturedScope) && profile?.subscription_tier === 'pro'
+      const subscription = await fetchVerifiedSubscription(session.accessToken, session.userId)
+      return scopeIsCurrent(capturedScope) && subscription.tier === 'pro'
     } catch {
       return false
     }
@@ -203,7 +169,8 @@ function PaymentSuccessContent() {
     const capturedScope = captureRenderedScope()
     if (!auth.authChecked || !scopeIsCurrent(capturedScope)) return
     const sessionId = searchParams.get('session_id')
-    if (hasVerified) return
+    const verificationRequestKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${sessionId || ''}`
+    if (hasVerified || verificationRequestKeyRef.current === verificationRequestKey) return
 
     // No session_id means the user reached this page without completing a real
     // Stripe checkout (bare access). Do NOT claim success — send them back to
@@ -213,16 +180,18 @@ function PaymentSuccessContent() {
       return
     }
 
+    verificationRequestKeyRef.current = verificationRequestKey
     setHasVerified(true)
     setVerificationStatus('verifying')
 
     try {
-      // 尝试获取 token（但不强制要求，verify-session 通过 Stripe metadata 识别用户）
+      // Obtain the current viewer token; verify-session also binds the Stripe
+      // session metadata to this authenticated identity on the server.
       const accessToken = await getValidAccessToken()
       if (!scopeIsCurrent(capturedScope)) return
 
-      // 调用验证 API 更新数据库 - 即使没有 token 也尝试调用
-      // verify-session 通过 Stripe session metadata 中的 userId 识别用户，不依赖调用者 token
+      // A missing token produces an explicit 401 and then follows the same
+      // bounded refresh + authority-poll path below.
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...getCsrfHeaders(),
@@ -238,8 +207,8 @@ function PaymentSuccessContent() {
       })
       if (!scopeIsCurrent(capturedScope)) return
 
-      if (response.ok) {
-        await response.json()
+      const responseData: unknown = await response.json().catch(() => null)
+      if (response.ok && readVerifiedCheckoutSession(responseData)) {
         if (!scopeIsCurrent(capturedScope)) return
 
         // 验证成功后，尝试刷新 auth session 以获取最新状态
@@ -259,12 +228,7 @@ function PaymentSuccessContent() {
       }
 
       // API 返回非 200，记录错误
-      try {
-        const errorData = await response.json()
-        logger.error('[Payment Success] Verification API error:', errorData)
-      } catch {
-        logger.error('[Payment Success] Verification API error:', response.status)
-      }
+      logger.error('[Payment Success] Verification API error:', responseData || response.status)
 
       // 验证 API 失败，可能 webhook 已经处理了，通过轮询数据库确认
       // 先尝试刷新 session 以确保后续查询有有效 token
@@ -308,6 +272,10 @@ function PaymentSuccessContent() {
         showToast(t('membershipActivated'), 'success')
       } else {
         setVerificationStatus('error')
+      }
+    } finally {
+      if (verificationRequestKeyRef.current === verificationRequestKey) {
+        verificationRequestKeyRef.current = null
       }
     }
   }, [
