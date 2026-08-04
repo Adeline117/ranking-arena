@@ -37,6 +37,12 @@ import {
   POST_REACTION_REQUEST_TIMEOUT_MS,
   readPostReactionAcknowledgement,
 } from '@/lib/posts/post-reaction-client-contract'
+import {
+  POST_REPOST_OPERATION,
+  POST_REPOST_REQUEST_TIMEOUT_MS,
+  createPostRepostRequestId,
+  readPostRepostAcknowledgement,
+} from '@/lib/reposts/post-repost-client-contract'
 
 type Post = PostWithUserState
 
@@ -1135,70 +1141,124 @@ export function usePostActions({
         if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return false
       }
-      const post = posts.find((p) => p.id === postId) || openPost
-      if (post?.author_id === currentUserId) {
+      if (!capturedScope.userId) return false
+      const post =
+        postsRef.current.find((candidate) => candidate.id === postId) ||
+        (openPostRef.current?.id === postId ? openPostRef.current : null)
+      if (!post) return false
+      if (post.author_id === capturedScope.userId) {
         showToast(t('cannotRepostOwn'), 'warning')
         return false
       }
-      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000repost-${postId}`
+      const rootPostId = post.original_post_id || post.id
+      const requestId = createPostRepostRequestId()
+      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000repost-${rootPostId}`
       if (lockRef.current.has(key)) return false
       lockRef.current.add(key)
       setRepostLoading((prev) => ({ ...prev, [postId]: true }))
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(new DOMException('Post repost request timed out', 'AbortError')),
+        POST_REPOST_REQUEST_TIMEOUT_MS
+      )
       try {
-        const response = await fetch(`/api/posts/${postId}/repost`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ comment }),
-        })
-        const result = await response.json()
+        const response = await waitWithinAbortSignal(
+          fetch(`/api/posts/${postId}/repost`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              ...getCsrfHeaders(),
+            },
+            body: JSON.stringify({
+              operation: POST_REPOST_OPERATION,
+              request_id: requestId,
+              comment: comment ?? '',
+            }),
+            cache: 'no-store',
+            signal: controller.signal,
+          }),
+          controller.signal
+        )
+        const result: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
         if (!scopeIsCurrent(capturedScope)) return false
-        if (response.ok) {
-          if (typeof result.repost_count === 'number') {
-            const rootPostId =
-              typeof result.root_post_id === 'string' ? result.root_post_id : postId
-            setPosts((prev) =>
-              prev.map((item) =>
-                item.id === rootPostId ? { ...item, repost_count: result.repost_count } : item
-              )
+
+        const expectedReceipt = {
+          actorId: capturedScope.userId,
+          sourcePostId: postId,
+          rootPostId,
+          requestId,
+        }
+        const acknowledgement =
+          response.ok && response.status === 201
+            ? readPostRepostAcknowledgement(result, {
+                ...expectedReceipt,
+                action: 'created',
+              })
+            : !response.ok && response.status === 409
+              ? readPostRepostAcknowledgement(result, {
+                  ...expectedReceipt,
+                  action: 'already_exists',
+                })
+              : null
+
+        if (acknowledgement) {
+          setPosts((prev) =>
+            prev.map((item) =>
+              item.id === acknowledgement.rootPostId
+                ? { ...item, repost_count: acknowledgement.repostCount }
+                : item
             )
-            const op = openPostRef.current
-            if (!openPostAliasesPosts && op && op.id === rootPostId) {
-              setOpenPost({ ...op, repost_count: result.repost_count })
-            }
+          )
+          const openedPost = openPostRef.current
+          if (!openPostAliasesPosts && openedPost && openedPost.id === acknowledgement.rootPostId) {
+            setOpenPost({ ...openedPost, repost_count: acknowledgement.repostCount })
           }
-          trackEvent('post_repost', { post_id: postId, with_comment: comment ? 1 : 0 })
-          showToast(t('reposted'), 'success')
-          return true
-        } else {
-          showToast(result.error || t('repostFailed'), 'error')
+          if (acknowledgement.action === 'created') {
+            trackEvent('post_repost', {
+              post_id: acknowledgement.sourcePostId,
+              with_comment: comment ? 1 : 0,
+            })
+            showToast(t('reposted'), 'success')
+            return true
+          }
+
+          // A duplicate is canonical existing state, not proof that this
+          // request created a row. Reconcile its count without publishing a
+          // creation success or analytics event.
+          showToast(t('alreadyReposted'), 'warning')
           return false
         }
+
+        const rawError =
+          result !== null && typeof result === 'object' && !Array.isArray(result)
+            ? (result as Record<string, unknown>).error
+            : null
+        showToast(typeof rawError === 'string' ? rawError : t('repostFailed'), 'error')
+        return false
       } catch (err) {
         if (!scopeIsCurrent(capturedScope)) return false
         logger.error('[PostFeed] repost failed:', err)
         showToast(getNetworkErrorMessage(err, t), 'error')
         return false
       } finally {
+        clearTimeout(timeoutId)
         if (scopeIsCurrent(capturedScope)) {
           setRepostLoading((prev) => ({ ...prev, [postId]: false }))
         }
         lockRef.current.delete(key)
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       accessToken,
       captureRenderedScope,
-      posts,
-      openPost,
-      currentUserId,
       scopeIsCurrent,
+      setOpenPost,
+      setPosts,
       showToast,
       openPostAliasesPosts,
+      setRepostLoading,
+      t,
     ]
   )
 

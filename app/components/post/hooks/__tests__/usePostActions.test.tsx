@@ -3,18 +3,25 @@ import { useCallback, useState } from 'react'
 import type { PostWithUserState } from '@/lib/types'
 import { bookmarkPostTarget, queueProfileActionLogin } from '@/lib/auth/profile-action-login'
 import { usePostActions } from '../usePostActions'
+import { trackEvent } from '@/lib/analytics/track'
 
 const mockSetOpenPost = jest.fn()
 const mockUpdatePostReaction = jest.fn()
 const mockRouterPush = jest.fn()
 const mockShowToast = jest.fn()
 const mockSavePostToBookmarkFolder = jest.fn()
+const mockTrackEvent = trackEvent as jest.Mock
 const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const REACTION_POST_ID = '22222222-2222-4222-8222-222222222222'
 const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
 const BOOKMARK_ACTOR_ID = REACTION_ACTOR_ID
 const BOOKMARK_POST_ID = REACTION_POST_ID
 const BOOKMARK_FOLDER_ID = '33333333-3333-4333-8333-333333333333'
+const REPOST_ACTOR_ID = REACTION_ACTOR_ID
+const REPOST_ROOT_POST_ID = '44444444-4444-4444-8444-444444444444'
+const REPOST_CHILD_POST_ID = '55555555-5555-4555-8555-555555555555'
+const REPOST_ROW_ID = '66666666-6666-4666-8666-666666666666'
+const REPOST_OTHER_ACTOR_ID = '77777777-7777-4777-8777-777777777777'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -81,6 +88,13 @@ const bookmarkViewer: ViewerProps = {
   currentUserId: BOOKMARK_ACTOR_ID,
   viewerKey: `user:${BOOKMARK_ACTOR_ID}`,
   sessionGeneration: 8,
+}
+
+const repostViewer: ViewerProps = {
+  accessToken: 'repost-token-a',
+  currentUserId: REPOST_ACTOR_ID,
+  viewerKey: `user:${REPOST_ACTOR_ID}`,
+  sessionGeneration: 9,
 }
 
 function useAliasedPostActions(viewer: ViewerProps = viewerA) {
@@ -164,6 +178,20 @@ function bookmarkStatusReceipt(
     operation: 'status',
     post_ids: postIds,
     bookmarks: Object.fromEntries(postIds.map((postId) => [postId, true])),
+    ...overrides,
+  }
+}
+
+function repostReceipt(requestId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    actor_id: REPOST_ACTOR_ID,
+    source_post_id: REPOST_ROOT_POST_ID,
+    root_post_id: REPOST_ROOT_POST_ID,
+    request_id: requestId,
+    operation: 'create',
+    action: 'created',
+    repost_post_id: REPOST_ROW_ID,
+    repost_count: 4,
     ...overrides,
   }
 }
@@ -910,51 +938,68 @@ describe('usePostActions aliased detail state', () => {
   })
 
   it('reconciles the canonical repost count returned by the server', async () => {
-    ;(global.fetch as jest.Mock).mockResolvedValue(
-      jsonResponse({
-        success: true,
-        post_id: 'repost-1',
-        root_post_id: 'post-1',
-        repost_count: 4,
-      })
-    )
-    const { result } = renderHook(() => useAliasedPostActions())
-    act(() => result.current.actions.setShowRepostModal('post-1'))
+    ;(global.fetch as jest.Mock).mockImplementation((_url: string, options: RequestInit) => {
+      const body = parsedRequestBody(options)
+      return Promise.resolve(jsonResponse(repostReceipt(body.request_id as string), true, 201))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(repostViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_OTHER_ACTOR_ID,
+      }))
+      result.current.actions.setShowRepostModal(REPOST_ROOT_POST_ID)
+    })
 
     let succeeded: boolean | undefined
     await act(async () => {
-      succeeded = await result.current.actions.handleRepost('post-1', 'worth sharing')
+      succeeded = await result.current.actions.handleRepost(REPOST_ROOT_POST_ID, 'worth sharing')
     })
 
     expect(succeeded).toBe(true)
     expect(result.current.post.repost_count).toBe(4)
     expect(mockSetOpenPost).not.toHaveBeenCalled()
+    const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+    expect(parsedRequestBody(options)).toEqual({
+      operation: 'create',
+      request_id: expect.stringMatching(/^[0-9a-f]{32}$/),
+      comment: 'worth sharing',
+    })
+    expect(options.cache).toBe('no-store')
+    expect(options.signal).toBeInstanceOf(AbortSignal)
     // The modal owns its local draft and closes itself after a successful ACK.
-    expect(result.current.actions.showRepostModal).toBe('post-1')
+    expect(result.current.actions.showRepostModal).toBe(REPOST_ROOT_POST_ID)
   })
 
   it('does not write a canonical root count onto a clicked child repost', async () => {
-    ;(global.fetch as jest.Mock).mockResolvedValue(
-      jsonResponse({
-        success: true,
-        post_id: 'repost-2',
-        root_post_id: 'post-1',
-        repost_count: 4,
-      })
-    )
-    const { result } = renderHook(() => useAliasedPostActions())
+    ;(global.fetch as jest.Mock).mockImplementation((_url: string, options: RequestInit) => {
+      const body = parsedRequestBody(options)
+      return Promise.resolve(
+        jsonResponse(
+          repostReceipt(body.request_id as string, {
+            source_post_id: REPOST_CHILD_POST_ID,
+            root_post_id: REPOST_ROOT_POST_ID,
+          }),
+          true,
+          201
+        )
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(repostViewer))
     act(() => {
       result.current.setPost((previous) => ({
         ...previous,
-        id: 'repost-1',
-        original_post_id: 'post-1',
+        id: REPOST_CHILD_POST_ID,
+        original_post_id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_OTHER_ACTOR_ID,
         repost_count: 0,
       }))
     })
 
     let succeeded: boolean | undefined
     await act(async () => {
-      succeeded = await result.current.actions.handleRepost('repost-1', 'worth sharing')
+      succeeded = await result.current.actions.handleRepost(REPOST_CHILD_POST_ID, 'worth sharing')
     })
 
     expect(succeeded).toBe(true)
@@ -969,29 +1014,264 @@ describe('usePostActions aliased detail state', () => {
         resolveFetch = resolve
       })
     )
-    const { result } = renderHook(() => useAliasedPostActions())
+    const { result } = renderHook(() => useAliasedPostActions(repostViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_OTHER_ACTOR_ID,
+      }))
+    })
 
     let firstRequest: Promise<boolean>
     let duplicateRequest: Promise<boolean>
     act(() => {
-      firstRequest = result.current.actions.handleRepost('post-1', 'worth sharing')
-      duplicateRequest = result.current.actions.handleRepost('post-1', 'worth sharing')
+      firstRequest = result.current.actions.handleRepost(REPOST_ROOT_POST_ID, 'worth sharing')
+      duplicateRequest = result.current.actions.handleRepost(REPOST_ROOT_POST_ID, 'worth sharing')
     })
 
     expect(global.fetch).toHaveBeenCalledTimes(1)
     await expect(duplicateRequest!).resolves.toBe(false)
 
     await act(async () => {
-      resolveFetch?.(
-        jsonResponse({
-          success: true,
-          post_id: 'repost-1',
-          root_post_id: 'post-1',
-          repost_count: 4,
-        })
-      )
+      const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+      const requestId = parsedRequestBody(options).request_id as string
+      resolveFetch?.(jsonResponse(repostReceipt(requestId), true, 201))
       await expect(firstRequest!).resolves.toBe(true)
     })
+  })
+
+  it.each([
+    ['actor', { actor_id: REPOST_OTHER_ACTOR_ID }],
+    ['source post', { source_post_id: REPOST_CHILD_POST_ID }],
+    ['root post', { root_post_id: REPOST_CHILD_POST_ID }],
+    ['request nonce', { request_id: 'f'.repeat(32) }],
+    ['operation', { operation: 'remove' }],
+    ['action', { action: 'already_exists' }],
+    ['count', { repost_count: -1 }],
+  ])('rejects a created repost receipt bound to another %s', async (_name, overrides) => {
+    ;(global.fetch as jest.Mock).mockImplementation((_url: string, options: RequestInit) => {
+      const requestId = parsedRequestBody(options).request_id as string
+      return Promise.resolve(jsonResponse(repostReceipt(requestId, overrides), true, 201))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(repostViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_OTHER_ACTOR_ID,
+        repost_count: 2,
+      }))
+    })
+
+    let succeeded: boolean | undefined
+    await act(async () => {
+      succeeded = await result.current.actions.handleRepost(REPOST_ROOT_POST_ID, 'share')
+    })
+    expect(succeeded).toBe(false)
+    expect(result.current.post.repost_count).toBe(2)
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('post_repost', expect.anything())
+    expect(mockShowToast).toHaveBeenCalledWith('repostFailed', 'error')
+  })
+
+  it('reconciles an exact 409 already-existing receipt without claiming a creation', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation((_url: string, options: RequestInit) => {
+      const requestId = parsedRequestBody(options).request_id as string
+      return Promise.resolve(
+        jsonResponse(
+          repostReceipt(requestId, { action: 'already_exists', repost_count: 7 }),
+          false,
+          409
+        )
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(repostViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_OTHER_ACTOR_ID,
+        repost_count: 2,
+      }))
+    })
+
+    let succeeded: boolean | undefined
+    await act(async () => {
+      succeeded = await result.current.actions.handleRepost(REPOST_ROOT_POST_ID, 'share')
+    })
+
+    expect(succeeded).toBe(false)
+    expect(result.current.post.repost_count).toBe(7)
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('post_repost', expect.anything())
+    expect(mockShowToast).toHaveBeenCalledWith('alreadyReposted', 'warning')
+  })
+
+  it('rejects the legacy loose 200 response without mutating last-known repost truth', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: true,
+        post_id: REPOST_ROW_ID,
+        root_post_id: REPOST_ROOT_POST_ID,
+        repost_count: 99,
+        message: 'Repost successful',
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions(repostViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_OTHER_ACTOR_ID,
+        repost_count: 2,
+      }))
+    })
+
+    let succeeded: boolean | undefined
+    await act(async () => {
+      succeeded = await result.current.actions.handleRepost(REPOST_ROOT_POST_ID)
+    })
+
+    expect(succeeded).toBe(false)
+    expect(result.current.post.repost_count).toBe(2)
+    expect(mockShowToast).toHaveBeenCalledWith('repostFailed', 'error')
+  })
+
+  it('hard-times out a hanging repost fetch, unlocks retry, and ignores its late response', async () => {
+    jest.useFakeTimers()
+    try {
+      const firstResponse = deferred<Response>()
+      const lateJson = jest.fn(async () => repostReceipt('f'.repeat(32), { repost_count: 99 }))
+      ;(global.fetch as jest.Mock)
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockImplementationOnce((_url: string, options: RequestInit) => {
+          const requestId = parsedRequestBody(options).request_id as string
+          return Promise.resolve(
+            jsonResponse(repostReceipt(requestId, { repost_count: 4 }), true, 201)
+          )
+        })
+      const { result } = renderHook(() => useAliasedPostActions(repostViewer))
+      act(() => {
+        result.current.setPost((post) => ({
+          ...post,
+          id: REPOST_ROOT_POST_ID,
+          author_id: REPOST_OTHER_ACTOR_ID,
+          repost_count: 2,
+        }))
+      })
+
+      let first!: Promise<boolean>
+      act(() => {
+        first = result.current.actions.handleRepost(REPOST_ROOT_POST_ID)
+      })
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await expect(first).resolves.toBe(false)
+      })
+      expect(result.current.post.repost_count).toBe(2)
+      expect(result.current.actions.repostLoading[REPOST_ROOT_POST_ID]).toBe(false)
+
+      await act(async () => {
+        await expect(result.current.actions.handleRepost(REPOST_ROOT_POST_ID)).resolves.toBe(true)
+      })
+      expect(result.current.post.repost_count).toBe(4)
+
+      await act(async () => {
+        firstResponse.resolve(responseWithJson(lateJson, true, 201))
+        await Promise.resolve()
+      })
+      expect(lateJson).not.toHaveBeenCalled()
+      expect(result.current.post.repost_count).toBe(4)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('hard-times out repost JSON parsing and ignores the late exact receipt', async () => {
+    jest.useFakeTimers()
+    try {
+      const lateBody = deferred<unknown>()
+      const lateJson = jest.fn(() => lateBody.promise)
+      ;(global.fetch as jest.Mock).mockResolvedValue(responseWithJson(lateJson, true, 201))
+      const { result } = renderHook(() => useAliasedPostActions(repostViewer))
+      act(() => {
+        result.current.setPost((post) => ({
+          ...post,
+          id: REPOST_ROOT_POST_ID,
+          author_id: REPOST_OTHER_ACTOR_ID,
+          repost_count: 2,
+        }))
+      })
+
+      let mutation!: Promise<boolean>
+      act(() => {
+        mutation = result.current.actions.handleRepost(REPOST_ROOT_POST_ID)
+      })
+      await act(async () => Promise.resolve())
+      expect(lateJson).toHaveBeenCalledTimes(1)
+      const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+      const requestId = parsedRequestBody(options).request_id as string
+
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await expect(mutation).resolves.toBe(false)
+      })
+      expect(result.current.post.repost_count).toBe(2)
+
+      await act(async () => {
+        lateBody.resolve(repostReceipt(requestId, { repost_count: 99 }))
+        await Promise.resolve()
+      })
+      expect(result.current.post.repost_count).toBe(2)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('drops an exact repost receipt after viewer generation changes', async () => {
+    const response = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
+    const viewerB: ViewerProps = {
+      accessToken: 'repost-token-b',
+      currentUserId: REPOST_OTHER_ACTOR_ID,
+      viewerKey: `user:${REPOST_OTHER_ACTOR_ID}`,
+      sessionGeneration: 10,
+    }
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: repostViewer }
+    )
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_OTHER_ACTOR_ID,
+        repost_count: 2,
+      }))
+    })
+
+    let mutation!: Promise<boolean>
+    act(() => {
+      mutation = result.current.actions.handleRepost(REPOST_ROOT_POST_ID)
+    })
+    const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+    const requestId = parsedRequestBody(options).request_id as string
+
+    rerender(viewerB)
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REPOST_ROOT_POST_ID,
+        author_id: REPOST_ACTOR_ID,
+        repost_count: 50,
+      }))
+    })
+    await act(async () => {
+      response.resolve(jsonResponse(repostReceipt(requestId, { repost_count: 99 }), true, 201))
+      await expect(mutation).resolves.toBe(false)
+    })
+
+    expect(result.current.post.repost_count).toBe(50)
+    expect(result.current.actions.repostLoading).toEqual({})
   })
 
   it('fails empty for A poll state on the first B render', async () => {
