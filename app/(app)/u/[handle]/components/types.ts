@@ -6,6 +6,9 @@ import type {
   TraderFeedItem,
 } from '@/lib/data/trader'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import type { PositionHistoryEntry } from '@/lib/data/trader-view-contracts'
+
+export type { PositionHistoryEntry }
 
 export interface ServerProfile {
   id: string
@@ -37,22 +40,6 @@ export interface AssetBreakdownData {
   '90D': Array<{ symbol: string; weightPct: number }>
   '30D': Array<{ symbol: string; weightPct: number }>
   '7D': Array<{ symbol: string; weightPct: number }>
-}
-
-export interface PositionHistoryEntry {
-  symbol: string
-  direction: 'long' | 'short'
-  positionType: string
-  marginMode: string
-  openTime: string
-  closeTime: string
-  entryPrice: number
-  exitPrice: number
-  maxPositionSize: number
-  closedSize: number
-  pnlUsd: number
-  pnlPct: number
-  status: string
 }
 
 /** @deprecated Use TraderDetail from lib/types/unified-trader.ts */

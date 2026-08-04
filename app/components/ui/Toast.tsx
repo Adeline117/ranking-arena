@@ -1,36 +1,12 @@
 'use client'
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useMemo,
-  ReactNode,
-  useEffect,
-  useRef,
-} from 'react'
+import { useState, useCallback, useMemo, type ReactNode, useEffect, useRef } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { setGlobalToast } from '@/lib/hooks/useApiMutation'
 import { t } from '@/lib/i18n'
+import { ToastContext, type Toast, type ToastAction, type ToastType } from '@/lib/ui/toast-context'
 
-type ToastType = 'success' | 'error' | 'warning' | 'info'
-
-interface ToastAction {
-  label: string
-  onClick: () => void
-}
-
-interface Toast {
-  id: string
-  message: string
-  type: ToastType
-  duration: number
-  createdAt: number
-  txHash?: string
-  chainId?: number
-  action?: ToastAction
-}
+export { useToast } from '@/lib/ui/toast-context'
 
 // Block explorer URLs by chain ID
 const EXPLORER_URLS: Record<number, string> = {
@@ -45,28 +21,6 @@ const EXPLORER_URLS: Record<number, string> = {
 function getTxExplorerUrl(txHash: string, chainId?: number): string {
   const base = EXPLORER_URLS[chainId || 8453] || EXPLORER_URLS[8453]
   return `${base}${txHash}`
-}
-
-interface ToastContextType {
-  showToast: (
-    message:
-      | string
-      | { message?: string; code?: string; txHash?: string; chainId?: number; action?: ToastAction }
-      | unknown,
-    type?: ToastType,
-    duration?: number
-  ) => void
-  hideToast: (id: string) => void
-}
-
-const ToastContext = createContext<ToastContextType | null>(null)
-
-export function useToast() {
-  const context = useContext(ToastContext)
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider')
-  }
-  return context
 }
 
 const getToastConfig = (type: ToastType) => {
