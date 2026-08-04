@@ -49,6 +49,12 @@ const HISTORY_BLOCKER_REASONS: ReadonlySet<HistoryCompletenessBlockerReason> = n
 const VERIFIED_POSITION_HISTORY_COMPLETENESS_CONTRACT =
   'arena.position-history-completeness@2' as const
 const SOURCE_RUN_SHA256 = /^[0-9a-f]{64}$/
+const COPIER_PNL_BUCKETS = ['<-1000', '-1000~0', '0~1000', '1000~10000', '>10000'] as const
+const COPIER_PNL_BUCKET_ORDINAL: ReadonlyMap<string, number> = new Map(
+  COPIER_PNL_BUCKETS.map((bucket, index) => [bucket, index])
+)
+const COPIER_PNL_MIN_BUCKET_COUNT = 5
+const COPIER_PNL_MIN_COHORT_COUNT = 10
 
 function validTimestampOrNull(value: unknown): string | null {
   return typeof value === 'string' &&
@@ -215,7 +221,53 @@ function finiteNumberOrNull(value: unknown): number | null {
 }
 
 function nonNegativeSafeIntegerOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    !Object.is(value, -0)
+    ? value
+    : null
+}
+
+function verifiedCopierPnlDistribution(
+  value: unknown,
+  currency: ServingCurrency | null,
+  copierCount: number | null,
+  receiptBound: boolean
+): CopierAggregate['pnlDistribution'] {
+  if (!receiptBound || currency === null || copierCount === null || !Array.isArray(value)) return []
+  if (value.length === 0) return []
+
+  const distribution: CopierAggregate['pnlDistribution'] = []
+  const seen = new Set<string>()
+  let previousOrdinal = -1
+  let cohortCount = 0
+
+  for (const candidate of value) {
+    if (!isPlainRecord(candidate) || !hasExactKeys(candidate, ['bucket', 'count'])) return []
+    const bucket = candidate.bucket
+    if (typeof bucket !== 'string') return []
+    const count = nonNegativeSafeIntegerOrNull(candidate.count)
+    const ordinal = COPIER_PNL_BUCKET_ORDINAL.get(bucket)
+    if (
+      ordinal === undefined ||
+      ordinal <= previousOrdinal ||
+      seen.has(bucket) ||
+      count === null ||
+      count < COPIER_PNL_MIN_BUCKET_COUNT ||
+      cohortCount > Number.MAX_SAFE_INTEGER - count
+    ) {
+      return []
+    }
+    seen.add(bucket)
+    previousOrdinal = ordinal
+    cohortCount += count
+    distribution.push({ bucket, count })
+  }
+
+  return cohortCount >= COPIER_PNL_MIN_COHORT_COUNT && cohortCount <= copierCount
+    ? distribution
+    : []
 }
 
 function unknownHistoryCompleteness(): HistoryCompleteness {
@@ -437,17 +489,6 @@ export async function getCopierAggregate(
   if (error || !isPlainRecord(data)) return null
   const d = data
 
-  const distribution: CopierAggregate['pnlDistribution'] = []
-  if (Array.isArray(d.pnlDistribution)) {
-    for (const candidate of d.pnlDistribution) {
-      if (!isPlainRecord(candidate)) continue
-      const count = nonNegativeSafeIntegerOrNull(candidate.count)
-      if (typeof candidate.bucket === 'string' && count !== null) {
-        distribution.push({ bucket: candidate.bucket, count })
-      }
-    }
-  }
-
   const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
   const currency = currencyOrNull(d.currency)
   const depth =
@@ -461,13 +502,21 @@ export async function getCopierAggregate(
   // into apparently usable unbound data.
   if (d.receiptBound === true && !receiptBound) return null
 
+  const copierCount = nonNegativeSafeIntegerOrNull(d.copierCount)
+  const distribution = verifiedCopierPnlDistribution(
+    d.pnlDistribution,
+    currency,
+    copierCount,
+    receiptBound
+  )
+
   const aggregate: CopierAggregate = {
-    copierCount: nonNegativeSafeIntegerOrNull(d.copierCount),
+    copierCount,
     copierCountMax: nonNegativeSafeIntegerOrNull(d.copierCountMax),
     totalCopierPnl: totalPnl === null || currency === null ? null : money(totalPnl, currency),
-    // Bucket labels/thresholds share the aggregate's money unit. Without a
-    // validated unit they are not safe to interpret either.
-    pnlDistribution: currency === null ? [] : distribution,
+    // Histogram disclosure requires one verified receipt/count plus the exact
+    // reviewed unit, order, bucket and k-anonymity contract.
+    pnlDistribution: distribution,
     depth,
     receiptBound,
     provenance: recordProvenance(source, d),

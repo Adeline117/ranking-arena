@@ -17,6 +17,27 @@ function rpcClient(data: unknown, error: unknown = null): SupabaseClient {
   return { rpc: jest.fn().mockResolvedValue({ data, error }) } as unknown as SupabaseClient
 }
 
+function verifiedCopierPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    copierCount: 10,
+    copierCountMax: null,
+    totalCopierPnl: 900.5,
+    currency: 'USDT',
+    depth: 'full',
+    sourceAsOf: null,
+    observedAt: '2026-06-10T12:00:00.000Z',
+    publishedAt: '2026-06-10T12:01:00.000Z',
+    receiptBound: true,
+    receiptId: 77,
+    sourceRunId: 'a'.repeat(64),
+    evidenceState: 'verified',
+    scanTerminalState: 'exhausted',
+    blockerReasons: [],
+    pnlDistribution: [{ bucket: '0~1000', count: 10 }],
+    ...overrides,
+  }
+}
+
 const EMPTY_ORDER_ROW = {
   ts: null,
   kind: null,
@@ -141,10 +162,10 @@ describe('copier PII rule (spec §6)', () => {
       ts: '2026-08-03T12:00:00.000Z',
     })
   })
-  it('filters malformed copier distribution entries and non-finite aggregate values', async () => {
+  it('drops an unbound histogram and non-finite aggregate values', async () => {
     const aggregate = await getCopierAggregate(
       rpcClient({
-        copierCount: Number.NaN,
+        copierCount: 20,
         copierCountMax: -1,
         totalCopierPnl: Number.POSITIVE_INFINITY,
         currency: 'USDT',
@@ -164,10 +185,10 @@ describe('copier PII rule (spec §6)', () => {
     )
 
     expect(aggregate).toMatchObject({
-      copierCount: null,
+      copierCount: 20,
       copierCountMax: null,
       totalCopierPnl: null,
-      pnlDistribution: [{ bucket: 'valid', count: 2 }],
+      pnlDistribution: [],
       receiptBound: false,
       completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
@@ -192,7 +213,7 @@ describe('copier PII rule (spec §6)', () => {
         blockerReasons: [],
         pnlDistribution: [
           { bucket: '0~1000', count: 20 },
-          { bucket: '>10000', count: 1 },
+          { bucket: '>10000', count: 8 },
         ],
       }),
       'bitget_futures',
@@ -204,7 +225,7 @@ describe('copier PII rule (spec §6)', () => {
       totalCopierPnl: { value: 900.5, currency: 'USDT' },
       pnlDistribution: [
         { bucket: '0~1000', count: 20 },
-        { bucket: '>10000', count: 1 },
+        { bucket: '>10000', count: 8 },
       ],
       depth: 'full',
       receiptBound: true,
@@ -226,40 +247,44 @@ describe('copier PII rule (spec §6)', () => {
     expect(JSON.stringify(aggregate)).not.toMatch(/copier_label|copierLabel|email/)
   })
 
-  it('rejects a malformed claimed copier receipt instead of downgrading it to legacy data', async () => {
-    const aggregate = await getCopierAggregate(
-      rpcClient({
-        copierCount: 1,
-        currency: 'USDT',
-        depth: 'full',
-        receiptBound: true,
-        receiptId: 0,
-        sourceRunId: 'a'.repeat(64),
-        evidenceState: 'verified',
-        scanTerminalState: 'exhausted',
-        blockerReasons: [],
-        observedAt: '2026-06-10T12:00:00.000Z',
-        publishedAt: '2026-06-10T12:01:00.000Z',
-        pnlDistribution: [],
-      }),
-      'bitget_futures',
-      'abc'
-    )
+  it.each([0, -0])(
+    'rejects malformed claimed copier receipt id %p instead of downgrading it',
+    async (receiptId) => {
+      const aggregate = await getCopierAggregate(
+        rpcClient({
+          copierCount: 10,
+          currency: 'USDT',
+          depth: 'full',
+          receiptBound: true,
+          receiptId,
+          sourceRunId: 'a'.repeat(64),
+          evidenceState: 'verified',
+          scanTerminalState: 'exhausted',
+          blockerReasons: [],
+          observedAt: '2026-06-10T12:00:00.000Z',
+          publishedAt: '2026-06-10T12:01:00.000Z',
+          pnlDistribution: [{ bucket: '0~1000', count: 10 }],
+        }),
+        'bitget_futures',
+        'abc'
+      )
 
-    expect(aggregate).toBeNull()
-  })
+      expect(aggregate).toBeNull()
+    }
+  )
 
   it.each([undefined, 'BTC', 'usdt'])(
     'does not invent a copier PnL unit for %s currency',
     async (currency) => {
       const aggregate = await getCopierAggregate(
-        rpcClient({
-          copierCount: 2,
-          totalCopierPnl: 12,
-          currency,
-          depth: 'full',
-          pnlDistribution: [{ bucket: '0~1000', count: 2 }],
-        }),
+        rpcClient(
+          verifiedCopierPayload({
+            copierCount: 10,
+            totalCopierPnl: 12,
+            currency,
+            pnlDistribution: [{ bucket: '0~1000', count: 10 }],
+          })
+        ),
         'bitget_futures',
         'abc'
       )
@@ -268,6 +293,110 @@ describe('copier PII rule (spec §6)', () => {
       expect(aggregate?.pnlDistribution).toEqual([])
     }
   )
+
+  it('accepts only exact, ordered, k-anonymous bucket projections', async () => {
+    const aggregate = await getCopierAggregate(
+      rpcClient(
+        verifiedCopierPayload({
+          copierCount: 15,
+          pnlDistribution: [
+            { bucket: '<-1000', count: 5 },
+            { bucket: '1000~10000', count: 10 },
+          ],
+        })
+      ),
+      'bitget_futures',
+      'abc'
+    )
+
+    expect(aggregate?.pnlDistribution).toEqual([
+      { bucket: '<-1000', count: 5 },
+      { bucket: '1000~10000', count: 10 },
+    ])
+  })
+
+  it.each([
+    [
+      'PII or any third key',
+      10,
+      [
+        { bucket: '<-1000', count: 5 },
+        { bucket: '0~1000', count: 5, copierLabel: 'private@example.invalid' },
+      ],
+    ],
+    [
+      'an unknown bucket',
+      10,
+      [
+        { bucket: '<-1000', count: 5 },
+        { bucket: 'negative', count: 5 },
+      ],
+    ],
+    [
+      'a duplicate bucket',
+      10,
+      [
+        { bucket: '0~1000', count: 5 },
+        { bucket: '0~1000', count: 5 },
+      ],
+    ],
+    [
+      'a bucket below k=5',
+      10,
+      [
+        { bucket: '-1000~0', count: 4 },
+        { bucket: '0~1000', count: 6 },
+      ],
+    ],
+    ['a non-empty cohort below 10', 10, [{ bucket: '0~1000', count: 5 }]],
+    ['a count above the verified copier count', 9, [{ bucket: '0~1000', count: 10 }]],
+    [
+      'non-canonical bucket order',
+      10,
+      [
+        { bucket: '0~1000', count: 5 },
+        { bucket: '-1000~0', count: 5 },
+      ],
+    ],
+    ['an unsafe integer count', 10, [{ bucket: '0~1000', count: Number.MAX_SAFE_INTEGER + 1 }]],
+    ['a fractional count', 10, [{ bucket: '0~1000', count: 10.5 }]],
+    ['a negative-zero count', 10, [{ bucket: '0~1000', count: -0 }]],
+  ] as const)(
+    'drops the entire histogram when it contains %s',
+    async (_label, count, histogram) => {
+      const aggregate = await getCopierAggregate(
+        rpcClient(verifiedCopierPayload({ copierCount: count, pnlDistribution: histogram })),
+        'bitget_futures',
+        'abc'
+      )
+
+      expect(aggregate).not.toBeNull()
+      expect(aggregate?.pnlDistribution).toEqual([])
+      expect(JSON.stringify(aggregate)).not.toContain('private@example.invalid')
+    }
+  )
+
+  it('keeps an empty verified histogram valid when every copier PnL is null', async () => {
+    const aggregate = await getCopierAggregate(
+      rpcClient(
+        verifiedCopierPayload({
+          copierCount: 12,
+          totalCopierPnl: null,
+          pnlDistribution: [],
+        })
+      ),
+      'bitget_futures',
+      'abc'
+    )
+
+    expect(aggregate).toMatchObject({
+      copierCount: 12,
+      totalCopierPnl: null,
+      pnlDistribution: [],
+      receiptBound: true,
+      completeness: { state: 'complete', reason: 'verified_copier_snapshot' },
+    })
+  })
 
   it.each([
     ['full', 'full'],
