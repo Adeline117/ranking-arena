@@ -49,6 +49,11 @@ type SettingsStateOwner = SettingsViewerSnapshot & {
   profileGeneration: number
 }
 
+type LogoutOperation = {
+  id: number
+  viewer: SettingsViewerSnapshot
+}
+
 const ACCOUNT_DELETION_ACK_FIELDS = [
   'auth_invalidation_pending',
   'billing_settlement_pending',
@@ -123,6 +128,8 @@ interface UseSettingsHandlersProps {
 export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSettingsHandlersProps) {
   const router = useRouter()
   const submittingRef = useRef(false)
+  const logoutOperationRef = useRef<LogoutOperation | null>(null)
+  const nextLogoutOperationIdRef = useRef(0)
   const profileLoadGenerationRef = useRef(0)
   const authRef = useRef(auth)
   authRef.current = auth
@@ -585,6 +592,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     setSaving(false)
     setLoading(authPending)
     submittingRef.current = false
+    logoutOperationRef.current = null
   }, [])
 
   const loadProfile = useCallback(async () => {
@@ -1706,12 +1714,19 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   // ===== Account handlers =====
   const handleLogout = async () => {
     const scope = captureViewer()
-    if (!scope) return
-    const confirmed = await showConfirm(t('logoutTitle'), t('logoutConfirm'))
-    if (!confirmed || !viewerIsCurrent(scope)) return
+    if (!scope || logoutOperationRef.current) return
+    const operation: LogoutOperation = {
+      id: ++nextLogoutOperationIdRef.current,
+      viewer: scope,
+    }
+    logoutOperationRef.current = operation
+    const operationIsCurrent = () =>
+      logoutOperationRef.current?.id === operation.id && viewerIsCurrent(operation.viewer)
     try {
+      const confirmed = await showConfirm(t('logoutTitle'), t('logoutConfirm'))
+      if (!confirmed || !operationIsCurrent()) return
       const { clearProStatusCache } = await import('@/lib/hooks/useProStatus')
-      if (!viewerIsCurrent(scope)) return
+      if (!operationIsCurrent()) return
       clearProStatusCache()
       try {
         sessionStorage.clear()
@@ -1723,10 +1738,23 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       } catch {
         /* ignore */
       }
-      await auth.signOut()
+      await authRef.current.signOut()
+      const latestAuth = authRef.current
+      if (
+        latestAuth.userId &&
+        (latestAuth.userId !== operation.viewer.userId ||
+          latestAuth.viewerKey !== operation.viewer.viewerKey ||
+          latestAuth.sessionGeneration !== operation.viewer.sessionGeneration)
+      ) {
+        return
+      }
       router.push('/')
     } catch {
-      if (viewerIsCurrent(scope)) showToast(t('logoutFailed'), 'error')
+      if (operationIsCurrent()) showToast(t('logoutFailed'), 'error')
+    } finally {
+      if (logoutOperationRef.current?.id === operation.id) {
+        logoutOperationRef.current = null
+      }
     }
   }
 

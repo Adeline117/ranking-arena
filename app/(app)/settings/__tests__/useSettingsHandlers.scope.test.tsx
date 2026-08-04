@@ -897,6 +897,35 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.revokingOtherSessions).toBe(false)
   })
 
+  it('single-flights rapid logout confirmation and sign-out attempts', async () => {
+    const confirmation = deferred<boolean>()
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    showConfirm.mockReturnValue(confirmation.promise)
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = hook.result.current.handleLogout()
+      duplicate = hook.result.current.handleLogout()
+    })
+
+    expect(showConfirm).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      confirmation.resolve(true)
+      await Promise.all([first, duplicate])
+    })
+
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
+    expect(mockRouterPush).toHaveBeenCalledTimes(1)
+    expect(mockRouterPush).toHaveBeenCalledWith('/')
+  })
+
   it('keeps an already-running Replay clean when localStorage and local sign-out fail', async () => {
     const recoveryToken = 'A'.repeat(43)
     const replayContext = { urls: [] as string[] }
