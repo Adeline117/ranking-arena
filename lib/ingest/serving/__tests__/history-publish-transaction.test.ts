@@ -41,6 +41,16 @@ const order: ParsedHistoryRow = {
   dedupeHash: 'order-1',
   raw: { id: 'order-1' },
 }
+const copier: ParsedHistoryRow = {
+  kind: 'copiers',
+  ts: '2026-08-02T00:00:00.000Z',
+  copierLabel: 'private-copier',
+  copierPnl: 10,
+  copierInvested: 100,
+  copyDurationDays: 2,
+  dedupeHash: 'copier-1',
+  raw: { id: 'copier-1' },
+}
 const nextCursor = '2026-08-02T00:00:00.000Z'
 
 function successfulQuery() {
@@ -125,32 +135,50 @@ describe('history transaction publication', () => {
     expect(query).not.toHaveBeenCalled()
   })
 
-  it('rejects every generic position-history call before queries or connection work', async () => {
+  it.each([
+    {
+      kind: 'position_history' as const,
+      row: position,
+      message: 'position_history requires parser-conservation publication',
+    },
+    {
+      kind: 'copiers' as const,
+      row: copier,
+      message: 'copiers require snapshot-receipt publication',
+    },
+  ])('rejects every generic $kind call before queries or connection work', async (entry) => {
     const query = successfulQuery()
     const transaction = executor(query)
-    const unsafeInTransaction = publishHistoryRowsInTransaction as unknown as (
+    const unsafeInTransaction = (
       transaction: IngestQueryExecutor,
       src: SourceRow,
       traderId: number,
       kind: HistoryKind,
       rows: ParsedHistoryRow[],
       cursor: string | null
-    ) => Promise<number>
-    const unsafeWrapper = publishHistoryRows as unknown as (
+    ): Promise<number> =>
+      Reflect.apply(publishHistoryRowsInTransaction, undefined, [
+        transaction,
+        src,
+        traderId,
+        kind,
+        rows,
+        cursor,
+      ])
+    const unsafeWrapper = (
       src: SourceRow,
       traderId: number,
       kind: HistoryKind,
       rows: ParsedHistoryRow[],
       cursor: string | null
-    ) => Promise<number>
+    ): Promise<number> =>
+      Reflect.apply(publishHistoryRows, undefined, [src, traderId, kind, rows, cursor])
 
-    for (const rows of [[position], []] as ParsedHistoryRow[][]) {
+    for (const rows of [[entry.row], []] as ParsedHistoryRow[][]) {
       await expect(
-        unsafeInTransaction(transaction, source, 11, 'position_history', rows, null)
-      ).rejects.toThrow('position_history requires parser-conservation publication')
-      await expect(unsafeWrapper(source, 11, 'position_history', rows, null)).rejects.toThrow(
-        'position_history requires parser-conservation publication'
-      )
+        unsafeInTransaction(transaction, source, 11, entry.kind, rows, null)
+      ).rejects.toThrow(entry.message)
+      await expect(unsafeWrapper(source, 11, entry.kind, rows, null)).rejects.toThrow(entry.message)
     }
 
     expect(query).not.toHaveBeenCalled()

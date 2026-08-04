@@ -8,6 +8,9 @@ const mockGetAdapter = jest.fn()
 const mockGetProfile = jest.fn()
 const mockGetPositions = jest.fn()
 const mockGetHistory = jest.fn()
+const mockSelectCopierVerifier = jest.fn()
+const mockVerifyCopierTerminal = jest.fn()
+const mockVerifyCopierConservation = jest.fn()
 const mockParseProfile = jest.fn()
 const mockParseHistory = jest.fn()
 const mockValidateProfile = jest.fn()
@@ -18,7 +21,7 @@ const mockWriteHistoryRawArtifact = jest.fn()
 const mockRecordStagingRejects = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockPublishPositions = jest.fn()
-const mockPublishHistoryRows = jest.fn()
+const mockPublishCopierSnapshot = jest.fn()
 const mockDbQuery = jest.fn()
 const mockIngestClientQuery = jest.fn()
 const mockIngestClientRelease = jest.fn()
@@ -43,7 +46,7 @@ jest.mock('@/lib/ingest/staging/rejects', () => ({
   recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
-  publishHistoryRows: (...args: unknown[]) => mockPublishHistoryRows(...args),
+  publishCopierSnapshot: (...args: unknown[]) => mockPublishCopierSnapshot(...args),
   publishPositions: (...args: unknown[]) => mockPublishPositions(...args),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
 }))
@@ -256,7 +259,7 @@ function expectedHistoryRenderRow(
   return null
 }
 
-function historyAdapter() {
+function historyAdapter(withCopierVerifier = false) {
   return {
     capabilities: {
       profile: true,
@@ -269,6 +272,11 @@ function historyAdapter() {
     supportsSurface: () => true,
     getHistory: mockGetHistory,
     parseHistory: mockParseHistory,
+    ...(withCopierVerifier
+      ? {
+          verifyCopierSnapshot: (...args: unknown[]) => mockSelectCopierVerifier(...args),
+        }
+      : {}),
   }
 }
 
@@ -323,7 +331,7 @@ describe('Tier-C incomplete profile window gate', () => {
     })
     mockWriteHistoryRawArtifact.mockImplementation(
       async (
-        _input: unknown,
+        input: { sourceRunId: string },
         runTransaction: (
           operation: (transaction: { query: typeof mockIngestClientQuery }) => Promise<unknown>
         ) => Promise<unknown>
@@ -331,7 +339,7 @@ describe('Tier-C incomplete profile window gate', () => {
         runTransaction(async () => ({
           id: 2_081_897,
           storagePath: 'test/history/event_history.json.gz',
-          contentHash: 'b'.repeat(64),
+          contentHash: input.sourceRunId,
         }))
     )
     mockRecordStagingRejects.mockResolvedValue(undefined)
@@ -339,7 +347,26 @@ describe('Tier-C incomplete profile window gate', () => {
     mockRedisSet.mockResolvedValue('OK')
     mockPublishProfile.mockResolvedValue(undefined)
     mockPublishPositions.mockResolvedValue(undefined)
-    mockPublishHistoryRows.mockResolvedValue(0)
+    mockSelectCopierVerifier.mockReturnValue({
+      contract: 'arena.ingest.history-terminal-verifier.test.copiers@1',
+      verifyTerminal: (...args: unknown[]) => mockVerifyCopierTerminal(...args),
+      verifyConservation: (...args: unknown[]) => mockVerifyCopierConservation(...args),
+    })
+    mockVerifyCopierTerminal.mockReturnValue({
+      verified: true,
+      scanTerminalState: 'exhausted',
+    })
+    mockVerifyCopierConservation.mockImplementation((input: { rows: readonly unknown[] }) => ({
+      verified: true,
+      envelopeRowCount: input.rows.length,
+    }))
+    mockPublishCopierSnapshot.mockResolvedValue({
+      receiptId: 501,
+      sourceRunId: 'a'.repeat(64),
+      observedAt: '2026-07-15T12:00:00.000Z',
+      publishedAt: '2026-07-15T12:00:01.000Z',
+      rowCount: 1,
+    })
     mockIngestClientQuery.mockResolvedValue({ rows: [], rowCount: 0 })
     mockIngestClientRelease.mockReturnValue(undefined)
     mockSessionClose.mockResolvedValue(undefined)
@@ -727,7 +754,7 @@ describe('Tier-C incomplete profile window gate', () => {
       )
       expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
       expect(mockWriteRawObject).not.toHaveBeenCalled()
-      expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+      expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
       expect(
         mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
       ).toBe(false)
@@ -769,9 +796,9 @@ describe('Tier-C incomplete profile window gate', () => {
     }
   )
 
-  it('commits RAW and private copier rows before publishing an exact opaque marker', async () => {
+  it('commits verified RAW and its atomic copier receipt before an exact opaque marker', async () => {
     const copierRow = parsedHistoryRow('copiers')
-    mockGetAdapter.mockReturnValue(historyAdapter())
+    mockGetAdapter.mockReturnValue(historyAdapter(true))
     mockGetHistory.mockImplementation(() => historyPreviewStream())
     mockParseHistory.mockReturnValue([copierRow])
 
@@ -783,17 +810,46 @@ describe('Tier-C incomplete profile window gate', () => {
 
     expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
-    expect(mockPublishHistoryRows).toHaveBeenCalledWith(
-      src,
-      42,
-      'copiers',
-      [copierRow, copierRow],
-      null
-    )
+    const rawInput = mockWriteHistoryRawArtifact.mock.calls[0][0] as {
+      artifact: {
+        pages: Array<{ fetched_at: string }>
+        termination: Record<string, unknown>
+        capture_config: Record<string, unknown>
+      }
+      sourceRunId: string
+    }
+    expect(rawInput.artifact.capture_config).toEqual({ caller_page_cap: null })
+    expect(rawInput.artifact.pages).toHaveLength(3)
+    expect(rawInput.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      scan_terminal_state: 'exhausted',
+      blocker_reasons: [],
+    })
+    expect(mockVerifyCopierTerminal).toHaveBeenCalledTimes(1)
+    expect(mockVerifyCopierConservation).toHaveBeenCalledWith({
+      exchangeTraderId: job.data.exchangeTraderId,
+      pages: expect.any(Array),
+      rows: [copierRow, copierRow, copierRow],
+    })
+    expect(mockPublishCopierSnapshot).toHaveBeenCalledWith({
+      sourceId: src.id,
+      traderId: 42,
+      rawObjectId: 2_081_897,
+      sourceRunId: rawInput.sourceRunId,
+      observedAt: rawInput.artifact.pages[2].fetched_at,
+      currency: 'USDC',
+      evidenceState: 'verified',
+      scanTerminalState: 'exhausted',
+      blockerReasons: [],
+      rows: [copierRow, copierRow, copierRow],
+    })
     expect(mockIngestClientQuery.mock.invocationCallOrder[1]).toBeLessThan(
-      mockPublishHistoryRows.mock.invocationCallOrder[0]
+      mockVerifyCopierConservation.mock.invocationCallOrder[0]
     )
-    expect(mockPublishHistoryRows.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockVerifyCopierConservation.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishCopierSnapshot.mock.invocationCallOrder[0]
+    )
+    expect(mockPublishCopierSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
       mockRedisSet.mock.invocationCallOrder[0]
     )
 
@@ -813,21 +869,21 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
-  it('publishes no copier marker or public cache when the private commit fails', async () => {
-    mockGetAdapter.mockReturnValue(historyAdapter())
+  it('publishes no copier marker or public cache when the receipt RPC fails', async () => {
+    mockGetAdapter.mockReturnValue(historyAdapter(true))
     mockGetHistory.mockImplementation(() => historyPreviewStream())
     mockParseHistory.mockReturnValue([parsedHistoryRow('copiers')])
-    mockPublishHistoryRows.mockRejectedValue(new Error('private copier commit failed'))
+    mockPublishCopierSnapshot.mockRejectedValue(new Error('copier receipt RPC failed'))
 
     await expect(processTierC(historyJob('copiers'), 'local')).rejects.toThrow(
-      'private copier commit failed'
+      'copier receipt RPC failed'
     )
 
     expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
-    expect(mockPublishHistoryRows).toHaveBeenCalledTimes(1)
+    expect(mockPublishCopierSnapshot).toHaveBeenCalledTimes(1)
     expect(mockIngestClientQuery.mock.invocationCallOrder[1]).toBeLessThan(
-      mockPublishHistoryRows.mock.invocationCallOrder[0]
+      mockPublishCopierSnapshot.mock.invocationCallOrder[0]
     )
     expect(mockRedisSet).not.toHaveBeenCalled()
     expect(
@@ -836,27 +892,112 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps last-good copier rows when response pages parse to an empty snapshot', async () => {
-    mockGetAdapter.mockReturnValue(historyAdapter())
+  it('publishes a verified zero-row receipt before marking the aggregate ready', async () => {
+    mockGetAdapter.mockReturnValue(historyAdapter(true))
     mockGetHistory.mockImplementation(() => historyPreviewStream())
     mockParseHistory.mockReturnValue([])
+    mockPublishCopierSnapshot.mockResolvedValue({
+      receiptId: 502,
+      sourceRunId: 'a'.repeat(64),
+      observedAt: '2026-07-15T12:00:00.000Z',
+      publishedAt: '2026-07-15T12:00:01.000Z',
+      rowCount: 0,
+    })
+
+    await expect(processTierC(historyJob('copiers'), 'local')).resolves.toEqual({
+      traderId: 42,
+      surface: 'copiers',
+      aggregateReady: true,
+    })
+
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(mockParseHistory).toHaveBeenCalledTimes(3)
+    expect(mockVerifyCopierConservation).toHaveBeenCalledWith(expect.objectContaining({ rows: [] }))
+    expect(mockPublishCopierSnapshot).toHaveBeenCalledWith(expect.objectContaining({ rows: [] }))
+    expect(mockPublishCopierSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRedisSet.mock.invocationCallOrder[0]
+    )
+    expect(JSON.parse(String(mockRedisSet.mock.calls[0][1]))).toEqual({
+      contract: 'arena.tier-c.copier-ready@1',
+      completed: true,
+      aggregateReady: true,
+    })
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+  })
+
+  it.each([
+    { label: 'empty', parsed: [] },
+    { label: 'non-empty', parsed: [parsedHistoryRow('copiers')] },
+  ])('fails an unverified $label copier snapshot closed after RAW', async ({ parsed }) => {
+    mockGetAdapter.mockReturnValue(historyAdapter())
+    mockGetHistory.mockImplementation(() => historyPreviewStream())
+    mockParseHistory.mockReturnValue(parsed)
 
     await expect(processTierC(historyJob('copiers'), 'local')).rejects.toThrow(
-      'copier snapshot returned no private rows'
+      'copier snapshot has no verified exhaustive terminal proof'
     )
 
     expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
-    expect(mockParseHistory).toHaveBeenCalledTimes(2)
-    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockVerifyCopierConservation).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
     ).toBe(false)
   })
 
+  it('fails closed when the copier terminal verifier rejects the claim', async () => {
+    mockGetAdapter.mockReturnValue(historyAdapter(true))
+    mockGetHistory.mockImplementation(() => historyPreviewStream())
+    mockVerifyCopierTerminal.mockReturnValue({ verified: false })
+
+    await expect(processTierC(historyJob('copiers'), 'local')).rejects.toThrow(
+      'copier snapshot has no verified exhaustive terminal proof'
+    )
+
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      label: 'explicit rejection',
+      verification: { verified: false },
+      message: 'copier snapshot conservation was not verified',
+    },
+    {
+      label: 'row-count mismatch',
+      verification: { verified: true, envelopeRowCount: 2 },
+      message: 'copier snapshot envelope/parser conservation mismatch',
+    },
+    {
+      label: 'extra verifier field',
+      verification: { verified: true, envelopeRowCount: 3, extra: true },
+      message: 'copier snapshot envelope/parser conservation mismatch',
+    },
+  ])('fails closed on $label', async ({ verification, message }) => {
+    mockGetAdapter.mockReturnValue(historyAdapter(true))
+    mockGetHistory.mockImplementation(() => historyPreviewStream())
+    mockParseHistory.mockReturnValue([parsedHistoryRow('copiers')])
+    mockVerifyCopierConservation.mockReturnValue(verification)
+
+    await expect(processTierC(historyJob('copiers'), 'local')).rejects.toThrow(message)
+
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockParseHistory).toHaveBeenCalledTimes(3)
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+  })
+
   it('requires a copier response page before parsing or publishing readiness', async () => {
-    mockGetAdapter.mockReturnValue(historyAdapter())
+    mockGetAdapter.mockReturnValue(historyAdapter(true))
     mockGetHistory.mockImplementation(() => historyWithoutResponsePages())
 
     await expect(processTierC(historyJob('copiers'), 'local')).rejects.toThrow(
@@ -875,7 +1016,7 @@ describe('Tier-C incomplete profile window gate', () => {
     )
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
     expect(mockParseHistory).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()
   })
 
@@ -906,7 +1047,7 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
     expect(mockParseHistory).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
     ).toBe(false)
@@ -930,7 +1071,7 @@ describe('Tier-C incomplete profile window gate', () => {
       mockParseHistory.mock.invocationCallOrder[0]
     )
     expect(mockRedisSet).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
     ).toBe(false)
@@ -948,7 +1089,7 @@ describe('Tier-C incomplete profile window gate', () => {
 
     expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockRedisSet).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -986,7 +1127,7 @@ describe('Tier-C incomplete profile window gate', () => {
       expect(mockOpenSession).not.toHaveBeenCalled()
       expect(mockWriteRawObject).not.toHaveBeenCalled()
       expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
-      expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+      expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
       expect(mockRedisSet).not.toHaveBeenCalled()
     }
   )
@@ -1007,7 +1148,7 @@ describe('Tier-C incomplete profile window gate', () => {
       expect(mockOpenSession).not.toHaveBeenCalled()
       expect(mockWriteRawObject).not.toHaveBeenCalled()
       expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
-      expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+      expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
       expect(mockRedisSet).not.toHaveBeenCalled()
     }
   )

@@ -33,6 +33,7 @@ import type {
   Currency,
   HistoryKind,
   ParseCtx,
+  ParsedCopierRow,
   ParsedHistoryRow,
   ParsedPosition,
 } from '@/lib/ingest/core/types'
@@ -43,9 +44,14 @@ import {
   writeHistoryRawArtifact,
   writeRawObject,
   type IngestTransactionRunner,
+  type RawObjectReceipt,
 } from '@/lib/ingest/raw'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
-import { publishHistoryRows, publishPositions, publishProfile } from '@/lib/ingest/serving/publish'
+import {
+  publishCopierSnapshot,
+  publishPositions,
+  publishProfile,
+} from '@/lib/ingest/serving/publish'
 import { getIngestPool } from '@/lib/ingest/db'
 import { tierCResultKey, type TierCJobData } from '../queues'
 import { runHistoryTransaction } from '../history-transaction'
@@ -250,7 +256,7 @@ function historyRowsForRender(
   }
 
   // An individual copier row remains identifying even without its label.
-  // Copier details therefore stay solely in the private RAW artifact.
+  // Receipt-bound private publication handles it; public rendering never does.
   if (kind === 'copiers') return []
 
   // Keep the interactive result aligned with arena_records_page. Parser
@@ -291,6 +297,80 @@ function historyRowsForRender(
     }
     throw new Error('[tier-c] copier row reached the public render mapper')
   })
+}
+
+function assertCopierSnapshotConservation(
+  value: unknown,
+  parsedRowCount: number
+): asserts value is Readonly<{ verified: true; envelopeRowCount: number }> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('[tier-c] copier snapshot conservation verifier returned an invalid result')
+  }
+  const prototype = Object.getPrototypeOf(value)
+  const ownKeys = Reflect.ownKeys(value)
+  const names = Object.getOwnPropertyNames(value).sort()
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  const verified = descriptors.verified
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    ownKeys.some((key) => typeof key === 'symbol') ||
+    !verified ||
+    !verified.enumerable ||
+    !('value' in verified)
+  ) {
+    throw new Error('[tier-c] copier snapshot conservation verifier returned an invalid result')
+  }
+  if (verified.value === false && names.length === 1 && names[0] === 'verified') {
+    throw new Error('[tier-c] copier snapshot conservation was not verified')
+  }
+  const expectedKeys = ['envelopeRowCount', 'verified']
+  const envelopeRowCount = descriptors.envelopeRowCount
+  if (
+    verified.value !== true ||
+    names.length !== expectedKeys.length ||
+    names.some((name, index) => name !== expectedKeys[index]) ||
+    !envelopeRowCount ||
+    !envelopeRowCount.enumerable ||
+    !('value' in envelopeRowCount) ||
+    typeof envelopeRowCount.value !== 'number' ||
+    !Number.isSafeInteger(envelopeRowCount.value) ||
+    envelopeRowCount.value < 0 ||
+    envelopeRowCount.value !== parsedRowCount
+  ) {
+    throw new Error('[tier-c] copier snapshot envelope/parser conservation mismatch')
+  }
+}
+
+function assertCopierRawReceipt(
+  value: unknown,
+  sourceRunId: string
+): asserts value is RawObjectReceipt {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('[tier-c] copier RAW receipt is invalid')
+  }
+  const prototype = Object.getPrototypeOf(value)
+  const ownKeys = Reflect.ownKeys(value)
+  const names = Object.getOwnPropertyNames(value).sort()
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  const expectedKeys = ['contentHash', 'id', 'storagePath']
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    ownKeys.some((key) => typeof key === 'symbol') ||
+    names.length !== expectedKeys.length ||
+    names.some((name, index) => name !== expectedKeys[index]) ||
+    names.some((name) => {
+      const descriptor = descriptors[name]
+      return !descriptor.enumerable || !('value' in descriptor)
+    }) ||
+    typeof descriptors.id.value !== 'number' ||
+    !Number.isSafeInteger(descriptors.id.value) ||
+    descriptors.id.value <= 0 ||
+    typeof descriptors.storagePath.value !== 'string' ||
+    descriptors.storagePath.value.length === 0 ||
+    descriptors.contentHash.value !== sourceRunId
+  ) {
+    throw new Error('[tier-c] copier RAW receipt does not match the source run')
+  }
 }
 
 /**
@@ -391,6 +471,8 @@ async function processHeavySurface(
       await publishPositions(src, traderId, positions, sourceAsOf ?? observedAt, positionEvidence)
     } else {
       const kind = surface as HistoryKind
+      const copierVerifier =
+        kind === 'copiers' ? (adapter.verifyCopierSnapshot?.(src) ?? null) : null
       const acquisition = await captureHistoryAcquisition({
         source: src,
         traderId,
@@ -398,9 +480,17 @@ async function processHeavySurface(
         kind,
         cursor: null,
         attemptStartedAt: scrapedAt,
-        callerPageCap: 2,
+        // A copier publication is a whole snapshot. Adapter-owned pagination
+        // limits and terminal proof control its crawl; the interactive two-page
+        // preview cap would make every deeper snapshot permanently partial.
+        callerPageCap: kind === 'copiers' ? null : 2,
         stream: adapter.getHistory(session, src, exchangeTraderId, kind, null, traderMeta),
-        terminalVerifier: adapter.historyTerminalVerifier?.(src, kind) ?? undefined,
+        terminalVerifier:
+          kind === 'copiers'
+            ? copierVerifier
+              ? { contract: copierVerifier.contract, verify: copierVerifier.verifyTerminal }
+              : undefined
+            : (adapter.historyTerminalVerifier?.(src, kind) ?? undefined),
       })
       rawPayload = acquisition.pages
       const rawInput = { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId }
@@ -431,17 +521,34 @@ async function processHeavySurface(
       let storageDurable = false
       let rawPointerDurable = false
       let copierAggregateReady = false
+      let copierRawObjectId: number | null = null
+      let copierObservedAt: string | null = null
       const renderPreviewWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
         // The immutable audit pointer commits before any untrusted parser or
         // Redis work. Non-copier history remains preview-only and cannot mutate
         // typed facts, evidence cursors, or the warm profile cache. Copiers are
         // the narrow private-table exception and publish only after this commit.
         storageDurable = true
-        const receipt = await runHistoryTransaction(persistRawPointer)
+        const rawReceipt = await runHistoryTransaction(persistRawPointer)
         rawPointerDurable = true
 
-        if (kind === 'copiers' && acquisition.artifact.pages.length === 0) {
-          throw new Error('[tier-c] copier snapshot returned no upstream response page')
+        if (kind === 'copiers') {
+          if (acquisition.artifact.pages.length === 0 || observedAt === null) {
+            throw new Error('[tier-c] copier snapshot returned no upstream response page')
+          }
+          if (
+            termination.evidence_state !== 'verified' ||
+            termination.scan_terminal_state !== 'exhausted' ||
+            termination.blocker_reasons.length !== 0
+          ) {
+            throw new Error('[tier-c] copier snapshot has no verified exhaustive terminal proof')
+          }
+          if (copierVerifier === null || typeof copierVerifier.verifyConservation !== 'function') {
+            throw new Error('[tier-c] copier snapshot has no reviewed conservation verifier')
+          }
+          assertCopierRawReceipt(rawReceipt, acquisition.sourceRunId)
+          copierRawObjectId = rawReceipt.id
+          copierObservedAt = observedAt
         }
 
         const parsed = acquisition.pages.flatMap((page) =>
@@ -449,13 +556,31 @@ async function processHeavySurface(
         )
 
         if (kind === 'copiers') {
-          // An empty parse cannot prove an authoritative empty snapshot. Keep
-          // the last-good private rows and retry instead of falsely waking the
-          // aggregate route as though a refresh completed.
-          if (parsed.length === 0) {
-            throw new Error('[tier-c] copier snapshot returned no private rows')
+          if (copierRawObjectId === null || copierObservedAt === null) {
+            throw new Error('[tier-c] copier RAW receipt invariant was not established')
           }
-          await publishHistoryRows(src, traderId, kind, parsed, null)
+          if (parsed.some((row) => row.kind !== 'copiers')) {
+            throw new Error('[tier-c] history row kind does not match copiers')
+          }
+          const copierRows = parsed as ParsedCopierRow[]
+          const conservation = copierVerifier!.verifyConservation({
+            exchangeTraderId,
+            pages: acquisition.pages,
+            rows: copierRows,
+          })
+          assertCopierSnapshotConservation(conservation, copierRows.length)
+          await publishCopierSnapshot({
+            sourceId: src.id,
+            traderId,
+            rawObjectId: copierRawObjectId,
+            sourceRunId: acquisition.sourceRunId,
+            observedAt: copierObservedAt,
+            currency: src.currency,
+            evidenceState: 'verified',
+            scanTerminalState: 'exhausted',
+            blockerReasons: termination.blocker_reasons,
+            rows: copierRows,
+          })
           const readyMarker = {
             contract: COPIER_READY_CONTRACT,
             completed: true,
@@ -463,12 +588,12 @@ async function processHeavySurface(
           }
           await redis.set(resultKey, JSON.stringify(readyMarker), 'EX', RESULT_TTL_SECONDS)
           copierAggregateReady = true
-          return receipt
+          return rawReceipt
         }
 
         rows = historyRowsForRender(parsed, kind, src.currency)
         await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', RESULT_TTL_SECONDS)
-        return receipt
+        return rawReceipt
       }
 
       try {

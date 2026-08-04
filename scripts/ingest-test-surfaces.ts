@@ -23,8 +23,7 @@ async function main() {
   const { writeRawObject } = await import('@/lib/ingest/raw')
   const { recordStagingRejects } = await import('@/lib/ingest/staging/rejects')
   const { validateStats } = await import('@/lib/ingest/staging/validate')
-  const { publishProfile, publishPositions, publishHistoryRows, getHistoryCursor } =
-    await import('@/lib/ingest/serving/publish')
+  const { publishProfile, publishPositions } = await import('@/lib/ingest/serving/publish')
   const { getIngestPool, closeIngestPool } = await import('@/lib/ingest/db')
 
   const src = await getSourceBySlug(slug)
@@ -158,35 +157,12 @@ async function main() {
         console.log(`[positions] ${trader.exchange_trader_id}: ${positions.length} open`)
       }
 
-      // Compatibility histories only. Position history requires the immutable
-      // @2 acquisition + parser-conservation receipt path; this manual smoke
-      // script must never publish its bounded three-page sample as typed data.
-      for (const kind of ['copiers'] as const) {
-        if (!adapter.capabilities.copiers) continue
-        const cursor = await getHistoryCursor(trader.id, kind)
-        const rows: import('@/lib/ingest/core/types').ParsedHistoryRow[] = []
-        let pages = 0
-        for await (const page of adapter.getHistory(
-          session,
-          src,
-          trader.exchange_trader_id,
-          kind,
-          cursor,
-          trader.meta
-        )) {
-          pages += 1
-          rows.push(...adapter.parseHistory(page.payload, kind, ctxOf()))
-          if (pages >= 3) break // smoke test: cap at 3 pages
-        }
-        let newest: string | null = null
-        for (const row of rows) {
-          if (row.kind !== kind) throw new Error(`history row kind does not match ${kind}`)
-          const ts = row.ts
-          if (ts && (newest === null || ts > newest)) newest = ts
-        }
-        const written = await publishHistoryRows(src, trader.id, kind, rows, newest)
+      // Copier facts require a full terminal-proof crawl, parser-conservation
+      // verifier, immutable RAW pointer, and atomic snapshot receipt. This
+      // bounded manual smoke script cannot manufacture those authorities.
+      if (adapter.capabilities.copiers) {
         console.log(
-          `[${kind}] ${trader.exchange_trader_id}: pages=${pages} parsed=${rows.length} written=${written} cursor=${cursor} → ${newest}`
+          `[copiers] ${trader.exchange_trader_id}: skipped; use the receipt-bound worker path`
         )
       }
     }

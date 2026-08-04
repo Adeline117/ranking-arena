@@ -12,6 +12,8 @@
 import { getIngestPool, ingestClientConnect, type IngestQueryExecutor } from '../db'
 import type {
   BoardSeriesBlock,
+  Currency,
+  ParsedCopierRow,
   ParsedLeaderboardRow,
   ParsedPosition,
   ParsedProfile,
@@ -27,6 +29,8 @@ import {
   assertPositionPublicationEvidence,
   type PositionSnapshotEvidence,
 } from '../core/position-snapshot'
+import { isCanonicalPostgresTimestamp } from '../postgres-timestamp'
+import { strictCanonicalJson } from '../strict-canonical-json'
 
 /** PURE-DEX sources the spec authorizes to self-compute risk from chain data
  *  (§31/32/34: "所有数据要靠我们链上算"). CEX gives real Sharpe on its page —
@@ -1592,13 +1596,330 @@ export async function publishPositions(
   }
 }
 
-type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history'>
+export const COPIER_SNAPSHOT_PUBLICATION_CONTRACT = 'arena.copier-snapshot-publication@1' as const
+
+export interface PublishCopierSnapshotInput {
+  sourceId: number
+  traderId: number
+  rawObjectId: number
+  sourceRunId: string
+  observedAt: string
+  currency: Currency
+  evidenceState: 'verified'
+  scanTerminalState: 'exhausted'
+  blockerReasons: readonly string[]
+  rows: readonly ParsedCopierRow[]
+}
+
+export interface CopierSnapshotPublicationReceipt {
+  readonly receiptId: number
+  readonly sourceRunId: string
+  readonly observedAt: string
+  readonly publishedAt: string
+  readonly rowCount: number
+}
+
+function copierSnapshotError(detail: string): Error {
+  return new Error(`[copier-snapshot] ${detail}`)
+}
+
+function exactCopierSnapshotObject(
+  value: unknown,
+  expectedKeys: readonly string[],
+  label: string
+): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw copierSnapshotError(`${label} must be a plain object`)
+  }
+  const prototype = Object.getPrototypeOf(value)
+  const ownKeys = Reflect.ownKeys(value)
+  const names = Object.getOwnPropertyNames(value).sort()
+  const expected = [...expectedKeys].sort()
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    ownKeys.some((key) => typeof key === 'symbol') ||
+    names.length !== expected.length ||
+    names.some((name, index) => name !== expected[index]) ||
+    names.some((name) => {
+      const descriptor = descriptors[name]
+      return !descriptor.enumerable || !('value' in descriptor)
+    })
+  ) {
+    throw copierSnapshotError(`${label} has an invalid object shape`)
+  }
+  return Object.fromEntries(names.map((name) => [name, descriptors[name].value]))
+}
+
+function cloneStrictJsonb(value: unknown, label: string): unknown {
+  let clone: unknown
+  try {
+    clone = JSON.parse(strictCanonicalJson(value))
+  } catch (cause) {
+    throw copierSnapshotError(
+      `${label} is not strict JSON: ${cause instanceof Error ? cause.message : String(cause)}`
+    )
+  }
+
+  const visit = (current: unknown): void => {
+    if (typeof current === 'string') {
+      if (current.includes('\0')) throw copierSnapshotError(`${label} contains a NUL character`)
+      return
+    }
+    if (Array.isArray(current)) {
+      current.forEach(visit)
+      return
+    }
+    if (current !== null && typeof current === 'object') Object.values(current).forEach(visit)
+  }
+  visit(clone)
+  return clone
+}
+
+function assertSafePositiveCopierInteger(value: unknown, label: string): asserts value is number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw copierSnapshotError(`${label} must be a positive safe integer`)
+  }
+}
+
+function copierNullableNumber(value: unknown, label: string): number | null {
+  if (value === null) return null
+  if (typeof value !== 'number' || !Number.isFinite(value) || Object.is(value, -0)) {
+    throw copierSnapshotError(`${label} must be null or a finite number`)
+  }
+  return value
+}
+
+function prepareCopierSnapshotPayload(input: PublishCopierSnapshotInput): {
+  payload: Record<string, unknown>
+  sourceRunId: string
+  observedAt: string
+  rowCount: number
+} {
+  const value = exactCopierSnapshotObject(
+    input,
+    [
+      'sourceId',
+      'traderId',
+      'rawObjectId',
+      'sourceRunId',
+      'observedAt',
+      'currency',
+      'evidenceState',
+      'scanTerminalState',
+      'blockerReasons',
+      'rows',
+    ],
+    'input'
+  )
+  assertSafePositiveCopierInteger(value.sourceId, 'sourceId')
+  if (value.sourceId > 32_767) {
+    throw copierSnapshotError('sourceId exceeds the database smallint range')
+  }
+  assertSafePositiveCopierInteger(value.traderId, 'traderId')
+  assertSafePositiveCopierInteger(value.rawObjectId, 'rawObjectId')
+  if (
+    typeof value.sourceRunId !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(value.sourceRunId) ||
+    value.sourceRunId === '0'.repeat(64)
+  ) {
+    throw copierSnapshotError('sourceRunId must be a nonzero lowercase SHA-256 digest')
+  }
+  const observedAt = value.observedAt
+  if (!isCanonicalPostgresTimestamp(observedAt)) {
+    throw copierSnapshotError('observedAt must be a canonical UTC millisecond timestamp')
+  }
+  if (!['USDT', 'USDx', 'USDC', 'USD'].includes(value.currency as string)) {
+    throw copierSnapshotError('currency is not supported')
+  }
+  if (value.evidenceState !== 'verified') {
+    throw copierSnapshotError('evidenceState must be verified')
+  }
+  if (value.scanTerminalState !== 'exhausted') {
+    throw copierSnapshotError('scanTerminalState must be exhausted')
+  }
+  const blockerReasons = cloneStrictJsonb(value.blockerReasons, 'blockerReasons')
+  if (!Array.isArray(blockerReasons) || blockerReasons.length !== 0) {
+    throw copierSnapshotError('blockerReasons must be an exact empty array')
+  }
+  const rowCandidates = cloneStrictJsonb(value.rows, 'rows')
+  if (!Array.isArray(rowCandidates) || rowCandidates.length > 10_000_000) {
+    throw copierSnapshotError('rows must be an array within the publication limit')
+  }
+
+  const dedupeHashes = new Set<string>()
+  const rows = rowCandidates.map((candidate, index) => {
+    const row = exactCopierSnapshotObject(
+      candidate,
+      [
+        'kind',
+        'ts',
+        'copierLabel',
+        'copierPnl',
+        'copierInvested',
+        'copyDurationDays',
+        'dedupeHash',
+        'raw',
+      ],
+      `rows[${index}]`
+    )
+    if (row.kind !== 'copiers') {
+      throw copierSnapshotError(`rows[${index}].kind must be copiers`)
+    }
+    if (!isCanonicalPostgresTimestamp(row.ts)) {
+      throw copierSnapshotError(`rows[${index}].ts must be a canonical UTC timestamp`)
+    }
+    if (Date.parse(row.ts) > Date.parse(observedAt) + 5 * 60_000) {
+      throw copierSnapshotError(`rows[${index}].ts exceeds the observation clock tolerance`)
+    }
+    if (
+      row.copierLabel !== null &&
+      (typeof row.copierLabel !== 'string' ||
+        row.copierLabel.trim() !== row.copierLabel ||
+        row.copierLabel.length < 1 ||
+        row.copierLabel.length > 512 ||
+        row.copierLabel.includes('\0'))
+    ) {
+      throw copierSnapshotError(`rows[${index}].copierLabel is invalid`)
+    }
+    const copierPnl = copierNullableNumber(row.copierPnl, `rows[${index}].copierPnl`)
+    const copierInvested = copierNullableNumber(row.copierInvested, `rows[${index}].copierInvested`)
+    if (copierInvested !== null && copierInvested < 0) {
+      throw copierSnapshotError(`rows[${index}].copierInvested must be nonnegative`)
+    }
+    if (
+      row.copyDurationDays !== null &&
+      (typeof row.copyDurationDays !== 'number' ||
+        !Number.isSafeInteger(row.copyDurationDays) ||
+        row.copyDurationDays < 0 ||
+        row.copyDurationDays > 2_147_483_647)
+    ) {
+      throw copierSnapshotError(`rows[${index}].copyDurationDays is invalid`)
+    }
+    if (
+      typeof row.dedupeHash !== 'string' ||
+      row.dedupeHash.trim() !== row.dedupeHash ||
+      row.dedupeHash.length < 1 ||
+      row.dedupeHash.length > 512 ||
+      row.dedupeHash.includes('\0')
+    ) {
+      throw copierSnapshotError(`rows[${index}].dedupeHash is invalid`)
+    }
+    if (dedupeHashes.has(row.dedupeHash)) {
+      throw copierSnapshotError(`rows[${index}].dedupeHash is duplicated`)
+    }
+    dedupeHashes.add(row.dedupeHash)
+    const raw = cloneStrictJsonb(row.raw, `rows[${index}].raw`)
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw copierSnapshotError(`rows[${index}].raw must be a JSON object`)
+    }
+    return {
+      ts: row.ts,
+      copierLabel: row.copierLabel,
+      copierPnl,
+      copierInvested,
+      copyDurationDays: row.copyDurationDays,
+      dedupeHash: row.dedupeHash,
+      raw,
+    }
+  })
+
+  const payload = {
+    contract: COPIER_SNAPSHOT_PUBLICATION_CONTRACT,
+    sourceId: value.sourceId,
+    traderId: value.traderId,
+    rawObjectId: value.rawObjectId,
+    sourceRunId: value.sourceRunId,
+    observedAt,
+    currency: value.currency,
+    evidenceState: value.evidenceState,
+    scanTerminalState: value.scanTerminalState,
+    blockerReasons,
+    rows,
+  }
+  cloneStrictJsonb(payload, 'publication payload')
+  return {
+    payload,
+    sourceRunId: value.sourceRunId,
+    observedAt,
+    rowCount: rows.length,
+  }
+}
+
+function validateCopierSnapshotReceipt(
+  value: unknown,
+  expected: Readonly<{ sourceRunId: string; observedAt: string; rowCount: number }>
+): CopierSnapshotPublicationReceipt {
+  const receipt = exactCopierSnapshotObject(
+    value,
+    ['receiptId', 'sourceRunId', 'observedAt', 'publishedAt', 'rowCount'],
+    'receipt'
+  )
+  assertSafePositiveCopierInteger(receipt.receiptId, 'receipt.receiptId')
+  if (receipt.sourceRunId !== expected.sourceRunId) {
+    throw copierSnapshotError('receipt.sourceRunId does not match the publication')
+  }
+  if (receipt.observedAt !== expected.observedAt) {
+    throw copierSnapshotError('receipt.observedAt does not match the publication')
+  }
+  if (!isCanonicalPostgresTimestamp(receipt.publishedAt)) {
+    throw copierSnapshotError('receipt.publishedAt must be a canonical UTC timestamp')
+  }
+  if (
+    typeof receipt.rowCount !== 'number' ||
+    !Number.isSafeInteger(receipt.rowCount) ||
+    receipt.rowCount < 0 ||
+    receipt.rowCount !== expected.rowCount
+  ) {
+    throw copierSnapshotError('receipt.rowCount does not match the publication')
+  }
+  if (Date.parse(expected.observedAt) > Date.parse(receipt.publishedAt) + 5 * 60_000) {
+    throw copierSnapshotError('receipt publication clock precedes observation beyond tolerance')
+  }
+  return Object.freeze({
+    receiptId: receipt.receiptId,
+    sourceRunId: receipt.sourceRunId,
+    observedAt: receipt.observedAt,
+    publishedAt: receipt.publishedAt,
+    rowCount: receipt.rowCount,
+  }) as CopierSnapshotPublicationReceipt
+}
+
+/**
+ * Publish one authoritative copier snapshot through the database-owned atomic
+ * RPC. The function commits private rows and their immutable receipt together;
+ * the worker never writes either table directly or wraps this call in a second
+ * transaction boundary.
+ */
+export async function publishCopierSnapshot(
+  input: PublishCopierSnapshotInput
+): Promise<CopierSnapshotPublicationReceipt> {
+  const prepared = prepareCopierSnapshotPayload(input)
+  const result = await getIngestPool().query<{ receipt: unknown }>(
+    `SELECT public.publish_copier_snapshot_v1($1::jsonb) AS receipt`,
+    [strictCanonicalJson(prepared.payload)]
+  )
+  if (result.command !== 'SELECT' || result.rowCount !== 1 || result.rows.length !== 1) {
+    throw copierSnapshotError('publisher RPC returned an invalid row count')
+  }
+  const row = exactCopierSnapshotObject(result.rows[0], ['receipt'], 'publisher RPC row')
+  return validateCopierSnapshotReceipt(row.receipt, {
+    sourceRunId: prepared.sourceRunId,
+    observedAt: prepared.observedAt,
+    rowCount: prepared.rowCount,
+  })
+}
+
+type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history' | 'copiers'>
 
 function assertCompatibilityHistoryKind(
   kind: HistoryKind
 ): asserts kind is CompatibilityHistoryKind {
   if (kind === 'position_history') {
     throw new Error('[history] position_history requires parser-conservation publication')
+  }
+  if (kind === 'copiers') {
+    throw new Error('[history] copiers require snapshot-receipt publication')
   }
 }
 
@@ -1648,7 +1969,7 @@ async function publishHistoryRowsTransactionInternal(
       ]
     )
     written = result.rowCount ?? 0
-  } else if (kind === 'transfers') {
+  } else {
     const result = await client.query(
       `INSERT INTO arena.transfer_history
            (trader_id, ts, direction, asset, amount, currency, dedupe_hash, raw)
@@ -1671,39 +1992,6 @@ async function publishHistoryRowsTransactionInternal(
               direction: r.direction,
               asset: r.asset,
               amount: r.amount,
-              dedupe_hash: r.dedupeHash,
-              raw: r.raw,
-            }))
-        ),
-      ]
-    )
-    written = result.rowCount ?? 0
-  } else {
-    const result = await client.query(
-      `INSERT INTO arena.copier_records
-           (trader_id, ts, copier_label, copier_pnl, copier_invested,
-            copy_duration_days, currency, dedupe_hash, raw)
-         SELECT $1, r.ts::timestamptz, r.copier_label, r.copier_pnl,
-                r.copier_invested, r.copy_duration_days, $2, r.dedupe_hash, r.raw
-           FROM jsonb_to_recordset($3::jsonb) AS r(
-             ts text, copier_label text, copier_pnl numeric,
-             copier_invested numeric, copy_duration_days int,
-             dedupe_hash text, raw jsonb)
-         ON CONFLICT (ts, dedupe_hash) DO NOTHING`,
-      [
-        traderId,
-        src.currency,
-        JSON.stringify(
-          rows
-            .filter(
-              (r): r is Extract<ParsedHistoryRow, { kind: 'copiers' }> => r.kind === 'copiers'
-            )
-            .map((r) => ({
-              ts: r.ts,
-              copier_label: r.copierLabel,
-              copier_pnl: r.copierPnl,
-              copier_invested: r.copierInvested,
-              copy_duration_days: r.copyDurationDays,
               dedupe_hash: r.dedupeHash,
               raw: r.raw,
             }))
@@ -1734,7 +2022,8 @@ async function publishHistoryRowsTransactionInternal(
  * Query-only compatibility publication for non-position histories. The caller
  * owns the transaction so RAW, typed rows, and the monotonic cursor may commit
  * or roll back as one unit. Position history requires parser-conservation
- * evidence and is rejected both by the type and the runtime guard.
+ * evidence; copier snapshots require an immutable receipt. Both are rejected
+ * by the type and the runtime guard.
  */
 export async function publishHistoryRowsInTransaction(
   transaction: IngestQueryExecutor,
