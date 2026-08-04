@@ -4,6 +4,9 @@ on:
   # Stacked PRs must retain the same preview-build contract as main-bound PRs.
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   # Pull-request code must never receive production database credentials.
   # These values only satisfy build-time validation; Lighthouse exercises the
@@ -58,10 +61,8 @@ jobs:
 
       - name: Run Lighthouse CI
         run: lhci autorun
-        env:
-          LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Parse Lighthouse results and comment on PR
+      - name: Summarize Lighthouse results
         if: always()
         uses: actions/github-script@v9
         with:
@@ -112,19 +113,15 @@ jobs:
 
             body += '\n**Thresholds:** Performance > 50, Accessibility > 80, Best Practices > 80\n';
 
-            if (context.payload.pull_request) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body,
-              });
-            }
+            await core.summary.addRaw(body).write();
 
       - name: Upload Lighthouse results
         uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: lighthouse-results
           path: .lighthouseci/
-          retention-days: 14
+          if-no-files-found: warn
+          retention-days: 3
+          include-hidden-files: true

@@ -98,6 +98,32 @@ function runTelegramFunction({ http = '200', curlExit = '0', token = 'bot-secret
   }
 }
 
+function runVercelBuildCommand({ vercelEnv, ciTypesAttested = '' }) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-vercel-build-command-'))
+  try {
+    const fakeNpm = path.join(directory, 'npm')
+    fs.writeFileSync(
+      fakeNpm,
+      [
+        '#!/usr/bin/env bash',
+        'printf "vercel=%s ci=%s preview_skip=%s args=%s\\n" "$VERCEL_ENV" "$ARENA_CI_TYPES_ATTESTED" "$ARENA_VERCEL_PREVIEW_SKIP_TYPES" "$*"',
+        '',
+      ].join('\n')
+    )
+    fs.chmodSync(fakeNpm, 0o755)
+    return spawnSync('bash', ['-c', vercelConfig.buildCommand], {
+      encoding: 'utf8',
+      env: {
+        PATH: `${directory}:${process.env.PATH}`,
+        VERCEL_ENV: vercelEnv,
+        ARENA_CI_TYPES_ATTESTED: ciTypesAttested,
+      },
+    })
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
+
 test('uploads the build lifecycle checker required by package.json', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
   assert.match(packageJson.scripts.postbuild, /qa:build-bigint/)
@@ -268,16 +294,39 @@ test('does not duplicate the detailed smoke rollback alert', () => {
   )
 })
 
-test('centralizes Vercel type validation in the required GitHub gate', () => {
-  assert.match(nextConfig, /ignoreBuildErrors: process\.env\.ARENA_CI_TYPES_ATTESTED === '1'/)
+test('skips duplicate preview types without weakening production validation', () => {
+  assert.match(nextConfig, /process\.env\.ARENA_CI_TYPES_ATTESTED === '1'/)
+  assert.match(
+    nextConfig,
+    /process\.env\.VERCEL_ENV === 'preview'[\s\S]*process\.env\.ARENA_VERCEL_PREVIEW_SKIP_TYPES === '1'/
+  )
   assert.equal(deployGate.match(/--build-env ARENA_CI_TYPES_ATTESTED=1/g)?.length, 1)
   assert.doesNotMatch(deployGate, /--env ARENA_CI_TYPES_ATTESTED=/)
-  assert.equal(vercelConfig.buildCommand, 'ARENA_CI_TYPES_ATTESTED=1 npm run build')
+  assert.doesNotMatch(deployGate, /ARENA_VERCEL_PREVIEW_SKIP_TYPES/)
   assert.match(deployGate, /"Lint & Type Check"/)
   assert.match(
     ciWorkflow,
     /- name: Type-check application[\s\S]*?NODE_OPTIONS: --max-old-space-size=4096[\s\S]*?run: npx tsc --noEmit/
   )
+
+  const preview = runVercelBuildCommand({ vercelEnv: 'preview' })
+  assert.equal(preview.status, 0)
+  assert.match(preview.stdout, /vercel=preview ci= preview_skip=1 args=run build/)
+
+  const emergencyProduction = runVercelBuildCommand({ vercelEnv: 'production' })
+  assert.equal(emergencyProduction.status, 0)
+  assert.match(emergencyProduction.stdout, /vercel=production ci= preview_skip= args=run build/)
+
+  const deployGateProduction = runVercelBuildCommand({
+    vercelEnv: 'production',
+    ciTypesAttested: '1',
+  })
+  assert.equal(deployGateProduction.status, 0)
+  assert.match(deployGateProduction.stdout, /vercel=production ci=1 preview_skip= args=run build/)
+
+  const local = runVercelBuildCommand({ vercelEnv: '' })
+  assert.equal(local.status, 0)
+  assert.match(local.stdout, /vercel= ci= preview_skip= args=run build/)
 })
 
 test('allocates enough V8 heap for the production application build', () => {

@@ -3,8 +3,8 @@ module.exports = {
     collect: {
       url: [
         'http://localhost:3000/',
-        'http://localhost:3000/rankings/binance_futures',
-        'http://localhost:3000/library',
+        'http://localhost:3000/?ex=binance_futures',
+        'http://localhost:3000/learn',
       ],
       numberOfRuns: 1,
       settings: {

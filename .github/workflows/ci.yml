@@ -6,6 +6,9 @@ on:
   # Validate stacked and release-branch PRs as rigorously as main-bound PRs.
   pull_request:
 
+permissions:
+  contents: read
+
 # Per-SHA group, no cancel: 7 个并发会话高频直推 main，per-ref cancel-in-progress
 # 会让每个 run 都被下一次 push 取消——CI 在忙碌时段永远跑不完（2026-07-02 差距
 # 审计发现"CI 全红"的一半根因是 cancelled 而非 failure）。快速作业必须每个
@@ -326,24 +329,19 @@ jobs:
       - name: Run tests with coverage
         env:
           WORKER_OWNERSHIP_REDIS_TEST_URL: redis://127.0.0.1:6379/15
-        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcovonly --ci
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v6
         if: always()
+        continue-on-error: true
         with:
           name: coverage-report
-          path: coverage/
-          retention-days: 7
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
-        if: always()
-        with:
-          files: coverage/lcov.info
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          # lcov.info is sufficient for downstream coverage tooling. Uploading
+          # the generated HTML tree added ~1,000 quota-consuming files per run.
+          path: coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 3
 
   # ─────────────────────────────────────────────
   # Stage 3b: Build (parallel with unit tests)
@@ -390,17 +388,6 @@ jobs:
             echo "::warning::Bundle size exceeds 5MB threshold ($((TOTAL / 1024))KB)"
           fi
 
-      - name: Clean build artifacts for upload
-        run: |
-          find .next -name '*:*' -delete 2>/dev/null || true
-
-      - uses: actions/upload-artifact@v6
-        with:
-          name: nextjs-build
-          path: .next
-          retention-days: 1
-          include-hidden-files: true
-
   # ─────────────────────────────────────────────
   # Stage 4: Public production E2E canary (push main only)
   # ─────────────────────────────────────────────
@@ -441,23 +428,17 @@ jobs:
           CI: true
           PLAYWRIGHT_BASE_URL: https://www.arenafi.org
 
-      - name: Upload Playwright report
+      - name: Upload Playwright failure diagnostics
         uses: actions/upload-artifact@v6
-        if: always()
+        if: failure()
+        continue-on-error: true
         with:
           name: playwright-report
           path: |
             playwright-report/
             test-results/
-          retention-days: 7
-
-      - name: Upload screenshots on failure
-        uses: actions/upload-artifact@v6
-        if: failure()
-        with:
-          name: playwright-screenshots
-          path: test-results/**/*.png
-          retention-days: 7
+          if-no-files-found: warn
+          retention-days: 3
 
   # ─────────────────────────────────────────────
   # Stage 5: Data Consistency (post-deploy verification)

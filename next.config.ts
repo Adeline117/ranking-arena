@@ -96,10 +96,12 @@ const nextConfig = {
 
   // The required GitHub gate runs `tsc --noEmit`, and the production deploy
   // gate binds that attestation to the exact SHA. Vercel Git previews are
-  // non-production and use the same flag through vercel.json so they do not
-  // retain the webpack graph while repeating TypeScript validation.
+  // non-production and may defer their duplicate type pass, but production
+  // builds only skip it when the deploy gate provides the exact-SHA proof.
   typescript: {
-    ignoreBuildErrors: process.env.ARENA_CI_TYPES_ATTESTED === '1',
+    ignoreBuildErrors:
+      process.env.ARENA_CI_TYPES_ATTESTED === '1' ||
+      (process.env.VERCEL_ENV === 'preview' && process.env.ARENA_VERCEL_PREVIEW_SKIP_TYPES === '1'),
   },
 
   // 性能优化
