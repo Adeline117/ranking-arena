@@ -454,6 +454,41 @@ FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何�
 
 1. 按 ADR-023 仅通过获准的 Supabase MCP `apply_migration` 生产通道核对远端
    migration ledger，并按顺序逐个应用所有缺失文件。每次只能提交一个完整文件，
+### Manual/provider-atomic secret rotation
+
+`scripts/security/rotate-secrets.sh` 已退役并固定以退出码 `2` fail closed。它不再读取、
+生成、记录或修改任何凭据。不同 provider 的双 key、版本、激活和撤销语义不同；禁止用一个
+通用脚本执行 Vercel `env rm` 后 `env add`、把 secret 放进 CLI argv、回显到终端，
+或写入仓库根 `.env`、`.env.bak`、rotation log 和带时间戳的明文备份。
+
+每次轮换必须由 credential owner 在 provider 控制面执行，并为**该凭据**先建立完整 consumer
+manifest。至少逐项裁定：provider 本身、Vercel Production，以及仅在明确授权时的
+Preview/Development；GitHub organization/repository/Environment secrets；Mac mini 与 SG
+worker 的受保护 host env；webhook/cron/monitoring 配置；获准的本地运行环境；以及需要重新
+部署或重启才会加载新值的 exact release。consumer 未穷尽时维持 NO-GO。
+
+支持重叠凭据、双 key 或 version alias 的 provider 使用以下顺序：
+
+1. 冻结相关 deploy/writer，记录 owner、credential ID、允许的 scope、consumer manifest、
+   轮换窗口和回退负责人；只记录 ID 或不可逆指纹，不记录 secret 原文。
+2. 在 provider 内创建新版本，但保留旧版本有效。通过 provider 的受保护 UI，或经独立证明
+   不把值放入 argv/log 的安全输入通道，把新版本写到 manifest 中的每个 secret store。
+3. 原子选择/替换 consumer 当前版本；不得先删除仍在服务的旧值。按 exact SHA 重新部署或
+   重启所有需要 reload 的 consumer，并逐个证明它们加载的是新 credential ID/版本。
+4. 用最小权限 canary 证明新值成功；保留状态码、时间、consumer、credential ID/指纹和
+   exact release 证据，不保留请求头、连接串或 token。
+5. 只有 manifest 全部通过后才在 provider 撤销旧版本。随后用无敏感输出的 negative canary
+   证明旧 credential 明确失败，并再次证明新版本和所有消费者健康。
+
+只支持单一活动值、无法重叠的 provider 必须使用其文档化的 provider-native atomic rotate/
+activate 操作和维护窗口：先让全部消费者进入安全停写/停服状态，再协调 provider 旋转、
+secret-store 替换、reload 与 canary。若 provider 或任一 consumer 不能在同一受控窗口内
+原子切换，停止轮换并维持 NO-GO；不得退化成 delete-then-add。
+
+任何阶段若新值验证失败，先保持旧值有效并回退 consumer 选择；若 provider 已使旧值失效，
+保持服务 fail closed，按 provider 恢复流程处理，禁止从终端历史、日志或明文备份“找回”。
+current incident NO-GO 期间，本节只定义 owner 操作门禁，不授权部署、secret 写入或轮换执行。
+
 ### Vercel Deployment Protection bypass 轮换门禁
 
 Deployment Protection bypass credential 与 deploy-force 标记是两个不同的能力，两者都不能覆盖 current incident NO-GO。本次发布前必须完成：
