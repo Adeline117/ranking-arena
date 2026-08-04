@@ -1,8 +1,9 @@
 /**
- * Tier B deep-profile crawl (spec §2.3-B): only the top
+ * Tier B deep-profile / record-history crawl (spec §2.3-B): only the top
  * sources.deep_profile_topn per board, every 12-24h. These hot traders
  * stay cache-warm so the most-viewed profiles never trigger a live fetch.
- * Long-tail traders are NEVER crawled on a timer — that's Tier C.
+ * Record-only adapters use the same bounded cohort and cadence. Long-tail
+ * traders are NEVER crawled on a timer — that's Tier C.
  */
 
 import type { Job } from 'bullmq'
@@ -40,9 +41,10 @@ import { runHistoryTransaction } from '../history-transaction'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
- * deep-profiled since `stalerThan` are returned. The marker is a dedicated
+ * processed by Tier B since `stalerThan` are returned. The marker is a dedicated
  * arena.ingest_cursors row (kind 'tierb_profiled') written after each trader
- * whose requested timeframes reached a terminal success/quality-reject state.
+ * whose requested profile timeframes reached a terminal state, or whose
+ * record-only surfaces all returned an upstream evidence page successfully.
  * trader_stats.as_of is NOT usable here because the
  * tier-A board upsert refreshes it every 2-5h, which would make everyone
  * look "fresh" and starve the deep crawl entirely.
@@ -50,7 +52,7 @@ import { runHistoryTransaction } from '../history-transaction'
  * native PASSED top-N membership; derived boards must never feed Tier-B back
  * into themselves.
  */
-/** Compatibility marker recording a terminal deep-profile attempt. */
+/** Compatibility marker recording a terminal Tier-B profile/record attempt. */
 const PROFILED_CURSOR_KIND = 'tierb_profiled'
 
 async function persistPositionHistoryRawOnly(
@@ -137,7 +139,8 @@ async function persistPositionHistory(
   session: FetchSession,
   adapter: SourceAdapter,
   src: SourceRow,
-  trader: NativeCohortTrader
+  trader: NativeCohortTrader,
+  requireResponsePage: boolean
 ): Promise<number> {
   // The retained @1 publication checkpoint was derived from typed rows whose
   // parser/source-fact conservation was never proved. It cannot seed the @2
@@ -207,6 +210,9 @@ async function persistPositionHistory(
       `[tier-b] ${src.slug} verified position-history evidence upgrade failed: ${evidenceFailure}`
     )
   }
+  if (requireResponsePage && acquisition.pages.length === 0) {
+    throw new Error(`[tier-b] ${src.slug} position_history returned no upstream response page`)
+  }
   return 0
 }
 
@@ -220,12 +226,19 @@ async function crawlTraderHistories(
   adapter: SourceAdapter,
   src: SourceRow,
   trader: NativeCohortTrader,
-  ctx: ParseCtx
+  ctx: ParseCtx,
+  requireResponseForEveryKind: boolean
 ): Promise<number> {
   let written = 0
   for (const kind of historyKinds(adapter, src)) {
     if (kind === 'position_history') {
-      written += await persistPositionHistory(session, adapter, src, trader)
+      written += await persistPositionHistory(
+        session,
+        adapter,
+        src,
+        trader,
+        requireResponseForEveryKind
+      )
       continue
     }
     const cursor = await getHistoryCursor(trader.id, kind)
@@ -259,7 +272,12 @@ async function crawlTraderHistories(
       })
     }
     if (fetchError !== null) throw fetchError
-    if (rawPages.length === 0) continue
+    if (rawPages.length === 0) {
+      if (requireResponseForEveryKind) {
+        throw new Error(`[tier-b] ${src.slug} ${kind} returned no upstream response page`)
+      }
+      continue
+    }
 
     // RAW is durable before an incomplete or changed payload can be rejected.
     const rows: ParsedHistoryRow[] = rawPages.flatMap((rawPage) => {
@@ -290,7 +308,9 @@ export async function processTierB(
   if (src.status !== 'active') return empty
 
   const adapter = getAdapter(src.adapter_slug)
-  if (!supportsSourceSurface(adapter, src, 'profile')) return empty
+  const supportsProfile = supportsSourceSurface(adapter, src, 'profile')
+  const scheduledHistoryKinds = historyKinds(adapter, src)
+  if (!supportsProfile && scheduledHistoryKinds.length === 0) return empty
 
   // Deadline chunking (2026-07-03 slot-monopoly root fix): a full top-300
   // deep-profile pass ran 3-4h per source and, phase-locked across sources,
@@ -329,7 +349,7 @@ export async function processTierB(
 
   // native ∪ derived: derived 30/90 boards are synthesized from these
   // profile stats (spec §1.1-C), so Tier-B must crawl their TFs too.
-  const timeframes = profileTimeframes(src)
+  const timeframes = supportsProfile ? profileTimeframes(src) : []
   // Tier A intentionally keeps the legacy unsuffixed profile (warm cookies).
   // Tier B owns a stable lane so a long profile crawl cannot collide with it.
   const session = await openSession(src, {
@@ -487,14 +507,14 @@ export async function processTierB(
         }
       }
       const allTimeframesTerminal =
-        timeframes.length > 0 && terminalTimeframes === timeframes.length
+        !supportsProfile || (timeframes.length > 0 && terminalTimeframes === timeframes.length)
       const allTimeframesSuccessful =
         allTimeframesTerminal &&
         !traderHadQualityReject &&
         !traderHadOperationalError &&
-        successfulTimeframes === timeframes.length
+        (!supportsProfile || successfulTimeframes === timeframes.length)
 
-      if (allTimeframesTerminal && !traderHadOperationalError) {
+      if (supportsProfile && allTimeframesTerminal && !traderHadOperationalError) {
         // Quality rejects are terminal for this pass: throttle the next attempt
         // so continuation jobs cannot hot-loop on a permanently bad upstream
         // payload. The compatibility cursor kind remains `tierb_profiled`.
@@ -502,7 +522,11 @@ export async function processTierB(
       }
 
       if (allTimeframesSuccessful) {
-        result.tradersCrawled += 1
+        // Preserve profile crawl accounting even when an optional history
+        // surface fails. A record-only source has no successful unit until all
+        // declared histories return evidence and the compatibility marker is
+        // durable, so it is counted only after that sequence completes.
+        if (supportsProfile) result.tradersCrawled += 1
         // Histories ride the same session right after the profile (spec §2.3).
         // Position history remains RAW evidence only; compatibility kinds keep
         // their incremental cursor/upsert behavior until separately migrated.
@@ -519,8 +543,13 @@ export async function processTierB(
             adapter,
             src,
             trader,
-            ctx
+            ctx,
+            !supportsProfile
           )
+          if (!supportsProfile) {
+            await markProfileAttempted(trader.id)
+            result.tradersCrawled += 1
+          }
         } catch (err) {
           result.errors += 1
           console.warn(

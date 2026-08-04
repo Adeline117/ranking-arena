@@ -268,8 +268,14 @@ async function* orderHistoryStream() {
   }
 }
 
+async function* noHistoryEvidenceStream() {
+  return undefined
+}
+
 const job = { data: { sourceSlug: 'gtrade' } } as Job<TierJobData>
 const binanceJob = { data: { sourceSlug: 'binance_futures' } } as Job<TierJobData>
+const bingxSource = { ...src, id: 21, slug: 'bingx_futures', adapter_slug: 'bingx' }
+const bingxJob = { data: { sourceSlug: 'bingx_futures' } } as Job<TierJobData>
 
 function configureBinancePositionHistory(
   options: { empty?: boolean; openingPnl?: string } = {}
@@ -385,6 +391,119 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockGetLatestPassedNativeCohort).not.toHaveBeenCalled()
     expect(mockOpenSession).not.toHaveBeenCalled()
     expect(mockWriteRawObject).not.toHaveBeenCalled()
+  })
+
+  it('skips sources with neither profiles nor scheduled history surfaces', async () => {
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positionHistory: false,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+    })
+
+    await expect(processTierB(job)).resolves.toEqual({
+      tradersCrawled: 0,
+      surfacesFetched: 0,
+      historyRowsWritten: 0,
+      rejects: 0,
+      errors: 0,
+      crossCheckFails: 0,
+      remaining: 0,
+    })
+
+    expect(mockGetLatestPassedNativeCohort).not.toHaveBeenCalled()
+    expect(mockProfileTimeframes).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+  })
+
+  it('schedules declared histories for a record-only adapter', async () => {
+    mockGetSourceBySlug.mockResolvedValue(bingxSource)
+    mockGetHistory.mockImplementation(() => orderHistoryStream())
+    mockParseHistory.mockReturnValue([orderRow])
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+    })
+
+    await expect(processTierB(bingxJob)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      surfacesFetched: 0,
+      historyRowsWritten: 1,
+      errors: 0,
+    })
+
+    expect(mockProfileTimeframes).not.toHaveBeenCalled()
+    expect(mockGetProfile).not.toHaveBeenCalled()
+    expect(mockGetHistory).toHaveBeenCalledWith(
+      expect.anything(),
+      bingxSource,
+      exchangeTraderId,
+      'orders',
+      null,
+      null
+    )
+    expect(mockPublishHistoryRows).toHaveBeenCalledWith(
+      bingxSource,
+      42,
+      'orders',
+      [orderRow],
+      '2026-07-15T11:00:00.000Z'
+    )
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('does not mark a record-only trader fresh without an upstream response page', async () => {
+    mockGetSourceBySlug.mockResolvedValue(bingxSource)
+    mockGetHistory.mockImplementation(() => noHistoryEvidenceStream())
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+    })
+
+    await expect(processTierB(bingxJob)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 0,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockGetProfile).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(false)
   })
 
   it('does not mark a trader fresh when one timeframe is unproven', async () => {
