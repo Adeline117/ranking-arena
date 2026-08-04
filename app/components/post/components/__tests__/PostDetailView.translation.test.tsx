@@ -17,6 +17,13 @@ jest.mock('../index', () => ({
   AvatarLink: () => null,
   PostModal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   CustomPollCard: () => null,
+  BuiltInVoteCard: ({
+    postId,
+    onVote,
+  }: {
+    postId: string
+    onVote: (postId: string, choice: 'bull') => void
+  }) => <button onClick={() => onVote(postId, 'bull')}>built-in-vote</button>,
   PostDetailActions: () => null,
 }))
 
@@ -35,6 +42,11 @@ const post = {
   like_count: 0,
   dislike_count: 0,
   user_reaction: null,
+  user_vote: null,
+  poll_enabled: false,
+  poll_bull: 0,
+  poll_bear: 0,
+  poll_wait: 0,
   group_name: null,
   group_id: null,
   poll_id: null,
@@ -71,6 +83,7 @@ function renderView(overrides: Partial<React.ComponentProps<typeof PostDetailVie
     votingCustomPoll: false,
     loadCustomPoll: jest.fn().mockResolvedValue(undefined),
     submitCustomPollVote: jest.fn().mockResolvedValue(undefined),
+    onToggleBuiltInVote: jest.fn().mockResolvedValue(undefined),
     userReaction: null,
     userBookmarks: {},
     bookmarkCounts: {},
@@ -194,5 +207,16 @@ describe('PostDetailView translation controls', () => {
     expect(screen.getByText('原始标题')).toBeInTheDocument()
     expect(screen.getByText('中文市场更新')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'viewOriginal' })).toBeInTheDocument()
+  })
+
+  it('renders and wires a legacy built-in poll only when no custom poll owns the post', () => {
+    const onToggleBuiltInVote = jest.fn().mockResolvedValue(undefined)
+    renderView({
+      openPost: { ...post, poll_enabled: true } as never,
+      onToggleBuiltInVote,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'built-in-vote' }))
+    expect(onToggleBuiltInVote).toHaveBeenCalledWith('post-1', 'bull')
   })
 })

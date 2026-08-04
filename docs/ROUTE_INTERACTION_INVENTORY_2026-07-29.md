@@ -22,9 +22,12 @@
 - Tip / Referral：`32f99908e` 只接受 durable payment truth；`31c6c538b` 保留并原子消费归因
   intent；`d561dc612` / `66cfb27a6` 用 qualification + entitlement grant 区分 pending、scheduled、
   active、expired、revoked，只有 active 显示 unlocked，409 会 GET 对账而非无限重试。
-- Post reaction：`9f2ea9355` 绑定 actor/post/request/action/count，补 15 秒硬超时、viewer scope、
-  回滚和迟到 ACK 隔离。底层仍是 toggle；响应超时时再次点击可能反向，后续需 desired-state/
-  idempotency authority，当前不伪称彻底清零。
+- Post reaction：已由绝对 `up/down/null` desired-state authority、同请求号有界重试、
+  latest-intent queue、viewer scope 和 hydration revision 收敛；旧回执/旧读取不能覆盖最新点击。
+  账户 hard-delete cascade 的缓存计数闭环仍是红色 P1。
+- Built-in vote：旧版看多/看空/观望已从不可达逻辑接入帖子详情；数据库/API/客户端使用绝对
+  `bull/bear/wait/null`，跨 actor 共享 post lock、禁用 poll 拒写、绝对三态重算、快速连点队列和
+  旧读取 revision gate。生产迁移与双账号 E2E 仍待完成。
 - Comment reaction：`ec688dd0b` 再绑定 actor/post/comment/operation/requested reaction；不确定
   结果优先 canonical GET，读不到才回滚 last-good。跨客户端仍是 toggle，靠 refresh/realtime 收敛。
 - Activity Feed：`5fed64896` 将首次加载的空白列表和虚假 `Live` 改成预留稳定高度的 Loading，
@@ -36,9 +39,9 @@
   也会在真实 deadline 结束，调用方取消和迟到结果不会继续落入 UI。
 - Bookmark / token detail：`8b6f7529b` 绑定收藏 actor/post/request/folder 与完整批量状态；
   `1a862e542` 绑定 token/period/page 并补 viewer/query 迟到隔离、错误/空态和 44px 控件。
-- Hot / reactions：`91281603e` 严格校验 posts/groups 并保留 last-good；`e37e04911` / `257ed300f`
-  将 Hot、Groups、共享 store 统一到 exact reaction receipt 和 scope single-flight。底层 toggle
-  仍没有 operation ID/desired-state，不能把超时后的服务端状态写成已确定。
+- Hot / reactions：`91281603e` 严格校验 posts/groups 并保留 last-good；Hot、Groups、共享
+  store 与 feed 已统一到 exact reaction desired-state 和 latest-intent lane。不确定写不会盲目
+  反向回滚；账户 cascade counter reconciliation 仍未闭合。
 - Compare：`d93a7b99f` 严格绑定有序 source/account 分区、following composite identity 与计数，
   为订阅/关注/搜索/对比各请求 lane 增加物理截止、owner/query generation、last-good/error、
   精确 401 登录恢复和至少 44px 的交互目标。
@@ -208,25 +211,30 @@ Settings 左侧/顶部 section 导航更新 `?section=` 并支持浏览器前进
 
 ## 6. 帖子、Feed 与 Groups 社交交互
 
-| 路由                  | 主要入口和按钮                                                                                        | 点击结果与状态合同                                                                                                                                         |
-| --------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/feed`               | Following/推荐流、排序、帖子卡、Like/Downvote、Bookmark、Repost、Share、Report、Comment、Load more    | optimistic 动作失败 rollback；分页不混入无权限帖子；登录 intent 回原位置。                                                                                 |
-| `/feed/[id]`          | Back、目标 activity/post、完整互动条、Comments                                                        | SSR 目标实体；不存在或不可见明确 404/permission；不以全局 feed 模态冒充详情。                                                                              |
-| `/hot`                | 时间/类别 tabs、帖子卡、互动、Load more、Refresh                                                      | hot score authority 漂移时 fail-closed/last-good；tab 用标准键盘语义。                                                                                     |
-| `/post/[id]`          | Back、Like/Downvote、Bookmark、Repost、Share、Report、Comment/Reply/Reaction；owner Edit/Delete       | 只渲染该帖和 thread；canonical audience；Delete 要 owner 双谓词、exact 单行 DB/客户端 ACK；registry 上线前不得直接删除 Storage。                           |
-| `/post/[id]/edit`     | Edit/Preview、正文/媒体、@mention picker、图片移动/删除、Cancel、Save                                 | owner-only；鉴权失败跳回带 redirect 的登录或明确错误；unsaved guard；正文/facet/join/count 原子 CAS；严格媒体/ACK；失败保留草稿。                          |
-| `/my-posts`           | Draft/Published 等分类、Open、Edit/Delete、Retry                                                      | 当前 viewer scope；解析 profile 期间有稳定占位；删除确认后才移除。                                                                                         |
-| `/hashtag/[tag]`      | 标签 header、排序、帖子互动、Load more                                                                | tag 贯穿所有分页；不能首屏按 tag、后续混入全局帖子。                                                                                                       |
-| `/groups`             | 推荐/已加入/我管理、Search、group 卡、Follow/Join/Apply、Create/Apply                                 | 未登录保留 intent；每类独立状态；权限/会员级别在服务端决定。                                                                                               |
-| `/groups/apply`       | 小组资料、规则、头像、Edit/Preview、Cancel、Submit                                                    | 必填/长度内联校验；头像回执绑定当前 owner/path/origin；账户切换丢弃旧完成；unsaved guard；重复提交 single-flight；失败保留表单。                           |
-| `/groups/[id]`        | Follow、Join/Apply/Leave、频道/帖子/成员 tabs、创建帖子、成员卡、Share/Report                         | private/premium/member/admin audience 在同一 authority；Leave/Follow exact ACK；tab 深链可恢复。                                                           |
-| `/groups/[id]/new`    | Edit/Preview、正文/图片/视频/投票、@mention、Cancel、Publish                                          | member permission 每次提交复核；媒体回执绑定 owner/path/origin/MIME/size；原子发布与严格 ACK；unsaved guard；失败保留内容。                                |
-| `/groups/[id]/manage` | Applications、Members、Roles、Mute/Remove/Ban、Invite、Broadcast、Posts Load more、Settings、Dissolve | owner/admin fail-closed；解散在 confirm 期间即锁定；广播/邀请/批量成员动作 single-flight 且 scope-bound；批处理串行；分页用 pin+time+id 稳定 cursor 去重。 |
+| 路由                  | 主要入口和按钮                                                                                                                   | 点击结果与状态合同                                                                                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/feed`               | Following/推荐流、排序、帖子卡、Like/Downvote、Bookmark、Repost、Share、Report、Comment、Load more                               | optimistic 动作失败 rollback；分页不混入无权限帖子；登录 intent 回原位置。                                                                                                             |
+| `/feed/[id]`          | Back、目标 activity/post、完整互动条、Comments                                                                                   | SSR 目标实体；不存在或不可见明确 404/permission；不以全局 feed 模态冒充详情。                                                                                                          |
+| `/hot`                | 时间/类别 tabs、帖子卡、互动、Load more、Refresh                                                                                 | hot score authority 漂移时 fail-closed/last-good；tab 用标准键盘语义。                                                                                                                 |
+| `/post/[id]`          | Back、Like/Downvote、内置看多/看空/观望或自定义 Poll、Bookmark、Repost、Share、Report、Comment/Reply/Reaction；owner Edit/Delete | 只渲染该帖和 thread；canonical audience；内置 poll 三态可再次点击取消且快速切换收敛到最新意图；Delete 要 owner 双谓词、exact 单行 DB/客户端 ACK；registry 上线前不得直接删除 Storage。 |
+| `/post/[id]/edit`     | Edit/Preview、正文/媒体、@mention picker、图片移动/删除、Cancel、Save                                                            | owner-only；鉴权失败跳回带 redirect 的登录或明确错误；unsaved guard；正文/facet/join/count 原子 CAS；严格媒体/ACK；失败保留草稿。                                                      |
+| `/my-posts`           | Draft/Published 等分类、Open、Edit/Delete、Retry                                                                                 | 当前 viewer scope；解析 profile 期间有稳定占位；删除确认后才移除。                                                                                                                     |
+| `/hashtag/[tag]`      | 标签 header、排序、帖子互动、Load more                                                                                           | tag 贯穿所有分页；不能首屏按 tag、后续混入全局帖子。                                                                                                                                   |
+| `/groups`             | 推荐/已加入/我管理、Search、group 卡、Follow/Join/Apply、Create/Apply                                                            | 未登录保留 intent；每类独立状态；权限/会员级别在服务端决定。                                                                                                                           |
+| `/groups/apply`       | 小组资料、规则、头像、Edit/Preview、Cancel、Submit                                                                               | 必填/长度内联校验；头像回执绑定当前 owner/path/origin；账户切换丢弃旧完成；unsaved guard；重复提交 single-flight；失败保留表单。                                                       |
+| `/groups/[id]`        | Follow、Join/Apply/Leave、频道/帖子/成员 tabs、创建帖子、成员卡、Share/Report                                                    | private/premium/member/admin audience 在同一 authority；Leave/Follow exact ACK；tab 深链可恢复。                                                                                       |
+| `/groups/[id]/new`    | Edit/Preview、正文/图片/视频/投票、@mention、Cancel、Publish                                                                     | member permission 每次提交复核；媒体回执绑定 owner/path/origin/MIME/size；原子发布与严格 ACK；unsaved guard；失败保留内容。                                                            |
+| `/groups/[id]/manage` | Applications、Members、Roles、Mute/Remove/Ban、Invite、Broadcast、Posts Load more、Settings、Dissolve                            | owner/admin fail-closed；解散在 confirm 期间即锁定；广播/邀请/批量成员动作 single-flight 且 scope-bound；批处理串行；分页用 pin+time+id 稳定 cursor 去重。                             |
 
 ### 6.1 帖子与评论按钮真值
 
-- **Like/Downvote/Reaction**：UI 可即时反馈，但失败必须回滚到服务器计数；同一用户同一对象
-  的互斥关系由服务器保证。
+- **Like/Downvote/Reaction**：UI 立即表达最新绝对意图；只有确定拒绝且已知前态可靠时才回滚，
+  超时/断线不做可能反转已提交写入的盲目回滚；同一用户同一对象的互斥关系由服务器保证。
+- **Built-in Bull/Bear/Wait**：只在 `poll_enabled=true` 且无 custom poll 时显示；再次点击所选项
+  表示 `null`，点击另一项表示更换。按钮保持可点以接收在途取消/反向意图，ACK 必须绑定
+  actor/post/request/desired 并带绝对三态计数。
+- **Custom Poll**：按作者定义的 single/multiple 选项提交完整 replacement；加载失败显示 Retry，
+  不能退化成内置三态或伪装成“无投票”。
 - **Bookmark**：写入 canonical post identity；原帖变私密/删除后 folder read 不得继续泄露。
 - **Repost**：重复点击去重；原帖 audience 改变时 repost 不能扩大可见范围。
 - **Share/Copy**：只分享 canonical public URL；系统 Share 不可用时回退 Copy，失败给可选中文本。
@@ -280,7 +288,7 @@ Edit Profile 修改头像/封面/handle/bio → Save revision → public viewer 
 
 ### 9.3 社交旅程
 
-`/hot`/`/feed` 打开 post → Like/Bookmark/Comment → `/favorites` 查看 canonical post →
+`/hot`/`/feed` 打开 post → Like/内置或自定义 Poll/Bookmark/Comment → `/favorites` 查看 canonical post →
 进入 group、Join/Apply → channel send/reply/reaction → notification 原子生成 → Inbox 点击回原对象。
 
 ### 9.4 账户与收费安全旅程

@@ -395,6 +395,7 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           votingCustomPoll={actions.votingCustomPoll}
           loadCustomPoll={actions.loadCustomPoll}
           submitCustomPollVote={actions.submitCustomPollVote}
+          onToggleBuiltInVote={actions._toggleVote}
           userReaction={post.user_reaction}
           userBookmarks={actions.userBookmarks}
           bookmarkCounts={actions.bookmarkCounts}

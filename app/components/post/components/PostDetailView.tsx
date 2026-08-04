@@ -8,9 +8,9 @@ import { CommentIcon } from '../../ui/icons'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { DynamicCommentsModal as CommentsModal } from '../../ui/Dynamic'
-import { AvatarLink, PostModal, CustomPollCard, PostDetailActions } from '.'
+import { AvatarLink, PostModal, CustomPollCard, BuiltInVoteCard, PostDetailActions } from '.'
 import LevelBadge from '@/app/components/user/LevelBadge'
-import type { PostWithUserState } from '@/lib/types'
+import type { PollChoice, PostWithUserState } from '@/lib/types'
 import type { Comment } from '../hooks/usePostComments'
 import type { PostTranslationCommentBusyLanes } from '../hooks/usePostTranslation'
 import type { ReplyTarget, ReplyTargetSetter } from '../comments/reply-types'
@@ -62,6 +62,7 @@ interface PostDetailViewProps {
   votingCustomPoll: boolean
   loadCustomPoll: (postId: string) => Promise<void>
   submitCustomPollVote: (postId: string) => Promise<void>
+  onToggleBuiltInVote: (postId: string, choice: PollChoice) => Promise<void>
   // Actions
   userReaction: string | null | undefined
   userBookmarks: Record<string, boolean>
@@ -124,6 +125,7 @@ export default function PostDetailView({
   votingCustomPoll,
   loadCustomPoll,
   submitCustomPollVote,
+  onToggleBuiltInVote,
   userBookmarks,
   bookmarkCounts,
   onToggleReaction,
@@ -392,6 +394,21 @@ export default function PostDetailView({
             </span>
           )}
         </div>
+      )}
+
+      {/* Legacy built-in sentiment poll. Custom polls use their authored options below. */}
+      {openPost.poll_enabled && !openPost.poll_id && (
+        <BuiltInVoteCard
+          postId={openPost.id}
+          counts={{
+            bull: openPost.poll_bull || 0,
+            bear: openPost.poll_bear || 0,
+            wait: openPost.poll_wait || 0,
+          }}
+          selectedChoice={openPost.user_vote ?? null}
+          onVote={onToggleBuiltInVote}
+          t={t}
+        />
       )}
 
       {/* Custom poll */}
