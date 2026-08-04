@@ -53,7 +53,7 @@ import { tierCResultKey, type TierCJobData } from '../queues'
 import { runHistoryTransaction } from '../history-transaction'
 
 const RESULT_TTL_SECONDS = 120
-const COPIER_READY_CONTRACT = 'arena.tier-c.copier-ready@1'
+const COPIER_SNAPSHOT_READY_CONTRACT = 'arena.tier-c.copier-snapshot-ready@1'
 
 type TierCSource = Awaited<ReturnType<typeof getSourceBySlug>>
 
@@ -540,12 +540,12 @@ async function processHeavySurface(
             })
           )
           const readyMarker = {
-            contract: COPIER_READY_CONTRACT,
+            contract: COPIER_SNAPSHOT_READY_CONTRACT,
             completed: true,
-            aggregateReady: true,
+            snapshotReady: true,
           }
           await redis.set(resultKey, JSON.stringify(readyMarker), 'EX', RESULT_TTL_SECONDS)
-          return { traderId, surface, aggregateReady: true }
+          return { traderId, surface, snapshotReady: true }
         }
 
         // Non-ranking history surfaces retain the compatibility RAW path.

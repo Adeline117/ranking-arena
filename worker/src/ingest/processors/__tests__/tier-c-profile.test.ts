@@ -808,7 +808,7 @@ describe('Tier-C incomplete profile window gate', () => {
     await expect(processTierC(copiersJob, 'local')).resolves.toMatchObject({
       traderId: 42,
       surface: 'copiers',
-      aggregateReady: true,
+      snapshotReady: true,
     })
 
     expect(mockWriteRawObject).not.toHaveBeenCalled()
@@ -855,9 +855,9 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     const readyMarker = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(readyMarker).toEqual({
-      contract: 'arena.tier-c.copier-ready@1',
+      contract: 'arena.tier-c.copier-snapshot-ready@1',
       completed: true,
-      aggregateReady: true,
+      snapshotReady: true,
     })
     expect(mockPublishCopierSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
       mockRedisSet.mock.invocationCallOrder[0]
@@ -968,7 +968,7 @@ describe('Tier-C incomplete profile window gate', () => {
     mockParseHistory.mockReturnValue([copierRow])
 
     await expect(processTierC(copiersJob, 'local')).resolves.toMatchObject({
-      aggregateReady: true,
+      snapshotReady: true,
     })
 
     expect(state).toEqual({ pulled: 2, closed: true })
