@@ -5031,6 +5031,12 @@ const ja = {
   tokenRankingNoData: '{token}の取引データが見つかりません',
   tokenRankingNoDataDesc:
     'このトークンの取引データはまだ利用できない可能性があります。他のトークンを試すか、後でもう一度確認してください。',
+  tokenRankingUnpublishedTitle: 'トークンランキングを検証中です',
+  tokenRankingUnpublishedDescription:
+    'Arena は正規のランキングスナップショットを構築・検証しています。検証に合格するまでトークンランキングは公開されません。取引データが存在しないという意味ではありません。',
+  tokenRankingEmptyCohortTitle: '証拠基準を満たすトレーダーはいません',
+  tokenRankingEmptyCohortDescription:
+    '現在、対象となるトレーダー集団は空です。取引履歴が不完全、価格が信頼できない、取得原価が不明、または FX 換算が不完全なトレーダーは「一部／不明」と表示され、ランキングから除外されます。',
   tokenRankingBrowseAll: 'すべてのトークンを見る',
   tokenRankingTotalPnl: '合計損益',
   tokenRankingTrades: '取引数',
