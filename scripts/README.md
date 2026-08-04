@@ -87,6 +87,9 @@ Retired standalone status and data-validation scripts must not be restored. Use
 `npm run diagnose` for routine public diagnostics, `scripts/pipeline-health-check.mjs`
 for pipeline investigation, and `npm run qa:serving` for the release acceptance gate.
 
+Pre-arena write scripts that target retired snapshot/profile tables must also stay removed. New
+enrichment tooling must use the current `arena.*` source taxonomy and serving contracts.
+
 ---
 
 Last updated: 2026-08-03

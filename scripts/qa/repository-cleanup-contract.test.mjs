@@ -24,3 +24,18 @@ test('retired standalone diagnostics stay removed in favor of supported entrypoi
     assert.doesNotMatch(packageCommands, new RegExp(retiredEntrypoint.replaceAll('.', '\\.')))
   }
 })
+
+test('retired pre-arena write scripts stay removed', () => {
+  const retiredWriters = ['scripts/generate-trader-bios.ts']
+
+  assert.deepEqual(
+    retiredWriters.filter((path) => existsSync(join(repoRoot, path))),
+    [],
+    'retired writers targeting dropped or non-serving schemas must be rewritten, not restored'
+  )
+
+  const packageCommands = Object.values(packageJson.scripts).join('\n')
+  for (const retiredWriter of retiredWriters) {
+    assert.doesNotMatch(packageCommands, new RegExp(retiredWriter.replaceAll('.', '\\.')))
+  }
+})
