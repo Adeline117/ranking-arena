@@ -8,14 +8,19 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import {
+  PUBLIC_SNAPSHOT_TOKEN_RE,
+  parsePublicRankingSnapshot,
+  parsePublicSnapshotMetadata,
+  parsePublicSnapshotTraders,
+} from '@/lib/ranking-snapshots/public-read-contract'
 import SnapshotViewerClient from './SnapshotViewerClient'
 
 export const revalidate = 300
 
-// SSR timeout: during cron contention, Supabase queries can block on row locks
-// for 30+ seconds. Race against this timeout so users see a fast 404 instead.
+// During cron contention, Supabase queries can block on row locks for 30+ seconds.
+// Physically abort them so the route reaches its retryable error boundary.
 const SSR_TIMEOUT_MS = 3000
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.arenafi.org'
@@ -24,45 +29,69 @@ interface PageProps {
   params: Promise<{ token: string }>
 }
 
+export async function withSnapshotDeadline<T>(
+  label: string,
+  load: (signal: AbortSignal) => PromiseLike<T>
+): Promise<T> {
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    const pending = Promise.resolve(load(controller.signal))
+    return await Promise.race([
+      pending,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort()
+          reject(new Error(`${label} timed out`))
+        }, SSR_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+function unavailableSnapshotMetadata(): Metadata {
+  return {
+    title: 'Snapshot Not Found',
+    robots: { index: false, follow: false },
+  }
+}
+
 // Generate metadata for SEO and social sharing
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { token } = await params
-  let snapshot: {
-    title: string | null
-    time_range: string
-    total_traders: number
-    top_trader_handle: string
-    top_trader_roi: number
-    data_captured_at: string
-  } | null = null
+  if (!PUBLIC_SNAPSHOT_TOKEN_RE.test(token)) return unavailableSnapshotMetadata()
+
+  let snapshot: ReturnType<typeof parsePublicSnapshotMetadata> | null = null
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
-    const { data } = await Promise.race([
+    const supabase = getSupabaseAdmin()
+    const { data, error } = await withSnapshotDeadline('Snapshot metadata read', (signal) =>
       supabase
         .from('ranking_snapshots')
         .select(
-          'title, time_range, total_traders, top_trader_handle, top_trader_roi, data_captured_at'
+          'share_token, is_public, is_expired, expires_at, title, time_range, total_traders, top_trader_handle, top_trader_roi, data_captured_at'
         )
         .eq('share_token', token)
         .eq('is_public', true)
-        .single(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
-      ),
-    ])
-    snapshot = data
-  } catch {
-    /* timeout or error — use default metadata */
+        .abortSignal(signal)
+        .maybeSingle()
+    )
+    if (error) throw new Error(`Snapshot metadata read failed: ${error.message}`)
+    if (data) snapshot = parsePublicSnapshotMetadata(data, token)
+  } catch (error) {
+    logger.warn(
+      '[s/token] snapshot metadata unavailable:',
+      error instanceof Error ? error.message : String(error)
+    )
   }
 
-  if (!snapshot) {
+  if (!snapshot || snapshot.isExpired) {
     // Invalid/expired share tokens stream a soft-404 (headers commit at 200
     // before notFound() runs, because this segment has loading.tsx +
     // revalidate). Emit noindex so crawlers don't index dead share links.
-    return {
-      title: 'Snapshot Not Found',
-      robots: { index: false, follow: false },
-    }
+    return unavailableSnapshotMetadata()
   }
 
   const timeRangeLabels: Record<string, string> = {
@@ -73,8 +102,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const title =
     snapshot.title ||
-    `${timeRangeLabels[snapshot.time_range] || snapshot.time_range} Leaderboard Snapshot`
-  const description = `Top ${snapshot.total_traders} traders. #1: ${snapshot.top_trader_handle} with ${snapshot.top_trader_roi >= 0 ? '+' : ''}${snapshot.top_trader_roi?.toFixed(1)}% ROI. Captured on ${new Date(snapshot.data_captured_at).toLocaleDateString()}.`
+    `${timeRangeLabels[snapshot.timeRange] || snapshot.timeRange} Leaderboard Snapshot`
+  const description = `Top ${snapshot.totalTraders} traders. #1: ${snapshot.topTraderHandle} with ${snapshot.topTraderRoi >= 0 ? '+' : ''}${snapshot.topTraderRoi.toFixed(1)}% ROI. Captured on ${new Date(snapshot.dataCapturedAt).toLocaleDateString()}.`
 
   return {
     title: `${title}`,
@@ -99,18 +128,15 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
 
   // Validate token format (url-safe charset, bounded length) — reject malformed
   // tokens before hitting the DB, not just short ones.
-  if (!token || !/^[A-Za-z0-9_-]{6,64}$/.test(token)) {
+  if (!PUBLIC_SNAPSHOT_TOKEN_RE.test(token)) {
     notFound()
   }
 
-  let snapshot: Record<string, unknown> | null = null
-  let traders: Record<string, unknown>[] | null = null
+  const supabase = getSupabaseAdmin()
 
-  try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    // Fetch snapshot metadata with timeout
-    const { data: snapshotData, error: snapshotError } = await Promise.race([
+  const { data: snapshotData, error: snapshotError } = await withSnapshotDeadline(
+    'Snapshot read',
+    (signal) =>
       supabase
         .from('ranking_snapshots')
         .select(
@@ -126,6 +152,7 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
           data_captured_at,
           data_delay_minutes,
           is_public,
+          is_expired,
           view_count,
           expires_at,
           title,
@@ -134,23 +161,25 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
         `
         )
         .eq('share_token', token)
-        .single(),
-      new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: { message: 'SSR timeout' } }), SSR_TIMEOUT_MS)
-      ),
-    ])
+        .eq('is_public', true)
+        .abortSignal(signal)
+        .maybeSingle()
+  )
 
-    if (snapshotError || !snapshotData || !snapshotData.is_public) {
-      notFound()
-    }
-    snapshot = snapshotData
+  if (snapshotError) {
+    throw new Error(`Snapshot read failed: ${snapshotError.message}`)
+  }
+  if (!snapshotData) notFound()
+  const snapshot = parsePublicRankingSnapshot(snapshotData, token)
 
-    // Fetch traders in the snapshot with timeout
-    const { data: tradersData, error: tradersError } = await Promise.race([
+  const { data: tradersData, error: tradersError } = await withSnapshotDeadline(
+    'Snapshot trader read',
+    (signal) =>
       supabase
         .from('snapshot_traders')
         .select(
           `
+          snapshot_id,
           rank,
           trader_id,
           handle,
@@ -169,76 +198,65 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
           data_availability
         `
         )
-        .eq('snapshot_id', snapshotData.id)
-        .order('rank', { ascending: true }),
-      new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: { message: 'SSR timeout' } }), SSR_TIMEOUT_MS)
-      ),
-    ])
-    // Surface a real query error (42703 on a stale snapshot_traders schema) — a
-    // silent {data:null} here renders an empty snapshot indistinguishable from a
-    // genuinely-empty one. Timeout is expected noise; a non-timeout error is drift.
-    if (tradersError && tradersError.message !== 'SSR timeout') {
-      logger.warn('[s/token] snapshot_traders query error (drift?):', tradersError.message)
-    }
-    traders = tradersData
-  } catch {
-    notFound()
+        .eq('snapshot_id', snapshot.id)
+        .order('rank', { ascending: true })
+        .abortSignal(signal)
+  )
+  if (tradersError) {
+    throw new Error(`Snapshot trader read failed: ${tradersError.message}`)
   }
-
-  // snapshot is guaranteed non-null here (notFound() returns never in all null/error paths above)
-  const snap = snapshot!
+  const traders = parsePublicSnapshotTraders(tradersData, snapshot.id, snapshot.totalTraders)
 
   // Check if snapshot is expired
-  const isExpired = snap.expires_at && new Date(snap.expires_at as string) < new Date()
+  const isExpired = snapshot.isExpired
 
-  // Increment view count (fire-and-forget, no timeout needed). Guard the
-  // rejection so a failed RPC can't surface as an unhandled promise rejection.
+  // Best-effort analytics must not hold the page open or surface an unhandled rejection.
   if (!isExpired) {
     void Promise.resolve(
-      getSupabaseAdmin().rpc('increment_snapshot_view_count', { snapshot_share_token: token })
+      getSupabaseAdmin()
+        .rpc('increment_snapshot_view_count', { snapshot_share_token: token })
+        .abortSignal(AbortSignal.timeout(1_000))
     ).catch(() => void 0)
   }
 
-  // Transform data for client component
   const snapshotPayload = {
-    id: snap.id as string,
-    shareToken: snap.share_token as string,
-    timeRange: snap.time_range as string,
-    exchange: snap.exchange as string,
-    category: snap.category as string,
-    totalTraders: snap.total_traders as number,
+    id: snapshot.id,
+    shareToken: snapshot.shareToken,
+    timeRange: snapshot.timeRange,
+    exchange: snapshot.exchange ?? undefined,
+    category: snapshot.category ?? undefined,
+    totalTraders: snapshot.totalTraders,
     topTrader: {
-      handle: snap.top_trader_handle as string,
-      roi: snap.top_trader_roi as number,
+      handle: snapshot.topTraderHandle,
+      roi: snapshot.topTraderRoi,
     },
-    dataCapturedAt: snap.data_captured_at as string,
-    dataDelayMinutes: snap.data_delay_minutes as number,
-    viewCount: snap.view_count as number,
-    expiresAt: (snap.expires_at as string) || undefined,
-    title: (snap.title as string) || undefined,
-    description: (snap.description as string) || undefined,
-    createdAt: snap.created_at as string,
-    isExpired: !!isExpired,
+    dataCapturedAt: snapshot.dataCapturedAt,
+    dataDelayMinutes: snapshot.dataDelayMinutes ?? undefined,
+    viewCount: snapshot.viewCount,
+    expiresAt: snapshot.expiresAt ?? undefined,
+    title: snapshot.title ?? undefined,
+    description: snapshot.description ?? undefined,
+    createdAt: snapshot.createdAt,
+    isExpired,
   }
 
-  const tradersPayload = (traders || []).map((t: Record<string, unknown>) => ({
-    rank: t.rank as number,
-    id: t.trader_id as string,
-    handle: t.handle as string,
-    source: t.source as string,
-    avatarUrl: (t.avatar_url as string) || undefined,
-    roi: (t.roi as number) ?? null,
-    pnl: (t.pnl as number) ?? undefined,
-    winRate: (t.win_rate as number) ?? undefined,
-    maxDrawdown: (t.max_drawdown as number) ?? undefined,
-    tradesCount: (t.trades_count as number) ?? undefined,
-    followers: (t.followers as number) ?? undefined,
-    arenaScore: (t.arena_score as number) ?? undefined,
-    returnScore: (t.return_score as number) ?? undefined,
-    drawdownScore: (t.drawdown_score as number) ?? undefined,
-    stabilityScore: (t.stability_score as number) ?? undefined,
-    dataAvailability: (t.data_availability as Record<string, boolean>) ?? undefined,
+  const tradersPayload = traders.map((trader) => ({
+    rank: trader.rank,
+    id: trader.id,
+    handle: trader.handle ?? undefined,
+    source: trader.source,
+    avatarUrl: trader.avatarUrl ?? undefined,
+    roi: trader.roi,
+    pnl: trader.pnl ?? undefined,
+    winRate: trader.winRate ?? undefined,
+    maxDrawdown: trader.maxDrawdown ?? undefined,
+    tradesCount: trader.tradesCount ?? undefined,
+    followers: trader.followers ?? undefined,
+    arenaScore: trader.arenaScore ?? undefined,
+    returnScore: trader.returnScore ?? undefined,
+    drawdownScore: trader.drawdownScore ?? undefined,
+    stabilityScore: trader.stabilityScore ?? undefined,
+    dataAvailability: trader.dataAvailability ?? undefined,
   }))
 
   return <SnapshotViewerClient snapshot={snapshotPayload} traders={tradersPayload} />

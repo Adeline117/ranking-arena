@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
@@ -9,10 +9,13 @@ import { useToast } from '@/app/components/ui/Toast'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { logger } from '@/lib/logger'
+import styles from './SnapshotViewerClient.module.css'
 
 // Icons
 const ShareIcon = ({ size = 16 }: { size?: number }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={size}
     height={size}
     viewBox="0 0 24 24"
@@ -29,6 +32,8 @@ const ShareIcon = ({ size = 16 }: { size?: number }) => (
 
 const CheckIcon = ({ size = 16 }: { size?: number }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={size}
     height={size}
     viewBox="0 0 24 24"
@@ -42,6 +47,8 @@ const CheckIcon = ({ size = 16 }: { size?: number }) => (
 
 const ClockIcon = ({ size = 14 }: { size?: number }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={size}
     height={size}
     viewBox="0 0 24 24"
@@ -56,6 +63,8 @@ const ClockIcon = ({ size = 14 }: { size?: number }) => (
 
 const EyeIcon = ({ size = 14 }: { size?: number }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={size}
     height={size}
     viewBox="0 0 24 24"
@@ -70,6 +79,8 @@ const EyeIcon = ({ size = 14 }: { size?: number }) => (
 
 const ArrowLeftIcon = ({ size = 16 }: { size?: number }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={size}
     height={size}
     viewBox="0 0 24 24"
@@ -83,6 +94,8 @@ const ArrowLeftIcon = ({ size = 16 }: { size?: number }) => (
 
 const WarningIcon = ({ size = 24 }: { size?: number }) => (
   <svg
+    aria-hidden="true"
+    focusable="false"
     width={size}
     height={size}
     viewBox="0 0 24 24"
@@ -143,21 +156,51 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const [copied, setCopied] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const copyInFlightRef = useRef(false)
+  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
 
   const shareUrl =
     typeof window !== 'undefined' ? window.location.href : `/s/${snapshot.shareToken}`
 
-  const handleCopyLink = async () => {
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current)
+    }
+  }, [])
+
+  const handleCopyLink = useCallback(async () => {
+    if (copyInFlightRef.current) return
+    copyInFlightRef.current = true
+    setCopying(true)
+    let deadline: ReturnType<typeof setTimeout> | undefined
+
     try {
-      await navigator.clipboard.writeText(shareUrl)
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+      await Promise.race([
+        navigator.clipboard.writeText(shareUrl),
+        new Promise<never>((_resolve, reject) => {
+          deadline = setTimeout(() => reject(new Error('Clipboard write timed out')), 5_000)
+        }),
+      ])
+      if (!mountedRef.current) return
       setCopied(true)
       showToast(t('copiedToClipboard'), 'success')
-      setTimeout(() => setCopied(false), 2000)
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current)
+      copyResetTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) setCopied(false)
+      }, 2_000)
     } catch (error) {
       logger.error('Failed to copy link:', error)
-      showToast(t('copyFailed'), 'error')
+      if (mountedRef.current) showToast(t('copyFailed'), 'error')
+    } finally {
+      if (deadline) clearTimeout(deadline)
+      copyInFlightRef.current = false
+      if (mountedRef.current) setCopying(false)
     }
-  }
+  }, [shareUrl, showToast, t])
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -250,13 +293,15 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
             style={{
               display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 44,
               gap: 8,
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
               borderRadius: tokens.radius.lg,
               background: tokens.gradient.primary,
               color: tokens.colors.white,
               textDecoration: 'none',
-              fontWeight: 600,
+              fontWeight: tokens.typography.fontWeight.semibold,
             }}
           >
             {t('backToHome')}
@@ -279,26 +324,18 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
-        <Box
-          style={{
-            maxWidth: 1200,
-            margin: '0 auto',
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: tokens.spacing[4],
-          }}
-        >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+        <Box className={styles.headerContent}>
+          <Box className={styles.headerIdentity}>
             <Link
               href="/"
+              aria-label={t('backToHome')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
+                flex: '0 0 44px',
                 borderRadius: tokens.radius.md,
                 background: tokens.colors.bg.tertiary,
                 color: tokens.colors.text.secondary,
@@ -307,7 +344,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
             >
               <ArrowLeftIcon size={18} />
             </Link>
-            <Box>
+            <Box className={styles.headerCopy}>
               <Text size="md" weight="bold">
                 {snapshot.title || `${getTimeRangeLabel(snapshot.timeRange)} ${t('snapshot')}`}
               </Text>
@@ -332,24 +369,32 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
           </Box>
           <button
             onClick={handleCopyLink}
-            aria-label="Copy link"
+            disabled={copying}
+            aria-busy={copying}
+            aria-label={copied ? t('snapshotCopied') : t('shareSnapshot')}
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 6,
+              minWidth: 44,
+              minHeight: 44,
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.lg,
               background: copied ? tokens.colors.accent.success : tokens.gradient.primary,
               border: 'none',
               color: tokens.colors.white,
-              cursor: 'pointer',
+              cursor: copying ? 'wait' : 'pointer',
+              opacity: copying ? 0.72 : 1,
               fontSize: tokens.typography.fontSize.sm,
-              fontWeight: 600,
+              fontWeight: tokens.typography.fontWeight.semibold,
               transition: tokens.transition.fast,
             }}
           >
             {copied ? <CheckIcon size={14} /> : <ShareIcon size={14} />}
-            {copied ? t('snapshotCopied') : t('shareSnapshot')}
+            <span className={styles.shareLabel}>
+              {copied ? t('snapshotCopied') : t('shareSnapshot')}
+            </span>
           </button>
         </Box>
       </Box>
@@ -386,10 +431,8 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
         >
           {/* Table Header */}
           <Box
+            className={styles.snapshotGrid}
             style={{
-              display: 'grid',
-              gridTemplateColumns: '50px minmax(120px, 1.5fr) 70px 100px 70px 70px',
-              gap: tokens.spacing[2],
               padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
               borderBottom: `1px solid ${tokens.colors.border.primary}`,
               background: tokens.glass.bg.light,
@@ -407,6 +450,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               {t('trader')}
             </Text>
             <Text
+              className={styles.desktopMetric}
               size="xs"
               weight="bold"
               color="tertiary"
@@ -423,6 +467,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               ROI
             </Text>
             <Text
+              className={styles.desktopMetric}
               size="xs"
               weight="bold"
               color="tertiary"
@@ -431,6 +476,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               Win%
             </Text>
             <Text
+              className={styles.desktopMetric}
               size="xs"
               weight="bold"
               color="tertiary"
@@ -449,16 +495,15 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                 : displayName
 
             return (
-              <Box
+              <Link
                 key={`${trader.id}-${trader.rank}`}
+                href={`/trader/${encodeURIComponent(trader.id)}?platform=${encodeURIComponent(trader.source)}`}
+                aria-label={`${t('trader')}: ${displayName}`}
+                className={`${styles.snapshotGrid} ${styles.snapshotRow}`}
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '50px minmax(120px, 1.5fr) 70px 100px 70px 70px',
-                  gap: tokens.spacing[2],
                   padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
                   borderBottom: `1px solid var(--glass-border-light)`,
                   alignItems: 'center',
-                  transition: 'background 0.2s',
                 }}
               >
                 {/* Rank */}
@@ -513,7 +558,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                       style={{
                         color: tokens.colors.white,
                         fontSize: '12px',
-                        fontWeight: 900,
+                        fontWeight: tokens.typography.fontWeight.black,
                         textShadow: '0 1px 3px var(--color-backdrop-heavy)',
                       }}
                     >
@@ -558,7 +603,10 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                 </Box>
 
                 {/* Arena Score */}
-                <Box style={{ display: 'flex', justifyContent: 'center' }}>
+                <Box
+                  className={styles.desktopMetric}
+                  style={{ display: 'flex', justifyContent: 'center' }}
+                >
                   {trader.arenaScore !== null && trader.arenaScore !== undefined ? (
                     <Box
                       style={{
@@ -629,6 +677,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
 
                 {/* Win Rate */}
                 <Text
+                  className={styles.desktopMetric}
                   size="sm"
                   weight="semibold"
                   style={{
@@ -644,6 +693,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
 
                 {/* Max Drawdown */}
                 <Text
+                  className={styles.desktopMetric}
                   size="sm"
                   weight="semibold"
                   style={{
@@ -658,7 +708,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                     ? `-${Math.abs(trader.maxDrawdown).toFixed(0)}%`
                     : '—'}
                 </Text>
-              </Box>
+              </Link>
             )
           })}
         </Box>
@@ -678,13 +728,15 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
             style={{
               display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 44,
               gap: 8,
               padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
               borderRadius: tokens.radius.lg,
               background: tokens.gradient.primary,
               color: tokens.colors.white,
               textDecoration: 'none',
-              fontWeight: 600,
+              fontWeight: tokens.typography.fontWeight.semibold,
               boxShadow: tokens.shadow.md,
             }}
           >
