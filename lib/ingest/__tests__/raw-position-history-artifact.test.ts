@@ -37,6 +37,7 @@ import {
   POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   POSITION_HISTORY_RAW_JOB_TYPE,
+  prepareHistoryRawArtifactReconciliationExpectation,
   type IngestTransactionRunner,
   writeHistoryRawArtifact,
   writePositionHistoryRawArtifact,
@@ -268,6 +269,25 @@ describe('writePositionHistoryRawArtifact', () => {
       quarantined: false,
     })
     const meta = database.pointers[0].meta as Record<string, unknown>
+    const reconciliation = prepareHistoryRawArtifactReconciliationExpectation(input)
+    expect(reconciliation).toMatchObject({
+      bytes: database.pointers[0].bytes,
+      contentHash: input.sourceRunId,
+      fetchedAt,
+      storagePath: receipt.storagePath,
+    })
+    expect(reconciliation.metaCandidatesCanonicalJson).toContain(strictCanonicalJson(meta))
+    const alternateCompressedBytes = database.pointers[0].bytes + 7
+    const crossRuntimeReconciliation = prepareHistoryRawArtifactReconciliationExpectation(
+      input,
+      alternateCompressedBytes
+    )
+    expect(crossRuntimeReconciliation.bytes).toBe(alternateCompressedBytes)
+    expect(
+      crossRuntimeReconciliation.metaCandidatesCanonicalJson.some((candidate) =>
+        candidate.includes(`"compressed_bytes":${alternateCompressedBytes}`)
+      )
+    ).toBe(true)
     expect(Object.keys(meta).sort()).toEqual(POSITION_HISTORY_RAW_META_KEYS)
     expect(meta).toMatchObject({
       data_contract: input.artifact.contract,
@@ -339,6 +359,9 @@ describe('writePositionHistoryRawArtifact', () => {
     await writePositionHistoryRawArtifact(input, database.runTransaction)
 
     const meta = database.pointers[0].meta as Record<string, unknown>
+    expect(
+      prepareHistoryRawArtifactReconciliationExpectation(input).metaCandidatesCanonicalJson
+    ).toContain(strictCanonicalJson(meta))
     expect(Object.keys(meta).sort()).toEqual([
       'attempt_started_at',
       'audit_reason',
@@ -439,6 +462,9 @@ describe('writePositionHistoryRawArtifact', () => {
     )
     expect(database.pointers[0].meta).toBe(previousMeta)
     expect(database.pointers[0].meta).not.toHaveProperty('page_manifest')
+    expect(
+      prepareHistoryRawArtifactReconciliationExpectation(input).metaCandidatesCanonicalJson
+    ).toContain(strictCanonicalJson(previousMeta))
   })
 
   it('replays only the exact legacy audit metadata without upgrading it', async () => {
@@ -465,6 +491,9 @@ describe('writePositionHistoryRawArtifact', () => {
       first
     )
     expect(database.pointers[0].meta).not.toHaveProperty('history_evidence_contract')
+    expect(
+      prepareHistoryRawArtifactReconciliationExpectation(input).metaCandidatesCanonicalJson
+    ).toContain(strictCanonicalJson(meta))
 
     meta.page_count = 2
     await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).rejects.toThrow(

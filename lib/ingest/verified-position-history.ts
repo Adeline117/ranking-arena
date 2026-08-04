@@ -750,6 +750,9 @@ export function validateVerifiedPositionHistoryPublicationReceipt(
   const publicationId = positiveSafeInteger(value.publicationId, 'receipt publicationId')
   const rawObjectId = positiveSafeInteger(value.rawObjectId, 'receipt rawObjectId')
   const stateId = positiveSafeInteger(value.stateId, 'receipt stateId')
+  if (stateId !== publicationId) {
+    throw publicationError('receipt stateId does not match publicationId')
+  }
   const factsAdded = nonNegativeSafeInteger(value.factsAdded, 'receipt factsAdded')
   const factsReused = nonNegativeSafeInteger(value.factsReused, 'receipt factsReused')
   if (typeof value.replayed !== 'boolean') {

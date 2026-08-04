@@ -1285,6 +1285,55 @@ function legacyPositionHistoryArtifactMeta(
   )
 }
 
+export interface HistoryRawArtifactReconciliationExpectation {
+  readonly bytes: number
+  readonly contentHash: string
+  readonly fetchedAt: string
+  readonly metaCandidatesCanonicalJson: readonly string[]
+  readonly storagePath: string
+}
+
+/**
+ * Build the exact immutable pointer values accepted by this writer without
+ * touching Storage or Postgres. Ambiguous-commit recovery consumes this
+ * projection so validation cannot drift from the writer's current and
+ * immutable compatibility metadata contracts.
+ */
+export function prepareHistoryRawArtifactReconciliationExpectation(
+  input: WriteHistoryRawArtifactInput,
+  durableCompressedBytes?: number
+): HistoryRawArtifactReconciliationExpectation {
+  const normalizedInput = normalizePositionHistoryRawArtifactInput(input, null)
+  const artifact = preparePositionHistoryRawArtifact(normalizedInput)
+  if (durableCompressedBytes !== undefined) {
+    assertSafePositiveInteger(
+      durableCompressedBytes,
+      'durable compressed byte count',
+      positionHistoryArtifactError
+    )
+    // A content-addressed object created by another Node/zlib version can
+    // have different gzip bytes while inflating to the same canonical JSON.
+    // The writer verifies that object before persisting its actual byte count.
+    artifact.durableCompressedBytes = durableCompressedBytes
+  }
+  const metaCandidates = [positionHistoryArtifactMeta(artifact)]
+  if (normalizedInput.artifact.history_kind === 'position_history') {
+    metaCandidates.push(
+      previousPositionHistoryArtifactMeta(normalizedInput, artifact),
+      legacyPositionHistoryArtifactMeta(normalizedInput, artifact)
+    )
+  }
+  return Object.freeze({
+    bytes: artifact.durableCompressedBytes,
+    contentHash: artifact.contentHash,
+    fetchedAt: normalizedInput.fetchedAt,
+    metaCandidatesCanonicalJson: Object.freeze(
+      metaCandidates.map((meta) => strictCanonicalJson(meta))
+    ),
+    storagePath: artifact.storagePath,
+  })
+}
+
 async function loadPositionHistoryTrustPointers(
   transaction: IngestQueryExecutor,
   artifact: PreparedPositionHistoryRawArtifact,

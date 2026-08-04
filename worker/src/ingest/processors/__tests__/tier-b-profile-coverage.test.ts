@@ -21,6 +21,7 @@ const mockParseHistory = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockDbQuery = jest.fn()
 const mockQueueAdd = jest.fn()
+const mockCaptureAndPublishVerifiedPositionHistory = jest.fn()
 
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
@@ -59,6 +60,14 @@ jest.mock('../../queues', () => ({
   getRegionQueue: jest.fn(() => ({ add: (...args: unknown[]) => mockQueueAdd(...args) })),
   INGEST_JOB: { TIER_B: 'tier-b' },
 }))
+jest.mock('../../verified-position-history-publisher', () => {
+  const actual = jest.requireActual('../../verified-position-history-publisher')
+  return {
+    ...actual,
+    captureAndPublishVerifiedPositionHistory: (...args: unknown[]) =>
+      mockCaptureAndPublishVerifiedPositionHistory(...args),
+  }
+})
 
 import { processTierB as processTierBInRegion } from '../tier-b-profiles'
 import { createConsumedRegionContext } from '../../consumed-region-context'
@@ -177,6 +186,25 @@ describe('Tier-B profile coverage accounting', () => {
     mockRoiCrossCheckOk.mockReturnValue(null)
     mockPublishProfile.mockResolvedValue(undefined)
     mockQueueAdd.mockResolvedValue(undefined)
+    mockCaptureAndPublishVerifiedPositionHistory.mockResolvedValue({
+      rawObject: {
+        id: 2_081_897,
+        storagePath: 'test/history/event_history.json.gz',
+        contentHash: 'b'.repeat(64),
+      },
+      receipt: {
+        cursorAfter: null,
+        factsAdded: 0,
+        factsReused: 0,
+        observedAt: '2026-07-15T12:00:00.000Z',
+        publicationId: 1,
+        publicationSha256: 'c'.repeat(64),
+        rawObjectId: 2_081_897,
+        replayed: false,
+        sourceRunId: 'b'.repeat(64),
+        stateId: 1,
+      },
+    })
     mockGetLatestPassedNativeCohort.mockResolvedValue({
       traders: [
         {
@@ -471,6 +499,167 @@ describe('Tier-B profile coverage accounting', () => {
       { kind: 'transfers', state: 'verifier_missing' },
       { kind: 'copiers', state: 'verifier_missing' },
     ])
+  })
+
+  it.each([
+    ['binance_futures', 'binance'],
+    ['bitget_futures', 'bitget'],
+    ['okx_futures', 'okx'],
+  ])(
+    'routes reviewed %s through the verified publisher and counts only validated additions',
+    async (slug, adapterSlug) => {
+      const reviewedSource = { ...src, id: 7, slug, adapter_slug: adapterSlug }
+      mockGetSourceBySlug.mockResolvedValue(reviewedSource)
+      mockProfileTimeframes.mockReturnValue([30])
+      mockParseProfile.mockReturnValue(profile(30, true))
+      const adapter = {
+        capabilities: {
+          profile: true,
+          positionHistory: true,
+          orders: false,
+          transfers: false,
+          copiers: false,
+        },
+        getProfile: mockGetProfile,
+        getHistory: mockGetHistory,
+        parseProfile: mockParseProfile,
+        validateProfile: mockValidateProfile,
+      }
+      mockGetAdapter.mockReturnValue(adapter)
+      mockCaptureAndPublishVerifiedPositionHistory.mockResolvedValue({
+        rawObject: {
+          id: 2_081_897,
+          storagePath: 'test/history/event_history.json.gz',
+          contentHash: 'b'.repeat(64),
+        },
+        receipt: {
+          cursorAfter: '2026-07-15T12:00:00.000Z',
+          factsAdded: 3,
+          factsReused: 2,
+          observedAt: '2026-07-15T12:00:00.000Z',
+          publicationId: 8,
+          publicationSha256: 'c'.repeat(64),
+          rawObjectId: 2_081_897,
+          replayed: false,
+          sourceRunId: 'b'.repeat(64),
+          stateId: 8,
+        },
+      })
+
+      await expect(
+        processTierB({ data: { sourceSlug: slug } } as Job<TierJobData>)
+      ).resolves.toMatchObject({
+        tradersCrawled: 1,
+        historyRowsWritten: 3,
+        errors: 0,
+      })
+      expect(mockCaptureAndPublishVerifiedPositionHistory).toHaveBeenCalledWith({
+        adapter,
+        session: expect.anything(),
+        source: reviewedSource,
+        trader: expect.objectContaining({ id: 42 }),
+      })
+      expect(mockGetHistory).not.toHaveBeenCalled()
+    }
+  )
+
+  it('continues RAW-only kinds after a reviewed position publication fails', async () => {
+    const reviewedSource = {
+      ...src,
+      id: 7,
+      slug: 'bitget_futures',
+      adapter_slug: 'bitget',
+    }
+    mockGetSourceBySlug.mockResolvedValue(reviewedSource)
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(() => historyStream())
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: true,
+        transfers: true,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      validateProfile: mockValidateProfile,
+    })
+    mockCaptureAndPublishVerifiedPositionHistory.mockRejectedValue(
+      Object.assign(new Error('stale verified head'), { code: '40001' })
+    )
+
+    await expect(
+      processTierB({ data: { sourceSlug: 'bitget_futures' } } as Job<TierJobData>)
+    ).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+    expect(mockCaptureAndPublishVerifiedPositionHistory).toHaveBeenCalledTimes(1)
+    expect(mockGetHistory.mock.calls.map((call) => call[3])).toEqual(['orders', 'transfers'])
+    expect(
+      mockWriteHistoryRawArtifact.mock.calls.map(([input]) => input.artifact.history_kind)
+    ).toEqual(['orders', 'transfers'])
+  })
+
+  it('keeps validated position additions when a later RAW-only kind fails', async () => {
+    const reviewedSource = {
+      ...src,
+      id: 7,
+      slug: 'bitget_futures',
+      adapter_slug: 'bitget',
+    }
+    mockGetSourceBySlug.mockResolvedValue(reviewedSource)
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation((_session, _source, _trader, kind: string) =>
+      historyStream({ failAfterPage: kind === 'transfers' })
+    )
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: true,
+        transfers: true,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      validateProfile: mockValidateProfile,
+    })
+    mockCaptureAndPublishVerifiedPositionHistory.mockResolvedValue({
+      rawObject: {
+        id: 2_081_897,
+        storagePath: 'test/history/event_history.json.gz',
+        contentHash: 'b'.repeat(64),
+      },
+      receipt: {
+        cursorAfter: '2026-07-15T12:00:00.000Z',
+        factsAdded: 4,
+        factsReused: 1,
+        observedAt: '2026-07-15T12:00:00.000Z',
+        publicationId: 8,
+        publicationSha256: 'c'.repeat(64),
+        rawObjectId: 2_081_897,
+        replayed: false,
+        sourceRunId: 'b'.repeat(64),
+        stateId: 8,
+      },
+    })
+
+    await expect(
+      processTierB({ data: { sourceSlug: 'bitget_futures' } } as Job<TierJobData>)
+    ).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 4,
+      errors: 1,
+    })
+    expect(mockGetHistory.mock.calls.map((call) => call[3])).toEqual(['orders', 'transfers'])
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(2)
   })
 
   it('audits a bundle-wide quality reject before any validation or publication', async () => {

@@ -18,8 +18,7 @@ import {
 import type { HistoryKind, ParseCtx, SourceRow } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
-import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
-import { writeHistoryRawArtifact, writeRawObject } from '@/lib/ingest/raw'
+import { writeRawObject } from '@/lib/ingest/raw'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import { publishProfile } from '@/lib/ingest/serving/publish'
@@ -30,7 +29,11 @@ import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
 } from '../consumed-region-context'
-import { runHistoryTransaction } from '../history-transaction'
+import {
+  canPublishVerifiedPositionHistory,
+  captureAndPublishVerifiedPositionHistory,
+  captureTierBHistoryRawOnly,
+} from '../verified-position-history-publisher'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
@@ -97,59 +100,53 @@ function historyKinds(adapter: SourceAdapter, src: SourceRow): HistoryKind[] {
 }
 
 /**
- * Capture every supported history surface as immutable evidence. Legacy
- * history cursors are intentionally ignored: they may have been advanced by
- * the former fail-open publisher and therefore cannot anchor new proof.
- *
- * Typed publication remains disabled here until the database authority can
- * bind exact RAW, verified termination, parsed facts, membership, and the new
- * evidence cursor in one owner-only transaction. A verified capture is still
- * durable and replayable; every other evidence state is explicitly RAW-only.
+ * Capture every supported history surface independently. Reviewed position
+ * history uses the verified head and two-phase RAW/publication authority;
+ * every other surface remains immutable RAW-only evidence and never inherits
+ * a cursor advanced by the legacy fail-open publisher.
  */
+interface TraderHistoryCrawlResult {
+  readonly failure: Error | null
+  readonly rowsWritten: number
+}
+
 async function crawlTraderHistories(
   session: FetchSession,
   adapter: SourceAdapter,
   src: SourceRow,
   trader: NativeCohortTrader
-): Promise<number> {
+): Promise<TraderHistoryCrawlResult> {
   const failures: Error[] = []
+  let rowsWritten = 0
   for (const kind of historyKinds(adapter, src)) {
     try {
-      const acquisition = await captureHistoryAcquisition({
-        source: src,
-        traderId: trader.id,
-        exchangeTraderId: trader.exchange_trader_id,
-        kind,
-        cursor: null,
-        attemptStartedAt: new Date().toISOString(),
-        stream: adapter.getHistory(
+      if (kind === 'position_history' && canPublishVerifiedPositionHistory(src)) {
+        const published = await captureAndPublishVerifiedPositionHistory({
+          adapter,
           session,
-          src,
-          trader.exchange_trader_id,
-          kind,
-          null,
-          trader.meta
-        ),
-        terminalVerifier: adapter.historyTerminalVerifier?.(src, kind) ?? undefined,
-      })
-      await writeHistoryRawArtifact(
-        { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId },
-        runHistoryTransaction
-      )
-
-      if (acquisition.error !== null) throw acquisition.error
+          source: src,
+          trader,
+        })
+        // Count only new facts from an already validated authority receipt.
+        // Ambiguous-commit reconciliation returns replayed=true/factsAdded=0.
+        rowsWritten += published.receipt.factsAdded
+      } else {
+        await captureTierBHistoryRawOnly({ adapter, kind, session, source: src, trader })
+      }
     } catch (cause) {
       failures.push(cause instanceof Error ? cause : new Error(String(cause)))
     }
   }
-  if (failures.length === 1) throw failures[0]
-  if (failures.length > 1) {
-    throw new AggregateError(
-      failures,
-      `[tier-b] ${src.slug} captured ${failures.length} independent history failures`
-    )
-  }
-  return 0
+  const failure =
+    failures.length === 0
+      ? null
+      : failures.length === 1
+        ? failures[0]
+        : new AggregateError(
+            failures,
+            `[tier-b] ${src.slug} captured ${failures.length} independent history failures`
+          )
+  return Object.freeze({ failure, rowsWritten })
 }
 
 export async function processTierB(
@@ -383,15 +380,15 @@ export async function processTierB(
 
       if (allTimeframesSuccessful) {
         result.tradersCrawled += 1
-        // Histories ride the same session right after the profile, but remain
-        // evidence-only until the verified publication authority is installed.
-        try {
-          result.historyRowsWritten += await crawlTraderHistories(session, adapter, src, trader)
-        } catch (err) {
+        // Histories ride the same session right after the profile. Each kind
+        // remains isolated, so one failure cannot suppress the others.
+        const histories = await crawlTraderHistories(session, adapter, src, trader)
+        result.historyRowsWritten += histories.rowsWritten
+        if (histories.failure !== null) {
           result.errors += 1
           console.warn(
             `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} histories failed:`,
-            err instanceof Error ? err.message : err
+            histories.failure.message
           )
         }
       }
