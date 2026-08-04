@@ -24,6 +24,10 @@ import type {
 } from './types'
 
 const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
+const COPIER_PNL_BUCKET_ORDER = ['<-1000', '-1000~0', '0~1000', '1000~10000', '>10000'] as const
+const COPIER_PNL_BUCKETS: ReadonlySet<string> = new Set(COPIER_PNL_BUCKET_ORDER)
+const COPIER_HISTOGRAM_MIN_BUCKET_COUNT = 5
+const COPIER_HISTOGRAM_MIN_TOTAL_COUNT = 10
 
 const HISTORY_COMPLETENESS_REASONS: ReadonlySet<HistoryCompletenessReason> = new Set([
   'verified_terminal_history',
@@ -208,6 +212,49 @@ function nonNegativeSafeIntegerOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
+function sanitizeCopierPnlDistribution(
+  value: unknown,
+  currency: ServingCurrency | null
+): CopierAggregate['pnlDistribution'] {
+  if (currency === null || !Array.isArray(value)) return []
+
+  const countsByBucket = new Map<string, number>()
+  let totalCount = 0
+  for (const candidate of value) {
+    if (!isPlainRecord(candidate)) return []
+    const keys = Object.keys(candidate)
+    if (
+      keys.length !== 2 ||
+      !Object.prototype.hasOwnProperty.call(candidate, 'bucket') ||
+      !Object.prototype.hasOwnProperty.call(candidate, 'count')
+    ) {
+      return []
+    }
+
+    const bucket = candidate.bucket
+    const count = nonNegativeSafeIntegerOrNull(candidate.count)
+    if (
+      typeof bucket !== 'string' ||
+      !COPIER_PNL_BUCKETS.has(bucket) ||
+      count === null ||
+      count < COPIER_HISTOGRAM_MIN_BUCKET_COUNT ||
+      countsByBucket.has(bucket)
+    ) {
+      return []
+    }
+
+    totalCount += count
+    if (!Number.isSafeInteger(totalCount)) return []
+    countsByBucket.set(bucket, count)
+  }
+
+  if (totalCount < COPIER_HISTOGRAM_MIN_TOTAL_COUNT) return []
+  return COPIER_PNL_BUCKET_ORDER.flatMap((bucket) => {
+    const count = countsByBucket.get(bucket)
+    return count === undefined ? [] : [{ bucket, count }]
+  })
+}
+
 function unknownHistoryCompleteness(): HistoryCompleteness {
   return { state: 'unknown', reason: 'history_evidence_not_bound' }
 }
@@ -330,19 +377,9 @@ export async function getCopierAggregate(
   if (error || !isPlainRecord(data)) return null
   const d = data
 
-  const distribution: CopierAggregate['pnlDistribution'] = []
-  if (Array.isArray(d.pnlDistribution)) {
-    for (const candidate of d.pnlDistribution) {
-      if (!isPlainRecord(candidate)) continue
-      const count = nonNegativeSafeIntegerOrNull(candidate.count)
-      if (typeof candidate.bucket === 'string' && count !== null) {
-        distribution.push({ bucket: candidate.bucket, count })
-      }
-    }
-  }
-
   const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
   const currency = currencyOrNull(d.currency)
+  const distribution = sanitizeCopierPnlDistribution(d.pnlDistribution, currency)
   const depth =
     d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
 
@@ -352,7 +389,7 @@ export async function getCopierAggregate(
     totalCopierPnl: totalPnl === null || currency === null ? null : money(totalPnl, currency),
     // Bucket labels/thresholds share the aggregate's money unit. Without a
     // validated unit they are not safe to interpret either.
-    pnlDistribution: currency === null ? [] : distribution,
+    pnlDistribution: distribution,
     depth,
     provenance: recordProvenance(source, d),
     // `depth=full` describes the upstream product surface, not proof that the
