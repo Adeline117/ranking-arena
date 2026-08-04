@@ -6090,6 +6090,14 @@ const ko = {
   tabCopiers: '카피어',
   recordsEmpty: '표시할 기록이 없습니다',
   recordsLoadMore: '더 보기',
+  historyCompletenessPartialTitle: '거래 이력은 불완전한 미리보기입니다',
+  historyCompletenessPartialDescription:
+    '수집된 미리보기만 표시됩니다. 전체 범위는 검증되지 않았으며 이 기록은 순위에 사용되지 않습니다.',
+  historyCompletenessUnknownTitle: '거래 이력 완전성을 알 수 없습니다',
+  historyCompletenessUnknownDescription:
+    '이 화면에 전체 거래 이력 증거가 연결되지 않았습니다. 이 기록은 순위에 사용되지 않습니다.',
+  historyPreviewEmptyTitle: '이번 미리보기에서 기록을 수집하지 못했습니다',
+  historyPreviewEmptyDescription: '이는 불완전한 미리보기이며 거래 이력이 없다는 뜻이 아닙니다.',
   assetPreference: '자산 선호도',
   assetOther: '기타',
   metaLastTrade: '최근 거래',

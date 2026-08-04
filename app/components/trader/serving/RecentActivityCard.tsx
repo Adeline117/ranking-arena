@@ -6,7 +6,8 @@
  * arena.order_records 的数据此前只埋在 Stats 深处的 records 子 tab
  * (ServingRecordsSection),Overview 看不到任何交易活动。这里取前 5 行
  * 轻量预览(同一 useTraderRecords 查询键,与 Stats 页共享 React Query 缓存,
- * 零重复网络)。数据缺失/能力关闭时整卡 NULL-collapse。
+ * 零重复网络)。能力关闭或已验证的空结果仍 NULL-collapse；不完整空预览必须
+ * 保留可见提示，避免被误读为“没有历史”。
  */
 
 import { memo } from 'react'
@@ -16,6 +17,7 @@ import { t as i18nT, getLanguage } from '@/lib/i18n'
 import { formatDateLocalized } from '@/lib/utils/format'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import Metric from '@/app/components/ui/Metric'
+import HistoryCompletenessNotice from './HistoryCompletenessNotice'
 
 interface RecentActivityCardProps {
   source: string
@@ -37,7 +39,7 @@ export const RecentActivityCard = memo(function RecentActivityCard({
   exchangeTraderId,
   enabled,
 }: RecentActivityCardProps) {
-  const { rows } = useTraderRecords({
+  const { rows, completeness } = useTraderRecords({
     source,
     exchangeTraderId,
     kind: 'orders',
@@ -45,7 +47,8 @@ export const RecentActivityCard = memo(function RecentActivityCard({
     enabled,
   })
   const recent = ((rows ?? []) as OrderRow[]).slice(0, ROWS_SHOWN)
-  if (recent.length === 0) return null
+  const hasIncompleteHistory = Boolean(completeness && completeness.state !== 'complete')
+  if (recent.length === 0 && !hasIncompleteHistory) return null
 
   return (
     <Box
@@ -64,66 +67,86 @@ export const RecentActivityCard = memo(function RecentActivityCard({
       >
         {i18nT('recentActivityTitle')}
       </Text>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
-        {recent.map((r, i) => {
-          const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null
-          const side = (r.side ?? '').toLowerCase()
-          return (
-            <div
-              key={`${r.ts ?? i}-${r.symbol ?? ''}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[2],
-                fontSize: tokens.typography.fontSize.sm,
-              }}
-            >
-              <span
-                style={{
-                  color:
-                    side === 'long' || side === 'buy'
-                      ? tokens.colors.accent.success
-                      : side === 'short' || side === 'sell'
-                        ? tokens.colors.accent.error
-                        : tokens.colors.text.tertiary,
-                  fontWeight: tokens.typography.fontWeight.semibold,
-                  minWidth: 42,
-                  textTransform: 'uppercase',
-                }}
-              >
-                {r.side ?? '—'}
-              </span>
-              <span style={{ flex: 1, color: 'var(--color-text-primary)' }}>{r.symbol ?? '—'}</span>
-              {/* 开仓单 realized_pnl=0,整列 +$0.00 是纯噪音(走查 2026-07-10)——
-                  只在真有已实现盈亏时显示。 */}
-              {pnl !== null && Number.isFinite(pnl) && pnl !== 0 && (
-                <Metric value={pnl} format="pnl" size="sm" align="right" showArrow />
-              )}
-              <span
-                style={{
-                  color: tokens.colors.text.tertiary,
-                  fontVariantNumeric: 'tabular-nums',
-                  fontSize: tokens.typography.fontSize.xs,
-                  minWidth: 74,
-                  textAlign: 'right',
-                }}
-              >
-                {r.ts ? formatDateLocalized(new Date(r.ts), getLanguage()) : ''}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-      <Text
-        size="xs"
-        style={{
-          marginTop: tokens.spacing[2],
-          color: tokens.colors.text.tertiary,
-          display: 'block',
-        }}
-      >
-        {i18nT('recentActivityViewAll')}
-      </Text>
+      <HistoryCompletenessNotice completeness={completeness} />
+      {recent.length === 0 ? (
+        <Box style={{ padding: tokens.spacing[2], textAlign: 'center' }}>
+          <Text size="sm" weight="semibold" color="secondary" style={{ display: 'block' }}>
+            {i18nT('historyPreviewEmptyTitle')}
+          </Text>
+          <Text
+            size="xs"
+            color="tertiary"
+            style={{ display: 'block', marginTop: tokens.spacing[1], lineHeight: 1.5 }}
+          >
+            {i18nT('historyPreviewEmptyDescription')}
+          </Text>
+        </Box>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+            {recent.map((r, i) => {
+              const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null
+              const side = (r.side ?? '').toLowerCase()
+              return (
+                <div
+                  key={`${r.ts ?? i}-${r.symbol ?? ''}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    fontSize: tokens.typography.fontSize.sm,
+                  }}
+                >
+                  <span
+                    style={{
+                      color:
+                        side === 'long' || side === 'buy'
+                          ? tokens.colors.accent.success
+                          : side === 'short' || side === 'sell'
+                            ? tokens.colors.accent.error
+                            : tokens.colors.text.tertiary,
+                      fontWeight: tokens.typography.fontWeight.semibold,
+                      minWidth: 42,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {r.side ?? '—'}
+                  </span>
+                  <span style={{ flex: 1, color: 'var(--color-text-primary)' }}>
+                    {r.symbol ?? '—'}
+                  </span>
+                  {/* 开仓单 realized_pnl=0,整列 +$0.00 是纯噪音(走查 2026-07-10)——
+                      只在真有已实现盈亏时显示。 */}
+                  {pnl !== null && Number.isFinite(pnl) && pnl !== 0 && (
+                    <Metric value={pnl} format="pnl" size="sm" align="right" showArrow />
+                  )}
+                  <span
+                    style={{
+                      color: tokens.colors.text.tertiary,
+                      fontVariantNumeric: 'tabular-nums',
+                      fontSize: tokens.typography.fontSize.xs,
+                      minWidth: 74,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {r.ts ? formatDateLocalized(new Date(r.ts), getLanguage()) : ''}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <Text
+            size="xs"
+            style={{
+              marginTop: tokens.spacing[2],
+              color: tokens.colors.text.tertiary,
+              display: 'block',
+            }}
+          >
+            {i18nT('recentActivityViewAll')}
+          </Text>
+        </>
+      )}
     </Box>
   )
 })

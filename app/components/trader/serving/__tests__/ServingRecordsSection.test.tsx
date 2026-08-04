@@ -43,6 +43,7 @@ describe('ServingRecordsSection selection scope', () => {
     ;(useTraderRecords as jest.Mock).mockReturnValue({
       rows: [],
       provenance: null,
+      completeness: null,
       isPendingUpstream: false,
       isLoading: false,
       isFetchingNextPage: false,
@@ -123,5 +124,116 @@ describe('ServingRecordsSection selection scope', () => {
       tf: 90,
       enabled: true,
     })
+  })
+
+  it.each(['position_history', 'orders', 'transfers'] as const)(
+    'discloses a partial %s preview as rank-ineligible',
+    (kind) => {
+      ;(useTraderRecords as jest.Mock).mockReturnValue({
+        rows: [{ symbol: 'BTCUSDT' }],
+        provenance: null,
+        completeness: {
+          state: 'partial',
+          reason: 'interactive_preview',
+          evidenceState: 'caller_limited',
+          scanTerminalState: 'partial',
+          blockerReasons: ['caller_limit'],
+        },
+        isPendingUpstream: false,
+        isLoading: false,
+        isFetchingNextPage: false,
+        hasNextPage: false,
+        fetchNextPage: jest.fn(),
+        error: null,
+        refetch: jest.fn(),
+      })
+
+      render(
+        <ServingRecordsSection
+          source="gmx"
+          exchangeTraderId="trader-a"
+          capability={capability([kind])}
+          tf={90}
+        />
+      )
+
+      const notice = screen.getByRole('status', {
+        name: 'historyCompletenessPartialTitle',
+      })
+      expect(notice).toHaveAttribute('data-history-completeness', 'partial')
+      expect(notice).toHaveAttribute('data-history-evidence', 'caller_limited')
+      expect(screen.getByText('historyCompletenessPartialDescription')).toBeInTheDocument()
+    }
+  )
+
+  it('discloses unknown order-history evidence', () => {
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [{ symbol: 'ETHUSDT' }],
+      provenance: null,
+      completeness: {
+        state: 'unknown',
+        reason: 'history_evidence_not_bound',
+      },
+      isPendingUpstream: false,
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['orders'])}
+        tf={90}
+      />
+    )
+
+    const notice = screen.getByRole('status', {
+      name: 'historyCompletenessUnknownTitle',
+    })
+    expect(notice).toHaveAttribute('data-history-completeness', 'unknown')
+    expect(screen.getByText('historyCompletenessUnknownDescription')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['positions', { state: 'partial', reason: 'interactive_preview' }],
+    [
+      'orders',
+      {
+        state: 'complete',
+        reason: 'verified_terminal_history',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
+      },
+    ],
+  ] as const)('does not show a limitation notice for %s', (kind, completeness) => {
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [{ symbol: 'BTCUSDT' }],
+      provenance: null,
+      completeness,
+      isPendingUpstream: false,
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability([kind])}
+        tf={90}
+      />
+    )
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

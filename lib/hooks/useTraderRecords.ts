@@ -14,6 +14,7 @@ import { fetcher } from '@/lib/hooks/fetchers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import type {
   CopierAggregate,
+  HistoryCompleteness,
   RecordKind,
   RecordsPage,
   ServingTimeframe,
@@ -39,6 +40,38 @@ function recordsUrl(
   const params = new URLSearchParams({ kind, source, tf: String(tf) })
   if (cursor) params.set('cursor', cursor)
   return `/api/traders/${encodeURIComponent(exchangeTraderId)}/records?${params.toString()}`
+}
+
+const UNBOUND_HISTORY: HistoryCompleteness = {
+  state: 'unknown',
+  reason: 'history_evidence_not_bound',
+}
+
+const LEGACY_TIER_C_PREVIEW: HistoryCompleteness = {
+  state: 'partial',
+  reason: 'interactive_preview',
+}
+
+function combinedHistoryCompleteness(
+  kind: Exclude<RecordKind, 'copiers'>,
+  pages: RecordsPage[]
+): HistoryCompleteness | null {
+  if (kind === 'positions' || pages.length === 0) return null
+
+  const pageCompleteness = pages.map(
+    (page) =>
+      page.completeness ??
+      (page.cacheState === 'cold-fetched' ? LEGACY_TIER_C_PREVIEW : UNBOUND_HISTORY)
+  )
+
+  // Pagination can only preserve or lower trust. One page without bound
+  // evidence makes the combined history unknown; otherwise any partial page
+  // keeps the whole result partial. Only an all-complete set is complete.
+  return (
+    pageCompleteness.find(({ state }) => state === 'unknown') ??
+    pageCompleteness.find(({ state }) => state === 'partial') ??
+    pageCompleteness[0]
+  )
 }
 
 export function useTraderRecords({
@@ -67,10 +100,12 @@ export function useTraderRecords({
   const pages = query.data?.pages ?? []
   const rows = pages.flatMap((p) => p.rows)
   const lastPage = pages[pages.length - 1]
+  const completeness = combinedHistoryCompleteness(kind, pages)
 
   return {
     rows,
     provenance: lastPage?.provenance ?? null,
+    completeness,
     /** First page is still cold-fetching upstream (Tier-C pending). */
     isPendingUpstream: pages.length === 1 && pages[0].cacheState === 'pending',
     isLoading: query.isLoading,

@@ -5860,6 +5860,14 @@ const ja = {
   tabCopiers: 'コピーユーザー',
   recordsEmpty: '記録がありません',
   recordsLoadMore: 'もっと見る',
+  historyCompletenessPartialTitle: '履歴は不完全なプレビューです',
+  historyCompletenessPartialDescription:
+    '取得済みのプレビューのみを表示しています。全期間の網羅性は未検証で、ランキングには使用されません。',
+  historyCompletenessUnknownTitle: '履歴の完全性は不明です',
+  historyCompletenessUnknownDescription:
+    'この表示には完全な履歴証拠が紐付いていません。これらの記録はランキングには使用されません。',
+  historyPreviewEmptyTitle: '今回のプレビューでは記録を取得できませんでした',
+  historyPreviewEmptyDescription: 'これは不完全なプレビューであり、履歴がないことを意味しません。',
   assetPreference: '資産選好',
   assetOther: 'その他',
   metaLastTrade: '最終取引',

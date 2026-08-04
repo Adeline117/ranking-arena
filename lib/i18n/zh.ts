@@ -6053,6 +6053,13 @@ const zh = {
   tabCopiers: '跟单者',
   recordsEmpty: '暂无记录',
   recordsLoadMore: '加载更多',
+  historyCompletenessPartialTitle: '历史记录仅为不完整预览',
+  historyCompletenessPartialDescription:
+    '当前仅展示本次已获取的预览记录，完整覆盖尚未验证；这些记录不参与排名。',
+  historyCompletenessUnknownTitle: '历史完整度未知',
+  historyCompletenessUnknownDescription: '当前页面尚未绑定完整历史证据；这些记录不参与排名。',
+  historyPreviewEmptyTitle: '本次预览未捕获到记录',
+  historyPreviewEmptyDescription: '这是不完整预览，不代表该交易员没有历史记录。',
   assetPreference: '资产偏好',
   assetOther: '其他',
   metaLastTrade: '最近交易',

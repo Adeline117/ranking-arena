@@ -6212,6 +6212,15 @@ const en = {
   tabCopiers: 'Copiers',
   recordsEmpty: 'No records to show',
   recordsLoadMore: 'Load more',
+  historyCompletenessPartialTitle: 'Partial history preview',
+  historyCompletenessPartialDescription:
+    'Only the captured preview is shown; full coverage is not verified. These records are not used in rankings.',
+  historyCompletenessUnknownTitle: 'History completeness unknown',
+  historyCompletenessUnknownDescription:
+    'Full-history evidence is not linked to this view. These records are not used in rankings.',
+  historyPreviewEmptyTitle: 'No records captured in this preview',
+  historyPreviewEmptyDescription:
+    'This incomplete preview does not mean the trader has no history.',
   assetPreference: 'Asset Preference',
   assetOther: 'Other',
   metaLastTrade: 'Last trade',
