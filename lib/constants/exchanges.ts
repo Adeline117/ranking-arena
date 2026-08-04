@@ -4,8 +4,8 @@
  * Single source of truth for all exchange-related mappings used across the
  * codebase: API routes, SSR data loading, cron jobs, and UI components.
  *
- * Key naming convention: the `source` column in `trader_snapshots` /
- * `trader_sources` uses snake_case identifiers (e.g. "binance_futures").
+ * Key naming convention: the `source` columns in `leaderboard_ranks` and
+ * `trader_sources` use snake_case identifiers (e.g. "binance_futures").
  * All constants here must match those DB values exactly.
  */
 
@@ -212,7 +212,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   // Data confirmed visible on user's browser, Mac Mini scripts deployed
   // ═══════════════════════════════════════════════════════════════
   // RECOVERED via Mac Mini scrapers (2026-03-13):
-  // 'phemex' — Mac Mini fetch-phemex.mjs (183 traders)
+  // 'phemex' — published through the canonical ingest adapter
   // 'lbank' — VPS scraper working (42 traders)
   // 'blofin' — VPS/Mac Mini working (429 traders)
   // 'kucoin' — RECOVERED 2026-03-31: POST API at /_api/ct-copy-trade/ works (822 traders)
@@ -820,8 +820,8 @@ for (let i = SOURCES_WITH_DATA.length - 1; i >= 0; i--) {
 
 /**
  * Is this platform dead/blocked (no pipeline writes anymore)?
- * Replaces lib/connectors/route-config isDead() after the legacy connector
- * deletion (ARENA_DATA_SPEC v1.2 endgame) — the canonical dead list lives in
+ * Replaces the retired connector runtime's isDead() helper
+ * (ARENA_DATA_SPEC v1.2 endgame) — the canonical dead list lives in
  * DEAD_BLOCKED_PLATFORMS now.
  */
 export function isDeadPlatform(platform: string): boolean {
@@ -834,55 +834,6 @@ export const SOURCE_ROI_TYPE: Record<string, RoiType> = Object.fromEntries(
 )
 
 // ---------------------------------------------------------------------------
-// SOURCE_TO_CONNECTOR_MAP – maps source names to ConnectorRegistry keys
-// ---------------------------------------------------------------------------
-
-/**
- * Maps source names (used in DB and cron groups) to ConnectorRegistry lookup keys.
- * Source names like 'htx_futures' map to connector platform 'htx' + marketType 'futures'.
- * Used by batch-fetch-traders and fetch-traders/[platform] routes.
- */
-export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketType: string }> = {
-  binance_futures: { platform: 'binance_futures', marketType: 'futures' },
-  binance_spot: { platform: 'binance_spot', marketType: 'spot' },
-  binance_web3: { platform: 'binance_web3', marketType: 'web3' },
-  bitget_futures: { platform: 'bitget_futures', marketType: 'futures' },
-  okx_futures: { platform: 'okx_futures', marketType: 'futures' },
-  okx_spot: { platform: 'okx_spot', marketType: 'spot' },
-  okx_web3: { platform: 'okx_web3', marketType: 'web3' },
-  htx_futures: { platform: 'htx_futures', marketType: 'futures' },
-  mexc: { platform: 'mexc', marketType: 'futures' },
-  coinex: { platform: 'coinex', marketType: 'futures' },
-  bingx: { platform: 'bingx', marketType: 'futures' },
-  gateio: { platform: 'gateio', marketType: 'futures' },
-  xt: { platform: 'xt', marketType: 'futures' },
-  blofin: { platform: 'blofin', marketType: 'futures' },
-  btcc: { platform: 'btcc', marketType: 'futures' },
-  bitunix: { platform: 'bitunix', marketType: 'futures' },
-  bitfinex: { platform: 'bitfinex', marketType: 'futures' },
-  toobit: { platform: 'toobit', marketType: 'futures' },
-  etoro: { platform: 'etoro', marketType: 'spot' },
-  bybit: { platform: 'bybit', marketType: 'futures' },
-  bybit_spot: { platform: 'bybit_spot', marketType: 'spot' },
-  hyperliquid: { platform: 'hyperliquid', marketType: 'perp' },
-  gmx: { platform: 'gmx', marketType: 'perp' },
-  dydx: { platform: 'dydx', marketType: 'perp' },
-  gains: { platform: 'gains', marketType: 'perp' },
-  jupiter_perps: { platform: 'jupiter_perps', marketType: 'perp' },
-  aevo: { platform: 'aevo', marketType: 'perp' },
-  drift: { platform: 'drift', marketType: 'perp' },
-  weex: { platform: 'weex', marketType: 'futures' },
-  phemex: { platform: 'phemex', marketType: 'futures' },
-  kucoin: { platform: 'kucoin', marketType: 'futures' },
-  kwenta: { platform: 'kwenta', marketType: 'perp' },
-  // New platforms (Wave 2)
-  woox: { platform: 'woox', marketType: 'copy' },
-  polymarket: { platform: 'polymarket', marketType: 'copy' },
-  copin: { platform: 'copin', marketType: 'perp' },
-  // DEAD (2026-04): rabbitx (DNS dead), vertex (no public leaderboard API), apex_pro (no public leaderboard API, geo-blocked)
-}
-
-// ---------------------------------------------------------------------------
 // validateExchangeConfig – cross-check all config objects for consistency
 // ---------------------------------------------------------------------------
 
@@ -893,8 +844,7 @@ export const SOURCE_TO_CONNECTOR_MAP: Record<string, { platform: string; marketT
  *
  * Checks:
  * 1. Every platform in SOURCES_WITH_DATA exists in EXCHANGE_CONFIG
- * 2. Every platform in SOURCE_TO_CONNECTOR_MAP exists in EXCHANGE_CONFIG
- * 3. Every platform in ALL_SOURCES exists in EXCHANGE_CONFIG
+ * 2. Every platform in ALL_SOURCES exists in EXCHANGE_CONFIG
  *
  * Called automatically on module load. Exported for explicit use in tests.
  */
@@ -907,15 +857,6 @@ export function validateExchangeConfig(): string[] {
     if (!exchangeConfigKeys.has(source)) {
       warnings.push(
         `[ExchangeConfig] SOURCES_WITH_DATA contains "${source}" which is missing from EXCHANGE_CONFIG`
-      )
-    }
-  }
-
-  // Check SOURCE_TO_CONNECTOR_MAP
-  for (const source of Object.keys(SOURCE_TO_CONNECTOR_MAP)) {
-    if (!exchangeConfigKeys.has(source)) {
-      warnings.push(
-        `[ExchangeConfig] SOURCE_TO_CONNECTOR_MAP contains "${source}" which is missing from EXCHANGE_CONFIG`
       )
     }
   }

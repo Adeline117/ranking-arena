@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Managed by scripts/install-git-hooks.mjs.
+
+set -euo pipefail
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+migrations_dir="supabase/migrations"
+if [ -d "$migrations_dir" ]; then
+  duplicate_versions=$(
+    find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' -print \
+      | sed 's#.*/##; s/_.*//' \
+      | sort \
+      | uniq -d
+  )
+
+  if [ -n "$duplicate_versions" ]; then
+    printf '%s\n' "ERROR: Duplicate migration versions found:" >&2
+    printf '%s\n' "$duplicate_versions" >&2
+    printf '%s\n' "Rename conflicting files so every migration version is unique." >&2
+    exit 1
+  fi
+fi
+
+if [ ! -x "node_modules/.bin/lint-staged" ]; then
+  printf '%s\n' "ERROR: lint-staged is unavailable; run npm ci before committing." >&2
+  exit 1
+fi
+
+node_modules/.bin/lint-staged --quiet

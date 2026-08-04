@@ -2645,7 +2645,7 @@ const en = {
   viewGroupInfoAria: 'View group info & rules',
   viewGroupMembersAria: 'View member list',
 
-  // Trader page i18n - TraderPageV2, TraderRefreshButton, TraderFeed, etc.
+  // Trader detail page, refresh state, and feed labels
   aumLabel: 'AUM',
   verifiedAccounts: 'verified accounts',
   mddLabel: 'MDD',

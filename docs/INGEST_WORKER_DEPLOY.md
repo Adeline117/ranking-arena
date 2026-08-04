@@ -144,7 +144,7 @@ node, and fresh Redis roster payload. Any failure restores and proves the exact
 previous release; an interrupted or unproved recovery blocks subsequent deploys
 for supervised handling.
 
-Do not restore the retired standalone `onchain-enrich-web3.mts` crontab entries.
+The retired standalone `onchain-enrich-web3.mts` entrypoint must remain absent.
 `maint:onchain-enrich` on the local BullMQ queue is the sole recurring owner.
 
 ## Failure handling

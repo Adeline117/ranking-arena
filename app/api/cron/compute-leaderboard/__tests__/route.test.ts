@@ -206,44 +206,8 @@ describe.skip('GET /api/cron/compute-leaderboard', () => {
   // ---- Normal execution ----------------------------------------------------
 
   it('computes leaderboard for all seasons and returns stats', async () => {
-    const now = new Date().toISOString()
-
-    // V2 snapshot rows (new column names: platform, trader_key, roi_pct, pnl_usd, updated_at)
-    const v2SnapshotRows = [
-      {
-        platform: 'binance-futures',
-        trader_key: 'trader1',
-        roi_pct: 50,
-        pnl_usd: 10000,
-        win_rate: 65,
-        max_drawdown: -15,
-        trades_count: 20,
-        followers: 100,
-        arena_score: 85,
-        updated_at: now,
-        sharpe_ratio: null,
-      },
-      {
-        platform: 'binance-futures',
-        trader_key: 'trader2',
-        roi_pct: 30,
-        pnl_usd: 5000,
-        win_rate: 55,
-        max_drawdown: -20,
-        trades_count: 15,
-        followers: 50,
-        arena_score: 70,
-        updated_at: now,
-        sharpe_ratio: null,
-      },
-    ]
-
     // Use chainable for all tables — it handles any chain pattern
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') {
-        return chainable({ data: v2SnapshotRows, error: null })
-      }
-
       if (table === 'leaderboard_ranks') {
         return chainable({ count: 2, data: [], error: null })
       }
@@ -284,7 +248,6 @@ describe.skip('GET /api/cron/compute-leaderboard', () => {
       expect(count).toBeGreaterThan(0)
     }
     // Reads ranking inputs from arena (RPC) + writes leaderboard_ranks.
-    // (trader_snapshots_v2 retired 2026-06-15)
     expect(mockSupabaseFrom).toHaveBeenCalledWith('leaderboard_ranks')
   })
 
@@ -294,7 +257,6 @@ describe.skip('GET /api/cron/compute-leaderboard', () => {
     // All tables return empty data via chainable proxy
     mockSupabaseFrom.mockImplementation((table: string) => {
       if (table === 'leaderboard_ranks') return chainable({ count: 0, data: [], error: null })
-      if (table === 'trader_snapshots_v2') return chainable({ data: [], error: null })
       return chainable({ data: null, error: null })
     })
 

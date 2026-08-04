@@ -8,9 +8,9 @@
  * - Structured error handling
  *
  * Usage:
- *   export const GET = withCron('batch-fetch-traders-a', async (request, { plog, supabase }) => {
- *     const count = await doWork(supabase)
- *     return { traders_fetched: count }
+ *   export const GET = withCron('sync-ranking-store', async (request, { supabase }) => {
+ *     const count = await syncRankings(supabase)
+ *     return { rankings_synced: count }
  *   })
  *
  * Inspired by dub.co's withCron pattern (23K★).

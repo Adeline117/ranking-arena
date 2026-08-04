@@ -57,10 +57,7 @@ describe('deprecated GET /api/monitoring/freshness', () => {
 
   it('contains no deleted snapshot authority or second freshness calculation', () => {
     const route = readFileSync(join(process.cwd(), 'app/api/monitoring/freshness/route.ts'), 'utf8')
-    const skill = readFileSync(
-      join(process.cwd(), '.claude/skills/arena-enrichment-patterns/SKILL.md'),
-      'utf8'
-    )
+    const skill = readFileSync(join(process.cwd(), '.claude/skills/data-quality/SKILL.md'), 'utf8')
 
     expect(route).not.toContain('get_monitoring_freshness_summary')
     expect(route).not.toMatch(/\.rpc\s*\(/)

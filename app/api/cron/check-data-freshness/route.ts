@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { isAuthorized } from '@/lib/cron/utils'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
@@ -86,7 +86,7 @@ async function freshnessPipelineLogUnavailable(): Promise<void> {
  */
 export async function GET(req: Request) {
   // 验证授权
-  if (!isAuthorized(req)) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

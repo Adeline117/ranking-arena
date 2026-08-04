@@ -43,14 +43,14 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 
 4. **Common causes and fixes**:
 
-   | Cause                       | Fix                                                                   |
-   | --------------------------- | --------------------------------------------------------------------- |
-   | Exchange API changed format | Update the fetcher/connector to match new response shape              |
-   | VPS scraper down            | SSH to VPS, check PM2: `pm2 status`, `pm2 restart arena-scraper`      |
-   | Rate limited (429)          | Wait for cooldown or increase delay in connector config               |
-   | Geo-blocked                 | Route through VPS proxy or Cloudflare Worker                          |
-   | Timeout (524/504)           | Reduce batch size or increase `timeoutMs` in connector config         |
-   | Supabase error 42P10        | Missing unique constraint on target table -- check ON CONFLICT clause |
+   | Cause                     | Fix                                                                     |
+   | ------------------------- | ----------------------------------------------------------------------- |
+   | Upstream response changed | Add a sanitized RAW fixture, then update the source adapter parser      |
+   | Ingest worker unavailable | Check PM2/container ownership heartbeat and the source execution region |
+   | Rate limited (429)        | Inspect attempt evidence and tune the shared transport policy           |
+   | Geo-blocked               | Verify the registry-selected region and its configured transport        |
+   | Timeout (524/504)         | Inspect source lease/attempt deadlines before changing bounded budgets  |
+   | Publish gate rejected     | Inspect completeness, metric parity, and staging rejection evidence     |
 
 5. **Generate automated fix script**:
    ```bash
@@ -233,7 +233,7 @@ delivery deduplication.
 
 ### Common alert patterns
 
-- **"<platform> consecutive failures 3+"**: Check platform API status, VPS proxy, and connector logs.
+- **"<platform> consecutive failures 3+"**: Check platform API status, worker attempt evidence, and adapter logs.
 - **"<platform> returned 0 results"**: API may have changed or be temporarily down. Wait 1 cycle, then investigate.
 - **"<platform> slow response"**: Check if the exchange is under maintenance or if VPS is overloaded.
 
@@ -277,9 +277,9 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
   "https://www.arenafi.org/api/cron/compute-leaderboard?season=90D"
 ```
 
-This recomputes one serving season from the configured `COMPUTE_READ_SOURCE` and
-writes `leaderboard_ranks`. It does not fetch upstream data and must not be used
-to advance `leaderboard_source_freshness.source_as_of`.
+This recomputes one serving season from canonical `arena_score_inputs` and writes
+`leaderboard_ranks`. It does not fetch upstream data and must not be used to
+advance `leaderboard_source_freshness.source_as_of`.
 
 The Mac Mini BullMQ worker normally schedules each season every 2 hours, staggered
 by 5 minutes. Vercel's `compute-leaderboard-watchdog` checks twice per hour and
@@ -789,5 +789,5 @@ Redis is non-critical — all Redis consumers fail-open:
 | **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 53 endpoints / 44 Vercel schedules, staggered        |
+| **Cron Schedule**    | 48 endpoints / 40 Vercel schedules, staggered        |
 | **Scraper PM2 name** | `arena-scraper`                                      |

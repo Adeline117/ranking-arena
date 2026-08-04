@@ -46,9 +46,9 @@ Rules:
    configs) may import lower-level modules; product modules do not import those
    entry points.
 5. Product/runtime modules do not import operator scripts.
-6. The legacy `connectors/` and `workers/` roots are migration debt. No new
-   imports may be added; their remaining consumers must move to `lib/ingest/`
-   and `worker/` before those roots are removed.
+6. The legacy `connectors/` and `workers/` roots are retired and must not be
+   reintroduced. Source adapters belong in `lib/ingest/`; shared runtime logic
+   belongs in `lib/`; long-running orchestration belongs in `worker/`.
 7. Applied files under `supabase/migrations/` are immutable. Bootstrap
    consolidation is a separate baseline artifact, not a rewrite of production
    history.
@@ -102,8 +102,9 @@ Structural changes are delivered in independently releasable slices:
 2. **Contract extraction:** move UI/API shared types into domain contracts.
 3. **Reverse-dependency removal:** eliminate each `lib -> app` and
    `lib -> worker` baseline entry with focused tests.
-4. **Legacy-root retirement:** move the remaining inline connector consumer to
-   the canonical ingest worker, then delete `connectors/` and `workers/`.
+4. **Legacy-root retirement (complete):** the remaining consumers moved to
+   canonical shared and ingest boundaries, and `connectors/` and `workers/`
+   were deleted. The retirement contract prevents those roots from returning.
 5. **Deployable isolation:** evaluate npm workspaces only when independent build
    contexts or dependency graphs provide measurable value.
 

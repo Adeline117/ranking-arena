@@ -1,6 +1,8 @@
 # Arena Task Queue
 
-> Priority-ordered task list. Update as tasks complete or priorities change.
+> Priority-ordered task list. Dated completed sections are historical evidence,
+> not current runtime guidance; use `docs/ARCHITECTURE.md` and
+> `docs/REPOSITORY_STRUCTURE.md` for current boundaries.
 
 ## Priority Legend
 
@@ -97,9 +99,9 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] **Worker reliability** — BullMQ retry 3x exponential, throw on non-2xx, completed handler try-catch, failed job heartbeat logging, uncaughtException/unhandledRejection handlers
 - [x] **DB indexes** — 6 missing indexes (notifications dedup, trader monthly/yearly, blocked_users blocker, rank_history, user_interactions, search_analytics)
 - [x] **Retention** — search_analytics 90d + user_interactions 30d cleanup in cleanup-data cron
-- [x] **Pipeline** — trigger chain failure → logger.error (was warn), by-token 6 queries → 1 .in()
+- [x] **Pipeline（历史）** — 当时将 trigger-chain failure 提升为 logger.error；该 trigger chain 现已退役，pipeline evaluator 独立排程
 - [x] **A11y** — pagination aria-label, period range aria-pressed, page counter aria-live
-- [x] **Health monitor** — freshness check reads trader_latest (was pipeline_logs for deleted batch-fetch-traders), etoro threshold 48h→96h
+- [x] **Health monitor（历史）** — 当时从 pipeline_logs 迁至 trader_latest；当前以 registry、attempt 和 publication 证据为权威
 - [x] **RLS audit** — 3 CRITICAL fixes: trader_claims + verified_traders open to public → service_role only; user_profiles UPDATE privilege escalation blocked (13 columns guarded)
 - [x] **RLS PII** — user_profiles SELECT: column-level REVOKE from authenticated, SECURITY DEFINER RPC for own sensitive data
 - [x] **Page audit** — Stripe checkout error toast (was infinite loading), trader tab scroll-to-top on switch

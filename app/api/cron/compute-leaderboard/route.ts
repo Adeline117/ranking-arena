@@ -1,11 +1,12 @@
 /**
- * Cron: Compute leaderboard_ranks from trader_snapshots
- * Schedule: Every hour (0 * * * *)
+ * Cron: Compute `leaderboard_ranks` from canonical `arena_score_inputs`.
+ * Schedule: each season every 2 hours via the BullMQ worker, with an
+ * authenticated Vercel watchdog as a safety net.
  *
  * For each season (7D, 30D, 90D):
- * 1. Fetch latest trader_snapshots per source+source_trader_id
+ * 1. Fetch the publication-fenced Arena score input bundle
  * 2. Calculate arena_score
- * 3. Join trader_sources for handle/avatar
+ * 3. Enrich display metadata and derived metrics
  * 4. Rank and upsert into leaderboard_ranks
  */
 
@@ -50,9 +51,7 @@ import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-// detectTraderType and getFreshnessHours live in ./helpers.ts
-// (single source of truth — duplicates removed 2026-04-09). getFreshnessHours
-// is now consumed only by fetch-phase1.ts.
+// detectTraderType lives in ./helpers.ts as the single source of truth.
 
 const logger = createLogger('compute-leaderboard')
 
@@ -332,13 +331,7 @@ export async function GET(request: NextRequest) {
       logger.warn('Withholding leaderboard_count_cache refresh after incomplete publication run')
     }
 
-    // (removed 2026-06-15) arena_score → trader_snapshots_v2 write-back.
-    // v2 is being retired (ARENA_DATA_SPEC endgame); leaderboard_ranks is the
-    // canonical score store. No point syncing scores back into a doomed table.
-
-    // (removed 2026-06-15) sub-scores → trader_snapshots_v2 write-back
-    // (syncSubscoresToV2). v2 is being retired; leaderboard_ranks holds the
-    // canonical sub-scores. See post-processing.ts.
+    // leaderboard_ranks is the canonical score and sub-score store.
 
     // A publication remains under the owner-token lease until every cache
     // mutation settles. Invalidate first, then warm the new generation; this
@@ -496,9 +489,7 @@ export async function GET(request: NextRequest) {
       {
         ok: !hasRealFailures && warnings.length === 0,
         elapsed_ms: elapsed,
-        // ENDGAME cutover visibility: which Phase-1 reader actually ran
-        // (trader_latest | arena | diff). Lets the cutover be verified from the
-        // response instead of guessing from data side-effects.
+        // Expose the authoritative Phase-1 reader in response metadata.
         read_source: getPhase1ReadSource(),
         stats,
         previous_counts: previousCounts,
@@ -540,28 +531,6 @@ async function computeSeason(
   const timeLeftMs = () => deadlineMs - Date.now()
   const isOutOfTime = (minMs: number = 10_000) => timeLeftMs() < minMs
 
-  // Log scheduler provenance only. Independent per-source board watermarks below are
-  // the source-data freshness gate; a completed batch job is not itself proof
-  // that every exchange/protocol returned fresh data.
-  try {
-    const { data: latestFetch } = await supabase
-      .from('pipeline_logs')
-      .select('ended_at')
-      .like('job_name', 'batch-fetch-traders%')
-      .eq('status', 'success')
-      .order('ended_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (latestFetch?.ended_at) {
-      const ageMin = Math.round((Date.now() - new Date(latestFetch.ended_at).getTime()) / 60_000)
-      logger.info(
-        `[${season}] Last batch-fetch job completed ${ageMin}min ago (${latestFetch.ended_at}); checking per-source board watermarks`
-      )
-    }
-  } catch {
-    // Non-critical — informational log only
-  }
-
   // Upsert abort flag (set inside the upsert loop when time runs out, consumed
   // by the zero-out phase below to skip its expensive N+1 cleanup path).
   let upsertAborted = false
@@ -571,30 +540,22 @@ async function computeSeason(
   const traderMap = new Map<string, TraderRow>()
   const addToTraderMap = makeAddToTraderMap(traderMap)
 
-  // Phase 1: Fetch fresh trader rows into traderMap. The read source is
-  // chosen by COMPUTE_READ_SOURCE (trader_latest | arena | diff) — the ENDGAME
-  // cutover switch from the legacy trader_latest table to the arena pipeline's
-  // arena_score_inputs RPC. Default 'trader_latest' is the legacy per-platform
-  // reader; 'diff' publishes legacy while logging the arena delta (shadow
-  // phase); 'arena' reads purely from the new pipeline. See phase1-select.ts.
+  // Phase 1: fetch the canonical, publication-fenced Arena score inputs. The
+  // retired trader_latest/diff cutover readers cannot be selected at runtime.
   await runPhase1(supabase, season, traderMap, addToTraderMap)
 
-  // V1 fetch removed — v2 backfill (migration 20260319b) ensures v2 has full coverage.
-  // upsertTraders() writes to both v1 and v2 on every cron run, so v2 stays current.
-  // If v2 coverage drops below expectations, run the backfill migration again.
-  // Debug: log per-source counts to diagnose missing platforms
+  // Log per-source counts from the canonical bundle to diagnose missing platforms.
   const sourceCounts = new Map<string, number>()
   for (const t of traderMap.values()) {
     sourceCounts.set(t.source, (sourceCounts.get(t.source) || 0) + 1)
   }
   const jupiterCount = sourceCounts.get('jupiter_perps') || 0
   logger.info(
-    `[${season}] ${traderMap.size} unique traders from v2 (jupiter_perps: ${jupiterCount}, sources: ${sourceCounts.size})`
+    `[${season}] ${traderMap.size} unique traders from arena_score_inputs (jupiter_perps: ${jupiterCount}, sources: ${sourceCounts.size})`
   )
 
-  // Cross-window backfill REMOVED — now handled at fetch time in connector-db-adapter.ts.
-  // runConnectorBatch() builds a union of all traders across all windows and ensures
-  // every trader has entries for ALL windows in trader_snapshots_v2.
+  // Window coverage is owned by the ingest adapter and RAW-to-canonical
+  // publication flow; ranking computation only consumes the published rows.
 
   // Data freshness check: classify each source as fresh / stale / query-failed.
   // If ALL platforms are stale (>48h) we skip computation to avoid publishing
@@ -633,9 +594,9 @@ async function computeSeason(
     )
   }
 
-  // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table).
-  // Catches data from the enrichment cron that was written to stats_detail but
-  // never propagated back to trader_snapshots_v2. Logic in enrich-stats-detail.ts.
+  // Phase 3: Fill optional missing metrics from existing trader_stats_detail
+  // evidence. This fallback does not establish source freshness or publication
+  // authority. Logic lives in enrich-stats-detail.ts.
   if (isOutOfTime(90_000)) {
     logger.warn(
       `[${season}] SKIPPING Phase 3 (stats_detail enrichment) — only ${Math.round(timeLeftMs() / 1000)}s left`

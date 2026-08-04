@@ -2565,7 +2565,7 @@ const zh = {
   viewGroupInfoAria: '查看群组信息与规则',
   viewGroupMembersAria: '查看成员列表',
 
-  // 交易员页面 i18n - TraderPageV2, TraderRefreshButton, TraderFeed 等
+  // 交易员详情页、刷新状态与动态标签
   aumLabel: '管理资金',
   verifiedAccounts: '已认证账户',
   mddLabel: '回撤',

@@ -1,29 +1,31 @@
-# Add XXX Exchange Connector
+# Add XXX Exchange Ingest Source
 
 ## Context
-We need to add XXX exchange's trader ranking data to Arena's leaderboard.
 
-## Requirements
-Connect to XXX exchange's public API to fetch top traders with their performance metrics.
+Add XXX exchange leaderboard data through the registry-driven ingest worker.
+Follow `docs/ADAPTER_ONBOARDING.md`; this template does not authorize a new
+Vercel fetch loop or standalone connector registry.
 
 ## Acceptance Criteria
-- [ ] Connector file at `lib/connectors/xxx.ts` implementing fetchLeaderboard and fetchTraderDetails
-- [ ] Trader data includes: username, PnL, ROI, win_rate (at minimum)
-- [ ] Data flows through the unified ingestion layer (batch-fetch-traders)
-- [ ] Add to appropriate batch group in `lib/cron/fetchers/` and `vercel.json`
-- [ ] Cron job runs at appropriate interval (group assignment based on data volume)
-- [ ] Rate limiting and error handling follow existing patterns (see hyperliquid.ts as reference)
-- [ ] After 3 consecutive failures, alert is triggered
-- [ ] Leaderboard page shows traders from this exchange
-- [ ] Build passes (`npm run build`)
-- [ ] Existing tests pass (`npm test`)
-- [ ] Type-check passes (`npm run type-check`)
+
+- [ ] Capture and document the upstream leaderboard/profile surfaces and geo requirements.
+- [ ] Add a `lib/ingest/adapters/<source>/` module with pure parsers and declared capabilities.
+- [ ] Store representative real RAW fixtures and cover every declared metric with parser tests.
+- [ ] Register the adapter in `lib/ingest/adapters/register.ts`.
+- [ ] Add expected-metric and parity coverage, including source-specific overrides when needed.
+- [ ] Add the `arena.sources` seed through a forward migration created by `scripts/new-migration.sh`.
+- [ ] Verify Tier-A publication, serving visibility, freshness, and metric/render coverage.
+- [ ] `npm run qa:architecture`, type checks, tests, lint, and production build pass.
 
 ## Constraints
-- Use existing connector patterns (check `lib/connectors/hyperliquid.ts` as reference)
-- Must handle geo-blocking gracefully (return empty array, don't throw)
-- Rate limit to max 5 requests/second to the exchange API
+
+- Preserve upstream nulls; do not invent CEX metrics.
+- Network access belongs in the adapter fetch boundary; parsers stay free of network, clock,
+  and module-state dependencies.
+- The database registry owns activation and cadence.
+- Do not edit an applied migration.
 
 ## Out of Scope
-- Historical data backfill (separate task)
-- Exchange-specific enrichment features
+
+- Historical backfill, unless separately approved with a bounded operator plan.
+- Product UI changes unrelated to source visibility.

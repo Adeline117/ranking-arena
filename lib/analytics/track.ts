@@ -103,7 +103,7 @@ export function trackEvent(name: AnalyticsEventName, props?: EventProps) {
     plausible(name, { props: props ?? {} })
   }
 
-  // PostHog (posthog-js attaches itself to window.posthog after init)
+  // Optional PostHog integration attaches itself to window.posthog after init.
   const posthog = (window as AnalyticsWindow).posthog
   if (posthog && typeof posthog.capture === 'function') {
     posthog.capture(name, props)

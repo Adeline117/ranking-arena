@@ -2,8 +2,8 @@
  * Redis Sorted Set for near-real-time rankings
  *
  * Uses Upstash Redis ZADD/ZREVRANK/ZREVRANGE to maintain a live ranking
- * that updates incrementally as new trader data arrives from batch-fetch-traders,
- * and fully syncs after compute-leaderboard runs.
+ * that updates incrementally as authoritative ranks are computed and fully
+ * syncs after compute-leaderboard runs.
  *
  * Key schema: {publication-epoch}:ranking:live:{period}
  * Member format: {platform}:{traderKey}

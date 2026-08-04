@@ -8,7 +8,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoredTrader } from './score-traders'
 import type { TraderRow } from './trader-row'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
+import { validateBeforeWrite, logRejectedWrites } from '@/lib/validation/data-write-gate'
 import { createLogger } from '@/lib/utils/logger'
 import { RANKING_SOURCE_FUTURE_TOLERANCE_MS } from '@/lib/rankings/source-freshness'
 

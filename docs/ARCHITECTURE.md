@@ -83,7 +83,7 @@ Overall     = 90D×0.70 + 30D×0.25 + 7D×0.05
 graph LR
   subgraph Vercel[Vercel hnd1]
     APP[Next.js App + API]
-    CRON[44 Vercel Crons]
+    CRON[41 Vercel Crons]
     GATE[deploy-gate.yml CI 门禁部署]
   end
   subgraph Supabase[Supabase us-west-2 ~24GB]
@@ -135,17 +135,17 @@ graph TD
 
 ## 六、关键文件索引
 
-| 层                 | 位置                                                                                    |
-| ------------------ | --------------------------------------------------------------------------------------- |
-| Ingest adapters    | `lib/ingest/adapters/<source>/`（NOT lib/connectors）                                   |
-| Ingest worker 入口 | `worker/src/ingest-worker.ts`（tier A/B/C/D）                                           |
-| 指标净化           | `lib/ingest/staging/validate.ts` + `lib/pipeline/validate-before-write.ts`              |
-| 主 perf 表         | `arena.trader_stats`（trader_latest/v2 已 DROP 2026-06-16）                             |
-| 服务层             | `public.leaderboard_ranks` + `lr_7d/30d/90d`                                            |
-| Arena Score        | `lib/utils/arena-score.ts`                                                              |
-| 缓存预设           | `lib/hooks/cache-presets.ts`                                                            |
-| Auth 原语          | `lib/api/with-cron.ts`/`with-admin-auth.ts`/`auth.ts`/`lib/auth/`                       |
-| 数据获取           | Server `lib/data/*`；Client `lib/hooks/use*`（React Query）；Cache `lib/cache/redis.ts` |
+| 层                 | 位置                                                                                               |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| Ingest adapters    | `lib/ingest/adapters/<source>/`（canonical adapter boundary）                                      |
+| Ingest worker 入口 | `worker/src/ingest-worker.ts`（tier A/B/C/D）                                                      |
+| 指标净化           | `lib/ingest/staging/validate.ts` + `lib/validation/data-write-gate.ts`                             |
+| 主 perf 表         | `arena.trader_stats`（trader_latest/v2 已 DROP 2026-06-16）                                        |
+| 服务层             | `public.leaderboard_ranks` + `lr_7d/30d/90d`                                                       |
+| Arena Score        | `lib/utils/arena-score.ts`                                                                         |
+| 缓存预设           | `lib/hooks/cache-presets.ts`                                                                       |
+| Auth 原语          | `lib/api/with-cron.ts`/`with-admin-auth.ts`/`auth.ts`/`lib/auth/`                                  |
+| 数据获取           | Server `lib/data/*`；Client `lib/hooks/use*`；Cache `lib/cache/redis-layer.ts` / `redis-client.ts` |
 
 ## 七、安全横切基建
 

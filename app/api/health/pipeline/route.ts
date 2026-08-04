@@ -22,6 +22,10 @@ import {
   type PlatformFreshnessRow,
   type PlatformHealth,
 } from '@/lib/services/platform-health'
+import {
+  classifyPipelineJobIdentity,
+  isAuthoritativePipelineStatusIdentity,
+} from '@/lib/monitoring/pipeline-job-lifecycle'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -339,15 +343,18 @@ export async function GET(req: NextRequest) {
     // v5 (2026-04-16): added `rateLimits` field + hot-exchange escalation.
     // v6 (2026-07-18): platform membership now comes from active arena.sources;
     // discard v5 entries that still contain retired/inactive static sources.
-    // v7 (2026-07-28): cache entries must carry an explicit authority verdict;
-    // never reuse a snapshot that masked an empty database result as healthy.
-    const CACHE_KEY = 'api:health:pipeline:v7'
+    // v7 (2026-07-28): cache entries must carry an explicit authority verdict.
+    // v8 (2026-08-04): retained logs for retired jobs are filtered before they
+    // can influence health or appear in monitoring payloads.
+    // v9 (2026-08-04): job/status identities fail closed and blocked-platform
+    // matching is structural. The hot tier matches the documented 2-minute TTL.
+    const CACHE_KEY = 'api:health:pipeline:v9'
     const cached = await withDeadline(
       deadline,
       CACHE_READ_DEADLINE_MS,
       { data: null, layer: null },
       'cache read',
-      () => tieredGet(CACHE_KEY, 'warm')
+      () => tieredGet(CACHE_KEY, 'hot')
     )
     if (cached.data !== null) {
       // Defensive: even on cache hit, validate the cached entry isn't degraded.
@@ -414,20 +421,49 @@ export async function GET(req: NextRequest) {
         throw new Error('active platform health computation timed out')
       }
 
-      // Filter out dead/blocked platforms from failure counts
-      const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
-      const isDeadPlatformJob = (jobName: string) => {
-        for (const dead of deadSet) {
-          if (jobName.includes(dead)) return true
-        }
-        return false
-      }
-      const recentFailures = (recentFailuresRaw ?? []).filter(
-        (f: { job_name?: string }) => !isDeadPlatformJob(f.job_name || '')
-      )
+      // Filter out dead/blocked platforms and retired job tombstones. Retained
+      // pipeline history is diagnostic evidence, not active runtime authority.
+      // Invalid job names and incoherent status pairs fail closed: they are
+      // excluded from the payload and make their database authority unavailable.
+      const classifyJob = (jobName: unknown) =>
+        classifyPipelineJobIdentity(jobName, DEAD_BLOCKED_PLATFORMS)
 
-      // Calculate overall pipeline health (excluding dead platforms)
-      const activeJobs = jobStatuses.filter((j) => !isDeadPlatformJob(j.job_name || ''))
+      let invalidJobStatusIdentity = false
+      const activeJobs = jobStatuses.filter((job) => {
+        const lifecycle = classifyJob(job.job_name)
+        if (lifecycle === 'invalid') {
+          invalidJobStatusIdentity = true
+          return false
+        }
+        if (lifecycle !== 'active') return false
+        if (!isAuthoritativePipelineStatusIdentity(job.status, job.health_status)) {
+          invalidJobStatusIdentity = true
+          return false
+        }
+        return true
+      })
+
+      let invalidJobStatsIdentity = false
+      const activeStats = jobStats.filter((job) => {
+        const lifecycle = classifyJob(job.job_name)
+        if (lifecycle === 'invalid') {
+          invalidJobStatsIdentity = true
+          return false
+        }
+        return lifecycle === 'active'
+      })
+
+      let invalidRecentFailureIdentity = false
+      const recentFailures = (recentFailuresRaw ?? []).filter((failure) => {
+        const lifecycle = classifyJob(failure.job_name)
+        if (lifecycle === 'invalid') {
+          invalidRecentFailureIdentity = true
+          return false
+        }
+        return lifecycle === 'active'
+      })
+
+      // Calculate overall pipeline health from executable jobs only.
       const totalJobs = activeJobs.length
       const healthyJobs = activeJobs.filter((j) => j.health_status === 'healthy').length
       const failedJobs = activeJobs.filter((j) => j.health_status === 'failed').length
@@ -441,9 +477,9 @@ export async function GET(req: NextRequest) {
       const platformNeverFetched = platformHealth.filter((p) => p.lastUpdate === null).length
       const platformStatus = classifyPlatformHealth(platformHealth)
       const unavailableAuthorities = [
-        ...(jobStatuses.length === 0 ? ['job_statuses'] : []),
-        ...(jobStats.length === 0 ? ['job_stats'] : []),
-        ...(recentFailuresRaw === null ? ['recent_failures'] : []),
+        ...(activeJobs.length === 0 || invalidJobStatusIdentity ? ['job_statuses'] : []),
+        ...(activeStats.length === 0 || invalidJobStatsIdentity ? ['job_stats'] : []),
+        ...(recentFailuresRaw === null || invalidRecentFailureIdentity ? ['recent_failures'] : []),
         ...(platformHealth.length === 0 ? ['platform_freshness'] : []),
       ]
 
@@ -472,8 +508,7 @@ export async function GET(req: NextRequest) {
         overallStatus = 'degraded'
       }
 
-      // Average success rate across active jobs only (exclude dead platforms)
-      const activeStats = jobStats.filter((j) => !isDeadPlatformJob(j.job_name || ''))
+      // Average success rate across executable jobs only.
       const avgSuccessRate =
         activeStats.length > 0
           ? activeStats.reduce((sum, j) => sum + (j.success_rate || 0), 0) / activeStats.length
@@ -500,8 +535,8 @@ export async function GET(req: NextRequest) {
         overallStatus = 'degraded'
       }
 
-      // ENDGAME (ARENA_DATA_SPEC v1.2): legacy connector circuit breakers
-      // deleted with lib/connectors — the new ingest pipeline tracks failures
+      // ENDGAME (ARENA_DATA_SPEC v1.2): legacy connector circuit breakers are
+      // retired — the ingest worker tracks failures
       // in arena.leaderboard_snapshots / freshness-sentinel instead. Keep the
       // response shape for OpenClaw consumers; always empty now.
       const rawCircuits: Record<string, string> = {}
@@ -566,8 +601,8 @@ export async function GET(req: NextRequest) {
           hotRateLimitedExchanges: hotExchanges.length,
         },
         platformHealth,
-        jobs: jobStatuses,
-        stats: jobStats,
+        jobs: activeJobs,
+        stats: activeStats,
         recentFailures,
         authority: {
           status:
@@ -607,7 +642,7 @@ export async function GET(req: NextRequest) {
       // but log failures. If this silently fails, every request recomputes
       // the full health snapshot (~dozens of Supabase queries), masking the
       // Redis outage and inflating costs until someone notices.
-      tieredSet(CACHE_KEY, result, 'warm', ['pipeline-health']).catch((cacheErr) => {
+      tieredSet(CACHE_KEY, result, 'hot', ['pipeline-health']).catch((cacheErr) => {
         logger.warn('[health/pipeline] Failed to cache pipeline health result', {
           error: cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
         })

@@ -41,6 +41,12 @@ docs
 *.md
 !README.md
 
+# Foundry contracts are an independent deployable unit.
+contracts
+script
+lib/forge-std
+foundry.toml
+
 # Storybook
 stories
 .storybook

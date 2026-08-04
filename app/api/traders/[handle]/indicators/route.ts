@@ -1,7 +1,7 @@
 /**
  * 交易员技术指标 API
  *
- * 从 trader_snapshots_v2 表获取历史 ROI 数据，计算技术分析指标
+ * 从 trader_daily_snapshots 获取历史 ROI 数据，计算技术分析指标。
  */
 
 import { NextRequest, NextResponse } from 'next/server'

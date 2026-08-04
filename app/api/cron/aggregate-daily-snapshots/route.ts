@@ -5,8 +5,7 @@
  * Core daily snapshot collection: fetch yesterday's data, gap-fill from leaderboard_ranks,
  * compute daily_return_pct, and upsert to trader_daily_snapshots.
  *
- * Derived metrics (Sharpe/MDD/WR) are computed by /api/cron/compute-derived-metrics (00:20 UTC).
- * Cleanup and metric refresh are handled by /api/cron/cleanup-data (01:00 UTC).
+ * Cleanup maintenance is handled by /api/cron/cleanup-data (01:00 UTC).
  *
  * Schedule: Daily at 00:05 UTC (Vercel cron sends GET)
  */
@@ -18,7 +17,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
+import { validateBeforeWrite, logRejectedWrites } from '@/lib/validation/data-write-gate'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
@@ -96,9 +95,6 @@ async function aggregateForDate(
   _plog: PipelineLogHandle
 ): Promise<{ inserted: number; errors: number }> {
   const readDb = getReadReplica() // Read replica for heavy SELECT queries
-  const today = new Date()
-  const _todayStr = today.toISOString().split('T')[0]
-
   // Step 1: Fetch ALL yesterday's snapshots in one query using RPC or direct query
   // Use distinct on (source, source_trader_id) ordered by captured_at desc to get latest per trader
   const { data: snapshots, error: snapshotError } = await readDb.rpc(
@@ -122,7 +118,7 @@ async function aggregateForDate(
 
   if (snapshotError || !snapshots) {
     // Fallback: fetch with regular query per-platform (prevents large platforms from crowding out small ones)
-    logger.warn('[aggregate] RPC not available, falling back to v2 per-platform query')
+    logger.warn('[aggregate] RPC not available, falling back to leaderboard per-platform query')
 
     const recentCutoff = new Date()
     recentCutoff.setUTCDate(recentCutoff.getUTCDate() - 2)
@@ -243,7 +239,7 @@ async function aggregateForDate(
         }
       }
       if (filled > 0) {
-        logger.info(`[aggregate] Filled ${filled} traders from leaderboard_ranks (not in v2)`)
+        logger.info(`[aggregate] Filled ${filled} traders from leaderboard_ranks`)
       }
     }
   }

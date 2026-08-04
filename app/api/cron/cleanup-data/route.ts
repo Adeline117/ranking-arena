@@ -3,14 +3,13 @@
  *
  * Handles data maintenance tasks:
  * - Cleanup ephemeral data (hot_topics, flash_news, notifications, pipeline_logs, trader_activities, authorization_sync_logs)
- * - Refresh computed metrics from equity curves
  * - Run orphaned/stale data cleanup via RPC
  *
- * IMPORTANT: trader_snapshots_v2, trader_daily_snapshots, trader_position_history
- * are NEVER deleted — historical data is accumulated for years.
+ * IMPORTANT: trader_daily_snapshots and trader_position_history are NEVER
+ * deleted — historical data is accumulated for years.
  * See CLAUDE.md: "绝对不要删除数据库历史数据"
  *
- * Schedule: Daily at 01:00 UTC (runs after aggregate + compute-derived-metrics)
+ * Schedule: Daily at 01:00 UTC (runs after aggregate-daily-snapshots)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -369,10 +368,6 @@ export async function GET(request: NextRequest) {
     } else {
       skippedSteps.push('pipeline_state')
     }
-
-    // ── Metrics refresh (with timeout to prevent hang) ────────────
-    // (removed 2026-06-15) refreshComputedMetrics — backfilled null metrics in
-    // trader_snapshots_v2 (retiring). Metrics now come from the arena pipeline.
 
     // ── ANALYZE on large tables (with per-table timeout) ─────────
     // Run ANALYZE periodically to keep planner stats fresh on growing tables

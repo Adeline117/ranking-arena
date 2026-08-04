@@ -1,11 +1,9 @@
 /**
- * compute-leaderboard / fetch-phase1-arena  (ENDGAME read path)
+ * compute-leaderboard / canonical Arena read path
  *
- * Drop-in replacement for fetchPhase1FromV2: pulls ranking inputs from the
- * new arena.* pipeline via the `arena_score_inputs` public RPC instead of the
- * legacy trader_latest table. Same signature, same TraderRow shape, same
- * addToTraderMap streaming — the caller chooses which reader to run via the
- * COMPUTE_READ_SOURCE flag (see route.ts).
+ * Pulls ranking inputs from the `arena.*` pipeline through the
+ * `arena_score_inputs` public RPC. The cutover readers have been retired, so
+ * this is the only Phase-1 source.
  *
  * WHY this is simpler than the legacy reader: arena.* is not PostgREST-exposed
  * (all reads go through SECURITY DEFINER RPCs), and the RPC already caps each

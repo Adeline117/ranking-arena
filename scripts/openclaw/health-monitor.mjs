@@ -11,28 +11,24 @@
  * Usage (OpenClaw):
  *   Configure as a skill that runs every 30 minutes
  *
- * Flags:
+ * Modes:
  *   check              Health check mode (default)
  *   daily              Daily report mode
- *   --with-auto-fix    Trigger auto-fix for failing fetchers after alert
  */
 
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { config as dotenvConfig } from 'dotenv'
-import { findStaleActivePlatforms, getActiveFetcherFailures } from './health-monitor-contract.mjs'
+import { findStaleActivePlatforms, parseBasicHealthResponse } from './health-monitor-contract.mjs'
+import { fetchJsonWithDeadline, parsePipelineHealthResponse } from './pipeline-health-monitor.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
+dotenvConfig({ path: path.resolve(__dirname, '../../.env'), quiet: true })
 
 const ARENA_URL = process.env.ARENA_URL || 'https://www.arenafi.org'
 const CRON_SECRET = process.env.CRON_SECRET
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
-
-// Auto-fix cooldown: 6 hours between fix attempts per platform
-const AUTO_FIX_COOLDOWN_MS = 6 * 60 * 60 * 1000
-const fixAttempts = new Map() // platform -> last attempt timestamp
 
 // Alert dedup: don't re-send same issue within cooldown
 import fs from 'fs'
@@ -81,6 +77,14 @@ function shouldSendAlert(issueFingerprint) {
   if (lastSent && Date.now() - lastSent < effectiveCooldown) {
     return false
   }
+  return true
+}
+
+function recordAlertSent(issueFingerprint) {
+  const state = loadAlertState()
+  const entry = state[issueFingerprint]
+  const lastSent = typeof entry === 'number' ? entry : entry?.ts
+  const streak = typeof entry === 'object' ? (entry?.streak ?? 1) : 1
   state[issueFingerprint] = { ts: Date.now(), streak: lastSent ? streak + 1 : 1 }
   // Cleanup entries older than 48h (covers the 24h max backoff window)
   for (const [key, val] of Object.entries(state)) {
@@ -88,58 +92,84 @@ function shouldSendAlert(issueFingerprint) {
     if (!ts || Date.now() - ts > 48 * 60 * 60 * 1000) delete state[key]
   }
   saveAlertState(state)
-  return true
 }
 
-if (!CRON_SECRET) {
-  console.error('CRON_SECRET is required')
-  process.exit(1)
-}
-
-async function checkBasicHealth() {
+export async function checkBasicHealth({
+  fetchImpl = globalThis.fetch,
+  arenaUrl = ARENA_URL,
+  timeoutMs = 30000,
+  nowMs = Date.now(),
+} = {}) {
   // 30s timeout — /api/health runs DB + Redis + freshness + VPS checks,
   // each with 5s internal cap, so worst case ~20s. 15s was too tight.
-  const res = await fetch(`${ARENA_URL}/api/health`, {
-    headers: { 'Cache-Control': 'no-cache' },
-    signal: AbortSignal.timeout(30000),
+  const payload = await fetchJsonWithDeadline({
+    fetchImpl,
+    url: `${arenaUrl}/api/health`,
+    init: { headers: { 'Cache-Control': 'no-cache' } },
+    timeoutMs,
+    label: 'Basic health request',
   })
-  return res.json()
+  return parseBasicHealthResponse(payload, { nowMs })
 }
 
-async function checkPipelineHealth() {
+export async function checkPipelineHealthSnapshot({
+  fetchImpl = globalThis.fetch,
+  arenaUrl = ARENA_URL,
+  cronSecret = CRON_SECRET,
+  timeoutMs = 60000,
+  nowMs = Date.now(),
+} = {}) {
   // 60s timeout: /api/health/pipeline does 4 parallel DB queries + RPC; under load
   // the 30s ceiling was too tight and caused false "Pipeline check failed: timeout"
   // alerts. The route itself caches results for 2min so this is mostly a cache-miss guard.
-  const res = await fetch(`${ARENA_URL}/api/health/pipeline`, {
-    headers: {
-      Authorization: `Bearer ${CRON_SECRET}`,
-      'Cache-Control': 'no-cache',
+  const payload = await fetchJsonWithDeadline({
+    fetchImpl,
+    url: `${arenaUrl}/api/health/pipeline`,
+    init: {
+      headers: {
+        Authorization: `Bearer ${cronSecret || ''}`,
+        'Cache-Control': 'no-cache',
+      },
     },
-    signal: AbortSignal.timeout(60000),
+    timeoutMs,
+    label: 'Pipeline health request',
   })
-  return res.json()
+  return parsePipelineHealthResponse(payload, { nowMs })
 }
 
-async function sendTelegram(text) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.log('[Telegram disabled]', text)
-    return
+export async function sendTelegram(
+  text,
+  {
+    fetchImpl = globalThis.fetch,
+    botToken = TELEGRAM_BOT_TOKEN,
+    chatId = TELEGRAM_CHAT_ID,
+    timeoutMs = 15000,
+  } = {}
+) {
+  if (!botToken || !chatId) {
+    throw new Error('Telegram alert credentials are required')
   }
 
-  try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+  const payload = await fetchJsonWithDeadline({
+    fetchImpl,
+    url: `https://api.telegram.org/bot${botToken}/sendMessage`,
+    init: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
+        chat_id: chatId,
         text,
         parse_mode: 'HTML',
         disable_web_page_preview: true,
       }),
-    })
-  } catch (err) {
-    console.error('Telegram send failed:', err.message)
+    },
+    timeoutMs,
+    label: 'Telegram alert delivery',
+  })
+  if (payload?.ok !== true) {
+    throw new Error('Telegram API rejected the alert')
   }
+  return payload
 }
 
 function formatDuration(ms) {
@@ -148,7 +178,7 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-async function runHealthCheck() {
+export async function runHealthCheck() {
   const issues = []
   // categories: stable fingerprint keys that don't change with counts/job lists
   const categories = new Set()
@@ -182,7 +212,7 @@ async function runHealthCheck() {
 
   // 2. Pipeline health
   try {
-    pipelineHealth = await checkPipelineHealth()
+    pipelineHealth = await checkPipelineHealthSnapshot()
 
     if (pipelineHealth.status === 'critical') {
       const { failedJobs, stuckJobs, staleJobs } = pipelineHealth.summary || {}
@@ -239,7 +269,7 @@ async function runHealthCheck() {
         categories.add('infra:vps-degraded')
       }
     } catch {
-      issues.push(`🚨 ${name} UNREACHABLE: ${url}`)
+      issues.push(`🚨 ${name} UNREACHABLE`)
       categories.add('infra:vps-dead')
     }
   }
@@ -301,7 +331,7 @@ async function runHealthCheck() {
   // from /api/health/pipeline to reduce DB load). Only use ageHours as signal.
   // Alert if a platform has no lastUpdate (ageHours=null) or is stale >threshold.
   // Default 48h; BloFin uses 12h (Mac Mini only, no fallback — need fast detection).
-  const platforms = pipelineHealth?.platformHealth || pipelineHealth?.platforms || []
+  const platforms = pipelineHealth?.platformHealth || []
   if (Array.isArray(platforms) && platforms.length > 0) {
     // platformHealth is registry-backed: present means active, absent means
     // inactive/retired. Every returned row must be evaluated, including a
@@ -326,14 +356,10 @@ async function runHealthCheck() {
     if (shouldSendAlert(fingerprint)) {
       const msg = `<b>🏟 Arena Health Alert</b>\n\n${issues.join('\n')}\n\n<i>${new Date().toISOString()}</i>`
       await sendTelegram(msg)
+      recordAlertSent(fingerprint)
       console.log('ALERT SENT:', issues.join(' | '))
     } else {
       console.log('ALERT DEDUPED (same category within 2h):', issues.join(' | '))
-    }
-
-    // 4. Trigger auto-fix if --with-auto-fix flag is set
-    if (process.argv.includes('--with-auto-fix') && pipelineHealth) {
-      await triggerAutoFix(pipelineHealth)
     }
 
     return { status: 'alert', issues }
@@ -345,54 +371,6 @@ async function runHealthCheck() {
 
   console.log(`✅ All healthy (basic: ${basicHealth?.status}, pipeline: ${pipelineHealth?.status})`)
   return { status: 'healthy' }
-}
-
-async function triggerAutoFix(pipelineHealth) {
-  const { spawn } = await import('child_process')
-  const autoFixScript = path.join(__dirname, 'auto-fix.mjs')
-  const failingJobs = getActiveFetcherFailures(pipelineHealth).map((failure) => ({
-    platform: failure.platform,
-    reason: classifyErrorMsg(failure.errorMessage),
-  }))
-  if (failingJobs.length === 0) {
-    console.log('[auto-fix] No fetcher failures')
-    return
-  }
-  const seen = new Set()
-  for (const { platform, reason } of failingJobs) {
-    if (seen.has(platform)) continue
-    seen.add(platform)
-    const lastAttempt = fixAttempts.get(platform) || 0
-    if (Date.now() - lastAttempt < AUTO_FIX_COOLDOWN_MS) {
-      console.log('[auto-fix] Cooldown: ' + platform)
-      continue
-    }
-    fixAttempts.set(platform, Date.now())
-    console.log('[auto-fix] Fixing ' + platform + ' (' + reason + ')')
-    try {
-      const proc = spawn('node', [autoFixScript, platform, '--reason', reason], {
-        cwd: path.dirname(__dirname),
-        stdio: 'inherit',
-        timeout: 300000,
-      })
-      proc.on('close', (code) => console.log('[auto-fix] ' + platform + ' exit: ' + code))
-    } catch (err) {
-      console.error('[auto-fix] Launch failed for ' + platform, err.message)
-    }
-  }
-}
-
-function classifyErrorMsg(msg) {
-  if (!msg) return 'unknown'
-  const m = msg.toLowerCase()
-  if (m.includes('geo') || m.includes('451')) return 'geo_blocked'
-  if (m.includes('waf') || m.includes('cloudflare') || m.includes('access denied'))
-    return 'waf_blocked'
-  if (m.includes('404') || m.includes('not found')) return 'endpoint_gone'
-  if (m.includes('429') || m.includes('rate limit')) return 'rate_limited'
-  if (m.includes('timeout') || m.includes('abort')) return 'timeout'
-  if (m.includes('401') || m.includes('unauthorized')) return 'auth_required'
-  return 'unknown'
 }
 
 // ============================================
@@ -421,15 +399,18 @@ async function fetchActivityStats() {
 // 每日报告
 // ============================================
 
-async function runDailyReport() {
+export async function runDailyReport() {
   let pipelineHealth
   let activity
 
   try {
-    ;[pipelineHealth, activity] = await Promise.all([checkPipelineHealth(), fetchActivityStats()])
+    ;[pipelineHealth, activity] = await Promise.all([
+      checkPipelineHealthSnapshot(),
+      fetchActivityStats(),
+    ])
   } catch (err) {
     await sendTelegram(`<b>📊 Arena 每日报告</b>\n\n获取数据失败: ${err.message}`)
-    return
+    return { status: 'error' }
   }
 
   const { summary, stats } = pipelineHealth
@@ -506,19 +487,36 @@ async function runDailyReport() {
 
   await sendTelegram(report)
   console.log('每日报告已发送')
+  return { status: pipelineHealth.status }
 }
 
 // Main
 const mode = process.argv[2] || 'check'
+const isDirectRun =
+  process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 
-if (mode === 'daily') {
-  runDailyReport().catch((err) => {
-    console.error('Daily report failed:', err)
-    process.exit(1)
-  })
-} else {
-  runHealthCheck().catch((err) => {
-    console.error('Health check failed:', err)
-    process.exit(1)
-  })
+if (isDirectRun) {
+  if (!CRON_SECRET || !TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.error('CRON_SECRET and Telegram alert credentials are required')
+    process.exitCode = 2
+  } else if (mode === 'daily') {
+    runDailyReport()
+      .then((result) => {
+        if (result?.status === 'error' || result?.status === 'critical') process.exitCode = 2
+        else if (result?.status === 'degraded') process.exitCode = 1
+      })
+      .catch((err) => {
+        console.error('Daily report failed:', err.message || String(err))
+        process.exitCode = 2
+      })
+  } else {
+    runHealthCheck()
+      .then((result) => {
+        if (result.status === 'alert') process.exitCode = 1
+      })
+      .catch((err) => {
+        console.error('Health check failed:', err.message || String(err))
+        process.exitCode = 2
+      })
+  }
 }

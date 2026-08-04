@@ -42,7 +42,7 @@ jest.mock('@/lib/services/platform-health', () => ({
 }))
 
 jest.mock('@/lib/constants/exchanges', () => ({
-  DEAD_BLOCKED_PLATFORMS: [],
+  DEAD_BLOCKED_PLATFORMS: ['drift'],
   EXCHANGE_CONFIG: { binance: { name: 'Binance' } },
 }))
 
@@ -485,13 +485,129 @@ describe('GET /api/health/pipeline', () => {
     expect(body.status).toBe('healthy')
     expect(body.authority).toEqual({ status: 'available', unavailable: [] })
     expect(mockTieredSet).toHaveBeenCalledWith(
-      'api:health:pipeline:v7',
+      'api:health:pipeline:v9',
       expect.objectContaining({ authority: { status: 'available', unavailable: [] } }),
-      'warm',
+      'hot',
       ['pipeline-health']
     )
+    expect(mockTieredGet).toHaveBeenCalledWith('api:health:pipeline:v9', 'hot')
     expect(mockGetJobStatuses.mock.calls[0][0]).toBeInstanceOf(AbortSignal)
     expect(mockGetJobStats.mock.calls[0][0]).toBeInstanceOf(AbortSignal)
     expect(mockGetRecentFailures.mock.calls[0][2]).toBeInstanceOf(AbortSignal)
+  })
+
+  it('keeps retained retired-job history out of the active health payload', async () => {
+    mockGetJobStatuses.mockResolvedValueOnce([
+      {
+        job_name: 'compute-leaderboard-7D',
+        status: 'success',
+        health_status: 'healthy',
+      },
+      {
+        job_name: 'batch-fetch-traders-a1',
+        status: 'error',
+        health_status: 'failed',
+      },
+      {
+        job_name: 'compute-derived-metrics',
+        status: 'error',
+        health_status: 'failed',
+      },
+    ])
+    mockGetJobStats.mockResolvedValueOnce([
+      { job_name: 'compute-leaderboard-7D', success_rate: 100 },
+      { job_name: 'fetch-traders-bybit', success_rate: 0 },
+    ])
+    mockGetRecentFailures.mockResolvedValueOnce([
+      { job_name: 'retry-dead-letters', error_message: 'retired failure' },
+      { job_name: 'check-data-freshness', error_message: 'active failure' },
+    ])
+
+    const { GET } = await import('../route')
+    const response = await GET({} as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.jobs.map((job: { job_name: string }) => job.job_name)).toEqual([
+      'compute-leaderboard-7D',
+    ])
+    expect(body.stats.map((job: { job_name: string }) => job.job_name)).toEqual([
+      'compute-leaderboard-7D',
+    ])
+    expect(body.recentFailures.map((job: { job_name: string }) => job.job_name)).toEqual([
+      'check-data-freshness',
+    ])
+    expect(body.summary).toEqual(
+      expect.objectContaining({ totalJobs: 1, healthyJobs: 1, failedJobs: 0 })
+    )
+  })
+
+  it('keeps a mixed active backfill job visible while filtering a blocked-only job', async () => {
+    mockGetJobStatuses.mockResolvedValueOnce([
+      {
+        job_name: 'backfill-avatars-drift,toobit,bitfinex,etoro,gains',
+        status: 'success',
+        health_status: 'healthy',
+      },
+      {
+        job_name: 'backfill-avatars-drift',
+        status: 'error',
+        health_status: 'failed',
+      },
+    ])
+    mockGetJobStats.mockResolvedValueOnce([
+      {
+        job_name: 'backfill-avatars-drift,toobit,bitfinex,etoro,gains',
+        success_rate: 100,
+      },
+      { job_name: 'backfill-avatars-drift', success_rate: 0 },
+    ])
+
+    const { GET } = await import('../route')
+    const response = await GET({} as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.jobs.map((job: { job_name: string }) => job.job_name)).toEqual([
+      'backfill-avatars-drift,toobit,bitfinex,etoro,gains',
+    ])
+    expect(body.stats.map((job: { job_name: string }) => job.job_name)).toEqual([
+      'backfill-avatars-drift,toobit,bitfinex,etoro,gains',
+    ])
+    expect(body.summary).toEqual(
+      expect.objectContaining({ totalJobs: 1, healthyJobs: 1, failedJobs: 0 })
+    )
+    expect(body.authority).toEqual({ status: 'available', unavailable: [] })
+  })
+
+  it('fails closed when active job or status identities are malformed', async () => {
+    mockGetJobStatuses.mockResolvedValueOnce([
+      {
+        job_name: 'compute-leaderboard-7D',
+        status: 'success',
+        health_status: 'healthy',
+      },
+      {
+        job_name: ' malformed-job',
+        status: 'success',
+        health_status: 'healthy',
+      },
+      {
+        job_name: 'check-data-freshness',
+        status: 'success',
+        health_status: 'failed',
+      },
+    ])
+
+    const { GET } = await import('../route')
+    const response = await GET({} as never)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.jobs.map((job: { job_name: string }) => job.job_name)).toEqual([
+      'compute-leaderboard-7D',
+    ])
+    expect(body.authority).toEqual({ status: 'unavailable', unavailable: ['job_statuses'] })
+    expect(mockTieredSet).not.toHaveBeenCalled()
   })
 })

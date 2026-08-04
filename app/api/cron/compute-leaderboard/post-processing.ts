@@ -31,10 +31,6 @@ interface PublicationLeaseGuard {
   readonly ownerToken: string
 }
 
-// (removed 2026-06-15) syncSubscoresToV2 — wrote sub-scores back into
-// trader_snapshots_v2 (retiring). Uncalled since the route stopped invoking it;
-// leaderboard_ranks is the canonical sub-score store.
-
 /** Warm the SSR homepage cache (home-initial-traders v3, 90D page 0). */
 export async function warmupSsrHomepageCache(): Promise<void> {
   // refreshHomeInitialTradersCache actually WRITES the cache keys. The old

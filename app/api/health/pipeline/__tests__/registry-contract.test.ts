@@ -22,7 +22,7 @@ describe('pipeline health registry contract', () => {
   })
 
   it('invalidates legacy cache entries and classifies platform failures in the body', () => {
-    expect(route).toContain("const CACHE_KEY = 'api:health:pipeline:v7'")
+    expect(route).toContain("const CACHE_KEY = 'api:health:pipeline:v9'")
     expect(route).toContain('const platformStatus = classifyPlatformHealth(platformHealth)')
     expect(route).toContain("platformStatus === 'critical'")
     expect(route).toContain("platformStatus === 'degraded'")

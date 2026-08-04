@@ -97,9 +97,9 @@ roster alone rules out a manually started or malicious duplicate process.
 ## On-chain enrichment owner
 
 `maint:onchain-enrich` is reconciled every 12 hours on the local BullMQ queue and
-is the only recurring owner. The retired Mac crontab calls to
-`scripts/onchain-enrich-web3.mts` must stay disabled because the two paths have no
-shared lock and can duplicate provider spend and writes.
+is the only recurring owner. The standalone `scripts/onchain-enrich-web3.mts`
+entrypoint has been removed and must remain absent: it had no shared lock and
+could duplicate provider spend and writes.
 
 ## SG dependency incident boundary
 

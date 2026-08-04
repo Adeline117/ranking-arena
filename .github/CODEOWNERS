@@ -40,7 +40,8 @@
 
 # 数据管道核心
 /lib/ingest/                @Adeline117
-/lib/pipeline/validate-before-write.ts @Adeline117
+/lib/validation/data-write-gate.ts @Adeline117
+/lib/validation/data-quality-bounds.ts @Adeline117
 /worker/                    @Adeline117
 
 # 独立部署单元与发布资产

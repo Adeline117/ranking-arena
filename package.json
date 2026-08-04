@@ -14,6 +14,9 @@
       "prettier --write"
     ]
   },
+  "engines": {
+    "node": ">=22.19 <25"
+  },
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=3584' next dev",
     "build": "touch .env && next build --webpack",
@@ -44,13 +47,14 @@
     "test:e2e:report": "playwright show-report",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "[ -d .git ] && cp scripts/check-service-layer.sh .git/hooks/check-service-layer.sh 2>/dev/null; true",
+    "prepare": "node scripts/install-git-hooks.mjs",
     "cap:sync": "npx cap sync",
     "cap:sync:ios": "npx cap sync ios",
     "cap:sync:android": "npx cap sync android",
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android",
     "cap:build:android": "cd android && ./gradlew assembleRelease",
+    "contracts:build": "forge build --sizes",
     "generate:icons": "node scripts/generate-app-icons.mjs",
     "version:sync": "node scripts/sync-version.mjs",
     "version:bump:patch": "node scripts/sync-version.mjs --bump patch",
@@ -63,15 +67,11 @@
     "validate:env": "npx tsx -e \"require('./lib/env')\"",
     "predev": "npx tsx -e \"try{require('./lib/env')}catch(e){console.warn(e.message)}\"",
     "diagnose": "node scripts/diagnose.mjs",
-    "check:seasons": "node scripts/check_seasons.mjs",
     "check:status": "node scripts/diagnose.mjs --status",
     "check:freshness": "node scripts/diagnose.mjs --freshness",
     "check:platforms": "node scripts/diagnose.mjs --platforms",
-    "check:enrichment": "node scripts/check_enrichment.mjs",
     "check:scripts-boundary": "node scripts/check-production-boundary.mjs",
     "lighthouse": "node scripts/lighthouse-test.mjs",
-    "backfill:24h": "npx tsx scripts/backfill-window-24h.ts",
-    "backfill:risk:7d30d": "npx tsx scripts/backfill-risk-metrics-7d30d.ts",
     "census:dex": "tsx scripts/dex-census-baseline.mts",
     "census:dex:golden-wallets": "tsx scripts/generate-dex-golden-wallets.mts",
     "census:dex:golden-wallets:verify": "tsx scripts/generate-dex-golden-wallets.mts --verify-pinned",
@@ -114,7 +114,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1049.0",
     "@aws-sdk/lib-storage": "3.1049.0",
-    "@aws-sdk/s3-request-presigner": "^3.1006.0",
     "@bull-board/api": "^7.1.5",
     "@bull-board/express": "^7.1.5",
     "@privy-io/react-auth": "^3.18.0",
@@ -122,14 +121,13 @@
     "@sentry/nextjs": "^10.48.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
-    "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/web3.js": "^1.98.4",
+    "@supabase/realtime-js": "2.101.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.101.1",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-virtual": "^3.13.21",
     "@types/sanitize-html": "^2.16.1",
-    "@upstash/qstash": "^2.10.1",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "^2.0.0",
@@ -137,7 +135,6 @@
     "bullmq": "^5.77.6",
     "candlestick-convert": "^7.0.0",
     "ccxt": "^4.5.63",
-    "cockatiel": "^3.2.1",
     "currency.js": "^2.0.4",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
@@ -147,7 +144,6 @@
     "next": "^16.2.11",
     "otpauth": "^9.5.0",
     "pg": "^8.20.0",
-    "posthog-js": "^1.396.5",
     "qrcode": "^1.5.4",
     "react": "19.2.7",
     "react-dom": "19.2.7",
@@ -177,7 +173,10 @@
     },
     "sharp": "$sharp",
     "postcss": "8.5.23",
-    "brace-expansion": "$brace-expansion"
+    "brace-expansion": "$brace-expansion",
+    "jayson": {
+      "uuid": "11.1.1"
+    }
   },
   "pnpm": {
     "overrides": {
@@ -191,7 +190,8 @@
       "viem>ws": "^8.21.0",
       "sharp": "$sharp",
       "postcss": "8.5.23",
-      "brace-expansion": "$brace-expansion"
+      "brace-expansion": "$brace-expansion",
+      "jayson>uuid": "11.1.1"
     }
   },
   "devDependencies": {
@@ -210,13 +210,14 @@
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@next/bundle-analyzer": "^16.2.1",
+    "@openzeppelin/contracts": "5.4.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25",
+    "@types/node": "^22.19.0",
     "@types/pg": "^8.18.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.14",
@@ -225,14 +226,16 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "brace-expansion": "file:worker/vendor/brace-expansion-compat",
     "capacitor-native-biometric": "^4.2.2",
+    "chrome-launcher": "^1.2.1",
     "dotenv": "^17.4.2",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.6",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
-    "lighthouse": "^13.0.3",
+    "lighthouse": "^13.4.1",
     "lint-staged": "^16.4.0",
     "playwright": "^1.58.2",
+    "postcss": "8.5.23",
     "prettier": "^3.8.1",
     "sharp": "^0.35.3",
     "tailwindcss": "^4",

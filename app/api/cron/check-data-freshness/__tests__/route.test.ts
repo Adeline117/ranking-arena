@@ -32,16 +32,6 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(),
 }))
 
-jest.mock('@/lib/cron/utils', () => ({
-  isAuthorized: jest.fn((req: Request) => {
-    return req.headers.get('authorization') === 'Bearer test-secret'
-  }),
-  getSupabaseEnv: jest.fn(() => ({
-    url: 'http://supabase.test',
-    serviceKey: 'test-key',
-  })),
-}))
-
 jest.mock('@/lib/alerts/send-alert', () => ({
   sendRateLimitedAlert: jest.fn(),
 }))

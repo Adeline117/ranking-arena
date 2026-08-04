@@ -6,7 +6,7 @@ import test from 'node:test'
 const source = readFileSync(join(process.cwd(), 'scripts/pipeline-health-check.mjs'), 'utf8')
 const freshnessSection = source.slice(
   source.indexOf('async function checkDataFreshness()'),
-  source.indexOf('// 2b. bot_snapshots')
+  source.indexOf('function generateSuggestions()')
 )
 
 test('pipeline health CLI trusts only the active-source freshness RPC', () => {
@@ -22,4 +22,8 @@ test('pipeline health CLI fails closed on blind or malformed freshness', () => {
   assert.match(freshnessSection, /seenPlatforms\.has\(platform\)/)
   assert.match(freshnessSection, /ageHours == null \|\| ageHours >= CRITICAL_HOURS/)
   assert.match(freshnessSection, /catch \(err\)[\s\S]*throw err/)
+})
+
+test('pipeline health CLI does not query retired bot snapshots', () => {
+  assert.doesNotMatch(source, /bot_snapshots|\/rankings\/bots/)
 })

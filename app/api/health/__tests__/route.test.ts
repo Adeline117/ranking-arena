@@ -398,77 +398,11 @@ describe('GET /api/health', () => {
     })
   })
 
-  it('bounds the VPS database heartbeat fallback', async () => {
-    jest.useFakeTimers()
+  it('leaves worker liveness to the dedicated heartbeat monitor after direct probes fail', async () => {
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
     process.env.VPS_PROXY_KEY = 'vps-key'
     const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
     const { restore } = installFetchMock(fetchMock)
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') {
-        return {
-          select: () => ({
-            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
-          }),
-        }
-      }
-      if (table === 'pipeline_logs') {
-        const chain = {
-          eq: () => chain,
-          or: () => chain,
-          gte: () => chain,
-          limit: () => chain,
-          abortSignal: (signal: AbortSignal) => {
-            observedSupabaseSignals.push(signal)
-            return chain
-          },
-          maybeSingle: () => new Promise(() => undefined),
-        }
-        return { select: () => chain }
-      }
-      throw new Error(`unexpected table: ${table}`)
-    })
-
-    try {
-      const { GET } = await import('../route')
-      const responsePromise = GET()
-      await jest.advanceTimersByTimeAsync(1_000)
-      const response = await responsePromise
-      const body = await response.json()
-
-      expect(response.status).toBe(200)
-      expect(body.checks.vps).toMatchObject({
-        status: 'skip',
-        message: expect.stringContaining('no recent heartbeat'),
-      })
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
-        '[health] checkVpsHeartbeat timed out after 1000ms'
-      )
-      expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
-      expect(jest.getTimerCount()).toBe(0)
-    } finally {
-      restore()
-      jest.useRealTimers()
-    }
-  })
-
-  it('does not expose VPS heartbeat authority errors', async () => {
-    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
-    process.env.VPS_PROXY_KEY = 'vps-key'
-    const internalError = 'postgres://vps-reader:private-secret@heartbeat-db.internal/postgres'
-    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
-    const { restore } = installFetchMock(fetchMock)
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') {
-        return {
-          select: () => ({
-            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
-          }),
-        }
-      }
-      if (table === 'pipeline_logs') throw new Error(internalError)
-      throw new Error(`unexpected table: ${table}`)
-    })
 
     try {
       const { GET } = await import('../route')
@@ -478,13 +412,36 @@ describe('GET /api/health', () => {
       expect(response.status).toBe(200)
       expect(body.checks.vps).toMatchObject({
         status: 'skip',
-        message: 'VPS SG unavailable (supplementary)',
+        message: 'VPS SG direct 503; see worker heartbeat monitor',
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(mockFrom.mock.calls.map(([table]) => table)).toEqual(['trader_sources'])
+    } finally {
+      restore()
+    }
+  })
+
+  it('does not expose failed VPS probe errors or consult retired pipeline heartbeats', async () => {
+    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
+    process.env.VPS_PROXY_KEY = 'vps-key'
+    const internalError = 'postgres://vps-reader:private-secret@heartbeat-db.internal/postgres'
+    const fetchMock = jest.fn().mockRejectedValue(new Error(internalError))
+    const { restore } = installFetchMock(fetchMock)
+
+    try {
+      const { GET } = await import('../route')
+      const response = await GET()
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.checks.vps).toMatchObject({
+        status: 'skip',
+        message: 'VPS SG direct unreachable; see worker heartbeat monitor',
       })
       expect(JSON.stringify(body)).not.toContain('private-secret')
       expect(JSON.stringify(body)).not.toContain('heartbeat-db.internal')
-      expect(mockLoggerWarn).toHaveBeenCalledWith('[health] VPS SG dependency threw', {
-        error: internalError,
-      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(mockFrom.mock.calls.map(([table]) => table)).toEqual(['trader_sources'])
     } finally {
       restore()
     }

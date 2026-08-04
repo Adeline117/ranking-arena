@@ -27,7 +27,6 @@ export type { SwipeDirection } from './useSwipeGesture'
 export {
   useRealtime,
   usePostsRealtime,
-  useTraderSnapshotsRealtime,
   useNotificationsRealtime,
   useMessagesRealtime,
 } from './useRealtime'

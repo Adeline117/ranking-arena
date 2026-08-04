@@ -159,21 +159,3 @@ export function isWithinDays(date: Date | string, days: number): boolean {
   const now = new Date()
   return daysBetween(d, now) <= days
 }
-
-/**
- * Truncate an ISO timestamp to the start of the UTC day.
- *
- * Used as the dedup key for trader_snapshots_v2 archive writes
- * (as_of_ts is part of the unique constraint).
- *
- * Changed from hourly → daily (2026-06-01): 24x less archive growth.
- * trader_latest is the primary hot table (UPSERT, always latest).
- * snapshots_v2 is archive only — 1 row per trader-window per DAY suffices.
- *
- * Name kept as `truncateToHour` to avoid renaming all call sites.
- */
-export function truncateToHour(isoOrDate?: string | Date | null): string {
-  const d = isoOrDate ? new Date(isoOrDate) : new Date()
-  d.setUTCHours(0, 0, 0, 0)
-  return d.toISOString()
-}

@@ -1,5 +1,5 @@
 import type { Period } from '@/lib/utils/arena-score'
-import { VALIDATION_BOUNDS } from '@/lib/pipeline/types'
+import { VALIDATION_BOUNDS } from '@/lib/validation/data-quality-bounds'
 
 const ROI_ABS_MAX_BY_PERIOD: Record<Period, number> = {
   '7D': 2_000,

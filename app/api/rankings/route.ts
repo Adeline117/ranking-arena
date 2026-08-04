@@ -650,7 +650,7 @@ async function getRankingsFallback(
       // Nested `metrics: { ... }` duplicate removed — all fields are already
       // exposed at the top level and no consumer read from the nested shape
       // (verified by repo-wide grep for `\.metrics\.roi` etc. in app/ and
-      // lib/hooks/ — only lib/connectors/* uses that shape internally).
+      // lib/hooks/; the retired connector runtime was its final consumer).
       // Saved ~30-40% response payload size.
       quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
       // Compatibility name retained, but the value is now the source-data

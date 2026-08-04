@@ -1,10 +1,10 @@
-openapi: "3.0.3"
+openapi: '3.0.3'
 info:
   title: Arena API
   description: >
     Cryptocurrency trader ranking and community platform.
     32,000+ traders across 27+ CEX/DEX exchanges.
-  version: "2.0.0"
+  version: '2.0.0'
   contact:
     name: Arena
     url: https://www.arenafi.org
@@ -40,7 +40,7 @@ paths:
         Returns application health status including database and Redis connectivity.
         Target response time: <200ms.
       responses:
-        "200":
+        '200':
           description: Healthy or degraded
           content:
             application/json:
@@ -56,7 +56,7 @@ paths:
                     format: date-time
                   version:
                     type: string
-                    example: "0.1.0"
+                    example: '0.1.0'
                   uptime:
                     type: integer
                     description: Uptime in seconds
@@ -66,19 +66,19 @@ paths:
                     type: object
                     properties:
                       api:
-                        $ref: "#/components/schemas/HealthCheck"
+                        $ref: '#/components/schemas/HealthCheck'
                       database:
-                        $ref: "#/components/schemas/HealthCheck"
+                        $ref: '#/components/schemas/HealthCheck'
                       redis:
-                        $ref: "#/components/schemas/HealthCheck"
-        "503":
+                        $ref: '#/components/schemas/HealthCheck'
+        '503':
           description: Unhealthy (database unreachable)
     head:
       tags: [Health]
       summary: Health Ping
       description: Lightweight health ping (no body).
       responses:
-        "200":
+        '200':
           description: OK
 
   /rankings:
@@ -87,8 +87,9 @@ paths:
       summary: Get Trader Rankings
       description: >
         Returns ranked traders for a given time window.
-        Reads from trader_snapshots with Redis caching (TTL 60s).
-        Supports keyset pagination via cursor parameter.
+        Reads from the publication-fenced leaderboard_ranks surface. Default
+        unfiltered queries use Redis caching; filtered queries read the database.
+        Pagination uses the offset parameter; cursor is reserved and unsupported.
       parameters:
         - name: window
           in: query
@@ -129,13 +130,13 @@ paths:
             maximum: 500
         - name: offset
           in: query
-          description: Legacy offset pagination
+          description: Pagination offset
           schema:
             type: integer
             default: 0
         - name: cursor
           in: query
-          description: "Keyset pagination cursor (format: score:id)"
+          description: Reserved and currently unsupported; use offset.
           schema:
             type: string
         - name: min_pnl
@@ -147,7 +148,7 @@ paths:
           schema:
             type: integer
       responses:
-        "200":
+        '200':
           description: Ranked traders
           content:
             application/json:
@@ -157,10 +158,10 @@ paths:
                   traders:
                     type: array
                     items:
-                      $ref: "#/components/schemas/RankedTrader"
+                      $ref: '#/components/schemas/RankedTrader'
                   window:
                     type: string
-                    example: "90D"
+                    example: '90D'
                   totalcount:
                     type: integer
                   total_count:
@@ -177,12 +178,12 @@ paths:
                   next_cursor:
                     type: string
                     nullable: true
-        "400":
+        '400':
           description: Invalid parameters
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
 
   /traders:
     get:
@@ -197,7 +198,7 @@ paths:
           schema:
             type: string
             enum: [7D, 30D, 90D]
-            default: "90D"
+            default: '90D'
         - name: exchange
           in: query
           description: Filter by exchange platform
@@ -232,7 +233,7 @@ paths:
           schema:
             type: integer
       responses:
-        "200":
+        '200':
           description: Success
           content:
             application/json:
@@ -242,7 +243,7 @@ paths:
                   traders:
                     type: array
                     items:
-                      $ref: "#/components/schemas/TraderListItem"
+                      $ref: '#/components/schemas/TraderListItem'
                   timeRange:
                     type: string
                   totalCount:
@@ -263,73 +264,6 @@ paths:
                     type: array
                     items:
                       type: string
-
-  /v2/trader/{platform}/{market_type}/{trader_key}:
-    get:
-      tags: [Traders]
-      summary: Get Trader Detail (V2)
-      description: >
-        Returns full trader detail including profile, snapshots for all windows,
-        timeseries data, and refresh status. Database-only (no external fetching).
-        Target: <200ms.
-      parameters:
-        - name: platform
-          in: path
-          required: true
-          schema:
-            type: string
-            example: binance_futures
-        - name: market_type
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [futures, spot, perp]
-        - name: trader_key
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Trader detail
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  profile:
-                    $ref: "#/components/schemas/TraderProfile"
-                  snapshots:
-                    type: object
-                    properties:
-                      "7d":
-                        $ref: "#/components/schemas/TraderSnapshot"
-                      "30d":
-                        $ref: "#/components/schemas/TraderSnapshot"
-                      "90d":
-                        $ref: "#/components/schemas/TraderSnapshot"
-                  timeseries:
-                    type: array
-                    items:
-                      type: object
-                  refresh_status:
-                    type: object
-                    properties:
-                      last_refreshed_at:
-                        type: string
-                        format: date-time
-                        nullable: true
-                      is_refreshing:
-                        type: boolean
-                      next_refresh_at:
-                        type: string
-                        format: date-time
-                        nullable: true
-                  provenance:
-                    type: object
-        "404":
-          description: Trader not found
 
   /search:
     get:
@@ -355,7 +289,7 @@ paths:
             default: 5
             maximum: 10
       responses:
-        "200":
+        '200':
           description: Search results
           content:
             application/json:
@@ -375,27 +309,27 @@ paths:
                           traders:
                             type: array
                             items:
-                              $ref: "#/components/schemas/SearchResult"
+                              $ref: '#/components/schemas/SearchResult'
                           posts:
                             type: array
                             items:
-                              $ref: "#/components/schemas/SearchResult"
+                              $ref: '#/components/schemas/SearchResult'
                           library:
                             type: array
                             items:
-                              $ref: "#/components/schemas/SearchResult"
+                              $ref: '#/components/schemas/SearchResult'
                           users:
                             type: array
                             items:
-                              $ref: "#/components/schemas/SearchResult"
+                              $ref: '#/components/schemas/SearchResult'
                           groups:
                             type: array
                             items:
-                              $ref: "#/components/schemas/SearchResult"
+                              $ref: '#/components/schemas/SearchResult'
                       total:
                         type: integer
                   meta:
-                    $ref: "#/components/schemas/ResponseMeta"
+                    $ref: '#/components/schemas/ResponseMeta'
 
   /follow:
     get:
@@ -411,7 +345,7 @@ paths:
           schema:
             type: string
       responses:
-        "200":
+        '200':
           description: Follow status
           content:
             application/json:
@@ -420,7 +354,7 @@ paths:
                 properties:
                   following:
                     type: boolean
-        "401":
+        '401':
           description: Unauthorized
     post:
       tags: [Follow]
@@ -442,7 +376,7 @@ paths:
                   type: string
                   enum: [follow, unfollow]
       responses:
-        "200":
+        '200':
           description: Success
           content:
             application/json:
@@ -453,11 +387,11 @@ paths:
                     type: boolean
                   following:
                     type: boolean
-        "400":
+        '400':
           description: Invalid input
-        "401":
+        '401':
           description: Unauthorized
-        "503":
+        '503':
           description: Follow feature not available
 
   /posts:
@@ -499,7 +433,7 @@ paths:
           schema:
             type: string
       responses:
-        "200":
+        '200':
           description: Success
           content:
             application/json:
@@ -514,9 +448,9 @@ paths:
                       posts:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Post"
+                          $ref: '#/components/schemas/Post'
                   pagination:
-                    $ref: "#/components/schemas/Pagination"
+                    $ref: '#/components/schemas/Pagination'
 
   /groups:
     get:
@@ -534,7 +468,7 @@ paths:
             type: integer
             default: 0
       responses:
-        "200":
+        '200':
           description: Success
           content:
             application/json:
@@ -549,7 +483,7 @@ paths:
                       groups:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Group"
+                          $ref: '#/components/schemas/Group'
 
 components:
   securitySchemes:
@@ -668,69 +602,6 @@ components:
           type: string
           nullable: true
 
-    TraderProfile:
-      type: object
-      properties:
-        platform:
-          type: string
-        market_type:
-          type: string
-        trader_key:
-          type: string
-        display_name:
-          type: string
-          nullable: true
-        avatar_url:
-          type: string
-          nullable: true
-        bio:
-          type: string
-          nullable: true
-        tags:
-          type: array
-          items:
-            type: string
-          nullable: true
-        profile_url:
-          type: string
-          nullable: true
-        followers:
-          type: integer
-          nullable: true
-        copiers:
-          type: integer
-          nullable: true
-        aum:
-          type: number
-          nullable: true
-
-    TraderSnapshot:
-      type: object
-      properties:
-        window:
-          type: string
-        roi:
-          type: number
-          nullable: true
-        pnl:
-          type: number
-          nullable: true
-        win_rate:
-          type: number
-          nullable: true
-        max_drawdown:
-          type: number
-          nullable: true
-        trades_count:
-          type: integer
-          nullable: true
-        arena_score:
-          type: number
-          nullable: true
-        captured_at:
-          type: string
-          format: date-time
-
     SearchResult:
       type: object
       properties:
@@ -807,7 +678,7 @@ components:
           type: string
           format: date-time
         pagination:
-          $ref: "#/components/schemas/Pagination"
+          $ref: '#/components/schemas/Pagination'
 
     ErrorResponse:
       type: object

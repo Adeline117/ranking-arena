@@ -1,84 +1,59 @@
-# Scripts Directory
+# Repository Scripts
 
-This directory contains data import, enrichment, verification, and maintenance scripts for Ranking Arena.
+This directory contains repository automation, diagnostics, release checks, and
+one-off maintenance tools. Application and ingestion runtime code belongs under
+`app/`, `lib/`, and `worker/`; scripts are not production entrypoints unless they
+are explicitly listed in `PRODUCTION_ALLOWLIST.json`.
 
-## 📁 Directory Structure
+## Canonical diagnostics
 
-```text
-scripts/
-├── import/           # Platform data import scripts
-├── maintenance/      # Data cleanup and calculations
-├── monitoring/       # Data quality and freshness monitoring
-├── verify/           # Verification and consistency checks
-├── test/             # Script test utilities
-├── performance/      # Performance measurement tools
-├── setup/            # Environment/setup helpers
-├── shell/            # Shell-based ops helpers
-├── sql/              # SQL snippets and helpers
-├── cron/             # Scheduled runner scripts
-└── *.mjs             # Root-level entrypoints and utilities
-```
-
-## ✅ Unified Diagnostics Entry
-
-Use the single diagnostics entrypoint for routine checks:
+The routine diagnostic checks the same public serving contracts used by the
+application. It does not require database credentials.
 
 ```bash
 npm run diagnose
-```
-
-This runs:
-
-- seasons check
-- status check
-- freshness check
-- platform freshness check
-- enrichment check
-
-Run one check only:
-
-```bash
-node scripts/diagnose.mjs --seasons
-node scripts/diagnose.mjs --status
-node scripts/diagnose.mjs --freshness
-node scripts/diagnose.mjs --platforms
-node scripts/diagnose.mjs --enrichment
-```
-
-Backward-compatible shortcuts still work:
-
-```bash
-npm run check:seasons
 npm run check:status
 npm run check:freshness
 npm run check:platforms
-npm run check:enrichment
 ```
 
-## 📝 Environment Requirements
+`npm run diagnose` runs all three sections. Set `ARENA_URL` to test a local or
+preview deployment; it defaults to the production site.
 
-Most scripts require:
+For an internal, read-only active-source freshness check, run:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+```bash
+node scripts/pipeline-health-check.mjs
+node scripts/pipeline-health-check.mjs --quick
+```
 
-Some enrichment/fetch scripts may also require proxy credentials.
+That command requires the Supabase URL and service-role key. `--fix` only prints
+remediation suggestions; it does not execute them.
 
-## 🔧 Operations Rhythm
+## Production boundary
 
-### Daily/Before release
+Run `npm run check:scripts-boundary` before changing production operations. The
+gate fails closed when an allowlisted entry is malformed, duplicated, nested,
+missing, has an unsupported extension, or is a symbolic link. Root scripts not
+on the allowlist are reported only and are never executed by the gate.
 
-- `npm run diagnose`
+## Directory map
 
-### Weekly
+| Path                                            | Purpose                                                    |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| `qa/`, `ci/`                                    | Architecture, contract, release, and deployment gates      |
+| `__tests__/`, `test-helpers/`, `fixtures/`      | Script tests and deterministic fixtures                    |
+| `maintenance/`                                  | Reviewed backup, restore, migration, and cache operations  |
+| `openclaw/`                                     | Alert-only sentinels and operational reports               |
+| `cron/`                                         | Retirement-only tombstones and uninstall/status helpers    |
+| `vps/`, `vps-deploy/`                           | Active regional worker/proxy checks and deployment tooling |
+| `git-hooks/`                                    | Version-controlled commit-message policy                   |
+| `lib/`                                          | Shared modules for current script families                 |
+| `flash-news/`, `social-seed/`                   | Domain-specific content utilities                          |
+| `clickhouse/`, `migration-reconcile/`           | Explicit schema and migration support                      |
+| `performance/`, `security/`, `email-templates/` | Specialized repository tooling and assets                  |
+| `archive/`                                      | Historical references; not supported production commands   |
 
-- Spot-check enrichment and avatar coverage if needed
-
-### As needed
-
-- Platform-specific import/enrichment scripts
-- Verification scripts under `scripts/verify/`
-
----
-
-Last updated: 2026-02-22
+The canonical data-ingestion implementation is the regional ingest worker and
+`lib/ingest`; retired ad-hoc `scripts/import` and local library collectors must
+not be recreated as parallel runtimes.

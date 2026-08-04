@@ -14,8 +14,6 @@ interface PipelineRow {
   last_passed_at: string | null
   actual_count: number | null
   rejects_24h: number
-  compat_platform: string | null
-  compat_rows: number
 }
 
 interface GroupedSource {
@@ -127,8 +125,8 @@ export default function ArenaPipelinePanel({ accessToken }: { accessToken: strin
           Arena Ingest Pipeline
         </Text>
         <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-          Per active source: latest passed snapshot age per timeframe, 24h staging rejects, cutover
-          mode, compat trader_latest rows
+          Per active source: latest passed snapshot age per timeframe, 24h staging rejects, and
+          cutover mode
         </Text>
 
         <Box style={{ overflowX: 'auto' }}>
@@ -199,8 +197,6 @@ export default function ArenaPipelinePanel({ accessToken }: { accessToken: strin
                           {cell.actual_count !== null
                             ? `${cell.actual_count.toLocaleString()} rows`
                             : 'no passed snapshot'}
-                          {' · compat '}
-                          {cell.compat_rows.toLocaleString()}
                         </Text>
                       </td>
                     )

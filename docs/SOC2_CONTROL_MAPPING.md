@@ -34,7 +34,7 @@
 | 灾难恢复              | 🔴   | managed scratch 全恢复未通过；当前只能依赖 Supabase PITR（SLO #4）             |
 | 冗余/失败切换         | 🟡   | worker 双节点 + 心跳漂移哨兵；但 Mac Mini/VPS 单点仍在(→ PHASE2_INFRA_PLAN #2) |
 | 事故响应              | ✅   | 高质量 RUNBOOK + postmortem 制度(模板 + 5 起回填)                              |
-| 弹性(重试/熔断)       | ✅   | circuit breaker(cockatiel) + 重试 + 分布式锁 + BullMQ 3x                       |
+| 弹性(重试/熔断)       | ✅   | 自有 circuit breaker + 重试 + 分布式锁 + BullMQ 3x                             |
 
 ## C — Confidentiality（保密）
 
@@ -46,14 +46,14 @@
 
 ## PI — Processing Integrity（处理完整性）
 
-| 控制         | 状态 | 证据                                                                |
-| ------------ | ---- | ------------------------------------------------------------------- |
-| 数据质量守卫 | ✅   | `lib/pipeline/validate-before-write.ts`(staging 边界 clamp roi/mdd) |
-| schema 契约  | ✅   | `qa:schema` CI 门禁(代码 DB 依赖 vs 生产) + 每日金丝雀哨兵          |
-| 迁移一致性   | ✅   | ledger 已对账(2026-07-02，repo⊆ledger，push no-op)；单一通道纪律    |
-| 幂等         | ✅   | Stripe idempotencyKey；写路径原子 RPC(non-trigger counters)         |
-| 输入校验     | 🟡   | zod 广泛用(`lib/api/validation.ts`)但非 100% route 覆盖             |
-| 类型安全     | ✅   | tsc strict + `.tsc-legacy-errors.txt` 零豁免(2026-07-02)            |
+| 控制         | 状态 | 证据                                                             |
+| ------------ | ---- | ---------------------------------------------------------------- |
+| 数据质量守卫 | ✅   | `lib/validation/data-write-gate.ts`（发布写入前拦截越界指标）    |
+| schema 契约  | ✅   | `qa:schema` CI 门禁(代码 DB 依赖 vs 生产) + 每日金丝雀哨兵       |
+| 迁移一致性   | ✅   | ledger 已对账(2026-07-02，repo⊆ledger，push no-op)；单一通道纪律 |
+| 幂等         | ✅   | Stripe idempotencyKey；写路径原子 RPC(non-trigger counters)      |
+| 输入校验     | 🟡   | zod 广泛用(`lib/api/validation.ts`)但非 100% route 覆盖          |
+| 类型安全     | ✅   | tsc strict + `.tsc-legacy-errors.txt` 零豁免(2026-07-02)         |
 
 ## P — Privacy（隐私）
 

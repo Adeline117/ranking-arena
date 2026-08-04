@@ -93,7 +93,7 @@ export async function checkDataFreshness(platformsHint?: string[]): Promise<Chec
         type: 'stale_data',
         severity: age > maxAge * 2 ? 'critical' : 'warning',
         description: `Data is ${Math.round(age / 3600000)}h old (max: ${Math.round(maxAge / 3600000)}h)`,
-        recommendation: `Check cron job for ${platform.platform}. May need VPS fallback or connector fix.`,
+        recommendation: `Check the ingest worker, source lease, and adapter for ${platform.platform}.`,
       })
     }
   }
@@ -344,7 +344,7 @@ export async function checkEnrichmentCoverage(): Promise<CheckResult> {
       type: 'low_enrichment_coverage',
       severity: coverage < 0.3 ? 'critical' : 'warning',
       description: `Enrichment coverage: ${Math.round(coverage * 100)}% of top 500 (${enrichedSample}/${sampleSize} have win_rate/sharpe/trades)`,
-      recommendation: 'Check batch-enrich cron — some platforms may be failing silently.',
+      recommendation: 'Check Tier-B ingest attempts and the source adapter metric declarations.',
     })
   }
 
@@ -364,27 +364,33 @@ export async function checkEnrichmentCoverage(): Promise<CheckResult> {
 export async function checkPlatformCoverage(): Promise<CheckResult> {
   const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
-  const EXPECTED = [
-    'binance_futures',
-    'bybit',
-    'okx_futures',
-    'bitget_futures',
-    'mexc',
-    'hyperliquid',
-    'gmx',
-    'dydx',
-    'drift',
-    'jupiter_perps',
-    'htx_futures',
-    'gateio',
-    'bingx',
-    'coinex',
-    'aevo',
-    'gains',
-  ]
+  const { data: registryRows, error: registryError } = await supabase.rpc('get_platform_freshness')
+  const expected = Array.from(
+    new Set((registryRows || []).map((row) => row.source?.trim()).filter(Boolean) as string[])
+  )
+  if (registryError || expected.length === 0) {
+    return {
+      check: {
+        name: 'platform_coverage',
+        category: 'completeness',
+        passed: false,
+        score: 0,
+        details: 'Active source registry is unavailable or empty',
+      },
+      issues: [
+        {
+          platform: 'all',
+          type: 'source_registry_unavailable',
+          severity: 'critical',
+          description: 'Cannot determine the active source set for coverage evaluation',
+          recommendation: 'Restore get_platform_freshness before evaluating platform coverage.',
+        },
+      ],
+    }
+  }
 
   const platformChecks = await Promise.all(
-    EXPECTED.map(async (platform) => {
+    expected.map(async (platform) => {
       const { data } = await supabase
         .from('leaderboard_ranks')
         .select('source')
@@ -396,24 +402,24 @@ export async function checkPlatformCoverage(): Promise<CheckResult> {
     })
   )
   const active = new Set(platformChecks.filter((p) => p.hasData).map((p) => p.platform))
-  const missing = EXPECTED.filter((p) => !active.has(p))
+  const missing = expected.filter((p) => !active.has(p))
   for (const p of missing) {
     issues.push({
       platform: p,
       type: 'missing_platform',
       severity: 'warning',
       description: `${p} has no traders in 90D leaderboard`,
-      recommendation: `Check batch-fetch-traders for ${p}.`,
+      recommendation: `Check the active registry row, ingest attempt, and publish gate for ${p}.`,
     })
   }
-  const score = Math.round(((EXPECTED.length - missing.length) / EXPECTED.length) * 100)
+  const score = Math.round(((expected.length - missing.length) / expected.length) * 100)
   return {
     check: {
       name: 'platform_coverage',
       category: 'completeness',
       passed: missing.length <= 2,
       score,
-      details: `${active.size} active, ${missing.length} missing of ${EXPECTED.length} expected`,
+      details: `${active.size} active, ${missing.length} missing of ${expected.length} expected`,
     },
     issues,
   }
@@ -423,23 +429,48 @@ export async function checkPlatformCoverage(): Promise<CheckResult> {
 export async function checkPerPlatformDataCoverage(): Promise<CheckResult> {
   const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
-  const PLATFORMS = [
-    'binance_futures',
-    'bybit',
-    'okx_futures',
-    'bitget_futures',
-    'mexc',
-    'hyperliquid',
-    'gmx',
-    'dydx',
-    'drift',
-    'jupiter_perps',
-  ]
+  const [{ data: registryRows, error: registryError }, { data: counts }] = await Promise.all([
+    supabase.rpc('get_platform_freshness'),
+    supabase
+      .from('leaderboard_count_cache')
+      .select('source, total_count')
+      .eq('season_id', '90D')
+      .neq('source', '_all')
+      .order('total_count', { ascending: false }),
+  ])
+  const activeSources = new Set(
+    (registryRows || []).map((row) => row.source?.trim()).filter(Boolean) as string[]
+  )
+  if (registryError || activeSources.size === 0) {
+    return {
+      check: {
+        name: 'per_platform_data_coverage',
+        category: 'completeness',
+        passed: false,
+        score: 0,
+        details: 'Active source registry is unavailable or empty',
+      },
+      issues: [
+        {
+          platform: 'all',
+          type: 'source_registry_unavailable',
+          severity: 'critical',
+          description: 'Cannot select active sources for field coverage evaluation',
+          recommendation: 'Restore get_platform_freshness before evaluating field coverage.',
+        },
+      ],
+    }
+  }
+  // Bound this expensive detailed check to the ten largest active boards.
+  const platforms = (counts || [])
+    .map((row) => row.source)
+    .filter((source): source is string => Boolean(source && activeSources.has(source)))
+    .slice(0, 10)
 
   let totalCoverage = 0
   let platformsChecked = 0
 
-  for (const platform of PLATFORMS) {
+  for (const platform of platforms) {
     const { data: sample } = await supabase
       .from('leaderboard_ranks')
       .select('win_rate, sharpe_ratio, max_drawdown, trades_count')

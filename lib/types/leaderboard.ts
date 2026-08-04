@@ -529,55 +529,6 @@ export interface TraderTimeseriesLegacy {
 }
 
 // ============================================
-// Refresh Jobs
-// ============================================
-
-export const JOB_TYPES = [
-  'DISCOVER',
-  'SNAPSHOT_REFRESH',
-  'PROFILE_ENRICH',
-  'TIMESERIES_REFRESH',
-] as const
-export type JobType = (typeof JOB_TYPES)[number]
-
-/** Legacy job types */
-export type LegacyJobType = 'discovery' | 'snapshot' | 'profile' | 'timeseries' | 'full_refresh'
-
-export const JOB_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
-export type JobStatus = (typeof JOB_STATUSES)[number]
-
-export const JOB_PRIORITIES = {
-  USER_TRIGGERED: 10,
-  TOP_N_PREHEAT: 20,
-  SCHEDULED_ACTIVE: 30,
-  SCHEDULED_LONG_TAIL: 40,
-  BACKGROUND: 50,
-} as const
-export type JobPriority = (typeof JOB_PRIORITIES)[keyof typeof JOB_PRIORITIES]
-
-export interface RefreshJob {
-  id: string
-  job_type: JobType
-  platform: LeaderboardPlatform
-  market_type: MarketType
-  trader_key: string | null
-  window: Window | null
-  priority: number
-  status: JobStatus
-  attempts: number
-  max_attempts: number
-  next_run_at: string
-  locked_at: string | null
-  locked_by: string | null
-  last_error: string | null
-  result: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
-  /** Idempotency key: prevents duplicate jobs for same target+day */
-  idempotency_key?: string
-}
-
-// ============================================
 // Platform Rate Limits
 // ============================================
 
@@ -1193,45 +1144,6 @@ export interface TraderDetailResponse {
     is_stale: boolean
     stale_reason: string | null
   }
-}
-
-/** Refresh request response */
-export interface RefreshResponse {
-  job_id: string
-  status: JobStatus
-  estimated_wait_seconds: number | null
-  message: string
-}
-
-// ============================================
-// Connector Interface Types
-// ============================================
-
-/** Result from discovering traders on a leaderboard */
-export interface DiscoverResult {
-  traders: TraderSource[]
-  total_available: number | null
-  window: Window
-  fetched_at: string
-}
-
-/** Result from fetching a trader's profile */
-export interface ProfileResult {
-  profile: TraderProfile
-  fetched_at: string
-}
-
-/** Result from fetching snapshot metrics */
-export interface SnapshotResult {
-  metrics: SnapshotMetrics
-  quality_flags: QualityFlags
-  fetched_at: string
-}
-
-/** Result from fetching timeseries */
-export interface TimeseriesResult {
-  series: TraderTimeseries[]
-  fetched_at: string
 }
 
 // ============================================

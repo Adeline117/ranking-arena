@@ -1,4 +1,4 @@
-import { withTimeout, createBudget } from '../timeout'
+import { withAbortableTimeout, withTimeout, createBudget } from '../timeout'
 
 describe('withTimeout', () => {
   it('resolves when promise completes before timeout', async () => {
@@ -12,11 +12,15 @@ describe('withTimeout', () => {
   })
 
   it('rejects immediately when budget is 0', async () => {
-    await expect(withTimeout(Promise.resolve(1), 0, 'expired')).rejects.toThrow('budget already expired')
+    await expect(withTimeout(Promise.resolve(1), 0, 'expired')).rejects.toThrow(
+      'budget already expired'
+    )
   })
 
   it('rejects immediately when budget is negative', async () => {
-    await expect(withTimeout(Promise.resolve(1), -100, 'neg')).rejects.toThrow('budget already expired')
+    await expect(withTimeout(Promise.resolve(1), -100, 'neg')).rejects.toThrow(
+      'budget already expired'
+    )
   })
 
   it('propagates the original error from the promise', async () => {
@@ -27,6 +31,32 @@ describe('withTimeout', () => {
   it('uses default label when none provided', async () => {
     const slow = new Promise<never>((resolve) => setTimeout(resolve, 5000))
     await expect(withTimeout(slow, 10)).rejects.toThrow('Timeout: query exceeded 10ms')
+  })
+})
+
+describe('withAbortableTimeout', () => {
+  it('aborts the operation when its deadline expires', async () => {
+    let observedSignal: AbortSignal | undefined
+    const operation = (signal: AbortSignal) => {
+      observedSignal = signal
+      return new Promise<never>(() => undefined)
+    }
+
+    await expect(withAbortableTimeout(operation, 10, 'abortable')).rejects.toThrow(
+      'Timeout: abortable exceeded 10ms'
+    )
+    expect(observedSignal?.aborted).toBe(true)
+  })
+
+  it('clears the deadline without aborting a completed operation', async () => {
+    let observedSignal: AbortSignal | undefined
+    const result = await withAbortableTimeout(async (signal) => {
+      observedSignal = signal
+      return 42
+    }, 1000)
+
+    expect(result).toBe(42)
+    expect(observedSignal?.aborted).toBe(false)
   })
 })
 

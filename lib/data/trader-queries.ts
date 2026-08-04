@@ -2,7 +2,7 @@
  * Trader query functions — database queries for trader detail pages.
  * Re-exported through lib/data/trader.ts as the public API.
  *
- * These query trader_snapshots_v2, leaderboard_ranks, and related tables.
+ * These query leaderboard_ranks and its dedicated enrichment tables.
  */
 
 import { supabase as _supabase } from '@/lib/supabase/client'

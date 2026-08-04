@@ -52,6 +52,12 @@ BITGET_REGRESSION_REPORT.md
 # Cloudflare Worker (独立部署)
 cloudflare-worker/
 
+# Foundry contracts (独立构建，不进入 Web 部署上下文)
+contracts/
+script/
+lib/forge-std/
+foundry.toml
+
 # 其他
 .DS_Store
 *.log

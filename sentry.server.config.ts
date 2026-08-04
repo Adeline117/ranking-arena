@@ -105,8 +105,8 @@ Sentry.init({
     }
 
     // Custom fingerprinting to reduce alert fatigue (inspired by Sentry best practices):
-    // Group exchange connector errors by exchange name so "binance timeout" and
-    // "binance rate limit" create 1 issue instead of N. Same for enrichment/pipeline.
+    // Group exchange acquisition errors by source so "binance timeout" and
+    // "binance rate limit" create 1 issue instead of N. Same for pipeline jobs.
     const errorMsg = message.toLowerCase()
     const exchangeMatch = errorMsg.match(
       /\b(binance|bybit|okx|bitget|mexc|kucoin|htx|coinex|hyperliquid|gmx|dydx|gateio|bingx)\b/
@@ -116,12 +116,12 @@ Sentry.init({
       const isTimeout = /timeout|timed out|ETIMEDOUT/.test(errorMsg)
       const isRateLimit = /rate.?limit|429|too many/i.test(errorMsg)
       const errorType = isTimeout ? 'timeout' : isRateLimit ? 'ratelimit' : 'error'
-      event.fingerprint = ['exchange-connector', exchange, errorType]
+      event.fingerprint = ['exchange-acquisition', exchange, errorType]
     }
 
     // Group pipeline/cron errors by job name
     const cronMatch = errorMsg.match(
-      /\b(batch-fetch|batch-enrich|compute-leaderboard|fetch-details|aggregate)/i
+      /\b(batch-5min|compute-leaderboard|pipeline-evaluate|check-data-freshness|aggregate)/i
     )
     if (cronMatch) {
       event.fingerprint = ['pipeline', cronMatch[1].toLowerCase()]

@@ -1,11 +1,4 @@
 {
   "description": "Scripts explicitly allowed for production/runtime operations.",
-  "allowed": [
-    "check_enrichment.mjs",
-    "check_seasons.mjs",
-    "check_status.mjs",
-    "daily-check.sh",
-    "diagnose.mjs",
-    "fetch_details_fast.mjs"
-  ]
+  "allowed": ["check_status.mjs", "diagnose.mjs", "pipeline-health-check.mjs"]
 }

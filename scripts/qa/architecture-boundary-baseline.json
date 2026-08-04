@@ -1,15 +1,4 @@
 {
   "version": 1,
-  "violations": [
-    {
-      "rule": "runtime-must-not-import-legacy-connectors",
-      "source": "lib/cron/inline-jobs.ts",
-      "specifier": "@/connectors"
-    },
-    {
-      "rule": "runtime-must-not-import-legacy-connectors",
-      "source": "lib/cron/inline-jobs.ts",
-      "specifier": "@/connectors/base/types"
-    }
-  ]
+  "violations": []
 }

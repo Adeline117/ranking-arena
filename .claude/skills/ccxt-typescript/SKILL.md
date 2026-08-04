@@ -1,6 +1,6 @@
 ---
 name: ccxt-typescript
-description: CCXT usage patterns for Arena. Arena uses CCXT only for market data (tickers, OHLCV, trading pairs) — NOT for copy trading APIs (custom connectors handle those).
+description: CCXT usage patterns for Arena. Arena uses CCXT only for market data (tickers, OHLCV, trading pairs), not for the registry-driven ranking ingest adapters.
 ---
 
 # CCXT in Arena
@@ -8,12 +8,14 @@ description: CCXT usage patterns for Arena. Arena uses CCXT only for market data
 ## How Arena Uses CCXT
 
 Arena uses CCXT **only** for standardized market data:
+
 - Ticker data (price, volume, 24h change)
 - OHLCV candlestick data
 - Trading pair lists
 - Price lookups for PnL calculation
 
-**NOT for**: Copy trading/leaderboard APIs — those use custom connectors in `lib/connectors/`.
+**NOT for**: Copy trading/leaderboard APIs — those use source adapters under
+`lib/ingest/adapters/` and the external BullMQ ingest worker.
 
 Key file: `lib/exchange/ccxt-client.ts` — lazy-loads ccxt to avoid 56MB cold start impact.
 
@@ -21,15 +23,26 @@ Key file: `lib/exchange/ccxt-client.ts` — lazy-loads ccxt to avoid 56MB cold s
 
 ```typescript
 const SUPPORTED_EXCHANGES = [
-  'binance', 'bybit', 'okx', 'bitget', 'mexc',
-  'kucoin', 'gateio', 'htx', 'coinex', 'bingx',
-  'phemex', 'xt', 'lbank',
+  'binance',
+  'bybit',
+  'okx',
+  'bitget',
+  'mexc',
+  'kucoin',
+  'gateio',
+  'htx',
+  'coinex',
+  'bingx',
+  'phemex',
+  'xt',
+  'lbank',
 ]
 ```
 
 ## Common Patterns
 
 ### Fetch Ticker
+
 ```typescript
 import ccxt from 'ccxt'
 const exchange = new ccxt.binance()
@@ -38,12 +51,14 @@ const ticker = await exchange.fetchTicker('BTC/USDT')
 ```
 
 ### Fetch OHLCV
+
 ```typescript
 const candles = await exchange.fetchOHLCV('BTC/USDT', '1h', undefined, 100)
 // Returns: [timestamp, open, high, low, close, volume][]
 ```
 
 ### Error Handling
+
 ```typescript
 try {
   const ticker = await exchange.fetchTicker(symbol)

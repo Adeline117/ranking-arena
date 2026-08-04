@@ -37,7 +37,7 @@ Row shape:
 - `week` → canonical **7**, `month` → canonical **30**. `day`/`allTime` kept in
   `raw` only. So timeframes_native={7,30} maps cleanly.
 - `roi` is a **decimal fraction** (0.0341 = 3.41%) — re-verified; matches the
-  legacy connector's 2026-04-20 finding (`lib/connectors/platforms/hyperliquid-perp.ts`).
+  retired legacy connector's 2026-04-20 finding.
   Arena parsers store percent → multiply by 100.
 - Field coverage: 15,297 rows have nonzero 7d PnL; 26,780 nonzero 30d PnL.
   `displayName` only on 1,365 rows (long tail renders shortened address).

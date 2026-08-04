@@ -1,6 +1,6 @@
 # Local Development Setup (for collaborators)
 
-Get Arena running locally in ~10 minutes. You need: **Node 20+**, git, and
+Get Arena running locally in ~10 minutes. You need: **Node 22**, git, and
 collaborator access to this repo.
 
 ## Quick start
@@ -8,10 +8,14 @@ collaborator access to this repo.
 ```bash
 git clone git@github.com:Adeline117/ranking-arena.git
 cd ranking-arena
-npm install                        # repo ships .npmrc (legacy-peer-deps) — plain npm install works
+npm ci                             # installs the lockfile and repository-managed Git hook
 bash scripts/setup-local-env.sh    # writes .env.local (public client values only)
 npm run dev                        # → http://localhost:3000
 ```
+
+The repository pins its runtime in `.nvmrc`; run `nvm use` before installing
+dependencies when your shell does not already use Node 22. The `prepare`
+step installs the version-controlled pre-commit hook in clones and worktrees.
 
 That's it. Rankings, trader detail pages, login, and community features all
 work against the live database (RLS enforces permissions).
@@ -43,6 +47,6 @@ If a task genuinely needs server secrets, ask the owner — they are shared via
 | ------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Every page slow, Supabase errors in console | `.env.local` typo'd/corrupted (often by chat apps mangling long keys) | `rm .env.local && bash scripts/setup-local-env.sh`, restart dev server |
 | `Invalid API key` / 401 in console          | same as above                                                         | same as above                                                          |
-| Weird build/runtime errors                  | Node < 20, or deps installed with yarn/pnpm                           | `node -v` (need ≥20); `rm -rf node_modules && npm install`             |
+| Weird build/runtime errors                  | Wrong Node major, or deps installed with yarn/pnpm                    | `nvm use`; reinstall with `npm ci`                                     |
 | Only the first page-load is slow            | dev on-demand compile                                                 | normal — revisit the page                                              |
 | Changed `.env.local` but nothing happened   | env is read at boot                                                   | restart `npm run dev`                                                  |

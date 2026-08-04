@@ -8,8 +8,6 @@ import {
   normalizeScoreConfidence,
   getSourceAliases,
   mapLeaderboardRow,
-  mapV1Snapshot,
-  mapV2Snapshot,
 } from '../mappers'
 
 describe('normalizePeriod', () => {
@@ -87,16 +85,7 @@ describe('getSourceAliases（遗留源名映射）', () => {
   })
 })
 
-describe('v1 vs v2 ROI 单位（关键：v1 是 ratio×100，v2 已是 %）', () => {
-  it('mapV1Snapshot：roi 是 ratio → ×100', () => {
-    // v1 存 0.5 = 50%
-    expect(mapV1Snapshot({ roi: 0.5 }, '30D').roi).toBe(50)
-    expect(mapV1Snapshot({ roi: 2 }, '30D').roi).toBe(200)
-  })
-  it('mapV2Snapshot：roi_pct 已是百分比 → 原样', () => {
-    // v2 存 50 = 50%
-    expect(mapV2Snapshot({ roi_pct: 50 }).roi).toBe(50)
-  })
+describe('leaderboard ROI 单位', () => {
   it('mapLeaderboardRow：roi 已是百分比 → 原样', () => {
     expect(mapLeaderboardRow({ roi: 50 }).roi).toBe(50)
   })

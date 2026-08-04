@@ -1,48 +1,47 @@
-# Playwright Worker on VPS
+# VPS Browser and Proxy Services
 
-## Overview
-Migrates browser-based scrapers from Railway to VPS for:
-- No cold start / container rebuild delays
-- Persistent Chromium instance
-- Lower cost ($6/mo VPS vs Railway usage-based)
+This directory owns the PM2 topology for the infrastructure deployed by
+`scripts/vps-deploy/deploy.sh`:
 
-## Browser-dependent platforms
-- MEXC (`cex-browser`)
-- KuCoin (`cex-browser`) 
-- BingX (`cex-browser`)
-- Plus fetchers using stealth: CoinEx, Phemex, Weex, Bitget, BloFin, LBank, Pionex
+- SG: `arena-scraper` (browser HTTP service on port 3457) and `arena-proxy`
+  (port 3456).
+- JP: `arena-proxy` only.
 
-## VPS-SG Setup (45.76.152.169)
+The canonical SG ingest worker, `arena-ingest-worker-sg`, is deployed separately
+under `/opt/arena-ingest`. This directory does not own that worker, any recurring
+data-fetch cron, or any database writer. See
+[`docs/INGEST_WORKER_DEPLOY.md`](../../docs/INGEST_WORKER_DEPLOY.md) and
+[`docs/INGEST_WORKER_TOPOLOGY.md`](../../docs/INGEST_WORKER_TOPOLOGY.md).
 
-Chromium is already installed at `/snap/bin/chromium`.
+The remote `/opt/arena-cron` directory is a retained path name for these PM2
+configuration and log files. It does not authorize an `arena-cron` process.
+
+## Deployment
+
+Run the scoped deployment script from the repository root:
 
 ```bash
-# Verify Chromium works headless
-ssh root@45.76.152.169 "/snap/bin/chromium --headless --no-sandbox --dump-dom https://example.com 2>/dev/null | head -5"
-
-# Deploy Playwright worker
-rsync -avz --exclude node_modules --exclude .git \
-  worker/ root@45.76.152.169:/root/arena-worker/
-
-ssh root@45.76.152.169 "cd /root/arena-worker && npm ci && npx playwright install-deps"
-
-# Copy PM2 config
-scp infra/vps-playwright/ecosystem.config.js root@45.76.152.169:/root/arena-worker/
-
-# Start
-ssh root@45.76.152.169 "cd /root/arena-worker && pm2 start ecosystem.config.js"
+scripts/vps-deploy/deploy.sh sg
+scripts/vps-deploy/deploy.sh jp
 ```
 
-## Testing a single scraper
-```bash
-ssh root@45.76.152.169 "cd /root/arena-worker && npx tsx src/index.ts --platforms mexc"
-```
+The script copies only the declared service artifacts, verifies that the SG
+ingest worker PID is unchanged, rejects the retired `arena-cron` process, and
+performs scoped service health checks. It must not be used to deploy or restart
+the ingest worker.
 
-## Stealth Configuration
-The base scraper (`worker/src/scrapers/base.ts`) already includes:
-- Proxy pool rotation
-- Random user-agents
-- Viewport randomization
-- Anti-detection via Playwright launch args
+## Runtime configuration
 
-Ensure `PROXY_LIST` is set in `.env` for platforms that need it.
+Provide `PROXY_KEY_CURRENT` and optionally `PROXY_KEY_NEXT` through the
+root-owned, mode-0600 `/etc/arena-proxy.env` file. Do not place credentials in
+this repository, the PM2 configuration, command output, or `/etc/environment`.
+The proxy/scraper topology must not receive a Supabase service-role key.
+
+## Read-only status
+
+Use `scripts/vps-deploy/check-vps.sh [sg|jp|all]` to check the proxy on either
+VPS and the canonical ingest PM2 process on SG. The command does not inspect or
+print credentials, old cron logs, or unrelated PM2 applications.
+
+The browser service implementation and endpoint contracts live in
+`scripts/vps-deploy/scraper-v16-parallel.js`.

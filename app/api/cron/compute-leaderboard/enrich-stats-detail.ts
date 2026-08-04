@@ -1,9 +1,8 @@
 /**
  * compute-leaderboard / enrich-stats-detail
  *
- * Phase 3: backfill missing metrics from `trader_stats_detail`. This catches
- * data from the enrichment cron that was written to stats_detail but never
- * propagated back to trader_snapshots_v2. Mutates traderMap in place.
+ * Phase 3: fill missing publication metrics from `trader_stats_detail` before
+ * scoring. Mutates traderMap in place.
  *
  * Extracted from route.ts as part of the computeSeason main-loop split
  * (TASKS.md "Open follow-ups").

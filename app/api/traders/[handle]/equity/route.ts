@@ -1,7 +1,7 @@
 /**
  * 获取交易员资金曲线数据 API
  *
- * 从 trader_snapshots_v2 表聚合历史 ROI 数据，构建资金曲线
+ * 从 trader_daily_snapshots 聚合历史 ROI 数据，构建资金曲线。
  */
 
 import { NextRequest, NextResponse } from 'next/server'
