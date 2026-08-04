@@ -128,6 +128,8 @@ describe('channel-message send operation ledger', () => {
     expect(page).toContain('operation_id: sendRequest.operationId')
     expect(page).toContain('userIdRef.current === operationActorId')
     expect(page).toContain('channelIdRef.current === operationChannelId')
+    expect(page).toContain('viewerKeyRef.current === operationViewerKey')
+    expect(page).toContain('sessionGenerationRef.current === operationSessionGeneration')
     expect(page).toMatch(
       /if \(acknowledgement\) \{[\s\S]*sendOperationsRef\.current\.complete\(sendRequest\)/
     )
@@ -137,6 +139,6 @@ describe('channel-message send operation ledger', () => {
     expect(page).not.toMatch(
       /catch \{[\s\S]{0,500}sendOperationsRef\.current\.complete\(sendRequest\)/
     )
-    expect(page).toContain('setTimeout(() => controller.abort(), 20_000)')
+    expect(page).toContain('setTimeout(() => requestController.abort(), 20_000)')
   })
 })

@@ -113,6 +113,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   // from overwriting each other's full aggregate acknowledgement out of order.
   const reactionInFlightRef = useRef<Set<string>>(new Set())
   const sendOperationsRef = useRef(new ChannelMessageSendOperationLedger())
+  const messageMutationControllersRef = useRef<Set<AbortController>>(new Set())
   // React state is not a synchronous exclusion primitive. This scope-bound set
   // closes the same-tick double-click/Enter race before operation acquisition.
   const sendInFlightRef = useRef<Set<string>>(new Set())
@@ -183,6 +184,8 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       loadChannelAbortRef.current?.abort()
       uploadOperationRef.current?.controller.abort()
       uploadOperationRef.current = null
+      for (const controller of messageMutationControllersRef.current) controller.abort()
+      messageMutationControllersRef.current.clear()
     }
   }, [])
 
@@ -214,7 +217,12 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     loadChannelAbortRef.current?.abort()
     uploadOperationRef.current?.controller.abort()
     uploadOperationRef.current = null
+    for (const controller of messageMutationControllersRef.current) controller.abort()
+    messageMutationControllersRef.current.clear()
     setSending(false)
+    reactionInFlightRef.current.clear()
+    sendInFlightRef.current.clear()
+    reactionRowMapRef.current.clear()
     memberMutationInFlightRef.current.clear()
     loadOlderInFlightRef.current.clear()
     setPendingMemberMutations({})
@@ -348,6 +356,16 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     autoReconnect: true,
     maxRetries: 10,
     onInsert: (msg) => {
+      if (
+        !mountedRef.current ||
+        userIdRef.current !== userId ||
+        channelIdRef.current !== channelId ||
+        viewerKeyRef.current !== viewerKey ||
+        sessionGenerationRef.current !== sessionGeneration ||
+        msg.channel_id !== channelId
+      ) {
+        return
+      }
       if (msg.sender_id !== userId) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev
@@ -366,7 +384,16 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     autoReconnect: true,
     maxRetries: 5,
     onInsert: (row) => {
-      if (!mountedRef.current) return
+      if (
+        !mountedRef.current ||
+        userIdRef.current !== userId ||
+        channelIdRef.current !== channelId ||
+        viewerKeyRef.current !== viewerKey ||
+        sessionGenerationRef.current !== sessionGeneration ||
+        !messagesRef.current.some((message) => message.id === row.message_id)
+      ) {
+        return
+      }
       reactionRowMapRef.current.set(row.id, {
         messageId: row.message_id,
         emoji: row.emoji,
@@ -393,7 +420,15 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     autoReconnect: true,
     maxRetries: 5,
     onDelete: (row) => {
-      if (!mountedRef.current) return
+      if (
+        !mountedRef.current ||
+        userIdRef.current !== userId ||
+        channelIdRef.current !== channelId ||
+        viewerKeyRef.current !== viewerKey ||
+        sessionGenerationRef.current !== sessionGeneration
+      ) {
+        return
+      }
       const info = reactionRowMapRef.current.get(row.id)
       reactionRowMapRef.current.delete(row.id)
       if (!info || info.userId === userId) return
@@ -418,19 +453,25 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       const actorId = userId
       const operationChannelId = channelId
       const operationAccessToken = accessToken
+      const operationViewerKey = viewerKey
+      const operationSessionGeneration = sessionGeneration
       const target = messagesRef.current.find((message) => message.id === messageId)
       if (!target) return
 
-      const inFlightKey = `${actorId}\u0000${operationChannelId}\u0000${messageId}`
+      const inFlightKey = `${operationViewerKey}\u0000${operationSessionGeneration}\u0000${operationChannelId}\u0000${messageId}`
       if (reactionInFlightRef.current.has(inFlightKey)) return
       reactionInFlightRef.current.add(inFlightKey)
 
       const isCurrent = () =>
         mountedRef.current &&
         userIdRef.current === actorId &&
-        channelIdRef.current === operationChannelId
+        channelIdRef.current === operationChannelId &&
+        viewerKeyRef.current === operationViewerKey &&
+        sessionGenerationRef.current === operationSessionGeneration
       const wasMine = !!target.reactions?.find((reaction) => reaction.emoji === emoji)?.mine
       let optimisticApplied = false
+      let controller: AbortController | null = null
+      let timeout: ReturnType<typeof setTimeout> | undefined
 
       try {
         const acquired = await reactionOperationsRef.current.acquire({
@@ -463,6 +504,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           )
         }
 
+        controller = new AbortController()
+        messageMutationControllersRef.current.add(controller)
+        timeout = setTimeout(() => controller?.abort(), 15_000)
         const res = await globalThis.fetch(
           `/api/channels/${operationChannelId}/messages/${messageId}/react`,
           {
@@ -473,6 +517,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               ...getCsrfHeaders(),
             },
             body: JSON.stringify({ emoji, operation_id: reactionRequest.operationId }),
+            signal: controller.signal,
           }
         )
         const data: unknown = await res.json().catch(() => null)
@@ -521,10 +566,22 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         }
         showToast(t('operationFailed'), 'error')
       } finally {
+        if (timeout) clearTimeout(timeout)
+        if (controller) messageMutationControllersRef.current.delete(controller)
         reactionInFlightRef.current.delete(inFlightKey)
       }
     },
-    [userId, accessToken, channelId, showToast] // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+    [
+      accessToken,
+      channelId,
+      sessionGeneration,
+      setCtxMenu,
+      setMessages,
+      showToast,
+      t,
+      userId,
+      viewerKey,
+    ]
   )
 
   const getMemberName = (senderId: string) => {
@@ -545,11 +602,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     const operationActorId = intent.actorId
     const operationChannelId = intent.channelId
     const operationAccessToken = accessToken
+    const operationViewerKey = viewerKey
+    const operationSessionGeneration = sessionGeneration
     if (!operationAccessToken || userId !== operationActorId || channelId !== operationChannelId) {
       return
     }
 
-    const inFlightKey = `${operationActorId}\u0000${operationChannelId}`
+    const inFlightKey = `${operationViewerKey}\u0000${operationSessionGeneration}\u0000${operationChannelId}`
     if (sendInFlightRef.current.has(inFlightKey)) return
     sendInFlightRef.current.add(inFlightKey)
     setSending(true)
@@ -581,16 +640,21 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     const isCurrent = () =>
       mountedRef.current &&
       userIdRef.current === operationActorId &&
-      channelIdRef.current === operationChannelId
+      channelIdRef.current === operationChannelId &&
+      viewerKeyRef.current === operationViewerKey &&
+      sessionGenerationRef.current === operationSessionGeneration
     let timeout: ReturnType<typeof setTimeout> | undefined
+    let controller: AbortController | null = null
 
     try {
       const acquired = await sendOperationsRef.current.acquire(intent)
       const sendRequest = acquired.operation
       if (!isCurrent()) return
 
-      const controller = new AbortController()
-      timeout = setTimeout(() => controller.abort(), 20_000)
+      const requestController = new AbortController()
+      controller = requestController
+      messageMutationControllersRef.current.add(requestController)
+      timeout = setTimeout(() => requestController.abort(), 20_000)
       const res = await globalThis.fetch(`/api/channels/${operationChannelId}/messages`, {
         method: 'POST',
         headers: {
@@ -598,7 +662,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           Authorization: `Bearer ${operationAccessToken}`,
           ...getCsrfHeaders(),
         },
-        signal: controller.signal,
+        signal: requestController.signal,
         body: JSON.stringify({
           operation_id: sendRequest.operationId,
           content: intent.content,
@@ -649,6 +713,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       showToast(t('sendFailed'), 'error')
     } finally {
       if (timeout) clearTimeout(timeout)
+      if (controller) messageMutationControllersRef.current.delete(controller)
       sendInFlightRef.current.delete(inFlightKey)
       if (isCurrent()) setSending(false)
     }

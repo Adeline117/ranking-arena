@@ -121,4 +121,17 @@ describe('channel page client snapshot', () => {
     expect(page).toContain("storageBaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''")
     expect(page).toContain('uploadOperationRef.current?.controller.abort()')
   })
+
+  it('drops realtime callbacks from a superseded viewer or channel', () => {
+    const page = readFileSync(join(__dirname, '../page.tsx'), 'utf8')
+
+    expect(page).toContain('userIdRef.current !== userId')
+    expect(page).toContain('channelIdRef.current !== channelId')
+    expect(page).toContain('viewerKeyRef.current !== viewerKey')
+    expect(page).toContain('sessionGenerationRef.current !== sessionGeneration')
+    expect(page).toContain('msg.channel_id !== channelId')
+    expect(page).toContain(
+      'for (const controller of messageMutationControllersRef.current) controller.abort()'
+    )
+  })
 })

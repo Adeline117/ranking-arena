@@ -89,6 +89,8 @@ describe('channel-message reaction operation ledger', () => {
     const page = readFileSync(join(__dirname, '../page.tsx'), 'utf8')
 
     expect(page).toContain('reactionInFlightRef.current.has(inFlightKey)')
+    expect(page).toContain('viewerKeyRef.current === operationViewerKey')
+    expect(page).toContain('sessionGenerationRef.current === operationSessionGeneration')
     expect(page).toContain('await reactionOperationsRef.current.acquire({')
     expect(page).toContain('operation_id: reactionRequest.operationId')
     expect(page).toMatch(
