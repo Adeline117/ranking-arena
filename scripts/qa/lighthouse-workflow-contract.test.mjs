@@ -65,12 +65,16 @@ test('Lighthouse audits canonical application routes and retains hidden reports'
   assert.equal(artifact.with['retention-days'], 3)
 })
 
-test('CI keeps optional artifacts bounded and off the quality gate', () => {
+test('CI keeps optional artifacts bounded, main-only, and off the quality gate', () => {
   const unitSteps = mainWorkflow.jobs['unit-tests'].steps
   const testStep = unitSteps.find((step) => step.name === 'Run tests with coverage')
   const coverageArtifact = unitSteps.find((step) => step.name === 'Upload coverage artifact')
   assert.match(testStep.run, /--coverageReporters=lcovonly/)
   assert.equal(coverageArtifact.uses, 'actions/upload-artifact@v6')
+  assert.equal(
+    coverageArtifact.if,
+    "always() && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+  )
   assert.equal(coverageArtifact['continue-on-error'], true)
   assert.equal(coverageArtifact.with.path, 'coverage/lcov.info')
   assert.equal(coverageArtifact.with['retention-days'], 3)
