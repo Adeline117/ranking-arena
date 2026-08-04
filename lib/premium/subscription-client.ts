@@ -1,5 +1,17 @@
 import type { UserSubscription } from './index'
 
+export const SUBSCRIPTION_REQUEST_TIMEOUT_MS = 10_000
+
+export class SubscriptionRequestError extends Error {
+  readonly status: number | null
+
+  constructor(message: string, status: number | null = null, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'SubscriptionRequestError'
+    this.status = status
+  }
+}
+
 const SUBSCRIPTION_KEYS = [
   'userId',
   'tier',
@@ -116,27 +128,65 @@ export function parseSubscriptionResponse(
 export async function fetchVerifiedSubscription(
   accessToken: string,
   expectedUserId: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  callerSignal?: AbortSignal
 ): Promise<UserSubscription> {
   if (!accessToken || !expectedUserId) {
     throw new Error('Subscription request identity is missing')
   }
 
-  const response = await fetchImpl('/api/subscription', {
-    method: 'GET',
-    credentials: 'include',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    signal: AbortSignal.timeout(10_000),
+  if (callerSignal?.aborted) throw new SubscriptionRequestError('Subscription request cancelled')
+  const controller = new AbortController()
+  let rejectInterruption: ((reason: Error) => void) | undefined
+  const interruption = new Promise<never>((_resolve, reject) => {
+    rejectInterruption = reject
   })
-  if (!response.ok) {
-    throw new Error(`Subscription API returned HTTP ${response.status}`)
+  const interrupt = (reason: Error) => {
+    if (!controller.signal.aborted) controller.abort(reason)
+    rejectInterruption?.(reason)
   }
+  const onCallerAbort = () =>
+    interrupt(new SubscriptionRequestError('Subscription request cancelled'))
+  callerSignal?.addEventListener('abort', onCallerAbort, { once: true })
+  const timeout = setTimeout(
+    () => interrupt(new SubscriptionRequestError('Subscription request timed out')),
+    SUBSCRIPTION_REQUEST_TIMEOUT_MS
+  )
 
-  let payload: unknown
   try {
-    payload = await response.json()
-  } catch {
-    throw new Error('Subscription API returned malformed JSON')
+    const response = await Promise.race([
+      fetchImpl('/api/subscription', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
+      }),
+      interruption,
+    ])
+    if (!response.ok || response.status !== 200) {
+      throw new SubscriptionRequestError(
+        `Subscription API returned HTTP ${response.status}`,
+        response.status
+      )
+    }
+
+    let payload: unknown
+    try {
+      payload = await Promise.race([response.json(), interruption])
+    } catch (cause) {
+      if (cause instanceof SubscriptionRequestError) throw cause
+      throw new SubscriptionRequestError(
+        'Subscription API returned malformed JSON',
+        response.status,
+        {
+          cause,
+        }
+      )
+    }
+    return parseSubscriptionResponse(payload, expectedUserId)
+  } finally {
+    clearTimeout(timeout)
+    callerSignal?.removeEventListener('abort', onCallerAbort)
   }
-  return parseSubscriptionResponse(payload, expectedUserId)
 }

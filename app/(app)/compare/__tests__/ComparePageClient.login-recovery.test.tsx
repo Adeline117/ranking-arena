@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 
 const mockPush = jest.fn()
 const mockReplace = jest.fn()
@@ -84,26 +84,62 @@ function okJson(body: unknown) {
   return { ok: true, status: 200, json: async () => body }
 }
 
+function subscriptionBody() {
+  return {
+    subscription: {
+      userId: 'viewer-1',
+      tier: 'pro',
+      status: 'active',
+      startDate: '2026-08-01T00:00:00.000Z',
+      endDate: null,
+      trialEndDate: null,
+      autoRenew: true,
+      usage: {
+        apiCallsToday: 0,
+        comparisonReportsThisMonth: 0,
+        exportsThisMonth: 0,
+        currentFollows: 0,
+        currentCustomRankings: 0,
+      },
+    },
+  }
+}
+
+function followingBody() {
+  return { items: [], count: 0, traderCount: 0, userCount: 0 }
+}
+
+function compareBody() {
+  const traders = accounts.map((account) => ({
+    ...account,
+    handle: account.source,
+    roi: 10,
+  }))
+  return {
+    success: true,
+    data: {
+      traders,
+      missingAccounts: [],
+      requestedIds: accounts.map((account) => account.id),
+      requestedPlatforms: accounts.map((account) => account.source),
+      requestedAccounts: accounts,
+      foundCount: traders.length,
+    },
+    meta: { timestamp: '2026-08-04T00:00:00.000Z' },
+  }
+}
+
 function installSuccessfulFetch() {
   global.fetch = jest.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url === '/api/subscription') {
-      return okJson({ subscription: { tier: 'pro' } })
+      return okJson(subscriptionBody())
     }
     if (url.startsWith('/api/following')) {
-      return okJson({ items: [] })
+      return okJson(followingBody())
     }
     if (url.startsWith('/api/compare')) {
-      return okJson({
-        data: {
-          traders: accounts.map((account) => ({
-            ...account,
-            handle: account.source,
-            roi: 10,
-          })),
-          missingAccounts: [],
-        },
-      })
+      return okJson(compareBody())
     }
     throw new Error(`Unexpected fetch: ${url}`)
   }) as unknown as typeof fetch
@@ -152,7 +188,12 @@ describe('ComparePageClient login recovery', () => {
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(
         '/api/compare?ids=shared%2Cshared&platforms=bybit%2Cbinance_futures&include_equity=1',
-        { headers: { Authorization: 'Bearer access-token' } }
+        expect.objectContaining({
+          cache: 'no-store',
+          credentials: 'include',
+          headers: { Authorization: 'Bearer access-token' },
+          signal: expect.any(AbortSignal),
+        })
       )
     )
     expect(`${window.location.pathname}${window.location.search}`).toBe(comparePath)
@@ -203,10 +244,10 @@ describe('ComparePageClient login recovery', () => {
     global.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/subscription') {
-        return okJson({ subscription: { tier: 'pro' } })
+        return okJson(subscriptionBody())
       }
       if (url.startsWith('/api/following')) {
-        return okJson({ items: [] })
+        return okJson(followingBody())
       }
       if (url.startsWith('/api/compare')) {
         return {
@@ -226,5 +267,73 @@ describe('ComparePageClient login recovery', () => {
       `${comparePath}&resumeAction=compare-traders`
     )
     expect(window.sessionStorage).toHaveLength(1)
+  })
+
+  it.each(['subscription', 'following'] as const)(
+    'preserves the exact comparison when the %s lane returns 401',
+    async (expiredLane) => {
+      mockAuth = { accessToken: 'expired-token', authChecked: true, userId: 'viewer-1' }
+      global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url === '/api/subscription') {
+          if (expiredLane === 'subscription') {
+            return { ok: false, status: 401, json: async () => ({ error: 'expired' }) }
+          }
+          return okJson(subscriptionBody())
+        }
+        if (url.startsWith('/api/following')) {
+          if (expiredLane === 'following') {
+            return { ok: false, status: 401, json: async () => ({ error: 'expired' }) }
+          }
+          return okJson(followingBody())
+        }
+        if (url.startsWith('/api/compare')) return okJson(compareBody())
+        throw new Error(`Unexpected fetch: ${url}`)
+      }) as unknown as typeof fetch
+
+      render(<ComparePageClient />)
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1))
+      const loginUrl = new URL(mockPush.mock.calls[0][0], 'https://arena.invalid')
+      expect(loginUrl.searchParams.get('returnUrl')).toBe(
+        `${comparePath}&resumeAction=compare-traders`
+      )
+      expect(window.sessionStorage).toHaveLength(1)
+    }
+  )
+
+  it('does not retain another viewer account comparison while the new scope is pending', async () => {
+    mockAuth = { accessToken: 'viewer-1-token', authChecked: true, userId: 'viewer-1' }
+    const view = render(<ComparePageClient />)
+    await screen.findByText(/2\/10/)
+
+    mockAuth = { accessToken: 'viewer-2-token', authChecked: true, userId: 'viewer-2' }
+    global.fetch = jest.fn(() => new Promise(() => undefined)) as unknown as typeof fetch
+    view.rerender(<ComparePageClient />)
+
+    expect(await screen.findByText('Loading compare')).toBeInTheDocument()
+    expect(screen.queryByText(/2\/10/)).not.toBeInTheDocument()
+    view.unmount()
+  })
+
+  it('retains same-viewer last-good comparison but labels a failed refresh', async () => {
+    mockAuth = { accessToken: 'viewer-1-token', authChecked: true, userId: 'viewer-1' }
+    const view = render(<ComparePageClient />)
+    await screen.findByText(/2\/10/)
+
+    mockAuth = { accessToken: 'refreshed-token', authChecked: true, userId: 'viewer-1' }
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/subscription') return okJson(subscriptionBody())
+      if (url.startsWith('/api/following')) return okJson(followingBody())
+      if (url.startsWith('/api/compare')) {
+        return { ok: false, status: 503, json: async () => ({ error: 'offline' }) }
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    }) as unknown as typeof fetch
+    view.rerender(<ComparePageClient />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('errorOccurred')
+    expect(screen.getByText(/2\/10/)).toBeInTheDocument()
   })
 })

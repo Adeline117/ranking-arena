@@ -96,6 +96,7 @@ describe('PremiumProvider viewer ownership', () => {
       const isUserA = new Headers(init?.headers).get('Authorization') === 'Bearer token-a'
       return {
         ok: true,
+        status: 200,
         json: async () => ({
           subscription: {
             userId: isUserA ? 'user-a' : 'user-b',
@@ -164,6 +165,7 @@ describe('PremiumProvider viewer ownership', () => {
       }
       return {
         ok: true,
+        status: 200,
         json: async () => ({
           subscription: {
             userId: 'badge-owner',

@@ -1,4 +1,8 @@
-import { fetchVerifiedSubscription, parseSubscriptionResponse } from './subscription-client'
+import {
+  fetchVerifiedSubscription,
+  parseSubscriptionResponse,
+  SUBSCRIPTION_REQUEST_TIMEOUT_MS,
+} from './subscription-client'
 
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 
@@ -27,6 +31,10 @@ function validSubscription(overrides: Record<string, unknown> = {}) {
 }
 
 describe('subscription client authority', () => {
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   it('accepts the exact current-viewer response', () => {
     expect(parseSubscriptionResponse({ subscription: validSubscription() }, USER_ID)).toMatchObject(
       { userId: USER_ID, tier: 'pro', status: 'active' }
@@ -83,10 +91,40 @@ describe('subscription client authority', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       '/api/subscription',
       expect.objectContaining({
+        cache: 'no-store',
         credentials: 'include',
         headers: { Authorization: 'Bearer access-token' },
+        signal: expect.any(AbortSignal),
       })
     )
+  })
+
+  it('hard-times-out a fetch implementation that ignores AbortSignal', async () => {
+    jest.useFakeTimers()
+    const fetchImpl = jest.fn(() => new Promise<Response>(() => undefined))
+
+    const rejection = expect(
+      fetchVerifiedSubscription('access-token', USER_ID, fetchImpl)
+    ).rejects.toThrow('Subscription request timed out')
+    await jest.advanceTimersByTimeAsync(SUBSCRIPTION_REQUEST_TIMEOUT_MS)
+    await rejection
+  })
+
+  it('keeps the physical deadline through JSON parsing and ignores a late payload', async () => {
+    jest.useFakeTimers()
+    let resolveBody: ((value: unknown) => void) | undefined
+    const body = new Promise<unknown>((resolve) => {
+      resolveBody = resolve
+    })
+    const fetchImpl = jest.fn(async () => ({ ok: true, status: 200, json: () => body }) as Response)
+
+    const rejection = expect(
+      fetchVerifiedSubscription('access-token', USER_ID, fetchImpl)
+    ).rejects.toThrow('Subscription request timed out')
+    await jest.advanceTimersByTimeAsync(SUBSCRIPTION_REQUEST_TIMEOUT_MS)
+    await rejection
+    resolveBody?.({ subscription: validSubscription() })
+    await Promise.resolve()
   })
 
   it('fails closed on non-2xx and malformed JSON', async () => {
@@ -103,7 +141,7 @@ describe('subscription client authority', () => {
     )
 
     const malformed = jest.fn(
-      async () => ({ ok: true, json: async () => Promise.reject() }) as Response
+      async () => ({ ok: true, status: 200, json: async () => Promise.reject() }) as Response
     )
     await expect(fetchVerifiedSubscription('token', USER_ID, malformed)).rejects.toThrow(
       /malformed JSON/

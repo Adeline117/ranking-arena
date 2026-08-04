@@ -6,7 +6,6 @@ import { useState, useEffect, Suspense, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import nextDynamic from 'next/dynamic'
-import { supabase } from '@/lib/supabase/client'
 import { tokens, alpha } from '@/lib/design-tokens'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { Box, Text } from '@/app/components/base'
@@ -25,10 +24,8 @@ import ProGate from '@/app/components/ui/ProGate'
 import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
-import type { UnifiedSearchResult } from '@/app/api/search/route'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import {
-  buildCompareApiUrl,
   buildCompareUrl,
   compareAccountKey,
   isSameCompareAccount,
@@ -37,34 +34,29 @@ import {
   type CompareAccountRef,
 } from '@/lib/compare/identity'
 import {
+  CompareClientRequestError,
+  fetchCompareAccounts,
+  fetchFollowingItems,
+  type CompareLoadResult,
+  type FollowingItem,
+  type TraderCompareData,
+} from '@/lib/compare/compare-client-contract'
+import {
+  fetchUnifiedSearch,
+  type UnifiedSearchResponse,
+} from '@/lib/search/unified-search-client-contract'
+import {
+  fetchVerifiedSubscription,
+  SubscriptionRequestError,
+} from '@/lib/premium/subscription-client'
+import {
   compareAccountsTarget,
   consumeProfileActionLogin,
   PROFILE_ACTION_QUERY_PARAM,
   queueProfileActionLogin,
 } from '@/lib/auth/profile-action-login'
 
-interface TraderCompareData extends CompareAccountRef {
-  handle: string | null
-  roi: number
-  roi_7d?: number
-  roi_30d?: number
-  pnl?: number
-  max_drawdown?: number
-  win_rate?: number
-  trades_count?: number
-  arena_score?: number
-  return_score?: number
-  drawdown_score?: number
-  stability_score?: number
-  avatar_url?: string
-  followers?: number
-  equity_curve?: Array<{ date: string; roi: number }>
-}
-
-interface CompareLoadResult {
-  traders: TraderCompareData[]
-  missingAccounts: CompareAccountRef[]
-}
+type UnifiedSearchResult = UnifiedSearchResponse['results']['traders'][number]
 
 interface CompareLoadRequest {
   accounts: CompareAccountRef[]
@@ -86,6 +78,17 @@ function CompareContent() {
   const redirectingToLoginRef = useRef(false)
   const rejectedResumeRef = useRef(false)
   const compareRetryPendingRef = useRef(false)
+  const initGenerationRef = useRef(0)
+  const subscriptionRequestRef = useRef<AbortController | null>(null)
+  const followedRequestRef = useRef<AbortController | null>(null)
+  const compareRequestRef = useRef<{
+    controller: AbortController
+    requestKey: string
+  } | null>(null)
+  const compareDataScopeRef = useRef<string | null>(null)
+  const followedOwnerRef = useRef<string | null>(null)
+  const compareOwnerRef = useRef<string | null>(null)
+  const subscriptionOwnerRef = useRef<string | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [compareFailure, setCompareFailure] = useState<CompareLoadFailure | null>(null)
@@ -99,23 +102,98 @@ function CompareContent() {
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchRetryKey, setSearchRetryKey] = useState(0)
   const [isPro, setIsPro] = useState(BETA_PRO_FEATURES_FREE)
-  const [followedTraders, setFollowedTraders] = useState<
-    Array<{
-      id: string
-      handle: string
-      type: string
-      avatar_url?: string
-      roi?: number
-      source?: string | null
-      platform?: string
-      identity_key?: string
-      arena_score?: number
-    }>
-  >([])
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+  const [followedTraders, setFollowedTraders] = useState<FollowingItem[]>([])
   const [followedLoading, setFollowedLoading] = useState(false)
   const [followedError, setFollowedError] = useState<string | null>(null)
   const searchFailedMessage = t('searchFailed')
   const followedFailedMessage = t('loadFollowingFailed')
+
+  function accountsFromCurrentUrl(): CompareAccountRef[] {
+    const parsed = parseCompareAccounts(searchParams.get('ids'), searchParams.get('platforms'))
+    return parsed.ok ? parsed.accounts : []
+  }
+
+  function redirectExpiredSession(accounts: CompareAccountRef[] = accountsFromCurrentUrl()) {
+    if (redirectingToLoginRef.current) return
+    redirectingToLoginRef.current = true
+    if (accounts.length === 0) {
+      router.push(`/login?returnUrl=${encodeURIComponent('/compare')}`)
+      return
+    }
+    router.push(
+      queueProfileActionLogin({
+        action: 'compare-traders',
+        target: compareAccountsTarget(accounts),
+        fallbackPath: buildCompareUrl(accounts),
+        initiatingUserId: userId,
+      })
+    )
+  }
+
+  // Every private lane is owned by the current token/viewer render. Abort old
+  // work before a refreshed token or another account can reuse this component.
+  useEffect(() => {
+    subscriptionRequestRef.current?.abort()
+    followedRequestRef.current?.abort()
+    compareRequestRef.current?.controller.abort()
+    subscriptionRequestRef.current = null
+    followedRequestRef.current = null
+    compareRequestRef.current = null
+    if (followedOwnerRef.current !== userId) {
+      followedOwnerRef.current = null
+      setFollowedTraders([])
+      setFollowedError(null)
+    }
+    if (compareOwnerRef.current !== userId) {
+      compareOwnerRef.current = null
+      compareDataScopeRef.current = null
+      setTraders([])
+      setAvailabilityWarning(null)
+      setCompareFailure(null)
+    }
+    if (subscriptionOwnerRef.current !== userId) {
+      subscriptionOwnerRef.current = null
+      setIsPro(BETA_PRO_FEATURES_FREE)
+    }
+    setSubscriptionError(null)
+
+    return () => {
+      subscriptionRequestRef.current?.abort()
+      followedRequestRef.current?.abort()
+      compareRequestRef.current?.controller.abort()
+    }
+  }, [accessToken, userId])
+
+  async function loadSubscription() {
+    if (!accessToken || !userId) return
+    subscriptionRequestRef.current?.abort()
+    const controller = new AbortController()
+    subscriptionRequestRef.current = controller
+    setSubscriptionError(null)
+    try {
+      const subscription = await fetchVerifiedSubscription(
+        accessToken,
+        userId,
+        fetch,
+        controller.signal
+      )
+      if (subscriptionRequestRef.current !== controller || controller.signal.aborted) return
+      subscriptionOwnerRef.current = userId
+      setIsPro(BETA_PRO_FEATURES_FREE || subscription.tier === 'pro')
+    } catch (error) {
+      if (subscriptionRequestRef.current !== controller || controller.signal.aborted) return
+      logger.error('Subscription fetch failed:', error)
+      if (error instanceof SubscriptionRequestError && error.status === 401) {
+        redirectExpiredSession()
+        setSubscriptionError(t('loginExpiredPleaseRelogin'))
+      } else {
+        setSubscriptionError(t('subscriptionFailed'))
+      }
+    } finally {
+      if (subscriptionRequestRef.current === controller) subscriptionRequestRef.current = null
+    }
+  }
 
   // Check auth
   useEffect(() => {
@@ -142,14 +220,18 @@ function CompareContent() {
   useEffect(() => {
     if (!authChecked) return
 
-    if (!accessToken) {
+    if (!accessToken || !userId) {
+      initGenerationRef.current += 1
       setLoading(false)
       return
     }
 
     const init = async () => {
+      const generation = initGenerationRef.current + 1
+      initGenerationRef.current = generation
+      setLoading(true)
       if (rejectedResumeRef.current) {
-        setLoading(false)
+        if (initGenerationRef.current === generation) setLoading(false)
         return
       }
 
@@ -167,27 +249,15 @@ function CompareContent() {
         if (resumedAction !== 'compare-traders') {
           rejectedResumeRef.current = true
           router.replace('/compare', { scroll: false })
-          setLoading(false)
+          if (initGenerationRef.current === generation) setLoading(false)
           return
         }
       }
 
-      // The subscription fetch only gates Pro UI; it has NO bearing on which
-      // traders to load (ids come from the URL). Running it before loadTraders
-      // serialized two independent round-trips and blocked the comparison data —
-      // the page's primary content — behind the subscription call. Run both
-      // concurrently so the comparison renders as soon as its own data is ready.
-      const subPromise = fetch('/api/subscription', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-        .then(async (subRes) => {
-          if (subRes.ok) {
-            const subData = await subRes.json()
-            const tier = subData.subscription?.tier || 'free'
-            setIsPro(BETA_PRO_FEATURES_FREE || tier === 'pro')
-          }
-        })
-        .catch((err) => logger.error('Subscription fetch failed:', err))
+      // Subscription only gates Pro controls; it must not hold the whole first
+      // screen behind a separate entitlement round-trip. Its own error/retry
+      // state renders in-page while the core comparison settles independently.
+      void loadSubscription()
 
       let tradersPromise: Promise<void> = Promise.resolve()
       if (ids || platforms) {
@@ -200,52 +270,59 @@ function CompareContent() {
       }
 
       try {
-        await Promise.all([subPromise, tradersPromise])
+        await tradersPromise
       } catch (err) {
         logger.error('Init failed:', err)
       } finally {
-        setLoading(false)
+        if (initGenerationRef.current === generation) setLoading(false)
       }
     }
 
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTraders is stable; including it would cause refetch loops
-  }, [authChecked, accessToken, searchParams])
+  }, [authChecked, accessToken, searchParams, userId])
 
-  // Fallback: if Privy SDK hasn't loaded after 3s, stop loading anyway
+  // Privy itself is outside these request lanes. Bound only that pre-auth
+  // wait; once auth is known, each network lane owns its physical deadline.
   useEffect(() => {
+    if (authChecked) return
     const timer = setTimeout(() => {
-      if (loading) setLoading(false)
+      setLoading(false)
     }, 3000)
     return () => clearTimeout(timer)
-  }, [loading])
+  }, [authChecked])
 
   const fetchFollowed = useCallback(async () => {
-    if (!accessToken) return
+    if (!accessToken || !userId) return
 
+    followedRequestRef.current?.abort()
+    const controller = new AbortController()
+    followedRequestRef.current = controller
+    if (followedOwnerRef.current !== userId) setFollowedTraders([])
     setFollowedLoading(true)
     setFollowedError(null)
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('Authenticated user is unavailable')
-
-      const res = await fetch(`/api/following?userId=${user.id}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      if (!res.ok) throw new Error(`Following request failed: ${res.status}`)
-
-      const data = await res.json()
-      const traders = (data.items || []).filter((item: { type: string }) => item.type === 'trader')
-      setFollowedTraders(traders)
-    } catch (err) {
-      logger.error('Fetch followed traders failed:', err)
+      const items = await fetchFollowingItems(userId, accessToken, controller.signal)
+      if (followedRequestRef.current !== controller || controller.signal.aborted) return
+      followedOwnerRef.current = userId
+      setFollowedTraders(items.filter((item) => item.type === 'trader'))
+    } catch (error) {
+      if (followedRequestRef.current !== controller || controller.signal.aborted) return
+      logger.error('Fetch followed traders failed:', error)
+      if (error instanceof CompareClientRequestError && error.status === 401) {
+        redirectExpiredSession()
+      }
       setFollowedError(followedFailedMessage)
     } finally {
-      setFollowedLoading(false)
+      if (followedRequestRef.current === controller) {
+        followedRequestRef.current = null
+        setFollowedLoading(false)
+      }
     }
-  }, [accessToken, followedFailedMessage])
+    // redirectExpiredSession reads the current URL at call time; adding the
+    // function itself would recreate this callback on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, followedFailedMessage, userId])
 
   // Fetch followed traders
   useEffect(() => {
@@ -269,14 +346,13 @@ function CompareContent() {
       setSearchError(null)
       setSearchResults([])
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=8`, {
-          signal: controller.signal,
-        })
-        if (!res.ok) throw new Error(`Search failed: ${res.status}`)
-        const json = await res.json()
-        const data = (json.data || json) as { results?: { traders?: UnifiedSearchResult[] } }
+        const data = await fetchUnifiedSearch(
+          `/api/search?q=${encodeURIComponent(q)}&limit=8`,
+          q,
+          controller.signal
+        )
         if (!controller.signal.aborted) {
-          setSearchResults(data.results?.traders ?? [])
+          setSearchResults(data.results.traders)
           setSearchDone(true)
         }
       } catch (err) {
@@ -301,56 +377,29 @@ function CompareContent() {
     accounts: CompareAccountRef[],
     { replaceUrlOnSuccess = false }: { replaceUrlOnSuccess?: boolean } = {}
   ): Promise<CompareLoadResult | null> => {
-    if (!accessToken || accounts.length === 0) return null
+    if (!accessToken || !userId || accounts.length === 0) return null
 
     const retry: CompareLoadRequest = {
       accounts: accounts.map(({ id, source }) => ({ id, source })),
       replaceUrlOnSuccess,
     }
 
+    compareRequestRef.current?.controller.abort()
+    const controller = new AbortController()
+    const requestKey = `${userId}\u0000${accounts.map(compareAccountKey).join('\u0000')}`
+    const request = { controller, requestKey }
+    compareRequestRef.current = request
+    if (!replaceUrlOnSuccess && compareDataScopeRef.current !== requestKey) {
+      setTraders([])
+      setAvailabilityWarning(null)
+    }
+
     try {
-      const res = await fetch(buildCompareApiUrl(accounts, { includeEquity: true }), {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string | { message?: string }
-        } | null
-        const responseMessage =
-          (typeof data?.error === 'string' ? data.error : data?.error?.message) ||
-          t('errorOccurred')
-        if (res.status === 401) {
-          if (!redirectingToLoginRef.current) {
-            redirectingToLoginRef.current = true
-            router.push(
-              queueProfileActionLogin({
-                action: 'compare-traders',
-                target: compareAccountsTarget(accounts),
-                fallbackPath: buildCompareUrl(accounts),
-                initiatingUserId: userId,
-              })
-            )
-          }
-          setCompareFailure({ message: t('loginExpiredPleaseRelogin'), retry: null })
-          return null
-        }
-        if (res.status === 403) {
-          setCompareFailure({ message: t('portfolioProRequired'), retry: null })
-        } else {
-          setCompareFailure({ message: responseMessage, retry })
-        }
-        return null
-      }
-
-      // /api/compare 用 success() 包装 → { success, data: { traders }, meta }。
-      // 此前读 data.traders(undefined)导致对比页对所有人 100% 空渲染(2026-07-04 修)。
-      const json = await res.json()
-      const payload = json.data ?? json
-      const list = (payload.traders ?? []) as TraderCompareData[]
-      const missingAccounts = Array.isArray(payload.missingAccounts)
-        ? (payload.missingAccounts as CompareAccountRef[])
-        : []
+      const result = await fetchCompareAccounts(accounts, accessToken, controller.signal)
+      if (compareRequestRef.current !== request || controller.signal.aborted) return null
+      const { traders: list, missingAccounts } = result
+      compareOwnerRef.current = userId
+      compareDataScopeRef.current = requestKey
       setTraders(list)
       setCompareFailure(null)
       setAvailabilityWarning(missingAccounts.length > 0 ? t('compareSomeUnavailable') : null)
@@ -361,10 +410,20 @@ function CompareContent() {
         tryUnlock('first_comparison')
       }
       return { traders: list, missingAccounts }
-    } catch (err) {
-      logger.error('Load traders failed:', err)
-      setCompareFailure({ message: t('errorOccurred'), retry })
+    } catch (error) {
+      if (compareRequestRef.current !== request || controller.signal.aborted) return null
+      logger.error('Load traders failed:', error)
+      if (error instanceof CompareClientRequestError && error.status === 401) {
+        redirectExpiredSession(accounts)
+        setCompareFailure({ message: t('loginExpiredPleaseRelogin'), retry: null })
+      } else if (error instanceof CompareClientRequestError && error.status === 403) {
+        setCompareFailure({ message: t('portfolioProRequired'), retry: null })
+      } else {
+        setCompareFailure({ message: t('errorOccurred'), retry })
+      }
       return null
+    } finally {
+      if (compareRequestRef.current === request) compareRequestRef.current = null
     }
   }
 
@@ -373,14 +432,12 @@ function CompareContent() {
     if (!retry || compareRetryPendingRef.current) return
 
     compareRetryPendingRef.current = true
-    setLoading(true)
     try {
       await loadTraders(retry.accounts, {
         replaceUrlOnSuccess: retry.replaceUrlOnSuccess,
       })
     } finally {
       compareRetryPendingRef.current = false
-      setLoading(false)
     }
   }
 
@@ -441,12 +498,20 @@ function CompareContent() {
 
   return (
     <Box
+      className="compare-page"
       style={{
         minHeight: '100vh',
         background: tokens.colors.bg.primary,
         color: tokens.colors.text.primary,
       }}
     >
+      <style>{`
+        .compare-page button,
+        .compare-page input[type='search'] {
+          min-width: 44px !important;
+          min-height: 44px !important;
+        }
+      `}</style>
       <Box
         style={{
           position: 'fixed',
@@ -489,7 +554,7 @@ function CompareContent() {
               onExport={async (format) => {
                 const { exportToCSV, exportToJSON, exportToPDF } =
                   await import('@/lib/utils/export')
-                const rows = traders.map((tr) => ({
+                const rows: Record<string, unknown>[] = traders.map((tr) => ({
                   handle: tr.handle || tr.id,
                   source: tr.source,
                   roi: tr.roi,
@@ -503,15 +568,24 @@ function CompareContent() {
                 }))
                 const filename = `compare-${traders.map((tr) => tr.handle || tr.id).join('-')}`
                 if (format === 'json') exportToJSON(rows, filename)
-                else if (format === 'pdf')
-                  exportToPDF(rows as unknown as Record<string, unknown>[], filename)
-                else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
+                else if (format === 'pdf') exportToPDF(rows, filename)
+                else exportToCSV(rows, filename)
               }}
             />
           )}
         </Box>
 
         {/* Pro gate */}
+        {subscriptionError && (
+          <Box style={{ marginBottom: tokens.spacing[4] }}>
+            <ErrorMessage
+              message={subscriptionError}
+              onRetry={() => void loadSubscription()}
+              retryButtonSize="md"
+            />
+          </Box>
+        )}
+
         {!isPro && (
           <Box style={{ marginBottom: tokens.spacing[6] }}>
             <ProGate variant="inline" featureKey="featureTraderCompareDesc" />
@@ -524,6 +598,7 @@ function CompareContent() {
             <ErrorMessage
               message={compareFailure.message}
               onRetry={compareFailure.retry ? () => void handleRetryCompare() : undefined}
+              retryButtonSize="md"
             />
           </Box>
         )}
@@ -576,6 +651,9 @@ function CompareContent() {
                   fontWeight: tokens.typography.fontWeight.semibold,
                   color: tokens.colors.accent.primary,
                   textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  minHeight: tokens.touchTarget.min,
                 }}
               >
                 {t('compareAddFromRankings')} →
@@ -598,6 +676,7 @@ function CompareContent() {
                 fontSize: tokens.typography.fontSize.sm,
                 outline: 'none',
                 transition: 'border-color 0.2s, box-shadow 0.2s',
+                minHeight: tokens.touchTarget.min,
               }}
               onFocus={(e) => {
                 e.currentTarget.style.borderColor = tokens.colors.accent.primary
@@ -634,6 +713,7 @@ function CompareContent() {
                     <ErrorMessage
                       message={searchError}
                       onRetry={() => setSearchRetryKey((value) => value + 1)}
+                      retryButtonSize="md"
                     />
                   </Box>
                 ) : searchResults.length === 0 ? (
@@ -674,6 +754,7 @@ function CompareContent() {
                           opacity: isAdded || isUnavailable ? 0.45 : 1,
                           textAlign: 'left',
                           color: tokens.colors.text.primary,
+                          minHeight: tokens.touchTarget.min,
                         }}
                       >
                         {result.avatar ? (
@@ -766,7 +847,11 @@ function CompareContent() {
 
             {followedError && !followedLoading && (
               <Box style={{ marginBottom: tokens.spacing[3] }}>
-                <ErrorMessage message={followedError} onRetry={() => void fetchFollowed()} />
+                <ErrorMessage
+                  message={followedError}
+                  onRetry={() => void fetchFollowed()}
+                  retryButtonSize="md"
+                />
               </Box>
             )}
 
@@ -798,11 +883,13 @@ function CompareContent() {
                     !isUnavailable &&
                     traders.some((trader) => isSameCompareAccount(trader, account))
                   return (
-                    <Box
+                    <button
                       key={
                         ft.identity_key ||
                         (isUnavailable ? `legacy:${ft.id}` : compareAccountKey(account))
                       }
+                      type="button"
+                      disabled={isAdded || isUnavailable}
                       onClick={() => !isAdded && !isUnavailable && handleAddTrader(account)}
                       style={{
                         display: 'flex',
@@ -817,6 +904,11 @@ function CompareContent() {
                         cursor: isAdded || isUnavailable ? 'not-allowed' : 'pointer',
                         opacity: isAdded || isUnavailable ? 0.45 : 1,
                         transition: 'all 0.2s',
+                        width: '100%',
+                        minHeight: tokens.touchTarget.min,
+                        color: tokens.colors.text.primary,
+                        font: 'inherit',
+                        textAlign: 'left',
                       }}
                       onMouseEnter={(e) => {
                         if (!isAdded && !isUnavailable)
@@ -864,7 +956,13 @@ function CompareContent() {
                             flexShrink: 0,
                           }}
                         >
-                          <Text size="xs" style={{ color: 'var(--foreground)', fontWeight: 700 }}>
+                          <Text
+                            size="xs"
+                            style={{
+                              color: 'var(--foreground)',
+                              fontWeight: tokens.typography.fontWeight.bold,
+                            }}
+                          >
                             {(ft.handle || '?')[0].toUpperCase()}
                           </Text>
                         </Box>
@@ -907,7 +1005,7 @@ function CompareContent() {
                           {t('compareAdded')}
                         </Text>
                       )}
-                    </Box>
+                    </button>
                   )
                 })}
               </Box>

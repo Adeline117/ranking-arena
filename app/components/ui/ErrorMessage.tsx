@@ -9,9 +9,15 @@ type ErrorMessageProps = {
   title?: string
   message: string
   onRetry?: () => void
+  retryButtonSize?: 'sm' | 'md' | 'lg'
 }
 
-export default function ErrorMessage({ title, message, onRetry }: ErrorMessageProps) {
+export default function ErrorMessage({
+  title,
+  message,
+  onRetry,
+  retryButtonSize = 'sm',
+}: ErrorMessageProps) {
   const { t } = useLanguage()
   const displayTitle = title || t('somethingWentWrong')
 
@@ -27,14 +33,26 @@ export default function ErrorMessage({ title, message, onRetry }: ErrorMessagePr
         borderColor: 'var(--color-red-border)',
       }}
     >
-      <Text size="md" weight="black" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[2] }}>
+      <Text
+        size="md"
+        weight="black"
+        style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[2] }}
+      >
         {displayTitle}
       </Text>
-      <Text size="sm" style={{ color: tokens.colors.accent.error, marginBottom: onRetry ? tokens.spacing[3] : 0 }}>
+      <Text
+        size="sm"
+        style={{ color: tokens.colors.accent.error, marginBottom: onRetry ? tokens.spacing[3] : 0 }}
+      >
         {message}
       </Text>
       {onRetry && (
-        <Button variant="secondary" size="sm" onClick={onRetry} style={{ marginTop: tokens.spacing[3] }}>
+        <Button
+          variant="secondary"
+          size={retryButtonSize}
+          onClick={onRetry}
+          style={{ marginTop: tokens.spacing[3] }}
+        >
           {t('retry')}
         </Button>
       )}
