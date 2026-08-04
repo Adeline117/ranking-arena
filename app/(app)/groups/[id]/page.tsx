@@ -24,7 +24,8 @@ import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import GroupHeader from './ui/GroupHeader'
 import GroupPostList from './ui/GroupPostList'
 import { GroupInfoModal, MembersListModal } from './ui/GroupMembersSection'
-import { useGroupPosts, Post } from './hooks/useGroupPosts'
+import { useGroupPosts } from './hooks/useGroupPosts'
+import { usePostTranslation } from './hooks/usePostTranslation'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
@@ -79,18 +80,6 @@ type GroupDetailAuth = Pick<
   AuthSessionReturn,
   'accessToken' | 'authChecked' | 'sessionGeneration' | 'userId' | 'viewerKey'
 >
-
-// Inline bilingual text helper (for one-off strings not in the i18n dictionary)
-function _bilingualText(zh: string, en: string, language: string): string {
-  return language === 'zh' ? zh : en
-}
-
-function isChineseText(text: string): boolean {
-  if (!text) return false
-  const chineseMatches = text.match(/[\u4e00-\u9fa5]/g)
-  const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
-  return chineseRatio > 0.1
-}
 
 interface PageWrapperProps {
   children: React.ReactNode
@@ -317,12 +306,6 @@ function GroupDetailScopedPage({
     [isCurrent, ownerScope]
   )
 
-  // Translation
-  const [translatedPosts, setTranslatedPosts] = useState<
-    Record<string, { title?: string; content?: string }>
-  >({})
-  const [translatingPosts, setTranslatingPosts] = useState(false)
-
   // Related groups
   const [relatedGroups, setRelatedGroups] = useState<
     Array<{
@@ -351,156 +334,13 @@ function GroupDetailScopedPage({
     showToast,
     showDangerConfirm,
   })
-
-  // sessionStorage cache helpers for translations
-  const getTranslationCache = useCallback(
-    (postId: string, lang: string): { title?: string; content?: string } | null => {
-      try {
-        const key = `trans:${postId}:${lang}`
-        const cached = sessionStorage.getItem(key)
-        return cached ? JSON.parse(cached) : null
-      } catch {
-        return null
-      }
-    },
-    []
-  )
-
-  const setTranslationCache = useCallback(
-    (postId: string, lang: string, value: { title?: string; content?: string }) => {
-      if (!isCurrent(ownerScope)) return
-      try {
-        const key = `trans:${postId}:${lang}`
-        sessionStorage.setItem(key, JSON.stringify(value))
-      } catch {
-        /* storage full, ignore */
-      }
-    },
-    [isCurrent, ownerScope]
-  )
-
-  // Batch translate posts (with sessionStorage cache)
-  const translatePosts = useCallback(
-    async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
-      const requestScope = ownerScope
-      const requestToken = accessToken
-      const requestIsCurrent = () => isCurrent(requestScope)
-      if (translatingPosts || !requestIsCurrent()) return
-      setTranslatingPosts(true)
-
-      try {
-        // Check cache first
-        const cachedResults: Record<string, { title?: string; content?: string }> = {}
-        const needsTranslation = postsToTranslate.filter((p) => {
-          if (translatedPosts[p.id]?.title) return false
-          if (!p.title) return false
-          const titleIsChinese = isChineseText(p.title)
-          const needsIt = targetLang === 'en' ? titleIsChinese : !titleIsChinese
-          if (!needsIt) return false
-          const cached = getTranslationCache(p.id, targetLang)
-          if (cached) {
-            cachedResults[p.id] = cached
-            return false
-          }
-          return true
-        })
-
-        if (!requestIsCurrent()) return
-        if (Object.keys(cachedResults).length > 0) {
-          setTranslatedPosts((prev) => ({ ...prev, ...cachedResults }))
-        }
-
-        if (needsTranslation.length === 0) return
-        // /api/translate requires auth — skip silently for anonymous visitors
-        if (!requestToken || !requestIsCurrent()) return
-
-        const items: Array<{
-          id: string
-          text: string
-          contentType: 'post_title' | 'post_content'
-          contentId: string
-        }> = []
-        needsTranslation.slice(0, 10).forEach((post) => {
-          if (post.title)
-            items.push({
-              id: `${post.id}-title`,
-              text: post.title,
-              contentType: 'post_title',
-              contentId: post.id,
-            })
-          if (post.content)
-            items.push({
-              id: `${post.id}-content`,
-              text: post.content,
-              contentType: 'post_content',
-              contentId: post.id,
-            })
-        })
-
-        if (items.length === 0 || !requestIsCurrent()) return
-
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${requestToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ items, targetLang }),
-        })
-        if (!requestIsCurrent()) return
-
-        if (!response.ok) {
-          if (requestIsCurrent()) logger.warn('Translation API failed:', response.status)
-          return
-        }
-
-        const data = await response.json()
-        if (!requestIsCurrent()) return
-        if (data.success && data.data?.results) {
-          const results = data.data.results as Record<
-            string,
-            { translatedText: string; cached: boolean }
-          >
-          const translatedResults: Record<string, { title?: string; content?: string }> = {}
-          needsTranslation.forEach((post) => {
-            translatedResults[post.id] = {
-              title: results[`${post.id}-title`]?.translatedText || post.title || '',
-              content: results[`${post.id}-content`]?.translatedText || post.content || '',
-            }
-          })
-          if (!requestIsCurrent()) return
-          for (const [postId, translated] of Object.entries(translatedResults)) {
-            setTranslationCache(postId, targetLang, translated)
-          }
-          setTranslatedPosts((prev) => ({ ...prev, ...translatedResults }))
-        }
-      } catch (error) {
-        if (requestIsCurrent()) logger.warn('Translation failed:', error)
-      } finally {
-        if (requestIsCurrent()) setTranslatingPosts(false)
-      }
-    },
-    [
-      accessToken,
-      getTranslationCache,
-      isCurrent,
-      ownerScope,
-      setTranslationCache,
-      translatedPosts,
-      translatingPosts,
-    ]
-  )
-
-  // Trigger translation when posts change
-  useEffect(() => {
-    const expectedScope = ownerScope
-    if (isCurrent(expectedScope) && postsHook.posts.length > 0 && !translatingPosts) {
-      // en/ja/ko → English (API only supports en/zh); zh → Chinese
-      translatePosts(postsHook.posts, language === 'zh' ? 'zh' : 'en')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- translatePosts excluded to avoid infinite loop; only trigger on posts/language change
-  }, [postsHook.posts, language, ownerReady])
+  const { translatedPosts, translatingPosts } = usePostTranslation({
+    posts: postsHook.posts,
+    language,
+    ownerKey: groupDetailOwnerKey(ownerScope, accessToken),
+    translatingEnabled: ownerReady,
+    accessToken,
+  })
 
   // Related groups
   useEffect(() => {
@@ -1018,13 +858,13 @@ function GroupDetailScopedPage({
           style={{
             background: 'var(--color-accent-warning-10)',
             border: '1px solid var(--color-accent-warning)',
-            borderRadius: 8,
+            borderRadius: tokens.radius.sm,
             padding: '10px 16px',
             margin: '0 16px 16px',
             textAlign: 'center',
-            fontSize: 13,
+            fontSize: tokens.typography.fontSize.sm,
             color: 'var(--color-accent-warning)',
-            fontWeight: 600,
+            fontWeight: tokens.typography.fontWeight.semibold,
           }}
         >
           {t('groupDissolvedBanner')}
@@ -1125,6 +965,7 @@ function GroupDetailScopedPage({
                 expandedPosts={postsHook.expandedPosts}
                 setExpandedPosts={postsHook.setExpandedPosts}
                 translatedPosts={translatedPosts}
+                translationLoading={translatingPosts}
                 handleLike={postsHook.handleLike}
                 handleBookmark={postsHook.handleBookmark}
                 handleRepost={postsHook.handleRepost}

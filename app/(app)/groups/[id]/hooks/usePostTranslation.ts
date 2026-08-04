@@ -1,14 +1,108 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
-import { isChineseText } from '../types'
+import {
+  requestBatchTranslation,
+  type BatchTranslationItem,
+  type TranslationTargetLanguage,
+} from '@/lib/translations/translation-client-contract'
 import type { Post } from './useGroupPosts'
+
+type TranslatedPost = { title?: string; content?: string }
+type TranslationField = 'title' | 'content'
+
+type TranslationDescriptor = {
+  cacheKey: string
+  contentId: string
+  contentType: 'post_title' | 'post_content'
+  field: TranslationField
+  id: string
+  postId: string
+  text: string
+}
+
+type TranslationScope = {
+  accessToken: string
+  descriptors: TranslationDescriptor[]
+  key: string
+  targetLanguage: TranslationTargetLanguage
+}
+
+type ActiveTranslation = {
+  controller: AbortController
+  key: string
+  sequence: number
+}
+
+const TRANSLATION_BATCH_SIZE = 20
+const MAX_TRANSLATION_CACHE_ENTRIES = 400
+
+function targetLanguage(language: string): TranslationTargetLanguage | null {
+  return language === 'zh' || language === 'en' || language === 'ja' || language === 'ko'
+    ? language
+    : null
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+function buildDescriptors(
+  posts: readonly Post[],
+  ownerKey: string,
+  language: TranslationTargetLanguage
+): TranslationDescriptor[] | null {
+  const seenPostIds = new Set<string>()
+  const descriptors: TranslationDescriptor[] = []
+
+  for (const post of posts) {
+    if (typeof post.id !== 'string' || !post.id || seenPostIds.has(post.id)) return null
+    seenPostIds.add(post.id)
+
+    const fields: Array<{
+      field: TranslationField
+      text: unknown
+      contentType: TranslationDescriptor['contentType']
+    }> = [
+      { field: 'title', text: post.title, contentType: 'post_title' },
+      { field: 'content', text: post.content, contentType: 'post_content' },
+    ]
+
+    for (const { field, text, contentType } of fields) {
+      if (text === null || text === undefined || text === '') continue
+      if (typeof text !== 'string') return null
+      if (!text.trim()) continue
+
+      const id = `${post.id}-${field}`
+      descriptors.push({
+        cacheKey: JSON.stringify([ownerKey, language, post.id, field, text]),
+        contentId: post.id,
+        contentType,
+        field,
+        id,
+        postId: post.id,
+        text,
+      })
+    }
+  }
+
+  return descriptors
+}
+
+function pruneCache(cache: Map<string, string>): void {
+  while (cache.size > MAX_TRANSLATION_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value
+    if (typeof oldest !== 'string') return
+    cache.delete(oldest)
+  }
+}
 
 interface UsePostTranslationOptions {
   posts: Post[]
   language: string
+  ownerKey: string
   translatingEnabled?: boolean
   accessToken?: string | null
 }
@@ -16,160 +110,181 @@ interface UsePostTranslationOptions {
 export function usePostTranslation({
   posts,
   language,
+  ownerKey,
   translatingEnabled = true,
   accessToken,
 }: UsePostTranslationOptions) {
-  const [translatedPosts, setTranslatedPosts] = useState<
-    Record<string, { title?: string; content?: string }>
-  >({})
-  const [translatingPosts, setTranslatingPosts] = useState(false)
+  const [cacheRevision, setCacheRevision] = useState(0)
+  const [loadingKey, setLoadingKey] = useState<string | null>(null)
+  const cacheRef = useRef(new Map<string, string>())
+  const activeRef = useRef<ActiveTranslation | null>(null)
+  const sequenceRef = useRef(0)
 
-  // sessionStorage cache helpers
-  const getTranslationCache = useCallback(
-    (postId: string, lang: string): { title?: string; content?: string } | null => {
-      try {
-        const key = `trans:${postId}:${lang}`
-        const cached = sessionStorage.getItem(key)
-        return cached ? JSON.parse(cached) : null
-      } catch {
-        return null
-      }
-    },
-    []
+  const sourceIdentity = JSON.stringify(
+    posts.map((post) => [
+      post.id,
+      post.content_version,
+      post.updated_at,
+      post.title,
+      post.content ?? null,
+    ])
   )
 
-  const setTranslationCache = useCallback(
-    (postId: string, lang: string, value: { title?: string; content?: string }) => {
-      try {
-        const key = `trans:${postId}:${lang}`
-        sessionStorage.setItem(key, JSON.stringify(value))
-      } catch {
-        /* storage full, ignore */
-      }
-    },
-    []
-  )
-
-  // Batch translate posts (with sessionStorage cache)
-  const translatePosts = useCallback(
-    async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
-      if (translatingPosts) return
-      setTranslatingPosts(true)
-
-      // Check cache first
-      const cachedResults: Record<string, { title?: string; content?: string }> = {}
-      const needsTranslation = postsToTranslate.filter((p) => {
-        if (translatedPosts[p.id]?.title) return false
-        if (!p.title) return false
-        const titleIsChinese = isChineseText(p.title)
-        const needsIt = targetLang === 'en' ? titleIsChinese : !titleIsChinese
-        if (!needsIt) return false
-        // Check sessionStorage cache
-        const cached = getTranslationCache(p.id, targetLang)
-        if (cached) {
-          cachedResults[p.id] = cached
-          return false
-        }
-        return true
-      })
-
-      // Apply cached results
-      if (Object.keys(cachedResults).length > 0) {
-        setTranslatedPosts((prev) => ({ ...prev, ...cachedResults }))
-      }
-
-      if (needsTranslation.length === 0) {
-        setTranslatingPosts(false)
-        return
-      }
-
-      if (!accessToken) {
-        setTranslatingPosts(false)
-        return
-      }
-
-      try {
-        const items: Array<{
-          id: string
-          text: string
-          contentType: 'post_title' | 'post_content'
-          contentId: string
-        }> = []
-        needsTranslation.slice(0, 10).forEach((post) => {
-          if (post.title)
-            items.push({
-              id: `${post.id}-title`,
-              text: post.title,
-              contentType: 'post_title',
-              contentId: post.id,
-            })
-          if (post.content)
-            items.push({
-              id: `${post.id}-content`,
-              text: post.content,
-              contentType: 'post_content',
-              contentId: post.id,
-            })
-        })
-
-        if (items.length === 0) {
-          setTranslatingPosts(false)
-          return
-        }
-
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ items, targetLang }),
-        })
-
-        if (!response.ok) {
-          logger.warn('Translation API failed:', response.status)
-          setTranslatingPosts(false)
-          return
-        }
-
-        const data = await response.json()
-        if (data.success && data.data?.results) {
-          const results = data.data.results as Record<
-            string,
-            { translatedText: string; cached: boolean }
-          >
-          setTranslatedPosts((prev) => {
-            const updated = { ...prev }
-            needsTranslation.forEach((post) => {
-              const translated = {
-                title: results[`${post.id}-title`]?.translatedText || post.title || '',
-                content: results[`${post.id}-content`]?.translatedText || post.content || '',
-              }
-              updated[post.id] = translated
-              // Cache in sessionStorage
-              setTranslationCache(post.id, targetLang, translated)
-            })
-            return updated
-          })
-        }
-      } catch (error) {
-        logger.warn('Translation failed:', error)
-      } finally {
-        setTranslatingPosts(false)
-      }
-    },
-    [translatingPosts, translatedPosts, getTranslationCache, setTranslationCache, accessToken]
-  )
-
-  // Trigger translation when posts change
-  useEffect(() => {
-    if (translatingEnabled && posts.length > 0 && !translatingPosts) {
-      // en/ja/ko → English (API only supports en/zh); zh → Chinese
-      translatePosts(posts, language === 'zh' ? 'zh' : 'en')
+  const scope = useMemo<TranslationScope | null>(() => {
+    const target = targetLanguage(language)
+    if (
+      !translatingEnabled ||
+      !target ||
+      !ownerKey ||
+      typeof accessToken !== 'string' ||
+      !accessToken.trim() ||
+      posts.length === 0
+    ) {
+      return null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- translatePosts excluded to avoid infinite loop; only trigger on posts/language change
-  }, [posts, language])
 
-  return { translatedPosts, translatingPosts }
+    const descriptors = buildDescriptors(posts, ownerKey, target)
+    if (!descriptors || descriptors.length === 0) return null
+    return {
+      accessToken,
+      descriptors,
+      key: JSON.stringify([
+        'group-post-translation',
+        ownerKey,
+        accessToken,
+        target,
+        descriptors.map(({ cacheKey }) => cacheKey),
+      ]),
+      targetLanguage: target,
+    }
+    // sourceIdentity snapshots every source field even when the posts array is reused.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, language, ownerKey, posts, sourceIdentity, translatingEnabled])
+
+  const translatedPosts = useMemo<Record<string, TranslatedPost>>(() => {
+    if (!scope) return {}
+    const translated: Record<string, TranslatedPost> = {}
+    for (const descriptor of scope.descriptors) {
+      const value = cacheRef.current.get(descriptor.cacheKey)
+      if (value === undefined) continue
+      translated[descriptor.postId] = {
+        ...translated[descriptor.postId],
+        [descriptor.field]: value,
+      }
+    }
+    return translated
+    // cacheRevision publishes writes made to the bounded ref-backed cache.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheRevision, scope?.key])
+
+  useEffect(() => {
+    if (!scope) {
+      const active = activeRef.current
+      if (active && !active.controller.signal.aborted) {
+        active.controller.abort(new DOMException('Group translation scope closed', 'AbortError'))
+      }
+      activeRef.current = null
+      setLoadingKey(null)
+      return
+    }
+
+    const missing = scope.descriptors.filter(
+      (descriptor) => !cacheRef.current.has(descriptor.cacheKey)
+    )
+    if (missing.length === 0) {
+      const active = activeRef.current
+      if (active && active.key !== scope.key && !active.controller.signal.aborted) {
+        active.controller.abort(
+          new DOMException('Group translation cache superseded', 'AbortError')
+        )
+      }
+      activeRef.current = null
+      setLoadingKey(null)
+      return
+    }
+
+    const previous = activeRef.current
+    if (previous?.key === scope.key) return
+    if (previous && !previous.controller.signal.aborted) {
+      previous.controller.abort(new DOMException('Group translation superseded', 'AbortError'))
+    }
+
+    const controller = new AbortController()
+    const active: ActiveTranslation = {
+      controller,
+      key: scope.key,
+      sequence: ++sequenceRef.current,
+    }
+    activeRef.current = active
+    setLoadingKey(scope.key)
+    let live = true
+
+    const isCurrent = () =>
+      live &&
+      activeRef.current === active &&
+      sequenceRef.current === active.sequence &&
+      !controller.signal.aborted
+
+    void (async () => {
+      try {
+        const chunks: TranslationDescriptor[][] = []
+        for (let offset = 0; offset < missing.length; offset += TRANSLATION_BATCH_SIZE) {
+          chunks.push(missing.slice(offset, offset + TRANSLATION_BATCH_SIZE))
+        }
+
+        const receipts = await Promise.all(
+          chunks.map((chunk) => {
+            const items: BatchTranslationItem[] = chunk.map((descriptor) => ({
+              id: descriptor.id,
+              text: descriptor.text,
+              contentType: descriptor.contentType,
+              contentId: descriptor.contentId,
+              targetLang: scope.targetLanguage,
+            }))
+            return requestBatchTranslation(items, scope.targetLanguage, {
+              accessToken: scope.accessToken,
+              csrfHeaders: getCsrfHeaders(),
+              signal: controller.signal,
+            })
+          })
+        )
+        if (!isCurrent()) return
+
+        const staged = new Map<string, string>()
+        chunks.forEach((chunk, chunkIndex) => {
+          const receipt = receipts[chunkIndex]
+          for (const descriptor of chunk) {
+            const result = receipt?.results[descriptor.id]
+            if (!result) throw new Error('Group translation receipt lost a requested field')
+            staged.set(descriptor.cacheKey, result.translatedText)
+          }
+        })
+        if (staged.size !== missing.length || !isCurrent()) return
+
+        for (const [key, value] of staged) cacheRef.current.set(key, value)
+        pruneCache(cacheRef.current)
+        setCacheRevision((revision) => revision + 1)
+      } catch (error) {
+        if (isCurrent() && !isAbortError(error)) logger.warn('Group translation failed:', error)
+      } finally {
+        if (isCurrent()) {
+          activeRef.current = null
+          setLoadingKey(null)
+        }
+      }
+    })()
+
+    return () => {
+      live = false
+      if (!controller.signal.aborted) {
+        controller.abort(new DOMException('Group translation effect closed', 'AbortError'))
+      }
+      if (activeRef.current === active) activeRef.current = null
+    }
+  }, [accessToken, scope])
+
+  return {
+    translatedPosts,
+    translatingPosts: scope !== null && loadingKey === scope.key,
+  }
 }

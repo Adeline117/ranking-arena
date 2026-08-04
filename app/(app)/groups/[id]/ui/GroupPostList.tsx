@@ -72,6 +72,7 @@ interface GroupPostListProps {
   expandedPosts: Record<string, boolean>
   setExpandedPosts: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void
   translatedPosts: Record<string, { title?: string; content?: string }>
+  translationLoading: boolean
 
   // Actions
   handleLike: (id: string) => void
@@ -134,6 +135,7 @@ export default function GroupPostList(props: GroupPostListProps) {
     expandedPosts,
     setExpandedPosts,
     translatedPosts,
+    translationLoading,
     handleLike,
     handleBookmark,
     handleRepost,
@@ -153,7 +155,25 @@ export default function GroupPostList(props: GroupPostListProps) {
   const nonMemberBanner = null
 
   return (
-    <Box style={{ position: 'relative' }}>
+    <Box style={{ position: 'relative' }} aria-busy={translationLoading || undefined}>
+      <Text
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        {translationLoading ? t('translating') : ''}
+      </Text>
       {nonMemberBanner}
       {/* Sort Tabs + View Toggle */}
       <Box
@@ -169,6 +189,7 @@ export default function GroupPostList(props: GroupPostListProps) {
             variant={sortMode === 'latest' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setSortMode('latest')}
+            style={{ minHeight: 44 }}
           >
             {t('latest')}
           </Button>
@@ -176,16 +197,21 @@ export default function GroupPostList(props: GroupPostListProps) {
             variant={sortMode === 'hot' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setSortMode('hot')}
+            style={{ minHeight: 44 }}
           >
             {t('hot')}
           </Button>
         </Box>
         <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
           <button
+            type="button"
             onClick={() => setViewMode('list')}
             title={t('listView')}
+            aria-label={t('listView')}
             style={{
-              padding: tokens.spacing[2],
+              width: 44,
+              height: 44,
+              padding: 0,
               borderRadius: tokens.radius.md,
               border: 'none',
               background:
@@ -197,6 +223,8 @@ export default function GroupPostList(props: GroupPostListProps) {
             }}
           >
             <svg
+              aria-hidden="true"
+              focusable="false"
               width="16"
               height="16"
               viewBox="0 0 24 24"
@@ -215,10 +243,14 @@ export default function GroupPostList(props: GroupPostListProps) {
             </svg>
           </button>
           <button
+            type="button"
             onClick={() => setViewMode('masonry')}
             title={t('masonryView')}
+            aria-label={t('masonryView')}
             style={{
-              padding: tokens.spacing[2],
+              width: 44,
+              height: 44,
+              padding: 0,
               borderRadius: tokens.radius.md,
               border: 'none',
               background:
@@ -232,6 +264,8 @@ export default function GroupPostList(props: GroupPostListProps) {
             }}
           >
             <svg
+              aria-hidden="true"
+              focusable="false"
               width="16"
               height="16"
               viewBox="0 0 24 24"
@@ -260,7 +294,12 @@ export default function GroupPostList(props: GroupPostListProps) {
             {sortedPosts.map((post) => (
               <MasonryPostCard
                 key={post.id}
-                post={{ ...post, group_id: groupId }}
+                post={{
+                  ...post,
+                  group_id: groupId,
+                  title: translatedPosts[post.id]?.title ?? post.title,
+                  content: translatedPosts[post.id]?.content ?? post.content,
+                }}
                 language={language}
                 onLike={(id) => handleLike(id)}
                 onComment={(id) => toggleComments(id)}
