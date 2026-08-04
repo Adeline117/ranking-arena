@@ -5,10 +5,14 @@ on:
     branches: [main]
 
 env:
-  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  # Pull-request code must never receive production database credentials.
+  # These values only satisfy build-time validation; Lighthouse exercises the
+  # locally built application and does not need production data access.
+  NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: lighthouse-build-anon-placeholder
+  SUPABASE_URL: https://placeholder.supabase.co
+  SUPABASE_SERVICE_ROLE_KEY: lighthouse-build-service-placeholder
+  CRON_SECRET: lighthouse-build-placeholder-cron-secret-000000
 
 jobs:
   lighthouse:
@@ -29,6 +33,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          # Match the production-build memory contract in the main CI workflow.
+          NODE_OPTIONS: --max-old-space-size=4096
           NODE_ENV: production
 
       - name: Install Lighthouse CI
@@ -61,7 +67,6 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const glob = require('glob') || {};
 
             // Find the latest Lighthouse JSON results
             const resultsDir = '.lighthouseci';
