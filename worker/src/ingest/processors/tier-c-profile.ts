@@ -50,6 +50,7 @@ import { tierCResultKey, type TierCJobData } from '../queues'
 import { runHistoryTransaction } from '../history-transaction'
 
 const RESULT_TTL_SECONDS = 120
+const COPIER_READY_CONTRACT = 'arena.tier-c.copier-ready@1'
 
 type TierCSource = Awaited<ReturnType<typeof getSourceBySlug>>
 
@@ -295,9 +296,10 @@ function historyRowsForRender(
 
 /**
  * Heavy-tab surfaces (spec §2.4-3): positions / position_history / orders /
- * transfers / copiers — fetched only when the user opens that tab. Same
- * render-before-persist contract: Redis result key {rows, nextCursor, asOf,
- * completeness?} first, then arena.* persistence + profile_cache.
+ * transfers / copiers — fetched only when the user opens that tab. Public row
+ * surfaces keep the render-before-persist preview contract. Copiers invert the
+ * order: private rows commit first, then an opaque readiness marker wakes the
+ * route so it can re-read the aggregate RPC; no copier profile_cache is written.
  *
  * Copier PII rule (spec §6): no individual copier row leaves the worker.
  * Full rows (including label, PnL, investment, duration, and dedupe identity)
@@ -383,7 +385,11 @@ async function processHeavySurface(
       await publishPositions(src, traderId, positions, sourceAsOf ?? observedAt)
     } else {
       const kind = surface as import('@/lib/ingest/core/types').HistoryKind
-      const cursor = await getHistoryCursor(traderId, kind)
+      // Copier tables are snapshots, not append-only event streams. A stored
+      // per-person timestamp cursor can truncate the very aggregate we are
+      // rebuilding, so every on-demand copier capture starts without one and
+      // never advances arena.ingest_cursors.
+      const cursor = kind === 'copiers' ? null : await getHistoryCursor(traderId, kind)
       if (kind === 'position_history') {
         const acquisition = await captureHistoryAcquisition({
           source: src,
@@ -498,17 +504,27 @@ async function processHeavySurface(
         if (fetchError !== null) throw fetchError
 
         const parsed = pages.flatMap((page) => adapter.parseHistory(page.payload, kind, ctx))
+        const nextCursor =
+          kind === 'copiers' || callerLimited ? null : nextHistoryCursor(parsed, cursor)
+
+        if (kind === 'copiers') {
+          // Private commit is the authority boundary. Never publish parsed
+          // rows, counts, labels, PnL, or RAW through Redis/profile_cache.
+          await publishHistoryRows(src, traderId, kind, parsed, nextCursor)
+          const readyMarker = {
+            contract: COPIER_READY_CONTRACT,
+            completed: true,
+            aggregateReady: true,
+          }
+          await redis.set(resultKey, JSON.stringify(readyMarker), 'EX', RESULT_TTL_SECONDS)
+          return { traderId, surface, aggregateReady: true }
+        }
+
         rows = historyRowsForRender(parsed, kind, src.currency)
 
-        await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
+        await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', RESULT_TTL_SECONDS)
 
-        await publishHistoryRows(
-          src,
-          traderId,
-          kind,
-          parsed,
-          callerLimited ? null : nextHistoryCursor(parsed, cursor)
-        )
+        await publishHistoryRows(src, traderId, kind, parsed, nextCursor)
       }
     }
 
