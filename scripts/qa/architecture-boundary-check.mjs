@@ -11,7 +11,20 @@ import ts from 'typescript'
 
 const DEFAULT_BASELINE = 'scripts/qa/architecture-boundary-baseline.json'
 const SOURCE_ROOTS = ['app', 'lib', 'worker']
-const SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx'])
+const ROOT_RUNTIME_SOURCE_PATHS = [
+  'instrumentation.ts',
+  'proxy.ts',
+  'sentry.client.config.ts',
+  'sentry.edge.config.ts',
+  'sentry.server.config.ts',
+]
+const ROOT_RUNTIME_SOURCES = new Set(ROOT_RUNTIME_SOURCE_PATHS)
+const ROOT_RUNTIME_TARGETS = new Set(
+  ROOT_RUNTIME_SOURCE_PATHS.flatMap((source) => [source, source.replace(/\.[^.]+$/u, '')])
+)
+const SOURCE_PATHS = [...SOURCE_ROOTS, ...ROOT_RUNTIME_SOURCE_PATHS]
+const REPOSITORY_IMPORT_ROOTS = new Set([...SOURCE_ROOTS, 'connectors', 'scripts', 'workers'])
+const SOURCE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
 
 function toPosix(value) {
   return value.split(path.sep).join('/')
@@ -20,7 +33,7 @@ function toPosix(value) {
 function trackedAndUntrackedSources(root) {
   const output = execFileSync(
     'git',
-    ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', ...SOURCE_ROOTS],
+    ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', ...SOURCE_PATHS],
     { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }
   )
 
@@ -49,6 +62,15 @@ export function collectModuleSpecifiers(source, file = 'source.ts') {
   const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKind(file))
   const imports = []
 
+  if (parsed.parseDiagnostics.length > 0) {
+    const diagnostic = parsed.parseDiagnostics[0]
+    const position = parsed.getLineAndCharacterOfPosition(diagnostic.start ?? 0)
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+    throw new Error(
+      `Cannot parse ${file}:${position.line + 1}:${position.character + 1}: ${message}`
+    )
+  }
+
   function record(node, kind) {
     const specifier = stringArgument(node)
     if (!specifier) return
@@ -60,10 +82,20 @@ export function collectModuleSpecifiers(source, file = 'source.ts') {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       if (node.moduleSpecifier)
         record(node.moduleSpecifier, ts.isImportDeclaration(node) ? 'import' : 'export')
-    } else if (ts.isCallExpression(node) && node.arguments.length === 1) {
-      if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression
+    ) {
+      record(node.moduleReference.expression, 'import-equals')
+    } else if (ts.isCallExpression(node)) {
+      if (node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments.length >= 1) {
         record(node.arguments[0], 'dynamic-import')
-      } else if (ts.isIdentifier(node.expression) && node.expression.text === 'require') {
+      } else if (
+        node.arguments.length === 1 &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'require'
+      ) {
         record(node.arguments[0], 'require')
       }
     } else if (
@@ -81,18 +113,32 @@ export function collectModuleSpecifiers(source, file = 'source.ts') {
 }
 
 export function resolveRepositoryTarget(source, specifier) {
-  if (specifier.startsWith('@/')) return specifier.slice(2)
-  if (!specifier.startsWith('.')) return null
+  let candidate
+  if (specifier.startsWith('@/')) {
+    candidate = specifier.slice(2).replace(/^\/+/, '')
+  } else if (specifier.startsWith('.')) {
+    candidate = path.posix.join(path.posix.dirname(source), specifier)
+  } else if (
+    REPOSITORY_IMPORT_ROOTS.has(specifier.split('/')[0]) ||
+    ROOT_RUNTIME_TARGETS.has(specifier)
+  ) {
+    candidate = specifier
+  } else {
+    return null
+  }
 
-  const target = path.posix.normalize(path.posix.join(path.posix.dirname(source), specifier))
-  return target.startsWith('../') ? null : target
+  const target = path.posix.normalize(candidate)
+  return target === '..' || target.startsWith('../') || path.posix.isAbsolute(target)
+    ? null
+    : target
 }
 
 export function classifyBoundary(source, target) {
   if (!target) return null
 
   const sourceRoot = source.split('/')[0]
-  if (!SOURCE_ROOTS.includes(sourceRoot)) return null
+  const rootRuntimeSource = ROOT_RUNTIME_SOURCES.has(source)
+  if (!SOURCE_ROOTS.includes(sourceRoot) && !rootRuntimeSource) return null
 
   if (sourceRoot === 'lib' && (target === 'app' || target.startsWith('app/'))) {
     return 'lib-must-not-import-app'
@@ -113,6 +159,15 @@ export function classifyBoundary(source, target) {
   if (sourceRoot === 'app' && (target === 'worker' || target.startsWith('worker/'))) {
     return 'app-must-not-import-worker'
   }
+  if (rootRuntimeSource && (target === 'app' || target.startsWith('app/'))) {
+    return 'root-runtime-must-not-import-app'
+  }
+  if (rootRuntimeSource && (target === 'worker' || target.startsWith('worker/'))) {
+    return 'root-runtime-must-not-import-worker'
+  }
+  if (!rootRuntimeSource && ROOT_RUNTIME_TARGETS.has(target)) {
+    return 'runtime-module-must-not-import-root-entrypoint'
+  }
   if (target === 'scripts' || target.startsWith('scripts/')) {
     return 'runtime-must-not-import-scripts'
   }
@@ -130,7 +185,7 @@ export function violationKey(violation) {
 }
 
 export async function scanArchitecture(root) {
-  const violations = []
+  const violations = new Map()
 
   for (const source of trackedAndUntrackedSources(root)) {
     const contents = await readFile(path.join(root, source), 'utf8')
@@ -138,25 +193,85 @@ export async function scanArchitecture(root) {
       const target = resolveRepositoryTarget(source, dependency.specifier)
       const rule = classifyBoundary(source, target)
       if (!rule) continue
-      violations.push({
+      const violation = {
         rule,
         source: toPosix(source),
         specifier: dependency.specifier,
         line: dependency.line,
         kind: dependency.kind,
-      })
+      }
+      const key = violationKey(violation)
+      if (!violations.has(key)) violations.set(key, violation)
     }
   }
 
-  return violations.sort((a, b) => violationKey(a).localeCompare(violationKey(b)))
+  return [...violations.values()].sort((a, b) => violationKey(a).localeCompare(violationKey(b)))
+}
+
+export function normalizeArchitectureBaseline(body, baselinePath = DEFAULT_BASELINE) {
+  if (!body || typeof body !== 'object' || body.version !== 1 || !Array.isArray(body.violations)) {
+    throw new Error(`Unsupported architecture baseline format: ${baselinePath}`)
+  }
+
+  const seen = new Set()
+  return body.violations.map((violation, index) => {
+    if (
+      !violation ||
+      typeof violation.rule !== 'string' ||
+      violation.rule.length === 0 ||
+      typeof violation.source !== 'string' ||
+      violation.source.length === 0 ||
+      typeof violation.specifier !== 'string' ||
+      violation.specifier.length === 0
+    ) {
+      throw new Error(`Invalid architecture baseline entry ${index + 1}: ${baselinePath}`)
+    }
+
+    const normalized = {
+      rule: violation.rule,
+      source: violation.source,
+      specifier: violation.specifier,
+    }
+    const key = violationKey(normalized)
+    if (seen.has(key)) {
+      throw new Error(`Duplicate architecture baseline entry ${index + 1}: ${baselinePath}`)
+    }
+    seen.add(key)
+    return normalized
+  })
+}
+
+export function baselineAdditions(current, previous) {
+  const previousKeys = new Set(previous.map(violationKey))
+  return current.filter((violation) => !previousKeys.has(violationKey(violation)))
 }
 
 async function readBaseline(root, baselinePath) {
   const body = JSON.parse(await readFile(path.join(root, baselinePath), 'utf8'))
-  if (body.version !== 1 || !Array.isArray(body.violations)) {
-    throw new Error(`Unsupported architecture baseline format: ${baselinePath}`)
+  return normalizeArchitectureBaseline(body, baselinePath)
+}
+
+function readBaselineAtRef(root, baselinePath, ref) {
+  let contents
+  try {
+    contents = execFileSync('git', ['show', `${ref}:${baselinePath}`], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    try {
+      execFileSync('git', ['cat-file', '-e', `${ref}^{commit}`], {
+        cwd: root,
+        stdio: ['ignore', 'ignore', 'ignore'],
+      })
+    } catch {
+      throw new Error(`Cannot resolve architecture baseline base ref: ${ref}`, { cause: error })
+    }
+    return null
   }
-  return body.violations
+
+  return normalizeArchitectureBaseline(JSON.parse(contents), `${ref}:${baselinePath}`)
 }
 
 function printable(violation) {
@@ -179,6 +294,18 @@ async function main() {
   }
 
   const baseline = await readBaseline(root, baselinePath)
+  const baseRef = process.env.ARCHITECTURE_BASE_REF?.trim()
+  if (baseRef) {
+    const previousBaseline = readBaselineAtRef(root, baselinePath, baseRef)
+    if (previousBaseline) {
+      const additions = baselineAdditions(baseline, previousBaseline)
+      if (additions.length > 0) {
+        console.error('Architecture baseline may only shrink; new waivers are forbidden:')
+        for (const violation of additions) console.error(`- ${printable(violation)}`)
+        process.exit(1)
+      }
+    }
+  }
   const currentByKey = new Map(violations.map((violation) => [violationKey(violation), violation]))
   const baselineByKey = new Map(baseline.map((violation) => [violationKey(violation), violation]))
   const added = violations.filter((violation) => !baselineByKey.has(violationKey(violation)))
