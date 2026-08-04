@@ -56,6 +56,7 @@ export default function SearchDropdown({
     selectedIndex,
     setSelectedIndex,
     translatedTitles,
+    translating,
     flatResults,
     saveToHistory,
     handleDeleteHistory,
@@ -182,6 +183,7 @@ export default function SearchDropdown({
       id="search-dropdown-listbox"
       role="listbox"
       aria-label="Search results"
+      aria-busy={searching || trendingLoading || loading || translating}
       className="dropdown-enter"
       style={{
         position: 'absolute',
@@ -254,7 +256,12 @@ export default function SearchDropdown({
                 >
                   <Text size="xs" color="tertiary">
                     {t('searchShowingTopTraders')}{' '}
-                    <span style={{ fontWeight: 700, color: tokens.colors.text.secondary }}>
+                    <span
+                      style={{
+                        fontWeight: tokens.typography.fontWeight.bold,
+                        color: tokens.colors.text.secondary,
+                      }}
+                    >
                       {EXCHANGE_CONFIG[searchData.matchedExchange as keyof typeof EXCHANGE_CONFIG]
                         ?.name || searchData.matchedExchange}
                     </span>
@@ -322,12 +329,22 @@ export default function SearchDropdown({
                     <Link
                       key={suggestion}
                       href={`/search?q=${encodeURIComponent(suggestion)}`}
-                      style={{ textDecoration: 'none' }}
+                      style={{
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: 44,
+                        minHeight: 44,
+                      }}
                       onClick={onClose}
                     >
                       <Text
                         size="xs"
-                        style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}
+                        style={{
+                          color: tokens.colors.accent.primary,
+                          fontWeight: tokens.typography.fontWeight.semibold,
+                        }}
                       >
                         {suggestion}
                       </Text>
@@ -337,12 +354,13 @@ export default function SearchDropdown({
               )}
               <Link
                 href={`/search?q=${encodeURIComponent(query)}`}
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: 'none', display: 'block', minHeight: 44 }}
                 onClick={() => handleResultClick()}
               >
                 <Box
                   style={{
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    minHeight: 44,
                     textAlign: 'center',
                     cursor: 'pointer',
                   }}

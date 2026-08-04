@@ -19,6 +19,7 @@ describe('mapHotPosts', () => {
       {
         id: 'post-1',
         title: 'Market update',
+        translationSource: 'Market update',
         hotScore: 0,
         rank: 1,
         view_count: 12,
@@ -32,6 +33,7 @@ describe('mapHotPosts', () => {
 
     expect(post.title).toHaveLength(83)
     expect(post.title.endsWith('...')).toBe(true)
+    expect(post.translationSource).toBe(content)
   })
 
   it('calculates a fallback score and localizes an empty title', () => {
@@ -47,6 +49,18 @@ describe('mapHotPosts', () => {
         ],
         '暂无标题'
       )[0]
-    ).toMatchObject({ title: '暂无标题', hotScore: 8, rank: 1 })
+    ).toMatchObject({ title: '暂无标题', translationSource: null, hotScore: 8, rank: 1 })
   })
+
+  it.each(['   ', '---', '# **_~~`[]()` > |'])(
+    'falls back for content with no meaningful text',
+    (content) => {
+      expect(
+        mapHotPosts([{ id: 'post-empty', title: 'Untitled', content }], 'No title')[0]
+      ).toMatchObject({
+        title: 'No title',
+        translationSource: null,
+      })
+    }
+  )
 })

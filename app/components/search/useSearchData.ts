@@ -13,7 +13,12 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
 import { logger } from '@/lib/logger'
 import { features } from '@/lib/features'
-import { mapHotPosts } from './hot-posts'
+import {
+  requestBatchTranslation,
+  type BatchTranslationItem,
+  type TranslationTargetLanguage,
+} from '@/lib/translations/translation-client-contract'
+import { mapHotPosts, type HotPostSource } from './hot-posts'
 
 // Module-level cache for trending searches (5-min TTL)
 let _trendingCache: { data: TrendingSearchItem[]; ts: number } | null = null
@@ -29,16 +34,64 @@ export interface TrendingSearchItem {
 export interface HotPost {
   id: string
   title: string
+  translationSource: string | null
   hotScore: number
   rank: number
   view_count?: number
 }
 
+type SearchTranslationDescriptor = {
+  id: string
+  source: string
+}
+
+type SearchTranslationScope = {
+  key: string
+  targetLang: TranslationTargetLanguage
+  accessToken: string
+  descriptors: SearchTranslationDescriptor[]
+}
+
+type ActiveSearchTranslation = {
+  key: string
+  sequence: number
+  controller: AbortController
+  promise: Promise<void>
+}
+
+type ActiveHotPostsRequest = {
+  scopeKey: string
+  sequence: number
+  controller: AbortController
+}
+
+const MAX_TRANSLATION_SNAPSHOTS = 8
+
+function detectedTranslationSourceLanguage(text: string): TranslationTargetLanguage | null {
+  if (/[가-힯ᄀ-ᇿ㄰-㆏]/.test(text)) return 'ko'
+  if (/[぀-ヿㇰ-ㇿ]/.test(text)) return 'ja'
+  const chineseCharacterCount = text.match(/[\u4e00-\u9fff]/g)?.length ?? 0
+  const nonWhitespaceLength = text.replace(/\s/g, '').length || 1
+  if (chineseCharacterCount / nonWhitespaceLength > 0.1) return 'zh'
+  if (/[A-Za-z]/.test(text)) return 'en'
+  return null
+}
+
+function needsTranslation(source: string, targetLang: TranslationTargetLanguage): boolean {
+  return detectedTranslationSourceLanguage(source) !== targetLang
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
 export function useSearchData(open: boolean, query: string) {
   const { t, language } = useLanguage()
-  const { userId, isLoggedIn, authChecked, accessToken } = useAuthSession()
+  const auth = useAuthSession()
+  const { userId, isLoggedIn, authChecked, accessToken, viewerKey, sessionGeneration } = auth
+  const noTitle = t('noTitle')
   const [searchHistory, setSearchHistory] = useState<string[]>([])
-  const [hotPosts, setHotPosts] = useState<HotPost[]>([])
+  const [hotPostSources, setHotPostSources] = useState<HotPostSource[]>([])
   const [trendingSearches, setTrendingSearches] = useState<TrendingSearchItem[]>([])
   const [trendingLoading, setTrendingLoading] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -46,9 +99,86 @@ export function useSearchData(open: boolean, query: string) {
   const [searching, setSearching] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
-  const [translatedTitles, setTranslatedTitles] = useState<Record<string, string>>({})
-  const [translating, setTranslating] = useState(false)
+  const [translationCacheRevision, setTranslationCacheRevision] = useState(0)
+  const [translationLoadingKey, setTranslationLoadingKey] = useState<string | null>(null)
+  const translationCacheRef = useRef(new Map<string, Record<string, string>>())
+  const activeTranslationRef = useRef<ActiveSearchTranslation | null>(null)
+  const translationSequenceRef = useRef(0)
+  const translationMountedRef = useRef(false)
+  const committedTranslationScopeRef = useRef<SearchTranslationScope | null>(null)
+  const hotPostsMountedRef = useRef(false)
+  const hotPostsSequenceRef = useRef(0)
+  const activeHotPostsRequestRef = useRef<ActiveHotPostsRequest | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Keep the raw result as authority so a language/t() change remaps fallback
+  // titles synchronously, without waiting for a second network response.
+  const hotPosts: HotPost[] = useMemo(
+    () => mapHotPosts(hotPostSources, noTitle),
+    [hotPostSources, noTitle]
+  )
+  const hotPostsLoadScopeKey = open && features.social ? JSON.stringify([language, noTitle]) : null
+
+  const translationDescriptors = hotPosts.flatMap<SearchTranslationDescriptor>((post) =>
+    post.translationSource?.trim() ? [{ id: post.id, source: post.translationSource }] : []
+  )
+  const resultIdentity = JSON.stringify(
+    hotPosts.map((post) => [
+      post.id,
+      post.title,
+      post.translationSource,
+      post.hotScore,
+      post.rank,
+      post.view_count ?? null,
+    ])
+  )
+  const hasUnambiguousResultIds = new Set(hotPosts.map((post) => post.id)).size === hotPosts.length
+  const translationScope: SearchTranslationScope | null =
+    open &&
+    query.trim().length < 2 &&
+    authChecked &&
+    isLoggedIn &&
+    typeof userId === 'string' &&
+    viewerKey === `user:${userId}` &&
+    Number.isSafeInteger(sessionGeneration) &&
+    sessionGeneration >= 0 &&
+    typeof accessToken === 'string' &&
+    accessToken.trim() &&
+    translationDescriptors.length > 0 &&
+    translationDescriptors.length <= 20 &&
+    hasUnambiguousResultIds
+      ? {
+          key: JSON.stringify([
+            'search-hot-post-title',
+            viewerKey,
+            sessionGeneration,
+            userId,
+            accessToken,
+            language,
+            query,
+            resultIdentity,
+          ]),
+          targetLang: language,
+          accessToken,
+          descriptors: translationDescriptors,
+        }
+      : null
+  const translationScopeKey = translationScope?.key ?? null
+
+  const translatedTitles = useMemo(() => {
+    if (!translationScope) return {}
+    return translationCacheRef.current.get(translationScope.key) ?? {}
+    // The revision makes writes to the ref-backed, bounded cache observable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translationCacheRevision, translationScopeKey])
+  const translating = translationScope !== null && translationLoadingKey === translationScope.key
+
+  // Async publication must follow the last committed render, not a speculative
+  // concurrent render. An equivalent new object with the same key is immaterial.
+  useEffect(() => {
+    committedTranslationScopeRef.current = translationScope
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translationScopeKey])
 
   // Flatten results for keyboard navigation
   const flatResults: UnifiedSearchResult[] = useMemo(
@@ -119,108 +249,224 @@ export function useSearchData(open: boolean, query: string) {
     }
   }, [open])
 
-  // Load hot posts (only when social feature is enabled)
-  const loadHotPosts = useCallback(async () => {
-    if (!open || !features.social) return
-    setLoading(true)
-    try {
-      const response = await fetch('/api/posts?sort_by=hot_score&sort_order=desc&limit=10&offset=0')
-      if (!response.ok) return
-
-      const result = await response.json()
-      const posts = result.data?.posts
-      if (Array.isArray(posts)) setHotPosts(mapHotPosts(posts, t('noTitle')))
-    } catch (e) {
-      logger.error('Failed to load hot posts:', e)
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable
-  }, [open])
-
   useEffect(() => {
     loadTrendingSearches()
-    loadHotPosts()
-  }, [loadTrendingSearches, loadHotPosts])
+  }, [loadTrendingSearches])
 
-  // Hot post title translation (requires auth — anonymous visitors got a 401 on every page)
   useEffect(() => {
-    if (hotPosts.length === 0 || translating || !isLoggedIn || !accessToken) return
-
-    const langKey = (id: string) => `${language}:${id}`
-
-    // Use functional updater to read current translatedTitles without
-    // including it in the dependency array (which caused extra re-fires
-    // since the effect itself calls setTranslatedTitles).
-    setTranslatedTitles((prev) => {
-      const needsTranslation = hotPosts.some((post) => !prev[langKey(post.id)])
-      if (!needsTranslation) return prev
-
-      const isCJK = (text: string) => /[\u4e00-\u9fff\u3000-\u303f]/.test(text)
-      const postsToTranslate = hotPosts.filter((post) => {
-        if (prev[langKey(post.id)]) return false
-        const titleIsCJK = isCJK(post.title)
-        if (language === 'zh' && titleIsCJK) return false
-        if (language === 'en' && !titleIsCJK) return false
-        return true
-      })
-
-      if (postsToTranslate.length === 0) {
-        const newTranslations = { ...prev }
-        hotPosts.forEach((post) => {
-          if (!newTranslations[langKey(post.id)]) newTranslations[langKey(post.id)] = post.title
-        })
-        return newTranslations
+    hotPostsMountedRef.current = true
+    return () => {
+      hotPostsMountedRef.current = false
+      hotPostsSequenceRef.current += 1
+      const active = activeHotPostsRequestRef.current
+      if (active && !active.controller.signal.aborted) {
+        active.controller.abort(new DOMException('Search hot posts unmounted', 'AbortError'))
       }
+      activeHotPostsRequestRef.current = null
+    }
+  }, [])
 
-      // Kick off async translation (outside updater)
-      const doTranslate = async () => {
-        setTranslating(true)
-        try {
-          const res = await fetch('/api/translate', {
-            method: 'POST',
-            // /api/translate uses requireAuth (Bearer header only) — logged-in
-            // users 401'd without the Authorization header
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-              ...getCsrfHeaders(),
-            },
-            body: JSON.stringify({
-              items: postsToTranslate.map((p) => ({
-                id: p.id,
-                text: p.title,
-                contentType: 'post_title',
-                contentId: p.id,
-              })),
-              targetLang: language === 'zh' ? 'zh' : 'en',
-            }),
-          })
-          if (res.ok) {
-            const json = await res.json()
-            const results = json.data?.results || {}
-            setTranslatedTitles((current) => {
-              const updated = { ...current }
-              postsToTranslate.forEach((post) => {
-                if (results[post.id]?.translatedText)
-                  updated[langKey(post.id)] = results[post.id].translatedText
-              })
-              hotPosts.forEach((post) => {
-                if (!updated[langKey(post.id)]) updated[langKey(post.id)] = post.title
-              })
-              return updated
-            })
-          }
-        } catch (e) {
-          logger.error('Failed to translate hot posts:', e)
-        } finally {
-          setTranslating(false)
+  // Bind every load to the exact open/language/fallback-label generation.
+  // A transport may ignore abort, so sequence and active-scope checks also
+  // prevent old data and old finally blocks from mutating the current view.
+  useEffect(() => {
+    const scopeKey = hotPostsLoadScopeKey
+    const previous = activeHotPostsRequestRef.current
+    if (previous && !previous.controller.signal.aborted) {
+      previous.controller.abort(new DOMException('Search hot posts superseded', 'AbortError'))
+    }
+    activeHotPostsRequestRef.current = null
+
+    if (!scopeKey) {
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const sequence = ++hotPostsSequenceRef.current
+    activeHotPostsRequestRef.current = { scopeKey, sequence, controller }
+    setLoading(true)
+
+    void (async () => {
+      try {
+        const response = await fetch(
+          '/api/posts?sort_by=hot_score&sort_order=desc&limit=10&offset=0',
+          { signal: controller.signal }
+        )
+        if (!response.ok) return
+
+        const result = await response.json()
+        const posts = result.data?.posts
+        const active = activeHotPostsRequestRef.current
+        if (
+          !Array.isArray(posts) ||
+          !hotPostsMountedRef.current ||
+          active?.sequence !== sequence ||
+          active.scopeKey !== scopeKey
+        ) {
+          return
+        }
+        setHotPostSources(posts as HotPostSource[])
+      } catch (error) {
+        const active = activeHotPostsRequestRef.current
+        if (
+          !isAbortError(error) &&
+          hotPostsMountedRef.current &&
+          active?.sequence === sequence &&
+          active.scopeKey === scopeKey
+        ) {
+          logger.error('Failed to load hot posts:', error)
+        }
+      } finally {
+        const active = activeHotPostsRequestRef.current
+        if (
+          hotPostsMountedRef.current &&
+          active?.sequence === sequence &&
+          active.scopeKey === scopeKey
+        ) {
+          activeHotPostsRequestRef.current = null
+          setLoading(false)
         }
       }
-      doTranslate()
-      return prev // return unchanged until async finishes
-    })
-  }, [language, hotPosts, translating, isLoggedIn, accessToken])
+    })()
+
+    return () => {
+      const active = activeHotPostsRequestRef.current
+      if (active?.sequence === sequence) {
+        if (!controller.signal.aborted) {
+          controller.abort(new DOMException('Search hot posts scope changed', 'AbortError'))
+        }
+        activeHotPostsRequestRef.current = null
+      }
+    }
+  }, [hotPostsLoadScopeKey])
+
+  useEffect(() => {
+    const translationCache = translationCacheRef.current
+    translationMountedRef.current = true
+    return () => {
+      translationMountedRef.current = false
+      translationSequenceRef.current += 1
+      const active = activeTranslationRef.current
+      if (active && !active.controller.signal.aborted) {
+        active.controller.abort(new DOMException('Search translation unmounted', 'AbortError'))
+      }
+      activeTranslationRef.current = null
+      translationCache.clear()
+    }
+  }, [])
+
+  // Hot-post title translation. Every published value is owned by one exact
+  // viewer/token/language/query/result/source scope; stale work can never cross it.
+  useEffect(() => {
+    const scope = committedTranslationScopeRef.current
+    if (!scope) {
+      const active = activeTranslationRef.current
+      if (active && !active.controller.signal.aborted) {
+        active.controller.abort(
+          new DOMException('Search translation scope became unavailable', 'AbortError')
+        )
+      }
+      activeTranslationRef.current = null
+      setTranslationLoadingKey(null)
+      return
+    }
+
+    if (translationCacheRef.current.has(scope.key)) {
+      const active = activeTranslationRef.current
+      if (active && active.key !== scope.key && !active.controller.signal.aborted) {
+        active.controller.abort(
+          new DOMException('Search translation superseded by cached scope', 'AbortError')
+        )
+        activeTranslationRef.current = null
+      }
+      setTranslationLoadingKey(null)
+      return
+    }
+
+    const descriptors = scope.descriptors.filter(({ source }) =>
+      needsTranslation(source, scope.targetLang)
+    )
+    if (descriptors.length === 0) {
+      translationCacheRef.current.set(scope.key, {})
+      setTranslationCacheRevision((revision) => revision + 1)
+      setTranslationLoadingKey(null)
+      return
+    }
+
+    const existing = activeTranslationRef.current
+    if (existing?.key === scope.key) return
+    if (existing && !existing.controller.signal.aborted) {
+      existing.controller.abort(new DOMException('Search translation superseded', 'AbortError'))
+    }
+
+    const controller = new AbortController()
+    const sequence = ++translationSequenceRef.current
+    setTranslationLoadingKey(scope.key)
+
+    const promise = (async () => {
+      try {
+        const items: BatchTranslationItem[] = descriptors.map(({ id, source }) => ({
+          id,
+          text: source,
+          contentType: 'post_title',
+          contentId: id,
+          targetLang: scope.targetLang,
+        }))
+        const receipt = await requestBatchTranslation(items, scope.targetLang, {
+          accessToken: scope.accessToken,
+          csrfHeaders: getCsrfHeaders(),
+          signal: controller.signal,
+        })
+
+        const active = activeTranslationRef.current
+        if (
+          !translationMountedRef.current ||
+          active?.sequence !== sequence ||
+          committedTranslationScopeRef.current?.key !== scope.key
+        ) {
+          return
+        }
+
+        const next: Record<string, string> = {}
+        for (const descriptor of descriptors) {
+          const translatedText = receipt.results[descriptor.id].translatedText
+          if (translatedText.trim() === descriptor.source.trim()) {
+            throw new Error('Search translation returned an original-text echo')
+          }
+          next[`${scope.targetLang}:${descriptor.id}`] = translatedText
+        }
+
+        translationCacheRef.current.set(scope.key, next)
+        while (translationCacheRef.current.size > MAX_TRANSLATION_SNAPSHOTS) {
+          const oldestKey = translationCacheRef.current.keys().next().value
+          if (typeof oldestKey !== 'string') break
+          translationCacheRef.current.delete(oldestKey)
+        }
+        setTranslationCacheRevision((revision) => revision + 1)
+      } catch (error) {
+        if (!isAbortError(error)) logger.error('Failed to translate hot posts:', error)
+      } finally {
+        const active = activeTranslationRef.current
+        if (active?.sequence === sequence) {
+          activeTranslationRef.current = null
+          setTranslationLoadingKey((key) => (key === scope.key ? null : key))
+        }
+      }
+    })()
+
+    activeTranslationRef.current = { key: scope.key, sequence, controller, promise }
+
+    return () => {
+      const active = activeTranslationRef.current
+      if (active?.sequence === sequence) {
+        if (!controller.signal.aborted) {
+          controller.abort(new DOMException('Search translation scope changed', 'AbortError'))
+        }
+        activeTranslationRef.current = null
+      }
+    }
+  }, [translationScopeKey])
 
   // Unified search with debounce
   useEffect(() => {
@@ -309,6 +555,7 @@ export function useSearchData(open: boolean, query: string) {
     selectedIndex,
     setSelectedIndex,
     translatedTitles,
+    translating,
     flatResults,
     saveToHistory,
     handleDeleteHistory,
