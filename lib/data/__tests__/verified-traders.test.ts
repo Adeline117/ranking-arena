@@ -23,15 +23,15 @@ function clientWith(result: { data: unknown; error: unknown }) {
 describe('Verified Data eligibility', () => {
   beforeEach(() => resetVerifiedTraderCacheForTests())
 
-  it('requires active, proven-read-only, successful and fresh authorization rows', async () => {
+  it('keeps authorization-derived public badges disabled throughout V1', async () => {
     const { client, calls, from } = clientWith({
       data: [{ platform: 'ByBit', trader_id: 'u1' }],
       error: null,
     })
     const keys = await getVerifiedTraderKeys(client)
-    expect(keys.has('bybit:u1')).toBe(true)
-    expect(calls).toContainEqual(['select', 'platform, trader_id'])
-    expect(from).toHaveBeenCalledWith('verified_data_authorizations')
+    expect(keys).toEqual(new Set())
+    expect(calls).toEqual([])
+    expect(from).not.toHaveBeenCalled()
   })
 
   it('fails closed when the eligibility query fails', async () => {

@@ -66,7 +66,10 @@ test('OpenClaw workflow installs deterministically and propagates hard failures'
   const workflow = readFileSync(join(repoRoot, '.github/workflows/openclaw-sentinels.yml'), 'utf8')
 
   assert.doesNotMatch(workflow, /npm ci[^\n]*\|\|[^\n]*npm install/)
-  assert.equal((workflow.match(/run: npm ci --ignore-scripts/g) || []).length, 9)
+  // The production payment canary was removed from this scheduled workflow.
+  // Its rollback-only replacement has a separate protected, manually
+  // dispatched staging workflow, leaving eight read-only sentinels here.
+  assert.equal((workflow.match(/run: npm ci --ignore-scripts/g) || []).length, 8)
 
   // Only the three independent checks in the shared pipeline-health job may
   // continue so all of them get evidence. Their outcomes are aggregated into

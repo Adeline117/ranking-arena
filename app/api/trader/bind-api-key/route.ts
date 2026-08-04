@@ -1,99 +1,30 @@
 /**
- * POST /api/trader/bind-api-key
+ * POST /api/trader/bind-api-key — RETIRED
  *
- * Bind a read-only CEX API key to a trader profile.
- * Validates the key, encrypts credentials, and stores in trader_authorizations.
- *
- * Body: {
- *   platform: string,      // 'binance', 'bybit', 'okx', 'bitget', etc.
- *   apiKey: string,         // Read-only API key
- *   apiSecret: string,      // API secret
- *   passphrase?: string,    // Required for OKX, Bitget
- *   label?: string,         // User-friendly name
- *   syncFrequency?: string, // 'realtime' | '5min' | '15min' | '1hour'
- * }
- *
- * Returns: {
- *   success: boolean,
- *   authorizationId?: string,
- *   traderId?: string,       // Exchange account UID
- *   nickname?: string,
- *   error?: string,
- * }
+ * /api/trader/authorize is the sole V1 API-key binding endpoint. Keeping this
+ * duplicate writer live would create a second public contract around the same
+ * credential lifecycle.
  */
 
-import { NextRequest } from 'next/server'
-import {
-  requireAuth,
-  getSupabaseAdmin,
-  success,
-  handleError,
-  validateString,
-  checkRateLimit,
-  RateLimitPresets,
-} from '@/lib/api'
-import { bindApiKey } from '@/lib/services/api-key-binder'
-import { logger } from '@/lib/logger'
-import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
+import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
-  if (rateLimitResponse) return rateLimitResponse
+const RETIRED_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+  Link: '</api/trader/authorize>; rel="successor-version"',
+} as const
 
-  try {
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
-    const body = await request.json()
-
-    // Validate required fields
-    const platform = validateString(body.platform, { required: true, fieldName: 'platform' })
-    const apiKey = validateString(body.apiKey, { required: true, fieldName: 'apiKey' })
-    const apiSecret = validateString(body.apiSecret, { required: true, fieldName: 'apiSecret' })
-
-    if (!platform || !apiKey || !apiSecret) {
-      return handleError(
-        new Error('Missing required fields: platform, apiKey, apiSecret'),
-        'bind-api-key'
-      )
-    }
-
-    // Bind the API key
-    const result = await bindApiKey(supabase, user.id, {
-      platform,
-      apiKey,
-      apiSecret,
-      passphrase: body.passphrase || undefined,
-      label: body.label || undefined,
-      syncFrequency: body.syncFrequency || undefined,
-    })
-
-    if (!result.success) {
-      return handleError(new Error(result.error || 'Binding failed'), 'bind-api-key')
-    }
-
-    logger.info('[bind-api-key] API key bound', {
-      userId: user.id,
-      platform,
-      traderId: result.traderId,
-    })
-
-    const initialSyncQueued = result.authorizationId
-      ? await enqueueFirstPartySync(result.authorizationId)
-      : false
-
-    return success({
-      success: true,
-      authorizationId: result.authorizationId,
-      traderId: result.traderId,
-      nickname: result.nickname,
-      initialSyncQueued,
-      message: initialSyncQueued
-        ? 'API key bound successfully. Your first-party verification is queued.'
-        : 'API key bound successfully. The background scheduler will verify it shortly.',
-    })
-  } catch (error: unknown) {
-    return handleError(error, 'bind-api-key')
-  }
+export async function POST() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'This API key binding endpoint is retired. Use /api/trader/authorize.',
+      successor: '/api/trader/authorize',
+    },
+    { status: 410, headers: RETIRED_HEADERS }
+  )
 }

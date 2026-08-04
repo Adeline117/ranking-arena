@@ -6,7 +6,6 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { sendNotification } from '@/lib/data/notifications'
 import { invalidateLinkedTraderCache } from '@/lib/data/linked-traders'
-import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
 
 // ============================================
 // 类型定义
@@ -23,6 +22,7 @@ export interface TraderClaim {
   source: string
   verification_method: VerificationMethod
   verification_data: Record<string, unknown> | null
+  submission_version: number
   status: ClaimStatus
   reject_reason: string | null
   reviewed_by: string | null
@@ -54,18 +54,14 @@ export interface VerifiedTrader {
   updated_at: string
 }
 
-export interface CreateClaimInput {
-  trader_id: string
-  source: string
-  verification_method: VerificationMethod
-  verification_data?: Record<string, unknown>
-}
-
 export interface SubmitClaimInput {
   trader_id: string
   source: string
-  verification_method: Extract<VerificationMethod, 'api_key' | 'signature'>
-  verification_data: Record<string, unknown>
+  challenge_id: string
+  challenge_issued_at: string
+  verified_at: string
+  message_sha256: string
+  signature_sha256: string
 }
 
 export interface TraderClaimActivation {
@@ -99,7 +95,7 @@ export interface VerifiedTraderIdentity {
 // ============================================
 
 const CLAIM_FIELDS =
-  'id, user_id, trader_id, source, verification_method, verification_data, status, reject_reason, reviewed_by, reviewed_at, verified_at, created_at, updated_at'
+  'id, user_id, trader_id, source, verification_method, verification_data, submission_version, status, reject_reason, reviewed_by, reviewed_at, verified_at, created_at, updated_at'
 const VERIFIED_TRADER_FIELDS =
   'id, user_id, trader_id, source, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, verified_at, verification_method, can_pin_posts, can_reply_reviews, can_receive_messages, created_at, updated_at'
 
@@ -118,7 +114,7 @@ function parseSubmittedClaim(
   const candidate = Array.isArray(value) && value.length === 1 ? value[0] : value
 
   if (!isRecord(candidate)) {
-    throw new Error('Invalid submit_trader_claim response')
+    throw new Error('Invalid submit_trader_claim_v2 response')
   }
 
   const method = candidate.verification_method
@@ -128,8 +124,9 @@ function parseSubmittedClaim(
     candidate.trader_id !== expected.traderId ||
     candidate.source !== expected.source ||
     candidate.status !== 'reviewing' ||
+    candidate.submission_version !== 2 ||
     !isVerificationMethod(method) ||
-    !['api_key', 'signature'].includes(method) ||
+    method !== 'signature' ||
     !isRecord(candidate.verification_data) ||
     !(candidate.reject_reason === null || typeof candidate.reject_reason === 'string') ||
     !(candidate.reviewed_by === null || typeof candidate.reviewed_by === 'string') ||
@@ -138,7 +135,7 @@ function parseSubmittedClaim(
     typeof candidate.created_at !== 'string' ||
     typeof candidate.updated_at !== 'string'
   ) {
-    throw new Error('Invalid submit_trader_claim response')
+    throw new Error('Invalid submit_trader_claim_v2 response')
   }
 
   return {
@@ -148,6 +145,7 @@ function parseSubmittedClaim(
     source: expected.source,
     verification_method: method,
     verification_data: candidate.verification_data,
+    submission_version: 2,
     status: 'reviewing',
     reject_reason: candidate.reject_reason,
     reviewed_by: candidate.reviewed_by,
@@ -160,7 +158,7 @@ function parseSubmittedClaim(
 
 function parseActivation(value: unknown, expectedClaimId: string): TraderClaimActivation {
   if (!isRecord(value) || !isRecord(value.claim)) {
-    throw new Error('Invalid activate_trader_claim response')
+    throw new Error('Invalid activate_trader_claim_v2 response')
   }
 
   const claim = value.claim
@@ -170,10 +168,11 @@ function parseActivation(value: unknown, expectedClaimId: string): TraderClaimAc
   if (
     claim.id !== expectedClaimId ||
     claim.status !== 'verified' ||
+    claim.submission_version !== 2 ||
     typeof claim.user_id !== 'string' ||
     typeof claim.trader_id !== 'string' ||
     typeof claim.source !== 'string' ||
-    !isVerificationMethod(method) ||
+    method !== 'signature' ||
     !(claim.verification_data === null || isRecord(claim.verification_data)) ||
     !(claim.reject_reason === null || typeof claim.reject_reason === 'string') ||
     !(claim.reviewed_by === null || typeof claim.reviewed_by === 'string') ||
@@ -189,11 +188,9 @@ function parseActivation(value: unknown, expectedClaimId: string): TraderClaimAc
     typeof value.arena_trader_id !== 'number' ||
     !Number.isSafeInteger(value.arena_trader_id) ||
     value.arena_trader_id < 1 ||
-    !(authorizationId === null || typeof authorizationId === 'string') ||
-    (method === 'api_key' && (typeof authorizationId !== 'string' || authorizationId.length < 1)) ||
-    (method !== 'api_key' && authorizationId !== null)
+    authorizationId !== null
   ) {
-    throw new Error('Invalid activate_trader_claim response')
+    throw new Error('Invalid activate_trader_claim_v2 response')
   }
 
   return {
@@ -204,6 +201,7 @@ function parseActivation(value: unknown, expectedClaimId: string): TraderClaimAc
       source: claim.source,
       verification_method: method,
       verification_data: claim.verification_data,
+      submission_version: 2,
       status: 'verified',
       reject_reason: claim.reject_reason,
       reviewed_by: claim.reviewed_by,
@@ -413,12 +411,15 @@ export async function submitClaim(
   userId: string,
   input: SubmitClaimInput
 ): Promise<TraderClaim> {
-  const { data, error } = await supabase.rpc('submit_trader_claim', {
+  const { data, error } = await supabase.rpc('submit_trader_claim_v2', {
     p_user_id: userId,
     p_trader_id: input.trader_id,
     p_source: input.source,
-    p_verification_method: input.verification_method,
-    p_verification_data: input.verification_data,
+    p_challenge_id: input.challenge_id,
+    p_challenge_issued_at: input.challenge_issued_at,
+    p_verified_at: input.verified_at,
+    p_message_digest: input.message_sha256,
+    p_signature_digest: input.signature_sha256,
   })
 
   if (error) {
@@ -445,19 +446,12 @@ export async function reviewClaim(
 ): Promise<TraderClaim> {
   if (approved) {
     const activation = await activateClaim(supabase, claimId, reviewerId)
-    const { claim, authorization_id: authorizationId } = activation
+    const { claim } = activation
 
     // These effects happen only after the database transaction commits. Cache
-    // invalidation is fail-soft; the periodic worker remains the sync fallback.
+    // invalidation is fail-soft; the durable database projections are already
+    // committed when activateClaim returns.
     await invalidateLinkedTraderCache(claim.user_id)
-    if (authorizationId) {
-      const queued = await enqueueFirstPartySync(authorizationId)
-      if (!queued) {
-        logger.warn(
-          '[trader-claims] immediate first-party sync was not queued; scheduler will retry'
-        )
-      }
-    }
 
     sendNotification(
       supabase,
@@ -474,20 +468,12 @@ export async function reviewClaim(
     return claim
   }
 
-  const now = new Date().toISOString()
   const reason = rejectReason || '未提供原因'
-  const { data: claim, error: updateError } = await supabase
-    .from('trader_claims')
-    .update({
-      status: 'rejected',
-      reviewed_by: reviewerId,
-      reviewed_at: now,
-      reject_reason: reason,
-    })
-    .eq('id', claimId)
-    .in('status', ['pending', 'reviewing'])
-    .select()
-    .maybeSingle()
+  const { data: claim, error: updateError } = await supabase.rpc('reject_trader_claim_v2', {
+    p_claim_id: claimId,
+    p_reviewer_id: reviewerId,
+    p_reject_reason: reason,
+  })
 
   if (updateError) {
     logger.error('[trader-claims] 更新申请状态失败:', updateError)
@@ -522,7 +508,7 @@ export async function activateClaim(
   claimId: string,
   reviewerId: string
 ): Promise<TraderClaimActivation> {
-  const { data, error } = await supabase.rpc('activate_trader_claim', {
+  const { data, error } = await supabase.rpc('activate_trader_claim_v2', {
     p_claim_id: claimId,
     p_reviewer_id: reviewerId,
   })
@@ -592,12 +578,10 @@ export async function cancelClaim(
   claimId: string,
   userId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from('trader_claims')
-    .delete()
-    .eq('id', claimId)
-    .eq('user_id', userId)
-    .eq('status', 'pending')
+  const { error } = await supabase.rpc('cancel_trader_claim_v2', {
+    p_claim_id: claimId,
+    p_user_id: userId,
+  })
 
   if (error) {
     throw error

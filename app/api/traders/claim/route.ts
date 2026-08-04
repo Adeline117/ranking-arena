@@ -3,12 +3,10 @@
  * GET /api/traders/claim - Get user's claim status (includes all linked traders)
  * POST /api/traders/claim - Submit claim with verification (supports multi-account)
  *
- * After verification passes (API key UID match or wallet signature), the
- * claim enters MANUAL owner review ('reviewing'); activation happens on
- * admin approval via activateClaim() (2026-07-09 owner decision).
+ * After a server-challenge wallet signature passes, the claim enters manual
+ * owner review ('reviewing'); activation happens only on admin approval.
  */
 
-import crypto from 'crypto'
 import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
@@ -23,17 +21,35 @@ import {
 import { ApiError } from '@/lib/api/errors'
 import {
   getUserClaimForTrader,
-  getUserVerifiedTrader,
+  getVerifiedTrader,
   isTraderClaimed,
   submitClaim,
 } from '@/lib/data/trader-claims'
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
 import { sendNotification } from '@/lib/data/notifications'
-import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
-import { hasVerifiedClaimConnection } from '@/lib/services/claim-connection-proof'
+import {
+  verifyWalletOwnership,
+  type WalletClaimChallengeAttestation,
+  type WalletReplayReservation,
+} from '@/lib/services/wallet-verification'
 import { logger } from '@/lib/logger'
 import { canonicalizeWalletIdentity, walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
+import { claimMethodForSource } from '@/lib/constants/trader-claim-platforms'
+
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
 
 function requireProofString(value: unknown, field: string, maxLength: number): string {
   if (typeof value !== 'string' || value.length === 0) {
@@ -51,7 +67,7 @@ function requireProofString(value: unknown, field: string, maxLength: number): s
  */
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -76,9 +92,9 @@ export async function GET(request: NextRequest) {
       ? canonicalizeWalletIdentity(rawTraderId, source)
       : rawTraderId
 
-    const [claim, verified, linkedResult] = await Promise.all([
+    const [claim, exactVerified, linkedResult] = await Promise.all([
       getUserClaimForTrader(supabase, user.id, traderId, source),
-      getUserVerifiedTrader(supabase, user.id),
+      getVerifiedTrader(supabase, traderId, source),
       supabase
         .from('user_linked_traders')
         .select(
@@ -88,17 +104,26 @@ export async function GET(request: NextRequest) {
         .order('display_order', { ascending: true }),
     ])
 
+    if (linkedResult.error) throw linkedResult.error
     const linkedTraders = linkedResult.data || []
+    const verified =
+      exactVerified?.user_id === user.id &&
+      exactVerified.trader_id === traderId &&
+      exactVerified.source === source
+        ? exactVerified
+        : null
 
-    return success({
-      claim,
-      verified_trader: verified,
-      is_verified: !!verified,
-      linked_traders: linkedTraders,
-      linked_count: linkedTraders.length,
-    })
+    return withPrivateNoStore(
+      success({
+        claim,
+        verified_trader: verified,
+        is_verified: !!verified,
+        linked_traders: linkedTraders,
+        linked_count: linkedTraders.length,
+      })
+    )
   } catch (error: unknown) {
-    return handleError(error, 'trader claim GET')
+    return withPrivateNoStore(handleError(error, 'trader claim GET'))
   }
 }
 
@@ -106,19 +131,19 @@ export async function GET(request: NextRequest) {
  * POST /api/traders/claim
  * Submit claim with verification proof.
  *
- * For CEX (API key): requires prior successful verify-ownership call
- * For DEX (wallet): requires signature verification
+ * V1 accepts only the wallet sources whose public leaderboard identity is the
+ * same address verified by the signature challenge.
  *
  * Body: {
  *   trader_id: string,
  *   source: string,
- *   verification_method: 'api_key' | 'signature',
- *   verification_data: { verified_uid?: string, wallet_address?: string, signature?: string, message?: string },
+ *   verification_method: 'signature',
+ *   verification_data: { wallet_address: string, signature: string, challenge_id: string },
  * }
  */
 export async function POST(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -132,13 +157,18 @@ export async function POST(request: NextRequest) {
     })
     const rawSource = validateString(body.source, { required: true, fieldName: 'source' })
     const source = rawSource?.toLowerCase()
-    const verification_method = validateEnum(body.verification_method, [
-      'api_key',
-      'signature',
-    ] as const)
+    const verification_method = validateEnum(body.verification_method, ['signature'] as const)
 
     if (!rawTraderId || !source || !verification_method) {
       throw ApiError.validation('Missing required parameters')
+    }
+
+    const requiredClaimMethod = claimMethodForSource(source)
+    if (requiredClaimMethod === 'unsupported') {
+      throw ApiError.validation(`Trader claims are not supported for source ${source}`)
+    }
+    if (verification_method !== requiredClaimMethod) {
+      throw ApiError.validation(`Source ${source} requires ${requiredClaimMethod} verification`)
     }
 
     let trader_id = rawTraderId
@@ -158,35 +188,8 @@ export async function POST(request: NextRequest) {
       throw ApiError.validation('This trader account has been claimed or is under review')
     }
 
-    // For API key verification, validate that verify-ownership was called and UID matches
-    if (verification_method === 'api_key') {
-      const verifiedUid = body.verification_data?.verified_uid
-
-      if (!verifiedUid) {
-        throw ApiError.validation(
-          'API key verification required. Please complete the verification step first.'
-        )
-      }
-
-      // Re-check the server-stored proof. Futures/spot leaderboard sources map
-      // to the base exchange connection written by verify-ownership.
-      const connectionIsVerified = await hasVerifiedClaimConnection(
-        supabase,
-        user.id,
-        source,
-        trader_id
-      )
-
-      if (!connectionIsVerified) {
-        logger.warn('[trader-claim] UID mismatch in claim submission', {
-          userId: user.id,
-          platform: source,
-        })
-        throw ApiError.validation(
-          'Verification mismatch. Your verified account does not match this trader.'
-        )
-      }
-    }
+    let walletReplayReservation: WalletReplayReservation | null = null
+    let challengeAttestation: WalletClaimChallengeAttestation | null = null
 
     // For wallet signature verification, verify the signature server-side
     if (verification_method === 'signature') {
@@ -198,7 +201,7 @@ export async function POST(request: NextRequest) {
       const proofRecord = proof as Record<string, unknown>
       const walletAddress = requireProofString(proofRecord.wallet_address, 'wallet_address', 512)
       const signature = requireProofString(proofRecord.signature, 'signature', 2048)
-      const message = requireProofString(proofRecord.message, 'message', 2048)
+      const challengeId = requireProofString(proofRecord.challenge_id, 'challenge_id', 64)
 
       // Verify that wallet_address matches trader_id
       if (!walletIdentitiesMatch(walletAddress, trader_id, source)) {
@@ -210,38 +213,27 @@ export async function POST(request: NextRequest) {
         const verification = await verifyWalletOwnership(supabase, user.id, {
           wallet_address: walletAddress,
           signature,
-          message,
+          challenge_id: challengeId,
           platform: source,
           trader_key: trader_id,
         })
-        body.verification_data = {
-          wallet_address: verification.wallet_address,
-          signature,
-          message,
-        }
+        walletReplayReservation = verification.reservation
+        challengeAttestation = verification.challenge_attestation
       } catch (err) {
+        if ((err as { statusCode?: unknown })?.statusCode === 503) throw err
         const msg = err instanceof Error ? err.message : 'Wallet signature verification failed'
         throw ApiError.validation(msg)
       }
     }
 
-    // Verification passed — queue for MANUAL owner review (2026-07-09 owner
-    // decision: "UID 加人工,我来一个个看"). The API-key UID match / wallet
-    // signature above proves account OWNERSHIP; the owner personally confirms
-    // the claim before any badge/authorization side effect fires. The whole
-    // activation chain (verified_traders / user_linked_traders / user_profiles
-    // / trader_authorizations) moved to activateClaim(), called from the admin
-    // approve path (lib/data/trader-claims.ts reviewClaim).
+    // Verification passed — queue for manual owner review. The wallet
+    // signature proves control of the leaderboard address; the owner confirms
+    // the claim before any verified profile or badge projection is created.
+    // Activation is centralized in activateClaim(), called from the admin
+    // approval path (lib/data/trader-claims.ts reviewClaim).
 
-    // Hash sensitive UIDs before storing in verification_data
-    let sanitizedVerificationData = body.verification_data || {}
-    if (verification_method === 'api_key' && sanitizedVerificationData.verified_uid) {
-      const uidHash = crypto
-        .createHash('sha256')
-        .update(String(sanitizedVerificationData.verified_uid))
-        .digest('hex')
-        .slice(0, 16)
-      sanitizedVerificationData = { uid_hash: uidHash }
+    if (!challengeAttestation) {
+      throw ApiError.validation('A verified wallet challenge attestation is required')
     }
 
     let claim
@@ -249,14 +241,41 @@ export async function POST(request: NextRequest) {
       claim = await submitClaim(supabase, user.id, {
         trader_id,
         source,
-        verification_method,
-        verification_data: sanitizedVerificationData,
+        ...challengeAttestation,
       })
     } catch (error) {
+      if (walletReplayReservation) {
+        try {
+          await walletReplayReservation.release()
+        } catch (releaseError) {
+          // Fail closed: if Redis is unavailable, its TTL keeps the reservation
+          // blocked. Never issue a blind DEL that could release another request.
+          logger.error('[trader-claim] Wallet challenge cleanup failed', {}, releaseError as Error)
+        }
+      }
       if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
         throw ApiError.validation('This trader has already been claimed')
       }
       throw error
+    }
+
+    if (walletReplayReservation) {
+      try {
+        const consumed = await walletReplayReservation.consume()
+        if (!consumed) {
+          // The claim is already durable. A missing ownership token must not
+          // turn into an unsafe cleanup; challenge expiry and the DB identity
+          // constraint remain fail-closed.
+          logger.error('[trader-claim] Wallet challenge consume lost reservation ownership', {
+            userId: user.id,
+            source,
+          })
+        }
+      } catch (consumeError) {
+        // Leaving the owner token until TTL is safer than retrying with a
+        // non-atomic write after the claim has already committed.
+        logger.error('[trader-claim] Wallet challenge consume failed', {}, consumeError as Error)
+      }
     }
 
     // In-app notification to the claimant (fire-and-forget, deduped).
@@ -274,13 +293,20 @@ export async function POST(request: NextRequest) {
     // Owner alert (Telegram) — the review queue ping.
     notifyTraderClaim(user.email ?? null, trader_id, source)
 
-    return success({
-      claim,
-      message:
-        'Verification passed! Your claim is under review — you will be notified once approved.',
-      auto_approved: false,
-    })
+    return withPrivateNoStore(
+      success({
+        claim,
+        message:
+          'Verification passed! Your claim is under review — you will be notified once approved.',
+        auto_approved: false,
+      })
+    )
   } catch (error: unknown) {
-    return handleError(error, 'trader claim POST')
+    const response = handleError(error, 'trader claim POST')
+    if ((error as { statusCode?: unknown })?.statusCode === 503) {
+      response.headers.set('Retry-After', '30')
+      response.headers.set('Cache-Control', 'private, no-store')
+    }
+    return withPrivateNoStore(response)
   }
 }

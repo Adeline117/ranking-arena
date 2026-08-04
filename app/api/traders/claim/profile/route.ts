@@ -23,10 +23,23 @@ import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
 
 const logger = createLogger('claim-profile')
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
 
 export async function PUT(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -149,12 +162,14 @@ export async function PUT(request: NextRequest) {
       fields: Object.keys(updates),
     })
 
-    return success({
-      verified_trader: updated,
-      message: 'Profile updated successfully',
-    })
+    return withPrivateNoStore(
+      success({
+        verified_trader: updated,
+        message: 'Profile updated successfully',
+      })
+    )
   } catch (error: unknown) {
     logger.error('Claim profile update failed', { error })
-    return handleError(error, 'claim profile PUT')
+    return withPrivateNoStore(handleError(error, 'claim profile PUT'))
   }
 }

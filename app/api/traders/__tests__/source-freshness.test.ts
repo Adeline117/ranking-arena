@@ -34,11 +34,20 @@ jest.mock('@/lib/api/middleware', () => ({
 const mockGetOrSetWithLock = jest.fn()
 const mockCacheSet = jest.fn()
 const mockReadSharedCacheWriteFence = jest.fn()
+const mockGetCanonicalPublicRanking = jest.fn()
 jest.mock('@/lib/cache', () => ({
   getOrSetWithLock: (...args: unknown[]) => mockGetOrSetWithLock(...args),
   set: (...args: unknown[]) => mockCacheSet(...args),
   readSharedCacheWriteFence: (...args: unknown[]) => mockReadSharedCacheWriteFence(...args),
 }))
+
+jest.mock('@/lib/rankings/canonical-public-cache', () => {
+  const actual = jest.requireActual('@/lib/rankings/canonical-public-cache')
+  return {
+    ...actual,
+    getCanonicalPublicRanking: (...args: unknown[]) => mockGetCanonicalPublicRanking(...args),
+  }
+})
 
 jest.mock('@/lib/data/verified-traders', () => ({
   getVerifiedTraderKeys: jest.fn(async () => new Set()),
@@ -83,6 +92,7 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
   let minimumRank: number | null = null
   let requirePublishedRank = false
   let pageLimit: number | null = null
+  let allowedSources: Set<string> | null = null
   const orders: Array<{ column: string; ascending: boolean }> = []
   const methods: Record<string, jest.Mock> = {}
   const proxy = new Proxy<Record<string, unknown>>(
@@ -93,6 +103,7 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
           const filtered = rows
             .filter((row) => !requirePublishedRank || row.rank != null)
             .filter((row) => minimumRank == null || Number(row.rank) > minimumRank)
+            .filter((row) => allowedSources == null || allowedSources.has(String(row.source)))
             .sort((left, right) => {
               for (const { column, ascending } of orders) {
                 const a = left[column]
@@ -142,6 +153,13 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
           })
           return methods.limit
         }
+        if (key === 'in') {
+          methods.in ??= jest.fn((column: string, values: string[]) => {
+            if (column === 'source') allowedSources = new Set(values)
+            return proxy
+          })
+          return methods.in
+        }
         methods[key] ??= jest.fn(() => proxy)
         return methods[key]
       },
@@ -163,12 +181,39 @@ describe('GET /api/traders source freshness', () => {
       key: 'public-rankings:write-fence:v1',
       token: '7',
     })
+    mockGetCanonicalPublicRanking.mockImplementation(
+      async ({ load }: { load: (context: unknown) => Promise<unknown> }) => ({
+        payload: await load({
+          signal: new AbortController().signal,
+          writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+        }),
+        source: 'fresh',
+      })
+    )
     jest.useFakeTimers().setSystemTime(new Date('2026-07-18T12:00:00.000Z'))
   })
 
   afterEach(() => {
     jest.useRealTimers()
   })
+
+  it.each(['sortBy=roi&order=desc&cursor=10', 'sortBy=arena_score&order=asc&cursor=10'])(
+    'rejects a rank cursor that cannot continue the requested ordering: %s',
+    async (query) => {
+      const response = await GET({
+        nextUrl: new URL(`http://localhost/api/traders?timeRange=90D&${query}`),
+      } as never)
+
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({
+        success: false,
+        error: expect.objectContaining({
+          message: expect.stringContaining('Cursor pagination supports only arena_score'),
+        }),
+      })
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
 
   it('keeps stale rows visible while exposing source timestamps per row and page', async () => {
     const generation = '2026-07-18T11:55:00.000Z'
@@ -266,6 +311,8 @@ describe('GET /api/traders source freshness', () => {
       'in',
       '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
+    expect(rankingQuery?.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal))
+    expect(freshnessQuery?.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal))
   })
 
   it('continues an arena-score tie by persisted rank without losing a row', async () => {
@@ -348,20 +395,70 @@ describe('GET /api/traders source freshness', () => {
       ])
     }
     expect(rankingQueries[1].gt).toHaveBeenCalledWith('rank', 2)
-    expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v3:/),
-      expect.any(Function),
-      {
-        ttl: 300,
-        lockTtl: 10,
-        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
-        skipMemory: true,
-        writeFenceKey: 'public-rankings:write-fence:v1',
-      }
+    expect(mockGetCanonicalPublicRanking).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keys: {
+          liveKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
+          lkgKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
+        },
+      })
     )
   })
 
-  it('warms the exact versioned full-response key only after Redis confirms it', async () => {
+  it('filters retired sources before the canonical raw top-500 limit', async () => {
+    const generation = '2026-07-18T11:55:00.000Z'
+    const activeRows = Array.from({ length: 500 }, (_, index) => ({
+      source: 'binance_futures',
+      source_trader_id: `active-${index + 1}`,
+      source_type: 'futures',
+      handle: `Active ${index + 1}`,
+      arena_score: 99 - index / 100,
+      rank: index + 2,
+      computed_at: generation,
+    }))
+    let rankingQuery: ReturnType<typeof rankedPageQuery> | undefined
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') {
+        rankingQuery = rankedPageQuery([
+          {
+            source: 'aevo',
+            source_trader_id: 'retired-first',
+            source_type: 'futures',
+            handle: 'Retired',
+            arena_score: 100,
+            rank: 1,
+            computed_at: generation,
+          },
+          ...activeRows,
+        ])
+        return rankingQuery
+      }
+      if (table === 'leaderboard_count_cache') {
+        return queryResult([
+          { source: '_all_gt0', total_count: 500, updated_at: generation },
+          { source: 'binance_futures_gt0', total_count: 500, updated_at: generation },
+        ])
+      }
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D&limit=500'),
+    } as never)
+    const body = await response.json()
+
+    expect(body.traders).toHaveLength(500)
+    expect(body.traders.some(({ source }: { source: string }) => source === 'aevo')).toBe(false)
+    expect(rankingQuery?.in).toHaveBeenCalledWith('source', expect.any(Array))
+  })
+
+  it('warms canonical live and LKG keys only after Redis confirms both', async () => {
     const generation = '2026-07-18T11:55:00.000Z'
     mockFrom.mockImplementation((table: string) => {
       if (table === 'leaderboard_ranks') {
@@ -395,8 +492,9 @@ describe('GET /api/traders source freshness', () => {
     await expect(
       warmDefaultPublicTradersCache({ from: mockFrom } as never, '90D', 50)
     ).resolves.toBe(1)
-    expect(mockCacheSet).toHaveBeenCalledWith(
-      'public-rank-policy-v7:leaderboard:v3:90D:all:all:arena_score:desc:start:50',
+    expect(mockCacheSet).toHaveBeenNthCalledWith(
+      1,
+      'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
       expect.objectContaining({
         traders: [expect.objectContaining({ id: 'rank-one', rank: 1 })],
         totalCount: 1,
@@ -406,7 +504,23 @@ describe('GET /api/traders source freshness', () => {
         tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         skipMemory: true,
         writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+        writeLock: undefined,
       }
+    )
+    expect(mockCacheSet).toHaveBeenNthCalledWith(
+      2,
+      'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
+      expect.objectContaining({
+        schema: 'public-ranking-canonical-v1',
+        publicationToken: '7',
+        payload: expect.objectContaining({ totalCount: 1 }),
+      }),
+      expect.objectContaining({
+        ttl: 86_400,
+        tags: ['rankings-lkg:rankings:public-rank-policy-v7:v1'],
+        skipMemory: true,
+        writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
+      })
     )
 
     mockCacheSet.mockResolvedValueOnce(false)
@@ -415,24 +529,38 @@ describe('GET /api/traders source freshness', () => {
     ).rejects.toThrow('[90D] public traders Redis cache write was not confirmed')
   })
 
+  it('bounds publication warmup even when the write fence lookup hangs', async () => {
+    mockReadSharedCacheWriteFence.mockImplementation(() => new Promise(() => undefined))
+
+    const pending = warmDefaultPublicTradersCache({ from: mockFrom } as never, '90D', 50)
+    const rejection = expect(pending).rejects.toThrow('Public ranking request timed out')
+    await jest.advanceTimersByTimeAsync(6_500)
+
+    await rejection
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
   it('sanitizes a polluted cache hit without truncating safe rows after the quarantine', async () => {
     const first = { source: 'binance_futures', id: 'first' }
     const last = { source: 'hyperliquid', id: 'last' }
-    mockGetOrSetWithLock.mockResolvedValue({
-      traders: [first, { source: 'okx_web3_solana', id: 'blocked' }, last],
-      timeRange: '90D',
-      totalCount: 999,
-      hasMore: true,
-      nextCursor: 50,
-      lastUpdated: 'blocked-aggregate-watermark',
-      dataAgeMinutes: 1,
-      isStale: false,
-      availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
-      source_freshness: [
-        { source: 'binance_futures', updated_at: 'safe' },
-        { source: 'okx_web3_solana', updated_at: 'blocked' },
-        { source: 'hyperliquid', updated_at: 'safe' },
-      ],
+    mockGetCanonicalPublicRanking.mockResolvedValue({
+      payload: {
+        traders: [first, { source: 'okx_web3_solana', id: 'blocked' }, last],
+        timeRange: '90D',
+        totalCount: 999,
+        hasMore: true,
+        nextCursor: 50,
+        lastUpdated: 'blocked-aggregate-watermark',
+        dataAgeMinutes: 1,
+        isStale: false,
+        availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
+        source_freshness: [
+          { source: 'binance_futures', updated_at: 'safe' },
+          { source: 'okx_web3_solana', updated_at: 'blocked' },
+          { source: 'hyperliquid', updated_at: 'safe' },
+        ],
+      },
+      source: 'live',
     })
 
     const response = await GET({
@@ -440,14 +568,7 @@ describe('GET /api/traders source freshness', () => {
     } as never)
     const body = await response.json()
 
-    expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v3:/),
-      expect.any(Function),
-      expect.objectContaining({
-        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
-        skipMemory: true,
-      })
-    )
+    expect(mockGetCanonicalPublicRanking).toHaveBeenCalled()
     expect(body.traders).toEqual([first, last])
     expect(body.totalCount).toBe(2)
     expect(body.hasMore).toBe(false)
@@ -462,6 +583,70 @@ describe('GET /api/traders source freshness', () => {
     ])
   })
 
+  it('slices different legacy pages from the same canonical LKG and marks both stale', async () => {
+    const canonicalRows = [1, 2, 3, 4].map((rank) => ({
+      source: 'binance_futures',
+      id: `trader-${rank}`,
+      rank,
+    }))
+    mockGetCanonicalPublicRanking.mockResolvedValue({
+      payload: { traders: canonicalRows, timeRange: '90D', totalCount: 10 },
+      source: 'lkg',
+    })
+
+    const firstResponse = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D&limit=2&page=0'),
+    } as never)
+    const secondResponse = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D&limit=2&page=1'),
+    } as never)
+    const first = await firstResponse.json()
+    const second = await secondResponse.json()
+
+    expect(first.traders.map(({ rank }: { rank: number }) => rank)).toEqual([1, 2])
+    expect(second.traders.map(({ rank }: { rank: number }) => rank)).toEqual([3, 4])
+    expect(first).toEqual(
+      expect.objectContaining({ isStale: true, stale_reason: 'dependency_unavailable' })
+    )
+    expect(second).toEqual(
+      expect.objectContaining({ isStale: true, stale_reason: 'dependency_unavailable' })
+    )
+    const requestedKeys = mockGetCanonicalPublicRanking.mock.calls.map(([options]) => options.keys)
+    expect(requestedKeys).toEqual([
+      {
+        liveKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
+        lkgKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
+      },
+      {
+        liveKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
+        lkgKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
+      },
+    ])
+  })
+
+  it('maps a canonical miss without LKG to service unavailable', async () => {
+    mockGetCanonicalPublicRanking.mockRejectedValue(new Error('source unavailable'))
+
+    await expect(
+      GET({ nextUrl: new URL('http://localhost/api/traders?timeRange=90D') } as never)
+    ).rejects.toMatchObject({ statusCode: 503, code: 'SERVICE_UNAVAILABLE' })
+  })
+
+  it('does not refresh canonical live or LKG when count authority fails', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_ranks') return queryResult([])
+      if (table === 'leaderboard_count_cache') {
+        return queryResult([], { message: 'count unavailable' })
+      }
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    await expect(
+      GET({ nextUrl: new URL('http://localhost/api/traders?timeRange=90D') } as never)
+    ).rejects.toMatchObject({ statusCode: 503, code: 'SERVICE_UNAVAILABLE' })
+    expect(mockCacheSet).not.toHaveBeenCalled()
+  })
+
   it('returns an honest empty board for an explicitly quarantined source without DB access', async () => {
     const response = await GET({
       nextUrl: new URL('http://localhost/api/traders?timeRange=90D&exchange=okx_web3_solana'),
@@ -472,7 +657,17 @@ describe('GET /api/traders source freshness', () => {
     expect(body).toEqual(
       expect.objectContaining({ traders: [], totalCount: 0, availableSources: [] })
     )
-    expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+    expect(mockGetCanonicalPublicRanking).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejects a retired exchange before cache or database access', async () => {
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D&exchange=aevo'),
+    } as never)
+
+    expect(response.status).toBe(400)
+    expect(mockGetCanonicalPublicRanking).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
 })

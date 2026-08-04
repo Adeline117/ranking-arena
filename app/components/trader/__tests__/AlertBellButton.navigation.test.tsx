@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockAuthedFetch = jest.fn()
 const mockOpenLoginModal = jest.fn()
-const mockTrackEvent = jest.fn()
 const mockAlertConfig = jest.fn(() => null)
 
 function jwt(userId: string): string {
@@ -108,10 +107,6 @@ jest.mock('@/app/components/ui/ModalOverlay', () => ({
     ) : null,
 }))
 
-jest.mock('@/lib/analytics/track', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
-}))
-
 import AlertBellButton from '../AlertBellButton'
 import {
   __resetViewerScopeForTests,
@@ -159,12 +154,6 @@ describe('AlertBellButton durable navigation', () => {
         userId: 'user-1',
       })
     )
-    expect(mockTrackEvent).toHaveBeenCalledWith('create_trader_alert', {
-      traderId: 'trader-1',
-      source: 'binance',
-      step: 'open',
-    })
-
     fireEvent.click(screen.getByRole('link', { name: 'View all alerts' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 

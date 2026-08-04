@@ -8,7 +8,7 @@ import {
   getUserVerifiedTrader,
   reviewClaim,
   cancelClaim,
-  type CreateClaimInput,
+  type SubmitClaimInput,
   type VerificationMethod,
 } from '@/lib/data/trader-claims'
 
@@ -21,16 +21,18 @@ describe('/api/traders/claim', () => {
       expect(methods).toContain('signature')
     })
 
-    it('should define CreateClaimInput correctly', () => {
-      const input: CreateClaimInput = {
-        trader_id: 'trader123',
-        source: 'binance_futures',
-        verification_method: 'api_key',
-        verification_data: { key: 'test' },
+    it('defines only the typed V2 wallet attestation submit input', () => {
+      const input: SubmitClaimInput = {
+        trader_id: '0x1111111111111111111111111111111111111111',
+        source: 'hyperliquid',
+        challenge_id: 'a'.repeat(64),
+        challenge_issued_at: '2026-08-03T00:00:00.000Z',
+        verified_at: '2026-08-03T00:01:00.000Z',
+        message_sha256: 'b'.repeat(64),
+        signature_sha256: 'c'.repeat(64),
       }
-      expect(input.trader_id).toBe('trader123')
-      expect(input.source).toBe('binance_futures')
-      expect(input.verification_method).toBe('api_key')
+      expect(input.source).toBe('hyperliquid')
+      expect(input.challenge_id).toHaveLength(64)
     })
 
     it('should export all required functions', () => {
@@ -53,19 +55,19 @@ describe('/api/traders/claim', () => {
 
   describe('claim request validation', () => {
     it('should require trader_id', () => {
-      const body = { source: 'binance', verification_method: 'api_key' }
+      const body = { source: 'hyperliquid', verification_method: 'signature' }
       expect(body.source).toBeDefined()
       expect((body as Record<string, unknown>).trader_id).toBeUndefined()
     })
 
     it('should require source', () => {
-      const body = { trader_id: 'abc', verification_method: 'api_key' }
+      const body = { trader_id: '0xabc', verification_method: 'signature' }
       expect(body.trader_id).toBeDefined()
       expect((body as Record<string, unknown>).source).toBeUndefined()
     })
 
     it('should require verification_method', () => {
-      const body = { trader_id: 'abc', source: 'binance' }
+      const body = { trader_id: '0xabc', source: 'hyperliquid' }
       expect(body.trader_id).toBeDefined()
       expect((body as Record<string, unknown>).verification_method).toBeUndefined()
     })

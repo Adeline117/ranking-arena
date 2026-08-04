@@ -5,7 +5,7 @@
  * Includes:
  * - Marketing content explaining benefits
  * - Search box to find trader profile
- * - Verification flow (API key for CEX, wallet for DEX)
+ * - V1 wallet-signature verification for Hyperliquid and GMX
  * - FAQ section
  * - Stats (claimed/total traders)
  */
@@ -20,16 +20,16 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 
-import { SearchResult, LinkedTrader, isDex } from './components/types'
+import { SearchResult, LinkedTrader } from './components/types'
 import { HeroSection } from './components/HeroSection'
 import { BenefitsSection } from './components/BenefitsSection'
 import { SearchSection } from './components/SearchSection'
 import { FaqSection } from './components/FaqSection'
-import { CexVerifyForm } from './components/CexVerifyForm'
 import { DexVerifyForm } from './components/DexVerifyForm'
 import { LinkedAccountsSidebar } from './components/LinkedAccountsSidebar'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
+import { claimMethodForSource } from '@/lib/constants/trader-claim-platforms'
 
 // ============================================
 // Main Page Component
@@ -114,6 +114,12 @@ export default function ClaimPage() {
   }, [fetchLinkedTraders, getAuthUser])
 
   const handleTraderSelect = async (result: SearchResult) => {
+    if (claimMethodForSource(result.source) === 'unsupported') {
+      setSelectedTrader(result)
+      setStep('verify')
+      return
+    }
+
     const activeUser = authChecked ? user : await getAuthUser()
     if (!authChecked) {
       setUser(activeUser)
@@ -145,6 +151,10 @@ export default function ClaimPage() {
       }
     }, 2000)
   }
+
+  const selectedClaimMethod = selectedTrader
+    ? claimMethodForSource(selectedTrader.source)
+    : 'unsupported'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -260,6 +270,25 @@ export default function ClaimPage() {
               <Box style={{ textAlign: 'center' }}>
                 <Text>{t('loading')}</Text>
               </Box>
+            ) : selectedClaimMethod === 'unsupported' ? (
+              <Box
+                role="alert"
+                style={{
+                  maxWidth: 500,
+                  margin: '0 auto',
+                  padding: tokens.spacing[4],
+                  border: `1px solid ${alpha(tokens.colors.accent.warning, 35)}`,
+                  borderRadius: tokens.radius.md,
+                  backgroundColor: alpha(tokens.colors.accent.warning, 8),
+                }}
+              >
+                <h3 style={{ marginBottom: tokens.spacing[2] }}>
+                  {t('claimSourceUnsupportedTitle')}
+                </h3>
+                <Text style={{ color: tokens.colors.text.secondary }}>
+                  {t('claimSourceUnsupportedBody')}
+                </Text>
+              </Box>
             ) : !user ? (
               <Box style={{ textAlign: 'center' }}>
                 <Text style={{ marginBottom: tokens.spacing[3] }}>{t('pleaseLoginFirst')}</Text>
@@ -286,11 +315,9 @@ export default function ClaimPage() {
                   {t('loginToClaim')}
                 </button>
               </Box>
-            ) : isDex(selectedTrader.source) ? (
+            ) : selectedClaimMethod === 'signature' ? (
               <DexVerifyForm trader={selectedTrader} onSuccess={handleClaimSuccess} />
-            ) : (
-              <CexVerifyForm trader={selectedTrader} onSuccess={handleClaimSuccess} />
-            )}
+            ) : null}
           </Box>
         )}
 

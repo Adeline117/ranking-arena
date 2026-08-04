@@ -8,7 +8,7 @@
  * win_rate_basis='income_events'). Everything degrades gracefully: a surface
  * an exchange doesn't support just yields fewer inputs, never a throw-away.
  *
- * Client construction mirrors lib/portfolio/exchange-sync.ts (geo proxy for
+ * Client construction uses lib/exchange/ccxt-read-transport.ts (geo proxy for
  * binance/okx, passphrase exchanges, read-only calls exclusively).
  */
 
