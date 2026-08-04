@@ -157,6 +157,8 @@ describe('translation server request contract', () => {
     ['비트코인이 상승했다', 'ko'],
     ['比特币BTC', 'unknown'],
     ['한글AB', 'unknown'],
+    ['Trading markets rallied 거래', 'unknown'],
+    ['Trading markets rallied の速報', 'unknown'],
     ['🚀 12345 $', 'unknown'],
   ])('detects %s as %s', (text, expected) => {
     expect(detectTranslationSourceLanguage(text)).toBe(expected)

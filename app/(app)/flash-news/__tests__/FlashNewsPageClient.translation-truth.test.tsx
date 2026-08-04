@@ -251,7 +251,6 @@ describe('FlashNewsPageClient translation truth', () => {
   })
 
   it.each([
-    ['Chinese', 'zh', '比特币价格今日持续上涨', 'English source needs a translation'],
     ['English', 'en', 'Bitcoin markets rallied after the announcement', '比特币价格今日持续上涨'],
     ['Japanese', 'ja', 'ビットコイン価格が上昇しました', 'English source needs a translation'],
     ['Korean', 'ko', '비트코인 가격이 오늘 상승했습니다', 'English source needs a translation'],
@@ -310,11 +309,17 @@ describe('FlashNewsPageClient translation truth', () => {
     const japanese = newsItem('source-ja', 'ビットコイン価格が上昇しました')
     const korean = newsItem('source-ko', '비트코인 가격이 상승했습니다')
     const mixed = newsItem('source-mixed', '比特币BTC')
+    const majorityEnglishMixed = newsItem(
+      'source-majority-mixed',
+      'Trading markets rallied sharply 거래 속보'
+    )
     let translationRequest: ReturnType<typeof parsedBody> | undefined
     const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
       const url = String(input)
       if (url.startsWith('/api/flash-news')) {
-        return Promise.resolve(response(newsPage([sameLanguage, japanese, korean, mixed])))
+        return Promise.resolve(
+          response(newsPage([sameLanguage, japanese, korean, mixed, majorityEnglishMixed]))
+        )
       }
       if (url === '/api/translate') {
         translationRequest = parsedBody(options)
@@ -322,9 +327,13 @@ describe('FlashNewsPageClient translation truth', () => {
           [japanese.id]: { translatedText: 'Japanese news in English', cached: false },
           [korean.id]: { translatedText: 'Korean news in English', cached: false },
           [mixed.id]: { translatedText: mixed.content, cached: true },
+          [majorityEnglishMixed.id]: {
+            translatedText: 'Trading markets rallied after breaking news',
+            cached: false,
+          },
         })
         payload.data.cached = 1
-        payload.data.translated = 2
+        payload.data.translated = 3
         return Promise.resolve(response(payload))
       }
       throw new Error(`Unexpected request: ${url}`)
@@ -339,6 +348,7 @@ describe('FlashNewsPageClient translation truth', () => {
       japanese.id,
       korean.id,
       mixed.id,
+      majorityEnglishMixed.id,
     ])
     expect(translationRequest?.items.every(({ text }) => text.length > 0)).toBe(true)
     expect(screen.getByText(sameLanguage.content)).toBeInTheDocument()

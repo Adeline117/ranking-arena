@@ -4,6 +4,7 @@ import {
   TRANSLATION_MAX_BATCH_TEXT_LENGTH,
   TRANSLATION_MAX_TEXT_LENGTH,
 } from './translation-limits'
+import { detectClearTranslationSourceLanguage } from './translation-language'
 
 export {
   TRANSLATION_MAX_BATCH_ITEMS,
@@ -289,41 +290,9 @@ export function splitTranslationText(
   return chunks
 }
 
-const HAN_RE = /\p{Script=Han}/u
-const HIRAGANA_RE = /\p{Script=Hiragana}/u
-const KATAKANA_RE = /\p{Script=Katakana}/u
-const HANGUL_RE = /\p{Script=Hangul}/u
-const LATIN_RE = /\p{Script=Latin}/u
-
 /** Detect the four supported source languages without treating emoji/numbers as English. */
 export function detectTranslationSourceLanguage(text: string): TranslationSourceLanguage {
-  let han = 0
-  let kana = 0
-  let hangul = 0
-  let latin = 0
-
-  for (const character of text) {
-    if (HIRAGANA_RE.test(character) || KATAKANA_RE.test(character)) kana += 1
-    else if (HANGUL_RE.test(character)) hangul += 1
-    else if (HAN_RE.test(character)) han += 1
-    else if (LATIN_RE.test(character)) latin += 1
-  }
-
-  // Han characters are shared by Chinese and Japanese. Without Kana there is
-  // no truthful local distinction (for example, `仮想通貨市場` is Japanese), so
-  // keep Han-only or Han-dominant text ambiguous and let the provider's auto
-  // detection decide. This deliberately favors a network lookup over a false
-  // same-language receipt.
-  const candidates: Array<[TranslationTargetLanguage, number]> = [
-    ['ja', kana > 0 ? kana + han : 0],
-    ['ko', hangul],
-    ['en', latin],
-  ]
-  candidates.sort((left, right) => right[1] - left[1])
-
-  const [leader, runnerUp] = candidates
-  const recognized = han + kana + hangul + latin
-  return leader[1] > runnerUp[1] && leader[1] / recognized > 0.6 ? leader[0] : 'unknown'
+  return detectClearTranslationSourceLanguage(text) ?? 'unknown'
 }
 
 export function isUsableTranslationText(value: unknown, sourceText: string): value is string {

@@ -221,6 +221,42 @@ describe('useSearchData translation truth', () => {
     }
   )
 
+  it('sends majority-English mixed-script text instead of hiding the foreign fragment', async () => {
+    mockLanguage = 'en'
+    const source = 'Trading markets rallied sharply after the open 거래 속보'
+    let capturedBody: TranslationBody | undefined
+    installFetch(
+      () => [rawPost('mixed-post', 'Untitled', source)],
+      async (options) => {
+        capturedBody = translationBody(options)
+        return response(
+          batchEnvelope({
+            'mixed-post': {
+              translatedText: 'Trading markets rallied after breaking news',
+              cached: false,
+            },
+          })
+        )
+      }
+    )
+
+    const { result } = renderHook(() => useSearchData(true, ''))
+
+    await waitFor(() =>
+      expect(result.current.translatedTitles['en:mixed-post']).toBe(
+        'Trading markets rallied after breaking news'
+      )
+    )
+    expect(capturedBody?.items).toEqual([
+      {
+        id: 'mixed-post',
+        text: source,
+        contentType: 'post_title',
+        contentId: 'mixed-post',
+      },
+    ])
+  })
+
   it('fails closed when the bearer identity does not match the committed viewer', async () => {
     mockUseAuthSession.mockReturnValue({
       ...authenticatedSession(),

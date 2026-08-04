@@ -19,6 +19,7 @@ import {
   type BatchTranslationItem,
   type TranslationTargetLanguage,
 } from '@/lib/translations/translation-client-contract'
+import { detectClearTranslationSourceLanguage } from '@/lib/translations/translation-language'
 import { mapHotPosts, type HotPostSource } from './hot-posts'
 
 // Module-level cache for trending searches (5-min TTL)
@@ -69,18 +70,8 @@ type ActiveHotPostsRequest = {
 
 const MAX_TRANSLATION_SNAPSHOTS = 8
 
-function detectedTranslationSourceLanguage(text: string): TranslationTargetLanguage | null {
-  if (/[가-힯ᄀ-ᇿ㄰-㆏]/.test(text)) return 'ko'
-  if (/[぀-ヿㇰ-ㇿ]/.test(text)) return 'ja'
-  const chineseCharacterCount = text.match(/[\u4e00-\u9fff]/g)?.length ?? 0
-  const nonWhitespaceLength = text.replace(/\s/g, '').length || 1
-  if (chineseCharacterCount / nonWhitespaceLength > 0.1) return 'zh'
-  if (/[A-Za-z]/.test(text)) return 'en'
-  return null
-}
-
 function needsTranslation(source: string, targetLang: TranslationTargetLanguage): boolean {
-  return detectedTranslationSourceLanguage(source) !== targetLang
+  return detectClearTranslationSourceLanguage(source) !== targetLang
 }
 
 function isAbortError(error: unknown): boolean {

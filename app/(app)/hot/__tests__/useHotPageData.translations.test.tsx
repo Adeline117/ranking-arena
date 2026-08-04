@@ -378,6 +378,11 @@ describe('useHotPageData translation truth', () => {
   it.each([
     ['Japanese', '日本語の投稿です', 'Translated Japanese'],
     ['Korean', '한국어 게시물입니다', 'Translated Korean'],
+    [
+      'majority-English mixed Korean',
+      'Trading markets rallied sharply 거래 속보',
+      'Trading markets rallied after breaking news',
+    ],
   ])('translates exact %s modal content into English', async (_label, source, translated) => {
     let capturedBody: ReturnType<typeof requestBody> | undefined
     mockFetch.mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {

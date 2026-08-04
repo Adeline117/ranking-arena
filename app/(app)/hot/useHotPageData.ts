@@ -43,6 +43,7 @@ import {
   type BatchTranslationItem,
   type TranslationTargetLanguage,
 } from '@/lib/translations/translation-client-contract'
+import { detectClearTranslationSourceLanguage } from '@/lib/translations/translation-language'
 import type { Post, Comment } from './types'
 import { useCommentDraftPersistence } from '@/app/components/post/hooks/useCommentDraftPersistence'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
@@ -87,24 +88,8 @@ function translationLaneKey(...parts: string[]): string {
   return JSON.stringify(parts)
 }
 
-function detectedHotSourceLanguage(text: string): TranslationTargetLanguage | null {
-  if (!text.trim()) return null
-  const hasJapaneseKana = /[\u3040-\u30ff\u31f0-\u31ff]/.test(text)
-  const hasKorean = /[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/.test(text)
-  if (hasJapaneseKana && hasKorean) return null
-  if (hasJapaneseKana) return 'ja'
-  const hasHan = /[\u4e00-\u9fff]/.test(text)
-  if (hasKorean && hasHan) return null
-  if (hasKorean) return 'ko'
-  const hasLatin = /[A-Za-z]/.test(text)
-  if (hasHan && hasLatin) return null
-  if (hasHan) return 'zh'
-  if (hasLatin) return 'en'
-  return null
-}
-
 function needsHotTranslation(source: string, targetLang: TranslationTargetLanguage): boolean {
-  const sourceLang = detectedHotSourceLanguage(source)
+  const sourceLang = detectClearTranslationSourceLanguage(source)
   return sourceLang === null || sourceLang !== targetLang
 }
 

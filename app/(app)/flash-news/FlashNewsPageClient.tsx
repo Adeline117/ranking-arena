@@ -19,6 +19,7 @@ import {
   type BatchTranslationItem,
   type TranslationTargetLanguage,
 } from '@/lib/translations/translation-client-contract'
+import { detectClearTranslationSourceLanguage } from '@/lib/translations/translation-language'
 import CategoryFilter from './components/CategoryFilter'
 import NewsCard from './components/NewsCard'
 import NewsTimelineSkeleton from './components/NewsTimelineSkeleton'
@@ -95,53 +96,6 @@ type FlashNewsTranslationDescriptor = {
 }
 
 const FLASH_NEWS_TRANSLATION_BATCH_SIZE = 20
-const FLASH_NEWS_HAN_RE = /\p{Script=Han}/u
-const FLASH_NEWS_HIRAGANA_RE = /\p{Script=Hiragana}/u
-const FLASH_NEWS_KATAKANA_RE = /\p{Script=Katakana}/u
-const FLASH_NEWS_HANGUL_RE = /\p{Script=Hangul}/u
-const FLASH_NEWS_LATIN_RE = /\p{Script=Latin}/u
-
-/**
- * Detect only a clear four-language source. Numbers, emoji and punctuation do
- * not make a source English, while mixed scripts need a unique >60% leader.
- * Unknown/ambiguous text deliberately stays eligible for server-side `auto`.
- */
-function detectedFlashNewsSourceLanguage(text: string): TranslationTargetLanguage | null {
-  let han = 0
-  let kana = 0
-  let hangul = 0
-  let latin = 0
-
-  for (const character of text) {
-    if (FLASH_NEWS_HIRAGANA_RE.test(character) || FLASH_NEWS_KATAKANA_RE.test(character)) {
-      kana += 1
-    } else if (FLASH_NEWS_HANGUL_RE.test(character)) {
-      hangul += 1
-    } else if (FLASH_NEWS_HAN_RE.test(character)) {
-      han += 1
-    } else if (FLASH_NEWS_LATIN_RE.test(character)) {
-      latin += 1
-    }
-  }
-
-  const candidates: Array<[TranslationTargetLanguage, number]> =
-    kana > 0
-      ? [
-          ['ja', kana + han],
-          ['ko', hangul],
-          ['en', latin],
-        ]
-      : [
-          ['zh', han],
-          ['ko', hangul],
-          ['en', latin],
-        ]
-  candidates.sort((left, right) => right[1] - left[1])
-
-  const [leader, runnerUp] = candidates
-  const recognizedCharacters = candidates.reduce((total, candidate) => total + candidate[1], 0)
-  return leader[1] > runnerUp[1] && leader[1] / recognizedCharacters > 0.6 ? leader[0] : null
-}
 
 function pretranslatedContent(
   item: FlashNews,
@@ -162,7 +116,7 @@ function pretranslatedContent(
 function translationSource(item: FlashNews, targetLang: TranslationTargetLanguage): string | null {
   if (pretranslatedContent(item, targetLang)) return null
   if (typeof item.content !== 'string' || !item.content.trim()) return null
-  return detectedFlashNewsSourceLanguage(item.content) === targetLang ? null : item.content
+  return detectClearTranslationSourceLanguage(item.content) === targetLang ? null : item.content
 }
 
 function sameTranslationScope(
