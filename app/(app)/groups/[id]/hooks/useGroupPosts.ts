@@ -27,6 +27,13 @@ import {
   readPostDeleteAcknowledgement,
   readPostDeleteError,
 } from '@/lib/posts/post-delete-contract'
+import {
+  POST_BOOKMARK_OPERATION,
+  createPostBookmarkRequestId,
+  isDefinitivePostBookmarkRejection,
+  readPostBookmarkAcknowledgement,
+  readPostBookmarkStatusAcknowledgement,
+} from '@/lib/bookmarks/post-bookmark-client-contract'
 
 export interface Post {
   id: string
@@ -88,22 +95,47 @@ const POST_PAGE_SIZE = 20
 const POST_SELECT_FIELDS =
   'id, group_id, title, content, created_at, updated_at, content_version, language, mentions, hashtags, author_handle, author_id, like_count, dislike_count, comment_count, bookmark_count, repost_count, is_pinned'
 
-// Generic fetch for boolean user interactions such as bookmarks.
-async function fetchUserInteractions(
-  table: string,
+class BookmarkStatusReadError extends Error {
+  constructor() {
+    super('Bookmark status authority unavailable')
+    this.name = 'BookmarkStatusReadError'
+  }
+}
+
+// A failed personalized bookmark query is not equivalent to an explicit
+// empty result. Throw so the caller preserves its last-known viewer state.
+async function fetchUserBookmarks(
   postIds: string[],
   userId: string
 ): Promise<Record<string, boolean>> {
   if (!userId || postIds.length === 0) return {}
-  const { data } = await supabase
-    .from(table)
+  const { data, error } = await supabase
+    .from('post_bookmarks')
     .select('post_id')
     .eq('user_id', userId)
     .in('post_id', postIds)
+  if (error || !Array.isArray(data)) {
+    throw new BookmarkStatusReadError()
+  }
+
+  const requestedPostIds = new Set(postIds)
+  const seenPostIds = new Set<string>()
   const map: Record<string, boolean> = {}
-  data?.forEach((item) => {
+  for (const item of data) {
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      Array.isArray(item) ||
+      Object.keys(item).length !== 1 ||
+      typeof item.post_id !== 'string' ||
+      !requestedPostIds.has(item.post_id) ||
+      seenPostIds.has(item.post_id)
+    ) {
+      throw new BookmarkStatusReadError()
+    }
+    seenPostIds.add(item.post_id)
     map[item.post_id] = true
-  })
+  }
   return map
 }
 
@@ -182,7 +214,7 @@ async function enrichPostsWithUserState(postsList: Post[], userId: string): Prom
   const postIds = postsList.map((p) => p.id)
   const [reactionMap, bookmarkMap, repostMap] = await Promise.all([
     fetchUserPostReactions(postIds, userId),
-    fetchUserInteractions('post_bookmarks', postIds, userId),
+    fetchUserBookmarks(postIds, userId),
     fetchUserReposts(postIds, userId),
   ])
   postsList.forEach((post) => {
@@ -297,6 +329,7 @@ export function useGroupPosts({
   )
   const [repostComment, setRepostComment] = useViewerOwnedState('', () => '', scopeKey)
   const likeRequestLockRef = useRef<Set<string>>(new Set())
+  const bookmarkRequestLockRef = useRef<Set<string>>(new Set())
   const repostRequestLockRef = useRef<Set<string>>(new Set())
   const editRequestLockRef = useRef<Set<string>>(new Set())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
@@ -506,6 +539,7 @@ export function useGroupPosts({
     commentMutationLocksRef.current.clear()
     replyMutationLocksRef.current.clear()
     likeRequestLockRef.current.clear()
+    bookmarkRequestLockRef.current.clear()
     pinRequestLockRef.current.clear()
     editRequestLockRef.current.clear()
     deleteRequestLockRef.current.clear()
@@ -635,11 +669,16 @@ export function useGroupPosts({
         ) {
           return
         }
-        const error = err instanceof Error ? err.message : 'Failed to load posts'
+        const error =
+          err instanceof BookmarkStatusReadError
+            ? t('loadBookmarksFailed')
+            : err instanceof Error
+              ? err.message
+              : 'Failed to load posts'
         showToast(error, 'error')
       }
     },
-    [enrichPosts, fetchPosts, groupId, scopeIsCurrent, setHasMorePosts, setPosts, showToast]
+    [enrichPosts, fetchPosts, groupId, scopeIsCurrent, setHasMorePosts, setPosts, showToast, t]
   )
 
   // Infinite scroll: load more
@@ -872,29 +911,105 @@ export function useGroupPosts({
         showToast(t('pleaseLoginFirst'), 'warning')
         return
       }
-      if (bookmarkLoading[postId]) return // prevent double-click
       const context = captureMutationContext()
+      if (!context.scope.userId || !mutationContextIsCurrent(context)) return
+      const requestId = createPostBookmarkRequestId()
+      const lockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
+      if (bookmarkRequestLockRef.current.has(lockKey)) return
+      bookmarkRequestLockRef.current.add(lockKey)
       setPostLoading(setBookmarkLoading, postId, true)
-      const result = await apiCall(`/api/posts/${postId}/bookmark`, {}, context.scope)
-      if (!mutationContextIsCurrent(context)) return
-      if (result.ok) {
-        const data = result.data as { bookmarked: boolean; bookmark_count: number }
+      const previousPost = postsRef.current.find((post) => post.id === postId)
+      const previousBookmarked = previousPost?.user_bookmarked ?? false
+      const previousCount = previousPost?.bookmark_count ?? 0
+      const requestedBookmarked = !previousBookmarked
+      try {
+        const result = await apiCall(
+          `/api/posts/${postId}/bookmark`,
+          {
+            body: { operation: POST_BOOKMARK_OPERATION, request_id: requestId },
+          },
+          context.scope
+        )
+        if (!mutationContextIsCurrent(context)) return
+        const acknowledgement =
+          result.ok && result.status === 200
+            ? readPostBookmarkAcknowledgement(result.data, {
+                actorId: context.scope.userId,
+                postId,
+                requestId,
+              })
+            : null
+        if (acknowledgement) {
+          setPosts((prev) =>
+            prev.map((p) =>
+              p.id === postId
+                ? {
+                    ...p,
+                    user_bookmarked: acknowledgement.bookmarked,
+                    bookmark_count: acknowledgement.bookmarkCount,
+                  }
+                : p
+            )
+          )
+          return
+        }
+
+        if (isDefinitivePostBookmarkRejection(result.status)) {
+          showToast(
+            result.error || (result.status === 0 ? t('networkError') : t('operationFailed')),
+            'error'
+          )
+          return
+        }
+
+        const statusRequestId = createPostBookmarkRequestId()
+        const statusResult = await apiCall(
+          '/api/posts/bookmarks/status',
+          { body: { postIds: [postId], request_id: statusRequestId } },
+          context.scope
+        )
+        if (!mutationContextIsCurrent(context)) return
+        const statusAcknowledgement =
+          statusResult.ok && statusResult.status === 200
+            ? readPostBookmarkStatusAcknowledgement(statusResult.data, {
+                actorId: context.scope.userId,
+                requestId: statusRequestId,
+                postIds: [postId],
+              })
+            : null
+        if (!statusAcknowledgement) {
+          showToast(
+            result.error || (result.status === 0 ? t('networkError') : t('operationFailed')),
+            'error'
+          )
+          return
+        }
+
+        const bookmarked = statusAcknowledgement.bookmarks[postId.toLowerCase()]
+        const ownCountDelta = bookmarked === previousBookmarked ? 0 : bookmarked ? 1 : -1
         setPosts((prev) =>
           prev.map((p) =>
             p.id === postId
-              ? { ...p, user_bookmarked: data.bookmarked, bookmark_count: data.bookmark_count }
+              ? {
+                  ...p,
+                  user_bookmarked: bookmarked,
+                  bookmark_count: Math.max(0, (p.bookmark_count ?? previousCount) + ownCountDelta),
+                }
               : p
           )
         )
-      } else {
-        showToast(result.error || t('operationFailed'), 'error')
+        if (bookmarked !== requestedBookmarked) {
+          showToast(t('operationFailed'), 'error')
+        }
+      } finally {
+        if (bookmarkRequestLockRef.current.delete(lockKey) && mutationContextIsCurrent(context)) {
+          setPostLoading(setBookmarkLoading, postId, false)
+        }
       }
-      setPostLoading(setBookmarkLoading, postId, false)
     },
     [
       accessToken,
       apiCall,
-      bookmarkLoading,
       captureMutationContext,
       mutationContextIsCurrent,
       setBookmarkLoading,

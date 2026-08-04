@@ -9,13 +9,19 @@ import { z } from 'zod'
 import { withAuth, withApiMiddleware } from '@/lib/api/middleware'
 import { apiLogger } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
-import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
+import { canServiceActorReadPostStrict } from '@/lib/data/service-post-audience'
 import { createUserScopedServerClient } from '@/lib/supabase/user-scoped-server'
 import { validateBookmarkFolderSaveAck } from '@/lib/bookmarks/folder-save'
 
 const ToggleBookmarkSchema = z
   .object({
-    folder_id: z.string().uuid().optional().nullable(),
+    operation: z.literal('toggle'),
+    request_id: z.string().regex(/^[0-9a-f]{32}$/),
+  })
+  .strict()
+const SaveBookmarkSchema = z
+  .object({
+    folder_id: z.string().uuid(),
   })
   .strict()
 const RemoveBookmarkSchema = z
@@ -25,11 +31,17 @@ const RemoveBookmarkSchema = z
     folder_id: z.string().uuid(),
   })
   .strict()
-// Toggle remains body-optional for existing callers. Folder-detail removal is
-// an explicit identity-bound command and can never fall through to toggle.
-const BookmarkSchema = z.union([RemoveBookmarkSchema, ToggleBookmarkSchema]).optional()
+// Folder save/removal retain their existing identity-bound contracts. The
+// toggle command is explicit and request-bound so an empty or malformed body
+// can never mutate state.
+const BookmarkSchema = z.union([RemoveBookmarkSchema, SaveBookmarkSchema, ToggleBookmarkSchema])
 const PostIdSchema = z.string().uuid()
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -49,6 +61,13 @@ function sameUUID(value: unknown, expected: string): boolean {
     UUID_PATTERN.test(value) &&
     value.toLowerCase() === expected.toLowerCase()
   )
+}
+
+function privateNoStore(response: NextResponse): NextResponse {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
 }
 
 function parseBookmarkRemovalAck(
@@ -95,12 +114,12 @@ function parseBookmarkRemovalAck(
 // 检查用户是否已收藏 (auth optional — returns { bookmarked: false } when unauthenticated)
 export async function GET(request: NextRequest, context: RouteContext) {
   const guard = socialFeatureGuard()
-  if (guard) return guard
+  if (guard) return privateNoStore(guard)
 
   const { id } = await context.params
   const postId = PostIdSchema.safeParse(id)
   if (!postId.success) {
-    return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 })
+    return privateNoStore(NextResponse.json({ error: 'Invalid post ID' }, { status: 400 }))
   }
 
   const handler = withApiMiddleware(
@@ -109,41 +128,60 @@ export async function GET(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ bookmarked: false })
       }
 
-      if (!(await canServiceActorReadPost(supabase, postId.data, user.id))) {
+      let canReadPost: boolean
+      try {
+        canReadPost = await canServiceActorReadPostStrict(supabase, postId.data, user.id)
+      } catch (error) {
+        apiLogger.error('Bookmark audience authority failed:', error)
+        return NextResponse.json({ error: 'Failed to load bookmark status' }, { status: 500 })
+      }
+      if (!canReadPost) {
         return NextResponse.json({ bookmarked: false })
       }
 
-      const { data: bookmark } = await supabase
+      const { data: bookmark, error } = await supabase
         .from('post_bookmarks')
         .select('id')
         .eq('post_id', postId.data)
         .eq('user_id', user.id)
         .maybeSingle()
 
+      if (
+        error ||
+        (bookmark !== null &&
+          (!isRecord(bookmark) ||
+            !hasExactKeys(bookmark, ['id']) ||
+            typeof bookmark.id !== 'string' ||
+            !PostIdSchema.safeParse(bookmark.id).success))
+      ) {
+        apiLogger.error('Bookmark status query failed:', error)
+        return NextResponse.json({ error: 'Failed to load bookmark status' }, { status: 500 })
+      }
+
       return NextResponse.json({ bookmarked: !!bookmark })
     },
     { name: 'posts-bookmark-check', rateLimit: 'authenticated', readsAuth: true }
   )
 
-  return handler(request)
+  return privateNoStore(await handler(request))
 }
 
 // 收藏/取消收藏
 export async function POST(request: NextRequest, context: RouteContext) {
   const guard = socialFeatureGuard()
-  if (guard) return guard
+  if (guard) return privateNoStore(guard)
 
   const { id } = await context.params
   const postId = PostIdSchema.safeParse(id)
   if (!postId.success) {
-    return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 })
+    return privateNoStore(NextResponse.json({ error: 'Invalid post ID' }, { status: 400 }))
   }
 
   const handler = withAuth(
     async ({ user, supabase, request: req }) => {
       let input: z.infer<typeof BookmarkSchema>
       try {
-        const body = req.body === null ? undefined : await req.json()
+        const body = await req.json()
         const parsed = BookmarkSchema.safeParse(body)
         if (!parsed.success) {
           return NextResponse.json(
@@ -156,7 +194,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
       }
 
-      if (input && 'action' in input && input.action === 'remove') {
+      if ('action' in input && input.action === 'remove') {
         const userSupabase = createUserScopedServerClient(req)
         const { data, error } = await userSupabase.rpc('remove_post_bookmark_from_folder_atomic', {
           p_post_id: postId.data,
@@ -202,7 +240,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         })
       }
 
-      if (input?.folder_id) {
+      if ('folder_id' in input) {
         const userSupabase = createUserScopedServerClient(req)
         const { data, error } = await userSupabase.rpc('save_post_bookmark_to_folder_atomic', {
           p_post_id: postId.data,
@@ -241,53 +279,71 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json(result)
       }
 
-      const folder_id = input?.folder_id ?? null
+      const actorId = PostIdSchema.safeParse(user.id)
+      if (!actorId.success) {
+        return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
+      }
 
       const { data, error } = await supabase.rpc('toggle_post_bookmark_atomic', {
-        p_actor_id: user.id,
+        p_actor_id: actorId.data,
         p_post_id: postId.data,
-        p_folder_id: folder_id,
+        p_folder_id: null,
       })
 
       if (error) {
         apiLogger.error('Atomic bookmark toggle failed:', error)
         return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
       }
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      if (!isRecord(data)) {
         return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
       }
 
-      const result = data as Record<string, unknown>
+      const result = data
       if (result.status === 'not_found') {
+        if (!hasExactKeys(result, ['status'])) {
+          return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
+        }
         return NextResponse.json({ error: 'Post not found' }, { status: 404 })
       }
       if (result.status === 'invalid_folder') {
+        if (!hasExactKeys(result, ['status'])) {
+          return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
+        }
         return NextResponse.json({ error: 'Bookmark folder not found' }, { status: 404 })
       }
       if (result.status === 'invalid') {
+        if (!hasExactKeys(result, ['status'])) {
+          return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
+        }
         return NextResponse.json({ error: 'Invalid bookmark request' }, { status: 400 })
       }
 
       const action = result.action
-      const validAction = action === 'added' || action === 'removed' || action === 'moved'
-      const expectedBookmarked = action !== 'removed'
+      const validAction = action === 'added' || action === 'removed'
+      const expectedBookmarked = action === 'added'
       const validFolder =
         (action === 'removed' && result.folder_id === null) ||
-        ((action === 'added' || action === 'moved') &&
+        (action === 'added' &&
           typeof result.folder_id === 'string' &&
           PostIdSchema.safeParse(result.folder_id).success)
       if (
+        !hasExactKeys(result, ['action', 'bookmark_count', 'bookmarked', 'folder_id', 'status']) ||
         result.status !== action ||
         !validAction ||
         result.bookmarked !== expectedBookmarked ||
         !Number.isSafeInteger(result.bookmark_count) ||
         (result.bookmark_count as number) < 0 ||
+        (action === 'added' && (result.bookmark_count as number) < 1) ||
         !validFolder
       ) {
         return NextResponse.json({ error: 'Bookmark failed' }, { status: 500 })
       }
 
       return NextResponse.json({
+        actor_id: actorId.data.toLowerCase(),
+        post_id: postId.data.toLowerCase(),
+        request_id: input.request_id,
+        operation: input.operation,
         action,
         bookmarked: result.bookmarked,
         bookmark_count: result.bookmark_count,
@@ -297,5 +353,5 @@ export async function POST(request: NextRequest, context: RouteContext) {
     { name: 'posts-bookmark', rateLimit: 'write' }
   )
 
-  return handler(request)
+  return privateNoStore(await handler(request))
 }

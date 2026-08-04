@@ -16,6 +16,14 @@ import {
 } from '@/lib/auth/profile-action-login'
 import { savePostToBookmarkFolder } from '@/lib/bookmarks/folder-save-client'
 import {
+  POST_BOOKMARK_OPERATION,
+  POST_BOOKMARK_REQUEST_TIMEOUT_MS,
+  createPostBookmarkRequestId,
+  isDefinitivePostBookmarkRejection,
+  readPostBookmarkAcknowledgement,
+  readPostBookmarkStatusAcknowledgement,
+} from '@/lib/bookmarks/post-bookmark-client-contract'
+import {
   postBelongsToPinScope,
   postPinScopeKey,
   readPostPinAcknowledgement,
@@ -65,6 +73,49 @@ function waitWithinAbortSignal<T>(work: Promise<T>, signal: AbortSignal): Promis
       }
     )
   })
+}
+
+async function readCurrentPostBookmarkStatus(input: {
+  accessToken: string
+  actorId: string
+  postId: string
+}): Promise<boolean | null> {
+  const requestId = createPostBookmarkRequestId()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(
+    () => controller.abort(new DOMException('Bookmark status request timed out', 'AbortError')),
+    POST_BOOKMARK_REQUEST_TIMEOUT_MS
+  )
+  try {
+    const response = await waitWithinAbortSignal(
+      fetch('/api/posts/bookmarks/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${input.accessToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ postIds: [input.postId], request_id: requestId }),
+        cache: 'no-store',
+        signal: controller.signal,
+      }),
+      controller.signal
+    )
+    const data: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
+    const acknowledgement =
+      response.ok && response.status === 200
+        ? readPostBookmarkStatusAcknowledgement(data, {
+            actorId: input.actorId,
+            requestId,
+            postIds: [input.postId],
+          })
+        : null
+    return acknowledgement ? acknowledgement.bookmarks[input.postId.toLowerCase()] : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 interface CustomPollState {
@@ -182,6 +233,15 @@ export function usePostActions({
   )
   const lockRef = useRef<Set<string>>(new Set())
   const bookmarkLockRef = useRef<Set<string>>(new Set())
+  const bookmarkStatusLockRef = useRef<Set<string>>(new Set())
+  const bookmarkMutationRevisionRef = useRef(new Map<string, number>())
+  const bookmarkHydrationRevisionRef = useRef(new Map<string, number>())
+  useEffect(() => {
+    // Revision keys include the viewer scope, but retaining completed entries
+    // from prior identities would grow these maps for the lifetime of the tab.
+    bookmarkMutationRevisionRef.current.clear()
+    bookmarkHydrationRevisionRef.current.clear()
+  }, [scopeKey])
   const pinRequestLockRef = useRef<Set<string>>(new Set())
   const editRequestLockRef = useRef<Set<string>>(new Set())
   const deleteRequestLockRef = useRef<Set<string>>(new Set())
@@ -725,9 +785,16 @@ export function usePostActions({
         if (scopeIsCurrent(capturedScope)) redirectBookmarkToLogin(postId)
         return
       }
+      if (!capturedScope.userId) return
+      const actorId = capturedScope.userId
+      const requestId = createPostBookmarkRequestId()
       const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
       if (bookmarkLockRef.current.has(lockKey)) return
       bookmarkLockRef.current.add(lockKey)
+      bookmarkMutationRevisionRef.current.set(
+        lockKey,
+        (bookmarkMutationRevisionRef.current.get(lockKey) ?? 0) + 1
+      )
       setBookmarkLoading((prev) => ({ ...prev, [postId]: true }))
 
       // Save previous state for rollback
@@ -742,51 +809,155 @@ export function usePostActions({
         [postId]: optimisticBookmarked ? prevCount + 1 : Math.max(0, prevCount - 1),
       }))
 
-      try {
-        const response = await fetch(`/api/posts/${postId}/bookmark`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
+      const rollback = () => {
+        setUserBookmarks((prev) => ({ ...prev, [postId]: prevBookmarked }))
+        setBookmarkCounts((prev) => ({ ...prev, [postId]: prevCount }))
+      }
+      const reconcileUncertainMutation = async (): Promise<'reconciled' | 'failed' | 'stale'> => {
+        const bookmarked = await readCurrentPostBookmarkStatus({
+          accessToken,
+          actorId,
+          postId,
         })
-        const result = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return 'stale'
+        if (bookmarked === null) return 'failed'
+
+        const ownCountDelta = bookmarked === prevBookmarked ? 0 : bookmarked ? 1 : -1
+        const reconciledCount = Math.max(0, prevCount + ownCountDelta)
+        setUserBookmarks((prev) => ({ ...prev, [postId]: bookmarked }))
+        setBookmarkCounts((prev) => ({ ...prev, [postId]: reconciledCount }))
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.id === postId
+              ? {
+                  ...post,
+                  bookmark_count: Math.max(0, post.bookmark_count + ownCountDelta),
+                }
+              : post
+          )
+        )
+        const openedPost = openPostRef.current
+        if (!openPostAliasesPosts && openedPost?.id === postId) {
+          setOpenPost({
+            ...openedPost,
+            bookmark_count: Math.max(0, openedPost.bookmark_count + ownCountDelta),
+          } as Post)
+        }
+
+        if (bookmarked === optimisticBookmarked) {
+          if (bookmarked && !prevBookmarked) {
+            trackEvent('post_bookmark', { post_id: postId })
+          }
+          showToast(bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
+        } else {
+          showToast(t('operationFailed'), 'error')
+        }
+        return 'reconciled'
+      }
+      const rejectDefinitively = (status: number, result: unknown) => {
+        rollback()
+        if (status === 401) {
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
+          redirectBookmarkToLogin(postId)
+          return
+        }
+        const errorMessage =
+          result !== null && typeof result === 'object' && !Array.isArray(result)
+            ? (result as Record<string, unknown>).error
+            : null
+        showToast(typeof errorMessage === 'string' ? errorMessage : t('operationFailed'), 'error')
+      }
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(new DOMException('Post bookmark request timed out', 'AbortError')),
+        POST_BOOKMARK_REQUEST_TIMEOUT_MS
+      )
+
+      let response: Response | null = null
+      try {
+        response = await waitWithinAbortSignal(
+          fetch(`/api/posts/${postId}/bookmark`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              ...getCsrfHeaders(),
+            },
+            body: JSON.stringify({ operation: POST_BOOKMARK_OPERATION, request_id: requestId }),
+            cache: 'no-store',
+            signal: controller.signal,
+          }),
+          controller.signal
+        )
+        const result: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
         if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok) {
+        const acknowledgement =
+          response.ok && response.status === 200
+            ? readPostBookmarkAcknowledgement(result, {
+                actorId,
+                postId,
+                requestId,
+              })
+            : null
+        if (acknowledgement) {
           // Reconcile with server state
-          setUserBookmarks((prev) => ({ ...prev, [postId]: result.bookmarked }))
-          setBookmarkCounts((prev) => ({ ...prev, [postId]: result.bookmark_count }))
+          setUserBookmarks((prev) => ({ ...prev, [postId]: acknowledgement.bookmarked }))
+          setBookmarkCounts((prev) => ({ ...prev, [postId]: acknowledgement.bookmarkCount }))
           // Sync bookmark count to feed posts array
           setPosts((prev) =>
-            prev.map((p) => (p.id === postId ? { ...p, bookmark_count: result.bookmark_count } : p))
+            prev.map((p) =>
+              p.id === postId ? { ...p, bookmark_count: acknowledgement.bookmarkCount } : p
+            )
           )
           const op = openPostRef.current
           if (!openPostAliasesPosts && op?.id === postId)
-            setOpenPost({ ...op, bookmark_count: result.bookmark_count } as Post)
+            setOpenPost({ ...op, bookmark_count: acknowledgement.bookmarkCount } as Post)
           // Analytics: only count adding a bookmark, not removing one
-          if (result.bookmarked) {
+          if (acknowledgement.bookmarked) {
             trackEvent('post_bookmark', { post_id: postId })
           }
-          showToast(result.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
+          showToast(acknowledgement.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
+        } else if (isDefinitivePostBookmarkRejection(response.status)) {
+          rejectDefinitively(response.status, result)
         } else {
-          // Rollback on server error
-          setUserBookmarks((prev) => ({ ...prev, [postId]: prevBookmarked }))
-          setBookmarkCounts((prev) => ({ ...prev, [postId]: prevCount }))
-          if (response.status === 401) {
-            showToast(t('loginExpiredPleaseRelogin'), 'error')
-            redirectBookmarkToLogin(postId)
-            return
+          const reconciliation = await reconcileUncertainMutation()
+          if (reconciliation === 'stale') return
+          if (reconciliation === 'failed') {
+            rollback()
+            const errorMessage =
+              result !== null && typeof result === 'object' && !Array.isArray(result)
+                ? (result as Record<string, unknown>).error
+                : null
+            showToast(
+              typeof errorMessage === 'string' ? errorMessage : t('operationFailed'),
+              'error'
+            )
           }
-          showToast(result.error || t('operationFailed'), 'error')
         }
       } catch (err) {
         if (!scopeIsCurrent(capturedScope)) return
-        // Rollback on network error
-        setUserBookmarks((prev) => ({ ...prev, [postId]: prevBookmarked }))
-        setBookmarkCounts((prev) => ({ ...prev, [postId]: prevCount }))
-        showToast(getNetworkErrorMessage(err, t), 'error')
+        if (response && isDefinitivePostBookmarkRejection(response.status)) {
+          rejectDefinitively(response.status, null)
+        } else {
+          const reconciliation = await reconcileUncertainMutation()
+          if (reconciliation === 'stale') return
+          if (reconciliation === 'failed') {
+            rollback()
+            showToast(getNetworkErrorMessage(err, t), 'error')
+          }
+        }
       } finally {
+        clearTimeout(timeoutId)
+        // A hydration begun while this toggle was in flight must stay stale
+        // even after the lock is released. Settlement advances the truth
+        // revision for both accepted and rolled-back mutations.
+        if (scopeIsCurrent(capturedScope)) {
+          bookmarkMutationRevisionRef.current.set(
+            lockKey,
+            (bookmarkMutationRevisionRef.current.get(lockKey) ?? 0) + 1
+          )
+        }
         bookmarkLockRef.current.delete(lockKey)
         if (scopeIsCurrent(capturedScope)) {
           setBookmarkLoading((prev) => ({ ...prev, [postId]: false }))
@@ -847,9 +1018,15 @@ export function usePostActions({
         return false
       }
       const capturedPostId = bookmarkingPostId
-      const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${capturedPostId}\u0000folder-save`
+      // Folder save and plain toggle mutate the same per-viewer/post row, so
+      // they share one client lock and one hydration truth revision.
+      const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${capturedPostId}`
       if (bookmarkLockRef.current.has(lockKey)) return false
       bookmarkLockRef.current.add(lockKey)
+      bookmarkMutationRevisionRef.current.set(
+        lockKey,
+        (bookmarkMutationRevisionRef.current.get(lockKey) ?? 0) + 1
+      )
       setBookmarkLoading((prev) => ({ ...prev, [capturedPostId]: true }))
       try {
         const result = await savePostToBookmarkFolder({
@@ -902,6 +1079,12 @@ export function usePostActions({
         if (!scopeIsCurrent(capturedScope)) return false
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
+        if (scopeIsCurrent(capturedScope)) {
+          bookmarkMutationRevisionRef.current.set(
+            lockKey,
+            (bookmarkMutationRevisionRef.current.get(lockKey) ?? 0) + 1
+          )
+        }
         bookmarkLockRef.current.delete(lockKey)
         if (scopeIsCurrent(capturedScope)) {
           setBookmarkLoading((prev) => ({ ...prev, [capturedPostId]: false }))
@@ -1022,27 +1205,91 @@ export function usePostActions({
   // Load user bookmarks
   const loadUserBookmarksAndReposts = useCallback(
     async (postIds: string[]) => {
-      if (!accessToken || postIds.length === 0) return
+      if (!accessToken || !currentUserId || postIds.length === 0) return
       const capturedScope = captureRenderedScope()
       if (!scopeIsCurrent(capturedScope)) return
-      try {
-        const res = await fetch('/api/posts/bookmarks/status', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ postIds }),
-        })
-        const data = await res.json()
+      const uniquePostIds = [...new Set(postIds.map((postId) => postId.toLowerCase()))]
+
+      for (let offset = 0; offset < uniquePostIds.length; offset += 100) {
         if (!scopeIsCurrent(capturedScope)) return
-        setUserBookmarks((prev) => ({ ...prev, ...(data.bookmarks || {}) }))
-      } catch {
-        // Bookmark status fetch is non-critical — silently ignore
+        const batchPostIds = uniquePostIds.slice(offset, offset + 100)
+        const batchLockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${[
+          ...batchPostIds,
+        ]
+          .sort()
+          .join(',')}`
+        if (bookmarkStatusLockRef.current.has(batchLockKey)) continue
+        const requestId = createPostBookmarkRequestId()
+        bookmarkStatusLockRef.current.add(batchLockKey)
+
+        const hydrationRevisions = new Map<string, number>()
+        const mutationRevisions = new Map<string, number>()
+        for (const postId of batchPostIds) {
+          const postKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
+          const hydrationRevision = (bookmarkHydrationRevisionRef.current.get(postKey) ?? 0) + 1
+          bookmarkHydrationRevisionRef.current.set(postKey, hydrationRevision)
+          hydrationRevisions.set(postKey, hydrationRevision)
+          mutationRevisions.set(postKey, bookmarkMutationRevisionRef.current.get(postKey) ?? 0)
+        }
+
+        const controller = new AbortController()
+        const timeoutId = setTimeout(
+          () =>
+            controller.abort(new DOMException('Bookmark status request timed out', 'AbortError')),
+          POST_BOOKMARK_REQUEST_TIMEOUT_MS
+        )
+        try {
+          const res = await waitWithinAbortSignal(
+            fetch('/api/posts/bookmarks/status', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+                ...getCsrfHeaders(),
+              },
+              body: JSON.stringify({ postIds: batchPostIds, request_id: requestId }),
+              cache: 'no-store',
+              signal: controller.signal,
+            }),
+            controller.signal
+          )
+          const data: unknown = await waitWithinAbortSignal(res.json(), controller.signal)
+          if (!scopeIsCurrent(capturedScope)) return
+          const acknowledgement =
+            res.ok && res.status === 200
+              ? readPostBookmarkStatusAcknowledgement(data, {
+                  actorId: currentUserId,
+                  requestId,
+                  postIds: batchPostIds,
+                })
+              : null
+          if (!acknowledgement) continue
+
+          const currentBookmarks: Record<string, boolean> = {}
+          for (const postId of acknowledgement.postIds) {
+            const postKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
+            if (
+              bookmarkHydrationRevisionRef.current.get(postKey) ===
+                hydrationRevisions.get(postKey) &&
+              (bookmarkMutationRevisionRef.current.get(postKey) ?? 0) ===
+                mutationRevisions.get(postKey) &&
+              !bookmarkLockRef.current.has(postKey)
+            ) {
+              currentBookmarks[postId] = acknowledgement.bookmarks[postId]
+            }
+          }
+          if (Object.keys(currentBookmarks).length > 0) {
+            setUserBookmarks((prev) => ({ ...prev, ...currentBookmarks }))
+          }
+        } catch {
+          // Bookmark status is non-critical. Preserve the last known state.
+        } finally {
+          clearTimeout(timeoutId)
+          bookmarkStatusLockRef.current.delete(batchLockKey)
+        }
       }
     },
-    [accessToken, captureRenderedScope, scopeIsCurrent, setUserBookmarks]
+    [accessToken, captureRenderedScope, currentUserId, scopeIsCurrent, setUserBookmarks]
   )
 
   // Edit

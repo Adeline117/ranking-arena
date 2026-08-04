@@ -58,6 +58,21 @@ async function readAudienceDecision(
   }
 }
 
+async function readAudienceDecisions(
+  supabase: SupabaseClient,
+  postIds: readonly string[],
+  actorId: string | null
+): Promise<AudienceDecision[]> {
+  const decisions: AudienceDecision[] = []
+  for (let index = 0; index < postIds.length; index += AUDIENCE_RPC_CONCURRENCY) {
+    const chunk = postIds.slice(index, index + AUDIENCE_RPC_CONCURRENCY)
+    decisions.push(
+      ...(await Promise.all(chunk.map((postId) => readAudienceDecision(supabase, postId, actorId))))
+    )
+  }
+  return decisions
+}
+
 /**
  * Apply the canonical audience decision to rows fetched with the service role.
  *
@@ -77,15 +92,7 @@ export async function filterServiceReadablePostRows<T extends ServiceReadablePos
   const postIds = [...new Set(rows.map((row) => row.id).filter(Boolean))]
   if (postIds.length === 0) return []
 
-  const decisions: AudienceDecision[] = []
-  for (let index = 0; index < postIds.length; index += AUDIENCE_RPC_CONCURRENCY) {
-    const chunk = postIds.slice(index, index + AUDIENCE_RPC_CONCURRENCY)
-    decisions.push(
-      ...(await Promise.all(
-        chunk.map((postId) => readAudienceDecision(supabase, postId, actorId ?? null))
-      ))
-    )
-  }
+  const decisions = await readAudienceDecisions(supabase, postIds, actorId ?? null)
 
   const failures = decisions.filter((decision) => decision.failureCode)
   if (failures.length > 0) {
@@ -102,6 +109,39 @@ export async function filterServiceReadablePostRows<T extends ServiceReadablePos
   return rows.filter((row) => readableIds.has(row.id))
 }
 
+/**
+ * Apply the canonical audience decision without collapsing authority failures
+ * into ordinary denials. Personalized truth snapshots must use this variant:
+ * publishing `false` after an RPC outage would overwrite valid last-known
+ * viewer state with a fabricated negative.
+ */
+export async function filterServiceReadablePostRowsStrict<T extends ServiceReadablePostCandidate>(
+  supabase: SupabaseClient,
+  rows: readonly T[],
+  actorId?: string | null
+): Promise<T[]> {
+  if (rows.length === 0) return []
+
+  const postIds = [...new Set(rows.map((row) => row.id).filter(Boolean))]
+  if (postIds.length === 0) return []
+
+  const decisions = await readAudienceDecisions(supabase, postIds, actorId ?? null)
+  const failure = decisions.find((decision) => decision.failureCode)
+  if (failure) {
+    logAudienceFailure('error', '[posts] strict canonical service audience check failed', {
+      failedPostId: failure.id,
+      failureCode: failure.failureCode,
+      total: postIds.length,
+    })
+    throw new Error('Canonical post audience authority unavailable')
+  }
+
+  const readableIds = new Set(
+    decisions.filter((decision) => decision.readable).map((decision) => decision.id)
+  )
+  return rows.filter((row) => readableIds.has(row.id))
+}
+
 /** Check a post audience without returning any post payload to the caller. */
 export async function canServiceActorReadPost(
   supabase: SupabaseClient,
@@ -109,5 +149,15 @@ export async function canServiceActorReadPost(
   actorId?: string | null
 ): Promise<boolean> {
   const readable = await filterServiceReadablePostRows(supabase, [{ id: postId }], actorId)
+  return readable.length === 1
+}
+
+/** Strict single-post variant for personalized boolean snapshots. */
+export async function canServiceActorReadPostStrict(
+  supabase: SupabaseClient,
+  postId: string,
+  actorId?: string | null
+): Promise<boolean> {
+  const readable = await filterServiceReadablePostRowsStrict(supabase, [{ id: postId }], actorId)
   return readable.length === 1
 }

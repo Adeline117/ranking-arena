@@ -11,7 +11,8 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 jest.mock('@/lib/data/service-post-audience', () => ({
-  filterServiceReadablePostRows: (...args: unknown[]) => mockFilterServiceReadablePostRows(...args),
+  filterServiceReadablePostRowsStrict: (...args: unknown[]) =>
+    mockFilterServiceReadablePostRows(...args),
 }))
 
 jest.mock('@/lib/utils/csrf', () => ({
@@ -22,7 +23,7 @@ jest.mock('@/lib/utils/csrf', () => ({
 
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: () => null,
-  RateLimitPresets: { write: {} },
+  RateLimitPresets: { authenticated: {} },
 }))
 
 jest.mock('@/lib/features', () => ({ socialFeatureGuard: () => null }))
@@ -35,12 +36,21 @@ import { POST } from '../route'
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const READABLE_ID = '22222222-2222-4222-8222-222222222222'
 const UNREADABLE_ID = '33333333-3333-4333-8333-333333333333'
+const REQUEST_ID = 'a'.repeat(32)
 
 function request(postIds: unknown): Parameters<typeof POST>[0] {
   return {
     headers: { get: () => 'csrf' },
     cookies: { get: () => ({ value: 'csrf' }) },
-    json: async () => ({ postIds }),
+    json: async () => ({ postIds, request_id: REQUEST_ID }),
+  } as unknown as Parameters<typeof POST>[0]
+}
+
+function bodyRequest(body: unknown): Parameters<typeof POST>[0] {
+  return {
+    headers: { get: () => 'csrf' },
+    cookies: { get: () => ({ value: 'csrf' }) },
+    json: async () => body,
   } as unknown as Parameters<typeof POST>[0]
 }
 
@@ -77,10 +87,19 @@ describe('POST /api/posts/bookmarks/status service audience boundary', () => {
       USER_ID
     )
     expect(mockIn).toHaveBeenCalledWith('post_id', [READABLE_ID])
-    expect(body.bookmarks).toEqual({
-      [READABLE_ID]: true,
-      [UNREADABLE_ID]: false,
+    expect(body).toEqual({
+      actor_id: USER_ID,
+      request_id: REQUEST_ID,
+      operation: 'status',
+      post_ids: [READABLE_ID, UNREADABLE_ID],
+      bookmarks: {
+        [READABLE_ID]: true,
+        [UNREADABLE_ID]: false,
+      },
     })
+    expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('cdn-cache-control')).toBe('no-store')
+    expect(response.headers.get('vercel-cdn-cache-control')).toBe('no-store')
   })
 
   it('does not touch bookmark children when every audience decision fails closed', async () => {
@@ -90,9 +109,15 @@ describe('POST /api/posts/bookmarks/status service audience boundary', () => {
     const body = await response.json()
 
     expect(mockFrom).not.toHaveBeenCalled()
-    expect(body.bookmarks).toEqual({
-      [READABLE_ID]: false,
-      [UNREADABLE_ID]: false,
+    expect(body).toEqual({
+      actor_id: USER_ID,
+      request_id: REQUEST_ID,
+      operation: 'status',
+      post_ids: [READABLE_ID, UNREADABLE_ID],
+      bookmarks: {
+        [READABLE_ID]: false,
+        [UNREADABLE_ID]: false,
+      },
     })
   })
 
@@ -134,5 +159,48 @@ describe('POST /api/posts/bookmarks/status service audience boundary', () => {
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON body' })
     expect(mockFilterServiceReadablePostRows).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['an empty list', { postIds: [], request_id: REQUEST_ID }],
+    ['an invalid post ID', { postIds: ['post-1'], request_id: REQUEST_ID }],
+    ['an invalid request nonce', { postIds: [READABLE_ID], request_id: 'bad' }],
+    ['an extra request field', { postIds: [READABLE_ID], request_id: REQUEST_ID, extra: true }],
+    [
+      'more than 100 raw entries',
+      { postIds: Array(101).fill(READABLE_ID), request_id: REQUEST_ID },
+    ],
+  ])('rejects %s without publishing a fake empty snapshot', async (_label, body) => {
+    const response = await POST(bodyRequest(body))
+    const data = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(data).toEqual({ error: 'Invalid bookmark status request' })
+    expect(data).not.toHaveProperty('bookmarks')
+    expect(mockFilterServiceReadablePostRows).not.toHaveBeenCalled()
+    expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('deduplicates canonical post IDs without truncating the acknowledged snapshot', async () => {
+    const response = await POST(request([READABLE_ID, READABLE_ID, UNREADABLE_ID]))
+    const body = await response.json()
+
+    expect(mockFilterServiceReadablePostRows).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ id: READABLE_ID }, { id: UNREADABLE_ID }],
+      USER_ID
+    )
+    expect(body.post_ids).toEqual([READABLE_ID, UNREADABLE_ID])
+    expect(Object.keys(body.bookmarks)).toEqual([READABLE_ID, UNREADABLE_ID])
+  })
+
+  it('fails closed when the database returns a bookmark outside the authorized request', async () => {
+    mockIn.mockResolvedValue({ data: [{ post_id: UNREADABLE_ID }], error: null })
+
+    const response = await POST(request([READABLE_ID, UNREADABLE_ID]))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).not.toHaveProperty('bookmarks')
   })
 })

@@ -11,20 +11,25 @@ const mockSupabase = {
   rpc: (...args: unknown[]) => mockRpc(...args),
 }
 const mockUserSupabase = { rpc: (...args: unknown[]) => mockUserRpc(...args) }
+type MiddlewareHandler = (context: {
+  user: typeof mockUser
+  supabase: typeof mockSupabase
+  request: Request
+}) => Promise<Response>
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
-    (handler: Function) =>
+    (handler: MiddlewareHandler) =>
     (request: Request): Promise<Response> =>
       handler({ user: mockUser, supabase: mockSupabase, request }),
   withApiMiddleware:
-    (handler: Function) =>
+    (handler: MiddlewareHandler) =>
     (request: Request): Promise<Response> =>
       handler({ user: mockUser, supabase: mockSupabase, request }),
 }))
 
 jest.mock('@/lib/data/service-post-audience', () => ({
-  canServiceActorReadPost: (...args: unknown[]) => mockCanServiceActorReadPost(...args),
+  canServiceActorReadPostStrict: (...args: unknown[]) => mockCanServiceActorReadPost(...args),
 }))
 jest.mock('@/lib/supabase/user-scoped-server', () => ({
   createUserScopedServerClient: (...args: unknown[]) => mockCreateUserScopedServerClient(...args),
@@ -39,6 +44,8 @@ import { GET, POST } from '../route'
 const POST_ID = '22222222-2222-4222-8222-222222222222'
 const FOLDER_ID = '33333333-3333-4333-8333-333333333333'
 const BOOKMARK_ID = '44444444-4444-4444-8444-444444444444'
+const REQUEST_ID = 'a'.repeat(32)
+const TOGGLE_BODY = { operation: 'toggle', request_id: REQUEST_ID }
 const context = { params: Promise.resolve({ id: POST_ID }) }
 
 function request(method: 'GET' | 'POST', body?: unknown): Parameters<typeof GET>[0] {
@@ -47,6 +54,14 @@ function request(method: 'GET' | 'POST', body?: unknown): Parameters<typeof GET>
     url: `https://www.arenafi.org/api/posts/${POST_ID}/bookmark`,
     json: async () => body,
   } as unknown as Parameters<typeof GET>[0]
+}
+
+function bookmarkReadQuery(result: { data: unknown; error: unknown }) {
+  const builder: Record<string, jest.Mock> = {}
+  builder.select = jest.fn(() => builder)
+  builder.eq = jest.fn(() => builder)
+  builder.maybeSingle = jest.fn(async () => result)
+  return builder
 }
 
 describe('/api/posts/[id]/bookmark service audience boundary', () => {
@@ -105,8 +120,44 @@ describe('/api/posts/[id]/bookmark service audience boundary', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('toggles a bodyless bookmark only through the actor-bound atomic RPC', async () => {
-    const response = await POST(request('POST'), context)
+  it('does not publish fake unbookmarked truth when audience authority fails', async () => {
+    mockCanServiceActorReadPost.mockRejectedValue(new Error('authority unavailable'))
+
+    const response = await GET(request('GET'), context)
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).toEqual({ error: 'Failed to load bookmark status' })
+    expect(body).not.toHaveProperty('bookmarked')
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('returns a no-store bookmark read only from an exact database row', async () => {
+    mockFrom.mockReturnValue(bookmarkReadQuery({ data: { id: BOOKMARK_ID }, error: null }))
+
+    const response = await GET(request('GET'), context)
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ bookmarked: true })
+    expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('does not publish a fake unbookmarked read when the database fails', async () => {
+    mockFrom.mockReturnValue(
+      bookmarkReadQuery({ data: null, error: { code: 'XX000', message: 'failed' } })
+    )
+
+    const response = await GET(request('GET'), context)
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).toEqual({ error: 'Failed to load bookmark status' })
+    expect(body).not.toHaveProperty('bookmarked')
+    expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('toggles an explicit request-bound bookmark only through the actor-bound atomic RPC', async () => {
+    const response = await POST(request('POST', TOGGLE_BODY), context)
     const body = await response.json()
 
     expect(response.status).toBe(200)
@@ -116,12 +167,31 @@ describe('/api/posts/[id]/bookmark service audience boundary', () => {
       p_folder_id: null,
     })
     expect(body).toEqual({
+      actor_id: mockUser.id,
+      post_id: POST_ID,
+      request_id: REQUEST_ID,
+      operation: 'toggle',
       action: 'added',
       bookmarked: true,
       bookmark_count: 1,
       folder_id: FOLDER_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
+    expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('cdn-cache-control')).toBe('no-store')
+    expect(response.headers.get('vercel-cdn-cache-control')).toBe('no-store')
+  })
+
+  it.each([
+    ['an absent body', undefined],
+    ['an invented field', { ...TOGGLE_BODY, invented: true }],
+    ['an invalid request nonce', { operation: 'toggle', request_id: 'not-a-request' }],
+  ])('rejects %s before the toggle authority runs', async (_label, body) => {
+    const response = await POST(request('POST', body), context)
+
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0')
   })
 
   it('saves into a folder through the authenticated idempotent authority', async () => {
@@ -226,10 +296,18 @@ describe('/api/posts/[id]/bookmark service audience boundary', () => {
   it('maps an atomic audience denial to authoritative absence', async () => {
     mockRpc.mockResolvedValue({ data: { status: 'not_found' }, error: null })
 
-    const response = await POST(request('POST'), context)
+    const response = await POST(request('POST', TOGGLE_BODY), context)
 
     expect(response.status).toBe(404)
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejects an atomic denial with extra fields', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'not_found', invented: true }, error: null })
+
+    const response = await POST(request('POST', TOGGLE_BODY), context)
+
+    expect(response.status).toBe(500)
   })
 
   it('removes a folder row through the authenticated identity-bound authority', async () => {
@@ -344,9 +422,27 @@ describe('/api/posts/[id]/bookmark service audience boundary', () => {
       error: null,
     })
 
-    const response = await POST(request('POST'), context)
+    const response = await POST(request('POST', TOGGLE_BODY), context)
 
     expect(response.status).toBe(500)
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for extra atomic acknowledgement fields', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        status: 'added',
+        action: 'added',
+        bookmarked: true,
+        bookmark_count: 1,
+        folder_id: FOLDER_ID,
+        invented: true,
+      },
+      error: null,
+    })
+
+    const response = await POST(request('POST', TOGGLE_BODY), context)
+
+    expect(response.status).toBe(500)
   })
 })

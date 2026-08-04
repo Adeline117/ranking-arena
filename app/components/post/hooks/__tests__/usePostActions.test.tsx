@@ -12,6 +12,9 @@ const mockSavePostToBookmarkFolder = jest.fn()
 const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const REACTION_POST_ID = '22222222-2222-4222-8222-222222222222'
 const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
+const BOOKMARK_ACTOR_ID = REACTION_ACTOR_ID
+const BOOKMARK_POST_ID = REACTION_POST_ID
+const BOOKMARK_FOLDER_ID = '33333333-3333-4333-8333-333333333333'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -73,6 +76,13 @@ const reactionViewer: ViewerProps = {
   sessionGeneration: 7,
 }
 
+const bookmarkViewer: ViewerProps = {
+  accessToken: 'bookmark-token-a',
+  currentUserId: BOOKMARK_ACTOR_ID,
+  viewerKey: `user:${BOOKMARK_ACTOR_ID}`,
+  sessionGeneration: 8,
+}
+
 function useAliasedPostActions(viewer: ViewerProps = viewerA) {
   const [post, setPost] = useState(initialPost)
   const setPosts = useCallback<React.Dispatch<React.SetStateAction<PostWithUserState[]>>>(
@@ -107,6 +117,10 @@ function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500): Respon
   return { ok, status, json: async () => body } as Response
 }
 
+function responseWithJson(json: () => Promise<unknown>, ok = true, status = 200): Response {
+  return { ok, status, json } as Response
+}
+
 function reactionReceipt(overrides: Record<string, unknown> = {}) {
   return {
     success: true,
@@ -122,6 +136,41 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
     },
     meta: { timestamp: REACTION_TIMESTAMP },
   }
+}
+
+function bookmarkReceipt(requestId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    actor_id: BOOKMARK_ACTOR_ID,
+    post_id: BOOKMARK_POST_ID,
+    request_id: requestId,
+    operation: 'toggle',
+    action: 'added',
+    bookmarked: true,
+    bookmark_count: 4,
+    folder_id: BOOKMARK_FOLDER_ID,
+    ...overrides,
+  }
+}
+
+function bookmarkStatusReceipt(
+  requestId: string,
+  actorId = BOOKMARK_ACTOR_ID,
+  postIds = [BOOKMARK_POST_ID],
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    actor_id: actorId,
+    request_id: requestId,
+    operation: 'status',
+    post_ids: postIds,
+    bookmarks: Object.fromEntries(postIds.map((postId) => [postId, true])),
+    ...overrides,
+  }
+}
+
+function parsedRequestBody(options: RequestInit | undefined): Record<string, unknown> {
+  expect(typeof options?.body).toBe('string')
+  return JSON.parse(options?.body as string) as Record<string, unknown>
 }
 
 function deferred<T>() {
@@ -311,11 +360,14 @@ describe('usePostActions aliased detail state', () => {
         resolveFetch = resolve
       })
     )
-    const { result } = renderHook(() => useAliasedPostActions())
+    const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: BOOKMARK_POST_ID }))
+    })
 
     let bookmarkRequest: Promise<void>
     act(() => {
-      bookmarkRequest = result.current.actions.handleBookmark('post-1')
+      bookmarkRequest = result.current.actions.handleBookmark(BOOKMARK_POST_ID)
     })
     act(() => {
       result.current.setPost((previous) => ({
@@ -326,7 +378,8 @@ describe('usePostActions aliased detail state', () => {
     })
 
     await act(async () => {
-      resolveFetch?.(jsonResponse({ bookmarked: true, bookmark_count: 4 }))
+      const requestBody = parsedRequestBody((global.fetch as jest.Mock).mock.calls[0][1])
+      resolveFetch?.(jsonResponse(bookmarkReceipt(requestBody.request_id as string)))
       await bookmarkRequest!
     })
 
@@ -336,6 +389,226 @@ describe('usePostActions aliased detail state', () => {
       bookmark_count: 4,
     })
     expect(mockSetOpenPost).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['another actor', { actor_id: '44444444-4444-4444-8444-444444444444' }, 200],
+    ['another post', { post_id: '44444444-4444-4444-8444-444444444444' }, 200],
+    ['another request', { request_id: 'b'.repeat(32) }, 200],
+    ['another operation', { operation: 'status' }, 200],
+    ['an extra field', { invented: true }, 200],
+    ['an exact receipt with a non-200 status', {}, 201],
+  ])('rolls back a bookmark 2xx receipt bound to %s', async (_label, overrides, status) => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options?: RequestInit) => {
+      const body = parsedRequestBody(options)
+      return jsonResponse(
+        bookmarkReceipt(body.request_id as string, overrides as Record<string, unknown>),
+        true,
+        status as number
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: BOOKMARK_POST_ID }))
+      result.current.actions.setBookmarkCounts({ [BOOKMARK_POST_ID]: 3 })
+      result.current.actions.setUserBookmarks({ [BOOKMARK_POST_ID]: false })
+    })
+
+    await act(async () => {
+      await result.current.actions.handleBookmark(BOOKMARK_POST_ID)
+    })
+
+    expect(result.current.post.bookmark_count).toBe(3)
+    expect(result.current.actions.userBookmarks[BOOKMARK_POST_ID]).toBe(false)
+    expect(result.current.actions.bookmarkCounts[BOOKMARK_POST_ID]).toBe(3)
+    expect(result.current.actions.bookmarkLoading[BOOKMARK_POST_ID]).toBe(false)
+    expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error')
+  })
+
+  it('rolls back a non-JSON bookmark response and releases the lock', async () => {
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('not json')
+        },
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('status is not json')
+        },
+      } as Response)
+      .mockImplementationOnce(async (_url: string, options?: RequestInit) => {
+        const body = parsedRequestBody(options)
+        return jsonResponse(bookmarkReceipt(body.request_id as string))
+      })
+    const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: BOOKMARK_POST_ID }))
+      result.current.actions.setBookmarkCounts({ [BOOKMARK_POST_ID]: 3 })
+    })
+
+    await act(async () => result.current.actions.handleBookmark(BOOKMARK_POST_ID))
+    expect(result.current.post.bookmark_count).toBe(3)
+
+    await act(async () => result.current.actions.handleBookmark(BOOKMARK_POST_ID))
+    expect(global.fetch).toHaveBeenCalledTimes(3)
+    expect(result.current.post.bookmark_count).toBe(4)
+  })
+
+  it('hard-times-out a failed status reconciliation and unlocks an exact retry', async () => {
+    jest.useFakeTimers()
+    try {
+      const statusResponse = deferred<Response>()
+      const lateStatusJson = jest.fn(async () =>
+        bookmarkStatusReceipt('f'.repeat(32), BOOKMARK_ACTOR_ID, [BOOKMARK_POST_ID])
+      )
+      ;(global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new SyntaxError('lost mutation acknowledgement')
+          },
+        } as Response)
+        .mockReturnValueOnce(statusResponse.promise)
+        .mockImplementationOnce(async (_url: string, options?: RequestInit) => {
+          const body = parsedRequestBody(options)
+          return jsonResponse(bookmarkReceipt(body.request_id as string))
+        })
+      const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+      act(() => {
+        result.current.setPost((post) => ({ ...post, id: BOOKMARK_POST_ID }))
+        result.current.actions.setBookmarkCounts({ [BOOKMARK_POST_ID]: 3 })
+      })
+
+      let first!: Promise<void>
+      act(() => {
+        first = result.current.actions.handleBookmark(BOOKMARK_POST_ID)
+      })
+      await act(async () => Promise.resolve())
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await first
+      })
+      expect(result.current.actions.bookmarkLoading[BOOKMARK_POST_ID]).toBe(false)
+      expect(result.current.actions.userBookmarks[BOOKMARK_POST_ID]).toBe(false)
+      expect(result.current.actions.bookmarkCounts[BOOKMARK_POST_ID]).toBe(3)
+
+      await act(async () => result.current.actions.handleBookmark(BOOKMARK_POST_ID))
+      expect(global.fetch).toHaveBeenCalledTimes(3)
+      expect(result.current.post.bookmark_count).toBe(4)
+
+      await act(async () => {
+        statusResponse.resolve(responseWithJson(lateStatusJson))
+        await Promise.resolve()
+      })
+      expect(lateStatusJson).not.toHaveBeenCalled()
+      expect(result.current.post.bookmark_count).toBe(4)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('recovers a timed-out bookmark from exact status truth and ignores its late ACK', async () => {
+    jest.useFakeTimers()
+    try {
+      const firstResponse = deferred<Response>()
+      const lateJson = jest.fn(async () => bookmarkReceipt('f'.repeat(32), { bookmark_count: 99 }))
+      ;(global.fetch as jest.Mock)
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockImplementationOnce(async (_url: string, options?: RequestInit) => {
+          const body = parsedRequestBody(options)
+          return jsonResponse(
+            bookmarkStatusReceipt(
+              body.request_id as string,
+              BOOKMARK_ACTOR_ID,
+              body.postIds as string[]
+            )
+          )
+        })
+      const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+      act(() => {
+        result.current.setPost((post) => ({ ...post, id: BOOKMARK_POST_ID }))
+        result.current.actions.setBookmarkCounts({ [BOOKMARK_POST_ID]: 3 })
+      })
+
+      let first!: Promise<void>
+      let duplicate!: Promise<void>
+      act(() => {
+        first = result.current.actions.handleBookmark(BOOKMARK_POST_ID)
+        duplicate = result.current.actions.handleBookmark(BOOKMARK_POST_ID)
+      })
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await Promise.all([first, duplicate])
+      })
+      expect(result.current.post.bookmark_count).toBe(4)
+      expect(result.current.actions.userBookmarks[BOOKMARK_POST_ID]).toBe(true)
+      expect(result.current.actions.bookmarkLoading[BOOKMARK_POST_ID]).toBe(false)
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(mockShowToast).toHaveBeenCalledWith('bookmarked', 'success')
+
+      await act(async () => {
+        firstResponse.resolve(responseWithJson(lateJson))
+        await Promise.resolve()
+      })
+      expect(lateJson).not.toHaveBeenCalled()
+      expect(result.current.post.bookmark_count).toBe(4)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('drops an uncertain bookmark reconciliation after the viewer scope changes', async () => {
+    const statusResponse = deferred<Response>()
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('lost mutation acknowledgement')
+        },
+      } as Response)
+      .mockReturnValueOnce(statusResponse.promise)
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: bookmarkViewer }
+    )
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: BOOKMARK_POST_ID }))
+      result.current.actions.setBookmarkCounts({ [BOOKMARK_POST_ID]: 3 })
+    })
+
+    let mutation!: Promise<void>
+    act(() => {
+      mutation = result.current.actions.handleBookmark(BOOKMARK_POST_ID)
+    })
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+    const statusBody = parsedRequestBody((global.fetch as jest.Mock).mock.calls[1][1])
+
+    rerender({
+      accessToken: 'bookmark-token-b',
+      currentUserId: '44444444-4444-4444-8444-444444444444',
+      viewerKey: 'user:44444444-4444-4444-8444-444444444444',
+      sessionGeneration: 9,
+    })
+    await act(async () => {
+      statusResponse.resolve(jsonResponse(bookmarkStatusReceipt(statusBody.request_id as string)))
+      await mutation
+    })
+
+    expect(result.current.actions.userBookmarks).toEqual({})
+    expect(result.current.actions.bookmarkCounts).toEqual({})
+    expect(result.current.post.bookmark_count).toBe(3)
+    expect(mockShowToast).not.toHaveBeenCalledWith('bookmarked', 'success')
   })
 
   it('reconciles an exact folder-save ACK and leaves modal closure to its caller', async () => {
@@ -768,25 +1041,164 @@ describe('usePostActions aliased detail state', () => {
     )
     const { result, rerender } = renderHook(
       (viewer: ViewerProps) => useAliasedPostActions(viewer),
-      { initialProps: viewerA }
+      { initialProps: bookmarkViewer }
     )
     let hydration!: Promise<void>
     act(() => {
-      hydration = result.current.actions.loadUserBookmarksAndReposts(['post-1'])
+      hydration = result.current.actions.loadUserBookmarksAndReposts([BOOKMARK_POST_ID])
     })
+
+    const requestBody = parsedRequestBody((global.fetch as jest.Mock).mock.calls[0][1])
 
     rerender({
       accessToken: 'token-b',
-      currentUserId: 'viewer-b',
-      viewerKey: 'user:viewer-b',
-      sessionGeneration: 2,
+      currentUserId: '44444444-4444-4444-8444-444444444444',
+      viewerKey: 'user:44444444-4444-4444-8444-444444444444',
+      sessionGeneration: 9,
     })
     await act(async () => {
-      resolveBookmarks(jsonResponse({ bookmarks: { 'post-1': true } }))
+      resolveBookmarks(jsonResponse(bookmarkStatusReceipt(requestBody.request_id as string)))
       await hydration
     })
 
     expect(result.current.actions.userBookmarks).toEqual({})
+  })
+
+  it('hydrates only an exact viewer-, request-, and post-bound bookmark snapshot', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options?: RequestInit) => {
+      const body = parsedRequestBody(options)
+      return jsonResponse(
+        bookmarkStatusReceipt(
+          body.request_id as string,
+          BOOKMARK_ACTOR_ID,
+          body.postIds as string[]
+        )
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+
+    await act(async () => {
+      await result.current.actions.loadUserBookmarksAndReposts([BOOKMARK_POST_ID, BOOKMARK_POST_ID])
+    })
+
+    expect(result.current.actions.userBookmarks).toEqual({ [BOOKMARK_POST_ID]: true })
+    expect(global.fetch).toHaveBeenCalledWith('/api/posts/bookmarks/status', {
+      method: 'POST',
+      headers: expect.objectContaining({
+        Authorization: `Bearer ${bookmarkViewer.accessToken}`,
+        'Content-Type': 'application/json',
+      }),
+      body: expect.stringMatching(
+        new RegExp(`^\\{"postIds":\\["${BOOKMARK_POST_ID}"\\],"request_id":"[0-9a-f]{32}"\\}$`)
+      ),
+      cache: 'no-store',
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('does not let hydration begun during a mutation overwrite its later exact ACK', async () => {
+    const mutationResponse = deferred<Response>()
+    const hydrationResponse = deferred<Response>()
+    ;(global.fetch as jest.Mock)
+      .mockReturnValueOnce(mutationResponse.promise)
+      .mockReturnValueOnce(hydrationResponse.promise)
+    const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: BOOKMARK_POST_ID }))
+      result.current.actions.setBookmarkCounts({ [BOOKMARK_POST_ID]: 3 })
+      result.current.actions.setUserBookmarks({ [BOOKMARK_POST_ID]: false })
+    })
+
+    let mutation!: Promise<void>
+    act(() => {
+      mutation = result.current.actions.handleBookmark(BOOKMARK_POST_ID)
+    })
+    let hydration!: Promise<void>
+    act(() => {
+      hydration = result.current.actions.loadUserBookmarksAndReposts([BOOKMARK_POST_ID])
+    })
+
+    const mutationBody = parsedRequestBody((global.fetch as jest.Mock).mock.calls[0][1])
+    const hydrationBody = parsedRequestBody((global.fetch as jest.Mock).mock.calls[1][1])
+    await act(async () => {
+      mutationResponse.resolve(jsonResponse(bookmarkReceipt(mutationBody.request_id as string)))
+      await mutation
+    })
+    expect(result.current.actions.userBookmarks[BOOKMARK_POST_ID]).toBe(true)
+
+    await act(async () => {
+      hydrationResponse.resolve(
+        jsonResponse(
+          bookmarkStatusReceipt(
+            hydrationBody.request_id as string,
+            BOOKMARK_ACTOR_ID,
+            [BOOKMARK_POST_ID],
+            { bookmarks: { [BOOKMARK_POST_ID]: false } }
+          )
+        )
+      )
+      await hydration
+    })
+
+    expect(result.current.actions.userBookmarks[BOOKMARK_POST_ID]).toBe(true)
+    expect(result.current.post.bookmark_count).toBe(4)
+  })
+
+  it('does not let a malformed fake-empty snapshot clear known bookmark truth', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ bookmarks: {} }))
+    const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+    act(() => result.current.actions.setUserBookmarks({ [BOOKMARK_POST_ID]: true }))
+
+    await act(async () => {
+      await result.current.actions.loadUserBookmarksAndReposts([BOOKMARK_POST_ID])
+    })
+
+    expect(result.current.actions.userBookmarks).toEqual({ [BOOKMARK_POST_ID]: true })
+  })
+
+  it('times out bookmark hydration, unlocks retry, and ignores the late snapshot', async () => {
+    jest.useFakeTimers()
+    try {
+      const firstResponse = deferred<Response>()
+      const lateJson = jest.fn(async () => ({ bookmarks: { [BOOKMARK_POST_ID]: false } }))
+      ;(global.fetch as jest.Mock)
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockImplementationOnce(async (_url: string, options?: RequestInit) => {
+          const body = parsedRequestBody(options)
+          return jsonResponse(
+            bookmarkStatusReceipt(
+              body.request_id as string,
+              BOOKMARK_ACTOR_ID,
+              body.postIds as string[]
+            )
+          )
+        })
+      const { result } = renderHook(() => useAliasedPostActions(bookmarkViewer))
+
+      let first!: Promise<void>
+      act(() => {
+        first = result.current.actions.loadUserBookmarksAndReposts([BOOKMARK_POST_ID])
+      })
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await first
+      })
+
+      await act(async () => {
+        await result.current.actions.loadUserBookmarksAndReposts([BOOKMARK_POST_ID])
+      })
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(result.current.actions.userBookmarks).toEqual({ [BOOKMARK_POST_ID]: true })
+
+      await act(async () => {
+        firstResponse.resolve(responseWithJson(lateJson))
+        await Promise.resolve()
+      })
+      expect(lateJson).not.toHaveBeenCalled()
+      expect(result.current.actions.userBookmarks).toEqual({ [BOOKMARK_POST_ID]: true })
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('rejects an A-rendered action callback and masks A interaction state on B first render', async () => {
@@ -1001,19 +1413,27 @@ describe('usePostActions aliased detail state', () => {
       '',
       new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
     )
-    ;(global.fetch as jest.Mock).mockResolvedValue(
-      jsonResponse({ bookmarked: true, bookmark_count: 1 })
-    )
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options?: RequestInit) => {
+      const body = parsedRequestBody(options)
+      return jsonResponse(
+        bookmarkReceipt(body.request_id as string, {
+          bookmark_count: 1,
+        })
+      )
+    })
 
-    renderHook(() => useAliasedPostActions())
+    renderHook(() => useAliasedPostActions(bookmarkViewer))
 
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(`/api/posts/${postId}/bookmark`, {
         method: 'POST',
         headers: expect.objectContaining({
-          Authorization: 'Bearer token-a',
+          Authorization: `Bearer ${bookmarkViewer.accessToken}`,
           'Content-Type': 'application/json',
         }),
+        body: expect.stringMatching(/^\{"operation":"toggle","request_id":"[0-9a-f]{32}"\}$/),
+        cache: 'no-store',
+        signal: expect.any(AbortSignal),
       })
     )
     expect(global.fetch).toHaveBeenCalledTimes(1)
