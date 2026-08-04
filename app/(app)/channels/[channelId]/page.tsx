@@ -9,18 +9,17 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { fireAndForget } from '@/lib/utils/logger'
 import { useRealtime } from '@/lib/hooks/useRealtime'
 import { usePresence, formatLastSeen } from '@/lib/hooks/usePresence'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 import {
   applyReactionDelta,
   DM_REACTION_EMOJIS,
 } from '@/app/(app)/messages/[conversationId]/components/types'
-import type {
-  MessageReaction,
-  ReplyPreview,
-} from '@/app/(app)/messages/[conversationId]/components/types'
+import type { ReplyPreview } from '@/app/(app)/messages/[conversationId]/components/types'
 import { ChannelMessageReactionOperationLedger } from './channel-message-reaction-operation'
 import { readChannelMessageReactionAcknowledgement } from './channel-message-reaction-client'
 import {
@@ -32,41 +31,12 @@ import {
   readChannelMemberDeleteAcknowledgement,
   readChannelMemberRoleAcknowledgement,
 } from './channel-member-client'
-
-type ChannelMessage = {
-  id: string
-  channel_id: string
-  sender_id: string
-  content: string
-  media_url?: string | null
-  media_type?: 'image' | 'video' | 'file' | null
-  media_name?: string | null
-  created_at: string
-  reply_to_id?: string | null
-  reply_preview?: ReplyPreview | null
-  reactions?: MessageReaction[]
-  _status?: 'sending' | 'sent' | 'failed'
-  _tempId?: string
-  _sendIntent?: ChannelMessageSendIntent
-}
-
-type Member = {
-  user_id: string
-  role: string
-  nickname: string | null
-  handle: string | null
-  avatar_url: string | null
-  joined_at: string
-}
-
-type Channel = {
-  id: string
-  name: string
-  type: string
-  avatar_url: string | null
-  description: string | null
-  created_by: string
-}
+import {
+  readChannelPageSnapshot,
+  type ChannelMember as Member,
+  type ChannelMessage,
+  type GroupChannel as Channel,
+} from './channel-page-client'
 
 type ChannelMemberMutationScope = {
   actorId: string
@@ -82,31 +52,50 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   const { t } = useLanguage()
   const { accessToken, userId, authChecked, viewerKey, sessionGeneration } = useAuthSession()
   const [channelId, setChannelId] = useState('')
-  const [channel, setChannel] = useState<Channel | null>(null)
-  const [members, setMembers] = useState<Member[]>([])
-  const [messages, setMessages] = useState<ChannelMessage[]>([])
-  const [myRole, setMyRole] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [newMessage, setNewMessage] = useState('')
-  const [sending, setSending] = useState(false)
-  const [showMembers, setShowMembers] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const channelScopeKey = `${viewerKey}\u0000${sessionGeneration}\u0000channel:${channelId || 'pending'}`
+  const [channel, setChannel] = useViewerOwnedState<Channel | null>(
+    null,
+    () => null,
+    channelScopeKey
+  )
+  const [members, setMembers] = useViewerOwnedState<Member[]>([], () => [], channelScopeKey)
+  const [messages, setMessages] = useViewerOwnedState<ChannelMessage[]>(
+    [],
+    () => [],
+    channelScopeKey
+  )
+  const [myRole, setMyRole] = useViewerOwnedState('', () => '', channelScopeKey)
+  const [loading, setLoading] = useViewerOwnedState(true, () => true, channelScopeKey)
+  const [newMessage, setNewMessage] = useViewerOwnedState('', () => '', channelScopeKey)
+  const [sending, setSending] = useViewerOwnedState(false, () => false, channelScopeKey)
+  const [showMembers, setShowMembers] = useViewerOwnedState(false, () => false, channelScopeKey)
+  const [hasMore, setHasMore] = useViewerOwnedState(true, () => true, channelScopeKey)
+  const [loadingMore, setLoadingMore] = useViewerOwnedState(false, () => false, channelScopeKey)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [pendingAttachment, setPendingAttachment] = useState<{
+  const [pendingAttachment, setPendingAttachment] = useViewerOwnedState<{
     url: string
     type: 'image' | 'video' | 'file'
     originalName: string
     fileSize?: number
-  } | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [pendingMemberMutations, setPendingMemberMutations] = useState<Record<string, true>>({})
+  } | null>(null, () => null, channelScopeKey)
+  const [uploading, setUploading] = useViewerOwnedState(false, () => false, channelScopeKey)
+  const [pendingMemberMutations, setPendingMemberMutations] = useViewerOwnedState<
+    Record<string, true>
+  >({}, () => ({}), channelScopeKey)
   // Reply / quote: the message currently being replied to (null = not replying)
-  const [replyingTo, setReplyingTo] = useState<ChannelMessage | null>(null)
+  const [replyingTo, setReplyingTo] = useViewerOwnedState<ChannelMessage | null>(
+    null,
+    () => null,
+    channelScopeKey
+  )
   // Per-message context menu (react / reply / copy)
-  const [ctxMenu, setCtxMenu] = useState<{ msgId: string; x: number; y: number } | null>(null)
+  const [ctxMenu, setCtxMenu] = useViewerOwnedState<{
+    msgId: string
+    x: number
+    y: number
+  } | null>(null, () => null, channelScopeKey)
   const ctxMenuRef = useRef<HTMLDivElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Guard against state updates after unmount in realtime callbacks (CLAUDE.md)
@@ -125,6 +114,8 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   // closes the same-tick double-click/Enter race before operation acquisition.
   const sendInFlightRef = useRef<Set<string>>(new Set())
   const memberMutationInFlightRef = useRef<Set<string>>(new Set())
+  const loadChannelRequestGenerationRef = useRef(0)
+  const loadChannelAbortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef(messages)
   const userIdRef = useRef(userId)
   const channelIdRef = useRef(channelId)
@@ -184,6 +175,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      loadChannelAbortRef.current?.abort()
     }
   }, [])
 
@@ -197,34 +189,56 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
-  }, [ctxMenu])
+  }, [ctxMenu, setCtxMenu])
 
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) {
-      ;(params as Promise<{ channelId: string }>)
-        .then((r) => setChannelId(r.channelId))
-        .catch(() => {
-          /* params resolution should not fail */
-        })
+      fireAndForget(
+        (params as Promise<{ channelId: string }>).then((r) => setChannelId(r.channelId)),
+        'Resolve channel route parameters'
+      )
     }
   }, [params])
 
   useEffect(() => {
     // A dynamic-route transition can reuse this component. Never let an old
     // channel's pending state disable the new viewer/channel composer.
+    loadChannelRequestGenerationRef.current += 1
+    loadChannelAbortRef.current?.abort()
     setSending(false)
     memberMutationInFlightRef.current.clear()
     setPendingMemberMutations({})
-  }, [channelId, sessionGeneration, userId, viewerKey])
+  }, [channelId, sessionGeneration, setPendingMemberMutations, setSending, userId, viewerKey])
 
   const loadChannel = useCallback(async () => {
-    if (!channelId || !accessToken) return
+    if (!channelId || !accessToken || !userId) return
+    loadChannelAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadChannelAbortRef.current = controller
+    const operation = {
+      actorId: userId,
+      channelId,
+      accessToken,
+      viewerKey,
+      sessionGeneration,
+      requestGeneration: ++loadChannelRequestGenerationRef.current,
+    }
+    const isCurrent = () =>
+      mountedRef.current &&
+      !controller.signal.aborted &&
+      loadChannelRequestGenerationRef.current === operation.requestGeneration &&
+      userIdRef.current === operation.actorId &&
+      channelIdRef.current === operation.channelId &&
+      viewerKeyRef.current === operation.viewerKey &&
+      sessionGenerationRef.current === operation.sessionGeneration
     setLoading(true)
     try {
-      const res = await globalThis.fetch(`/api/channels/${channelId}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+      const res = await globalThis.fetch(`/api/channels/${operation.channelId}`, {
+        headers: { Authorization: `Bearer ${operation.accessToken}` },
+        signal: controller.signal,
       })
-      const data = await res.json()
+      const data: unknown = await res.json().catch(() => null)
+      if (!isCurrent()) return
       if (!res.ok) {
         // Localize instead of surfacing the raw API string (was leaking English
         // "Not a member" onto a zh page). 403 = not a member, 404 = gone.
@@ -238,17 +252,45 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         router.push('/inbox?tab=messages&chat=group')
         return
       }
-      setChannel(data.channel)
-      setMembers(data.members || [])
-      setMessages(data.messages || [])
-      setMyRole(data.my_role)
-      setHasMore(data.has_more)
-    } catch {
-      showToast(t('loadFailed2'), 'error')
+      const snapshot = readChannelPageSnapshot(data, {
+        actorId: operation.actorId,
+        channelId: operation.channelId,
+      })
+      if (!snapshot) {
+        showToast(t('loadFailed2'), 'error')
+        router.push('/inbox?tab=messages&chat=group')
+        return
+      }
+      setChannel(snapshot.channel)
+      setMembers(snapshot.members)
+      setMessages(snapshot.messages)
+      setMyRole(snapshot.myRole)
+      setHasMore(snapshot.hasMore)
+    } catch (error) {
+      if (isCurrent() && !(error instanceof DOMException && error.name === 'AbortError')) {
+        showToast(t('loadFailed2'), 'error')
+        router.push('/inbox?tab=messages&chat=group')
+      }
     } finally {
-      setLoading(false)
+      if (loadChannelAbortRef.current === controller) loadChannelAbortRef.current = null
+      if (isCurrent()) setLoading(false)
     }
-  }, [channelId, accessToken, showToast, router]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [
+    accessToken,
+    channelId,
+    router,
+    sessionGeneration,
+    setChannel,
+    setHasMore,
+    setLoading,
+    setMembers,
+    setMessages,
+    setMyRole,
+    showToast,
+    t,
+    userId,
+    viewerKey,
+  ])
 
   useEffect(() => {
     loadChannel()
@@ -1717,12 +1759,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               {ctxMsg.content && !ctxMsg.content.startsWith('[') && (
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(ctxMsg.content).catch(() => {
-                      /* clipboard write may fail in some browsers */
-                    })
+                    fireAndForget(
+                      navigator.clipboard.writeText(ctxMsg.content),
+                      'Copy channel message text'
+                    )
                     setCtxMenu(null)
                   }}
-                  aria-label="Copy text"
+                  aria-label={t('copyText')}
                   className="hover-bg-tertiary"
                   style={{
                     display: 'flex',
