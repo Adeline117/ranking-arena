@@ -457,9 +457,9 @@ describe('/api/groups/subscribe atomic boundary', () => {
     const response = await POST(postRequest(paidActivationRequest()))
 
     expect(response.status).toBe(201)
-    expect(STRIPE_API_VERSION).toBe('2026-04-22.dahlia')
+    expect(STRIPE_API_VERSION).toBe('2026-07-29.dahlia')
     expect(Stripe).toHaveBeenCalledWith('sk_test_unit', {
-      apiVersion: '2026-04-22.dahlia',
+      apiVersion: '2026-07-29.dahlia',
     })
   })
 

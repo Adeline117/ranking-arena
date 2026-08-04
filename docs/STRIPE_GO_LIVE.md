@@ -46,8 +46,10 @@ previous（如配置）都必须是 32–4096 个可打印、非空白 ASCII 字
 
 - 旧 test endpoint `we_1TtMgDCL6ewruupgKXyNH9Zf` 已 disabled；它保留作回滚目标，不再接收
   新事件。
-- 新 test endpoint `we_1TvnrtCL6ewruupgh3pNXkfo` 是 canonical URL 上唯一 enabled writer，
-  `api_version=2026-04-22.dahlia`，并且只订阅本 runbook 的精确 15 个事件。
+- 新 test endpoint `we_1TvnrtCL6ewruupgh3pNXkfo` 是 2026-07-21 最后核验时 canonical URL
+  上唯一 enabled writer，`api_version=2026-04-22.dahlia`，并且只订阅本 runbook 的精确
+  15 个事件。应用现已固定到 `2026-07-29.dahlia`；在单独完成受控 endpoint 轮换并重新核验前，
+  readiness 必须把这个版本差异视为 drift 并保持阻断，不能把代码版本升级误记成 Stripe 控制面已更新。
 - 新 endpoint 的 signing secret 只以 Sensitive Production 变量
   `STRIPE_WEBHOOK_SECRET_PREVIOUS` 保存；现有不可回读的旧密钥继续作为
   `STRIPE_WEBHOOK_SECRET` primary。新部署因此可以同时验证旧、新两个 endpoint，任何输出均不得
@@ -56,9 +58,10 @@ previous（如配置）都必须是 32–4096 个可打印、非空白 ASCII 字
   状态下，Production deployment `dpl_7T9B3tPfZvoFBcecQgvvaafU4ELR` 返回 HTTP 200；数据库事件
   仍为 `processed`、`attempts=1`，Tip、交付记录与 `tip_received` 通知仍均为 `0`。Stripe
   `delivery_success=false` 全量分页结果为 `0`。
-- 正式 `stripe-readiness` 已不再报告 endpoint/event contract drift。它仍因两个历史模糊 Pro
-  投影阻断，并保留 test mode、free promo 和 previous secret 三个 warning；这些 owner gate
-  不能借本次 sandbox 修复清除。
+- 2026-07-21 的 `stripe-readiness` 不再报告 endpoint/event contract drift；应用 API 版本升级到
+  `2026-07-29.dahlia` 后，这项结论已经过期。完成新一轮 sandbox endpoint 轮换前必须预期
+  endpoint version drift；两个历史模糊 Pro 投影以及 test mode、free promo 和 previous secret
+  owner gate 也不能借版本升级清除。
 
 当前回滚顺序必须是先重新启用并核对旧 endpoint，再停用新 endpoint。禁止出现两个都
 disabled 的窗口。test-mode 反向 primary/previous 是可回滚过渡态；在未来独立密钥切换前，
@@ -81,7 +84,7 @@ disabled 的窗口。test-mode 反向 primary/previous 是可回滚过渡态；�
 - Live mode 中存在且启用三档 B2C Product/Price，金额和周期精确匹配产品口径。
 - Live mode 中只能有一个 `status='enabled'` 的 webhook endpoint 指向 canonical
   `https://www.arenafi.org/api/stripe/webhook`。必须新建 endpoint，不能原地更新旧版本
-  endpoint；新 endpoint 的 `api_version` 必须精确等于 `2026-04-22.dahlia`，`null`、
+  endpoint；新 endpoint 的 `api_version` 必须精确等于 `2026-07-29.dahlia`，`null`、
   其他版本或账户默认版本均不合格。
 - 该唯一 enabled canonical endpoint 只能订阅以下精确 `15` 个事件：
   - `checkout.session.completed`
@@ -151,7 +154,7 @@ SELECT s.id, s.user_id, s.stripe_subscription_id, s.stripe_customer_id,
 6. 运行 writer-boundary 静态扫描、真实 canary 和 readiness。任何 open review、未完成 effect、paid-but-unbound payment、未合并 refund tombstone、reservation/projection/authority drift 都必须阻断。
 7. 只有 readiness 精确为 ready、同一待发布 SHA 的 canary 全绿，并且真正的 Stripe POSTDEPLOY 已另行实现、分配新版本、完成 PostgreSQL 17 对抗测试且注册到受审 runner 后，才可单独应用它来撤销旧 RPC 并启用数据库 direct-DML guard。当前仓库不具备这一步，因此 paid launch 必须保持 blocked；此后也不能靠回滚旧 app 恢复。
 8. 在 Stripe Dashboard 切到 Live mode，创建/确认 B2C Pro 三档价格。
-9. 新建 live webhook endpoint，不要更新旧 endpoint：canonical URL、`api_version=2026-04-22.dahlia`、精确 `15` 个事件必须一次配置正确；安全保存新 signing secret 后立即把新 endpoint 暂时设为 disabled，此时不要停用旧 endpoint。这样密钥部署完成前不会让新 endpoint 向只认识旧密钥的生产实例投递。
+9. 新建 live webhook endpoint，不要更新旧 endpoint：canonical URL、`api_version=2026-07-29.dahlia`、精确 `15` 个事件必须一次配置正确；安全保存新 signing secret 后立即把新 endpoint 暂时设为 disabled，此时不要停用旧 endpoint。这样密钥部署完成前不会让新 endpoint 向只认识旧密钥的生产实例投递。
 10. 在 Vercel Production 更新：
 
 | 变量                                            | Live 值                                                                                                 |

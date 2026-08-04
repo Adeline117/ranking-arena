@@ -280,7 +280,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Stripe API 2026-04-22 exposes billing periods on subscription items.
+      // The pinned Dahlia API exposes billing periods on subscription items.
       const pStart = item.current_period_start
       const pEnd = item.current_period_end
       if (pStart) {

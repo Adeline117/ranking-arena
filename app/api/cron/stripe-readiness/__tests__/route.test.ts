@@ -95,7 +95,7 @@ function healthyWebhookEndpoint(overrides: Record<string, unknown> = {}) {
     id: 'we_canonical',
     url: 'https://www.arenafi.org/api/stripe/webhook',
     status: 'enabled',
-    api_version: '2026-04-22.dahlia',
+    api_version: '2026-07-29.dahlia',
     enabled_events: [...HEALTHY_CANONICAL_EVENTS],
     ...overrides,
   }
@@ -349,7 +349,7 @@ describe('GET /api/cron/stripe-readiness', () => {
     expect(mockSendAlert).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['2024-10-28.acacia', null])(
+  it.each(['2026-04-22.dahlia', '2024-10-28.acacia', null])(
     'fails closed when the webhook endpoint API version is %p',
     async (apiVersion) => {
       mockWebhookList.mockResolvedValue({

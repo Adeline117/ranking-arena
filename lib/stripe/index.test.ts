@@ -139,9 +139,9 @@ describe('getStripe', () => {
   test('constructs the shared client with the pinned API version', () => {
     getStripe()
 
-    expect(STRIPE_API_VERSION).toBe('2026-04-22.dahlia')
+    expect(STRIPE_API_VERSION).toBe('2026-07-29.dahlia')
     expect(Stripe).toHaveBeenCalledWith('sk_test_123', {
-      apiVersion: '2026-04-22.dahlia',
+      apiVersion: '2026-07-29.dahlia',
       typescript: true,
     })
   })
