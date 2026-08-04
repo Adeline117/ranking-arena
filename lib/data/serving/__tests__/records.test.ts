@@ -45,6 +45,22 @@ describe('copier PII rule (spec §6)', () => {
     expect(({} as { polluted?: boolean }).polluted).toBeUndefined()
   })
 
+  it('sanitizeRecordRow strips claim-substrate provenance the DB path never projects', () => {
+    // okx/bitget/binance position-history parsers attach these to every row.
+    // arena_records_page builds an explicit column list and omits them, so the
+    // Tier-C preview must not advertise a wider row contract than Tier-B.
+    const row = JSON.parse(
+      '{"symbol":"BTCUSDT","realized_pnl":12,' +
+        '"sourceFactId":"[\\"trader\\",\\"row\\"]","source_fact_id":"x",' +
+        '"sourceLifecycleMarker":"1730000000000","source_lifecycle_marker":"x",' +
+        '"sourceReturn":0.42,"source_return":0.42,' +
+        '"fieldSources":{"symbol":"data[].instId"},"field_sources":{},' +
+        '"limitations":["source_return_missing"]}'
+    ) as Record<string, unknown>
+
+    expect(sanitizeRecordRow(row)).toEqual({ symbol: 'BTCUSDT', realized_pnl: 12 })
+  })
+
   it('filters malformed copier distribution entries and non-finite aggregate values', async () => {
     const aggregate = await getCopierAggregate(
       rpcClient({
