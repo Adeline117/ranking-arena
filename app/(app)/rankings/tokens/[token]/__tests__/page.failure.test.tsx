@@ -1,95 +1,45 @@
-import type { ReactElement } from 'react'
-
-const mockGetTokenTraderRankings = jest.fn()
-const mockNotFound = jest.fn()
-
-jest.mock('next/cache', () => ({
-  unstable_cache: (loader: (...args: unknown[]) => unknown) => loader,
-}))
-
-jest.mock('next/navigation', () => ({
-  notFound: (...args: unknown[]) => mockNotFound(...args),
-}))
+const mockGetSupabaseAdmin = jest.fn()
+const mockTieredGetOrSet = jest.fn()
+const mockCheckRateLimit = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: () => ({ kind: 'admin-client' }),
+  getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
 }))
 
-jest.mock('@/lib/rankings/token-traders', () => ({
-  getTokenTraderRankings: (...args: unknown[]) => mockGetTokenTraderRankings(...args),
+jest.mock('@/lib/cache/redis-layer', () => ({
+  tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
 }))
 
-jest.mock('../TokenRankingClient', () => ({
-  __esModule: true,
-  default: () => null,
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }))
 
-import TokenDetailPage, { loadTokenTradersSSR } from '../page'
+import TokenDetailPage, { metadata } from '../page'
+import TokenRankingContainment from '../../TokenRankingContainment'
 
-type TokenDetailProps = {
-  token: string
-  initialPeriod: string
-  initialTraders: unknown[]
-  initialTotal: number
-  initialStatus: 'success' | 'error'
-}
+const originalFetch = global.fetch
 
-describe('token ranking detail SSR state', () => {
+describe('token ranking detail containment', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    global.fetch = jest.fn()
   })
 
-  it('throws upstream failures out of the cached loader and marks the client seed failed', async () => {
-    mockGetTokenTraderRankings.mockRejectedValue(new Error('database unavailable'))
-
-    await expect(loadTokenTradersSSR('BTC', '90D')).rejects.toThrow('database unavailable')
-
-    const element = (await TokenDetailPage({
-      params: Promise.resolve({ token: 'btc' }),
-      searchParams: Promise.resolve({ period: '7D' }),
-    })) as ReactElement<TokenDetailProps>
-    expect(element.props).toMatchObject({
-      token: 'BTC',
-      initialPeriod: '7D',
-      initialTraders: [],
-      initialTotal: 0,
-      initialStatus: 'error',
-    })
+  afterAll(() => {
+    global.fetch = originalFetch
   })
 
-  it('keeps a legitimate empty page distinct from failure', async () => {
-    mockGetTokenTraderRankings.mockResolvedValue({ traders: [], total: 0 })
-
-    const element = (await TokenDetailPage({
-      params: Promise.resolve({ token: 'btc' }),
-      searchParams: Promise.resolve({ period: '90D' }),
-    })) as ReactElement<TokenDetailProps>
-    expect(element.props).toMatchObject({
-      initialTraders: [],
-      initialTotal: 0,
-      initialStatus: 'success',
-    })
+  it('is noindex and renders the shared server-only hold without parsing params', () => {
+    expect(metadata.robots).toEqual({ index: false, follow: false, nocache: true })
+    expect(TokenDetailPage().type).toBe(TokenRankingContainment)
   })
 
-  it('marks an SSR timeout as failure instead of an empty page', async () => {
-    jest.useFakeTimers()
-    try {
-      mockGetTokenTraderRankings.mockReturnValue(new Promise(() => undefined))
-      const page = TokenDetailPage({
-        params: Promise.resolve({ token: 'btc' }),
-        searchParams: Promise.resolve({ period: '90D' }),
-      })
+  it('does not call Supabase, Redis, rate limiting, or fetch', () => {
+    TokenDetailPage()
 
-      await jest.advanceTimersByTimeAsync(4_000)
-
-      const element = (await page) as ReactElement<TokenDetailProps>
-      expect(element.props).toMatchObject({
-        initialTraders: [],
-        initialTotal: 0,
-        initialStatus: 'error',
-      })
-    } finally {
-      jest.useRealTimers()
-    }
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })

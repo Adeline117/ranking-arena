@@ -5272,6 +5272,11 @@ const zh = {
   writeFirstPostButton: '发第一条帖子',
 
   // Token Rankings
+  tokenRankingsContainmentLabel: '校验暂停',
+  tokenRankingsContainmentTitle: '币种排行暂时不对外发布',
+  tokenRankingsContainmentDescription:
+    '我们正在重建并独立校验排名权威快照。在校验完成前，不会发布任何币种排名。',
+  tokenRankingsContainmentBack: '返回交易员排行',
   tokenRankingsTitle: '币种排行',
   tokenRankingsSubtitle: '发现每个币种的最佳交易员。谁交易 BTC 最厉害？',
   tokenRankingsSearchPlaceholder: '搜索币种（BTC、ETH、SOL...）',
