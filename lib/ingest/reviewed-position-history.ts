@@ -316,6 +316,17 @@ function reviewedSourceMarker(value: unknown): string | null {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : null
 }
 
+function assertUnambiguousReviewedDedupeComponents(
+  sourceSlug: ReviewedPositionHistorySourceSlug,
+  components: readonly string[]
+): void {
+  if (components.some((component) => component.includes('|'))) {
+    throw contractError(
+      `${sourceSlug} reviewed dedupe identity components must not contain the legacy delimiter`
+    )
+  }
+}
+
 export function reviewedPositionHistoryContract(
   sourceSlug: string,
   adapterSlug?: string
@@ -375,6 +386,12 @@ export function reviewedPositionHistoryFactIdentity(
     const symbol = row.raw.symbol ? String(row.raw.symbol) : null
     const side = reviewedSourceMarker(row.raw.side)
     if (portfolioId !== null && rowId !== null && symbol !== null && side !== null) {
+      assertUnambiguousReviewedDedupeComponents(contract.sourceSlug, [
+        portfolioId,
+        rowId,
+        symbol,
+        side,
+      ])
       sourceFactId = JSON.stringify([portfolioId, rowId, symbol, side])
       dedupeHash = binanceDedupeHash('binance_ph', portfolioId, rowId, symbol, side)
     }
@@ -386,6 +403,10 @@ export function reviewedPositionHistoryFactIdentity(
     const traderIdentity = reviewedSourceIdentity(payload.historyTraderIdentity)
     const subPositionId = reviewedSourceIdentity(row.raw.subPosId)
     if (traderIdentity !== null && subPositionId !== null) {
+      assertUnambiguousReviewedDedupeComponents(contract.sourceSlug, [
+        traderIdentity,
+        subPositionId,
+      ])
       sourceFactId = JSON.stringify([traderIdentity, subPositionId])
       dedupeHash = okxDedupeHash('okx_ph', traderIdentity, subPositionId)
     }

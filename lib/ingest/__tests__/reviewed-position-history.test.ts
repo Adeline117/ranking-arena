@@ -10,6 +10,7 @@ import {
   bitgetPositionHistoryTerminalVerifier,
 } from '@/lib/ingest/adapters/bitget/history-terminal'
 import { okxPositionHistoryTerminalVerifier } from '@/lib/ingest/adapters/okx/history-terminal'
+import { dedupeHash as okxDedupeHash } from '@/lib/ingest/adapters/okx/parsers'
 import type { ParsedPositionHistoryRow, RawPage } from '@/lib/ingest/core/types'
 import {
   captureHistoryAcquisition,
@@ -123,7 +124,8 @@ async function bitgetCapture(
 }
 
 async function binanceCapture(
-  overrides: Record<string, unknown> = {}
+  overrides: Record<string, unknown> = {},
+  capturedExchangeTraderId = exchangeTraderId
 ): Promise<CapturedHistoryAcquisition> {
   const raw = {
     id: Number(openedMs),
@@ -146,8 +148,8 @@ async function binanceCapture(
     fetchedAt: at,
     payload: {
       contract: BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
-      portfolioId: exchangeTraderId,
-      request: { pageNumber: 1, pageSize: 50, portfolioId: exchangeTraderId, sort },
+      portfolioId: capturedExchangeTraderId,
+      request: { pageNumber: 1, pageSize: 50, portfolioId: capturedExchangeTraderId, sort },
       response: { code: '000000', success: true, data: { list: [raw], total: 1 } },
       sort,
     },
@@ -159,12 +161,14 @@ async function binanceCapture(
       { segment_id: 'closing', reason: 'reported_end', page_ordinal: 1 },
       { segment_id: 'opening', reason: 'reported_end', page_ordinal: 2 },
     ]),
-    binancePositionHistoryTerminalVerifier
+    binancePositionHistoryTerminalVerifier,
+    capturedExchangeTraderId
   )
 }
 
 async function okxCapture(
-  overrides: Record<string, unknown> = {}
+  overrides: Record<string, unknown> = {},
+  capturedExchangeTraderId = exchangeTraderId
 ): Promise<CapturedHistoryAcquisition> {
   const raw: Record<string, unknown> = {
     subPosId: 'sub-position-1',
@@ -184,7 +188,7 @@ async function okxCapture(
   if (Object.hasOwn(overrides, 'ccy') && overrides.ccy === undefined) delete raw.ccy
   const firstUrl =
     'https://www.okx.com/api/v5/copytrading/public-subpositions-history?' +
-    `instType=SWAP&limit=100&uniqueCode=${exchangeTraderId}`
+    `instType=SWAP&limit=100&uniqueCode=${encodeURIComponent(capturedExchangeTraderId)}`
   return capture(
     { id: 9, slug: 'okx_futures' },
     [
@@ -192,17 +196,18 @@ async function okxCapture(
         pageIndex: 1,
         url: firstUrl,
         fetchedAt,
-        payload: { historyTraderIdentity: exchangeTraderId, data: [raw] },
+        payload: { historyTraderIdentity: capturedExchangeTraderId, data: [raw] },
       },
       {
         pageIndex: 2,
         url: `${firstUrl}&after=${String(raw.subPosId)}`,
         fetchedAt: '2026-08-03T10:00:01.000Z',
-        payload: { historyTraderIdentity: exchangeTraderId, data: [] },
+        payload: { historyTraderIdentity: capturedExchangeTraderId, data: [] },
       },
     ],
     terminalClaim([{ segment_id: 'default', reason: 'empty_page', page_ordinal: 2 }]),
-    okxPositionHistoryTerminalVerifier
+    okxPositionHistoryTerminalVerifier,
+    capturedExchangeTraderId
   )
 }
 
@@ -654,18 +659,39 @@ describe('shared reviewed position-history evidence contract', () => {
     }
   )
 
-  it('rejects Binance delimiter-ambiguous ids before publication', async () => {
-    const first = { id: 'A|B', symbol: 'C' }
-    const second = { id: 'A', symbol: 'B|C' }
-    expect(binanceDedupeHash('binance_ph', exchangeTraderId, first.id, first.symbol, 'Long')).toBe(
-      binanceDedupeHash('binance_ph', exchangeTraderId, second.id, second.symbol, 'Long')
+  it('rejects every side of a cross-field Binance delimiter collision', async () => {
+    const first = {
+      trader: exchangeTraderId,
+      raw: { id: 1, opened: 1, symbol: '2|BTCUSDT' },
+    }
+    const second = {
+      trader: `${exchangeTraderId}|1`,
+      raw: { id: 2, opened: 2, symbol: 'BTCUSDT' },
+    }
+    expect(binanceDedupeHash('binance_ph', first.trader, 1, first.raw.symbol, 'Long')).toBe(
+      binanceDedupeHash('binance_ph', second.trader, 2, second.raw.symbol, 'Long')
     )
 
-    for (const overrides of [first, second]) {
-      const captured = await binanceCapture(overrides)
+    for (const candidate of [first, second]) {
+      const captured = await binanceCapture(candidate.raw, candidate.trader)
       expect(() =>
         buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
-      ).toThrow('id and opened must be equal positive safe-integer JSON numbers')
+      ).toThrow('dedupe identity components must not contain the legacy delimiter')
+    }
+  })
+
+  it('rejects every side of a cross-field OKX delimiter collision', async () => {
+    const first = { trader: exchangeTraderId, subPositionId: 'sub|position' }
+    const second = { trader: `${exchangeTraderId}|sub`, subPositionId: 'position' }
+    expect(okxDedupeHash('okx_ph', first.trader, first.subPositionId)).toBe(
+      okxDedupeHash('okx_ph', second.trader, second.subPositionId)
+    )
+
+    for (const candidate of [first, second]) {
+      const captured = await okxCapture({ subPosId: candidate.subPositionId }, candidate.trader)
+      expect(() =>
+        buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
+      ).toThrow('dedupe identity components must not contain the legacy delimiter')
     }
   })
 
