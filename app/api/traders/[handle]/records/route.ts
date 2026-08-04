@@ -12,25 +12,27 @@
  * timeout the route answers 200 {cacheState:'pending'} — never 5xx.
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, after } from 'next/server'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
-import { tfToInt } from '@/lib/data/serving/core'
+import { isFresh, tfToInt } from '@/lib/data/serving/core'
 import {
   getRecordsPage,
   getCopierAggregate,
   recordsPageFromTierC,
 } from '@/lib/data/serving/records'
 import { requestTierC } from '@/lib/data/serving/tier-c'
+import { METRIC_AUTHORITY_NO_STORE_HEADERS } from '@/lib/data/serving/cache-policy'
 import type { RecordsPage, ServingTimeframe } from '@/lib/data/serving/types'
 
 const handleSchema = z.string().min(1).max(255)
 const kindSchema = z.enum(['positions', 'position_history', 'orders', 'transfers', 'copiers'])
 const tfSchema = z.enum(['7', '30', '90', 'inception']).default('90')
 const cursorSchema = z.string().max(200).optional()
+const COPIER_FRESH_TTL_SECONDS = 6 * 3600
 
 export async function GET(
   request: NextRequest,
@@ -71,7 +73,22 @@ export async function GET(
           resolved.exchangeTraderId
         )
         if (aggregate) {
-          return withCache(apiSuccess(aggregate), { maxAge: 300, staleWhileRevalidate: 600 })
+          const authorityAsOf = aggregate.provenance.sourceAsOf ?? aggregate.provenance.observedAt
+          if (aggregate.depth !== 'none' && !isFresh(authorityAsOf, COPIER_FRESH_TTL_SECONDS)) {
+            after(() =>
+              requestTierC(
+                {
+                  sourceSlug: resolved.source,
+                  fetchRegion: resolved.fetchRegion,
+                  exchangeTraderId: resolved.exchangeTraderId,
+                  timeframe: 0,
+                  surface: 'copiers',
+                },
+                { fireAndForget: true }
+              )
+            )
+          }
+          return apiSuccess(aggregate, 200, METRIC_AUTHORITY_NO_STORE_HEADERS)
         }
 
         // Copier data is a window-independent snapshot. Canonical timeframe=0
@@ -92,10 +109,7 @@ export async function GET(
           resolved.exchangeTraderId
         )
         if (refreshedAggregate) {
-          return withCache(apiSuccess(refreshedAggregate), {
-            maxAge: 300,
-            staleWhileRevalidate: 600,
-          })
+          return apiSuccess(refreshedAggregate, 200, METRIC_AUTHORITY_NO_STORE_HEADERS)
         }
         return apiSuccess({ cacheState: 'pending' as const }, 200, { 'Cache-Control': 'no-store' })
       }
