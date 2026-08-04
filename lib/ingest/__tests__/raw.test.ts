@@ -25,7 +25,10 @@ jest.mock('@/lib/ingest/db', () => ({
 }))
 
 import {
+  EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   type IngestTransactionRunner,
+  POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+  POSITION_HISTORY_RAW_JOB_TYPE,
   RAW_JSON_STRINGIFY_CONTRACT,
   cleanupRawObjects,
   readRawObject,
@@ -564,7 +567,12 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     expect(retireSql).toContain('FOR UPDATE SKIP LOCKED')
     expect(retireSql).toContain('ORDER BY fetched_at, id')
     expect(retireSql).toContain('LIMIT 500')
-    expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([30])
+    expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([
+      30,
+      POSITION_HISTORY_RAW_JOB_TYPE,
+      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+      POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+    ])
     expect(mockClientQuery.mock.invocationCallOrder[retireIndex]).toBeLessThan(
       mockRemove.mock.invocationCallOrder[0]
     )
@@ -572,6 +580,23 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     expect(rawGcQueryIndex('DELETE FROM arena.raw_object_gc_queue')).toBeGreaterThan(retireIndex)
     expect(rawGcQueryIndex('pg_advisory_unlock')).toBeGreaterThan(retireIndex)
     expect(mockClientRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('never admits versioned position-history evidence to the generic GC queue', async () => {
+    await expect(cleanupRawObjects(30)).resolves.toBe(0)
+
+    const retireIndex = rawGcQueryIndex('WITH candidates AS MATERIALIZED')
+    const retireSql = String(mockClientQuery.mock.calls[retireIndex][0])
+    expect(retireSql).toContain('job_type IS DISTINCT FROM $2')
+    expect(retireSql).toContain('trust_artifact_role IS DISTINCT FROM $3')
+    expect(retireSql).toContain("meta->>'history_evidence_contract' IS DISTINCT FROM $4")
+    expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([
+      30,
+      POSITION_HISTORY_RAW_JOB_TYPE,
+      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+      POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+    ])
+    expect(mockRemove).not.toHaveBeenCalled()
   })
 
   it('drains a prior durable queue before retiring more DB evidence', async () => {

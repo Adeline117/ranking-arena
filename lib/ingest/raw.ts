@@ -1608,6 +1608,15 @@ export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
            FROM arena.raw_objects
           WHERE NOT quarantined
             AND fetched_at < now() - ($1 || ' days')::interval
+            -- Versioned position-history evidence is an audit/publication
+            -- substrate, not an ordinary 30-day cache. Keep both published
+            -- and replayable RAW out of the generic GC lane; a dedicated
+            -- evidence-retention authority must retire it explicitly.
+            AND (
+              job_type IS DISTINCT FROM $2
+              OR trust_artifact_role IS DISTINCT FROM $3
+              OR meta->>'history_evidence_contract' IS DISTINCT FROM $4
+            )
           ORDER BY fetched_at, id
           FOR UPDATE SKIP LOCKED
           LIMIT 500
@@ -1622,7 +1631,12 @@ export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
        DELETE FROM arena.raw_objects AS raw
         USING queued
         WHERE raw.id = queued.raw_object_id`,
-      [retentionDays]
+      [
+        retentionDays,
+        POSITION_HISTORY_RAW_JOB_TYPE,
+        EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+        POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      ]
     )
 
     return drainRawObjectGcBatch(client, await readRawObjectGcBatch(client))
