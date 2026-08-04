@@ -27,7 +27,6 @@ interface GroupHeaderProps {
   groupId: string
   language: string
   userId: string | null
-  accessToken?: string | null
   isMember: boolean
   userRole: 'owner' | 'admin' | 'member' | null
   joining: boolean
@@ -44,7 +43,6 @@ export default function GroupHeader({
   groupId,
   language,
   userId,
-  accessToken,
   isMember,
   userRole,
   joining,
@@ -391,7 +389,7 @@ export default function GroupHeader({
               isMember ? (
                 <>
                   {/* Member self-controlled prefs: mute admin broadcasts + pin (U9-12) */}
-                  <GroupMemberPrefsControls groupId={groupId} accessToken={accessToken ?? null} />
+                  <GroupMemberPrefsControls groupId={groupId} />
                   {!isDissolved && (
                     <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
                       <Button variant="primary" size="sm">
