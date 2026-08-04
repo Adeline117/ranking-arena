@@ -299,19 +299,20 @@ Core tables (all with Row Level Security enabled):
 
 ### Trader Data
 
-| Table                     | Purpose                                                                  |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `leaderboard_ranks`       | Precomputed ranked leaderboard; each season is normally rebuilt every 2h |
-| `arena.trader_stats`      | Point-in-time performance per (trader, timeframe) — primary write table  |
-| `arena.traders`           | Trader identity registry, keyed by `(source_id, exchange_trader_id)`     |
-| `trader_sources`          | Trader source identities (legacy serving + enrichment)                   |
-| `trader_equity_curve`     | Historical equity curve data points per period                           |
-| `trader_position_history` | Past trading positions with PnL                                          |
-| `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period  |
-| `trader_asset_breakdown`  | Asset allocation analysis per period                                     |
-| `trader_daily_snapshots`  | Daily ROI/PnL rollups                                                    |
-| `trader_portfolio`        | Current open positions                                                   |
-| `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`          |
+| Table                     | Purpose                                                                   |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `leaderboard_ranks`       | Precomputed ranked leaderboard; each season is normally rebuilt every 2h  |
+| `arena.trader_stats`      | Point-in-time performance per (trader, timeframe) — primary write table   |
+| `arena.traders`           | Trader identity registry, keyed by `(source_id, exchange_trader_id)`      |
+| `trader_sources`          | Trader source identities (legacy serving + enrichment)                    |
+| `trader_equity_curve`     | Historical equity curve data points per period                            |
+| `arena.position_history`  | Current ingest history facts; not rank-eligible without authority proof   |
+| `trader_position_history` | Frozen forensic archive; no application reads and never ranking authority |
+| `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period   |
+| `trader_asset_breakdown`  | Asset allocation analysis per period                                      |
+| `trader_daily_snapshots`  | Daily ROI/PnL rollups                                                     |
+| `trader_portfolio`        | Current open positions                                                    |
+| `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`           |
 
 ### User and Social
 
