@@ -136,4 +136,12 @@ describe('CoinEx copier pagination', () => {
 
     await expect(copiers(fetchSession)).rejects.toThrow('coinex.data.data must be an array')
   })
+
+  it('rejects an empty page that still claims continuation', async () => {
+    const { fetchSession } = session([payload(0, true)])
+
+    await expect(copiers(fetchSession)).rejects.toThrow(
+      'empty copier page still claims continuation'
+    )
+  })
 })
