@@ -1,11 +1,15 @@
 name: Post-Deploy Evaluate
 
+# SECURITY SUSPENDED (V1 NO-GO): this invokes a production authenticated hook
+# from an externally created deployment_status event. Restore only with exact
+# protected-main deployment identity and reviewer-gated environment-only secret.
+
 on:
   deployment_status:
 
 jobs:
   evaluate:
-    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

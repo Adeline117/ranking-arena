@@ -20,9 +20,16 @@ ownership and monitoring semantics.
   post-cutover marker followed by fresh ready, full SHA, and release-ID evidence.
 - Do not bypass the worker's production database release-readiness gate.
 
-## Sole SG deployment channel
+## Sole SG deployment channel (currently suspended)
 
-Use **Actions → Deploy Ingest Worker (SG)** from the `main` workflow ref.
+During the V1 incident NO-GO there is no authorized SG mutation channel:
+`.github/workflows/deploy-ingest-sg.yml` has only an internal `workflow_call`
+trigger and every job is fixed to `if: false`. Do not call it from another
+workflow or bypass it with the direct script. After the owner closes every
+release gate, restores the protected environment and explicitly re-enables the
+reviewed jobs, a reviewed protected-main caller invoking this reusable workflow
+is the sole channel. Arbitrary-ref `workflow_dispatch` must not return. Its
+restored inputs are:
 
 | Change                                                      | Input                                                   |
 | ----------------------------------------------------------- | ------------------------------------------------------- |
@@ -36,8 +43,9 @@ git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
 git rev-parse origin/main
 ```
 
-The deploy job references the `ingest-sg-production` GitHub Environment. That
-Environment must retain a selected-branch rule allowing only `main`. Its three
+The deploy job references the `ingest-sg-production` GitHub Environment. Before
+workflow restoration, that Environment must gain a required reviewer and a
+selected-branch rule allowing only protected `main`. Its three
 secrets are environment-scoped, never repository-scoped:
 
 - `INGEST_SG_SSH_KEY`: dedicated Actions deploy private key.
@@ -94,8 +102,10 @@ cutover into a false deployment failure.
 
 ## Direct script modes
 
-The GitHub workflow is the canonical mutating entrypoint. Direct use is for an
-inspected maintainer operation and still requires exact current main.
+The restored GitHub workflow is the canonical mutating entrypoint. During the
+current NO-GO, direct use is limited to `--dry-run`; the mutating modes below are
+reference material for an owner-approved, supervised recovery only and still
+require exact current main plus every stopped-recovery gate.
 
 ```bash
 git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
@@ -112,6 +122,10 @@ bash worker/deploy-ingest-sg.sh --target-sha="$TARGET_SHA" --dry-run
   the emergency-only `--force-npm-ci` flag is supplied.
 - `--force-npm-ci`: install only inside the isolated candidate and require actual
   module loads before cutover. It never modifies live `node_modules`.
+- `--recover-from-stopped`: explicit stopped-baseline recovery. It is mutually
+  exclusive with `--dry-run`, requires both incident holds plus a fresh
+  host-created one-time confirmation, and does not make an ordinary deployment
+  accept a stopped worker.
 
 ## Container deployment is disabled
 
@@ -146,6 +160,129 @@ for supervised handling.
 
 Do not restore the retired standalone `onchain-enrich-web3.mts` crontab entries.
 `maint:onchain-enrich` on the local BullMQ queue is the sole recurring owner.
+
+## Incident deployment hold
+
+The current incident uses a host-owned, durable deploy hold. It is independent
+of Git, the candidate SHA, PM2, and GitHub environment approval:
+
+- Mac mini: `~/ranking-arena/.arena-ingest/ingest-deploy.hold`
+- Singapore: `/opt/arena-ingest.deploy-hold`
+
+Any real file or symlink at either path blocks a mutating deployment. The local
+transaction checks before candidate preparation, after taking its deploy lock,
+and again immediately before PM2 cutover. The SG transaction checks before lock
+creation and on every token-fenced lease assertion; a hold armed during a run
+therefore cannot be bypassed by continuing an already-started candidate. Read-
+only dry-runs remain available.
+
+During the 2026-08-03 NO-GO, both primary holds are armed. Compatibility guards
+for the previously deployed orchestrators are armed at
+`~/ranking-arena-releases/.arena-ingest-deploy-blocked` and
+`/opt/arena-ingest.deploy-recovery-required` as an additional fail-closed layer.
+No deploy-force input, workflow approval, PM2 restart, or current-main SHA may
+clear or override these files.
+
+Only the owner may authorize recovery after the execution-status runbook's
+credential, staging, migration, restore, and release gates are all evidenced.
+For a stopped-baseline recovery, do **not** remove either hold. Preserve the
+existing hold records in the incident evidence bundle, create the one-time
+confirmation described below, and use only the transactional deploy script.
+Never start either PM2 app directly.
+
+## Stopped-baseline recovery
+
+Stopped recovery is a separate, explicit mode; ordinary deployment semantics are
+unchanged. Before authorizing it, prove no deployment workflow is in progress
+and both deploy-lock paths are absent. Both the primary incident hold and its
+compatibility guard must remain armed:
+
+- Mac mini:
+  `~/ranking-arena/.arena-ingest/ingest-deploy.hold` and
+  `~/ranking-arena-releases/.arena-ingest-deploy-blocked`.
+- Singapore:
+  `/opt/arena-ingest.deploy-hold` and
+  `/opt/arena-ingest.deploy-recovery-required`.
+
+Create the confirmation on the target host itself, as a regular, non-symlink
+file owned by the deploy user with mode `0600`. The fixed paths are:
+
+- Mac mini:
+  `~/ranking-arena/.arena-ingest/recover-from-stopped.go`.
+- Singapore:
+  `/opt/arena-ingest.recover-from-stopped.go`.
+
+The file is at most 1024 bytes and contains exactly four lines:
+
+```text
+arena.ingest-recover-from-stopped@1
+target_sha=<exact-current-main-40-hex-sha>
+expires_epoch=<unix-seconds-not-more-than-900-seconds-in-the-future>
+nonce=<64-lowercase-hex-characters>
+```
+
+Generate the nonce inside a non-traced owner shell and write it with a shell
+builtin so it never appears in a process argument or deploy output. For example,
+after setting `TARGET_SHA` to exact current main:
+
+```bash
+set +x
+umask 077
+GO_PATH='/replace/with/the/exact/path/above'
+EXPIRES_EPOCH="$(( $(date +%s) + 600 ))"
+RECOVERY_NONCE="$(openssl rand -hex 32)"
+{
+  builtin printf '%s\n' \
+    'arena.ingest-recover-from-stopped@1' \
+    "target_sha=$TARGET_SHA" \
+    "expires_epoch=$EXPIRES_EPOCH" \
+    "nonce=$RECOVERY_NONCE"
+} > "$GO_PATH.tmp"
+chmod 600 "$GO_PATH.tmp"
+mv "$GO_PATH.tmp" "$GO_PATH"
+unset RECOVERY_NONCE
+```
+
+The script requires `expires_epoch` to be current and no more than 900 seconds
+ahead, atomically moves the GO file inside its token-fenced deploy lock, and
+validates it again. It never prints the nonce or places it in an SSH/process
+argument. A failed consumption destroys the moved confirmation and removes only
+the newly acquired lock, so authorization cannot be replayed.
+
+Run the exact-current-main transaction with the new flag:
+
+```bash
+# Mac mini
+ARENA_NODE_BIN=/absolute/path/to/node22 \
+  bash worker/deploy-ingest-local.sh \
+  --target-sha="$TARGET_SHA" --recover-from-stopped
+
+# Singapore; add --code-only or the attested artifact arguments when applicable
+bash worker/deploy-ingest-sg.sh \
+  --target-sha="$TARGET_SHA" --recover-from-stopped
+```
+
+Before removing the primary hold, the scripts re-prove the stopped baseline:
+PM2 live state, both `dump.pm2` generations, OS processes, Docker ownership,
+and Redis roster contain no active ingest owner; future-dated roster ownership
+is also rejected. They bind the old canonical directory, deployed SHA, release
+ID, and mode-0600 environment digest. The SG transaction additionally rejects
+ingest aliases in saved PM2 state, symlinked live/candidate directories, or a
+candidate environment that differs from the stopped baseline.
+
+Success removes the primary hold only for the token-fenced cutover, starts one
+candidate, and requires exact SHA, release ID, PID, readiness-log, fresh Redis,
+PM2 stability, and saved-state proof before reporting success. It then clears
+the compatibility guard and destroys the consumed GO.
+
+Any failure in a stopped-recovery session takes the stopped quarantine path,
+never the ordinary old-release restart path. The candidate is stopped and
+its SG PM2 entry is deleted. PM2 state is force-saved twice; on SG, a cut-over
+old directory is restored only when its bound SHA/release/environment digests
+agree. Both holds are re-created as mode-0600 regular files, and the consumed GO
+is destroyed. The worker remains stopped. If any zero-owner or restore proof is
+incomplete, treat the result as a continuing incident: leave both holds armed
+and perform manual inspection; do not start the old release.
 
 ## Failure handling
 

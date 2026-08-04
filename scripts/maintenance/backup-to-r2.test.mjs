@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { Readable } from 'node:stream'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
@@ -9,11 +12,13 @@ import { arenaBackupCompletionSentinel } from './backup-restore-contract.mjs'
 
 import {
   assertBackupArtifact,
+  attestUploadedBackupArtifact,
   assertUploadedBackupObject,
   backupDateFromKey,
   buildBackupMetadata,
   buildBackupArtifactIdentity,
   COMPLETE_BACKUP_MIN_BYTES,
+  createBackupWorkspace,
   IMMUTABLE_BACKUP_FILENAME_PATTERN,
   MULTIPART_PART_SIZE_BYTES,
   MULTIPART_QUEUE_SIZE,
@@ -23,6 +28,7 @@ import {
   produceAndCommitBackup,
   runPgDumpPipeline,
   uploadAndAttestBackupArtifact,
+  uploadBackupArtifact,
 } from './backup-to-r2.mjs'
 import { POSTGRES_CONNECTION_ENV_NAMES } from './postgres-cli-env.mjs'
 
@@ -244,13 +250,49 @@ test('uses managed multipart upload and attests the exact remote object through 
   })
 })
 
+test('multipart upload can consume the sealed descriptor body without reopening a pathname', async () => {
+  const sealedBody = Readable.from(Buffer.from('sealed artifact'))
+  let uploadOptions
+
+  class FakeUpload {
+    constructor(options) {
+      uploadOptions = options
+    }
+
+    async done() {
+      for await (const _chunk of uploadOptions.params.Body) {
+        // Consume the same stream supplied by the sealed-artifact boundary.
+      }
+      return { ETag: '"sealed-multipart-etag"' }
+    }
+  }
+
+  const uploaded = await uploadBackupArtifact({
+    client: {},
+    bucket: 'arena-test',
+    key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'d'.repeat(32)}-schemas.sql.gz`,
+    body: sealedBody,
+    localPath: '/path/must/not/be/reopened.sql.gz',
+    size: Buffer.byteLength('sealed artifact'),
+    metadata: {},
+    UploadClass: FakeUpload,
+  })
+
+  assert.equal(uploadOptions.params.Body, sealedBody)
+  assert.equal(uploaded.ETag, '"sealed-multipart-etag"')
+})
+
 test('remote upload attestation rejects size, ETag, content-type, and metadata drift', () => {
   const key = `db-backups/2026/08/arena-backup-20260804T070809123Z-${'c'.repeat(32)}-full.sql.gz`
-  const metadata = buildBackupMetadata({
-    now: new Date('2026-08-04T07:08:09.123Z'),
-    mode: { type: 'full', schemas: [] },
-    completionToken: COMPLETION_TOKEN,
-  })
+  const metadata = {
+    ...buildBackupMetadata({
+      now: new Date('2026-08-04T07:08:09.123Z'),
+      mode: { type: 'full', schemas: [] },
+      completionToken: COMPLETION_TOKEN,
+    }),
+    'artifact-size': String(COMPLETE_BACKUP_MIN_BYTES),
+    'artifact-sha256': 'b'.repeat(64),
+  }
   const validHead = {
     ContentLength: COMPLETE_BACKUP_MIN_BYTES,
     ContentType: 'application/gzip',
@@ -288,6 +330,17 @@ test('remote upload attestation rejects size, ETag, content-type, and metadata d
       }),
     /metadata attestation failed: completion-token/
   )
+  for (const [name, expectedError] of [
+    ['backup-type', /completeness metadata/],
+    ['tables', /completeness metadata/],
+    ['artifact-size', /metadata attestation failed: artifact-size/],
+    ['artifact-sha256', /metadata attestation failed: artifact-sha256/],
+  ]) {
+    assert.throws(
+      () => attest({ ...validHead, Metadata: { ...metadata, [name]: 'changed' } }),
+      expectedError
+    )
+  }
 })
 
 test('moves an encoded authority password out of the pg_dump URL', () => {
@@ -590,17 +643,173 @@ test('uploads and prunes only after a valid artifact, then removes the local cop
       localPath: output,
       minimumBytes: 1,
       completionToken: COMPLETION_TOKEN,
-      upload: async (validatedSize) => {
+      upload: async ({ size: validatedSize, body }) => {
         events.push(`upload:${validatedSize}`)
         assert.equal((await stat(output)).size, validatedSize)
+        for await (const _chunk of body) {
+          // Consume the exact sealed descriptor as an object-store client would.
+        }
+        return { ETag: '"uploaded-etag"' }
+      },
+      verifyUpload: async ({ size: validatedSize }, putResult) => {
+        events.push('head')
+        assert.equal(validatedSize, (await stat(output)).size)
+        assert.equal(putResult.ETag, '"uploaded-etag"')
       },
       prune: async () => {
         events.push('prune')
       },
     })
 
-    assert.deepEqual(events, [`upload:${size}`, 'prune'])
+    assert.deepEqual(events, [`upload:${size}`, 'head', 'prune'])
     await assert.rejects(stat(output), { code: 'ENOENT' })
+  })
+})
+
+test('creates private per-run workspaces and refuses to clobber an existing artifact', async () => {
+  const filename = `arena-backup-20260803T153000000Z-${'c'.repeat(32)}-schemas.sql.gz`
+  const workspaces = Array.from({ length: 8 }, () => createBackupWorkspace(filename))
+  try {
+    assert.equal(new Set(workspaces.map(({ directory }) => directory)).size, workspaces.length)
+    for (const { directory, localPath } of workspaces) {
+      assert.equal((await stat(directory)).mode & 0o777, 0o700)
+      await assert.rejects(stat(localPath), { code: 'ENOENT' })
+    }
+
+    const pgDump = join(workspaces[0].directory, 'fake-pg-dump')
+    await writeExecutable(pgDump, successfulPgDumpShell())
+    const options = {
+      pgDumpPath: pgDump,
+      connectionUrl: 'postgresql://backup@db.example.com/app',
+      password: undefined,
+      pgDumpArgs: [],
+      outputPath: workspaces[0].localPath,
+      completionToken: COMPLETION_TOKEN,
+      timeoutMs: 5_000,
+    }
+    runPgDumpPipeline(options)
+    const original = await readFile(workspaces[0].localPath)
+    assert.throws(() => runPgDumpPipeline(options), /EEXIST/)
+    assert.deepEqual(await readFile(workspaces[0].localPath), original)
+  } finally {
+    await Promise.all(
+      workspaces.map(({ directory }) => rm(directory, { force: true, recursive: true }))
+    )
+  }
+})
+
+test('a pathname replacement cannot change the sealed bytes or reach retention', async () => {
+  await withTempDir(async (directory) => {
+    const pgDump = join(directory, 'fake-pg-dump')
+    const output = join(directory, 'sealed.sql.gz')
+    const moved = join(directory, 'sealed-original.sql.gz')
+    let prunes = 0
+    let uploaded
+    await writeExecutable(pgDump, successfulPgDumpShell())
+
+    await assert.rejects(
+      produceAndCommitBackup({
+        produce: () =>
+          runPgDumpPipeline({
+            pgDumpPath: pgDump,
+            connectionUrl: 'postgresql://backup@db.example.com/app',
+            password: undefined,
+            pgDumpArgs: [],
+            outputPath: output,
+            completionToken: COMPLETION_TOKEN,
+            timeoutMs: 5_000,
+          }),
+        localPath: output,
+        minimumBytes: 1,
+        completionToken: COMPLETION_TOKEN,
+        upload: async ({ body }) => {
+          await rename(output, moved)
+          await writeFile(output, gzipSync('replacement'), { mode: 0o600 })
+          const chunks = []
+          for await (const chunk of body) chunks.push(chunk)
+          uploaded = Buffer.concat(chunks)
+          return { ETag: '"uploaded-etag"' }
+        },
+        verifyUpload: async () => {
+          throw new Error('HEAD must not run after local identity loss')
+        },
+        prune: async () => {
+          prunes += 1
+        },
+      }),
+      /pathname identity changed/
+    )
+
+    assert.deepEqual(uploaded, await readFile(moved))
+    assert.notDeepEqual(uploaded, await readFile(output))
+    assert.equal(prunes, 0)
+  })
+})
+
+test('a post-upload HEAD mismatch fails before local deletion or retention', async () => {
+  await withTempDir(async (directory) => {
+    const pgDump = join(directory, 'fake-pg-dump')
+    const output = join(directory, 'head-failure.sql.gz')
+    let prunes = 0
+    await writeExecutable(pgDump, successfulPgDumpShell())
+
+    await assert.rejects(
+      produceAndCommitBackup({
+        produce: () =>
+          runPgDumpPipeline({
+            pgDumpPath: pgDump,
+            connectionUrl: 'postgresql://backup@db.example.com/app',
+            password: undefined,
+            pgDumpArgs: [],
+            outputPath: output,
+            completionToken: COMPLETION_TOKEN,
+            timeoutMs: 5_000,
+          }),
+        localPath: output,
+        minimumBytes: 1,
+        completionToken: COMPLETION_TOKEN,
+        upload: async ({ body }) => {
+          for await (const _chunk of body) {
+            // Consume the sealed upload body.
+          }
+          return { ETag: '"put-etag"' }
+        },
+        verifyUpload: async ({ sha256 }, putResult) => {
+          const remoteSize = COMPLETE_BACKUP_MIN_BYTES
+          const metadata = {
+            ...buildBackupMetadata({
+              now: new Date('2026-08-03T15:30:00.000Z'),
+              mode: { type: 'schemas', schemas: ['arena', 'public'] },
+              completionToken: COMPLETION_TOKEN,
+            }),
+            'artifact-size': String(remoteSize),
+            'artifact-sha256': sha256,
+          }
+          return attestUploadedBackupArtifact({
+            client: {
+              send: async () => ({
+                ContentLength: remoteSize,
+                ContentType: 'application/gzip',
+                ETag: putResult.ETag,
+                Metadata: metadata,
+              }),
+            },
+            bucket: 'arena-test',
+            key: `db-backups/2026/08/arena-backup-20260803T153000000Z-${'e'.repeat(32)}-schemas.sql.gz`,
+            size: remoteSize + 1,
+            metadata,
+            uploadETag: putResult.ETag,
+          })
+        },
+        prune: async () => {
+          prunes += 1
+        },
+      }),
+      /size attestation failed/
+    )
+
+    assert.ok((await stat(output)).size > 0)
+    assert.equal(prunes, 0)
   })
 })
 
@@ -731,10 +940,37 @@ test('the executable uses the safe pipeline and CI runs the behavioral contract'
   assert.match(source, /new UploadClass\(/)
   assert.match(source, /new HeadObjectCommand\(/)
   assert.doesNotMatch(source, /PutObjectCommand/)
+  assert.match(source, /realpathSync\(process\.argv\[1\]\)/)
   assert.match(source, /cleanPostgresConnectionEnv\(/)
   assert.match(source, /parseBackupMode\(/)
   assert.doesNotMatch(source, /TRADER_TABLES|trader-tables/)
   assert.doesNotMatch(source, /execSync\(/)
   assert.doesNotMatch(source, /`\$\{pgDumpPath\}/)
   assert.match(ci, /node --test scripts\/maintenance\/backup-to-r2\.test\.mjs/)
+})
+
+test('the producer runs through a symlink instead of silently skipping main', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'arena-backup-producer-'))
+  const link = join(directory, 'backup-to-r2.mjs')
+  try {
+    await symlink(fileURLToPath(new URL('./backup-to-r2.mjs', import.meta.url)), link)
+    const env = { ...process.env }
+    for (const key of [
+      'DATABASE_URL',
+      'R2_ACCOUNT_ID',
+      'R2_ACCESS_KEY_ID',
+      'R2_SECRET_ACCESS_KEY',
+    ]) {
+      env[key] = ''
+    }
+    const result = spawnSync(process.execPath, [link, '--full'], {
+      cwd: process.cwd(),
+      env,
+      encoding: 'utf8',
+    })
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /Missing DATABASE_URL/)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })

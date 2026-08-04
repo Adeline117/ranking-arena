@@ -377,8 +377,8 @@ test('dedups only a valid recent marker and retries invalid or future markers', 
 })
 
 test('restores and saves cache explicitly before failing unhealthy runs', () => {
-  assert.match(workflow, /uses: actions\/cache\/restore@v4/)
-  assert.match(workflow, /uses: actions\/cache\/save@v4/)
+  assert.match(workflow, /uses: actions\/cache\/restore@[0-9a-f]{40}/)
+  assert.match(workflow, /uses: actions\/cache\/save@[0-9a-f]{40}/)
   assert.equal(workflow.match(/hm-alert-marker-v2-/g)?.length, 3)
   assert.doesNotMatch(workflow, /hm-alert-marker-\$\{\{/)
   assert.match(workflow, /if: steps\.telegram\.outputs\.delivered == 'true'/)
@@ -387,7 +387,7 @@ test('restores and saves cache explicitly before failing unhealthy runs', () => 
     /- name: Fail unhealthy health-monitor run\n        if: always\(\) && steps\.aggregate\.outputs\.status != 'healthy'/
   )
   assert.match(runBlock('Fail unhealthy health-monitor run'), /exit 1/)
-  assert.doesNotMatch(workflow, /uses: actions\/cache@v4/)
+  assert.doesNotMatch(workflow, /uses: actions\/cache(?:\/restore|\/save)?@v4/)
 })
 
 test('keeps secrets and dynamic health data out of shell expression interpolation', () => {
@@ -423,7 +423,10 @@ test('uses a de-duplicated GitHub issue when the primary alert channel fails', (
 })
 
 test('checks out full history before verifying the serving release', () => {
-  assert.match(workflow, /uses: actions\/checkout@v4\n        with:\n          fetch-depth: 0/)
+  assert.match(
+    workflow,
+    /uses: actions\/checkout@[0-9a-f]{40}[^\n]*\n        with:\n          fetch-depth: 0\n          persist-credentials: false/
+  )
   const release = runBlock('Verify production main ancestry')
   assert.match(release, /git fetch origin main --quiet/)
   assert.match(release, /git merge-base --is-ancestor "\$SERVING" origin\/main/)

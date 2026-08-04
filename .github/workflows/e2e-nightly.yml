@@ -5,17 +5,20 @@ name: E2E Nightly (main)
 # （最多 7 个 claude 会话）不停 push，长达 ~10-15min 的 E2E（92 spec、chromium+webkit）
 # 每次都被下一个 push 取消。结果 E2E 在 main 上「从未真正执行过一次」，是个幻影门。
 #
-# 解法：把 main 的 E2E 覆盖搬到独立 workflow，
+# 历史设计：把 main 的 E2E 覆盖搬到独立 workflow，
 #   1. 独立 concurrency group（不被 main push 取消）→ 跑得完；
 #   2. schedule 每日跑 + workflow_dispatch 可随时手动触发拿干净结果；
 #   3. 提供真实运行时 env（secrets）→ npm start 服务真实页面，E2E 才有意义
 #      （ci.yml e2e job 只设 CI=true、没给 Supabase env，server 会 500）。
-# ci.yml 的 e2e job 保留不动——PR 分支没有 churn，那里 E2E 能跑完，是 PR 的门。
+# 上述 schedule/workflow_dispatch 已在 V1 NO-GO 期间移除；当前仅保留被固定停用
+# 的 workflow_call 定义。ci.yml 的 PR E2E 语义另行保留。
 
+# SECURITY SUSPENDED (V1 NO-GO): the full suite currently combines unattended
+# execution with production credentials and controlled writes. Restore only after
+# it is split into a secret-free scheduled public smoke and an environment-only,
+# non-production credential path with a required reviewer and protected-main policy.
 on:
-  schedule:
-    - cron: '0 3 * * *' # 每日 03:00 UTC
-  workflow_dispatch: # 允许手动触发（拿即时干净结果）
+  workflow_call: {}
 
 # 独立于 ci-${{ github.ref }}：main 的 push 不会取消本 run。
 concurrency:
@@ -25,6 +28,7 @@ concurrency:
 jobs:
   e2e:
     name: E2E (full suite, real env)
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     # build（NEXT_PUBLIC_* 在 build 期 inline）与 npm start（运行时）都需要这些 env。
