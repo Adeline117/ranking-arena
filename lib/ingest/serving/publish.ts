@@ -21,6 +21,7 @@ import type {
 } from '../core/types'
 import type { RejectedRow } from '../staging/validate'
 import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
+import { parsedPositionHistoryRowSchema } from '../core/schemas'
 import { ensureHistoryPartitions } from './history-partitions'
 import { LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT } from '../acquisition-manifest'
 
@@ -1750,6 +1751,232 @@ async function publishHistoryRowsTransactionInternal(
   }
 
   return written
+}
+
+const POSITION_HISTORY_PUBLISHER_LANE = 'tier_b' as const
+const POSITION_HISTORY_PUBLISHER_CONTRACT =
+  'arena.ingest.position-history-publisher.worker@1' as const
+
+export interface PositionHistoryPublicationCheckpoint {
+  publicationId: number | null
+  cursor: string | null
+  observedAt: string | null
+}
+
+export interface VerifiedPositionHistoryPublicationReceipt {
+  publicationId: number
+  rowsWritten: number
+  parsedRowCount: number
+  cursor: string | null
+  observedAt: string
+  publishedAt: string
+  replayed: boolean
+}
+
+function exactObjectKeys(
+  value: unknown,
+  expected: readonly string[],
+  label: string
+): asserts value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`[history] ${label} is not an object`)
+  }
+  const actual = Object.keys(value).sort()
+  const wanted = [...expected].sort()
+  if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
+    throw new Error(`[history] ${label} fields do not match the database contract`)
+  }
+}
+
+function nullableCanonicalTimestamp(value: unknown, label: string): string | null {
+  if (value === null) return null
+  if (typeof value !== 'string' || value.length === 0 || value !== value.trim()) {
+    throw new Error(`[history] ${label} is not a timestamp`)
+  }
+  const epochMs = Date.parse(value)
+  if (!Number.isFinite(epochMs)) throw new Error(`[history] ${label} is not a timestamp`)
+  return new Date(epochMs).toISOString()
+}
+
+function safePositiveInteger(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`[history] ${label} is not a safe positive integer`)
+  }
+  return value
+}
+
+function safeNonNegativeInteger(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`[history] ${label} is not a safe non-negative integer`)
+  }
+  return value
+}
+
+function parsePositionHistoryCheckpoint(value: unknown): PositionHistoryPublicationCheckpoint {
+  exactObjectKeys(value, ['publicationId', 'cursor', 'observedAt'], 'publication checkpoint')
+  const publicationId =
+    value.publicationId === null
+      ? null
+      : safePositiveInteger(value.publicationId, 'checkpoint publicationId')
+  const cursor = nullableCanonicalTimestamp(value.cursor, 'checkpoint cursor')
+  const observedAt = nullableCanonicalTimestamp(value.observedAt, 'checkpoint observedAt')
+  if (publicationId === null) {
+    if (cursor !== null || observedAt !== null) {
+      throw new Error('[history] empty publication checkpoint carries trusted state')
+    }
+  } else if (observedAt === null) {
+    throw new Error('[history] publication checkpoint has no observation time')
+  }
+  return { publicationId, cursor, observedAt }
+}
+
+/**
+ * Read the authoritative position-history receipt head. This intentionally
+ * never falls back to arena.ingest_cursors: that table is compatibility state,
+ * not terminal-history evidence.
+ */
+export async function getPositionHistoryPublicationCheckpoint(
+  sourceId: number,
+  traderId: number
+): Promise<PositionHistoryPublicationCheckpoint> {
+  if (!Number.isSafeInteger(sourceId) || sourceId <= 0) {
+    throw new Error('[history] checkpoint source id is invalid')
+  }
+  if (!Number.isSafeInteger(traderId) || traderId <= 0) {
+    throw new Error('[history] checkpoint trader id is invalid')
+  }
+  const result = await getIngestPool().query<{ checkpoint: unknown }>(
+    `SELECT arena.get_position_history_publication_checkpoint(
+              $1::smallint,
+              $2::bigint
+            ) AS checkpoint`,
+    [sourceId, traderId]
+  )
+  if (result.rows.length !== 1) {
+    throw new Error('[history] checkpoint query returned an unexpected row count')
+  }
+  return parsePositionHistoryCheckpoint(result.rows[0].checkpoint)
+}
+
+function verifiedPositionHistoryRows(rows: ParsedHistoryRow[]): Array<Record<string, unknown>> {
+  if (rows.some((row) => row.kind !== 'position_history')) {
+    throw new Error('[history] verified publication contains a non-position row')
+  }
+  return rows.map((row) => {
+    if (row.kind !== 'position_history') {
+      throw new Error('[history] verified publication contains a non-position row')
+    }
+    const parsed = parsedPositionHistoryRowSchema.parse(row)
+    return {
+      opened_at: parsed.openedAt,
+      closed_at: parsed.closedAt,
+      symbol: parsed.symbol,
+      side: parsed.side,
+      leverage: parsed.leverage,
+      size: parsed.size,
+      entry_price: parsed.entryPrice,
+      exit_price: parsed.exitPrice,
+      realized_pnl: parsed.realizedPnl,
+      dedupe_hash: parsed.dedupeHash,
+      raw: parsed.raw,
+    }
+  })
+}
+
+function parseVerifiedPositionHistoryReceipt(
+  value: unknown,
+  expectedRows: number,
+  expectedCursor: string | null
+): VerifiedPositionHistoryPublicationReceipt {
+  exactObjectKeys(
+    value,
+    [
+      'publicationId',
+      'rowsWritten',
+      'parsedRowCount',
+      'cursor',
+      'observedAt',
+      'publishedAt',
+      'replayed',
+    ],
+    'publication receipt'
+  )
+  const publicationId = safePositiveInteger(value.publicationId, 'receipt publicationId')
+  const rowsWritten = safeNonNegativeInteger(value.rowsWritten, 'receipt rowsWritten')
+  const parsedRowCount = safeNonNegativeInteger(value.parsedRowCount, 'receipt parsedRowCount')
+  const cursor = nullableCanonicalTimestamp(value.cursor, 'receipt cursor')
+  const observedAt = nullableCanonicalTimestamp(value.observedAt, 'receipt observedAt')
+  const publishedAt = nullableCanonicalTimestamp(value.publishedAt, 'receipt publishedAt')
+  if (typeof value.replayed !== 'boolean') {
+    throw new Error('[history] receipt replayed flag is invalid')
+  }
+  const canonicalExpectedCursor = nullableCanonicalTimestamp(expectedCursor, 'expected cursor')
+  if (
+    parsedRowCount !== expectedRows ||
+    cursor !== canonicalExpectedCursor ||
+    observedAt === null ||
+    publishedAt === null ||
+    (value.replayed ? rowsWritten !== 0 : rowsWritten !== parsedRowCount)
+  ) {
+    throw new Error('[history] publication receipt does not match the requested write')
+  }
+  return {
+    publicationId,
+    rowsWritten,
+    parsedRowCount,
+    cursor,
+    observedAt,
+    publishedAt,
+    replayed: value.replayed,
+  }
+}
+
+/** Publish Tier-B acquisition-verified closed-position history through the receipt-owned writer. */
+export async function publishTierBVerifiedPositionHistoryInTransaction(
+  transaction: IngestQueryExecutor,
+  input: {
+    rawObjectId: number
+    previousPublicationId: number | null
+    effectiveCursorAfter: string | null
+    rows: ParsedHistoryRow[]
+  }
+): Promise<VerifiedPositionHistoryPublicationReceipt> {
+  const rawObjectId = safePositiveInteger(input.rawObjectId, 'RAW object id')
+  const previousPublicationId =
+    input.previousPublicationId === null
+      ? null
+      : safePositiveInteger(input.previousPublicationId, 'previous publication id')
+  const effectiveCursorAfter = nullableCanonicalTimestamp(
+    input.effectiveCursorAfter,
+    'effective cursor'
+  )
+  const serializedRows = verifiedPositionHistoryRows(input.rows)
+  const result = await transaction.query<{ receipt: unknown }>(
+    `SELECT arena.publish_verified_position_history(
+              $1::bigint,
+              $2::bigint,
+              $3::timestamptz,
+              $4::jsonb,
+              $5::text,
+              $6::text
+            ) AS receipt`,
+    [
+      rawObjectId,
+      previousPublicationId,
+      effectiveCursorAfter,
+      JSON.stringify(serializedRows),
+      POSITION_HISTORY_PUBLISHER_LANE,
+      POSITION_HISTORY_PUBLISHER_CONTRACT,
+    ]
+  )
+  if (result.rows.length !== 1) {
+    throw new Error('[history] publication writer returned an unexpected row count')
+  }
+  return parseVerifiedPositionHistoryReceipt(
+    result.rows[0].receipt,
+    serializedRows.length,
+    effectiveCursorAfter
+  )
 }
 
 /**

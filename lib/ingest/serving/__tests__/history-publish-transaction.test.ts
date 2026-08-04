@@ -1,8 +1,9 @@
 const mockClientQuery = jest.fn()
 const mockClientRelease = jest.fn()
+const mockPoolQuery = jest.fn()
 
 jest.mock('@/lib/ingest/db', () => ({
-  getIngestPool: jest.fn(),
+  getIngestPool: jest.fn(() => ({ query: mockPoolQuery })),
   ingestClientConnect: jest.fn(async () => ({
     query: mockClientQuery,
     release: mockClientRelease,
@@ -11,7 +12,13 @@ jest.mock('@/lib/ingest/db', () => ({
 
 import type { ParsedHistoryRow, SourceRow } from '../../core/types'
 import type { IngestQueryExecutor } from '../../db'
-import { publishHistoryRows, publishHistoryRowsInTransaction } from '../publish'
+import type { QueryResult, QueryResultRow } from 'pg'
+import {
+  getPositionHistoryPublicationCheckpoint,
+  publishHistoryRows,
+  publishHistoryRowsInTransaction,
+  publishTierBVerifiedPositionHistoryInTransaction,
+} from '../publish'
 
 const source = { slug: 'binance_futures', currency: 'USDT' } as SourceRow
 const position: ParsedHistoryRow = {
@@ -39,6 +46,15 @@ function successfulQuery() {
   })
 }
 
+function executor(query: jest.Mock): IngestQueryExecutor {
+  return {
+    query: async <R extends QueryResultRow = QueryResultRow>(
+      text: string,
+      values?: readonly unknown[]
+    ): Promise<QueryResult<R>> => query(text, values),
+  }
+}
+
 describe('history transaction publication', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -46,7 +62,7 @@ describe('history transaction publication', () => {
 
   it('uses only the caller executor for rows and the monotonic cursor', async () => {
     const query = successfulQuery()
-    const transaction = { query } as unknown as IngestQueryExecutor
+    const transaction = executor(query)
 
     await expect(
       publishHistoryRowsInTransaction(
@@ -105,7 +121,7 @@ describe('history transaction publication', () => {
 
   it('rejects a mixed-kind batch before queries or cursor progress', async () => {
     const query = successfulQuery()
-    const transaction = { query } as unknown as IngestQueryExecutor
+    const transaction = executor(query)
     const order: ParsedHistoryRow = {
       kind: 'orders',
       ts: nextCursor,
@@ -129,5 +145,258 @@ describe('history transaction publication', () => {
       )
     ).rejects.toThrow('row kind does not match position_history')
     expect(query).not.toHaveBeenCalled()
+  })
+
+  it('reads the receipt-owned position-history checkpoint without consulting compatibility cursors', async () => {
+    mockPoolQuery.mockResolvedValue({
+      rows: [
+        {
+          checkpoint: {
+            publicationId: 91,
+            cursor: '2026-08-02T00:00:00.000Z',
+            observedAt: '2026-08-02T00:01:00.000Z',
+          },
+        },
+      ],
+      rowCount: 1,
+    })
+
+    await expect(getPositionHistoryPublicationCheckpoint(34, 11)).resolves.toEqual({
+      publicationId: 91,
+      cursor: '2026-08-02T00:00:00.000Z',
+      observedAt: '2026-08-02T00:01:00.000Z',
+    })
+
+    expect(mockPoolQuery).toHaveBeenCalledWith(
+      expect.stringContaining('arena.get_position_history_publication_checkpoint'),
+      [34, 11]
+    )
+    expect(String(mockPoolQuery.mock.calls[0][0])).not.toContain('ingest_cursors')
+  })
+
+  it('accepts only a fully empty genesis checkpoint', async () => {
+    mockPoolQuery.mockResolvedValueOnce({
+      rows: [{ checkpoint: { publicationId: null, cursor: null, observedAt: null } }],
+      rowCount: 1,
+    })
+
+    await expect(getPositionHistoryPublicationCheckpoint(34, 11)).resolves.toEqual({
+      publicationId: null,
+      cursor: null,
+      observedAt: null,
+    })
+
+    mockPoolQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          checkpoint: {
+            publicationId: null,
+            cursor: nextCursor,
+            observedAt: '2026-08-02T00:01:00.000Z',
+          },
+        },
+      ],
+      rowCount: 1,
+    })
+    await expect(getPositionHistoryPublicationCheckpoint(34, 11)).rejects.toThrow(
+      'empty publication checkpoint carries trusted state'
+    )
+  })
+
+  it('rejects a checkpoint whose JSON shape drifts', async () => {
+    mockPoolQuery.mockResolvedValue({
+      rows: [
+        {
+          checkpoint: {
+            publicationId: 91,
+            cursor: nextCursor,
+            observedAt: '2026-08-02T00:01:00.000Z',
+            legacyCursor: nextCursor,
+          },
+        },
+      ],
+      rowCount: 1,
+    })
+
+    await expect(getPositionHistoryPublicationCheckpoint(34, 11)).rejects.toThrow(
+      'publication checkpoint fields do not match the database contract'
+    )
+  })
+
+  it('publishes exact position rows through the receipt-owned writer', async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          receipt: {
+            publicationId: 92,
+            rowsWritten: 1,
+            parsedRowCount: 1,
+            cursor: nextCursor,
+            observedAt: '2026-08-02T00:01:00.000Z',
+            publishedAt: '2026-08-02T00:01:01.000Z',
+            replayed: false,
+          },
+        },
+      ],
+      rowCount: 1,
+    })
+    const transaction = executor(query)
+
+    await expect(
+      publishTierBVerifiedPositionHistoryInTransaction(transaction, {
+        rawObjectId: 2_081_897,
+        previousPublicationId: 91,
+        effectiveCursorAfter: nextCursor,
+        rows: [position],
+      })
+    ).resolves.toEqual({
+      publicationId: 92,
+      rowsWritten: 1,
+      parsedRowCount: 1,
+      cursor: nextCursor,
+      observedAt: '2026-08-02T00:01:00.000Z',
+      publishedAt: '2026-08-02T00:01:01.000Z',
+      replayed: false,
+    })
+
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('arena.publish_verified_position_history'),
+      [
+        2_081_897,
+        91,
+        nextCursor,
+        JSON.stringify([
+          {
+            opened_at: position.openedAt,
+            closed_at: position.closedAt,
+            symbol: position.symbol,
+            side: position.side,
+            leverage: position.leverage,
+            size: position.size,
+            entry_price: position.entryPrice,
+            exit_price: position.exitPrice,
+            realized_pnl: position.realizedPnl,
+            dedupe_hash: position.dedupeHash,
+            raw: position.raw,
+          },
+        ]),
+        'tier_b',
+        'arena.ingest.position-history-publisher.worker@1',
+      ]
+    )
+  })
+
+  it('publishes a receipt even when a verified capture parses zero rows', async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          receipt: {
+            publicationId: 1,
+            rowsWritten: 0,
+            parsedRowCount: 0,
+            cursor: null,
+            observedAt: '2026-08-02T00:01:00.000Z',
+            publishedAt: '2026-08-02T00:01:01.000Z',
+            replayed: false,
+          },
+        },
+      ],
+      rowCount: 1,
+    })
+    const transaction = executor(query)
+
+    await expect(
+      publishTierBVerifiedPositionHistoryInTransaction(transaction, {
+        rawObjectId: 2_081_897,
+        previousPublicationId: null,
+        effectiveCursorAfter: null,
+        rows: [],
+      })
+    ).resolves.toMatchObject({ publicationId: 1, parsedRowCount: 0, rowsWritten: 0 })
+
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(query.mock.calls[0][1]).toEqual([
+      2_081_897,
+      null,
+      null,
+      '[]',
+      'tier_b',
+      'arena.ingest.position-history-publisher.worker@1',
+    ])
+  })
+
+  it('rejects a schema-invalid verified row before invoking the database writer', async () => {
+    const query = jest.fn()
+    const transaction = executor(query)
+    const invalid = { ...position, realizedPnl: Number.NaN } as ParsedHistoryRow
+
+    await expect(
+      publishTierBVerifiedPositionHistoryInTransaction(transaction, {
+        rawObjectId: 2_081_897,
+        previousPublicationId: null,
+        effectiveCursorAfter: nextCursor,
+        rows: [invalid],
+      })
+    ).rejects.toThrow()
+
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it('accepts an idempotent replay only when it reports zero newly written rows', async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          receipt: {
+            publicationId: 92,
+            rowsWritten: 0,
+            parsedRowCount: 1,
+            cursor: nextCursor,
+            observedAt: '2026-08-02T00:01:00.000Z',
+            publishedAt: '2026-08-02T00:01:01.000Z',
+            replayed: true,
+          },
+        },
+      ],
+      rowCount: 1,
+    })
+    const transaction = executor(query)
+
+    await expect(
+      publishTierBVerifiedPositionHistoryInTransaction(transaction, {
+        rawObjectId: 2_081_897,
+        previousPublicationId: 91,
+        effectiveCursorAfter: nextCursor,
+        rows: [position],
+      })
+    ).resolves.toMatchObject({ publicationId: 92, parsedRowCount: 1, rowsWritten: 0 })
+  })
+
+  it('fails closed when the writer receipt contradicts the requested write', async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          receipt: {
+            publicationId: 92,
+            rowsWritten: 1,
+            parsedRowCount: 1,
+            cursor: nextCursor,
+            observedAt: '2026-08-02T00:01:00.000Z',
+            publishedAt: '2026-08-02T00:01:01.000Z',
+            replayed: true,
+          },
+        },
+      ],
+      rowCount: 1,
+    })
+    const transaction = executor(query)
+
+    await expect(
+      publishTierBVerifiedPositionHistoryInTransaction(transaction, {
+        rawObjectId: 2_081_897,
+        previousPublicationId: 91,
+        effectiveCursorAfter: nextCursor,
+        rows: [position],
+      })
+    ).rejects.toThrow('publication receipt does not match the requested write')
   })
 })
