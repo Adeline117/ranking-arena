@@ -23,26 +23,26 @@ import {
   UnsupportedSourceSurfaceError,
   type SurfaceCapability,
 } from '@/lib/ingest/core/surface-capabilities'
-import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
 import { assertPositionSnapshotEvidence } from '@/lib/ingest/core/position-snapshot'
 import {
   findIncompleteProfileWindow,
   IncompleteProfileWindowError,
 } from '@/lib/ingest/core/profile-coverage'
 import type { ProfileQualityReject } from '@/lib/ingest/core/profile-quality'
-import type { ParseCtx } from '@/lib/ingest/core/types'
+import type { HistoryKind, ParseCtx, ParsedHistoryRow } from '@/lib/ingest/core/types'
+import type { HistoryCompleteness } from '@/lib/data/serving/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
-import { writeRawObject } from '@/lib/ingest/raw'
-import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
+import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import {
-  getHistoryCursor,
-  publishHistoryRows,
-  publishPositions,
-  publishProfile,
-  resolveTraderId,
-} from '@/lib/ingest/serving/publish'
+  writeHistoryRawArtifact,
+  writeRawObject,
+  type IngestTransactionRunner,
+} from '@/lib/ingest/raw'
+import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
+import { publishPositions, publishProfile, resolveTraderId } from '@/lib/ingest/serving/publish'
 import { getIngestPool } from '@/lib/ingest/db'
 import { tierCResultKey, type TierCJobData } from '../queues'
+import { runHistoryTransaction } from '../history-transaction'
 
 const RESULT_TTL_SECONDS = 120
 
@@ -209,15 +209,31 @@ export async function processTierC(
   }
 }
 
+function historyRowsForRender(
+  parsed: ParsedHistoryRow[],
+  kind: HistoryKind
+): Record<string, unknown>[] {
+  return parsed.map((row) => {
+    if (row.kind !== kind) throw new Error(`[tier-c] history row kind does not match ${kind}`)
+    if (row.kind === 'copiers') {
+      const { copierLabel: _pii, raw: _raw, ...rest } = row
+      return rest
+    }
+    const { raw: _raw, ...rest } = row
+    return rest
+  })
+}
+
 /**
  * Heavy-tab surfaces (spec §2.4-3): positions / position_history / orders /
  * transfers / copiers — fetched only when the user opens that tab. Same
- * render-before-persist contract: Redis result key {rows, nextCursor, asOf}
- * first, then arena.* persistence + profile_cache.
+ * history previews are explicitly partial and live only in the short Redis
+ * result. They never enter typed history tables, legacy cursors, or
+ * profile_cache. Positions retain their evidence-bound persistence path.
  *
  * Copier PII rule (spec §6): copierLabel never leaves the worker — the
- * Redis rows are stripped before publish; full rows (with label, for
- * dedupe) only reach arena.copier_records which has no public access.
+ * Redis preview rows are stripped before publish and this preview-only lane
+ * does not write the full row into any typed history table.
  */
 async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Promise<unknown> {
   const { sourceSlug, exchangeTraderId, timeframe, surface } = job.data
@@ -298,89 +314,87 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
       const asOf = new Date(Date.parse(scrapedAt) - delayHours * 3600_000).toISOString()
       await publishPositions(src, traderId, positions, asOf, positionEvidence)
     } else {
-      const kind = surface as import('@/lib/ingest/core/types').HistoryKind
+      const kind = surface as HistoryKind
+      const acquisition = await captureHistoryAcquisition({
+        source: src,
+        traderId,
+        exchangeTraderId,
+        kind,
+        cursor: null,
+        attemptStartedAt: scrapedAt,
+        callerPageCap: 2,
+        stream: adapter.getHistory(session, src, exchangeTraderId, kind, null, traderMeta),
+        terminalVerifier: adapter.historyTerminalVerifier?.(src, kind) ?? undefined,
+      })
+      rawPayload = acquisition.pages
+      const rawInput = { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId }
 
-      const cursor = await getHistoryCursor(traderId, kind)
-      const pages: import('@/lib/ingest/core/types').RawPage[] = []
-      let fetchError: unknown = null
-      let callerLimited = false
-      // On-demand view needs the freshest page or two; deeper pagination is
-      // served from arena.* by the records route, not by re-fetching.
+      if (acquisition.error !== null) {
+        await writeHistoryRawArtifact(rawInput, runHistoryTransaction)
+        throw acquisition.error
+      }
+
+      const termination = acquisition.artifact.termination
+      const observedAt = acquisition.artifact.pages.at(-1)?.fetched_at ?? null
+      const historyCompleteness: HistoryCompleteness = {
+        state: 'partial',
+        reason: 'interactive_preview',
+        evidenceState: termination.evidence_state,
+        scanTerminalState: termination.scan_terminal_state,
+        blockerReasons: [...termination.blocker_reasons],
+      }
+      const renderPayload = () => ({
+        rows,
+        nextCursor: null,
+        asOf: observedAt ?? scrapedAt,
+        sourceAsOf: null,
+        observedAt,
+        publishedAt: null,
+        completeness: historyCompleteness,
+      })
+
+      let storageDurable = false
+      let rawPointerDurable = false
+      const renderPreviewWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
+        // The immutable audit pointer commits before any untrusted parser or
+        // Redis work. This lane is preview-only and cannot mutate typed facts,
+        // evidence cursors, or the warm profile cache.
+        storageDurable = true
+        const receipt = await runHistoryTransaction(persistRawPointer)
+        rawPointerDurable = true
+        const parsed = acquisition.pages.flatMap((page) =>
+          adapter.parseHistory(page.payload, kind, ctx)
+        )
+        rows = historyRowsForRender(parsed, kind)
+        await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
+        return receipt
+      }
+
       try {
-        for await (const page of adapter.getHistory(
-          session,
-          src,
-          exchangeTraderId,
-          kind,
-          cursor,
-          traderMeta
-        )) {
-          pages.push(page)
-          if (pages.length >= 2) {
-            callerLimited = true
-            break
+        await writeHistoryRawArtifact(rawInput, renderPreviewWithRaw)
+      } catch (cause) {
+        if (storageDurable && !rawPointerDurable) {
+          try {
+            await writeHistoryRawArtifact(rawInput, runHistoryTransaction)
+          } catch (rawCause) {
+            throw new AggregateError(
+              [
+                cause instanceof Error ? cause : new Error(String(cause)),
+                rawCause instanceof Error ? rawCause : new Error(String(rawCause)),
+              ],
+              '[tier-c] history preview failure and RAW audit persistence both failed'
+            )
           }
         }
-      } catch (error) {
-        fetchError = error
+        throw cause
       }
-      rawPayload = pages
 
-      // Evidence first: parser/publication failures must leave a replayable
-      // account of every source page received before the checkpoint stayed put.
-      await writeRawObject({
-        sourceId: src.id,
-        sourceSlug: src.slug,
-        jobType: 'tier_c',
+      return {
         traderId,
-        timeframe,
-        payload: rawPayload,
-        meta: {
-          surface,
-          caller_limited: callerLimited,
-          fetch_failed: fetchError !== null,
-        },
-      })
-      rawPersisted = true
-      if (fetchError !== null) throw fetchError
-
-      const parsed = pages.flatMap((p) => adapter.parseHistory(p.payload, kind, ctx))
-
-      // PII strip for the render path (spec §6) — aggregates only for copiers.
-      rows =
-        kind === 'copiers'
-          ? parsed.map((r) => {
-              const {
-                copierLabel: _pii,
-                raw: _raw,
-                ...rest
-              } = r as unknown as Record<string, unknown> & {
-                copierLabel?: unknown
-                raw?: unknown
-              }
-              return rest
-            })
-          : parsed.map((r) => {
-              const { raw: _raw, ...rest } = r as unknown as Record<string, unknown> & {
-                raw?: unknown
-              }
-              return rest
-            })
-
-      await redis.set(
-        resultKey,
-        JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
-        'EX',
-        120
-      )
-
-      await publishHistoryRows(
-        src,
-        traderId,
-        kind,
-        parsed,
-        callerLimited ? null : nextHistoryCursor(parsed, cursor)
-      )
+        surface,
+        rows: rows.length,
+        completeness: historyCompleteness,
+      }
     }
 
     // Persist path (after render): RAW + profile_cache for warm re-reads.

@@ -90,11 +90,48 @@ export type TraderCoreResponse =
 
 export type RecordKind = 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
 
+/** Evidence state attached to an exact history response. */
+export type HistoryCompletenessState = 'complete' | 'partial' | 'unknown'
+
+export type HistoryCompletenessReason =
+  | 'verified_terminal_history'
+  | 'interactive_preview'
+  | 'history_evidence_not_bound'
+
+export type HistoryEvidenceState =
+  | 'verified'
+  | 'missing'
+  | 'invalid'
+  | 'verifier_missing'
+  | 'rejected'
+  | 'caller_limited'
+  | 'upstream_error'
+
+export type HistoryScanTerminalState = 'exhausted' | 'cursor_overlap' | 'partial' | 'unknown'
+
+export type HistoryCompletenessBlockerReason =
+  | 'terminal_claim_missing'
+  | 'terminal_claim_invalid'
+  | 'terminal_verifier_missing'
+  | 'terminal_claim_rejected'
+  | 'caller_limit'
+  | 'upstream_error'
+
+export interface HistoryCompleteness {
+  state: HistoryCompletenessState
+  reason: HistoryCompletenessReason
+  evidenceState?: HistoryEvidenceState
+  scanTerminalState?: HistoryScanTerminalState
+  blockerReasons?: HistoryCompletenessBlockerReason[]
+}
+
 export interface RecordsPage<T = Record<string, unknown>> {
   rows: T[]
   nextCursor: string | null
   provenance: Provenance
   cacheState: CoreCacheState
+  /** Present only when the response has an explicit history-evidence verdict. */
+  completeness?: HistoryCompleteness
 }
 
 /** Copier data is AGGREGATE-ONLY — no row-level identifiers, ever (spec §6). */

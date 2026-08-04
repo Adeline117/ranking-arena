@@ -7,16 +7,22 @@ const mockGetSourceBySlug = jest.fn()
 const mockGetAdapter = jest.fn()
 const mockGetProfile = jest.fn()
 const mockGetPositions = jest.fn()
+const mockGetHistory = jest.fn()
 const mockParseProfile = jest.fn()
+const mockParseHistory = jest.fn()
 const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
+const mockWriteHistoryRawArtifact = jest.fn()
 const mockRecordStagingRejects = jest.fn()
 const mockResolveTraderId = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockPublishPositions = jest.fn()
+const mockPublishHistoryRows = jest.fn()
 const mockDbQuery = jest.fn()
+const mockIngestClientQuery = jest.fn()
+const mockIngestClientRelease = jest.fn()
 
 jest.mock('../../../connection', () => ({
   getConnection: jest.fn(() => ({ set: (...args: unknown[]) => mockRedisSet(...args) })),
@@ -27,25 +33,28 @@ jest.mock('@/lib/ingest/sources', () => ({
 jest.mock('@/lib/ingest/core/adapter', () => ({
   getAdapter: (...args: unknown[]) => mockGetAdapter(...args),
 }))
-jest.mock('@/lib/ingest/core/history-cursor', () => ({ nextHistoryCursor: jest.fn() }))
 jest.mock('@/lib/ingest/fetch/fetcher', () => ({
   openSession: (...args: unknown[]) => mockOpenSession(...args),
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
+  writeHistoryRawArtifact: (...args: unknown[]) => mockWriteHistoryRawArtifact(...args),
 }))
 jest.mock('@/lib/ingest/staging/rejects', () => ({
   recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
-  getHistoryCursor: jest.fn(),
-  publishHistoryRows: jest.fn(),
+  publishHistoryRows: (...args: unknown[]) => mockPublishHistoryRows(...args),
   publishPositions: (...args: unknown[]) => mockPublishPositions(...args),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
   resolveTraderId: (...args: unknown[]) => mockResolveTraderId(...args),
 }))
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
+  ingestClientConnect: jest.fn(async () => ({
+    query: (...args: unknown[]) => mockIngestClientQuery(...args),
+    release: (...args: unknown[]) => mockIngestClientRelease(...args),
+  })),
 }))
 jest.mock('../../queues', () => ({ tierCResultKey: jest.fn(() => 'tier-c:result') }))
 
@@ -115,6 +124,98 @@ const job = {
   },
 } as Job<TierCJobData>
 
+function historyJob(surface: 'position_history' | 'orders' | 'transfers' | 'copiers') {
+  return {
+    data: { ...job.data, surface },
+  } as Job<TierCJobData>
+}
+
+async function* historyPreviewStream(options: { failAfterFirst?: boolean } = {}) {
+  for (let pageIndex = 1; pageIndex <= 3; pageIndex += 1) {
+    yield {
+      pageIndex,
+      payload: { pageIndex },
+      url: `https://gtrade.test/history?page=${pageIndex}`,
+      fetchedAt: new Date(Date.now() + pageIndex * 1_000).toISOString(),
+    }
+    if (options.failAfterFirst) throw new Error('history preview upstream failed')
+  }
+  return {
+    contract: 'arena.ingest.history-terminal-claim@1' as const,
+    observations: [{ segment_id: 'default', reason: 'reported_end' as const, page_ordinal: 3 }],
+  }
+}
+
+function parsedHistoryRow(kind: 'position_history' | 'orders' | 'transfers' | 'copiers') {
+  const raw = { private: true }
+  if (kind === 'position_history') {
+    return {
+      kind,
+      openedAt: '2026-07-14T12:00:00.000Z',
+      closedAt: '2026-07-15T12:00:00.000Z',
+      symbol: 'BTCUSDT',
+      side: 'long',
+      leverage: 2,
+      size: 1,
+      entryPrice: 100,
+      exitPrice: 110,
+      realizedPnl: 10,
+      dedupeHash: 'position-1',
+      raw,
+    }
+  }
+  if (kind === 'orders') {
+    return {
+      kind,
+      ts: '2026-07-15T12:00:00.000Z',
+      orderKind: 'close',
+      symbol: 'BTCUSDT',
+      side: 'long',
+      price: 110,
+      qty: 1,
+      dedupeHash: 'order-1',
+      raw,
+    }
+  }
+  if (kind === 'transfers') {
+    return {
+      kind,
+      ts: '2026-07-15T12:00:00.000Z',
+      direction: 'in' as const,
+      asset: 'USDC',
+      amount: 10,
+      dedupeHash: 'transfer-1',
+      raw,
+    }
+  }
+  return {
+    kind,
+    ts: '2026-07-15T12:00:00.000Z',
+    copierLabel: 'private-user',
+    copierPnl: 10,
+    copierInvested: 100,
+    copyDurationDays: 3,
+    dedupeHash: 'copier-1',
+    raw,
+  }
+}
+
+function historyAdapter() {
+  return {
+    capabilities: {
+      profile: true,
+      positions: true,
+      positionHistory: true,
+      orders: true,
+      transfers: true,
+      copiers: true,
+    },
+    supportsSurface: () => true,
+    getHistory: mockGetHistory,
+    parseHistory: mockParseHistory,
+  }
+}
+
 describe('Tier-C incomplete profile window gate', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -138,11 +239,27 @@ describe('Tier-C incomplete profile window gate', () => {
       storagePath: 'test/tier_c/raw.json.gz',
       contentHash: 'a'.repeat(64),
     })
+    mockWriteHistoryRawArtifact.mockImplementation(
+      async (
+        _input: unknown,
+        runTransaction: (
+          operation: (transaction: { query: typeof mockIngestClientQuery }) => Promise<unknown>
+        ) => Promise<unknown>
+      ) =>
+        runTransaction(async () => ({
+          id: 2_081_897,
+          storagePath: 'test/history/event_history.json.gz',
+          contentHash: 'b'.repeat(64),
+        }))
+    )
     mockRecordStagingRejects.mockResolvedValue(undefined)
     mockValidateProfile.mockReturnValue([])
     mockRedisSet.mockResolvedValue('OK')
     mockPublishProfile.mockResolvedValue(undefined)
     mockPublishPositions.mockResolvedValue(undefined)
+    mockPublishHistoryRows.mockResolvedValue(0)
+    mockIngestClientQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+    mockIngestClientRelease.mockReturnValue(undefined)
     mockSessionClose.mockResolvedValue(undefined)
   })
 
@@ -403,6 +520,163 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockRedisSet).not.toHaveBeenCalled()
     expect(mockPublishPositions).not.toHaveBeenCalled()
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['position_history', 'orders', 'transfers', 'copiers'] as const)(
+    'keeps the %s interactive result partial, private, and RAW-only',
+    async (surface) => {
+      mockGetAdapter.mockReturnValue(historyAdapter())
+      mockGetHistory.mockImplementation(() => historyPreviewStream())
+      mockParseHistory.mockImplementation((_payload: unknown, kind: typeof surface) => [
+        parsedHistoryRow(kind),
+      ])
+
+      await expect(processTierC(historyJob(surface), 'local')).resolves.toMatchObject({
+        traderId: 42,
+        surface,
+        rows: 2,
+        completeness: {
+          state: 'partial',
+          reason: 'interactive_preview',
+          evidenceState: 'caller_limited',
+          scanTerminalState: 'partial',
+          blockerReasons: ['caller_limit'],
+        },
+      })
+
+      expect(mockGetHistory).toHaveBeenCalledWith(
+        expect.anything(),
+        src,
+        job.data.exchangeTraderId,
+        surface,
+        null,
+        null
+      )
+      expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+      expect(mockWriteHistoryRawArtifact).toHaveBeenCalledWith(
+        {
+          artifact: expect.objectContaining({
+            source: { id: src.id, slug: src.slug },
+            trader: { id: 42, exchange_trader_id: job.data.exchangeTraderId },
+            history_kind: surface,
+            starting_cursor: null,
+            capture_config: { caller_page_cap: 2 },
+            pages: [expect.any(Object), expect.any(Object)],
+            termination: expect.objectContaining({
+              evidence_state: 'caller_limited',
+              scan_terminal_state: 'partial',
+              blocker_reasons: ['caller_limit'],
+            }),
+          }),
+          sourceRunId: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+        expect.any(Function)
+      )
+      expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+      expect(mockWriteRawObject).not.toHaveBeenCalled()
+      expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+      expect(
+        mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+      ).toBe(false)
+
+      expect(mockRedisSet).toHaveBeenCalledWith('tier-c:result', expect.any(String), 'EX', 120)
+      const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+      expect(renderPayload).toMatchObject({
+        rows: [
+          expect.objectContaining({ kind: surface }),
+          expect.objectContaining({ kind: surface }),
+        ],
+        nextCursor: null,
+        asOf: expect.any(String),
+        sourceAsOf: null,
+        observedAt: expect.any(String),
+        publishedAt: null,
+        completeness: {
+          state: 'partial',
+          reason: 'interactive_preview',
+          evidenceState: 'caller_limited',
+          scanTerminalState: 'partial',
+          blockerReasons: ['caller_limit'],
+        },
+      })
+      for (const row of renderPayload.rows) {
+        expect(row.raw).toBeUndefined()
+        expect(row.copierLabel).toBeUndefined()
+      }
+      expect(mockSessionClose).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('persists a partial RAW artifact before failing an interrupted history preview', async () => {
+    mockGetAdapter.mockReturnValue(historyAdapter())
+    mockGetHistory.mockImplementation(() => historyPreviewStream({ failAfterFirst: true }))
+
+    await expect(processTierC(historyJob('position_history'), 'local')).rejects.toThrow(
+      'history preview upstream failed'
+    )
+
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledWith(
+      {
+        artifact: expect.objectContaining({
+          history_kind: 'position_history',
+          pages: [expect.any(Object)],
+          termination: expect.objectContaining({
+            evidence_state: 'upstream_error',
+            scan_terminal_state: 'partial',
+            blocker_reasons: ['upstream_error'],
+          }),
+        }),
+        sourceRunId: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+      expect.any(Function)
+    )
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('commits the RAW pointer before parsing and exposes nothing when parsing fails', async () => {
+    mockGetAdapter.mockReturnValue(historyAdapter())
+    mockGetHistory.mockImplementation(() => historyPreviewStream())
+    mockParseHistory.mockImplementation(() => {
+      throw new Error('history parser failed')
+    })
+
+    await expect(processTierC(historyJob('orders'), 'local')).rejects.toThrow(
+      'history parser failed'
+    )
+
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(mockIngestClientQuery.mock.invocationCallOrder[1]).toBeLessThan(
+      mockParseHistory.mock.invocationCallOrder[0]
+    )
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a parser row from another history surface after preserving RAW', async () => {
+    mockGetAdapter.mockReturnValue(historyAdapter())
+    mockGetHistory.mockImplementation(() => historyPreviewStream())
+    mockParseHistory.mockReturnValue([parsedHistoryRow('orders')])
+
+    await expect(processTierC(historyJob('position_history'), 'local')).rejects.toThrow(
+      'history row kind does not match position_history'
+    )
+
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
   })
 
   it.each(['profile', 'positions'] as const)(
