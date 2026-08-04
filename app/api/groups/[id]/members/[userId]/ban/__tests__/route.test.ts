@@ -63,13 +63,17 @@ function resolveStatus(status: string) {
   mockRpc.mockResolvedValueOnce({ data: { status }, error: null })
 }
 
+function resolveResult(data: unknown) {
+  mockRpc.mockResolvedValueOnce({ data, error: null })
+}
+
 describe('group member ban atomic route', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   it('calls the service-only RPC with server-authenticated actor identity', async () => {
-    resolveStatus('banned')
+    resolveResult({ status: 'banned', member_removed: true, member_count: 2 })
 
     const response = await POST(request() as never, context())
 
@@ -143,6 +147,25 @@ describe('group member ban atomic route', () => {
     expect(failed.status).toBe(500)
     expect(malformed.status).toBe(500)
   })
+
+  it.each([
+    [{ status: 'banned' }],
+    [{ status: 'banned', member_removed: true }],
+    [{ status: 'banned', member_removed: 'true', member_count: 2 }],
+    [{ status: 'banned', member_removed: true, member_count: -1 }],
+    [{ status: 'banned', member_removed: true, member_count: 1.5 }],
+    [{ status: 'banned', member_removed: true, member_count: Number.MAX_SAFE_INTEGER + 1 }],
+    [{ status: 'banned', member_removed: true, member_count: 2, unexpected: true }],
+    [{ status: 'already_banned', member_removed: false, member_count: 2 }],
+    [{ status: 'unknown' }],
+  ])('rejects non-exact ban acknowledgement %#', async (data) => {
+    resolveResult(data)
+
+    const response = await POST(request() as never, context())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Ban failed' })
+  })
 })
 
 describe('group member unban atomic route', () => {
@@ -189,5 +212,19 @@ describe('group member unban atomic route', () => {
     const response = await DELETE(request() as never, context())
 
     expect(response.status).toBe(500)
+  })
+
+  it.each([
+    [{ status: 'unbanned', member_count: 2 }],
+    [{ status: 'already_unbanned', unexpected: true }],
+    [{ status: 'banned', member_removed: false, member_count: 2 }],
+    [{ status: 'unknown' }],
+  ])('rejects non-exact unban acknowledgement %#', async (data) => {
+    resolveResult(data)
+
+    const response = await DELETE(request() as never, context())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to unban' })
   })
 })

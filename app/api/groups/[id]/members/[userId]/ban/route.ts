@@ -14,12 +14,65 @@ const ModerationIdsSchema = z.object({
 
 type ModerationResult = {
   status: string
+  member_removed?: boolean
+  member_count?: number
 }
 
-function readModerationResult(value: unknown): ModerationResult | null {
+const SIMPLE_BAN_STATUSES = new Set([
+  'already_banned',
+  'invalid_reason',
+  'invalid',
+  'self_forbidden',
+  'target_not_found',
+  'not_found',
+  'dissolved',
+  'owner_forbidden',
+  'hierarchy_forbidden',
+  'account_inactive',
+  'forbidden',
+])
+
+const SIMPLE_UNBAN_STATUSES = new Set([
+  'unbanned',
+  'already_unbanned',
+  'invalid',
+  'not_found',
+  'dissolved',
+  'account_inactive',
+  'forbidden',
+])
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value)
+  return keys.length === expected.length && expected.every((key) => keys.includes(key))
+}
+
+function isSafeNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function readModerationResult(value: unknown, action: 'ban' | 'unban'): ModerationResult | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const status = (value as { status?: unknown }).status
-  return typeof status === 'string' ? { status } : null
+  const acknowledgement = value as Record<string, unknown>
+  const status = acknowledgement.status
+  if (action === 'ban' && status === 'banned') {
+    return hasExactKeys(acknowledgement, ['status', 'member_removed', 'member_count']) &&
+      typeof acknowledgement.member_removed === 'boolean' &&
+      isSafeNonNegativeInteger(acknowledgement.member_count)
+      ? {
+          status,
+          member_removed: acknowledgement.member_removed,
+          member_count: acknowledgement.member_count,
+        }
+      : null
+  }
+
+  const allowedStatuses = action === 'ban' ? SIMPLE_BAN_STATUSES : SIMPLE_UNBAN_STATUSES
+  return typeof status === 'string' &&
+    allowedStatuses.has(status) &&
+    hasExactKeys(acknowledgement, ['status'])
+    ? { status }
+    : null
 }
 
 async function moderate(
@@ -42,7 +95,7 @@ async function moderate(
     return null
   }
 
-  const result = readModerationResult(data)
+  const result = readModerationResult(data, action)
   if (!result) {
     logger.error(`Atomic group ${action} returned an invalid result`, { data })
   }

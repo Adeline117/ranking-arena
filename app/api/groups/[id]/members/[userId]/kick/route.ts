@@ -15,12 +15,46 @@ const ModerationIdsSchema = z.object({
 
 type ModerationResult = {
   status: string
+  member_count?: number
+}
+
+const SIMPLE_KICK_STATUSES = new Set([
+  'self_forbidden',
+  'invalid',
+  'target_not_found',
+  'not_member',
+  'not_found',
+  'dissolved',
+  'owner_forbidden',
+  'hierarchy_forbidden',
+  'account_inactive',
+  'forbidden',
+])
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value)
+  return keys.length === expected.length && expected.every((key) => keys.includes(key))
+}
+
+function isSafeNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
 function readModerationResult(value: unknown): ModerationResult | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const status = (value as { status?: unknown }).status
-  return typeof status === 'string' ? { status } : null
+  const acknowledgement = value as Record<string, unknown>
+  const status = acknowledgement.status
+  if (status === 'kicked') {
+    return hasExactKeys(acknowledgement, ['status', 'member_count']) &&
+      isSafeNonNegativeInteger(acknowledgement.member_count)
+      ? { status, member_count: acknowledgement.member_count }
+      : null
+  }
+  return typeof status === 'string' &&
+    SIMPLE_KICK_STATUSES.has(status) &&
+    hasExactKeys(acknowledgement, ['status'])
+    ? { status }
+    : null
 }
 
 function nonSuccessResponse(result: ModerationResult | null) {

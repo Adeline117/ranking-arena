@@ -60,13 +60,17 @@ function resolveStatus(status: string) {
   mockRpc.mockResolvedValueOnce({ data: { status }, error: null })
 }
 
+function resolveResult(data: unknown) {
+  mockRpc.mockResolvedValueOnce({ data, error: null })
+}
+
 describe('POST group member kick atomic route', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   it('notifies only after the atomic RPC reports a committed kick', async () => {
-    resolveStatus('kicked')
+    resolveResult({ status: 'kicked', member_count: 2 })
 
     const response = await POST(request() as never, context())
 
@@ -136,6 +140,25 @@ describe('POST group member kick atomic route', () => {
 
     expect(failed.status).toBe(500)
     expect(malformed.status).toBe(500)
+    expect(mockSendNotification).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{ status: 'kicked' }],
+    [{ status: 'kicked', member_count: -1 }],
+    [{ status: 'kicked', member_count: 1.5 }],
+    [{ status: 'kicked', member_count: Number.MAX_SAFE_INTEGER + 1 }],
+    [{ status: 'kicked', member_count: '2' }],
+    [{ status: 'kicked', member_count: 2, unexpected: true }],
+    [{ status: 'not_member', member_count: 2 }],
+    [{ status: 'unknown' }],
+  ])('rejects non-exact kick acknowledgement %# without notifying', async (data) => {
+    resolveResult(data)
+
+    const response = await POST(request() as never, context())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Operation failed' })
     expect(mockSendNotification).not.toHaveBeenCalled()
   })
 })
