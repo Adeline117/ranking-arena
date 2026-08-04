@@ -131,16 +131,16 @@ V1 继续收敛为“可信的跨交易所交易员发现、判断与持续跟�
 
 ## 最终本地验证证据
 
-2026-08-03 18:54 PDT，在本分支无冲突整合当时最新 `origin/main` 后，最终本地候选完成以下验证：
+2026-08-03 21:30 PDT，在本分支无冲突整合当时最新 `origin/main` 后，最终本地候选完成以下验证：
 
-- 完整 Jest：1045 suites / 11,901 tests 通过；3 suites / 27 tests 按既有条件跳过；零失败。
+- 完整 Jest：1047 suites / 11,952 tests 通过；3 suites / 27 tests 按既有条件跳过；零失败。上游 position-history acquisition/source-facts/RAW 与 Tier-B 定向 Jest 另有 4/4 suites、75/75 tests 通过。
 - 主应用与 ingest worker TypeScript：通过。主应用 ESLint 为 0 error / 2700 条既有 warning；worker ESLint 为 0 error / 8 条既有 warning。
-- 与 CI 相同的非生产 dummy 环境执行 Next.js webpack production build：通过；postbuild BigInt 检查覆盖 1094 chunks 并通过。第一次完全空环境构建按预期在 critical env validation 处停止，不属于代码失败，也未使用生产凭据。
-- 仓库 QA：337/337 API route 鉴权覆盖、221/221 sweep unit、11/11 generated-types contract、19/19 launch migration runner、Supabase cast ratchet 与 migration-history shape 全部通过。当前 shape 为 584 个 migration（393 modern、191 fingerprinted legacy）；这只证明清单形状，不证明迁移已部署。
-- 本轮事故加固在隔离 Node 22 下再次通过 225/225 QA sweep；备份/恢复行为契约 50/50、新 freshness contract 5/5，以及 Mac mini/SG 两组 deploy safety tests均通过。当前 Mac 主机默认/旧 PM2 interpreter 为 Node 25.8.1，Vercel 为 Node 24.x，而部署与 CI 契约要求 Node 22；在干净 staging/主机安装并绑定 exact Node 22 前仍是发布阻塞项。
-- 五项隔离 PostgreSQL 17 证明全部通过：exchange-connection ACL、activation v2、authorization lifecycle、legacy Portfolio retirement/export/delete 与 Claim V2 two-phase cutover。
+- 与 CI 相同的非生产 dummy 环境执行 Next.js webpack production build：通过；postbuild BigInt 检查覆盖 1094 chunks 并通过。构建只使用 inert placeholder，未注入生产凭据；placeholder Supabase 解析失败和未安装的可选 wallet connector 只产生既有 warning，没有掩盖退出码。
+- 仓库 QA：337/337 API route 鉴权覆盖、237/237 sweep unit、11/11 generated-types contract、19/19 launch migration runner、Supabase cast ratchet 与 migration-history shape 全部通过。当前 shape 为 584 个 migration（393 modern、191 fingerprinted legacy）；这只证明清单形状，不证明迁移已部署。
+- 备份 producer/freshness 行为契约 27/27 通过；Mac mini/SG 两组完整 deploy safety tests 与四文件 shell syntax 均通过。13 个 privileged workflow 共 24 个 job 均解析为 exact `if: false`；workflow YAML 全部可解析。当前 Mac 主机默认/旧 PM2 interpreter 为 Node 25.8.1，Vercel 为 Node 24.x，而部署与 CI 契约要求 Node 22；在干净 staging/主机安装并绑定 exact Node 22 前仍是发布阻塞项。
+- 隔离 PostgreSQL 17 验证为 8/8 顶层命令、11/11 底层 proof scripts 通过：三个 record/publication suites、四个 public-rank-authority proofs，以及 activation、authorization、legacy Portfolio retirement/export/delete 与 Claim V2 two-phase cutover；这些都是 disposable local PG17，不是 production apply 证据。
 - `npm audit --audit-level=high` 为 0 high / 0 critical；仍有 2 low / 22 moderate，不能表述为“零漏洞”。
-- changed-file Prettier、OpenAPI YAML/Portfolio-export paths、`git diff --check`、新增内容 secret pattern scan、clean worktree、`origin/main` ancestry 与 production-generated `database.types.ts` 未改动均须在最后一次文档冻结后再次通过；交付报告记录其最终结果。
+- changed-file Prettier、workflow YAML parse、`git diff --check`、新增内容 credential pattern scan、clean worktree、`origin/main` ancestry 与 production-generated `database.types.ts` 未改动均在最后一次文档冻结后再次核验；最终 exact SHA 由交付报告绑定。
 
 Git commit 不能在自己的内容中自引用其最终 SHA；因此 exact candidate SHA 由冻结后只读 `git rev-parse HEAD` 与本次交付报告绑定。任何后续 amend、rebase 或文件修改都会使本节证据失效，必须重新验证并重新记录。上述本地 green 不能替代 production migration、ACL、凭据轮换、恢复演练、48 小时排空或真实环境 smoke。
 
