@@ -12,6 +12,11 @@ import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+import {
+  COMMENT_REACTION_REQUEST_TIMEOUT_MS,
+  readCommentReactionAcknowledgement,
+  type CommentReaction,
+} from '@/lib/comments/comment-reaction-client-contract'
 
 export type Comment = {
   id: string
@@ -30,15 +35,6 @@ export type Comment = {
   user_liked?: boolean
   user_disliked?: boolean
   replies?: Comment[]
-}
-
-type CommentReaction = 'like' | 'dislike'
-
-type CommentReactionResponse = {
-  like_count: number
-  dislike_count: number
-  liked: boolean
-  disliked: boolean
 }
 
 type DeleteCommentResponse = {
@@ -148,25 +144,6 @@ function getCommentReaction(comment: Comment): CommentReaction | null {
   return null
 }
 
-function isCommentReactionResponse(
-  value: unknown,
-  expectedReaction: CommentReaction | null
-): value is CommentReactionResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const data = value as Partial<CommentReactionResponse>
-  const acknowledgedReaction = data.liked ? 'like' : data.disliked ? 'dislike' : null
-  return (
-    Number.isSafeInteger(data.like_count) &&
-    (data.like_count ?? -1) >= 0 &&
-    Number.isSafeInteger(data.dislike_count) &&
-    (data.dislike_count ?? -1) >= 0 &&
-    typeof data.liked === 'boolean' &&
-    typeof data.disliked === 'boolean' &&
-    !(data.liked && data.disliked) &&
-    acknowledgedReaction === expectedReaction
-  )
-}
-
 function isDeleteCommentResponse(value: unknown): value is DeleteCommentResponse {
   if (!value || typeof value !== 'object') return false
   const data = value as Partial<DeleteCommentResponse>
@@ -197,8 +174,17 @@ type CommentViewerScope = {
   userId: string | null
 }
 
+type PendingCommentReaction = {
+  controller: AbortController
+  operation: symbol
+}
+
 function commentViewerScopeKey(scope: Pick<CommentViewerScope, 'viewerKey' | 'sessionGeneration'>) {
   return `${scope.viewerKey}\u0000${scope.sessionGeneration}`
+}
+
+function commentReactionLockKey(postId: string, commentId: string) {
+  return `${postId}\u0000${commentId}`
 }
 
 // Convert Comment to CommentData for store compatibility
@@ -294,7 +280,7 @@ export function usePostComments({
   // Ref-based guards to prevent double submissions
   const submittingCommentRef = useRef<symbol | null>(null)
   const submittingReplyRef = useRef<symbol | null>(null)
-  const pendingReactionIdsRef = useRef(new Map<string, symbol>())
+  const pendingReactionOperationsRef = useRef(new Map<string, PendingCommentReaction>())
   const pendingDeleteIdsRef = useRef(new Map<string, symbol>())
   // Resource binding is deliberately separate from draft persistence. It guards
   // every async response from mutating a newly opened post.
@@ -311,6 +297,20 @@ export function usePostComments({
     )
   }, [])
 
+  const abortPendingCommentReactions = useCallback(() => {
+    for (const pending of pendingReactionOperationsRef.current.values()) {
+      pending.controller.abort()
+    }
+    pendingReactionOperationsRef.current.clear()
+  }, [])
+
+  useEffect(
+    () => () => {
+      abortPendingCommentReactions()
+    },
+    [abortPendingCommentReactions]
+  )
+
   useEffect(() => {
     const store = usePostStore.getState()
     if ('setViewerScope' in store && typeof store.setViewerScope === 'function') {
@@ -326,7 +326,7 @@ export function usePostComments({
     submittingCommentRef.current = null
     submittingReplyRef.current = null
     submittingEditRef.current = null
-    pendingReactionIdsRef.current.clear()
+    abortPendingCommentReactions()
     pendingDeleteIdsRef.current.clear()
     setComments([])
     setLoadingComments(false)
@@ -340,6 +340,7 @@ export function usePostComments({
     setSubmittingEdit(false)
   }, [
     scopeKey,
+    abortPendingCommentReactions,
     setCommentLikeLoading,
     setComments,
     setDeletingCommentId,
@@ -445,6 +446,7 @@ export function usePostComments({
       if (currentPostIdRef.current !== postId) {
         // Modal/page reuse must not carry interaction state from the previous
         // post while the next post is loading.
+        abortPendingCommentReactions()
         setComments([])
         setReplyingTo(null)
         setExpandedReplies({})
@@ -467,6 +469,7 @@ export function usePostComments({
     },
     [
       authChecked,
+      abortPendingCommentReactions,
       reconcileCanonicalComments,
       scopeIsCurrent,
       setCommentLikeLoading,
@@ -605,14 +608,16 @@ export function usePostComments({
       commentId: string,
       requestedReaction: CommentReaction
     ): Promise<void> => {
-      if (!requireAuth() || pendingReactionIdsRef.current.has(commentId)) return
+      const lockKey = commentReactionLockKey(postId, commentId)
+      if (!requireAuth() || pendingReactionOperationsRef.current.has(lockKey)) return
       const operation = Symbol('comment-reaction')
       const capturedScope = activeScopeRef.current
+      const controller = new AbortController()
 
       const targetComment = findComment(commentsRef.current, commentId)
       if (!targetComment) return
 
-      pendingReactionIdsRef.current.set(commentId, operation)
+      pendingReactionOperationsRef.current.set(lockKey, { controller, operation })
       setCommentLikeLoading((previous) => ({ ...previous, [commentId]: true }))
 
       const previousReaction = getCommentReaction(targetComment)
@@ -667,11 +672,7 @@ export function usePostComments({
       }
 
       try {
-        const result = await authedFetch<{
-          success: boolean
-          error?: string
-          data?: unknown
-        }>(
+        const result = await authedFetch<unknown>(
           `/api/posts/${postId}/comments/like`,
           'POST',
           accessToken,
@@ -679,21 +680,26 @@ export function usePostComments({
             comment_id: commentId,
             type: requestedReaction,
           },
-          15_000,
+          COMMENT_REACTION_REQUEST_TIMEOUT_MS,
           {
             expectedUserId: capturedScope.userId,
             expectedSessionGeneration: capturedScope.sessionGeneration,
+            signal: controller.signal,
           }
         )
 
-        if (!scopeIsCurrent(capturedScope) || result.stale) return
+        if (controller.signal.aborted || !scopeIsCurrent(capturedScope) || result.stale) return
 
-        if (
-          result.ok &&
-          result.data?.success &&
-          isCommentReactionResponse(result.data.data, nextReaction)
-        ) {
-          const serverReaction = result.data.data
+        const acknowledgement = capturedScope.userId
+          ? readCommentReactionAcknowledgement(result.data, {
+              actorId: capturedScope.userId,
+              postId,
+              commentId,
+              requestedReaction,
+            })
+          : null
+
+        if (result.ok && result.status === 200 && acknowledgement) {
           if (
             (stateRevisionRef.current.get(revisionKey) || 0) === optimisticRevision &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
@@ -711,10 +717,10 @@ export function usePostComments({
                 }
                 return {
                   ...comment,
-                  like_count: serverReaction.like_count,
-                  dislike_count: serverReaction.dislike_count,
-                  user_liked: serverReaction.liked,
-                  user_disliked: serverReaction.disliked,
+                  like_count: acknowledgement.likeCount,
+                  dislike_count: acknowledgement.dislikeCount,
+                  user_liked: acknowledgement.liked,
+                  user_disliked: acknowledgement.disliked,
                 }
               })
             )
@@ -723,23 +729,26 @@ export function usePostComments({
           rollback()
           if (scopeIsCurrent(capturedScope)) {
             showToast(
-              getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
+              getHttpErrorMessage(result.status, t('operationFailed')),
               result.status === 429 ? 'warning' : 'error'
             )
           }
         } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
+          rollback()
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } catch {
+        if (controller.signal.aborted) return
         if (
           scopeIsCurrent(capturedScope) &&
           !(await reconcileCanonicalComments(postId, 'best', capturedScope))
         ) {
+          rollback()
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } finally {
-        if (pendingReactionIdsRef.current.get(commentId) === operation) {
-          pendingReactionIdsRef.current.delete(commentId)
+        if (pendingReactionOperationsRef.current.get(lockKey)?.operation === operation) {
+          pendingReactionOperationsRef.current.delete(lockKey)
         }
         if (
           scopeIsCurrent(capturedScope) &&

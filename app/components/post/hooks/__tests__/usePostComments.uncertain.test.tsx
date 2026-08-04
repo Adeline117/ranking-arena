@@ -5,6 +5,10 @@ const mockAuthedFetch = jest.fn()
 const mockSetStoreComments = jest.fn()
 const mockAddStoreComment = jest.fn()
 const mockUpdatePostCommentCount = jest.fn()
+const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
+const REACTION_POST_ID = '22222222-2222-4222-8222-222222222222'
+const REACTION_COMMENT_ID = '33333333-3333-4333-8333-333333333333'
+const REACTION_TIMESTAMP = '2026-08-03T21:30:00.000Z'
 
 jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
@@ -87,12 +91,15 @@ function editedAcknowledgement(content: string, overrides: Record<string, unknow
   }
 }
 
-function renderCommentsHook(showDangerConfirm = async () => true) {
+function renderCommentsHook(showDangerConfirm = async () => true, currentUserId?: string) {
   const onCommentCountChange = jest.fn()
   const showToast = jest.fn()
   const hook = renderHook(() =>
     usePostComments({
       accessToken: 'token-1',
+      currentUserId,
+      viewerKey: currentUserId ? `user:${currentUserId}` : undefined,
+      sessionGeneration: currentUserId ? 1 : undefined,
       showToast,
       showDangerConfirm,
       onCommentCountChange,
@@ -100,6 +107,31 @@ function renderCommentsHook(showDangerConfirm = async () => true) {
     })
   )
   return { ...hook, onCommentCountChange, showToast }
+}
+
+function reactionComment(overrides: Partial<Comment> = {}): Comment {
+  return comment({ id: REACTION_COMMENT_ID, post_id: REACTION_POST_ID, ...overrides })
+}
+
+function reactionReceipt(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    data: {
+      actor_id: REACTION_ACTOR_ID,
+      post_id: REACTION_POST_ID,
+      comment_id: REACTION_COMMENT_ID,
+      operation: 'toggle',
+      requested_reaction: 'like',
+      action: 'added',
+      reaction: 'like',
+      liked: true,
+      disliked: false,
+      like_count: 1,
+      dislike_count: 0,
+      ...overrides,
+    },
+    meta: { timestamp: REACTION_TIMESTAMP },
+  }
 }
 
 async function loadInitial(
@@ -190,9 +222,9 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
   })
 
   it('preserves a newer reaction event when HTTP and canonical GET both fail', async () => {
-    const initial = comment()
-    const { result } = renderCommentsHook()
-    await loadInitial(result, [initial], 1)
+    const initial = reactionComment()
+    const { result } = renderCommentsHook(async () => true, REACTION_ACTOR_ID)
+    await loadInitial(result, [initial], 1, REACTION_POST_ID)
 
     let rejectMutation: ((error: Error) => void) | undefined
     mockAuthedFetch.mockReturnValueOnce(
@@ -204,9 +236,9 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
 
     let request: Promise<void>
     act(() => {
-      request = result.current.toggleCommentLike('post-1', initial.id)
+      request = result.current.toggleCommentLike(REACTION_POST_ID, initial.id)
     })
-    const realtimeTruth = comment({ user_liked: true, like_count: 20, dislike_count: 4 })
+    const realtimeTruth = reactionComment({ user_liked: true, like_count: 20, dislike_count: 4 })
     act(() => result.current.setComments([realtimeTruth]))
 
     await act(async () => {
@@ -218,10 +250,10 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
   })
 
   it('treats a malformed 2xx reaction ACK as unknown and reads canonical truth', async () => {
-    const initial = comment()
-    const canonicalReaction = comment({ user_liked: true, like_count: 1 })
-    const { result } = renderCommentsHook()
-    await loadInitial(result, [initial], 1)
+    const initial = reactionComment()
+    const canonicalReaction = reactionComment({ user_liked: true, like_count: 1 })
+    const { result } = renderCommentsHook(async () => true, REACTION_ACTOR_ID)
+    await loadInitial(result, [initial], 1, REACTION_POST_ID)
     mockAuthedFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -229,34 +261,31 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
     })
     mockAuthedFetch.mockResolvedValueOnce(canonical([canonicalReaction], 1))
 
-    await act(async () => result.current.toggleCommentLike('post-1', initial.id))
+    await act(async () => result.current.toggleCommentLike(REACTION_POST_ID, initial.id))
 
     expect(result.current.comments).toEqual([canonicalReaction])
   })
 
   it('does not let a valid but older reaction ACK overwrite newer Realtime truth', async () => {
-    const initial = comment()
-    const { result } = renderCommentsHook()
-    await loadInitial(result, [initial], 1)
+    const initial = reactionComment()
+    const { result } = renderCommentsHook(async () => true, REACTION_ACTOR_ID)
+    await loadInitial(result, [initial], 1, REACTION_POST_ID)
 
     let resolveMutation: ((value: unknown) => void) | undefined
     mockAuthedFetch.mockReturnValueOnce(new Promise((resolve) => (resolveMutation = resolve)))
 
     let request: Promise<void>
     act(() => {
-      request = result.current.toggleCommentLike('post-1', initial.id)
+      request = result.current.toggleCommentLike(REACTION_POST_ID, initial.id)
     })
-    const realtimeTruth = comment({ user_liked: true, like_count: 20, dislike_count: 4 })
+    const realtimeTruth = reactionComment({ user_liked: true, like_count: 20, dislike_count: 4 })
     act(() => result.current.setComments([realtimeTruth]))
 
     await act(async () => {
       resolveMutation?.({
         ok: true,
         status: 200,
-        data: {
-          success: true,
-          data: { liked: true, disliked: false, like_count: 1, dislike_count: 0 },
-        },
+        data: reactionReceipt(),
       })
       await request!
     })
