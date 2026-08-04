@@ -171,7 +171,7 @@ function publicProfile(handle: string) {
   }
 }
 
-function sensitiveProfile(settingsVersion = 0) {
+function sensitiveProfile(settingsVersion = 0, totpEnabled = false) {
   return {
     data: {
       notify_follow: true,
@@ -180,11 +180,42 @@ function sensitiveProfile(settingsVersion = 0) {
       notify_mention: true,
       notify_message: true,
       notify_trader_events: true,
-      totp_enabled: false,
+      totp_enabled: totpEnabled,
       email_digest: 'none',
       settings_version: settingsVersion,
     },
     error: null,
+  }
+}
+
+const TWO_FACTOR_SECRET = 'JBSWY3DPEHPK3PXP'
+const TWO_FACTOR_BACKUP_CODES = [
+  '0001-0001',
+  '0002-0002',
+  '0003-0003',
+  '0004-0004',
+  '0005-0005',
+  '0006-0006',
+  '0007-0007',
+  '0008-0008',
+]
+
+function twoFactorSetupAcknowledgement(viewerId = 'user-a') {
+  return {
+    success: true,
+    viewerId,
+    status: 'staged',
+    qrCode: 'data:image/png;base64,aGVsbG8=',
+    secret: TWO_FACTOR_SECRET,
+  }
+}
+
+function twoFactorEnableAcknowledgement(viewerId = 'user-a') {
+  return {
+    success: true,
+    viewerId,
+    status: 'enabled',
+    backupCodes: TWO_FACTOR_BACKUP_CODES,
   }
 }
 
@@ -301,6 +332,250 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.profileLoadFailed).toBe(false)
     expect(hook.result.current.handle).toBe('alpha')
     expect(hook.result.current.initialValuesRef.current?.handle).toBe('alpha')
+  })
+
+  it('single-flights setup and displays only an exact viewer-bound enrollment secret', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const setup = deferred<{ ok: boolean; status: number; data: unknown }>()
+    mockAuthedFetch.mockReturnValueOnce(setup.promise)
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = hook.result.current.handleSetup2FA()
+      duplicate = hook.result.current.handleSetup2FA()
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      setup.resolve({ ok: true, status: 200, data: twoFactorSetupAcknowledgement() })
+      await Promise.all([first, duplicate])
+    })
+
+    expect(hook.result.current.twoFASetupData).toEqual({
+      qrCodeDataUrl: 'data:image/png;base64,aGVsbG8=',
+      secret: TWO_FACTOR_SECRET,
+    })
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/settings/2fa/setup',
+      'POST',
+      jwt('user-a'),
+      undefined,
+      15_000,
+      expect.objectContaining({
+        expectedUserId: 'user-a',
+        expectedSessionGeneration: scope.sessionGeneration,
+      })
+    )
+  })
+
+  it('does not expose enrollment material from a widened or mismatched 2xx response', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { ...twoFactorSetupAcknowledgement('user-b'), debugSecret: true },
+    })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleSetup2FA()
+    })
+
+    expect(hook.result.current.twoFASetupData).toBeNull()
+    expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
+  })
+
+  it('enables 2FA only with eight exact one-time recovery codes', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: twoFactorSetupAcknowledgement(),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: twoFactorEnableAcknowledgement(),
+      })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.handleSetup2FA()
+    })
+    act(() => hook.result.current.setTwoFACode('123456'))
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = hook.result.current.handleVerify2FA()
+      duplicate = hook.result.current.handleVerify2FA()
+    })
+    await act(async () => {
+      await Promise.all([first, duplicate])
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(hook.result.current.twoFAEnabled).toBe(true)
+    expect(hook.result.current.twoFASetupData).toBeNull()
+    expect(hook.result.current.twoFACode).toBe('')
+    expect(hook.result.current.backupCodes).toEqual(TWO_FACTOR_BACKUP_CODES)
+    expect(showToast).toHaveBeenCalledWith('twoFAEnabled', 'success')
+  })
+
+  it('does not report enabled or discard the setup secret on a wrong 2xx receipt', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: twoFactorSetupAcknowledgement(),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        data: twoFactorEnableAcknowledgement(),
+      })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    await act(async () => {
+      await hook.result.current.handleSetup2FA()
+    })
+    act(() => hook.result.current.setTwoFACode('123456'))
+
+    await act(async () => {
+      await hook.result.current.handleVerify2FA()
+    })
+
+    expect(hook.result.current.twoFAEnabled).toBe(false)
+    expect(hook.result.current.twoFASetupData?.secret).toBe(TWO_FACTOR_SECRET)
+    expect(hook.result.current.backupCodes).toEqual([])
+    expect(showToast).toHaveBeenCalledWith('verificationFailed', 'error')
+    expect(showToast).not.toHaveBeenCalledWith('twoFAEnabled', 'success')
+  })
+
+  it('never releases late recovery codes after the viewer changes', async () => {
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(publicProfile('alpha'))
+      .mockResolvedValueOnce(publicProfile('bravo'))
+    mockSensitiveMaybeSingle
+      .mockResolvedValueOnce(sensitiveProfile())
+      .mockResolvedValueOnce(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: twoFactorSetupAcknowledgement(),
+    })
+    const verification = deferred<{ ok: boolean; status: number; data: unknown }>()
+    mockAuthedFetch.mockReturnValueOnce(verification.promise)
+
+    const scopeA = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(
+      ({ auth }) => useSettingsHandlers({ auth, showToast, showConfirm, t }),
+      { initialProps: { auth: authFor('user-a', scopeA.sessionGeneration) } }
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    await act(async () => {
+      await hook.result.current.handleSetup2FA()
+    })
+    act(() => hook.result.current.setTwoFACode('123456'))
+    let requestA!: Promise<void>
+    act(() => {
+      requestA = hook.result.current.handleVerify2FA()
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+
+    const transition = beginViewerTransition('user-b')
+    const scopeB = commitViewerTransition(transition, 'user-b')!
+    hook.rerender({ auth: authFor('user-b', scopeB.sessionGeneration) })
+    await waitFor(() => expect(hook.result.current.handle).toBe('bravo'))
+
+    await act(async () => {
+      verification.resolve({ ok: true, status: 200, data: twoFactorEnableAcknowledgement() })
+      await requestA
+    })
+
+    expect(hook.result.current.twoFAEnabled).toBe(false)
+    expect(hook.result.current.twoFASetupData).toBeNull()
+    expect(hook.result.current.backupCodes).toEqual([])
+    expect(showToast).not.toHaveBeenCalledWith('twoFAEnabled', 'success')
+  })
+
+  it('keeps 2FA enabled until disable returns the exact viewer-bound acknowledgement', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile(0, true))
+    mockAuthedFetch
+      .mockResolvedValueOnce({ ok: true, status: 200, data: { success: true } })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { success: true, viewerId: 'user-a', status: 'disabled' },
+      })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => hook.result.current.setDisablePassword('correct horse'))
+
+    await act(async () => {
+      await hook.result.current.handleDisable2FA()
+    })
+    expect(hook.result.current.twoFAEnabled).toBe(true)
+    expect(hook.result.current.disablePassword).toBe('correct horse')
+    expect(showToast).toHaveBeenCalledWith('closeFailed', 'error')
+
+    await act(async () => {
+      await hook.result.current.handleDisable2FA()
+    })
+    expect(hook.result.current.twoFAEnabled).toBe(false)
+    expect(hook.result.current.disablePassword).toBe('')
+    expect(showToast).toHaveBeenCalledWith('twoFADisabled', 'success')
   })
 
   it('does not present a failed passkey read as an empty credential list', async () => {

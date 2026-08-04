@@ -12,15 +12,15 @@ jest.mock('next/server', () => {
     _body: unknown
     status: number
     headers: Map<string, string>
-    constructor(body?: unknown, init: { status?: number } = {}) {
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status || 200
-      this.headers = new Map()
+      this.headers = new Map(Object.entries(init.headers ?? {}))
     }
     async json() {
       return this._body
     }
-    static json(data: unknown, init?: { status?: number }) {
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -190,9 +190,15 @@ describe('POST /api/settings/2fa/setup', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.secret).toBe('JBSWY3DPEHPK3PXP')
-    expect(body.uri).toContain('otpauth://totp/')
-    expect(body.qrCode).toContain('data:image/png')
+    expect(body).toEqual({
+      success: true,
+      viewerId: 'user-123',
+      status: 'staged',
+      secret: 'JBSWY3DPEHPK3PXP',
+      qrCode: 'data:image/png;base64,iVBORw0KGgoAAAA...',
+    })
+    expect(res.headers.get('Cache-Control')).toBe('no-store, private')
+    expect(res.headers.get('Pragma')).toBe('no-cache')
     expect(mockGenerateTotpSecret).toHaveBeenCalledWith('test@test.com')
     expect(mockToDataURL).toHaveBeenCalledWith(expect.stringContaining('otpauth://totp/'))
   })
@@ -206,6 +212,19 @@ describe('POST /api/settings/2fa/setup', () => {
     await POST(req)
 
     expect(mockGenerateTotpSecret).toHaveBeenCalledWith('user-456')
+  })
+
+  it('rejects any setup request body before generating a secret', async () => {
+    const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
+      method: 'POST',
+      body: { unexpected: true },
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    expect(mockGenerateTotpSecret).not.toHaveBeenCalled()
+    expect(mockSupabase.rpc).not.toHaveBeenCalled()
   })
 
   it('stages the exact TOTP secret through the atomic RPC', async () => {

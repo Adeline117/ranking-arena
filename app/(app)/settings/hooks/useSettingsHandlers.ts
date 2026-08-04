@@ -31,6 +31,11 @@ import {
   isSettingsViewerCurrent,
   type SettingsViewerSnapshot,
 } from './settings-viewer-scope'
+import {
+  readTwoFactorDisableAcknowledgement,
+  readTwoFactorEnableAcknowledgement,
+  readTwoFactorSetupAcknowledgement,
+} from '@/lib/security/two-factor-client-contract'
 
 type NotificationWriteContext = {
   accessToken: string
@@ -112,6 +117,22 @@ function isExactUnblockAcknowledgement(value: unknown): value is { success: true
   const acknowledgement = value as Record<string, unknown>
   const fields = Object.keys(acknowledgement)
   return fields.length === 1 && fields[0] === 'success' && acknowledgement.success === true
+}
+
+function twoFactorResponseMessage(value: unknown, fallback: string): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback
+  const response = value as Record<string, unknown>
+  if (typeof response.error === 'string' && response.error.trim()) return response.error.trim()
+  if (
+    response.error &&
+    typeof response.error === 'object' &&
+    !Array.isArray(response.error) &&
+    typeof (response.error as Record<string, unknown>).message === 'string'
+  ) {
+    const message = ((response.error as Record<string, unknown>).message as string).trim()
+    if (message) return message
+  }
+  return fallback
 }
 
 function settingsScopeMatches(
@@ -1268,6 +1289,10 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     if (submittingRef.current || twoFALoading || !scope || !stateBelongsToViewer(scope)) return
     submittingRef.current = true
     setTwoFALoading(true)
+    // A new setup invalidates any previously displayed enrollment material.
+    setTwoFASetupData(null)
+    setTwoFACode('')
+    setBackupCodes([])
     try {
       const token = await getFreshToken(scope)
       if (!viewerIsCurrent(scope)) return
@@ -1275,18 +1300,27 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         showToast(t('pleaseLoginFirst'), 'error')
         return
       }
-      const res = await fetch('/api/settings/2fa/setup', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, ...getCsrfHeaders() },
-      })
-      if (!viewerIsCurrent(scope)) return
-      const data = await res.json()
-      if (!viewerIsCurrent(scope)) return
-      if (!res.ok) {
-        showToast(data.error || t('operationFailed'), 'error')
+      const result = await authedFetch<unknown>(
+        '/api/settings/2fa/setup',
+        'POST',
+        token,
+        undefined,
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!viewerIsCurrent(scope) || result.stale) return
+      const acknowledgement =
+        result.ok && result.status === 200
+          ? readTwoFactorSetupAcknowledgement(result.data, scope.userId)
+          : null
+      if (!acknowledgement) {
+        showToast(twoFactorResponseMessage(result.data, t('operationFailed')), 'error')
         return
       }
-      setTwoFASetupData({ qrCodeDataUrl: data.qrCode, secret: data.secret })
+      setTwoFASetupData(acknowledgement)
     } catch {
       if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
@@ -1305,12 +1339,13 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       twoFALoading ||
       !scope ||
       !stateBelongsToViewer(scope) ||
-      !twoFACode ||
-      twoFACode.length !== 6
+      !/^\d{6}$/.test(twoFACode)
     )
       return
     submittingRef.current = true
     setTwoFALoading(true)
+    // Never keep an earlier recovery set alongside a new enablement attempt.
+    setBackupCodes([])
     try {
       const token = await getFreshToken(scope)
       if (!viewerIsCurrent(scope)) return
@@ -1318,24 +1353,32 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         showToast(t('pleaseLoginFirst'), 'error')
         return
       }
-      const res = await fetch('/api/settings/2fa/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ code: twoFACode }),
-      })
-      if (!viewerIsCurrent(scope)) return
-      const data = await res.json()
-      if (!viewerIsCurrent(scope)) return
-      if (!res.ok) {
-        showToast(data.error || t('verificationFailed'), 'error')
+      const result = await authedFetch<unknown>(
+        '/api/settings/2fa/verify',
+        'POST',
+        token,
+        { code: twoFACode },
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!viewerIsCurrent(scope) || result.stale) return
+      const acknowledgedCodes =
+        result.ok && result.status === 200
+          ? readTwoFactorEnableAcknowledgement(result.data, scope.userId)
+          : null
+      if (!acknowledgedCodes) {
+        if (result.status === 409) {
+          setTwoFASetupData(null)
+          setTwoFACode('')
+        }
+        showToast(twoFactorResponseMessage(result.data, t('verificationFailed')), 'error')
         return
       }
       setTwoFAEnabled(true)
-      setBackupCodes(data.backupCodes || [])
+      setBackupCodes(acknowledgedCodes)
       setTwoFASetupData(null)
       setTwoFACode('')
       showToast(t('twoFAEnabled'), 'success')
@@ -1369,20 +1412,24 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         showToast(t('pleaseLoginFirst'), 'error')
         return
       }
-      const res = await fetch('/api/settings/2fa/disable', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ password: disablePassword }),
-      })
-      if (!viewerIsCurrent(scope)) return
-      const data = await res.json()
-      if (!viewerIsCurrent(scope)) return
-      if (!res.ok) {
-        showToast(data.error || t('closeFailed'), 'error')
+      const result = await authedFetch<unknown>(
+        '/api/settings/2fa/disable',
+        'POST',
+        token,
+        { password: disablePassword },
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!viewerIsCurrent(scope) || result.stale) return
+      if (
+        !result.ok ||
+        result.status !== 200 ||
+        !readTwoFactorDisableAcknowledgement(result.data, scope.userId)
+      ) {
+        showToast(twoFactorResponseMessage(result.data, t('closeFailed')), 'error')
         return
       }
       setTwoFAEnabled(false)

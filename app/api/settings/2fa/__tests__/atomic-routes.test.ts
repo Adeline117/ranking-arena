@@ -7,17 +7,17 @@ jest.mock('next/server', () => {
     status: number
     headers: Map<string, string>
 
-    constructor(body?: unknown, init: { status?: number } = {}) {
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status ?? 200
-      this.headers = new Map()
+      this.headers = new Map(Object.entries(init.headers ?? {}))
     }
 
     async json() {
       return this._body
     }
 
-    static json(data: unknown, init?: { status?: number }) {
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -84,9 +84,10 @@ const backupCodes = [
 ]
 const codeHashes = backupCodes.map((_, index) => `${index + 1}`.repeat(64))
 const mockVerifyTotpCode = jest.fn()
+const mockGenerateBackupCodes = jest.fn(() => backupCodes)
 
 jest.mock('@/lib/services/totp', () => ({
-  generateBackupCodes: jest.fn(() => backupCodes),
+  generateBackupCodes: () => mockGenerateBackupCodes(),
   hashBackupCode: jest.fn((code: string) => codeHashes[backupCodes.indexOf(code)]),
   verifyTotpCode: (...args: unknown[]) => mockVerifyTotpCode(...args),
 }))
@@ -124,6 +125,7 @@ describe('atomic 2FA runtime routes', () => {
     jest.clearAllMocks()
     mockHasActiveTwoFactorProfile.mockResolvedValue(true)
     mockVerifyTotpCode.mockReturnValue(true)
+    mockGenerateBackupCodes.mockReturnValue(backupCodes)
     mockSignInWithPassword.mockResolvedValue({
       data: { user: mockUser, session: { user: mockUser } },
       error: null,
@@ -137,7 +139,14 @@ describe('atomic 2FA runtime routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body).toEqual({ success: true, backupCodes })
+    expect(body).toEqual({
+      success: true,
+      viewerId: mockUser.id,
+      status: 'rotated',
+      backupCodes,
+    })
+    expect(response.headers.get('Cache-Control')).toBe('no-store, private')
+    expect(response.headers.get('Pragma')).toBe('no-cache')
     expect(mockRpc).toHaveBeenCalledTimes(1)
     expect(mockRpc).toHaveBeenCalledWith('rotate_two_factor_backup_codes_atomic', {
       p_user_id: mockUser.id,
@@ -193,6 +202,25 @@ describe('atomic 2FA runtime routes', () => {
     expect(body.backupCodes).toBeUndefined()
   })
 
+  it('rejects backup-code rotation request bodies before generating credentials', async () => {
+    const response = await rotateBackupCodes(request({ unexpected: true }))
+
+    expect(response.status).toBe(400)
+    expect(mockGenerateBackupCodes).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the backup-code generator returns duplicates', async () => {
+    mockGenerateBackupCodes.mockReturnValue([...backupCodes.slice(0, 7), backupCodes[0]])
+
+    const response = await rotateBackupCodes(request())
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body.backupCodes).toBeUndefined()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
   it('binds enablement to the exact secret that passed TOTP verification', async () => {
     mockRpc
       .mockResolvedValueOnce({
@@ -208,7 +236,14 @@ describe('atomic 2FA runtime routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body).toEqual({ success: true, backupCodes })
+    expect(body).toEqual({
+      success: true,
+      viewerId: mockUser.id,
+      status: 'enabled',
+      backupCodes,
+    })
+    expect(response.headers.get('Cache-Control')).toBe('no-store, private')
+    expect(response.headers.get('Pragma')).toBe('no-cache')
     expect(mockVerifyTotpCode).toHaveBeenCalledWith('JBSWY3DPEHPK3PXP', '123456')
     expect(mockRpc).toHaveBeenNthCalledWith(2, 'enable_two_factor_credentials_atomic', {
       p_user_id: mockUser.id,
@@ -228,6 +263,42 @@ describe('atomic 2FA runtime routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(400)
+    expect(body.backupCodes).toBeUndefined()
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['an extra field', { code: '123456', extra: true }],
+    ['a short code', { code: '12345' }],
+    ['a long code', { code: '1234567' }],
+    ['a non-numeric code', { code: 'ABCDEF' }],
+    ['a null body', null],
+  ])('rejects verification body with %s before reading enrollment', async (_label, body) => {
+    const response = await verifyTwoFactor(request(body))
+
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockVerifyTotpCode).not.toHaveBeenCalled()
+  })
+
+  it('rejects an oversized verification body before reading enrollment', async () => {
+    const response = await verifyTwoFactor(request({ code: '1'.repeat(33_000) }))
+
+    expect(response.status).toBe(413)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('never enables 2FA when generated recovery codes are not unique', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: { status: 'ready', totp_secret: 'JBSWY3DPEHPK3PXP' },
+      error: null,
+    })
+    mockGenerateBackupCodes.mockReturnValue([...backupCodes.slice(0, 7), backupCodes[0]])
+
+    const response = await verifyTwoFactor(request({ code: '123456' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
     expect(body.backupCodes).toBeUndefined()
     expect(mockRpc).toHaveBeenCalledTimes(1)
   })
@@ -337,7 +408,7 @@ describe('atomic 2FA runtime routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body).toEqual({ success: true })
+    expect(body).toEqual({ success: true, viewerId: mockUser.id, status: 'disabled' })
     expect(mockRpc).toHaveBeenCalledTimes(1)
     expect(mockRpc).toHaveBeenCalledWith('disable_two_factor_credentials_atomic', {
       p_user_id: mockUser.id,
@@ -392,6 +463,18 @@ describe('atomic 2FA runtime routes', () => {
 
   it('rejects oversized password input before invoking authentication', async () => {
     const response = await disableTwoFactor(request({ password: 'x'.repeat(4097) }))
+
+    expect(response.status).toBe(400)
+    expect(mockSignInWithPassword).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['an extra field', { password: 'correct horse', extra: true }],
+    ['a null body', null],
+    ['a non-string password', { password: 123456 }],
+  ])('rejects disable body with %s before password proof', async (_label, body) => {
+    const response = await disableTwoFactor(request(body))
 
     expect(response.status).toBe(400)
     expect(mockSignInWithPassword).not.toHaveBeenCalled()

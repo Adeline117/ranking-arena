@@ -11,14 +11,27 @@ import { serverError } from '@/lib/api/response'
 import { twoFactorBackupCodeRotationResultSchema } from '@/lib/security/two-factor-credentials'
 import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
+import { isValidTwoFactorBackupCodeSet } from '@/lib/security/two-factor-client-contract'
+import {
+  hasExactEmptyTwoFactorBody,
+  TWO_FACTOR_SECRET_RESPONSE_HEADERS,
+} from '@/lib/security/two-factor-http-contract'
 
 const logger = createLogger('2fa-backup-codes')
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
-  async ({ user, supabase }) => {
+  async ({ user, supabase, request }) => {
+    if (!(await hasExactEmptyTwoFactorBody(request))) {
+      return NextResponse.json({ error: 'Backup-code request body must be empty' }, { status: 400 })
+    }
+
     const backupCodes = generateBackupCodes(8)
+    if (!isValidTwoFactorBackupCodeSet(backupCodes)) {
+      logger.error('[2FA Backup Codes] Generator returned an invalid set')
+      return serverError('Failed to regenerate backup codes')
+    }
     const codeHashes = backupCodes.map((plainCode: string) => hashBackupCode(plainCode))
 
     const { data, error } = await supabase.rpc('rotate_two_factor_backup_codes_atomic', {
@@ -56,10 +69,15 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
-    return NextResponse.json({
-      success: true,
-      backupCodes,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        viewerId: user.id,
+        status: 'rotated',
+        backupCodes,
+      },
+      { headers: TWO_FACTOR_SECRET_RESPONSE_HEADERS }
+    )
   },
   {
     name: '2fa-backup-codes',

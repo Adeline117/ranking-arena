@@ -10,25 +10,34 @@ import { badRequest, serverError } from '@/lib/api/response'
 import { twoFactorDisableResultSchema } from '@/lib/security/two-factor-credentials'
 import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
+import { z } from 'zod'
+import { readTwoFactorJson } from '@/lib/security/two-factor-http-contract'
 
 const logger = createLogger('2fa-disable')
+
+const DisableTwoFactorSchema = z
+  .object({
+    password: z.string().min(1).max(4096),
+  })
+  .strict()
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    let body: { password?: string }
-    try {
-      body = await request.json()
-    } catch {
+    const decodedBody = await readTwoFactorJson(request)
+    if (!decodedBody.ok && decodedBody.reason === 'too_large') {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+    }
+    if (!decodedBody.ok) {
       return badRequest('Invalid JSON body')
     }
 
-    const { password } = body
-
-    if (typeof password !== 'string' || password.length === 0 || password.length > 4096) {
+    const parsedBody = DisableTwoFactorSchema.safeParse(decodedBody.value)
+    if (!parsedBody.success) {
       return badRequest('Password is required')
     }
+    const { password } = parsedBody.data
 
     // Verify the user's password by attempting sign-in
     const userEmail = user.email
@@ -82,7 +91,7 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, viewerId: user.id, status: 'disabled' })
   },
   {
     name: '2fa-disable',

@@ -14,30 +14,37 @@ import {
 } from '@/lib/security/two-factor-credentials'
 import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
+import { isValidTwoFactorBackupCodeSet } from '@/lib/security/two-factor-client-contract'
+import {
+  readTwoFactorJson,
+  TWO_FACTOR_SECRET_RESPONSE_HEADERS,
+} from '@/lib/security/two-factor-http-contract'
 
 const logger = createLogger('2fa-verify')
 
 // Zod schema for POST /api/settings/2fa/verify
-const Verify2FASchema = z.object({
-  code: z
-    .string()
-    .min(1, 'Verification code is required')
-    .max(10, 'Code too long')
-    .regex(/^\d+$/, 'Code must be numeric'),
-})
+const Verify2FASchema = z
+  .object({
+    code: z
+      .string()
+      .length(6, 'Verification code must be 6 digits')
+      .regex(/^\d{6}$/, 'Code must be numeric'),
+  })
+  .strict()
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    let body: Record<string, unknown>
-    try {
-      body = await request.json()
-    } catch {
+    const decodedBody = await readTwoFactorJson(request)
+    if (!decodedBody.ok && decodedBody.reason === 'too_large') {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+    }
+    if (!decodedBody.ok) {
       return badRequest('Invalid JSON body')
     }
 
-    const parsed = Verify2FASchema.safeParse(body)
+    const parsed = Verify2FASchema.safeParse(decodedBody.value)
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'Invalid input', details: parsed.error.flatten() },
@@ -86,6 +93,10 @@ export const POST = withAuth(
     }
 
     const backupCodes = generateBackupCodes(8)
+    if (!isValidTwoFactorBackupCodeSet(backupCodes)) {
+      logger.error('[2FA Verify] Backup code generator returned an invalid set')
+      return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
+    }
     const codeHashes = backupCodes.map((plainCode: string) => hashBackupCode(plainCode))
     const { data: enableData, error: enableError } = await supabase.rpc(
       'enable_two_factor_credentials_atomic',
@@ -137,10 +148,15 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
-    return NextResponse.json({
-      success: true,
-      backupCodes,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        viewerId: user.id,
+        status: 'enabled',
+        backupCodes,
+      },
+      { headers: TWO_FACTOR_SECRET_RESPONSE_HEADERS }
+    )
   },
   {
     name: '2fa-verify',

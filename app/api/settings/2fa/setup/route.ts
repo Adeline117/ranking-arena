@@ -11,13 +11,21 @@ import { badRequest, serverError } from '@/lib/api/response'
 import { twoFactorEnrollmentStageResultSchema } from '@/lib/security/two-factor-credentials'
 import { hasActiveTwoFactorProfile } from '@/lib/security/two-factor-active-profile'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  hasExactEmptyTwoFactorBody,
+  TWO_FACTOR_SECRET_RESPONSE_HEADERS,
+} from '@/lib/security/two-factor-http-contract'
 
 const logger = createLogger('2fa-setup')
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
-  async ({ user, supabase }) => {
+  async ({ user, supabase, request }) => {
+    if (!(await hasExactEmptyTwoFactorBody(request))) {
+      return badRequest('2FA setup request body must be empty')
+    }
+
     const userEmail = user.email ?? user.id
     const { secret, uri } = generateTotpSecret(userEmail)
 
@@ -61,7 +69,16 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
     }
 
-    return NextResponse.json({ qrCode, secret, uri })
+    return NextResponse.json(
+      {
+        success: true,
+        viewerId: user.id,
+        status: 'staged',
+        qrCode,
+        secret,
+      },
+      { headers: TWO_FACTOR_SECRET_RESPONSE_HEADERS }
+    )
   },
   {
     name: '2fa-setup',
