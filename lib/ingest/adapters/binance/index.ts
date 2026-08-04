@@ -47,6 +47,16 @@ import {
   projectBinanceLeaderboardRequest,
 } from '../../leaderboard-request-evidence'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+  type HistoryTerminalClaimReason,
+} from '../../history-acquisition'
+import {
+  BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
+  BINANCE_POSITION_HISTORY_URL,
+} from './history-contract'
+import { binancePositionHistoryTerminalVerifier } from './history-terminal'
+import {
   parseBinanceHistory,
   parseBinanceLeaderboardPage,
   parseBinancePositions,
@@ -68,7 +78,7 @@ const ENDPOINTS: Record<string, Record<string, string>> = {
     chart: `${FUT_PUB}/lead-portfolio/chart-data`,
     coinPreference: `${FUT_PUB}/lead-portfolio/performance/coin`,
     positions: `${FUT}/lead-data/positions`,
-    positionHistory: `${FUT}/lead-portfolio/position-history`,
+    positionHistory: BINANCE_POSITION_HISTORY_URL,
     orders: `${FUT}/lead-portfolio/order-history`,
     transfers: `${FUT}/lead-portfolio/transfer-history`,
     copiers: `${FUT}/lead-portfolio/copy-traders`,
@@ -86,6 +96,16 @@ const ENDPOINTS: Record<string, Record<string, string>> = {
 }
 
 const HEADERS = { 'content-type': 'application/json' }
+
+type Dict = Record<string, unknown>
+
+function isRecord(value: unknown): value is Dict {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function terminalClaim(observations: HistoryTerminalClaim['observations']): HistoryTerminalClaim {
+  return { contract: HISTORY_TERMINAL_CLAIM_CONTRACT, observations }
+}
 
 function boardKeyOf(src: SourceRow): string {
   return (src.meta.boardKey as string) ?? 'futures'
@@ -210,6 +230,18 @@ const binanceAdapter: SourceAdapter = {
     orders: true, // futures Latest Records; spot trade history (fills)
     transfers: true, // futures only
     copiers: true, // both boards (PII rules apply downstream)
+  },
+
+  historyTerminalVerifier(src, kind) {
+    return src.slug === 'binance_futures' &&
+      src.adapter_slug === 'binance' &&
+      src.product_type === 'futures' &&
+      src.currency === 'USDT' &&
+      boardKeyOf(src) === 'futures' &&
+      kind === 'position_history' &&
+      endpoint(src, 'positionHistory') === BINANCE_POSITION_HISTORY_URL
+      ? binancePositionHistoryTerminalVerifier
+      : null
   },
 
   async captureLeaderboard(
@@ -374,8 +406,8 @@ const binanceAdapter: SourceAdapter = {
 
   /**
    * Incremental history pages, newest→oldest (spec §2.3). RAW pages are
-   * wrapped { portfolioId, sort, response } so dedupe hashes can include
-   * the portfolio id (see parsers.ts).
+   * wrapped { contract, portfolioId, sort, request, response } so terminal
+   * proof binds the exact request while dedupe can include the portfolio id.
    *
    * Board coverage differs: spot exposes only orders (fills) + copiers —
    * unsupported kinds yield nothing so Tier-B skips them silently.
@@ -395,7 +427,7 @@ const binanceAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     const board = boardKeyOf(src)
     const supported =
       board === 'spot'
@@ -404,12 +436,13 @@ const binanceAdapter: SourceAdapter = {
           kind === 'orders' ||
           kind === 'transfers' ||
           kind === 'copiers'
-    if (!supported) return
+    if (!supported) return undefined
 
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const maxPages = Number(src.meta.history_max_pages ?? 25) || 25
     const cursorMs = cursor ? Date.parse(cursor) : NaN
+    let captureOrdinal = 0
 
     const fetchPage = async (url: string, body: Record<string, unknown>): Promise<unknown> =>
       replayJson(session, fetcher, { url, method: 'POST', headers: HEADERS, body })
@@ -420,34 +453,111 @@ const binanceAdapter: SourceAdapter = {
       url: string,
       bodyOf: (pageNo: number) => Record<string, unknown>,
       opts: {
+        segmentId: string
         sort?: string
         pageSize: number
         pages: number
+        allowShortPage: boolean
         tsOf?: (row: Record<string, unknown>) => number | null
       }
-    ): AsyncIterable<RawPage> {
+    ): AsyncGenerator<
+      RawPage,
+      { segment_id: string; reason: HistoryTerminalClaimReason; page_ordinal: number },
+      void
+    > {
+      let rowsSeen = 0
+      let reportedTotal: number | null | undefined
       for (let pageNo = 1; pageNo <= opts.pages; pageNo++) {
-        const response = await fetchPage(url, bodyOf(pageNo))
-        const data = ((response as Record<string, unknown>)?.data ?? {}) as Record<string, unknown>
-        const rows = Array.isArray(data.list) ? (data.list as Array<Record<string, unknown>>) : []
-        if (rows.length === 0) return
+        const request = bodyOf(pageNo)
+        const response = await fetchPage(url, request)
+        captureOrdinal += 1
 
         yield {
           pageIndex: pageNo,
-          payload: { portfolioId: exchangeTraderId, sort: opts.sort ?? null, response },
+          payload: {
+            contract: BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
+            portfolioId: exchangeTraderId,
+            sort: opts.sort ?? null,
+            request,
+            response,
+          },
           url,
           fetchedAt: new Date().toISOString(),
         }
 
-        if (rows.length < opts.pageSize) return
+        if (
+          !isRecord(response) ||
+          response.code !== '000000' ||
+          response.success !== true ||
+          !isRecord(response.data)
+        ) {
+          throw new Error(`[binance] ${kind} ${opts.segmentId} returned an invalid API envelope`)
+        }
+        const data = response.data
+        const rawRows = data.list
+        if (!Array.isArray(rawRows) || !rawRows.every(isRecord)) {
+          throw new Error(`[binance] ${kind} ${opts.segmentId} returned an invalid API envelope`)
+        }
+        const rows = rawRows.filter(isRecord)
+        if (rows.length > opts.pageSize) {
+          throw new Error(`[binance] ${kind} ${opts.segmentId} exceeded its requested page size`)
+        }
+        const pageTotal =
+          data.total === null || data.total === undefined
+            ? null
+            : Number.isSafeInteger(data.total) && Number(data.total) >= 0
+              ? Number(data.total)
+              : Number.NaN
+        if (Number.isNaN(pageTotal)) {
+          throw new Error(`[binance] ${kind} ${opts.segmentId} returned an invalid total`)
+        }
+        if (reportedTotal === undefined) reportedTotal = pageTotal
+        else if (reportedTotal !== pageTotal) {
+          throw new Error(`[binance] ${kind} ${opts.segmentId} changed total during pagination`)
+        }
+
+        rowsSeen += rows.length
+        if (reportedTotal !== null && rowsSeen > reportedTotal) {
+          throw new Error(`[binance] ${kind} ${opts.segmentId} exceeded its reported total`)
+        }
+        if (reportedTotal !== null && rowsSeen === reportedTotal) {
+          return {
+            segment_id: opts.segmentId,
+            reason: 'reported_end',
+            page_ordinal: captureOrdinal,
+          }
+        }
+        if (rows.length === 0) {
+          if (reportedTotal !== null) {
+            throw new Error(`[binance] ${kind} ${opts.segmentId} ended before its reported total`)
+          }
+          return {
+            segment_id: opts.segmentId,
+            reason: 'empty_page',
+            page_ordinal: captureOrdinal,
+          }
+        }
+        if (reportedTotal === null && rows.length < opts.pageSize && opts.allowShortPage) {
+          return {
+            segment_id: opts.segmentId,
+            reason: 'short_page',
+            page_ordinal: captureOrdinal,
+          }
+        }
         if (opts.tsOf && Number.isFinite(cursorMs)) {
           const ts = rows.map(opts.tsOf).filter((t): t is number => Number.isFinite(t as number))
           // Overlap reached: this page already dips into stored history.
-          if (ts.length > 0 && Math.min(...ts) <= cursorMs) return
+          if (ts.length > 0 && Math.min(...ts) <= cursorMs) {
+            return {
+              segment_id: opts.segmentId,
+              reason: 'cursor_overlap',
+              page_ordinal: captureOrdinal,
+            }
+          }
         }
       }
       throw new Error(
-        `[binance] ${kind} ${opts.sort ?? 'default'} reached page cap ${opts.pages} without terminal proof`
+        `[binance] ${kind} ${opts.sort ?? opts.segmentId} reached page cap ${opts.pages} without terminal proof`
       )
     }
 
@@ -455,7 +565,7 @@ const binanceAdapter: SourceAdapter = {
       const url = endpoint(src, 'positionHistory')
       const tsOf = (r: Record<string, unknown>) =>
         Number.isFinite(Number(r.closed)) ? Number(r.closed) : null
-      yield* paged(
+      const closingTerminal = yield* paged(
         url,
         (pageNo) => ({
           pageNumber: pageNo,
@@ -464,16 +574,18 @@ const binanceAdapter: SourceAdapter = {
           sort: 'CLOSING',
         }),
         {
+          segmentId: 'closing',
           sort: 'CLOSING',
           pageSize: 50,
           pages: maxPages,
+          allowShortPage: false,
           tsOf,
         }
       )
       if (cursor === null) {
         // First-sight backfill: the OPENING view can surface long-lived
         // positions the CLOSING page budget missed (dedupe collapses dupes).
-        yield* paged(
+        const openingTerminal = yield* paged(
           url,
           (pageNo) => ({
             pageNumber: pageNo,
@@ -482,32 +594,37 @@ const binanceAdapter: SourceAdapter = {
             sort: 'OPENING',
           }),
           {
+            segmentId: 'opening',
             sort: 'OPENING',
             pageSize: 50,
             pages: maxPages,
+            allowShortPage: false,
           }
         )
+        return terminalClaim([closingTerminal, openingTerminal])
       }
-      return
+      return terminalClaim([closingTerminal])
     }
 
     if (kind === 'orders') {
       if (board === 'spot') {
-        yield* paged(
+        const terminal = yield* paged(
           endpoint(src, 'orders'),
           (pageNo) => ({ pageNumber: pageNo, pageSize: 50, portfolioId: exchangeTraderId }),
           {
+            segmentId: 'default',
             pageSize: 50,
             pages: maxPages,
+            allowShortPage: true,
             tsOf: (r) => (Number.isFinite(Number(r.time)) ? Number(r.time) : null),
           }
         )
-        return
+        return terminalClaim([terminal])
       }
       const backfillDays = Number(src.meta.orders_backfill_days ?? 90) || 90
       const endTime = Date.now()
       const startTime = Number.isFinite(cursorMs) ? cursorMs : endTime - backfillDays * 86_400_000
-      yield* paged(
+      const terminal = yield* paged(
         endpoint(src, 'orders'),
         (pageNo) => ({
           pageNumber: pageNo,
@@ -517,34 +634,44 @@ const binanceAdapter: SourceAdapter = {
           endTime,
         }),
         {
+          segmentId: 'default',
           pageSize: 50,
           pages: maxPages,
+          allowShortPage: true,
           tsOf: (r) => (Number.isFinite(Number(r.orderTime)) ? Number(r.orderTime) : null),
         }
       )
-      return
+      return terminalClaim([terminal])
     }
 
     if (kind === 'transfers') {
-      yield* paged(
+      const terminal = yield* paged(
         endpoint(src, 'transfers'),
         (pageNo) => ({ pageNumber: pageNo, pageSize: 50, portfolioId: exchangeTraderId }),
         {
+          segmentId: 'default',
           pageSize: 50,
           pages: maxPages,
+          allowShortPage: true,
           tsOf: (r) => (Number.isFinite(Number(r.time)) ? Number(r.time) : null),
         }
       )
-      return
+      return terminalClaim([terminal])
     }
 
     // copiers: live snapshot, no cursor — full crawl, page budget capped
     const copierPages = Number(src.meta.copier_max_pages ?? 10) || 10
-    yield* paged(
+    const terminal = yield* paged(
       endpoint(src, 'copiers'),
       (pageNo) => ({ pageNumber: pageNo, pageSize: 50, portfolioId: exchangeTraderId }),
-      { pageSize: 50, pages: copierPages }
+      {
+        segmentId: 'default',
+        pageSize: 50,
+        pages: copierPages,
+        allowShortPage: true,
+      }
     )
+    return terminalClaim([terminal])
   },
 
   parseLeaderboard: parseBinanceLeaderboardPage,

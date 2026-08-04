@@ -7,6 +7,7 @@ import {
 import type { SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
 import { LeaderboardCaptureUpstreamError } from '../../../fetch/capture'
+import { captureHistoryAcquisition } from '../../../history-acquisition'
 import { assessLeaderboardNativeWindowRequest } from '../../../leaderboard-request-evidence'
 import { binanceAdapter, projectBinanceLeaderboardRequest } from '../index'
 
@@ -77,6 +78,16 @@ function withRows(
   data.list = rows
   data.total = total
   return payload
+}
+
+function historyEnvelope(rows: unknown[], total: number | null): Record<string, unknown> {
+  return { code: '000000', success: true, data: { list: rows, total } }
+}
+
+function historyVerifier(src: SourceRow) {
+  const verifier = binanceAdapter.historyTerminalVerifier?.(src, 'position_history')
+  if (!verifier) throw new Error('expected the reviewed Binance position-history verifier')
+  return verifier
 }
 
 describe('Binance evidence-preserving leaderboard capture', () => {
@@ -334,7 +345,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     }))
     const { session: fetchSession } = session(async () => ({
       status: 200,
-      json: { data: { list: rows } },
+      json: historyEnvelope(rows, 100),
     }))
 
     const captured = []
@@ -355,13 +366,363 @@ describe('Binance evidence-preserving leaderboard capture', () => {
 
     expect(captured).toHaveLength(1)
     expect(captured[0].payload).toMatchObject({
+      contract: 'arena.ingest.binance-history-page@1',
       portfolioId: 'portfolio-1',
       sort: 'CLOSING',
+      request: {
+        pageNumber: 1,
+        pageSize: 50,
+        portfolioId: 'portfolio-1',
+        sort: 'CLOSING',
+      },
     })
     expect(failure).toEqual(
       expect.objectContaining({
         message: '[binance] position_history CLOSING reached page cap 1 without terminal proof',
       })
     )
+  })
+
+  it('selects terminal verification only for the reviewed Binance Futures source contract', () => {
+    const futures = source()
+    expect(binanceAdapter.historyTerminalVerifier?.(futures, 'position_history')).toMatchObject({
+      contract: 'arena.ingest.history-terminal-verifier.binance.position_history@1',
+    })
+    expect(binanceAdapter.historyTerminalVerifier?.(futures, 'orders')).toBeNull()
+
+    const driftedSources: SourceRow[] = [
+      { ...futures, slug: 'binance_spot' },
+      { ...futures, adapter_slug: 'foreign-adapter' },
+      { ...futures, product_type: 'spot' },
+      { ...futures, currency: 'BUSD' },
+      source({ boardKey: 'spot' }),
+      source({ endpoints: { positionHistory: 'https://proxy.example.test/history' } }),
+    ]
+    for (const drifted of driftedSources) {
+      expect(binanceAdapter.historyTerminalVerifier?.(drifted, 'position_history')).toBeNull()
+    }
+  })
+
+  it('returns and verifies separate CLOSING and OPENING terminal observations on first sight', async () => {
+    const requestSorts: unknown[] = []
+    const closing = fixture('position-history-closing-p1.json')
+    const opening = fixture('position-history-opening-p1.json')
+    ;(closing.data as Record<string, unknown>).total = (
+      (closing.data as Record<string, unknown>).list as unknown[]
+    ).length
+    ;(opening.data as Record<string, unknown>).total = (
+      (opening.data as Record<string, unknown>).list as unknown[]
+    ).length
+    const { session: fetchSession } = session(async (request) => {
+      const sort = (request.body as Record<string, unknown>).sort
+      requestSorts.push(sort)
+      return { status: 200, json: sort === 'CLOSING' ? closing : opening }
+    })
+    const src = source()
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(fetchSession, src, 'portfolio-1', 'position_history', null),
+      terminalVerifier: historyVerifier(src),
+    })
+
+    expect(requestSorts).toEqual(['CLOSING', 'OPENING'])
+    expect(acquisition.pages).toHaveLength(2)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [
+        { segment_id: 'closing', reason: 'reported_end', page_ordinal: 1 },
+        { segment_id: 'opening', reason: 'reported_end', page_ordinal: 2 },
+      ],
+      scan_terminal_state: 'exhausted',
+    })
+  })
+
+  it('verifies an incremental CLOSING cursor overlap without an OPENING segment', async () => {
+    const closeBase = Date.parse('2026-07-20T00:00:00.000Z')
+    const rows = Array.from({ length: 50 }, (_, index) => ({
+      id: `position-${index}`,
+      symbol: 'BTCUSDT',
+      side: 'Long',
+      status: 'All Closed',
+      opened: closeBase - index - 60_000,
+      closed: closeBase - index,
+    }))
+    const cursor = new Date(closeBase - 25).toISOString()
+    const src = source({ history_max_pages: 1 })
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(
+        session(async () => ({ status: 200, json: historyEnvelope(rows, 100) })).session,
+        src,
+        'portfolio-1',
+        'position_history',
+        cursor
+      ),
+      terminalVerifier: historyVerifier(src),
+    })
+
+    expect(acquisition.pages).toHaveLength(1)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      claim_observations: [{ segment_id: 'closing', reason: 'cursor_overlap', page_ordinal: 1 }],
+      scan_terminal_state: 'cursor_overlap',
+      overlap_event_at: new Date(closeBase - 49).toISOString(),
+    })
+  })
+
+  it('rejects a future cursor instead of treating the first page as stored overlap', async () => {
+    const closeBase = Date.parse('2026-07-20T00:00:00.000Z')
+    const rows = Array.from({ length: 50 }, (_, index) => ({
+      id: `position-${index}`,
+      symbol: 'BTCUSDT',
+      side: 'Long',
+      status: 'All Closed',
+      opened: closeBase - index - 60_000,
+      closed: closeBase - index,
+    }))
+    const cursor = '2099-01-01T00:00:00.000Z'
+    const src = source({ history_max_pages: 1 })
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(
+        session(async () => ({ status: 200, json: historyEnvelope(rows, 100) })).session,
+        src,
+        'portfolio-1',
+        'position_history',
+        cursor
+      ),
+      terminalVerifier: historyVerifier(src),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
+    })
+  })
+
+  it('rejects a dual-sort proof when CLOSING and OPENING identify different facts', async () => {
+    const closeTime = Date.parse('2026-07-02T00:00:00.000Z')
+    const row = (id: string) => ({
+      id,
+      symbol: 'BTCUSDT',
+      side: 'Long',
+      status: 'All Closed',
+      opened: closeTime - 60_000,
+      closed: closeTime,
+    })
+    const src = source()
+    const fetchSession = session(async (request) => {
+      const sort = (request.body as Record<string, unknown>).sort
+      return {
+        status: 200,
+        json: historyEnvelope([row(sort === 'CLOSING' ? 'closing-id' : 'opening-id')], 1),
+      }
+    }).session
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(fetchSession, src, 'portfolio-1', 'position_history', null),
+      terminalVerifier: historyVerifier(src),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
+    })
+  })
+
+  it.each([
+    [
+      'duplicate facts',
+      [
+        {
+          id: 'duplicate-id',
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-01T00:00:00.000Z'),
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+        {
+          id: 'duplicate-id',
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-01T00:00:00.000Z'),
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+      ],
+    ],
+    [
+      'a negative numeric source id',
+      [
+        {
+          id: -1,
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-01T00:00:00.000Z'),
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+      ],
+    ],
+    [
+      'non-monotonic sort order',
+      [
+        {
+          id: 'older-first',
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-01T00:00:00.000Z'),
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+        {
+          id: 'newer-second',
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-02T00:00:00.000Z'),
+          closed: Date.parse('2026-07-03T00:00:00.000Z'),
+        },
+      ],
+    ],
+    [
+      'a future lifecycle timestamp',
+      [
+        {
+          id: 'future-position',
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2098-12-31T00:00:00.000Z'),
+          closed: Date.parse('2099-01-01T00:00:00.000Z'),
+        },
+      ],
+    ],
+  ] as const)('rejects terminal proof containing %s', async (_caseName, rows) => {
+    const src = source()
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(
+        session(async () => ({ status: 200, json: historyEnvelope([...rows], rows.length) }))
+          .session,
+        src,
+        'portfolio-1',
+        'position_history',
+        null
+      ),
+      terminalVerifier: historyVerifier(src),
+    })
+
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
+    })
+  })
+
+  it('does not mistake a 20-row response for the end when total reports 56', async () => {
+    const pageNumbers: unknown[] = []
+    const allRows = Array.from({ length: 56 }, (_, index) => ({
+      id: `position-${index}`,
+      closed: Date.parse('2026-07-20T00:00:00.000Z') - index,
+    }))
+    const { session: fetchSession } = session(async (request) => {
+      const pageNumber = (request.body as Record<string, unknown>).pageNumber as number
+      pageNumbers.push(pageNumber)
+      const start = (pageNumber - 1) * 20
+      return { status: 200, json: historyEnvelope(allRows.slice(start, start + 20), 56) }
+    })
+    const src = source({ history_max_pages: 3 })
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor: '2020-01-01T00:00:00.000Z',
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(
+        fetchSession,
+        src,
+        'portfolio-1',
+        'position_history',
+        '2020-01-01T00:00:00.000Z'
+      ),
+    })
+
+    expect(pageNumbers).toEqual([1, 2, 3])
+    expect(acquisition.pages).toHaveLength(3)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verifier_missing',
+      claim_observations: [{ segment_id: 'closing', reason: 'reported_end', page_ordinal: 3 }],
+    })
+  })
+
+  it('keeps captured pages partial when the reported total changes mid-crawl', async () => {
+    let requestCount = 0
+    const rows = Array.from({ length: 20 }, (_, index) => ({
+      id: `position-${index}`,
+      closed: Date.parse('2026-07-20T00:00:00.000Z') - index,
+    }))
+    const { session: fetchSession } = session(async () => ({
+      status: 200,
+      json: historyEnvelope(rows, requestCount++ === 0 ? 56 : 57),
+    }))
+    const src = source({ history_max_pages: 3 })
+
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+      kind: 'position_history',
+      cursor: '2020-01-01T00:00:00.000Z',
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: binanceAdapter.getHistory(
+        fetchSession,
+        src,
+        'portfolio-1',
+        'position_history',
+        '2020-01-01T00:00:00.000Z'
+      ),
+    })
+
+    expect(acquisition.pages).toHaveLength(2)
+    expect(acquisition.error).toBeInstanceOf(Error)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'upstream_error',
+      scan_terminal_state: 'partial',
+    })
   })
 })
