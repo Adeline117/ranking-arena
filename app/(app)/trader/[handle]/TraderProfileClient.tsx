@@ -741,7 +741,7 @@ export default function TraderProfileClient({
     // Only bundle extras for the primary account (not when switching linked accounts)
     if (primaryUsesServerDetail) {
       const separator = base.includes('?') ? '&' : '?'
-      return `${base}${separator}include=claim,rank_history`
+      return `${base}${separator}include=rank_history`
     }
     return base
   })()
@@ -826,8 +826,9 @@ export default function TraderProfileClient({
       ? 'checking'
       : 'unavailable'
 
-  // P7: Extract bundled data only for an exact primary response.
-  const bundledClaimData = primaryUsesServerDetail ? traderData?.claim_status : undefined
+  // Claim ownership is never authorized from this longer-lived profile query.
+  // Every visitor uses the dedicated exact, no-store status boundary below.
+  const bundledClaimData = undefined
   const rawBundledRankHistory = primaryUsesServerDetail ? traderData?.rank_history : undefined
   const parsedBundledRankHistory =
     !traderDataIsPlaceholder && rawBundledRankHistory?._error === undefined
@@ -881,9 +882,8 @@ export default function TraderProfileClient({
     }
   }, [activeTab, handleTabChange, suppressAccountContent])
 
-  // Anonymous visitors can use an exact, non-placeholder bundle for the public
-  // badge. Signed-in ownership/editor controls always require the no-store exact
-  // probe so a cached bundle can never authorize or hydrate another identity.
+  // Every visitor, including anonymous badge viewers, uses the exact no-store
+  // probe. A longer-lived profile bundle may never resurrect an unlinked claim.
   const claimSubject =
     isPrimaryAccount && baseIdentityReady
       ? { traderId: data.source_trader_id, source: data.source }
@@ -901,15 +901,9 @@ export default function TraderProfileClient({
               validatedActiveAccount.platform,
           }
         : null
-  const bundledClaimMatchesVisibleIdentity =
-    primaryUsesServerDetail &&
-    !traderDataIsPlaceholder &&
-    bundledClaimData?.trader_id === data.source_trader_id &&
-    bundledClaimData.source === data.source
-  const claimUrl =
-    claimSubject && (Boolean(currentUserId) || !bundledClaimMatchesVisibleIdentity)
-      ? `/api/traders/claim/status?trader_id=${encodeURIComponent(claimSubject.traderId)}&source=${encodeURIComponent(claimSubject.source)}`
-      : null
+  const claimUrl = claimSubject
+    ? `/api/traders/claim/status?trader_id=${encodeURIComponent(claimSubject.traderId)}&source=${encodeURIComponent(claimSubject.source)}`
+    : null
   const {
     data: claimResponse,
     error: claimDataError,
@@ -918,7 +912,7 @@ export default function TraderProfileClient({
     isFetching: claimIsFetching,
   } = useQuery<unknown>({
     queryKey: ['trader-claim-status', claimSubject?.traderId, claimSubject?.source],
-    queryFn: () => fetcher(claimUrl!),
+    queryFn: () => fetcher(claimUrl!, { cache: 'no-store' }),
     enabled: !!claimUrl,
     refetchOnWindowFocus: true,
     retry: false,
@@ -926,6 +920,8 @@ export default function TraderProfileClient({
     // revalidate this authorization probe and do not authorize from data that
     // only predates the current observer mount or whose refresh has failed.
     staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
   })
   const freshExactClaim =
     claimDataFetchedAfterMount && claimFetchStatus === 'idle' && !claimIsFetching && !claimDataError

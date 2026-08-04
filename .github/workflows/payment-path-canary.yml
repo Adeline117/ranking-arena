@@ -1,0 +1,42 @@
+name: Payment Path Canary (Staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_rollback_only_staging:
+        description: 'Run only against the protected disposable staging fixture'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: payment-path-canary-staging
+  cancel-in-progress: false
+
+jobs:
+  payment-path-canary:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_rollback_only_staging
+    runs-on: ubuntu-latest
+    environment: arena-staging-payment-canary
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v6.0.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts
+      - name: payment-path-canary
+        env:
+          PAYMENT_CANARY_STAGING_DATABASE_URL: ${{ secrets.PAYMENT_CANARY_STAGING_DATABASE_URL }}
+          PAYMENT_CANARY_STAGING_PROJECT_REF: ${{ secrets.PAYMENT_CANARY_STAGING_PROJECT_REF }}
+          PAYMENT_CANARY_TARGET_ATTESTATION: STAGING_SUPABASE_DISPOSABLE_DB_V1
+          PAYMENT_CANARY_DISPOSABLE_USER_ID: ${{ secrets.PAYMENT_CANARY_DISPOSABLE_USER_ID }}
+          PAYMENT_CANARY_DISPOSABLE_HANDLE: ${{ secrets.PAYMENT_CANARY_DISPOSABLE_HANDLE }}
+          PAYMENT_CANARY_WRITE_ATTESTATION: ROLLBACK_ONLY_DISPOSABLE_FIXTURE_V1
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: node scripts/openclaw/payment-path-canary.mjs

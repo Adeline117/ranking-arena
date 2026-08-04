@@ -290,19 +290,17 @@ const cachedLeaderboardMeta = unstable_cache(
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
-// Cached user handle lookup for one exact claimed exchange account. Raw trader
-// IDs and handles collide across sources, so this function must never start
-// from the URL handle or pick the first matching trader_sources row.
-const cachedFindUserHandleByTrader = unstable_cache(
+// Request-deduplicated but never persistently cached: claimed ownership is an
+// authorization/privacy projection. Unlink must remove owner routing on the
+// next request instead of waiting for an ISR cache entry to expire.
+const findUserHandleByTraderFresh = cache(
   async (source: string, traderId: string): Promise<string | null> => {
     try {
       return await findClaimedUserHandleByIdentity(getReadReplica(), { source, traderId })
     } catch {
       return null
     }
-  },
-  ['trader-user-handle-by-source-and-id-v2'],
-  { revalidate: 300, tags: ['trader-profile'] }
+  }
 )
 
 /**
@@ -560,7 +558,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     const [firstScreenRaw, capabilities, userHandle] = await Promise.all([
       cachedGetFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
       cachedCapabilities(),
-      cachedFindUserHandleByTrader(servingResolved.source, servingResolved.exchangeTraderId),
+      findUserHandleByTraderFresh(servingResolved.source, servingResolved.exchangeTraderId),
     ])
 
     // ROOT-CAUSE FIX (2026-06-11): a serving-only trader (exists only in arena.*,
@@ -743,7 +741,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       )
       return null
     }),
-    cachedFindUserHandleByTrader(resolved.platform, resolved.traderKey),
+    findUserHandleByTraderFresh(resolved.platform, resolved.traderKey),
   ])
 
   const serverTraderData = detailResult ? toTraderPageData(detailResult) : null

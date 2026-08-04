@@ -22,6 +22,8 @@ export interface B2CProductMetrics {
   newSignups: number
   activationEligible: number
   activated7d: number
+  activationDefinitionVersion: string
+  activationMeasurementStartedAt: string
   funnel: Partial<Record<B2CFunnelStep, number>>
   eventCollectionStartedAt: string | null
   generatedAt: string
@@ -41,6 +43,8 @@ export function parseB2CProductMetrics(value: Json | null): B2CProductMetrics | 
   const newSignups = nonNegativeInteger(value.new_signups)
   const activationEligible = nonNegativeInteger(value.activation_eligible)
   const activated7d = nonNegativeInteger(value.activated_7d)
+  const activationDefinitionVersion = value.activation_definition_version
+  const activationMeasurementStartedAt = value.activation_measurement_started_at
   const generatedAt = value.generated_at
   const collectionStartedAt = value.event_collection_started_at
 
@@ -52,6 +56,8 @@ export function parseB2CProductMetrics(value: Json | null): B2CProductMetrics | 
     newSignups === null ||
     activationEligible === null ||
     activated7d === null ||
+    typeof activationDefinitionVersion !== 'string' ||
+    typeof activationMeasurementStartedAt !== 'string' ||
     typeof generatedAt !== 'string' ||
     (collectionStartedAt !== null && typeof collectionStartedAt !== 'string')
   ) {
@@ -78,6 +84,8 @@ export function parseB2CProductMetrics(value: Json | null): B2CProductMetrics | 
     newSignups,
     activationEligible,
     activated7d,
+    activationDefinitionVersion,
+    activationMeasurementStartedAt,
     funnel,
     eventCollectionStartedAt: collectionStartedAt,
     generatedAt,

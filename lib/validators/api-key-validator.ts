@@ -1,7 +1,8 @@
 /**
  * Exchange API Key Validator
  * Validates API keys by making test requests to exchange APIs.
- * Now properly extracts account UIDs for ownership verification.
+ * Extracts account UIDs for first-party connection and sync. These UIDs are
+ * not public-leaderboard profile claim identifiers.
  */
 
 import { logger } from '@/lib/logger'
@@ -36,11 +37,21 @@ function validatedReadOnlyResult(
         'API key must be read-only. Disable trading, withdrawal, and transfer permissions before connecting it.',
     }
   }
+  const permissions = (result.permissions ?? [])
+    .filter((permission): permission is string => typeof permission === 'string')
+    .map((permission) => permission.trim())
+    .filter(Boolean)
+  if (permissions.length === 0) {
+    return {
+      isValid: false,
+      error: 'Exchange did not return auditable read-only permission evidence.',
+    }
+  }
   return {
     isValid: true,
     traderId: result.uid,
     nickname: result.nickname,
-    permissions: result.permissions || ['read'],
+    permissions,
   }
 }
 
@@ -97,7 +108,7 @@ export async function validateOKXApiKey(
 }
 
 /**
- * Validate Bitget API Key - uses /api/v2/spot/account/info for userId
+ * Validate Bitget API Key - uses /api/v3/account/info for userId and permType
  */
 export async function validateBitgetApiKey(
   credentials: ExchangeCredentials
@@ -169,6 +180,7 @@ export async function validateExchangeApiKey(
 
     case 'okx':
     case 'okx_futures':
+    case 'okx_spot':
       return validateOKXApiKey(credentials)
 
     case 'bitget':
