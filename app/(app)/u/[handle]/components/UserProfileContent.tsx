@@ -8,7 +8,10 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 import { features } from '@/lib/features'
+import { LEGACY_HISTORY_COMPLETENESS_UNKNOWN } from '@/lib/data/trader/history-quarantine'
 import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
+
+const EMPTY_LEGACY_POSITION_HISTORY: NonNullable<TraderPageData['positionHistory']> = []
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
@@ -55,7 +58,7 @@ export default function UserProfileContent({
 
   const traderStats = traderData?.stats ?? null
   const traderPortfolio = traderData?.portfolio ?? []
-  const traderPositionHistory = traderData?.positionHistory ?? []
+  const traderPositionHistory = EMPTY_LEGACY_POSITION_HISTORY
   const traderEquityCurve = traderData?.equityCurve
   const traderAssetBreakdown = traderData?.assetBreakdown
   const traderProfile = traderData?.profile ?? null
@@ -131,6 +134,7 @@ export default function UserProfileContent({
               assetBreakdown={traderAssetBreakdown}
               equityCurve={traderEquityCurve}
               positionHistory={traderPositionHistory}
+              historyCompleteness={LEGACY_HISTORY_COMPLETENESS_UNKNOWN}
               isPro={true}
               onUnlock={() => router.push('/pricing')}
             />
@@ -157,6 +161,7 @@ export default function UserProfileContent({
           <PortfolioTable
             items={traderPortfolio}
             history={traderPositionHistory}
+            historyCompleteness={LEGACY_HISTORY_COMPLETENESS_UNKNOWN}
             isPro={true}
             onUnlock={() => router.push('/pricing')}
           />
