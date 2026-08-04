@@ -61,6 +61,10 @@ describe('useCopierAggregate subject identity', () => {
     )
 
     await waitFor(() => expect(view.result.current.aggregate?.copierCount).toBe(12))
+    expect(view.result.current.aggregate?.completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
 
     view.rerender({ source: 'hyperliquid_perp', exchangeTraderId: 'trader-b' })
 
@@ -73,6 +77,10 @@ describe('useCopierAggregate subject identity', () => {
       await pendingB.promise
     })
     await waitFor(() => expect(view.result.current.aggregate?.copierCount).toBe(3))
+    expect(view.result.current.aggregate?.completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
 
     view.unmount()
     queryClient.clear()
@@ -136,36 +144,50 @@ describe('useTraderRecords history completeness', () => {
     }
   )
 
-  it('aggregates every page without allowing later pages to upgrade trust', async () => {
-    ;(fetcher as jest.Mock).mockImplementation((url: string) => {
-      if (url.includes('cursor=page-3')) {
-        return Promise.resolve(recordsResponse(recordsPage()))
+  it.each(['orders', 'transfers'] as const)(
+    'fails closed for legacy warm %s without completeness metadata',
+    async (kind) => {
+      ;(fetcher as jest.Mock).mockResolvedValue(recordsResponse(recordsPage()))
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      })
+
+      function Wrapper({ children }: { children: ReactNode }) {
+        return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       }
-      if (url.includes('cursor=page-2')) {
-        return Promise.resolve(
-          recordsResponse(
-            recordsPage({
-              nextCursor: 'page-3',
-              completeness: { state: 'partial', reason: 'interactive_preview' },
-            })
-          )
-        )
-      }
-      return Promise.resolve(
-        recordsResponse(
-          recordsPage({
-            nextCursor: 'page-2',
-            completeness: {
-              state: 'complete',
-              reason: 'verified_terminal_history',
-              evidenceState: 'verified',
-              scanTerminalState: 'exhausted',
-              blockerReasons: [],
-            },
-          })
-        )
+
+      const view = renderHook(
+        () =>
+          useTraderRecords({
+            source: 'gmx',
+            exchangeTraderId: 'trader-a',
+            kind,
+            enabled: true,
+          }),
+        { wrapper: Wrapper }
       )
-    })
+
+      await waitFor(() =>
+        expect(view.result.current.completeness).toEqual({
+          state: 'unknown',
+          reason: 'history_evidence_not_bound',
+        })
+      )
+
+      view.unmount()
+      queryClient.clear()
+    }
+  )
+
+  it('does not apply history completeness to a current-position snapshot', async () => {
+    ;(fetcher as jest.Mock).mockResolvedValue(
+      recordsResponse(
+        recordsPage({
+          cacheState: 'cold-fetched',
+          completeness: { state: 'partial', reason: 'interactive_preview' },
+        })
+      )
+    )
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
     })
@@ -179,25 +201,84 @@ describe('useTraderRecords history completeness', () => {
         useTraderRecords({
           source: 'gmx',
           exchangeTraderId: 'trader-a',
-          kind: 'position_history',
+          kind: 'positions',
           enabled: true,
         }),
       { wrapper: Wrapper }
     )
 
-    await waitFor(() => expect(view.result.current.completeness?.state).toBe('complete'))
-    await act(async () => {
-      await view.result.current.fetchNextPage()
-    })
-    await waitFor(() => expect(view.result.current.completeness?.state).toBe('partial'))
-    await act(async () => {
-      await view.result.current.fetchNextPage()
-    })
-    await waitFor(() => expect(view.result.current.completeness?.state).toBe('unknown'))
+    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
+    expect(view.result.current.completeness).toBeNull()
 
     view.unmount()
     queryClient.clear()
   })
+
+  it.each(['position_history', 'orders', 'transfers'] as const)(
+    'aggregates every %s page without allowing later pages to upgrade trust',
+    async (kind) => {
+      ;(fetcher as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('cursor=page-3')) {
+          return Promise.resolve(recordsResponse(recordsPage()))
+        }
+        if (url.includes('cursor=page-2')) {
+          return Promise.resolve(
+            recordsResponse(
+              recordsPage({
+                nextCursor: 'page-3',
+                completeness: { state: 'partial', reason: 'interactive_preview' },
+              })
+            )
+          )
+        }
+        return Promise.resolve(
+          recordsResponse(
+            recordsPage({
+              nextCursor: 'page-2',
+              completeness: {
+                state: 'complete',
+                reason: 'verified_terminal_history',
+                evidenceState: 'verified',
+                scanTerminalState: 'exhausted',
+                blockerReasons: [],
+              },
+            })
+          )
+        )
+      })
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      })
+
+      function Wrapper({ children }: { children: ReactNode }) {
+        return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      }
+
+      const view = renderHook(
+        () =>
+          useTraderRecords({
+            source: 'gmx',
+            exchangeTraderId: 'trader-a',
+            kind,
+            enabled: true,
+          }),
+        { wrapper: Wrapper }
+      )
+
+      await waitFor(() => expect(view.result.current.completeness?.state).toBe('complete'))
+      await act(async () => {
+        await view.result.current.fetchNextPage()
+      })
+      await waitFor(() => expect(view.result.current.completeness?.state).toBe('partial'))
+      await act(async () => {
+        await view.result.current.fetchNextPage()
+      })
+      await waitFor(() => expect(view.result.current.completeness?.state).toBe('unknown'))
+
+      view.unmount()
+      queryClient.clear()
+    }
+  )
 
   it('aggregates page clocks conservatively without a later-page freshness upgrade', async () => {
     ;(fetcher as jest.Mock).mockImplementation((url: string) =>

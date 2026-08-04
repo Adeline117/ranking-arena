@@ -143,6 +143,10 @@ function unknownHistoryCompleteness(): HistoryCompleteness {
   return { state: 'unknown', reason: 'history_evidence_not_bound' }
 }
 
+function isAppendOnlyHistory(kind: Exclude<RecordKind, 'copiers'>): boolean {
+  return kind !== 'positions'
+}
+
 /** Parse trust metadata at the RPC/Redis boundary and reject contradictory
  * `complete` claims. This prevents an unverified payload from opening a rank
  * or UI trust gate merely by setting state=complete. */
@@ -234,12 +238,13 @@ export async function getRecordsPage(
   // truth. Keep the observation clocks for cold-cache routing, but fail closed
   // until the RPC is replaced by a receipt-bound projection.
   const mayServeRows = kind !== 'position_history'
+  const isHistory = isAppendOnlyHistory(kind)
   return {
     rows: mayServeRows ? sanitizeRecordRows(d.rows) : [],
     nextCursor: mayServeRows && typeof d.nextCursor === 'string' ? d.nextCursor : null,
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
-    ...(kind === 'position_history' ? { completeness: unknownHistoryCompleteness() } : {}),
+    ...(isHistory ? { completeness: unknownHistoryCompleteness() } : {}),
   }
 }
 
@@ -278,6 +283,9 @@ export async function getCopierAggregate(
     pnlDistribution: distribution,
     depth,
     provenance: recordProvenance(source, d),
+    // `depth=full` describes the upstream product surface, not proof that the
+    // aggregate is bound to a terminal collection receipt.
+    completeness: unknownHistoryCompleteness(),
   }
 }
 
@@ -290,32 +298,32 @@ export function recordsPageFromTierC(
   if (!isPlainRecord(payload) || !Array.isArray(payload.rows)) return null
   const rows = sanitizeRecordRows(payload.rows)
   const parsedCompleteness = parseHistoryCompleteness(payload.completeness)
-  const previewCompleteness: HistoryCompleteness | undefined =
-    kind === 'position_history'
-      ? {
-          state: 'partial',
-          reason: 'interactive_preview',
-          ...(parsedCompleteness?.evidenceState
-            ? { evidenceState: parsedCompleteness.evidenceState }
-            : {}),
-          ...(parsedCompleteness?.scanTerminalState
-            ? { scanTerminalState: parsedCompleteness.scanTerminalState }
-            : {}),
-          ...(parsedCompleteness?.blockerReasons
-            ? { blockerReasons: parsedCompleteness.blockerReasons }
-            : {}),
-        }
-      : undefined
+  const isHistory = isAppendOnlyHistory(kind)
+  const previewCompleteness: HistoryCompleteness | undefined = isHistory
+    ? {
+        state: 'partial',
+        reason: 'interactive_preview',
+        ...(parsedCompleteness?.evidenceState && parsedCompleteness.evidenceState !== 'verified'
+          ? { evidenceState: parsedCompleteness.evidenceState }
+          : {}),
+        ...(parsedCompleteness?.scanTerminalState === 'partial' ||
+        parsedCompleteness?.scanTerminalState === 'unknown'
+          ? { scanTerminalState: parsedCompleteness.scanTerminalState }
+          : {}),
+        ...(parsedCompleteness?.blockerReasons?.length
+          ? { blockerReasons: parsedCompleteness.blockerReasons }
+          : {}),
+      }
+    : undefined
   return {
     rows,
-    // Tier-C history is a bounded preview and may never advertise pagination,
-    // even if an old or malformed worker payload supplies a cursor.
-    nextCursor:
-      kind === 'position_history'
-        ? null
-        : typeof payload.nextCursor === 'string'
-          ? payload.nextCursor
-          : null,
+    // Tier-C append-only history is a bounded preview and may never advertise
+    // pagination, even if an old or malformed worker payload supplies a cursor.
+    nextCursor: isHistory
+      ? null
+      : typeof payload.nextCursor === 'string'
+        ? payload.nextCursor
+        : null,
     provenance: recordProvenance(source, payload),
     cacheState: 'cold-fetched',
     ...(previewCompleteness ? { completeness: previewCompleteness } : {}),
