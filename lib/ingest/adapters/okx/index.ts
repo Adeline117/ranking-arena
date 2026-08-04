@@ -61,6 +61,7 @@ import {
   type HistoryTerminalClaim,
 } from '../../history-acquisition'
 import { okxPositionHistoryTerminalVerifier } from './history-terminal'
+import { OKX_COPIER_HISTORY_URL, okxCopierSnapshotVerifier } from './copier-snapshot'
 
 const API_BASE = 'https://www.okx.com/api/v5/copytrading'
 const PAGE_LIMIT = 20 // public-lead-traders hard max
@@ -97,8 +98,8 @@ function supportsSwapRecords(src: SourceRow): boolean {
   return src.product_type === 'futures' && instType(src) === 'SWAP'
 }
 
-/** Paced plain-HTTP GET; OKX envelopes everything as {code,data,msg}. */
-async function fetchData(session: FetchSession, url: string): Promise<Dict[]> {
+/** Paced plain-HTTP GET retaining the exact upstream JSON envelope. */
+async function fetchPayload(session: FetchSession, url: string): Promise<unknown> {
   return session.paced(async () => {
     const res = await fetch(url, {
       headers: {
@@ -110,12 +111,21 @@ async function fetchData(session: FetchSession, url: string): Promise<Dict[]> {
     })
     if (isBlockedStatus(res.status)) throw new BlockedUpstreamError(res.status, url)
     if (!res.ok) throw new Error(`[okx] HTTP ${res.status} from ${url}`)
-    const payload = (await res.json()) as { code?: unknown; data?: unknown; msg?: unknown }
-    if (payload.code !== '0') {
-      throw new Error(`[okx] API code ${String(payload.code)} (${String(payload.msg)}) from ${url}`)
-    }
-    return Array.isArray(payload.data) ? (payload.data as Dict[]) : []
+    return res.json()
   })
+}
+
+/** Legacy projection used by non-copier surfaces. */
+async function fetchData(session: FetchSession, url: string): Promise<Dict[]> {
+  const payload = (await fetchPayload(session, url)) as {
+    code?: unknown
+    data?: unknown
+    msg?: unknown
+  }
+  if (payload.code !== '0') {
+    throw new Error(`[okx] API code ${String(payload.code)} (${String(payload.msg)}) from ${url}`)
+  }
+  return Array.isArray(payload.data) ? (payload.data as Dict[]) : []
 }
 
 // ── Preference-currency, memoized per (session, trader) — TF-independent ──
@@ -164,6 +174,18 @@ const okxAdapter: SourceAdapter = {
       supportsSwapRecords(src) &&
       base(src) === API_BASE
       ? okxPositionHistoryTerminalVerifier
+      : null
+  },
+
+  verifyCopierSnapshot(src) {
+    return src.slug === 'okx_futures' &&
+      src.adapter_slug === 'okx' &&
+      src.product_type === 'futures' &&
+      src.currency === 'USDT' &&
+      src.copier_table_depth === 'top10' &&
+      supportsSwapRecords(src) &&
+      `${base(src)}/public-copy-traders` === OKX_COPIER_HISTORY_URL
+      ? okxCopierSnapshotVerifier
       : null
   },
 
@@ -301,10 +323,15 @@ const okxAdapter: SourceAdapter = {
     const it = instType(src)
     if (kind === 'copiers') {
       assertSourceSurfaceSupported(okxAdapter, src, 'copiers')
-      const url = `${base(src)}/public-copy-traders?instType=${it}&uniqueCode=${exchangeTraderId}`
-      const data = await fetchData(session, url)
-      yield { pageIndex: 1, payload: { data }, url, fetchedAt: new Date().toISOString() }
-      return undefined
+      const url =
+        `${base(src)}/public-copy-traders?instType=${it}&uniqueCode=` +
+        encodeURIComponent(exchangeTraderId)
+      const payload = await fetchPayload(session, url)
+      yield { pageIndex: 1, payload, url, fetchedAt: new Date().toISOString() }
+      return {
+        contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+        observations: [{ segment_id: 'default', reason: 'snapshot_complete', page_ordinal: 1 }],
+      }
     }
     if (kind !== 'position_history') {
       throw new Error(`[okx] history surface ${kind} not supported`)
