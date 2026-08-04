@@ -389,7 +389,10 @@ jobs:
       - name: Run tests with coverage
         env:
           WORKER_OWNERSHIP_REDIS_TEST_URL: redis://127.0.0.1:6379/15
-        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci
+        # Keep jsdom/webpack transforms inside the hosted-runner memory budget.
+        # Unbounded CPU-derived workers caused deterministic 10s RTL timeouts
+        # under coverage despite the same files passing alone.
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci --maxWorkers=2
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
