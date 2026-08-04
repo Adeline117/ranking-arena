@@ -94,10 +94,10 @@ const nextConfig = {
     return config
   },
 
-  // The deploy gate already requires `tsc --noEmit` for this exact SHA. It
-  // injects the attestation only into its staged CLI candidate so Vercel does
-  // not repeat the expensive type phase after webpack. Git previews and the
-  // emergency direct-deploy path do not get this flag and retain Next's check.
+  // The required GitHub gate runs `tsc --noEmit`, and the production deploy
+  // gate binds that attestation to the exact SHA. Vercel Git previews are
+  // non-production and use the same flag through vercel.json so they do not
+  // retain the webpack graph while repeating TypeScript validation.
   typescript: {
     ignoreBuildErrors: process.env.ARENA_CI_TYPES_ATTESTED === '1',
   },

@@ -18,6 +18,7 @@ const releaseControlScript = fs.readFileSync(
 )
 const nextConfig = fs.readFileSync(path.join(root, 'next.config.ts'), 'utf8')
 const ciWorkflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
+const vercelConfig = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'))
 
 function ignoredByVercelRules(relativePath) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-vercel-upload-'))
@@ -267,10 +268,11 @@ test('does not duplicate the detailed smoke rollback alert', () => {
   )
 })
 
-test('skips duplicate Next type validation only for a CI-attested candidate', () => {
+test('centralizes Vercel type validation in the required GitHub gate', () => {
   assert.match(nextConfig, /ignoreBuildErrors: process\.env\.ARENA_CI_TYPES_ATTESTED === '1'/)
   assert.equal(deployGate.match(/--build-env ARENA_CI_TYPES_ATTESTED=1/g)?.length, 1)
   assert.doesNotMatch(deployGate, /--env ARENA_CI_TYPES_ATTESTED=/)
+  assert.equal(vercelConfig.buildCommand, 'ARENA_CI_TYPES_ATTESTED=1 npm run build')
   assert.match(deployGate, /"Lint & Type Check"/)
   assert.match(
     ciWorkflow,
