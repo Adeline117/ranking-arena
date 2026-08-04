@@ -13,7 +13,8 @@
 
 ## Project Overview
 
-Crypto trader ranking platform. 34,000+ traders across 32+ CEX/DEX exchanges.
+Crypto trader ranking platform. The database registry determines the active
+CEX/DEX source set; do not hard-code a marketing count in runtime decisions.
 Live site: https://www.arenafi.org
 
 ## Tech Stack
@@ -27,22 +28,23 @@ Live site: https://www.arenafi.org
 - **State**: Zustand + React Query
 - **Styling**: Tailwind CSS v4
 - **Charts**: TradingView, lightweight-charts
-- **Exchange Data**: CCXT + custom connectors
+- **Exchange Data**: registry-driven ingest adapters + CCXT market data
 
 ## Directory Structure
 
 ```
 app/                    # Next.js App Router pages
+  (app)/                # User-facing product route group
+    rankings/           # Leaderboard subpages
+    trader/[handle]/    # Trader profile pages
+    groups/             # Social groups feature
+    hot/                # Hot/trending content page
   api/                  # 100+ API route groups
     cron/               # Scheduled jobs (Vercel Cron)
   components/           # Shared UI components
-  rankings/             # Leaderboard pages
-  trader/[id]/          # Trader profile pages
-  groups/               # Social groups feature
-  hot/                  # Hot/trending content page
 
 lib/                    # Core business logic
-  connectors/           # Exchange API connectors
+  ingest/               # Source adapters, RAW capture, validation, publication
   data/                 # Data fetching functions
   services/             # Business logic services
   hooks/                # React hooks
@@ -52,8 +54,10 @@ lib/                    # Core business logic
   supabase/             # Supabase client + helpers
 
 scripts/                # CLI tools and maintenance
-  import/               # Data import scripts
-  backfill-*.ts         # Backfill jobs
+  openclaw/             # Alerting and reporting sentinels
+  maintenance/          # Backup and controlled maintenance
+  qa/                   # Repository and runtime contracts
+  vps-deploy/           # Scoped proxy/browser deployment
 
 supabase/migrations/    # SQL migration files
 worker/                 # Background job runner
@@ -73,7 +77,7 @@ npm run test:e2e        # Playwright E2E
 # Data scripts
 npm run diagnose        # Check data freshness
 npm run check:platforms # Platform status
-npm run backfill:24h    # Backfill 24h window metrics
+npm run qa:coverage     # Refresh the read-only field-coverage ledger
 ```
 
 ## Database Schema (Core Tables)
@@ -107,24 +111,20 @@ stripe_customers        # Stripe integration
 
 ## Data Pipeline
 
-62 Vercel cron jobs refresh trader data continuously:
+First-party ranking ingestion runs in the external BullMQ worker. Active rows in
+`arena.sources` drive Tier A/B/C/D schedules; adapters under
+`lib/ingest/adapters/` capture durable RAW evidence, parse it, validate complete
+boards, and publish to `arena.*`. Vercel cron handles supporting orchestration,
+maintenance, scoring, and monitoring; `vercel.json` is its schedule source of
+truth.
 
-- `batch-fetch-traders` (groups a-f): Fetch rankings from exchanges
-- `batch-enrich`: Enrich trader details (7D, 30D periods)
-- `compute-leaderboard`: Compute Arena Scores
-- `fetch-details`: Hot/normal tier detail fetching
-- `aggregate-daily-snapshots`: Daily rollups
+## Ingest Adapters (`lib/ingest/adapters/`)
 
-## Exchange Connectors (`lib/connectors/`)
-
-CEX: binance-futures, binance-spot, bybit, okx, bitget, mexc, kucoin, htx, coinex
-DEX: hyperliquid, gmx, dydx, vertex, drift, aevo, gains, kwenta
-
-Each connector implements:
-
-- `fetchLeaderboard(period)` - Get ranked traders
-- `fetchTraderDetails(traderId)` - Get trader profile
-- Rate limiting + circuit breaker built-in
+Adapters expose pure parsers and declared capabilities. A source is not live
+until it is registered in `lib/ingest/adapters/register.ts`, represented by an
+active `arena.sources` row, covered by real RAW fixtures, and passes the metric
+parity gate. Follow `docs/ADAPTER_ONBOARDING.md`; never recreate a standalone
+connector registry or Vercel fetch loop.
 
 ## Arena Score Formula
 
@@ -387,7 +387,7 @@ This prevents WebSocket leaks when components unmount during async subscribe.
 
 - Server: `lib/data/*.ts` functions
 - Client: `lib/hooks/use*.ts` with React Query
-- Redis cache: `lib/cache/redis.ts`
+- Redis cache: `lib/cache/redis-layer.ts`; shared client: `lib/cache/redis-client.ts`
 
 ## Environment Variables (Key)
 
@@ -576,12 +576,12 @@ cp specs/_template.md specs/my-feature.md
 # Agent implements autonomously, commits after each criterion
 ```
 
-### OpenClaw Autonomous Operations (Mac Mini)
+### OpenClaw Operations (Mac Mini)
 
-- **Health Monitor**: Every 30 min, checks `/api/health/pipeline`, alerts via Telegram
-- **Daily Report**: 8 AM, pipeline success rates + anomaly summary
-- **Auto-Fix**: On pipeline failure, opens Claude Code session to diagnose and fix
-- **Weekly Self-Check**: Fridays, runs `/weekly-self-check` to find and fix recurring issues
+- **Health Monitor**: Every 30 min, reads `/api/health/pipeline` and alerts via Telegram
+- **Daily Report**: 8 AM, authoritative source health plus cron diagnostics
+- **Incident changes**: Use an isolated worktree, required checks, and a reviewed pull request
+- **Weekly Self-Check**: Fridays, runs `/weekly-self-check` for read-only findings
 - Scripts: `scripts/openclaw/`
 
 ### Pipeline Logging
@@ -599,20 +599,20 @@ try {
 }
 ```
 
-### Fetcher 修复流程
+### Ingest 故障修复流程
 
-1. 运行 `node scripts/pipeline-health-check.mjs` 识别问题
-2. 参考 `/.claude/skills/arena-fetcher-error-handling.md` 获取标准模板
-3. 修复后运行 `/fix-pipeline` 验证
+1. 从 `/api/health/pipeline` 与 `arena.sources` 确认失败源和 authority 状态
+2. 在 `lib/ingest/adapters/<source>/` 复现并修复 adapter/parser 或 worker 问题
+3. 运行对应 fixture、契约、类型检查和 `/fix-pipeline`，通过 PR 发布
 
 ### 关键诊断脚本
 
-| 脚本                                  | 用途                |
-| ------------------------------------- | ------------------- |
-| `scripts/pipeline-health-check.mjs`   | 全面健康检查        |
-| `scripts/diagnose-enrichment.mjs`     | Enrichment API 诊断 |
-| `scripts/check-data-distribution.mjs` | 数据分布检查        |
-| `scripts/backfill-sharpe-ratio.mjs`   | Sharpe ratio 回填   |
+| 脚本                                       | 用途                         |
+| ------------------------------------------ | ---------------------------- |
+| `scripts/pipeline-health-check.mjs`        | 全面健康检查                 |
+| `scripts/ingest-queue-state.mts`           | 队列、调度器与租约状态       |
+| `scripts/ingest-field-coverage-ledger.mts` | canonical 字段覆盖率审计     |
+| `scripts/ingest-shadow-diff.ts`            | shadow 与 canonical 数据对比 |
 
 ## Quick Reference
 
@@ -620,7 +620,6 @@ try {
 | ---------------------- | ---------------------------------------------------- |
 | Add migration          | `scripts/new-migration.sh <description>`             |
 | Add API route          | `app/api/{name}/route.ts`                            |
-| Add connector          | `lib/connectors/{exchange}.ts`                       |
 | **Add ingest source**  | `docs/ADAPTER_ONBOARDING.md`(checklist,含指标声明门) |
 | Add cron job           | `vercel.json` crons array                            |
 | Check logs             | `vercel logs` or Sentry dashboard                    |

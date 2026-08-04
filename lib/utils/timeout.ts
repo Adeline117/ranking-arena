@@ -32,6 +32,37 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number, label = 'q
 }
 
 /**
+ * Execute an AbortSignal-aware operation with a hard deadline. The signal is
+ * aborted before the timeout error is exposed, allowing database and fetch
+ * clients to stop work instead of continuing after their caller returned.
+ */
+export async function withAbortableTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  label = 'operation'
+): Promise<T> {
+  if (ms <= 0) {
+    throw new Error(`Timeout: ${label} — budget already expired`)
+  }
+
+  const controller = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(`Timeout: ${label} exceeded ${ms}ms`)
+      controller.abort(error)
+      reject(error)
+    }, ms)
+  })
+
+  try {
+    return await Promise.race([operation(controller.signal), timeout])
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
+}
+
+/**
  * Create a budget tracker for cascading timeouts.
  *
  * Usage:

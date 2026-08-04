@@ -34,39 +34,32 @@ Trigger: Daily at 08:00
 Script: node scripts/openclaw/health-monitor.mjs daily
 ```
 
-#### Auto-Fix Pipeline (on alert)
+#### Incident Response (on alert)
 
-```
-Trigger: When health-monitor detects pipeline failure
-Action:
-  1. Open Claude Code session in the Arena project directory
-  2. Prompt: "[JOB_NAME] pipeline failed with error: [ERROR].
-     Read pipeline_logs for the last 10 runs of this job.
-     Analyze the error pattern, fix the root cause, run tests, and commit."
-  3. Send Telegram notification with result
-```
+The monitor is alert-only. Investigate failures against the active source
+registry, reproduce them in an isolated worktree, run the required checks, and
+ship changes through a reviewed pull request. Monitoring must never launch a
+code-writing process or push directly to a deployment branch.
 
 #### Bug Report Handler
 
 ```
 Trigger: When receiving a bug report (Discord/Telegram)
 Action:
-  1. Extract bug description
-  2. Open Claude Code session
-  3. Prompt: "User reported: [DESCRIPTION].
-     Reproduce, locate root cause, fix, test, commit.
-     Log in CHANGELOG.md."
-  4. Send fix summary to Telegram
-  5. Wait for "ok" to deploy (auto-deploy if <3 files changed + tests pass)
+  1. Capture the report and reproducible evidence
+  2. Open or update a tracked incident
+  3. Prepare an isolated, tested pull request when a code change is required
+  4. Send the incident/PR link to Telegram for human review
+  5. Deploy only through the normal reviewed main-branch release gate
 ```
 
-### 3. Auto-Deploy Rules
+### 3. Change-Control Rules
 
-| Condition                     | Action                |
-| ----------------------------- | --------------------- |
-| Tests pass + <3 files changed | Auto-deploy           |
-| Tests pass + 3+ files changed | Wait for confirmation |
-| Tests fail                    | Block + alert         |
+| Condition                       | Action                                  |
+| ------------------------------- | --------------------------------------- |
+| Tests and required checks pass  | Open a pull request for review          |
+| Any required check fails        | Block release and keep the alert active |
+| Production mutation is required | Use the approved runbook and audit log  |
 
 #### Daily R2 Backup (3:00 AM)
 
@@ -118,3 +111,9 @@ Add these lines to `crontab -e`:
 | `../maintenance/backup-to-r2.mjs`        | Daily trader data backup to R2 (3 AM)                            |
 | `../maintenance/backup-to-r2.mjs --full` | Full DB backup to R2 (Sunday 4 AM)                               |
 | `sentry-convergence.mjs`                 | Weekly Sentry error report + stale issue cleanup (Friday 10 AM)  |
+
+`health-monitor.mjs` requires both Telegram credentials and exits non-zero
+when the authoritative health verdict is degraded/critical, when a response is
+invalid or stale, or when alert delivery is rejected. A logged `ALERT SENT`
+therefore means Telegram acknowledged the message, not merely that an HTTP
+request was attempted.

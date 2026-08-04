@@ -12,7 +12,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createSupabaseAdmin } from '@/lib/cron/utils'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { TIER_SCHEDULES } from '@/lib/services/smart-scheduler'
@@ -50,10 +50,7 @@ export async function GET(_req: Request) {
       })
     }
 
-    const supabase = createSupabaseAdmin()
-    if (!supabase) {
-      return NextResponse.json({ ok: false, error: 'Database connection failed' }, { status: 500 })
-    }
+    const supabase = getSupabaseAdmin()
     const scheduleManager = createScheduleManager()
 
     // 1. Get tier statistics
@@ -73,16 +70,7 @@ export async function GET(_req: Request) {
     // queue to keep the response shape for the monitoring dashboard.
     const queueData: unknown[] = []
 
-    // 5. Calculate data freshness by tier
-    const { data: _freshnessData, error: freshnessError } = await supabase.rpc(
-      'calculate_freshness_by_tier'
-    )
-
-    if (freshnessError) {
-      logger.warn('Failed to calculate freshness', { error: freshnessError })
-    }
-
-    // 6. Get recent tier updates
+    // 5. Get recent tier updates
     const { data: recentUpdates, error: _updatesError } = await supabase
       .from('trader_sources')
       .select('tier_updated_at')
@@ -94,7 +82,7 @@ export async function GET(_req: Request) {
 
     const lastTierUpdate = recentUpdates?.tier_updated_at || null
 
-    // 7. Return comprehensive statistics
+    // 6. Return comprehensive statistics
     return NextResponse.json({
       ok: true,
       enabled: true,

@@ -10,11 +10,13 @@ description: Post-ship documentation update. Reads all docs, cross-references di
 Post-ship documentation sync. Ensures all project docs accurately reflect what was just shipped.
 
 ## When to Use
+
 Run this after `/ship` or after any significant merge to main.
 
 ## Process
 
 ### Step 1: Identify What Changed
+
 ```bash
 # Get the diff of what was just shipped
 # Option A: Compare with previous tag
@@ -25,6 +27,7 @@ git log --oneline -20 --no-merges
 ```
 
 Categorize changes:
+
 - New features
 - Bug fixes
 - Architecture changes
@@ -35,7 +38,9 @@ Categorize changes:
 - Configuration changes
 
 ### Step 2: Read All Project Docs
+
 Read these files and note any discrepancies:
+
 - `README.md`
 - `CLAUDE.md`
 - `docs/PROGRESS.md`
@@ -49,47 +54,56 @@ Read these files and note any discrepancies:
 ### Step 3: Update Each Document
 
 #### CLAUDE.md Updates
+
 - Update "Directory Structure" if new top-level dirs added
 - Update "Key Commands" if new npm scripts
 - Update "Database Schema" if new tables
 - Update "Data Pipeline" if cron jobs changed
-- Update "Exchange Connectors" if new connectors
+- Update ingest adapter/registry documentation if source coverage changes
 - Update "Known Issues" if issues resolved or new ones found
 - Update "Quick Reference" table
 
 #### docs/PROGRESS.md Updates
+
 - Move completed items to "Recently Completed"
 - Update "Current Sprint Focus"
 - Archive items older than 2 weeks
 
 #### docs/TASKS.md Updates
+
 - Mark completed tasks as done
 - Remove tasks that are no longer relevant
 - Add new tasks discovered during the ship
 
 #### CHANGELOG.md Updates
+
 - Ensure all changes from this release are documented
 - Format follows Keep a Changelog standard
 - Version number matches package.json
 
 #### README.md Updates
+
 - Update feature list if new features shipped
 - Update tech stack if new dependencies
 - Update setup instructions if configuration changed
 
 ### Step 4: Clean Up TODOs
+
 ```bash
 # Find resolved TODOs
 grep -rn "TODO\|FIXME" app/ lib/ --include="*.ts" --include="*.tsx"
 ```
 
 For each TODO:
+
 - If the code around it was changed and the TODO is resolved → remove it
 - If the TODO references a completed task → remove it
 - If still valid → leave it
 
 ### Step 5: Memory Update
+
 Check if any changes affect the memory system:
+
 - New architecture decisions → update relevant memory files
 - New infrastructure → update VPS/pipeline memories
 - Changed conventions → update feedback memories
@@ -112,23 +126,28 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 # Documentation Release — [Date]
 
 ## Documents Updated
+
 - [x] CLAUDE.md: [what changed]
 - [x] docs/PROGRESS.md: [what changed]
 - [ ] docs/TASKS.md: no changes needed
 - [x] CHANGELOG.md: [version]
 
 ## TODOs Cleaned
+
 - Removed [N] resolved TODOs
 - [N] TODOs remaining
 
 ## Discrepancies Found
+
 - [doc] said [X] but code shows [Y] — fixed
 
 ## Suggested Follow-ups
+
 - [any documentation gaps that need user input]
 ```
 
 ## Rules
+
 - NEVER change code — documentation only
 - NEVER fabricate features or changes — only document what actually shipped
 - Keep docs concise — Arena values brevity

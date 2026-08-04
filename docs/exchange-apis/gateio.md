@@ -48,6 +48,7 @@ SIGN: <request-signature>
 **🌟 No API keys needed!** This is the frontend web API used by the copy trading page.
 
 **Query Parameters:**
+
 - `page` (integer, required): Page number (starts at 1)
 - `page_size` (integer, optional): Results per page (default: 20, max: 100)
 - `status` (string, optional): Filter by status (`running`, `closed`, `all`)
@@ -65,6 +66,7 @@ SIGN: <request-signature>
   - `quarter` - Quarterly stats
 
 **Required Headers:**
+
 ```javascript
 {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -75,6 +77,7 @@ SIGN: <request-signature>
 ```
 
 **Response Format:**
+
 ```json
 {
   "code": 0,
@@ -84,14 +87,14 @@ SIGN: <request-signature>
       {
         "leader_id": 123456,
         "nickname": "ProTrader",
-        "profit_rate": 1.255,      // 125.5% ROI (decimal)
+        "profit_rate": 1.255, // 125.5% ROI (decimal)
         "profit": "50000.00",
         "aum": "1000000.00",
         "follower_num": 500,
-        "win_rate": 0.6520,        // 65.20% (decimal)
-        "max_drawdown": 0.0850,    // 8.50% (decimal, absolute value)
+        "win_rate": 0.652, // 65.20% (decimal)
+        "max_drawdown": 0.085, // 8.50% (decimal, absolute value)
         "sharp_ratio": 2.5,
-        "position_num": 150,       // Total trades
+        "position_num": 150, // Total trades
         "close_position_num": 145, // Closed trades
         "total_pnl": "75000.00",
         "avatar": "https://..."
@@ -104,6 +107,7 @@ SIGN: <request-signature>
 ```
 
 **⚠️ Important Notes:**
+
 1. **Decimal format:** All percentages are decimals (0.8214 = 82.14%)
 2. **CTA traders:** Traders with `cta_` prefix don't appear in API results
 3. **Numeric IDs only:** Only numeric trader IDs (e.g., `123456`) are returned
@@ -134,40 +138,46 @@ Since all endpoints require authentication, there are two approaches:
 ### Option A: Authenticated API Access (Recommended)
 
 **Pros:**
+
 - Official, stable API
 - Rate limits are reasonable
 - Full data access
 
 **Cons:**
+
 - Requires user to create API keys
 - Need to implement signature generation
 
 **Implementation:**
+
 ```javascript
-import crypto from 'crypto';
+import crypto from 'crypto'
 
 function generateSignature(method, path, query, timestamp, secret) {
   const payload = `${method}\n${path}\n${query}\n${crypto
     .createHash('sha512')
     .update('')
-    .digest('hex')}\n${timestamp}`;
-  
-  return crypto.createHmac('sha512', secret).update(payload).digest('hex');
+    .digest('hex')}\n${timestamp}`
+
+  return crypto.createHmac('sha512', secret).update(payload).digest('hex')
 }
 ```
 
 ### Option B: Web Scraping (Fallback)
 
 **Pros:**
+
 - No API keys needed
 - Can access public leaderboard page
 
 **Cons:**
+
 - Fragile (breaks when UI changes)
 - Rate limiting concerns
 - More complex parsing
 
 **Implementation:**
+
 - Use Puppeteer/Playwright to load `https://www.gate.io/copy_trade`
 - Extract data from rendered HTML/XHR requests
 - Parse leaderboard table or intercept API calls from browser
@@ -226,17 +236,12 @@ For our use case (periodic enrichment), this is sufficient.
 
 ---
 
-## Next Steps
+## Active implementation boundary
 
-1. **If API keys are available:**
-   - Implement authenticated API client in `scripts/enrich-gateio.mjs`
-   - Use signature-based authentication
-   - Fetch top 100 traders periodically
-
-2. **If no API keys:**
-   - Implement Puppeteer-based scraper
-   - Extract data from https://www.gate.io/copy_trade
-   - Parse HTML or intercept network requests
+Gate.io collection is registry-driven through `lib/ingest/adapters/gate/` and
+the region-owned ingest worker. Extend that adapter and its contract tests when
+new authenticated or browser evidence becomes available; do not add a
+standalone enrichment script or a second scheduler.
 
 ---
 

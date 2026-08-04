@@ -10,7 +10,7 @@
  * can stop carrying 110 lines of data-cleaning noise.
  */
 
-import { VALIDATION_BOUNDS as VB } from '@/lib/pipeline/types'
+import { VALIDATION_BOUNDS as VB } from '@/lib/validation/data-quality-bounds'
 
 export interface TraderRow {
   source: string

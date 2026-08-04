@@ -22,8 +22,8 @@ export const TIMEOUTS = {
  * SSR query timeouts — used with AbortSignal.timeout() on Supabase queries.
  *
  * During compute-leaderboard cron execution, bulk upserts hold row locks on
- * leaderboard_ranks / trader_snapshots for seconds at a time. SSR SELECT
- * queries against those tables block until the lock is released. These
+ * leaderboard_ranks for seconds at a time. SSR SELECT queries against that
+ * projection block until the lock is released. These
  * timeouts ensure SSR queries are *actually cancelled* (AbortSignal aborts
  * the HTTP request to PostgREST) instead of just racing a setTimeout that
  * lets the abandoned query keep consuming a connection in the background.

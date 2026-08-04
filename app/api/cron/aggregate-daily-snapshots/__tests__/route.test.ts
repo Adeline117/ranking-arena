@@ -50,7 +50,7 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
-jest.mock('@/lib/pipeline/validate-before-write', () => ({
+jest.mock('@/lib/validation/data-write-gate', () => ({
   validateBeforeWrite: jest.fn((records: Record<string, unknown>[]) => ({
     valid: records,
     rejected: [],
@@ -199,9 +199,6 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
     mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'function not found' } })
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') {
-        return buildChainProxy({ data: [], error: null })
-      }
       if (table === 'leaderboard_ranks') {
         return buildChainProxy({ data: [], error: null })
       }
@@ -232,13 +229,13 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
     expect(body.error).toContain('Database unavailable')
   })
 
-  it('returns success with errors when fallback query fails', async () => {
+  it('handles a canonical fallback query failure without throwing', async () => {
     // RPC fails → triggers fallback
     mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } })
 
     // Fallback query also returns error
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') {
+      if (table === 'leaderboard_ranks') {
         return buildChainProxy({ data: null, error: { message: 'Query failed' } })
       }
       return buildChainProxy({ data: [], error: null })

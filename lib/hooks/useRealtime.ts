@@ -527,24 +527,6 @@ export function usePostsRealtime(
 }
 
 /**
- * 订阅交易员快照更新
- */
-export function useTraderSnapshotsRealtime(
-  platform?: string,
-  callbacks?: {
-    onInsert?: (snapshot: Record<string, unknown>) => void
-    onUpdate?: (payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void
-  }
-) {
-  return useRealtime({
-    table: 'trader_snapshots_v2',
-    event: '*',
-    filter: platform ? `platform=eq.${platform}` : undefined,
-    ...callbacks,
-  })
-}
-
-/**
  * 订阅通知更新
  */
 export function useNotificationsRealtime(

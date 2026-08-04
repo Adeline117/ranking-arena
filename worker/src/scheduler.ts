@@ -1,12 +1,11 @@
 /**
- * Job scheduler — legacy pipeline residue (score + meilisearch only).
+ * Downstream publication scheduler (score + Meilisearch only).
  *
  * ENDGAME (ARENA_DATA_SPEC v1.2): all leaderboard fetching + enrichment moved
- * to the arena-ingest-worker (worker/src/ingest/). This scheduler now only
- * keeps the downstream chain alive: Arena Score recompute (reads
- * public.trader_latest, which the ingest pipeline compat-writes) and
- * Meilisearch sync. Stale fetch and enrich schedulers are actively removed
- * so retired legacy jobs can never fire again.
+ * to the arena ingest worker (`worker/src/ingest/`). This scheduler only
+ * triggers Arena Score recomputation, which reads canonical
+ * `arena_score_inputs`, and Meilisearch sync. Stale fetch and enrichment
+ * schedulers are actively removed so retired jobs can never fire again.
  */
 
 import { getQueue, JOB, type ComputeLeaderboardData } from './queues'

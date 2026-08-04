@@ -13,7 +13,7 @@
  *    dragnet. Better one rock-solid flag than three that false-accuse.
  *  - Signals known to be noisy data artifacts are intentionally NOT flagged.
  *    e.g. ROI-vs-PnL sign divergence is a common field-mapping artifact
- *    (~2k/day, log-only in validate-before-write) — flagging the TRADER for
+ *    (~2k/day, log-only in the data-write gate) — flagging the TRADER for
  *    our own pipeline quirk would be unfair, so it is excluded.
  *
  * Computed at read time from fields already on the serving row (no migration,

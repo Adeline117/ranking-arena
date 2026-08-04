@@ -1,235 +1,61 @@
-# Arena Scraper Architecture & Operations
+# Source Acquisition and Scraper Operations
 
-## Overview
+Status: **Canonical transport guide**
 
-Arena uses a hybrid approach to collect trader data from 32+ exchanges:
+Public ranking acquisition is owned by the external BullMQ ingest worker.
+`arena.sources` selects active sources, cadence, and `fetch_region`; adapters
+under `lib/ingest/adapters/` implement source-specific acquisition and pure
+parsing. There is no Vercel exchange-fetch loop or standalone connector registry.
 
-1. **Direct API** — Exchanges with open APIs (Binance, OKX, HTX, Hyperliquid, etc.)
-2. **VPS Browser Scraper** — Exchanges with WAF protection (Bybit, MEXC, Bitget, etc.)
-3. **Fallback chain** — API -> CF Worker proxy -> VPS scraper -> cached data
+## Transport model
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   Arena Data Collection                      │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                ┌─────────────┴─────────────┐
-                │                           │
-          ┌─────▼──────┐             ┌──────▼────────┐
-          │ Direct API │             │ VPS Scraper   │
-          │ (HTTP/JSON)│             │ (Playwright)  │
-          └─────┬──────┘             └──────┬────────┘
-                │                           │
-      ┌─────────┼───────────┐      ┌────────┼─────────┐
-      │         │           │      │        │         │
-  Binance    OKX      Hyperliquid Bybit   MEXC    Bitget ...
-      │         │          │       │       │        │
-      └─────────┴──────────┴───────┴───────┴────────┘
-                          │
-                  ┌───────▼────────┐
-                  │  Supabase DB   │
-                  └────────────────┘
+An adapter may use direct HTTP, a region-affine worker, or a bounded browser
+transport. Every path must use the shared fetch budget, persist durable RAW
+evidence before parsing, and preserve the acquisition attempt/provenance chain.
+Geo routing is an adapter and registry concern, not a fallback that silently
+returns an empty leaderboard.
+
+```text
+arena.sources
+    -> regional BullMQ queue
+    -> registered source adapter
+    -> bounded network/browser acquisition
+    -> durable RAW artifact
+    -> pure parser + validation
+    -> complete-board publication
 ```
 
----
+## Adding or changing a source
 
-## Quick Start
+Follow `docs/ADAPTER_ONBOARDING.md`. In particular:
 
-```bash
-# Health check
-curl http://45.76.152.169:3456/health
+- capture real upstream evidence and document available metrics;
+- keep parsers independent of network, clock, and module state;
+- add representative RAW fixtures and expected-metric parity tests;
+- register the adapter and add the source row through a forward migration;
+- validate the correct fetch region and worker capacity before activation.
 
-# Run full scraper test
-npx tsx scripts/test-vps-scrapers.ts
+Do not add a route to `vercel.json`, write directly to serving tables, edit an
+applied migration, or restore a retired connector/fetcher.
 
-# Trigger a single platform fetch
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.arenafi.org/api/cron/unified-connector?platform=hyperliquid&window=90d"
+## Diagnosis
 
-# Trigger batch fetch for a group
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.arenafi.org/api/cron/batch-fetch-traders?group=a"
-```
+1. Check source status, serving mode, adapter slug, and fetch region.
+2. Check worker heartbeat/ownership and the source region queue.
+3. Inspect the latest acquisition attempt and durable RAW artifact.
+4. Separate transport, schema, parser, validation, and publication failures.
+5. Reproduce parsing from stored RAW before making another upstream request.
+6. Verify source freshness and public visibility after the next successful
+   publication.
 
----
+Useful references:
 
-## VPS Scraper Service
+- `docs/INGEST_WORKER_TOPOLOGY.md`
+- `docs/INGEST_WORKER_DEPLOY.md`
+- `docs/RUNBOOK.md`
+- `lib/ingest/fetch/`
+- `lib/ingest/adapters/`
+- `worker/src/ingest/`
 
-- **Host**: `http://45.76.152.169:3456` (Singapore VPS)
-- **Auth**: `X-Proxy-Key` header (from `VPS_PROXY_KEY` env var)
-- **PM2 name**: `arena-scraper`
-
-### Endpoints
-
-| Platform | Endpoint                   | Speed | Status  |
-| -------- | -------------------------- | ----- | ------- |
-| Bybit    | `/bybit/leaderboard-batch` | ~65s  | Working |
-| MEXC     | `/mexc/leaderboard`        | >120s | Slow    |
-| Bitget   | `/bitget/leaderboard`      | ~40s  | Working |
-| CoinEx   | `/coinex/leaderboard`      | ~35s  | Working |
-| KuCoin   | `/kucoin/leaderboard`      | ~45s  | Working |
-| BingX    | `/bingx/leaderboard`       | ~30s  | Working |
-| LBank    | `/lbank/leaderboard`       | ~40s  | Working |
-| GateIO   | `/gateio/leaderboard`      | ~50s  | Working |
-
-### Usage
-
-```typescript
-const VPS_SCRAPER_URL = 'http://45.76.152.169:3456'
-
-// Batch scrape Bybit (all periods in one browser session)
-const res = await fetch(
-  `${VPS_SCRAPER_URL}/bybit/leaderboard-batch?pageSize=50&durations=DATA_DURATION_THIRTY_DAY,DATA_DURATION_NINETY_DAY`,
-  {
-    headers: { 'X-Proxy-Key': process.env.VPS_PROXY_KEY! },
-    signal: AbortSignal.timeout(90_000),
-  }
-)
-```
-
----
-
-## Platform Strategies
-
-### Bybit — WAF blocked, VPS only
-
-- Akamai WAF blocks all direct API access (HTTP 403)
-- **Always use batch mode** (`/bybit/leaderboard-batch`): ~65s for 3 periods
-- Sequential mode: ~73s per period (3x slower)
-
-### MEXC — API first, VPS fallback
-
-1. Try `copyFutures/api/v1/traders/top` (~2-5s)
-2. Try legacy POST API (~3s)
-3. Try futures GET API (~3s)
-4. VPS scraper fallback (~120s, last resort)
-
-### HTX — Direct API, no VPS needed
-
-- Public API: `futures.htx.com/-/x/hbg/v1/futures/copytrading/rank`
-- ~1-3s response time
-
----
-
-## Adding a New Exchange
-
-**Step 1**: Create fetcher in `lib/cron/fetchers/`
-
-```typescript
-export async function fetchNewExchange(supabase, periods): Promise<FetchResult> {
-  // Try direct API first
-  // If blocked, use VPS scraper
-  // Transform to TraderData[], save to DB
-}
-```
-
-**Step 2**: Add VPS scraper endpoint (if WAF-blocked)
-
-```bash
-ssh root@45.76.152.169
-cd /opt/scraper && nano exchanges.js
-# Add new endpoint, restart: pm2 restart arena-scraper
-```
-
-**Step 3**: Test
-
-```bash
-curl http://45.76.152.169:3456/newexchange/leaderboard \
-  -H "X-Proxy-Key: $VPS_PROXY_KEY" -m 60
-```
-
-**Step 4**: Add cron entry to `vercel.json`
-
----
-
-## Troubleshooting
-
-### VPS scraper returns 403
-
-VPS IP blocked by exchange WAF. Fix: restart (rotates fingerprints)
-
-```bash
-ssh root@45.76.152.169
-pm2 restart arena-scraper
-```
-
-### VPS scraper timeout
-
-Browser session hung or WAF challenge too long. Fix: increase timeout in fetcher config.
-
-### Fetcher returns 0 traders but VPS works
-
-Exchange changed API endpoint or response format. Inspect response:
-
-```bash
-curl http://45.76.152.169:3456/mexc/leaderboard?periodType=2&pageSize=10 \
-  -H "X-Proxy-Key: $VPS_PROXY_KEY" -m 60 | jq '.data.resultList[0]'
-```
-
-Then update parser in the fetcher.
-
-### Platform has no fresh data
-
-```bash
-node scripts/pipeline-health-check.mjs        # Diagnose
-node scripts/pipeline-health-check.mjs --fix   # Generate fix script
-```
-
----
-
-## Environment Variables
-
-```bash
-VPS_SCRAPER_URL=http://45.76.152.169:3456
-VPS_PROXY_KEY=<set-in-secret-manager>
-# Fallback proxies (optional)
-VPS_PROXY_SG=http://45.76.152.169:3457
-VPS_PROXY_JP=http://149.28.27.242:3001
-CLOUDFLARE_PROXY_URL=https://ranking-arena-proxy.broosbook.workers.dev
-```
-
----
-
-## Monitoring
-
-### Telegram alerts
-
-Sent via `lib/alerts/send-alert.ts` with 5-minute rate limiting per platform:level.
-
-| Alert Level | Action              |
-| ----------- | ------------------- |
-| `info`      | No action needed    |
-| `warning`   | Check within 1 hour |
-| `critical`  | Act immediately     |
-
-### Data freshness
-
-```sql
-SELECT source, season_id, COUNT(*), MAX(captured_at) as last_captured
-FROM leaderboard_ranks
-GROUP BY source, season_id
-ORDER BY last_captured DESC;
-```
-
-If `last_captured` > 2 hours ago, the fetcher is failing.
-
----
-
-## Maintenance Checklist
-
-**Daily**: Check VPS scraper health, review Vercel cron logs
-**Weekly**: Run full scraper test suite, check Supabase data freshness, review Sentry errors
-**Monthly**: Test each exchange manually, update VPS dependencies, rotate VPS API key
-
----
-
-## Key Infrastructure
-
-| Resource       | Value                                        |
-| -------------- | -------------------------------------------- |
-| VPS Singapore  | `45.76.152.169` (scraper :3456, proxy :3001) |
-| VPS Japan      | `149.28.27.242` (proxy :3001)                |
-| CF Worker      | `ranking-arena-proxy.broosbook.workers.dev`  |
-| VPS SSH user   | `root` (key: ask Adeline)                    |
-| VPS Provider   | Vultr (creds in 1Password)                   |
-| Scraper source | `/opt/scraper/` on SG VPS                    |
+Worker restarts, source activation, production queue mutation, and backfills are
+state-changing operations and require a bounded rollout and rollback plan.

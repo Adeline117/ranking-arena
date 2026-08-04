@@ -79,7 +79,7 @@ describe('PipelineLogger', () => {
   describe('start', () => {
     it('should insert a running log entry and return a handle with an id', async () => {
       mockInsertSuccess(42)
-      const handle = await PipelineLogger.start('batch-fetch-traders-a')
+      const handle = await PipelineLogger.start('batch-5min')
       expect(handle.id).toBe(42)
     })
 
@@ -92,16 +92,24 @@ describe('PipelineLogger', () => {
       expect(pingHealthcheck).toHaveBeenCalledWith('compute-leaderboard', 'start')
     })
 
-    it('should match prefix for group-suffixed jobs (batch-fetch-traders-a)', async () => {
+    it('should match prefix for source-suffixed jobs', async () => {
       mockInsertSuccess(2)
+      await PipelineLogger.start('backfill-avatars-binance')
+
+      await new Promise((r) => setTimeout(r, 10))
+      expect(pingHealthcheck).toHaveBeenCalledWith('backfill-avatars', 'start')
+    })
+
+    it('should not revive retired pipeline healthchecks', async () => {
+      mockInsertSuccess(3)
       await PipelineLogger.start('batch-fetch-traders-a')
 
       await new Promise((r) => setTimeout(r, 10))
-      expect(pingHealthcheck).toHaveBeenCalledWith('batch-fetch-traders', 'start')
+      expect(pingHealthcheck).not.toHaveBeenCalled()
     })
 
     it('should not ping healthcheck for unmonitored jobs', async () => {
-      mockInsertSuccess(3)
+      mockInsertSuccess(4)
       await PipelineLogger.start('some-custom-job-xyz')
 
       await new Promise((r) => setTimeout(r, 10))

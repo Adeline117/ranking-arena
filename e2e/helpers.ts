@@ -13,22 +13,8 @@ export async function dismissCookieConsent(page: Page) {
   }
 }
 
-/** Dismiss WelcomeModal onboarding overlay if visible */
-export async function dismissWelcomeModal(page: Page) {
-  const closeBtn = page.locator('button[aria-label="Close"]')
-  if (
-    await closeBtn
-      .first()
-      .isVisible({ timeout: 2000 })
-      .catch(() => false)
-  ) {
-    await closeBtn.first().click()
-  }
-}
-
-/** Dismiss all overlays (cookie consent + welcome modal) */
+/** Dismiss supported global overlays without closing unrelated dialogs. */
 export async function dismissOverlays(page: Page) {
-  await dismissWelcomeModal(page)
   await dismissCookieConsent(page)
 }
 

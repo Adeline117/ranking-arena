@@ -20,7 +20,6 @@ import type {
   EquityCurvePoint,
   DailyPnlPoint,
   AssetBreakdownPoint,
-  RefreshJobSummary,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
@@ -63,105 +62,29 @@ export async function GET(
       const cacheKey = publicRankingCacheKey(`trader:${platform}:${trader_key}`)
       const cached = await tieredGet<TraderDetailResponse>(cacheKey)
       if (cached.data) {
-        return NextResponse.json(cached.data, {
-          headers: { 'X-Cache': 'HIT', 'Cache-Control': CACHE_CONTROL },
-        })
+        // Older cache entries may still contain a refresh job produced by the
+        // retired queue. Normalize at the response boundary so a deployment
+        // cannot temporarily resurrect that contract until the warm TTL ends.
+        return NextResponse.json(
+          { ...cached.data, refresh_job: null },
+          {
+            headers: { 'X-Cache': 'HIT', 'Cache-Control': CACHE_CONTROL },
+          }
+        )
       }
 
-      // Legacy source aliases for fallback queries to old tables
-      const LEGACY_SOURCE_ALIASES: Record<string, string[]> = {
+      // Source aliases used by the dedicated enrichment tables.
+      const ENRICHMENT_SOURCE_ALIASES: Record<string, string[]> = {
         binance_futures: ['binance', 'binance_futures'],
         bitget_futures: ['bitget', 'bitget_futures'],
         htx_futures: ['htx_futures', 'htx'],
         okx_web3: ['okx', 'okx_web3'],
       }
-      const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
+      const sourceAliases = ENRICHMENT_SOURCE_ALIASES[platform] || [platform]
 
-      // Phase 1: fire the 6 always-needed queries in parallel.
-      //
-      // v2 snapshots table has 1.4M+ rows — most traders DO have v2 data, so the
-      // 4 leaderboard_ranks fallback queries from the old code (profile, 7D, 30D,
-      // 90D) were wasted work 95%+ of the time. We defer them to Phase 2, firing
-      // only on the rare miss. trader_timeseries is still empty so legacy
-      // equity_curve + asset_breakdown stay in Phase 1 unconditionally.
-      //
-      // Common case: 6 queries. Cold case (no v2 data): 6 + 1 = 7 queries (the
-      // fallback is a single merged .in('season_id', ...) query instead of 4).
+      // Fetch the authoritative ranking rows, profile, and time-series sources in
+      // parallel. leaderboard_ranks is the sole source for 7D/30D/90D snapshots.
       const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-      const [profileResult, snapshotsResult, timeseriesResult, jobResult, ecResult, abResult] =
-        await Promise.all([
-          // V2 primary queries
-          supabase
-            .from('trader_profiles_v2')
-            .select(
-              'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, followers, copiers, aum, updated_at, last_enriched_at, created_at'
-            )
-            .eq('platform', platform)
-            .eq('trader_key', trader_key)
-            .maybeSingle(),
-          // trader_snapshots_v2 retired (2026-06-15) → always use the leaderboard_ranks
-          // fallback below (empty array → needsLrFallback true).
-          Promise.resolve({
-            data: [] as Array<{ updated_at?: string | null; as_of_ts?: string | null }>,
-          }),
-          supabase
-            .from('trader_timeseries')
-            .select('series_type, data, as_of_ts, updated_at')
-            .eq('platform', platform)
-            .eq('trader_key', trader_key)
-            .order('as_of_ts', { ascending: false })
-            .limit(5),
-          supabase
-            .from('refresh_jobs')
-            .select('id, status, attempts, last_error, created_at, updated_at')
-            .eq('platform', platform)
-            .eq('trader_key', trader_key)
-            .in('status', ['pending', 'running'])
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-
-          // Legacy timeseries (trader_timeseries is empty, always needed).
-          // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
-          sourceAliases.length === 1
-            ? supabase
-                .from('trader_equity_curve')
-                .select('data_date, roi_pct, pnl_usd')
-                .eq('source', sourceAliases[0])
-                .eq('source_trader_id', trader_key)
-                .in('period', ['90D', '30D', '7D'])
-                .order('data_date', { ascending: true })
-                .limit(365)
-            : supabase
-                .from('trader_equity_curve')
-                .select('data_date, roi_pct, pnl_usd')
-                .in('source', sourceAliases)
-                .eq('source_trader_id', trader_key)
-                .in('period', ['90D', '30D', '7D'])
-                .order('data_date', { ascending: true })
-                .limit(365),
-          sourceAliases.length === 1
-            ? supabase
-                .from('trader_asset_breakdown')
-                .select('symbol, weight_pct')
-                .eq('source', sourceAliases[0])
-                .eq('source_trader_id', trader_key)
-                .order('weight_pct', { ascending: false })
-                .limit(20)
-            : supabase
-                .from('trader_asset_breakdown')
-                .select('symbol, weight_pct')
-                .in('source', sourceAliases)
-                .eq('source_trader_id', trader_key)
-                .order('weight_pct', { ascending: false })
-                .limit(20),
-        ])
-
-      // Phase 2: leaderboard_ranks fallback — only fire if v2 data is missing.
-      // Merged into 1 query (instead of 4) via .in('season_id', ...). Common case
-      // (v2 data present) skips this entirely.
-      const needsLrFallback =
-        !profileResult.data || !snapshotsResult.data || snapshotsResult.data.length === 0
       type LrRow = {
         season_id: string
         handle: string | null
@@ -176,18 +99,68 @@ export async function GET(
         rank: number | null
         computed_at: string | null
       }
-      const lrRows: LrRow[] = needsLrFallback
-        ? (((
-            await supabase
-              .from('leaderboard_ranks')
-              .select(
-                'season_id, handle, avatar_url, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at'
-              )
-              .eq('source', platform)
+      const [profileResult, lrResult, timeseriesResult, ecResult, abResult] = await Promise.all([
+        supabase
+          .from('trader_profiles_v2')
+          .select(
+            'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, followers, copiers, aum, updated_at, last_enriched_at, created_at'
+          )
+          .eq('platform', platform)
+          .eq('trader_key', trader_key)
+          .maybeSingle(),
+        supabase
+          .from('leaderboard_ranks')
+          .select(
+            'season_id, handle, avatar_url, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, rank, computed_at'
+          )
+          .eq('source', platform)
+          .eq('source_trader_id', trader_key)
+          .in('season_id', windows),
+        supabase
+          .from('trader_timeseries')
+          .select('series_type, data, as_of_ts, updated_at')
+          .eq('platform', platform)
+          .eq('trader_key', trader_key)
+          .order('as_of_ts', { ascending: false })
+          .limit(5),
+
+        // Dedicated enrichment time-series provide compatibility coverage.
+        // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
+        sourceAliases.length === 1
+          ? supabase
+              .from('trader_equity_curve')
+              .select('data_date, roi_pct, pnl_usd')
+              .eq('source', sourceAliases[0])
               .eq('source_trader_id', trader_key)
-              .in('season_id', ['7D', '30D', '90D'])
-          ).data ?? []) as LrRow[])
-        : []
+              .in('period', ['90D', '30D', '7D'])
+              .order('data_date', { ascending: true })
+              .limit(365)
+          : supabase
+              .from('trader_equity_curve')
+              .select('data_date, roi_pct, pnl_usd')
+              .in('source', sourceAliases)
+              .eq('source_trader_id', trader_key)
+              .in('period', ['90D', '30D', '7D'])
+              .order('data_date', { ascending: true })
+              .limit(365),
+        sourceAliases.length === 1
+          ? supabase
+              .from('trader_asset_breakdown')
+              .select('symbol, weight_pct')
+              .eq('source', sourceAliases[0])
+              .eq('source_trader_id', trader_key)
+              .order('weight_pct', { ascending: false })
+              .limit(20)
+          : supabase
+              .from('trader_asset_breakdown')
+              .select('symbol, weight_pct')
+              .in('source', sourceAliases)
+              .eq('source_trader_id', trader_key)
+              .order('weight_pct', { ascending: false })
+              .limit(20),
+      ])
+
+      const lrRows = (lrResult.data ?? []) as LrRow[]
       const lrByWindow = new Map<string, LrRow>()
       for (const row of lrRows) {
         lrByWindow.set(row.season_id, row)
@@ -214,7 +187,7 @@ export async function GET(
         created_at: new Date(0).toISOString(),
       }
 
-      // Fallback: profile from leaderboard_ranks (Phase 2 result)
+      // Fill missing profile display fields from the authoritative ranking row.
       if (!profileResult.data && lrProfileRow) {
         profile.display_name = lrProfileRow.handle || null
         profile.avatar_url = lrProfileRow.avatar_url || null
@@ -227,12 +200,7 @@ export async function GET(
         '90D': null,
       }
 
-      // (v2 snapshots-building block removed 2026-06-15 — trader_snapshots_v2 retired;
-      // snapshots are now built solely from leaderboard_ranks below.)
-
-      // Snapshots from leaderboard_ranks
-      const hasAnyV2Snapshot = Object.values(snapshots).some((s) => s !== null)
-      if (!hasAnyV2Snapshot && lrRows.length > 0) {
+      if (lrRows.length > 0) {
         for (const win of windows) {
           const snap = lrByWindow.get(win)
           if (snap) {
@@ -326,18 +294,6 @@ export async function GET(
       const stalenessSeconds = getStalenessSeconds(latestUpdate)
       const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
 
-      // Build refresh job summary
-      const refreshJob: RefreshJobSummary | null = jobResult.data
-        ? {
-            id: jobResult.data.id,
-            status: jobResult.data.status,
-            attempts: jobResult.data.attempts,
-            last_error: jobResult.data.last_error,
-            created_at: jobResult.data.created_at,
-            updated_at: jobResult.data.updated_at,
-          }
-        : null
-
       const response: TraderDetailResponse = {
         profile,
         snapshots,
@@ -345,7 +301,7 @@ export async function GET(
         updated_at: latestUpdate,
         is_stale: isStale,
         staleness_seconds: stalenessSeconds,
-        refresh_job: refreshJob,
+        refresh_job: null,
       }
 
       // Cache to Redis (warm tier - 5min TTL). Use next/server `after()` so the

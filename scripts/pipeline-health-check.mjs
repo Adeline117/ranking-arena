@@ -70,7 +70,7 @@ const REQUIRED_PATTERNS = [
       /retry|attempt|maxRetries|fetchJsonWithRetry|fetchWithFallback|fetchWithVpsFallback|withRetry/,
     required: false,
   },
-  // config-driven-fetcher and batch-fetch-traders provide circuit breaker at infrastructure level
+  // The ingest worker and source adapters provide retry/fencing at the infrastructure level.
   {
     name: 'circuit breaker',
     pattern: /circuitBreaker|failureCount|isOpen|createConfigDrivenFetcher|getInlineFetcher/,
@@ -285,76 +285,6 @@ async function checkDataFreshness() {
 }
 
 // ============================================
-// 2b. bot_snapshots 新鲜度哨兵（/rankings/bots）
-// ============================================
-//
-// 背景（2026-07-02 审计）：bot_snapshots 全仓库只有读取方（app/api/bots/*），
-// 没有任何写入方/cron —— 数据 2026-02-11 一次性灌入后再未刷新，页面停更近
-// 5 个月无人发现。此哨兵让停更可见，防止再次静默腐烂。
-//
-// 注意：报 🟡 WARN + 建议，不翻 exit code —— 没有可修的 fetcher（重建采集
-// 应走 worker/ingest 通道 vs 下线页面，待产品决策），恒 CRITICAL 会让脚本
-// 永远 exit(1)、掩盖其他新增严重问题。决策落地后再收紧为 CRITICAL。
-
-async function checkBotSnapshotsFreshness() {
-  console.log('\n=== 2b. bot_snapshots 新鲜度哨兵 (/rankings/bots) ===\n')
-
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.log('跳过：未配置 Supabase 环境变量')
-    return
-  }
-
-  const STALE_DAYS = 7
-
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/bot_snapshots?select=captured_at&order=captured_at.desc&limit=1`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
-    )
-
-    if (!res.ok) {
-      console.log(`⚠️  bot_snapshots 查询失败 (HTTP ${res.status}) — 表可能不存在或权限问题`)
-      return
-    }
-
-    const rows = await res.json()
-    if (!Array.isArray(rows) || rows.length === 0) {
-      console.log('⚪ bot_snapshots 无数据（页面应展示空态）')
-      return
-    }
-
-    const ageDays = Math.floor(
-      (Date.now() - new Date(rows[0].captured_at).getTime()) / (1000 * 60 * 60 * 24)
-    )
-
-    if (ageDays >= STALE_DAYS) {
-      console.log(`🟡 bot_snapshots 停更 ${ageDays} 天（最新 captured_at: ${rows[0].captured_at}）`)
-      console.log('   /rankings/bots 正在展示过期快照（页面已有 stale 警示横幅兜底）')
-      results.dataFreshness.push({
-        platform: 'bot_snapshots',
-        status: 'STALE',
-        ageHours: ageDays * 24,
-      })
-      results.suggestions.push({
-        platform: 'bot_snapshots',
-        priority: 'MEDIUM',
-        action: `/rankings/bots 数据停更 ${ageDays} 天 — 无写入方。待产品决策：重建采集（走 worker/ingest 通道，勿新增 Vercel cron）或下线该页`,
-        command: '# 产品决策后执行：重建 bot_snapshots 采集 job 或下线 /rankings/bots',
-      })
-    } else {
-      console.log(`🟢 bot_snapshots 新鲜（${ageDays} 天前）`)
-    }
-  } catch (err) {
-    console.error('bot_snapshots 哨兵检查失败:', err.message)
-  }
-}
-
-// ============================================
 // 3. 生成修复建议
 // ============================================
 
@@ -469,8 +399,6 @@ async function main() {
   }
 
   await checkDataFreshness()
-
-  await checkBotSnapshotsFreshness()
 
   generateSuggestions()
 

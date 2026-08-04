@@ -37,7 +37,6 @@ const RESPONSE_RESERVE_MS = 250
 const CORE_CHECK_TIMEOUT_MS = 8_000
 const VPS_SCRAPER_TIMEOUT_MS = 2_000
 const VPS_PROXY_TIMEOUT_MS = 1_000
-const VPS_HEARTBEAT_TIMEOUT_MS = 1_000
 
 interface RequestDeadline {
   signal: AbortSignal
@@ -325,53 +324,13 @@ export async function GET() {
             message: 'VPS SG check skipped because the health response deadline was exhausted',
           }
         } else {
-          // Direct connection failed — check pipeline_logs for recent VPS-sourced successes
-          // If VPS cron wrote data in the last 15min, the VPS is actually working fine
-          // (Vultr intermittently blocks Vercel's Tokyo IPs)
-          // Check if any VPS-dependent pipeline succeeded recently
-          // Note: bybit removed 2026-04-08 (dead platform), kept bitget + binance_futures
-          const recentVpsJob = await withTimeout(
-            deadline,
-            VPS_HEARTBEAT_TIMEOUT_MS,
-            null,
-            'checkVpsHeartbeat',
-            (signal) =>
-              getSupabaseAdmin()
-                .from('pipeline_logs')
-                .select('job_name, started_at')
-                .eq('status', 'success')
-                .or(
-                  'job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b2%,job_name.like.batch-fetch-traders-a1%'
-                )
-                .gte('started_at', new Date(Date.now() - 30 * 60000).toISOString())
-                .limit(1)
-                .abortSignal(signal)
-                .maybeSingle()
-                .then(({ data, error }) => {
-                  if (error) throw error
-                  return data
-                })
-          )
-
-          if (recentVpsJob) {
-            vps = {
-              status: 'pass',
-              latency: lat,
-              message: `VPS SG OK (via pipeline heartbeat, direct ${res?.status || 'blocked'})`,
-            }
-          } else {
-            // ROOT CAUSE FIX (2026-04-09): Vultr intermittently blocks Vercel's
-            // Tokyo IPs which made this check flap to 'fail' even while the VPS
-            // scraper itself was fine (just not reachable from Vercel). VPS is
-            // supplementary infra (doesn't affect overall status per line ~186),
-            // but 'fail' still appeared in monitor's System degraded alerts.
-            // Demote to 'skip' to silence the noise — if the VPS is genuinely
-            // dead the cron failures will surface via /api/health/pipeline.
-            vps = {
-              status: 'skip',
-              latency: lat,
-              message: `VPS SG direct ${res?.status || 'unreachable'}, no recent heartbeat (supplementary, not flagged)`,
-            }
+          // Ingest no longer emits per-platform Vercel pipeline-log heartbeats.
+          // A failed cross-region HTTP probe is therefore inconclusive; the
+          // dedicated worker-heartbeat monitor owns worker liveness.
+          vps = {
+            status: 'skip',
+            latency: lat,
+            message: `VPS SG direct ${res?.status || 'unreachable'}; see worker heartbeat monitor`,
           }
         }
       } catch (e: unknown) {

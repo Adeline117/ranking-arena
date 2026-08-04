@@ -7,14 +7,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '../supabase/server'
-import {
-  ActivityTier,
-  TraderActivity,
-  ScheduledJob,
-  scheduleTraderBatch,
-  getNextScheduledTime,
-  getTierStats,
-} from './smart-scheduler'
+import { ActivityTier, ScheduledJob, getNextScheduledTime } from './smart-scheduler'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('ScheduleManager')
@@ -33,10 +26,6 @@ export interface TraderWithSchedule {
   next_refresh_at: string | null
   last_refreshed_at: string | null
   refresh_priority: number | null
-  // Activity data
-  rank?: number
-  follower_count?: number
-  last_seen_at?: string
 }
 
 export interface GetTradersOptions {
@@ -56,11 +45,6 @@ export interface TierStats {
   lastUpdated: string
 }
 
-export interface ClassifyOptions {
-  platforms?: string[]
-  forceRecalculate?: boolean
-}
-
 // ============================================
 // Schedule Manager Class
 // ============================================
@@ -70,122 +54,6 @@ export class ScheduleManager {
 
   constructor(supabase: SupabaseClient) {
     this.supabase = supabase
-  }
-
-  /**
-   * Classify all traders into activity tiers
-   */
-  async classifyTraders(options: ClassifyOptions = {}): Promise<ScheduledJob[]> {
-    const startTime = Date.now()
-    logger.info('Starting tier classification', options)
-
-    try {
-      // 1. Fetch traders with activity data
-      const traders = await this.fetchTradersWithActivity(options.platforms)
-      logger.info(`Fetched ${traders.length} traders for classification`)
-
-      // 2. Convert to TraderActivity format
-      const activities: TraderActivity[] = traders.map((t) => ({
-        traderId: t.trader_key,
-        platform: t.platform,
-        rank: t.rank,
-        followers: t.follower_count,
-        lastTradeAt: t.last_seen_at ? new Date(t.last_seen_at) : undefined,
-        // Note: viewsLast24h not available in current schema
-      }))
-
-      // 3. Schedule using smart scheduler
-      const schedules = scheduleTraderBatch(activities)
-
-      // 4. Log statistics
-      const tierCounts = getTierStats(activities)
-      const duration = Date.now() - startTime
-      logger.info('Tier classification complete', {
-        total: traders.length,
-        ...tierCounts,
-        duration: `${duration}ms`,
-      })
-
-      return schedules
-    } catch (error) {
-      logger.error('Failed to classify traders', { error })
-      throw error
-    }
-  }
-
-  /**
-   * Fetch traders with activity data for classification
-   * @deprecated Uses trader_sources directly for scheduling-specific columns (activity_tier, next_refresh_at, etc.)
-   *             that are not available in the unified data layer. Kept as-is for infrastructure.
-   */
-  private async fetchTradersWithActivity(platforms?: string[]): Promise<TraderWithSchedule[]> {
-    let query = this.supabase
-      .from('trader_sources')
-      .select(
-        `
-        id,
-        platform:source,
-        trader_key:source_trader_id,
-        handle,
-        last_seen_at,
-        activity_tier,
-        next_refresh_at,
-        last_refreshed_at,
-        refresh_priority,
-        trader_profiles!inner (
-          follower_count
-        ),
-        trader_snapshots_v2!inner (
-          metrics
-        )
-      `
-      )
-      .eq('is_active', true)
-      .eq('trader_snapshots_v2.window', '7D')
-
-    if (platforms && platforms.length > 0) {
-      query = query.in('source', platforms)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      logger.error('Failed to fetch traders with activity', { error })
-      throw error
-    }
-
-    // Flatten and extract rank from metrics
-    type TraderRow = {
-      id: string
-      platform: string
-      trader_key: string
-      handle: string
-      last_seen_at?: string | null
-      activity_tier?: ActivityTier | null
-      next_refresh_at?: string | null
-      last_refreshed_at?: string | null
-      refresh_priority?: number | null
-      trader_snapshots_v2?: Array<{ metrics?: { rank?: string | number; [key: string]: unknown } }>
-      trader_profiles?: Array<{ follower_count?: number; [key: string]: unknown }>
-    }
-    return (data || []).map((row: TraderRow) => {
-      const metrics = row.trader_snapshots_v2?.[0]?.metrics || {}
-      const profile = row.trader_profiles?.[0] || {}
-
-      return {
-        id: row.id,
-        platform: row.platform,
-        trader_key: row.trader_key,
-        handle: row.handle,
-        last_seen_at: row.last_seen_at ?? undefined,
-        activity_tier: row.activity_tier ?? null,
-        next_refresh_at: row.next_refresh_at ?? null,
-        last_refreshed_at: row.last_refreshed_at ?? null,
-        refresh_priority: row.refresh_priority ?? null,
-        rank: metrics.rank ? parseInt(String(metrics.rank), 10) : undefined,
-        follower_count: profile.follower_count ?? undefined,
-      }
-    })
   }
 
   /**

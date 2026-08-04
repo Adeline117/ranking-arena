@@ -14,7 +14,6 @@
  *
  * DB column names vary by table:
  *   leaderboard_ranks:   source, source_trader_id, season_id, roi, pnl
- *   trader_snapshots_v2:  platform, trader_key, window, roi_pct, pnl_usd
  *   enrichment tables:    source, source_trader_id, season_id/period
  *   traders:              platform, trader_key
  */
@@ -38,23 +37,6 @@ export const LEADERBOARD_RANKS_FIELDS = {
   roi: 'roi',
   /** DB column `pnl` → canonical `pnl` (already USD) */
   pnl: 'pnl',
-} as const
-
-/**
- * trader_snapshots_v2 uses the newer naming conventions.
- * Keys = DB column names, Values = canonical app field names.
- */
-export const SNAPSHOTS_V2_FIELDS = {
-  /** DB column `platform` → canonical `platform` */
-  platform: 'platform',
-  /** DB column `trader_key` → canonical `traderKey` */
-  trader_key: 'traderKey',
-  /** DB column `window` → canonical `period` */
-  window: 'period',
-  /** DB column `roi_pct` → canonical `roi` (already percentage) */
-  roi_pct: 'roi',
-  /** DB column `pnl_usd` → canonical `pnl` (already USD) */
-  pnl_usd: 'pnl',
 } as const
 
 /**
@@ -113,18 +95,6 @@ export const LR = {
   handle: 'handle',
   avatar_url: 'avatar_url',
   computed_at: 'computed_at',
-} as const
-
-/**
- * Column name constants for trader_snapshots_v2 table.
- */
-export const V2 = {
-  platform: 'platform',
-  trader_key: 'trader_key',
-  window: 'window',
-  roi_pct: 'roi_pct',
-  pnl_usd: 'pnl_usd',
-  arena_score: 'arena_score',
 } as const
 
 /**

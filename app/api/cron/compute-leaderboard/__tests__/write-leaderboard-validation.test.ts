@@ -5,7 +5,7 @@
 const mockValidateBeforeWrite = jest.fn()
 const mockLogRejectedWrites = jest.fn()
 
-jest.mock('@/lib/pipeline/validate-before-write', () => ({
+jest.mock('@/lib/validation/data-write-gate', () => ({
   validateBeforeWrite: (...args: unknown[]) => mockValidateBeforeWrite(...args),
   logRejectedWrites: (...args: unknown[]) => mockLogRejectedWrites(...args),
 }))

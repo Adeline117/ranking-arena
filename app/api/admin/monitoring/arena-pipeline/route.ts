@@ -6,7 +6,6 @@
  * - latest PASSED snapshot timestamp + actual_count (publish-gate health)
  * - staging_rejects count over the last 24h
  * - serving_mode / phase (cutover state)
- * - compat row count in public.trader_latest (shadow dual-write health)
  *
  * Reads via the service_role-only RPC public.arena_pipeline_panel()
  * (migration 20260611214749) — functions are private-by-default, so this
@@ -19,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import type { Database } from '@/lib/supabase/database.types'
 
 const logger = createLogger('monitoring-arena-pipeline')
 
@@ -34,8 +34,29 @@ export interface ArenaPipelineRow {
   last_passed_at: string | null
   actual_count: number | null
   rejects_24h: number
-  compat_platform: string | null
-  compat_rows: number
+}
+
+type ArenaPipelineRpcRow =
+  Database['public']['Functions']['arena_pipeline_panel']['Returns'][number]
+
+function isServingMode(value: string): value is ArenaPipelineRow['serving_mode'] {
+  return value === 'legacy' || value === 'shadow' || value === 'serving'
+}
+
+function toArenaPipelineRow(row: ArenaPipelineRpcRow): ArenaPipelineRow {
+  if (!isServingMode(row.serving_mode)) {
+    throw new Error(`arena_pipeline_panel returned invalid serving mode: ${row.serving_mode}`)
+  }
+  return {
+    slug: row.slug,
+    serving_mode: row.serving_mode,
+    status: row.status,
+    phase: row.phase,
+    timeframe: row.timeframe,
+    last_passed_at: row.last_passed_at,
+    actual_count: row.actual_count,
+    rejects_24h: row.rejects_24h,
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -62,7 +83,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       timestamp: new Date().toISOString(),
-      rows: (data ?? []) as unknown as ArenaPipelineRow[],
+      rows: (data ?? []).map(toArenaPipelineRow),
     })
   } catch (error) {
     logger.error('arena-pipeline monitoring error', { error })

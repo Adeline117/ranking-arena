@@ -1,4 +1,4 @@
-import type { Event, TransactionEvent } from '@sentry/core'
+import type { Event, TransactionEvent } from '@sentry/nextjs'
 import {
   redactRecoveryTokenFromUrl,
   sanitizeSentryEvent,

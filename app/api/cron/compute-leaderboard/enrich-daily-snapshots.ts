@@ -14,21 +14,25 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/api'
-import { DATA_QUALITY_BOUNDARY } from '@/lib/pipeline/types'
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderRow } from './trader-row'
 
-const periodDaysFor = (season: Period): number =>
-  season === '7D' ? 7 : season === '30D' ? 30 : 90
+const periodDaysFor = (season: Period): number => (season === '7D' ? 7 : season === '30D' ? 30 : 90)
 
 export async function deriveAdvancedFromDailySnapshots(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   traderMap: Map<string, TraderRow>,
   season: Period,
-  isOutOfTime: (minMs?: number) => boolean,
+  isOutOfTime: (minMs?: number) => boolean
 ): Promise<number> {
-  const stillNeedAdvanced = Array.from(traderMap.values())
-    .filter(t => t.roi != null && (t.sharpe_ratio == null || t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null))
+  const stillNeedAdvanced = Array.from(traderMap.values()).filter(
+    (t) =>
+      t.roi != null &&
+      (t.sharpe_ratio == null ||
+        t.sortino_ratio == null ||
+        t.calmar_ratio == null ||
+        t.profit_factor == null)
+  )
   if (stillNeedAdvanced.length === 0) return 0
 
   const dsBySource = new Map<string, string[]>()
@@ -40,6 +44,11 @@ export async function deriveAdvancedFromDailySnapshots(
 
   let dailyDerived = 0
   const periodDays = periodDaysFor(season)
+  // Include one preceding snapshot so ROI-difference fallback can derive the
+  // first return inside the requested leaderboard window.
+  const snapshotCutoff = new Date(Date.now() - (periodDays + 1) * 24 * 3600 * 1000)
+    .toISOString()
+    .split('T')[0]
 
   await Promise.all(
     Array.from(dsBySource.entries()).map(async ([source, traderIds]) => {
@@ -51,15 +60,20 @@ export async function deriveAdvancedFromDailySnapshots(
           .select('trader_key, date, daily_return_pct, roi')
           .eq('platform', source)
           .in('trader_key', chunk)
-          .gte('date', DATA_QUALITY_BOUNDARY)
+          .gte('date', snapshotCutoff)
           .order('date', { ascending: true })
           .limit(10000)
         if (!dsRows?.length) continue
 
         // Group by trader — collect daily_return_pct AND roi for fallback computation
-        const byTraderRaw = new Map<string, Array<{ daily_return_pct: number | null; roi: number | null }>>()
+        const byTraderRaw = new Map<
+          string,
+          Array<{ daily_return_pct: number | null; roi: number | null }>
+        >()
         for (const row of dsRows) {
-          const tid = row.trader_key.startsWith('0x') ? row.trader_key.toLowerCase() : row.trader_key
+          const tid = row.trader_key.startsWith('0x')
+            ? row.trader_key.toLowerCase()
+            : row.trader_key
           if (!byTraderRaw.has(tid)) byTraderRaw.set(tid, [])
           byTraderRaw.get(tid)!.push({
             daily_return_pct: row.daily_return_pct != null ? Number(row.daily_return_pct) : null,
@@ -90,26 +104,29 @@ export async function deriveAdvancedFromDailySnapshots(
 
           // Sharpe ratio from daily snapshots
           if (existing.sharpe_ratio == null && dailyReturns.length >= 7) {
-            const decReturns = dailyReturns.map(r => r / 100)
+            const decReturns = dailyReturns.map((r) => r / 100)
             const mean = decReturns.reduce((a, b) => a + b, 0) / decReturns.length
             const variance = decReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / decReturns.length
             const stdDev = Math.sqrt(variance)
             if (stdDev > 0) {
               const sharpe = (mean / stdDev) * Math.sqrt(365)
-              existing.sharpe_ratio = Math.round(Math.max(-20, Math.min(20, sharpe)) * 10000) / 10000
+              existing.sharpe_ratio =
+                Math.round(Math.max(-20, Math.min(20, sharpe)) * 10000) / 10000
               dailyDerived++
             }
           }
 
           // Sortino
           if (existing.sortino_ratio == null && dailyReturns.length >= 3) {
-            const decReturns = dailyReturns.map(r => r / 100)
-            const negReturns = decReturns.filter(r => r < 0)
+            const decReturns = dailyReturns.map((r) => r / 100)
+            const negReturns = decReturns.filter((r) => r < 0)
             if (negReturns.length > 0) {
               const avg = decReturns.reduce((a, b) => a + b, 0) / decReturns.length
               const dsd = Math.sqrt(negReturns.reduce((s, r) => s + r * r, 0) / decReturns.length)
               if (dsd > 0) {
-                existing.sortino_ratio = Math.round(Math.max(-10, Math.min(10, (avg / dsd) * Math.sqrt(365))) * 10000) / 10000
+                existing.sortino_ratio =
+                  Math.round(Math.max(-10, Math.min(10, (avg / dsd) * Math.sqrt(365))) * 10000) /
+                  10000
                 dailyDerived++
               }
             } else {
@@ -119,16 +136,24 @@ export async function deriveAdvancedFromDailySnapshots(
           }
 
           // Calmar
-          if (existing.calmar_ratio == null && existing.roi != null && existing.max_drawdown != null && existing.max_drawdown > 0) {
+          if (
+            existing.calmar_ratio == null &&
+            existing.roi != null &&
+            existing.max_drawdown != null &&
+            existing.max_drawdown > 0
+          ) {
             const annRoi = existing.roi * (365 / periodDays)
-            existing.calmar_ratio = Math.round(Math.max(-10, Math.min(10, annRoi / Math.abs(existing.max_drawdown))) * 10000) / 10000
+            existing.calmar_ratio =
+              Math.round(
+                Math.max(-10, Math.min(10, annRoi / Math.abs(existing.max_drawdown))) * 10000
+              ) / 10000
             dailyDerived++
           }
 
           // Profit factor
           if (existing.profit_factor == null && dailyReturns.length >= 3) {
-            const gw = dailyReturns.filter(r => r > 0).reduce((s, r) => s + r, 0)
-            const gl = Math.abs(dailyReturns.filter(r => r < 0).reduce((s, r) => s + r, 0))
+            const gw = dailyReturns.filter((r) => r > 0).reduce((s, r) => s + r, 0)
+            const gl = Math.abs(dailyReturns.filter((r) => r < 0).reduce((s, r) => s + r, 0))
             if (gl > 0) {
               existing.profit_factor = Math.round(Math.min(10, gw / gl) * 10000) / 10000
               dailyDerived++
@@ -139,7 +164,7 @@ export async function deriveAdvancedFromDailySnapshots(
           }
         }
       }
-    }),
+    })
   )
 
   return dailyDerived

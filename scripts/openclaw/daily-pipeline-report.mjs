@@ -1,160 +1,158 @@
 #!/usr/bin/env node
 /**
  * Arena Daily Pipeline Report (OpenClaw)
- * 
- * Generates a daily summary focusing on CURRENT health, not historical failures.
- * 
+ *
+ * Reports the authoritative API verdict and active-source freshness. Cron job
+ * history and seven-day stats are diagnostics only.
+ *
  * Usage:
  *   node scripts/openclaw/daily-pipeline-report.mjs
  */
 
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { config as dotenvConfig } from 'dotenv'
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
+import { fetchJsonWithDeadline, parsePipelineHealthResponse } from './pipeline-health-monitor.mjs'
 
 const CRON_SECRET = process.env.CRON_SECRET
-const API_URL = process.env.ARENA_URL ? `${process.env.ARENA_URL}/api/health/pipeline` : 'https://www.arenafi.org/api/health/pipeline'
+const API_URL = process.env.ARENA_URL
+  ? `${process.env.ARENA_URL}/api/health/pipeline`
+  : 'https://www.arenafi.org/api/health/pipeline'
 
-async function generateDailyReport() {
+function numeric(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function sourceName(source) {
+  return source?.platform || source?.displayName || 'unknown'
+}
+
+function sourceAge(source) {
+  const age = source?.ageHours
+  return typeof age === 'number' && Number.isFinite(age) ? `${age.toFixed(1)}h old` : 'no data'
+}
+
+export async function generateDailyReport({
+  fetchImpl = globalThis.fetch,
+  apiUrl = API_URL,
+  cronSecret = CRON_SECRET,
+  now = new Date(),
+  logger = console,
+  timeoutMs = 15000,
+} = {}) {
   try {
-    const response = await fetch(API_URL, {
-      headers: {
-        'Authorization': `Bearer ${CRON_SECRET}`
-      }
+    const reportDate = now instanceof Date ? now : new Date(now)
+    if (!Number.isFinite(reportDate.getTime())) throw new Error('Daily report date is invalid')
+    const payload = await fetchJsonWithDeadline({
+      fetchImpl,
+      url: apiUrl,
+      init: {
+        headers: { Authorization: `Bearer ${cronSecret || ''}` },
+      },
+      timeoutMs,
+      label: 'Daily pipeline health request',
     })
+    const health = parsePipelineHealthResponse(payload, { nowMs: reportDate.getTime() })
+    const failedJobs = health.jobs.filter((job) => job?.health_status === 'failed')
+    const stuckJobs = health.jobs.filter((job) => job?.health_status === 'stuck')
+    const staleJobs = health.jobs.filter((job) => job?.health_status === 'stale')
+    const criticalSources = health.platformHealth.filter((source) => source?.status === 'critical')
+    const warningSources = health.platformHealth.filter((source) => source?.status === 'warning')
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    const data = await response.json()
-    
-    // Get current failed/stuck jobs (NOT recentFailures!)
-    const currentFailed = data.jobs.filter(j => j.health_status === 'failed')
-    const currentStuck = data.jobs.filter(j => j.health_status === 'stuck')
-    const currentStale = data.jobs.filter(j => j.health_status === 'stale')
-
-    // Calculate total runs and records from stats
-    const totalRuns7d = data.stats.reduce((sum, j) => sum + (j.total_runs_7d || 0), 0)
-    const totalFailures7d = data.stats.reduce((sum, j) => sum + (j.failures_7d || 0), 0)
-    
-    // Get lowest success rates (but only alert if currently failed)
-    const lowSuccessRates = data.stats
-      .filter(j => j.success_rate !== null && j.success_rate < 70)
-      .sort((a, b) => a.success_rate - b.success_rate)
+    const totalRuns7d = health.stats.reduce((sum, job) => sum + numeric(job?.total_runs), 0)
+    const totalFailures7d = health.stats.reduce((sum, job) => sum + numeric(job?.error_count), 0)
+    const lowSuccessRates = health.stats
+      .filter((job) => job?.success_rate !== null && Number.isFinite(Number(job?.success_rate)))
+      .map((job) => ({ ...job, successRate: numeric(job?.success_rate) }))
+      .filter((job) => job.successRate < 70)
+      .sort((a, b) => a.successRate - b.successRate)
       .slice(0, 5)
 
-    // Determine if these low-success jobs are CURRENTLY failing
-    const lowSuccessCurrentlyFailing = lowSuccessRates.filter(stat => 
-      currentFailed.some(j => j.job_name === stat.job_name)
-    )
-
-    // Build report
-    const now = new Date()
-    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' })
-    const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-
-    // Determine real status (ignore 7d success rate)
-    // Note: 3-4 historical failed jobs during recovery period is normal
-    let realStatus = 'healthy'
-    if (currentStuck.length > 0 || currentFailed.length > 5) {
-      realStatus = 'critical'
-    } else if (currentFailed.length > 0 || currentStale.length > 0) {
-      realStatus = 'degraded'
-    }
-
-    const statusEmoji = realStatus === 'critical' ? '🔴' : 
-                        realStatus === 'degraded' ? '🟡' : '🟢'
+    const dayName = reportDate.toLocaleDateString('en-US', { weekday: 'long' })
+    const dateStr = reportDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+    const statusEmoji =
+      health.status === 'critical' ? '🔴' : health.status === 'degraded' ? '🟡' : '🟢'
+    const averageSuccessRate = numeric(health.summary.avgSuccessRate7d)
 
     let report = `🏟 Arena Daily Report\n${dayName}, ${dateStr}\n\n`
-    report += `Status: ${statusEmoji} ${realStatus}\n`
-    report += `Success Rate (7d): ${data.summary.avgSuccessRate7d.toFixed(1)}%\n`
-    
-    if (totalRuns7d > 0) {
-      report += `Total Runs (7d): ${totalRuns7d.toLocaleString()}\n`
-      report += `Errors (7d): ${totalFailures7d.toLocaleString()}\n`
-    }
-    
-    report += `Jobs: ${data.summary.healthyJobs} healthy / ${data.summary.totalJobs} total\n`
+    report += `Authoritative status: ${statusEmoji} ${health.status}\n`
+    report += `Active sources: ${health.platformHealth.length}\n`
+    report += `Success Rate (7d cron diagnostics): ${averageSuccessRate.toFixed(1)}%\n`
+    report += `Total Runs (7d): ${totalRuns7d.toLocaleString()}\n`
+    report += `Errors (7d): ${totalFailures7d.toLocaleString()}\n`
+    report += `Cron Jobs: ${health.summary.healthyJobs ?? 0} healthy / ${health.summary.totalJobs ?? 0} total\n`
 
-    // Current issues (if any)
-    if (currentFailed.length > 0) {
-      report += `\n⚠️  Currently Failed (${currentFailed.length}):\n`
-      currentFailed.slice(0, 5).forEach(job => {
-        const errorShort = (job.error_message || 'Unknown').slice(0, 60)
-        report += `  ❌ ${job.job_name}: ${errorShort}\n`
-      })
-    }
-
-    if (currentStuck.length > 0) {
-      report += `\n⏱️  Currently Stuck (${currentStuck.length}):\n`
-      currentStuck.forEach(job => {
-        const startedAt = new Date(job.started_at)
-        const runningTime = Math.floor((Date.now() - startedAt.getTime()) / 60000)
-        report += `  ⏱️  ${job.job_name}: ${runningTime}min\n`
-      })
-    }
-
-    if (currentStale.length > 0) {
-      report += `\n🕒 Currently Stale (${currentStale.length}):\n`
-      currentStale.forEach(job => {
-        report += `  🕒 ${job.job_name}\n`
-      })
-    }
-
-    // Low 7d success rates (with context)
-    if (lowSuccessRates.length > 0) {
-      const hasCurrentIssues = lowSuccessCurrentlyFailing.length > 0
-
-      if (hasCurrentIssues) {
-        report += `\n⚠️  Low Success Rates (currently failing):\n`
-        lowSuccessCurrentlyFailing.forEach(stat => {
-          report += `  ${stat.success_rate.toFixed(1)}% - ${stat.job_name} (CURRENTLY FAILING)\n`
-        })
-      } else {
-        report += `\n📊 Low 7d Success Rates (all currently healthy):\n`
-        lowSuccessRates.forEach(stat => {
-          report += `  ${stat.success_rate.toFixed(1)}% - ${stat.job_name} ✅\n`
-        })
-        report += `\n💡 Note: These jobs are recovering from past issues. Success rates will improve over the next 7 days.\n`
+    const sourceIssues = [...criticalSources, ...warningSources]
+    if (sourceIssues.length > 0) {
+      report += `\nSource freshness (${sourceIssues.length}):\n`
+      for (const source of sourceIssues.slice(0, 10)) {
+        const marker = source.status === 'critical' ? '🚨' : '⚠️'
+        report += `  ${marker} ${sourceName(source)}: ${source.status} (${sourceAge(source)})\n`
       }
     }
 
-    // All healthy message
-    if (currentFailed.length === 0 && currentStuck.length === 0 && currentStale.length === 0) {
-      report += `\n✅ All systems healthy!\n`
+    if (failedJobs.length > 0) {
+      report += `\nCron failures (${failedJobs.length}, diagnostic only):\n`
+      for (const job of failedJobs.slice(0, 5)) {
+        report += `  ❌ ${job.job_name || 'unknown'}: ${(job.error_message || 'Unknown').slice(0, 60)}\n`
+      }
+    }
+    if (stuckJobs.length > 0) {
+      report += `\nCron stuck (${stuckJobs.length}, diagnostic only):\n`
+      for (const job of stuckJobs.slice(0, 5)) {
+        report += `  ⏱️ ${job.job_name || 'unknown'}\n`
+      }
+    }
+    if (staleJobs.length > 0) {
+      report += `\nCron stale (${staleJobs.length}, diagnostic only):\n`
+      for (const job of staleJobs.slice(0, 5)) {
+        report += `  🕒 ${job.job_name || 'unknown'}\n`
+      }
     }
 
-    console.log(report)
+    if (lowSuccessRates.length > 0) {
+      report += '\nLow 7d cron success rates (diagnostic only):\n'
+      for (const job of lowSuccessRates) {
+        report += `  ${job.successRate.toFixed(1)}% - ${job.job_name || 'unknown'}\n`
+      }
+    }
 
+    if (health.status === 'healthy') {
+      report += '\n✅ Authoritative health verdict is healthy.\n'
+    }
+
+    logger.log(report)
     return {
-      status: realStatus,
+      status: health.status,
       report,
       data: {
-        healthy: data.summary.healthyJobs,
-        total: data.summary.totalJobs,
-        failed: currentFailed.length,
-        stuck: currentStuck.length,
-        stale: currentStale.length,
-        successRate7d: data.summary.avgSuccessRate7d
-      }
+        healthy: health.summary.healthyJobs ?? 0,
+        total: health.summary.totalJobs ?? 0,
+        failed: failedJobs.length,
+        stuck: stuckJobs.length,
+        stale: staleJobs.length,
+        criticalSources: criticalSources.length,
+        warningSources: warningSources.length,
+        successRate7d: averageSuccessRate,
+        totalRuns7d,
+        totalFailures7d,
+      },
     }
-
   } catch (error) {
-    console.error('❌ Error generating daily report:', error.message)
+    const errorMessage = error?.message || String(error)
+    logger.error('❌ Error generating daily report:', errorMessage)
     return {
       status: 'error',
-      report: `❌ Daily report failed: ${error.message}`,
-      data: null
+      report: `❌ Daily report failed: ${errorMessage}`,
+      data: null,
     }
   }
 }
 
-// Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await generateDailyReport()
+  const result = await generateDailyReport()
+  if (result.status === 'error' || result.status === 'critical') process.exitCode = 2
+  else if (result.status === 'degraded') process.exitCode = 1
 }
-
-export { generateDailyReport }

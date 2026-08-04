@@ -12,7 +12,7 @@
 # worktree on its own branch — same .git object store, separate working dir —
 # so conflicts are deferred to the intentional merge point instead of happening
 # live. Merge back to main through the SAME push lock everyone else uses.
-# Mirrors the proven openclaw/auto-fix pattern (~/arena-openclaw on its own branch).
+# Uses the same isolated-branch discipline as production incident work.
 #
 # Usage:
 #   scripts/new-session-worktree.sh <name>      # create + print next steps

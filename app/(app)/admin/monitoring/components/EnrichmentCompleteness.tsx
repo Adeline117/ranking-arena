@@ -14,29 +14,14 @@ interface PlatformStat {
   sd_coverage_pct: number
 }
 
-interface DeadLetter {
-  key: string
-  count: number
-  fail_count: number
+interface GapSummary {
+  source: string
+  gap_count: number
 }
 
 interface EnrichmentData {
   enrichment_stats: PlatformStat[]
-  dead_letter_queue: DeadLetter[]
-  dead_letter_total: number
-  pipeline_24h: {
-    total: number
-    success: number
-    success_rate_pct: number
-  }
-  heartbeats: Array<{
-    platform: string
-    source_host: string
-    status: string
-    trader_count: number
-    hours_since: number
-    is_stale: boolean
-  }>
+  gap_summary: GapSummary[]
 }
 
 function coverageColor(pct: number): string {
@@ -81,13 +66,26 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
 
   if (!data) return null
 
-  const { enrichment_stats, dead_letter_queue, dead_letter_total, pipeline_24h, heartbeats } = data
+  const { enrichment_stats, gap_summary } = data
+  const averageEquityCoverage = enrichment_stats.length
+    ? Math.round(
+        enrichment_stats.reduce((sum, stat) => sum + stat.ec_coverage_pct, 0) /
+          enrichment_stats.length
+      )
+    : 0
+  const averageStatsCoverage = enrichment_stats.length
+    ? Math.round(
+        enrichment_stats.reduce((sum, stat) => sum + stat.sd_coverage_pct, 0) /
+          enrichment_stats.length
+      )
+    : 0
+  const totalGaps = gap_summary.reduce((sum, source) => sum + source.gap_count, 0)
 
   return (
     <Card>
       <Box style={{ padding: tokens.spacing[4] }}>
         <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-          Enrichment Completeness
+          Data Completeness
         </Text>
 
         {/* Summary row */}
@@ -107,57 +105,13 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
             }}
           >
             <Text size="xs" color="tertiary">
-              24h Success Rate
-            </Text>
-            <Text
-              size="xl"
-              weight="black"
-              style={{ color: coverageColor(pipeline_24h.success_rate_pct) }}
-            >
-              {pipeline_24h.success_rate_pct}%
-            </Text>
-            <Text size="xs" color="tertiary">
-              {pipeline_24h.success}/{pipeline_24h.total} runs
-            </Text>
-          </Box>
-          <Box
-            style={{
-              padding: tokens.spacing[3],
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.md,
-            }}
-          >
-            <Text size="xs" color="tertiary">
-              Dead Letter Queue
-            </Text>
-            <Text
-              size="xl"
-              weight="black"
-              style={{
-                color:
-                  dead_letter_total > 0
-                    ? tokens.colors.accent.warning
-                    : tokens.colors.sentiment.bull,
-              }}
-            >
-              {dead_letter_total}
-            </Text>
-            <Text size="xs" color="tertiary">
-              {dead_letter_queue.length} platforms
-            </Text>
-          </Box>
-          <Box
-            style={{
-              padding: tokens.spacing[3],
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.md,
-            }}
-          >
-            <Text size="xs" color="tertiary">
               Platforms Tracked
             </Text>
-            <Text size="xl" weight="black">
+            <Text size="xl" weight="black" style={{ color: tokens.colors.text.primary }}>
               {enrichment_stats.length}
+            </Text>
+            <Text size="xs" color="tertiary">
+              ranked sources
             </Text>
           </Box>
           <Box
@@ -168,21 +122,59 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
             }}
           >
             <Text size="xs" color="tertiary">
-              Heartbeats
+              Equity Coverage
             </Text>
             <Text
               size="xl"
               weight="black"
               style={{
-                color: heartbeats.some((h) => h.is_stale)
-                  ? tokens.colors.accent.warning
-                  : tokens.colors.sentiment.bull,
+                color: coverageColor(averageEquityCoverage),
               }}
             >
-              {heartbeats.filter((h) => !h.is_stale).length}/{heartbeats.length}
+              {averageEquityCoverage}%
             </Text>
             <Text size="xs" color="tertiary">
-              fresh / total
+              average by source
+            </Text>
+          </Box>
+          <Box
+            style={{
+              padding: tokens.spacing[3],
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.md,
+            }}
+          >
+            <Text size="xs" color="tertiary">
+              Stats Coverage
+            </Text>
+            <Text size="xl" weight="black" style={{ color: coverageColor(averageStatsCoverage) }}>
+              {averageStatsCoverage}%
+            </Text>
+            <Text size="xs" color="tertiary">
+              average by source
+            </Text>
+          </Box>
+          <Box
+            style={{
+              padding: tokens.spacing[3],
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.md,
+            }}
+          >
+            <Text size="xs" color="tertiary">
+              Data Gaps
+            </Text>
+            <Text
+              size="xl"
+              weight="black"
+              style={{
+                color: totalGaps > 0 ? tokens.colors.accent.warning : tokens.colors.sentiment.bull,
+              }}
+            >
+              {totalGaps}
+            </Text>
+            <Text size="xs" color="tertiary">
+              older than 48h
             </Text>
           </Box>
         </Box>
@@ -249,28 +241,6 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
             </tbody>
           </table>
         </Box>
-
-        {/* Dead letter details */}
-        {dead_letter_queue.length > 0 && (
-          <Box style={{ marginTop: tokens.spacing[4] }}>
-            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-              Dead Letter Queue
-            </Text>
-            {dead_letter_queue.map((d) => (
-              <Box
-                key={d.key}
-                style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}
-              >
-                <Text size="xs" style={{ fontFamily: 'monospace' }}>
-                  {d.key}
-                </Text>
-                <Text size="xs" color="tertiary">
-                  {d.count} traders, {d.fail_count} failures
-                </Text>
-              </Box>
-            ))}
-          </Box>
-        )}
       </Box>
     </Card>
   )

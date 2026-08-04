@@ -7,29 +7,13 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import {
-  detectMultiDimensional,
-  detectAnomaliesForAll,
-  type AnomalyResult,
-  type SeverityLevel,
-} from './anomaly-detection'
-import type { TraderRankingData } from '../utils/ranking'
 import { logger } from '@/lib/logger'
 
 // ============================================
 // Types
 // ============================================
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
-export interface TraderData {
-  id: string
-  platform: string
-  roi: number
-  pnl: number
-  win_rate?: number | null
-  max_drawdown?: number | null
-  trades_count?: number | null
-}
+export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical'
 
 export interface Anomaly {
   id?: string
@@ -83,175 +67,8 @@ function getSupabaseClient(): SupabaseClient {
 }
 
 // ============================================
-// Conversion Utilities
-// ============================================
-
-function convertToTraderRankingData(trader: TraderData): TraderRankingData {
-  return {
-    id: trader.id,
-    roi: trader.roi,
-    pnl: trader.pnl,
-    win_rate: trader.win_rate ?? null,
-    max_drawdown: trader.max_drawdown ?? null,
-    trades_count: trader.trades_count ?? null,
-    source: trader.platform,
-  }
-}
-
-function convertAnomalyResultToDbFormat(
-  result: AnomalyResult,
-  platform: string
-): Anomaly[] {
-  const anomalies: Anomaly[] = []
-
-  for (const detail of result.details) {
-    anomalies.push({
-      trader_id: result.traderId,
-      platform,
-      anomaly_type: result.anomalyType.join(','),
-      field_name: detail.field,
-      detected_value: detail.value,
-      z_score: detail.zScore ?? null,
-      severity: result.severity,
-      status: 'pending',
-      description: detail.description,
-      metadata: {
-        anomaly_score: result.anomalyScore,
-        confidence: result.confidence,
-        all_anomaly_types: result.anomalyType,
-      },
-    })
-  }
-
-  return anomalies
-}
-
-// ============================================
-// Core Detection Functions
-// ============================================
-
-/**
- * Detect anomalies for a single trader
- */
-export async function detectTraderAnomalies(
-  traderId: string,
-  platform: string,
-  data: TraderData,
-  allTraders?: TraderData[]
-): Promise<Anomaly[]> {
-  // Convert to internal format
-  const trader = convertToTraderRankingData(data)
-
-  // If no comparison set provided, use just this trader (limited detection)
-  const tradersForComparison = allTraders
-    ? allTraders.map(convertToTraderRankingData)
-    : [trader]
-
-  // Run detection
-  const result = detectMultiDimensional(trader, tradersForComparison)
-
-  // Convert to database format
-  if (result.isAnomaly) {
-    return convertAnomalyResultToDbFormat(result, platform)
-  }
-
-  return []
-}
-
-/**
- * Batch detect anomalies for multiple traders
- */
-export async function batchDetectAnomalies(
-  traders: TraderData[]
-): Promise<Map<string, Anomaly[]>> {
-  const anomaliesMap = new Map<string, Anomaly[]>()
-
-  if (traders.length === 0) {
-    return anomaliesMap
-  }
-
-  // Convert all traders
-  const tradersForDetection = traders.map(convertToTraderRankingData)
-
-  // Run batch detection
-  const results = detectAnomaliesForAll(tradersForDetection)
-
-  // Convert results to database format
-  for (const trader of traders) {
-    const result = results.get(trader.id)
-    if (result && result.isAnomaly) {
-      const anomalies = convertAnomalyResultToDbFormat(result, trader.platform)
-      anomaliesMap.set(trader.id, anomalies)
-    }
-  }
-
-  return anomaliesMap
-}
-
-// ============================================
 // Database Operations
 // ============================================
-
-/**
- * Save anomalies to database
- */
-export async function saveAnomalies(anomalies: Anomaly[]): Promise<void> {
-  if (anomalies.length === 0) return
-
-  const supabase = getSupabaseClient()
-
-  const { error } = await supabase
-    .from('trader_anomalies')
-    .insert(anomalies)
-
-  if (error) {
-    logger.error('Failed to save anomalies:', error)
-    throw new Error(`Failed to save anomalies: ${error.message}`)
-  }
-}
-
-/**
- * Get anomalies for a specific trader
- */
-export async function getTraderAnomalies(
-  traderId: string,
-  platform: string,
-  options?: GetAnomaliesOptions
-): Promise<Anomaly[]> {
-  const supabase = getSupabaseClient()
-
-  let query = supabase
-    .from('trader_anomalies')
-    .select('id, trader_id, platform, anomaly_type, field_name, detected_value, expected_range_min, expected_range_max, z_score, severity, status, description, metadata, detected_at')
-    .eq('trader_id', traderId)
-    .eq('platform', platform)
-    .order('detected_at', { ascending: false })
-
-  if (options?.status) {
-    query = query.eq('status', options.status)
-  }
-
-  if (options?.severity) {
-    query = query.eq('severity', options.severity)
-  }
-
-  if (options?.limit) {
-    query = query.limit(options.limit)
-  }
-
-  if (options?.offset) {
-    query = query.range(options.offset, options.offset + (options.limit || 10) - 1)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    logger.error('Failed to fetch trader anomalies:', error)
-    throw new Error(`Failed to fetch trader anomalies: ${error.message}`)
-  }
-
-  return data || []
-}
 
 /**
  * Get all anomalies with filtering
@@ -263,7 +80,9 @@ export async function getAllAnomalies(
 
   let query = supabase
     .from('trader_anomalies')
-    .select('id, trader_id, platform, anomaly_type, field_name, detected_value, expected_range_min, expected_range_max, z_score, severity, status, description, metadata, detected_at')
+    .select(
+      'id, trader_id, platform, anomaly_type, field_name, detected_value, expected_range_min, expected_range_max, z_score, severity, status, description, metadata, detected_at'
+    )
     .order('detected_at', { ascending: false })
 
   if (options?.platform) {
@@ -324,10 +143,7 @@ export async function updateAnomalyStatus(
     updateData.resolved_at = new Date().toISOString()
   }
 
-  const { error } = await supabase
-    .from('trader_anomalies')
-    .update(updateData)
-    .eq('id', anomalyId)
+  const { error } = await supabase.from('trader_anomalies').update(updateData).eq('id', anomalyId)
 
   if (error) {
     logger.error('Failed to update anomaly status:', error)
@@ -409,68 +225,4 @@ export async function getAnomalyStats(): Promise<AnomalyStats> {
   stats.affected_traders = uniqueTraders.size
 
   return stats
-}
-
-/**
- * Check if trader should be flagged as suspicious
- */
-export async function checkTraderSuspicion(
-  traderId: string,
-  platform: string
-): Promise<boolean> {
-  const supabase = getSupabaseClient()
-
-  const { data, error } = await supabase
-    .rpc('check_trader_suspicion', {
-      p_trader_id: traderId,
-      p_platform: platform,
-    })
-
-  if (error) {
-    logger.error('Failed to check trader suspicion:', error)
-    return false
-  }
-
-  return data as boolean
-}
-
-/**
- * Get pending critical anomalies count
- */
-export async function getPendingCriticalCount(): Promise<number> {
-  const supabase = getSupabaseClient()
-
-  const { data, error } = await supabase
-    .rpc('get_pending_critical_anomalies_count')
-
-  if (error) {
-    logger.error('Failed to get pending critical count:', error)
-    return 0
-  }
-
-  return data as number
-}
-
-/**
- * Delete old resolved/false positive anomalies
- */
-export async function cleanupOldAnomalies(daysOld: number = 90): Promise<number> {
-  const supabase = getSupabaseClient()
-
-  const cutoffDate = new Date()
-  cutoffDate.setDate(cutoffDate.getDate() - daysOld)
-
-  const { data, error } = await supabase
-    .from('trader_anomalies')
-    .delete()
-    .in('status', ['resolved', 'false_positive'])
-    .lt('resolved_at', cutoffDate.toISOString())
-    .select('id')
-
-  if (error) {
-    logger.error('Failed to cleanup old anomalies:', error)
-    throw new Error(`Failed to cleanup old anomalies: ${error.message}`)
-  }
-
-  return data?.length || 0
 }

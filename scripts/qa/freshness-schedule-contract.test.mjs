@@ -39,8 +39,8 @@ test('registers exactly one three-hour freshness schedule without exceeding Verc
   const definitions = crons.filter((cron) => cron.path === FRESHNESS_PATH)
   const uniqueSchedulePaths = new Set(crons.map((cron) => cron.path))
   assert.deepEqual(definitions, [{ path: FRESHNESS_PATH, schedule: FRESHNESS_SCHEDULE }])
-  assert.equal(crons.length, 44)
-  assert.equal(uniqueSchedulePaths.size, 44)
+  assert.equal(crons.length, 40)
+  assert.equal(uniqueSchedulePaths.size, 40)
   assert.ok(crons.length <= 100, `expected at most 100 Vercel crons, found ${crons.length}`)
 
   const [minute, hourList, dayOfMonth, month, dayOfWeek] = FRESHNESS_SCHEDULE.split(' ')
@@ -62,6 +62,14 @@ test('keeps the six-hour meta-monitor aligned to a 180-minute freshness expectat
     [{ path: '/api/cron/meta-monitor', schedule: '23 */6 * * *' }]
   )
   assert.match(metaMonitor, /['"]check-data-freshness['"]:\s*180/)
+  assert.match(metaMonitor, /['"]batch-5min['"]:\s*15/)
+  assert.match(metaMonitor, /['"]fetch-market-data['"]:\s*240/)
+  assert.match(metaMonitor, /['"]fetch-open-interest['"]:\s*360/)
+  assert.match(metaMonitor, /['"]cleanup-stuck-logs['"]:\s*360/)
+  assert.doesNotMatch(
+    metaMonitor,
+    /['"](?:batch-fetch-traders|batch-enrich|fetch-details|backfill-data|link-entities|verify-fetchers|snapshot-positions|auto-post-insights)['"]:/
+  )
   assert.match(metaMonitor, /findStuckCronJobs\(statuses, EXPECTED_INTERVALS\)/)
 })
 
@@ -82,7 +90,7 @@ test('budgets the compute watchdog for every sequential season trigger', () => {
 })
 
 test('documents the source_as_of authority and the no-alert inspection path', () => {
-  assert.equal(cronRouteCount, 53)
+  assert.equal(cronRouteCount, 48)
   assert.equal(adapterImportCount, 26)
   assert.match(readme, new RegExp(`${crons.length} (?:are )?production Vercel schedules`))
   assert.match(readme, new RegExp(`${cronRouteCount} cron\\/worker endpoints`))
@@ -107,7 +115,7 @@ test('documents the source_as_of authority and the no-alert inspection path', ()
   assert.match(runbook, /\/api\/admin\/data-freshness/)
   assert.match(runbook, /Never update `source_as_of` manually/)
   assert.match(runbook, /leaderboard_ranks\.computed_at/)
-  assert.match(runbook, /53 endpoints \/ 44 Vercel schedules/)
+  assert.match(runbook, /48 endpoints \/ 40 Vercel schedules/)
   assert.doesNotMatch(runbook, /api\/cron\/(?:unified-connector|batch-fetch-traders|batch-enrich)/)
   assert.match(runbook, /scripts\/ingest-enqueue-region-smoke\.mts/)
   assert.match(runbook, /serving leaderboard uses Arena Score v4/)

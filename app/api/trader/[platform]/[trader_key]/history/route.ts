@@ -1,8 +1,7 @@
 /**
  * 交易员历史数据 API
  *
- * 获取交易员的 ROI/PnL 历史趋势数据
- * 使用 trader_snapshots_v2 表的历史记录
+ * 从 trader_daily_snapshots 获取交易员的 ROI/PnL 历史趋势数据。
  */
 
 import { NextRequest, NextResponse } from 'next/server'

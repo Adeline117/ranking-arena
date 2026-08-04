@@ -48,10 +48,6 @@ jobs:
         continue-on-error: true
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/openclaw/pipeline-health-monitor.mjs
       - name: trust-scorecard-snapshot（日内幂等守卫,今日已写即秒退;含净倒退 Telegram 告警）
         id: trust-scorecard-snapshot
@@ -141,8 +137,6 @@ jobs:
       - name: daily-pipeline-report
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/openclaw/daily-pipeline-report.mjs
 
   ux-patrol:

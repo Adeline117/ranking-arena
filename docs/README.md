@@ -26,7 +26,7 @@
 | [TOKEN_RANKING_DATA_AUTHORITY_PLAN_2026-07-29.md](./TOKEN_RANKING_DATA_AUTHORITY_PLAN_2026-07-29.md) | Token rank eligibility, coverage, and fail-closed plan           |
 | [DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md](./DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md)         | DEX event-ledger execution authority and phase gates             |
 | [DEX_OPEN_SOURCE_EVALUATION_2026-07-29.md](./DEX_OPEN_SOURCE_EVALUATION_2026-07-29.md)               | Ponder/SQD/node evaluation; no production authorization          |
-| [API_ROUTES.md](./API_ROUTES.md)                                                                     | API endpoint reference (may lag behind code)                     |
+| [API_ROUTES.md](./API_ROUTES.md)                                                                     | API ownership, discovery, and boundary policy                    |
 | [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)                                                     | Error handling, response format, auth patterns                   |
 
 ## Exchange API Docs

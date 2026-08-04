@@ -394,6 +394,49 @@ runtime shape—not that the historical directory can rebuild a clean database.
 
 ---
 
+## ADR-024: Retire the legacy connector and refresh-job runtime
+
+**Date:** 2026-08-03
+**Status:** Accepted
+
+### Context
+
+The root `connectors/` registry and `runWorkerInline` predated the authoritative
+BullMQ ingest worker. Its `SNAPSHOT` result was discarded, its discovery
+snapshot rows were never published, and job names emitted by the public manual
+refresh API had no matching consumer branch yet could still be marked complete.
+
+A production read-only audit found that `refresh_jobs` had only ever contained
+`DISCOVER` jobs. During the preceding 30 days there were no trader-scoped or
+manual-refresh jobs. The remaining pending/failed rows were historical, and
+dYdX had no canonical source or public ranks; its legacy identities had not
+advanced since 2026-06-12.
+
+### Decision
+
+- Remove the legacy scheduled producer/consumer, manual-refresh UI/API, root
+  `connectors/` and `workers/`, and their obsolete container reference.
+- Keep the database table, generated schema types, and applied migrations as
+  historical schema contracts; this repository change does not delete
+  production rows.
+- Keep first-party ranking acquisition in the registry-driven BullMQ worker.
+  Any future on-demand trader refresh must use the canonical Tier-C port with
+  source and region resolution.
+- Enforce retirement with an empty architecture debt ledger and a static QA
+  contract that rejects reintroduced runtime references.
+
+### Consequences
+
+- ✅ Removes the final dependency inversions and false-success queue path.
+- ✅ Leaves one authoritative acquisition, retry, evidence, and publication model.
+- ✅ Deletes top-level migration-debt roots and stale operator guidance.
+- ⚠️ The legacy `refresh_jobs` table remains until a separately reviewed forward
+  schema migration proves that no external integration still depends on it.
+- ⚠️ Reintroducing user-triggered refresh requires a canonical Tier-C product
+  contract rather than restoring the retired path.
+
+---
+
 ## Pending Decisions
 
 ### Should we add WebSocket for real-time rankings?

@@ -7,7 +7,7 @@
  * The Evaluator does NOT trust the Generator's self-reports. It independently
  * queries the database to verify data quality after each pipeline run.
  *
- * Runs after compute-leaderboard, triggered via trigger-chain.
+ * Runs from the scheduled pipeline-evaluate route.
  * Writes feedback to pipeline_state for the Planner to read on next cycle.
  *
  * Check implementations split into:
@@ -84,7 +84,7 @@ export class PipelineEvaluator {
     const checks: EvaluationCheck[] = []
     const issues: EvaluationIssue[] = []
 
-    // Run all 17 checks in parallel (they're independent reads)
+    // Run all checks in parallel (they're independent reads)
     const checkResults = await Promise.allSettled([
       checkDataFreshness(platformsHint),
       checkRecordCounts(),

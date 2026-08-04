@@ -15,11 +15,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
-import { getSupportedPlatforms } from '@/lib/cron/utils'
-import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getFireAndForgetStats } from '@/lib/utils/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { getAuthFailureStats } from '@/lib/auth/extract-user'
+import { buildPlatformHealth, type PlatformFreshnessRow } from '@/lib/services/platform-health'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -118,56 +117,26 @@ async function checkDatabaseAndCron(): Promise<{
       }
     }
 
-    // 2. 获取最近的 Cron 运行记录 (filter out dead/blocked platforms)
-    const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-    const platforms = getSupportedPlatforms().filter((p) => !deadSet.has(p))
     const cronRuns: CronRunInfo[] = []
 
     try {
-      const { data: cronLogs } = await supabase
-        .from('cron_logs')
-        .select('name, ran_at') // cron_logs 无 result 列(旧 select 400)；下方 JSON.parse 已有 '[]' 兜底
-        .order('ran_at', { ascending: false })
-        .limit(20)
-
-      if (cronLogs) {
-        // 为每个平台找到最近的运行记录
-        for (const platform of platforms) {
-          const platformLog = cronLogs.find(
-            (log) => log.name === `fetch-traders-${platform}` || log.name === 'fetch-traders-all'
-          )
-
-          if (platformLog) {
-            let success = true
-            try {
-              // cron_logs has no `result` column (dropped from the select) —
-              // access safely; undefined → '[]' fallback keeps success=true.
-              const result = JSON.parse((platformLog as { result?: string }).result || '[]')
-              success =
-                Array.isArray(result) && result.every((r: { success?: boolean }) => r.success)
-            } catch {
-              success = false
-            }
-
-            cronRuns.push({
-              platform,
-              ran_at: platformLog.ran_at,
-              success,
-            })
-          } else {
-            cronRuns.push({
-              platform,
-              ran_at: null,
-              success: null,
-            })
-          }
-        }
+      const { data, error } = await supabase.rpc('get_platform_freshness')
+      if (error) throw error
+      const activeSources = buildPlatformHealth({
+        freshnessRows: (data || []) as PlatformFreshnessRow[],
+        logs: [],
+        now: Date.now(),
+      })
+      for (const source of activeSources) {
+        cronRuns.push({
+          platform: source.platform,
+          ran_at: source.lastUpdate,
+          success: source.status === 'healthy' ? true : source.status === 'critical' ? false : null,
+        })
       }
     } catch {
-      // cron_logs 表可能不存在，忽略错误
-      for (const platform of platforms) {
-        cronRuns.push({ platform, ran_at: null, success: null })
-      }
+      // The detailed endpoint remains available when freshness authority is
+      // unavailable; an empty list yields an explicit unknown cron status.
     }
 
     return {
@@ -259,35 +228,7 @@ function calculateStatus(
   return 'healthy'
 }
 
-// ---------- Connectors section (was /api/health/connectors) ----------
-
-const ACTIVE_PLATFORMS = [
-  'binance_futures',
-  'binance_spot',
-  'bitget_futures',
-  'okx_futures',
-  'htx_futures',
-  'mexc',
-  'coinex',
-  'bingx',
-  'gateio',
-  'xt',
-  'btcc',
-  'bitunix',
-  'bitfinex',
-  'toobit',
-  'etoro',
-  'hyperliquid',
-  'gmx',
-  'dydx',
-  'gains',
-  'jupiter_perps',
-  'aevo',
-  'drift',
-  'okx_web3',
-  'binance_web3',
-  'web3_bot',
-]
+// ---------- Source freshness section (legacy API name: connectors) ----------
 
 async function getConnectorsSection(request: Request) {
   // Connectors section requires CRON_SECRET auth (timing-safe)
@@ -297,36 +238,19 @@ async function getConnectorsSection(request: Request) {
 
   const supabase = getSupabaseAdmin() as SupabaseClient
 
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-
-  const [{ data: logs }, { data: freshness }] = await Promise.all([
-    supabase
-      .from('pipeline_logs')
-      .select(
-        'job_name, status, started_at, ended_at, duration_ms, records_processed, error_message'
-      )
-      .like('job_name', 'batch-fetch-traders%')
-      .gte('started_at', oneDayAgo)
-      .order('started_at', { ascending: false }),
-    // Get latest computed_at per source using leaderboard_count_cache
-    // (was: fetch 5000 rows and dedupe in JS)
-    supabase.from('leaderboard_count_cache').select('source, updated_at').neq('source', '_all'),
-  ])
-
-  const latestByPlatform = new Map<string, string>()
-  for (const row of freshness || []) {
-    latestByPlatform.set(row.source, row.updated_at)
+  const { data, error } = await supabase.rpc('get_platform_freshness')
+  if (error) {
+    return NextResponse.json(
+      { error: 'active source freshness authority unavailable' },
+      { status: 503 }
+    )
   }
 
-  const groupStats = new Map<string, { total: number; success: number; errors: string[] }>()
-  for (const log of logs || []) {
-    const group = log.job_name
-    const stats = groupStats.get(group) || { total: 0, success: 0, errors: [] }
-    stats.total++
-    if (log.status === 'success') stats.success++
-    if (log.error_message) stats.errors.push(log.error_message.slice(0, 100))
-    groupStats.set(group, stats)
-  }
+  const activeSources = buildPlatformHealth({
+    freshnessRows: (data || []) as PlatformFreshnessRow[],
+    logs: [],
+    now: Date.now(),
+  })
 
   const connectors: Record<
     string,
@@ -337,20 +261,16 @@ async function getConnectorsSection(request: Request) {
     }
   > = {}
 
-  for (const platform of ACTIVE_PLATFORMS) {
-    const latest = latestByPlatform.get(platform)
-    const hoursAgo = latest ? (Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000) : null
-    connectors[platform] = {
+  for (const source of activeSources) {
+    connectors[source.platform] = {
       status:
-        hoursAgo === null
-          ? 'critical'
-          : hoursAgo > 24
-            ? 'critical'
-            : hoursAgo > 8
-              ? 'stale'
-              : 'healthy',
-      last_update: latest || null,
-      staleness_hours: hoursAgo ? Math.round(hoursAgo * 10) / 10 : null,
+        source.status === 'healthy'
+          ? 'healthy'
+          : source.status === 'warning'
+            ? 'stale'
+            : 'critical',
+      last_update: source.lastUpdate,
+      staleness_hours: source.ageHours,
     }
   }
 
@@ -361,18 +281,11 @@ async function getConnectorsSection(request: Request) {
   return NextResponse.json({
     status: critical > 0 ? 'degraded' : 'healthy',
     timestamp: new Date().toISOString(),
-    summary: { total: ACTIVE_PLATFORMS.length, healthy, stale, critical },
+    summary: { total: activeSources.length, healthy, stale, critical },
     connectors,
-    pipeline_groups: Object.fromEntries(
-      Array.from(groupStats.entries()).map(([k, v]) => [
-        k,
-        {
-          runs_24h: v.total,
-          success_rate: v.total > 0 ? Math.round((v.success / v.total) * 100) : 0,
-          recent_errors: v.errors.slice(0, 3),
-        },
-      ])
-    ),
+    // Kept for response compatibility. First-party ingest attempts are exposed
+    // by the arena pipeline monitor, not reconstructed from retired cron names.
+    pipeline_groups: {},
   })
 }
 
@@ -544,7 +457,7 @@ export async function GET(request: NextRequest) {
     })
 
     const cronStatus: CronStatus = {
-      platforms: getSupportedPlatforms(),
+      platforms: cronRuns.map((run) => run.platform),
       lastRuns: cronRuns,
       status: cronHasFailures ? 'fail' : cronHasRecent ? 'pass' : 'unknown',
     }

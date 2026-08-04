@@ -36,7 +36,6 @@ const AUTH_PATTERNS = [
   /\bsignInWithPassword\b/, // 凭证自验证型端点（登录/恢复）
   /\bextractUserFromRequest\b/, // lib/auth/extract-user.ts — Bearer 用户鉴权
   /\bsafeCompare\b/, // lib/auth/verify-service-auth.ts — webhook secret 比较
-  /\bisAuthorized\b/, // lib/cron/utils.ts — cron CRON_SECRET 校验
   /\bwithPublic\b/, // lib/api/middleware.ts — 显式"有意公开"wrapper（结构化决策）
 ]
 

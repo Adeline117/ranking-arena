@@ -18,8 +18,9 @@ describe('public diagnostics contract', () => {
 
   it('routes freshness and platform checks to an existing current diagnostic', () => {
     expect(diagnose).not.toContain('check-freshness.mjs')
-    expect(diagnose).toContain("'check_status.mjs'), '--freshness'")
-    expect(diagnose).toContain("'check_status.mjs'), '--platforms'")
+    expect(diagnose).toContain("const CHECK_STATUS_PATH = resolve(__dirname, 'check_status.mjs')")
+    expect(diagnose).toContain("const SECTIONS = ['status', 'freshness', 'platforms']")
+    expect(diagnose).toContain('[CHECK_STATUS_PATH, ...args]')
     expect(packageJson.scripts['check:status']).toBe('node scripts/diagnose.mjs --status')
   })
 

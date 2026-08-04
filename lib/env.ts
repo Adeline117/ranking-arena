@@ -247,11 +247,6 @@ export const env = {
   WORKER_BATCH_SIZE: getEnvNumber('WORKER_BATCH_SIZE', 10),
   WORKER_POLL_INTERVAL: getEnvNumber('WORKER_POLL_INTERVAL', 60000),
 
-  // ── QStash ──
-  QSTASH_TOKEN: isServer ? getEnv('QSTASH_TOKEN', false) : undefined,
-  QSTASH_CURRENT_SIGNING_KEY: isServer ? getEnv('QSTASH_CURRENT_SIGNING_KEY', false) : undefined,
-  QSTASH_NEXT_SIGNING_KEY: isServer ? getEnv('QSTASH_NEXT_SIGNING_KEY', false) : undefined,
-
   // ── Cloudflare Proxy ──
   CLOUDFLARE_PROXY_URL: getEnv('CLOUDFLARE_PROXY_URL', false),
   CLOUDFLARE_PROXY_SECRET: isServer ? getEnv('CLOUDFLARE_PROXY_SECRET', false) : undefined,

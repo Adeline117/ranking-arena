@@ -66,7 +66,7 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
   const raw = (data ?? []) as WeeklyLeader[]
 
   // 可信度过滤(首次真点 2026-07-10 打脸:榜首全 +10000% clamp + PnL $11 灰尘):
-  // 剔除 bot/离群标记、roi==pnl(validate-before-write 的已知垃圾模式);
+  // 剔除 bot/离群标记、roi==pnl（data-write-gate 已识别的垃圾模式）；
   // 每源最多 2 个防单一来源刷屏;可信条目不足 3 个宁可跳过不发。
   const perSource = new Map<string, number>()
   const leaders: WeeklyLeader[] = []

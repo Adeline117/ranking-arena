@@ -4,10 +4,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import {
-  findStaleActivePlatforms,
-  getActiveFetcherFailures,
-} from '../openclaw/health-monitor-contract.mjs'
+import { findStaleActivePlatforms } from '../openclaw/health-monitor-contract.mjs'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
@@ -35,23 +32,6 @@ test('invalid ages fail closed as missing data', () => {
   assert.deepEqual(stale, [
     { platform: 'phemex', ageHours: null, thresholdHours: 48 },
     { platform: 'bitget_spot', ageHours: null, thresholdHours: 48 },
-  ])
-})
-
-test('auto-fix accepts exact active sources and rejects group job aliases', () => {
-  const failures = getActiveFetcherFailures({
-    platformHealth: [{ platform: 'lbank' }, { platform: 'bybit' }],
-    recentFailures: [
-      { job_name: 'fetch-traders-lbank', error_message: 'timeout' },
-      { job_name: 'batch-fetch-traders-bybit', error_message: '429' },
-      { job_name: 'batch-fetch-traders-a1', error_message: 'timeout' },
-      { job_name: 'fetch-traders-retired', error_message: '404' },
-    ],
-  })
-
-  assert.deepEqual(failures, [
-    { platform: 'lbank', errorMessage: 'timeout' },
-    { platform: 'bybit', errorMessage: '429' },
   ])
 })
 

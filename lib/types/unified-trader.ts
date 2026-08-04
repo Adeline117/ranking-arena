@@ -12,7 +12,7 @@
  */
 
 // Canonical period values used across the system
-// Maps to: season_id (leaderboard_ranks), season_id (trader_snapshots v1), window (trader_snapshots_v2)
+// Maps to `season_id` in the authoritative leaderboard projection.
 export type TradingPeriod = '7D' | '30D' | '90D'
 
 // The ONE trader type for all frontend use

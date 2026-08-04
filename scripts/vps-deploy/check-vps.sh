@@ -1,92 +1,88 @@
-#!/bin/bash
-# Quick VPS status check — run from local machine
-#
-# Usage:
-#   ./check-vps.sh          # Check both VPS
-#   ./check-vps.sh sg       # Check SG only
-#   ./check-vps.sh jp       # Check JP only
+#!/usr/bin/env bash
+# Read-only status check for the VPS-owned proxy and canonical SG ingest worker.
+# This script never reads or prints runtime credentials.
 
-SG_HOST="root@45.76.152.169"
-JP_HOST="root@149.28.27.242"
+set -u
+
+readonly SG_HOST="root@45.76.152.169"
+readonly JP_HOST="root@149.28.27.242"
+readonly -a SSH_OPTIONS=(-o BatchMode=yes -o ConnectTimeout=5)
 
 check_vps() {
-  local HOST="$1"
-  local LABEL="$2"
+  local host="$1"
+  local label="$2"
+  local role="$3"
 
-  echo "=== $LABEL ($HOST) ==="
-  echo ""
+  echo "=== $label ($host) ==="
 
-  # Check SSH connectivity
-  if ! ssh -o ConnectTimeout=5 "$HOST" "echo ok" > /dev/null 2>&1; then
-    echo "  UNREACHABLE"
-    echo ""
+  if ! ssh "${SSH_OPTIONS[@]}" "$host" bash -s -- "$role" <<'REMOTE_STATUS'
+set -u
+
+role="$1"
+status=0
+
+check_pm2_app() {
+  app="$1"
+  pid="$(pm2 pid "$app" 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+  case "$pid" in
+    ''|0|*[!0-9]*)
+      echo "  $app: NOT ONLINE"
+      return 1
+      ;;
+    *)
+      echo "  $app: online (pid $pid)"
+      ;;
+  esac
+}
+
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "  PM2: NOT INSTALLED"
+  exit 1
+fi
+
+check_pm2_app arena-proxy || status=1
+if curl --fail --silent --show-error --max-time 5 \
+  http://127.0.0.1:3456/health >/dev/null; then
+  echo "  arena-proxy health: healthy"
+else
+  echo "  arena-proxy health: UNHEALTHY"
+  status=1
+fi
+
+if [ "$role" = "sg" ]; then
+  check_pm2_app arena-ingest-worker-sg || status=1
+fi
+
+exit "$status"
+REMOTE_STATUS
+  then
+    echo "  RESULT: FAILED"
+    echo
     return 1
   fi
 
-  # PM2 status
-  echo "── PM2 Processes ──"
-  ssh "$HOST" "pm2 ls 2>/dev/null || echo 'PM2 not installed'"
-  echo ""
-
-  # Env vars check
-  echo "── Environment Variables ──"
-  ssh "$HOST" "
-    if [ -n \"\$SUPABASE_SERVICE_ROLE_KEY\" ]; then
-      echo '  SUPABASE_SERVICE_ROLE_KEY: SET (' \$(echo \$SUPABASE_SERVICE_ROLE_KEY | head -c 8) '...)'
-    else
-      # Try loading from /etc/environment
-      source /etc/environment 2>/dev/null
-      if [ -n \"\$SUPABASE_SERVICE_ROLE_KEY\" ]; then
-        echo '  SUPABASE_SERVICE_ROLE_KEY: SET in /etc/environment (' \$(echo \$SUPABASE_SERVICE_ROLE_KEY | head -c 8) '...)'
-      else
-        echo '  SUPABASE_SERVICE_ROLE_KEY: ❌ NOT SET'
-      fi
-    fi
-    if [ -n \"\$TELEGRAM_BOT_TOKEN\" ]; then
-      echo '  TELEGRAM_BOT_TOKEN: SET'
-    else
-      source /etc/environment 2>/dev/null
-      [ -n \"\$TELEGRAM_BOT_TOKEN\" ] && echo '  TELEGRAM_BOT_TOKEN: SET in /etc/environment' || echo '  TELEGRAM_BOT_TOKEN: ❌ NOT SET'
-    fi
-  "
-  echo ""
-
-  # Scraper health
-  echo "── Scraper (port 3457) ──"
-  ssh "$HOST" "curl -s --max-time 5 http://localhost:3457/health 2>/dev/null || echo 'Not responding'"
-  echo ""
-
-  # Proxy health
-  echo "── Proxy (port 3456) ──"
-  ssh "$HOST" "curl -s --max-time 5 http://localhost:3456/health 2>/dev/null || echo 'Not responding'"
-  echo ""
-
-  # Memory / disk
-  echo "── System Resources ──"
-  ssh "$HOST" "
-    echo '  Memory:' \$(free -h | awk '/Mem:/ {print \$3 \"/\" \$2}')
-    echo '  Disk:' \$(df -h / | awk 'NR==2 {print \$3 \"/\" \$2 \" (\" \$5 \" used)\"}')
-    echo '  Uptime:' \$(uptime -p 2>/dev/null || uptime)
-  "
-  echo ""
-
-  # Last cron log
-  echo "── Last Cron Run ──"
-  ssh "$HOST" "tail -5 /opt/arena-cron/logs/cron-out.log 2>/dev/null || echo 'No cron log found'"
-  echo ""
+  echo "  RESULT: OK"
+  echo
 }
 
-TARGET="${1:-all}"
+target="${1:-all}"
+status=0
 
-case "$TARGET" in
-  sg)  check_vps "$SG_HOST" "SG VPS" ;;
-  jp)  check_vps "$JP_HOST" "JP VPS" ;;
+case "$target" in
+  sg)
+    check_vps "$SG_HOST" "SG VPS" sg || status=1
+    ;;
+  jp)
+    check_vps "$JP_HOST" "JP VPS" jp || status=1
+    ;;
   all)
-    check_vps "$SG_HOST" "SG VPS"
-    check_vps "$JP_HOST" "JP VPS"
+    check_vps "$SG_HOST" "SG VPS" sg || status=1
+    check_vps "$JP_HOST" "JP VPS" jp || status=1
     ;;
   *)
-    echo "Usage: $0 [sg|jp|all]"
-    exit 1
+    echo "Usage: $0 [sg|jp|all]" >&2
+    exit 2
     ;;
 esac
+
+exit "$status"

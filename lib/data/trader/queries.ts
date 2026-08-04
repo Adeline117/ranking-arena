@@ -258,7 +258,7 @@ export async function getTraderDetail(
   const sourceAliases = getSourceAliases(platform)
 
   // --- Phase 1: Fetch basic data + profile in parallel (4 queries) ---
-  // Profile queries (traders + trader_profiles_v2) don't depend on LR/v2 results,
+  // Profile queries (traders + trader_profiles_v2) don't depend on ranking results,
   // so run them all in one Promise.all to save a sequential round trip (~100-200ms).
   // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
   const phase1Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
@@ -314,7 +314,7 @@ export async function getTraderDetail(
   const sourceProfile = unwrap(sourceProfileResult) as Record<string, unknown> | null | undefined
   const profileV2 = unwrap(profileV2Result) as Record<string, unknown> | null | undefined
 
-  // Build per-period data using fallback chain: LR -> v2
+  // Build per-period data from the authoritative ranking projection.
   const periods: Record<TradingPeriod, Partial<UnifiedTrader> | null> = {
     '7D': null,
     '30D': null,

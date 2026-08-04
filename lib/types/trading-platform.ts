@@ -56,17 +56,6 @@ export type Platform = (typeof SUPPORTED_PLATFORMS)[number]
 export const SNAPSHOT_WINDOWS = ['7D', '30D', '90D'] as const
 export type SnapshotWindow = (typeof SNAPSHOT_WINDOWS)[number]
 
-export const JOB_TYPES = [
-  'full_refresh',
-  'profile_only',
-  'snapshot_only',
-  'timeseries_only',
-] as const
-export type JobType = (typeof JOB_TYPES)[number]
-
-export const JOB_STATUSES = ['pending', 'running', 'success', 'failed', 'cancelled'] as const
-export type JobStatus = (typeof JOB_STATUSES)[number]
-
 export const SERIES_TYPES = ['equity_curve', 'daily_pnl', 'asset_breakdown'] as const
 export type SeriesType = (typeof SERIES_TYPES)[number]
 
@@ -150,19 +139,6 @@ export interface QualityFlags {
   data_completeness: number // 0-1
 }
 
-/** DB row type */
-export interface TraderSnapshotV2Row {
-  id: string
-  platform: Platform
-  trader_key: string
-  window: SnapshotWindow
-  as_of_ts: string
-  metrics: SnapshotMetrics
-  quality_flags: QualityFlags
-  updated_at: string
-  created_at: string
-}
-
 export interface TraderTimeseriesRow {
   id: string
   platform: Platform
@@ -172,26 +148,6 @@ export interface TraderTimeseriesRow {
   data: EquityCurvePoint[] | DailyPnlPoint[] | AssetBreakdownPoint[]
   updated_at: string
   created_at: string
-}
-
-export interface RefreshJobRow {
-  id: string
-  job_type: JobType
-  platform: Platform
-  trader_key: string
-  priority: number
-  status: JobStatus
-  attempts: number
-  max_attempts: number
-  next_run_at: string
-  locked_at: string | null
-  locked_by: string | null
-  started_at: string | null
-  completed_at: string | null
-  last_error: string | null
-  result: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
 }
 
 // ============================================
@@ -231,11 +187,6 @@ export interface RankingsQueryParams {
   offset?: number
 }
 
-export interface RefreshRequest {
-  job_type?: JobType
-  priority?: number
-}
-
 // ============================================
 // API Response Types
 // ============================================
@@ -273,64 +224,8 @@ export interface TraderDetailResponse {
   updated_at: string
   is_stale: boolean
   staleness_seconds: number
-  refresh_job: RefreshJobSummary | null
-}
-
-export interface RefreshJobSummary {
-  id: string
-  status: JobStatus
-  attempts: number
-  last_error: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface RefreshResponse {
-  job: RefreshJobSummary
-  created: boolean // true if new job was created, false if existing job returned
-}
-
-// ============================================
-// Connector Interface Types
-// ============================================
-
-/** DB row type */
-export interface ConnectorTraderProfile {
-  trader_key: string
-  display_name: string | null
-  avatar_url: string | null
-  bio: string | null
-  followers: number | null
-  copiers: number | null
-  aum: number | null
-  tags: string[]
-}
-
-export interface ConnectorSnapshot {
-  trader_key: string
-  window: SnapshotWindow
-  metrics: SnapshotMetrics
-  quality_flags: Partial<QualityFlags>
-}
-
-export interface ConnectorTimeseries {
-  trader_key: string
-  series_type: SeriesType
-  data: EquityCurvePoint[] | DailyPnlPoint[] | AssetBreakdownPoint[]
-}
-
-export interface LeaderboardEntry {
-  trader_key: string
-  display_name: string | null
-  avatar_url: string | null
-  roi: number
-  pnl: number
-  win_rate: number | null
-  max_drawdown: number | null
-  trades_count: number | null
-  followers: number | null
-  aum: number | null
-  rank: number
+  /** Compatibility field for the retired refresh API. Always null. */
+  refresh_job: null
 }
 
 // ============================================

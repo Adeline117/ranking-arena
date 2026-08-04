@@ -1,11 +1,11 @@
 /**
  * Pipeline Evaluator cron route.
  *
- * Runs after compute-leaderboard to independently verify data quality.
+ * Independently verifies data quality without participating in acquisition or
+ * leaderboard publication.
  * Based on Anthropic's harness pattern: Generator-Evaluator separation.
  *
- * Triggered by: trigger-chain (after compute-leaderboard)
- * Also runs on schedule: every 6h as fallback
+ * Invoked by the daily Vercel schedule and by authenticated post-deploy checks.
  *
  * NOTE: Kept as manual pattern (not withCron) because it conditionally
  * calls plog.partialSuccess() based on evaluation results, which

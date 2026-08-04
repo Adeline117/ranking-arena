@@ -1,74 +1,68 @@
 /**
  * Batch dispatcher for all "every 5 minutes" cron jobs.
  *
- * Runs sub-jobs INLINE (in-process) to avoid:
+ * Runs the job INLINE (in-process) to avoid:
  * - Cloudflare 100s proxy timeout (via NEXT_PUBLIC_APP_URL)
  * - Vercel deployment protection 401 (via VERCEL_URL)
  *
- * Sub-jobs:
- * - run-worker: Process pending refresh_jobs
+ * Sub-job:
  * - refresh-hot-scores: Update post hot_score via RPC
  *
  * First-party trader sync is intentionally NOT run here. It belongs to the
- * BullMQ ingest worker, which owns scheduling, retries, and first-party writes.
+ * BullMQ ingest worker, which owns exchange fetching, retries, and canonical
+ * data writes. Retired legacy queue consumption must not run in Vercel.
  *
- * Schedule: every 5 min (see vercel.json)
+ * Historical route name retained for compatibility. Production schedule:
+ * every 15 minutes (see vercel.json).
  *
  * Resilience (2026-04-07):
- * - Global AbortController ensures the response is sent before maxDuration
- * - Each sub-job gets its own timeout via Promise.race
- * - Logs which sub-job is slow for easier diagnosis
- * - Reduced global timeout from 280s to 240s for extra safety margin
+ * - The job gets a 90-second abortable deadline
+ * - Slow execution is logged for diagnosis
+ * - Pipeline and HTTP timeout states remain consistent
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import {
-  runWorkerInline,
-  refreshHotScoresInline,
-  type InlineJobResult,
-} from '@/lib/cron/inline-jobs'
+import { refreshHotScoresInline, type InlineJobResult } from '@/lib/cron/inline-jobs'
 import { createLogger } from '@/lib/utils/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
+import { withAbortableTimeout } from '@/lib/utils/timeout'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300 // 5 minutes — longest of the three
+export const maxDuration = 300 // Vercel ceiling; internal deadlines return earlier
 
 const logger = createLogger('batch-5min')
 
-/** Wrap a sub-job with a per-job timeout so one slow job doesn't block the batch.
- *  Also logs when a timeout fires so we know which sub-job was slow. */
-function withTimeout(
-  fn: () => Promise<InlineJobResult>,
+/** Wrap a job with the shared timeout primitive, which clears its timer when
+ *  the operation wins the race. */
+async function runWithTimeout(
+  fn: (signal: AbortSignal) => Promise<InlineJobResult>,
   jobName: string,
-  timeoutMs: number = 120_000 // 2 min per sub-job
+  timeoutMs: number
 ): Promise<InlineJobResult> {
   const jobStart = Date.now()
-  return Promise.race([
-    fn().then((result) => {
-      const elapsed = Date.now() - jobStart
-      if (elapsed > 60_000) {
-        logger.warn(
-          `[${jobName}] completed but took ${Math.round(elapsed / 1000)}s (>60s threshold)`
-        )
-      }
-      return result
-    }),
-    new Promise<InlineJobResult>((resolve) =>
-      setTimeout(() => {
-        logger.error(
-          `[${jobName}] TIMED OUT after ${Math.round(timeoutMs / 1000)}s — this sub-job is hanging`
-        )
-        resolve({
-          name: jobName,
-          status: 'error',
-          durationMs: timeoutMs,
-          error: `${jobName} timed out after ${Math.round(timeoutMs / 1000)}s`,
-        })
-      }, timeoutMs)
-    ),
-  ])
+  try {
+    const result = await withAbortableTimeout(fn, timeoutMs, jobName)
+    const elapsed = Date.now() - jobStart
+    if (elapsed > 60_000) {
+      logger.warn(`[${jobName}] completed but took ${Math.round(elapsed / 1000)}s (>60s threshold)`)
+    }
+    return result
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const timedOut = message.startsWith(`Timeout: ${jobName}`)
+    if (timedOut) {
+      logger.error(`[${jobName}] TIMED OUT after ${Math.round(timeoutMs / 1000)}s`)
+    }
+    return {
+      name: jobName,
+      status: 'error',
+      durationMs: Date.now() - jobStart,
+      error: message,
+      detail: { timedOut },
+    }
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -85,47 +79,16 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   const plog = await PipelineLogger.start('batch-5min')
 
-  // Global safety timeout: 240s (leaves 60s buffer before Vercel's 300s maxDuration kills us)
-  // This ensures we ALWAYS send a response and log results, even if sub-jobs are slow.
-  const GLOBAL_TIMEOUT_MS = 240_000
-  // Per sub-job timeout: 90s each (jobs run in parallel).
+  // Per-job timeout: 90s.
   const PER_JOB_TIMEOUT_MS = 90_000
 
-  // Run all sub-jobs in parallel with per-job timeouts.
-  // Global timeout ensures we return a response even if Promise.race somehow hangs.
+  // Keep the result array shape used by PipelineLogger and the response contract.
   let results: InlineJobResult[]
-  let timedOut = false
   try {
     try {
-      results = await Promise.race([
-        Promise.all([
-          withTimeout(runWorkerInline, 'run-worker', PER_JOB_TIMEOUT_MS),
-          withTimeout(refreshHotScoresInline, 'refresh-hot-scores', PER_JOB_TIMEOUT_MS),
-        ]),
-        new Promise<InlineJobResult[]>((resolve) =>
-          setTimeout(() => {
-            logger.error(
-              `batch-5min global timeout after ${GLOBAL_TIMEOUT_MS / 1000}s — returning partial results`
-            )
-            timedOut = true
-            // Return timeout results for all jobs so we still log something useful
-            resolve([
-              {
-                name: 'run-worker',
-                status: 'error',
-                durationMs: GLOBAL_TIMEOUT_MS,
-                error: 'global timeout',
-              },
-              {
-                name: 'refresh-hot-scores',
-                status: 'error',
-                durationMs: GLOBAL_TIMEOUT_MS,
-                error: 'global timeout',
-              },
-            ])
-          }, GLOBAL_TIMEOUT_MS)
-        ),
-      ])
+      results = [
+        await runWithTimeout(refreshHotScoresInline, 'refresh-hot-scores', PER_JOB_TIMEOUT_MS),
+      ]
     } catch (err) {
       const totalDuration = Date.now() - startTime
       logger.error(
@@ -146,6 +109,7 @@ export async function GET(request: NextRequest) {
     const totalDuration = Date.now() - startTime
     const failedJobs = results.filter((r) => r.status === 'error')
     const succeeded = results.filter((r) => r.status === 'success').length
+    const timedOut = failedJobs.some((result) => result.detail?.timedOut === true)
 
     // Log timing for each sub-job for diagnosis
     for (const r of results) {
@@ -154,15 +118,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Only log as error if a critical sub-job (not run-worker) fails.
-    // run-worker timeout is expected when processing a backlog — it'll catch up next run.
-    const criticalFailures = failedJobs.filter((r) => r.name !== 'run-worker')
     if (timedOut) {
-      await plog.error(
-        new Error(`batch-5min global timeout after ${Math.round(totalDuration / 1000)}s`),
-        { results, totalDurationMs: totalDuration }
-      )
-    } else if (criticalFailures.length > 0) {
+      await plog.timeout({ results, totalDurationMs: totalDuration })
+    } else if (failedJobs.length > 0) {
       await plog.error(new Error(`${failedJobs.length}/${results.length} sub-jobs failed`), {
         results,
       })
@@ -173,12 +131,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         batch: 'batch-5min',
-        status: timedOut ? 'timeout' : failedJobs.length > 0 ? 'partial' : 'success',
+        status: timedOut ? 'timeout' : failedJobs.length > 0 ? 'error' : 'success',
         totalDurationMs: totalDuration,
         results,
       },
       {
-        status: timedOut ? 504 : failedJobs.length > 0 ? 207 : 200,
+        status: timedOut ? 504 : failedJobs.length > 0 ? 500 : 200,
       }
     )
   } finally {

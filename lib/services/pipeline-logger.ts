@@ -3,7 +3,7 @@
  * Records cron job runs to pipeline_logs table for monitoring
  *
  * Usage:
- *   const log = await PipelineLogger.start('batch-fetch-traders-a')
+ *   const log = await PipelineLogger.start('compute-leaderboard-90D')
  *   try {
  *     const count = await doWork()
  *     await log.success(count)
@@ -95,28 +95,19 @@ export interface PipelineLogHandle {
 export class PipelineLogger {
   /**
    * All cron job base names that should be monitored via healthchecks.io dead man's switch.
-   * Each entry is the base slug — jobs with group/period suffixes (e.g. batch-fetch-traders-a,
-   * batch-enrich-90D) are matched via prefix and roll up to the base slug.
+   * Each entry is the base slug — jobs with source/period suffixes (for example
+   * compute-leaderboard-90D) are matched via prefix and roll up to the base slug.
    */
   private static readonly MONITORED_JOBS = new Set([
     // Core data pipeline
-    'batch-fetch-traders',
-    'batch-enrich',
     'compute-leaderboard',
     'aggregate-daily-snapshots',
     'check-data-freshness',
-    'pipeline-fetch',
-    'fetch-details',
     'precompute-composite',
-    'compute-derived-metrics',
-    'backfill-data',
 
     // Discovery & enrichment
-    'batch-discover',
-    'enrich-gmx',
     'generate-profiles',
     'backfill-avatars',
-    'link-entities',
     'batch-5min',
 
     // Market data
@@ -126,16 +117,13 @@ export class PipelineLogger {
     'flash-news-fetch',
 
     // Monitoring & health
-    'verify-fetchers',
     'check-trader-alerts',
     'cleanup-stuck-logs',
     'cleanup-data',
     'cleanup-deleted-accounts',
-    'cleanup-violations',
     'meta-monitor',
 
     // Snapshots & ranks
-    'snapshot-positions',
     'snapshot-ranks',
 
     // Search & cache
@@ -143,7 +131,6 @@ export class PipelineLogger {
 
     // Social & notifications
     'auto-post-market-summary',
-    'auto-post-insights',
     'auto-post-twitter',
     'daily-digest',
 
@@ -157,7 +144,7 @@ export class PipelineLogger {
     if (this.MONITORED_JOBS.has(jobName)) {
       return jobName
     }
-    // Prefix match: batch-fetch-traders-a -> batch-fetch-traders
+    // Prefix match: compute-leaderboard-90D -> compute-leaderboard
     for (const monitored of this.MONITORED_JOBS) {
       if (jobName.startsWith(`${monitored}-`)) {
         return monitored

@@ -56,7 +56,18 @@ const nextConfig = {
   },
 
   // Webpack config (production builds use webpack for better chunk consolidation)
-  webpack: (config: Record<string, any>, { isServer }: { isServer: boolean }) => {
+  webpack: (
+    config: Record<string, any>,
+    {
+      isServer,
+      webpack,
+    }: {
+      isServer: boolean
+      webpack: {
+        IgnorePlugin: new (options: { resourceRegExp: RegExp }) => unknown
+      }
+    }
+  ) => {
     if (!isServer) {
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
@@ -83,8 +94,7 @@ const nextConfig = {
       // route pay for a site-wide vendor payload.
     }
     config.plugins.push(
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      new (require('webpack').IgnorePlugin)({
+      new webpack.IgnorePlugin({
         resourceRegExp:
           /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
@@ -393,7 +403,6 @@ const nextConfig = {
     'pg',
     'redis',
     '@aws-sdk/client-s3',
-    '@aws-sdk/s3-request-presigner',
     'sharp',
     'web-push',
     'resend',
@@ -416,7 +425,6 @@ const nextConfig = {
       '@supabase/ssr',
       '@upstash/redis',
       '@upstash/ratelimit',
-      '@upstash/qstash',
       'lucide-react',
       '@sentry/nextjs',
       'zod',
@@ -438,8 +446,6 @@ const nextConfig = {
       // @solana/web3.js is 102MB installed — tree-shaking PublicKey etc.
       // avoids pulling Connection/Transaction/etc. into the wallet chunk.
       '@solana/web3.js',
-      // cockatiel advertises sideEffects:false; server-only but cheap hint.
-      'cockatiel',
     ],
 
     // Keep optimizeCss disabled: Next.js loads the deprecated `critters` package

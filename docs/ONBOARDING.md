@@ -21,7 +21,7 @@ Welcome to Arena. This doc takes you from zero to productive.
 
 ### Prerequisites (all required)
 
-- **Node.js 20+**
+- **Node.js 22.19+ and <25** (`nvm use` selects the supported LTS line)
 - **npm 10+** (ships with Node)
 - **Git**
 - **VS Code** (recommended — project includes `.vscode/` settings)
@@ -34,7 +34,8 @@ git clone git@github.com:Adeline117/ranking-arena.git
 cd ranking-arena
 
 # 2. Install dependencies
-npm install
+nvm use
+npm ci
 
 # 3. Set up environment variables (ask Adeline for real values)
 cp .env.example .env.local
@@ -44,6 +45,10 @@ cp .env.example .env.local
 npm run dev
 # Open http://localhost:3000
 ```
+
+`npm ci` also installs the repository-managed pre-commit hook. The hook uses
+the checked-in lockfile tooling and works from both normal clones and Git
+worktrees.
 
 ### Environment Variables: What You Actually Need
 
@@ -79,7 +84,7 @@ VPS_PROXY_KEY=...           # VPS scraper proxy — without it, some exchange da
 
 #### Ignore for now
 
-Web3 (RPC URLs, contract addresses, block explorer keys), HSM, QStash, Smart Scheduler — not needed for day-to-day development.
+Web3 (RPC URLs, contract addresses, block explorer keys), HSM, and Smart Scheduler are not needed for day-to-day development.
 
 > **Ask Adeline for a pre-filled `.env.local`. Never commit `.env.local` to Git.**
 
@@ -126,7 +131,7 @@ Read in this order, don't skip:
 | ---------------------------------------------------------- | ------------------------------------------------------------------ |
 | [DECISIONS.md](./DECISIONS.md)                             | When you wonder "why was it built this way?"                       |
 | [RUNBOOK.md](./RUNBOOK.md)                                 | Before touching anything in production (has real IPs and commands) |
-| [SCRAPER.md](./SCRAPER.md)                                 | Before touching the data pipeline or exchange connectors           |
+| [ADAPTER_ONBOARDING.md](./ADAPTER_ONBOARDING.md)           | Before adding or changing an ingest source adapter                 |
 | [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)           | Before writing a new API route                                     |
 | [RLS_POLICIES.md](./RLS_POLICIES.md)                       | Before touching database tables or policies                        |
 | [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Before touching auth, payments, or user data                       |
@@ -171,21 +176,22 @@ node scripts/pipeline-health-check.mjs --fix     # Generate fix script
 
 ```
 app/                    # Next.js pages and API routes
+  (app)/                #   User-facing product route group
+    rankings/           #   Leaderboard subpages
+    trader/[handle]/    #   Trader profile pages
   api/                  #   100+ API endpoints
-    cron/               #   Scheduled jobs (62 Vercel crons)
+    cron/               #   48 cron/worker routes (40 Vercel schedules)
   components/           #   All React components
-  rankings/             #   Leaderboard pages
-  trader/[id]/          #   Trader profile pages
 
 lib/                    # Core logic (imported as @/lib/...)
-  connectors/           #   Exchange API connectors
+  ingest/adapters/      #   Registry-backed exchange adapters
   data/                 #   Server-side data functions
   hooks/                #   React hooks (client-side)
   utils/                #   Shared utilities
   supabase/             #   Supabase client helpers
 
 docs/                   # Documentation (you are here)
-scripts/                # CLI tools, import scripts, maintenance
+scripts/                # Supported diagnostics, QA, and maintenance tools
 supabase/migrations/    # Database migrations (SQL)
 ```
 
@@ -198,9 +204,9 @@ Full directory breakdown: [CLAUDE.md > Directory Structure](../CLAUDE.md#directo
 ### Data flow
 
 ```
-32+ exchanges → cron jobs (fetch) → Supabase (store)
-              → enrichment (details) → Arena Score (compute)
-              → leaderboard (rank) → frontend (display)
+arena.sources → BullMQ ingest worker → durable RAW + validation
+              → arena.* publication → Arena Score / leaderboard_ranks
+              → frontend serving APIs
 ```
 
 ### Arena Score
@@ -216,14 +222,13 @@ The unified ranking metric across all exchanges.
 
 Each trader is uniquely identified by `(source, source_trader_id)` — a composite key. The same person on Binance and Bybit is two separate records.
 
-### Exchange connectors
+### Exchange adapters
 
-Each connector in [`lib/connectors/`](../lib/connectors/) implements:
-
-- `fetchLeaderboard(period)` — get ranked traders
-- `fetchTraderDetails(traderId)` — get trader profile
-
-Rate limiting and circuit breakers are built in. See [SCRAPER.md](./SCRAPER.md) for the full architecture.
+Canonical source adapters live in [`lib/ingest/adapters/`](../lib/ingest/adapters/) and are
+registered through `lib/ingest/adapters/register.ts`. The active-serving database registry
+decides which source/window promises are exposed; adapter presence alone does not imply
+production scheduling. See [INGEST_WORKER_TOPOLOGY.md](./INGEST_WORKER_TOPOLOGY.md) for the
+worker architecture.
 
 ---
 

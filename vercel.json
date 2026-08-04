@@ -60,10 +60,6 @@
       "schedule": "27 */6 * * *"
     },
     {
-      "path": "/api/cron/batch-discover",
-      "schedule": "56 */6 * * *"
-    },
-    {
       "path": "/api/cron/subscription-expiry",
       "schedule": "9 0 * * 1"
     },
@@ -100,10 +96,6 @@
       "schedule": "30 4 * * *"
     },
     {
-      "path": "/api/cron/compute-derived-metrics",
-      "schedule": "20 0 * * *"
-    },
-    {
       "path": "/api/cron/cleanup-data",
       "schedule": "6 1 * * *"
     },
@@ -128,10 +120,6 @@
       "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/cron/retry-dead-letters",
-      "schedule": "0 5 * * *"
-    },
-    {
       "path": "/api/cron/weekly-report",
       "schedule": "0 8 * * 1"
     },
@@ -154,10 +142,6 @@
     {
       "path": "/api/cron/health-check-all",
       "schedule": "25 */6 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-violations",
-      "schedule": "57 */6 * * *"
     },
     {
       "path": "/api/cron/scan-data-quality",

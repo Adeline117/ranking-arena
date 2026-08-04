@@ -26,7 +26,7 @@ export interface LinkedTraderAccount {
   isPrimary: boolean
   linkedAt: string
 
-  // Latest snapshot stats (from trader_snapshots_v2)
+  // Latest published stats (from leaderboard_ranks)
   roi: number | null
   pnl: number | null
   arenaScore: number | null
@@ -171,9 +171,7 @@ export async function getLinkedTraders(
     byPlatform.set(link.platform, keys)
   }
 
-  // Parallel batch fetch per platform from leaderboard_ranks (precomputed, has correct columns)
-  // Previously queried trader_snapshots_v2 with wrong column names (roi→roi_pct, pnl→pnl_usd,
-  // rank doesn't exist), causing null values for linked account stats.
+  // Parallel batch fetch per platform from the authoritative leaderboard projection.
   const snapshotMap = new Map<string, Record<string, unknown>>()
   const snapshotErrors: Error[] = []
   await Promise.all(

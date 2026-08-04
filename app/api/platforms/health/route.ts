@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
+import { buildPlatformHealth, type PlatformFreshnessRow } from '@/lib/services/platform-health'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,55 +30,30 @@ export const GET = withPublic(
 )
 
 async function computePlatformHealth(supabase: SupabaseClient) {
-  // Run both queries in parallel instead of sequentially
-  const [healthResult, pipelineLogsResult] = await Promise.all([
-    supabase
-      .from('platform_health')
-      .select('platform, status, last_success_at, error_count:consecutive_failures')
-      .order('platform'),
-    supabase
-      .from('pipeline_logs')
-      .select('job_name, ended_at')
-      .eq('status', 'success')
-      .order('ended_at', { ascending: false })
-      .limit(200),
-  ])
-
-  const health = healthResult.data
-  const pipelineLogs = pipelineLogsResult.data
-
-  // Get latest data timestamps per platform from pipeline_logs
-  const latestByPlatform = new Map<string, string>()
-
-  for (const row of pipelineLogs || []) {
-    const match = row.job_name?.match(/(?:fetch|enrich)-(.+)/)
-    if (match) {
-      const platform = match[1]
-      if (!latestByPlatform.has(platform)) {
-        latestByPlatform.set(platform, row.ended_at)
-      }
-    }
+  // Registry-backed fetch freshness is the source-membership authority. Cron
+  // names are orchestration details and can accidentally invent platforms such
+  // as "market-data" when parsed with a fetch-* regex.
+  const { data, error } = await supabase.rpc('get_platform_freshness')
+  if (error) {
+    throw new Error(`active platform freshness unavailable: ${error.message}`)
   }
 
-  // Fallback: use leaderboard_ranks (only if pipeline_logs empty)
-  if (latestByPlatform.size === 0) {
-    const { data: lbFreshness } = await supabase
-      .from('leaderboard_ranks')
-      .select('platform:source, updated_at:computed_at')
-      .eq('season_id', '90D')
-      .order('computed_at', { ascending: false })
-      .limit(100)
-
-    for (const row of lbFreshness || []) {
-      const key = row.platform
-      if (key && !latestByPlatform.has(key)) {
-        latestByPlatform.set(key, row.updated_at)
-      }
-    }
-  }
+  const health = buildPlatformHealth({
+    freshnessRows: (data || []) as PlatformFreshnessRow[],
+    logs: [],
+    now: Date.now(),
+  })
 
   return {
-    platforms: health || [],
-    freshness: Object.fromEntries(latestByPlatform),
+    platforms: health.map((platform) => ({
+      platform: platform.platform,
+      status: platform.status,
+      last_check: platform.lastUpdate,
+    })),
+    freshness: Object.fromEntries(
+      health
+        .filter((platform) => platform.lastUpdate !== null)
+        .map((platform) => [platform.platform, platform.lastUpdate])
+    ),
   }
 }

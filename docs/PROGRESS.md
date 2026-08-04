@@ -1,6 +1,17 @@
 # Arena Progress Tracker
 
-> Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
+> Historical delivery log. For current runtime authority, use
+> [ARCHITECTURE.md](./ARCHITECTURE.md), [REPOSITORY_STRUCTURE.md](./REPOSITORY_STRUCTURE.md),
+> and [RUNBOOK.md](./RUNBOOK.md); dated statements below describe the state at
+> that milestone and are not operational instructions.
+
+## 当前数据运行态（2026-08-03）
+
+- `arena.sources` 注册表与 `worker/src/ingest/` 是第一方数据采集和调度权威。
+- 排名计算仅消费 publication-fenced `arena_score_inputs`；`trader_latest`
+  切换读路径、compat writer 以及旧 connector/scraper 根目录均已退役。
+- 数据健康以 `/api/health/pipeline`、`/api/admin/data-freshness` 和
+  `/api/admin/monitoring/arena-pipeline` 的 registry/attempt/publication 证据为准。
 
 ## 当前上线 / 数据权威台账（2026-08-03）
 
@@ -55,11 +66,11 @@
 
 ---
 
-## 数据层重建 — ARENA_DATA_SPEC v1.2 Phase 0（2026-06-10 启动，进行中）
+## 数据层重建历史里程碑 — ARENA_DATA_SPEC v1.2（2026-06-10 启动，已完成）
 
 Spec: `~/Desktop/ARENA_DATA_SPEC.md`；计划: `~/.claude/plans/snug-squishing-hamming.md`；记忆: `memory/data-layer-rebuild.md`
 
-**已落地（25+ commits）**：
+**当时已落地（25+ commits）**：
 
 - `arena.*` 规范 schema M1-M7 生产上线（32 源配置入库、月分区、RLS、public 读 RPC）
 - `lib/ingest/` 统一框架：SourceAdapter + 纯 parser、PacedGate/Circuit、UTC FetchSession、pageFetch 页内回放（破 Bitget 签名头）、replayPaged 完整性断言、滚动 median count-check（bootstrap ±30%）、事务发布门、compat 双写
@@ -76,11 +87,11 @@ Spec: `~/Desktop/ARENA_DATA_SPEC.md`；计划: `~/.claude/plans/snug-squishing-h
 - **全队 shadow-diff PASS**：写路径切断 + compat 全队重写后，22 shadow 源 0 mismatch（此前 mexc/binance/gateio/coinex/kucoin/htx/binance_web3 全 FAIL，根因即 legacy 覆写）
 - **读路径全量切换**：15 个 shadow 源批量翻 serving（现 23 serving / 7 shadow 等首个过门快照：bitunix/blofin×2/btcc/xt×2/bingx_spot）；`arena_resolve_trader` RPC 新增 legacy_platform 别名匹配（mexc/bybit/gateio… slug≠旧名的源此前进不了 serving 路径）；Redis `serving_sources` 扩到 32 项（slug+别名）。生产 curl 验证 8 平台 dataMode="serving"，post-deploy 5/5
 - **代码删除 ~45k LOC**：lib/connectors（71 文件）+ lib/cron/fetchers（45 文件）+ enrichment-runner + connector-db-adapter + lib/jobs + /api/v2/trader + 12 个 legacy-only API 路由 + admin/pipeline 页 + 4 个废弃脚本。每组 commit tsc+测试+build 全绿
-- **保留（有意）**：compat writer（rankings/leaderboard_ranks 仍读 trader_latest，直到 compute-leaderboard 重指 arena.score_inputs）；SSH 隧道（tier-c 远程区域驻地）；pipeline-health-check.mjs（独立 .mjs 诊断）
+- **当时保留（有意）**：compat writer（rankings/leaderboard_ranks 仍读 trader_latest，直到 compute-leaderboard 重指 arena.score_inputs）；SSH 隧道（tier-c 远程区域驻地）；pipeline-health-check.mjs（独立 .mjs 诊断）
 - **Rankings 修复**：SOURCES_WITH_DATA 补 5 个 compat 平台（bitget_cfd/bitmart_futures/htx_spot 新增 + lbank/bitget_spot 从 DEAD_BLOCKED 复活）→ 三季全量重算：7D 2826→5754、30D 2721→6445、90D 3269→6430 行；**bitget 缺席 11 天后重回 rankings**（1348 futures + 596 cfd + 67 spot）
-- **已知 follow-up**：非 USDT 源（hyperliquid/gmx/gtrade/bybit_mt5/gate_cfd）无 compat 写入 → 其 leaderboard_ranks 旧行残留（hyperliquid 冻结 06-08），完全恢复需 compute-leaderboard 增读 arena.score_inputs（或非 USDT compat 变体）；VPS arena-scraper:3457 待手动停（已无调用方）；legacy arena-worker 进程仍跑旧码（调度已清空故无害，下次自然重启换新码）
+- **当时已知 follow-up**：非 USDT 源（hyperliquid/gmx/gtrade/bybit_mt5/gate_cfd）无 compat 写入 → 其 leaderboard_ranks 旧行残留（hyperliquid 冻结 06-08），完全恢复需 compute-leaderboard 增读 arena.score_inputs（或非 USDT compat 变体）；VPS arena-scraper:3457 待手动停（已无调用方）；legacy arena-worker 进程仍跑旧码（调度已清空故无害，下次自然重启换新码）
 
-**后续**：Phase 3（OKX CEX/Toobit adapter 已落，待 VPS 解封验证、Bitfinex API）→ compute-leaderboard 重指 arena.score_inputs → 删 compat writer
+**当时后续计划**：Phase 3（OKX CEX/Toobit adapter 已落，待 VPS 解封验证、Bitfinex API）→ compute-leaderboard 重指 arena.score_inputs → 删 compat writer
 
 ---
 

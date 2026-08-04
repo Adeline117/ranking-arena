@@ -7,15 +7,14 @@
  * Schema mapping reference: @/lib/types/schema-mapping.ts
  *
  * Table column differences:
- *   leaderboard_ranks:  source → platform, source_trader_id → traderKey, season_id → period
- *   trader_snapshots_v2: platform → platform, trader_key → traderKey, window → period
- *   enrichment tables:  source → platform, source_trader_id → traderKey
+ *   leaderboard_ranks: source → platform, source_trader_id → traderKey, season_id → period
+ *   enrichment tables: source → platform, source_trader_id → traderKey
  */
 
 import type { UnifiedTrader, TradingPeriod } from './types'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-// Schema mapping reference: see LEADERBOARD_RANKS_FIELDS and SNAPSHOTS_V2_FIELDS
-// in '@/lib/types/schema-mapping' for the canonical column→field mapping documentation.
+// Schema mapping reference: see LEADERBOARD_RANKS_FIELDS in
+// '@/lib/types/schema-mapping' for the canonical column→field mapping documentation.
 
 // ============================================================
 // Period normalization
@@ -115,7 +114,7 @@ export function getSourceAliases(platform: string): string[] {
 }
 
 // ============================================================
-// FIELD MAPPING — the single place where v1/v2/lr differences live
+// FIELD MAPPING — the single place where database/application differences live
 // ============================================================
 
 /**
@@ -183,74 +182,5 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     traderType: (row.trader_type as string) || (platform === 'web3_bot' ? 'bot' : null),
     isOutlier: row.is_outlier === true,
     lastUpdated: (row.computed_at as string) || null,
-  }
-}
-
-/**
- * Map trader_snapshots v1 row -> Partial<UnifiedTrader>.
- * v1 uses: source, source_trader_id, season_id
- * IMPORTANT: v1 roi is stored as a RATIO (0.5 = 50%), must multiply by 100 for percentage.
- */
-export function mapV1Snapshot(
-  row: Record<string, unknown>,
-  period: TradingPeriod
-): Partial<UnifiedTrader> {
-  return {
-    platform: String(row.source || ''),
-    traderKey: String(row.source_trader_id || ''),
-    // v1 ROI is ratio — multiply by 100 to get percentage
-    roi: row.roi != null ? Number(row.roi) * 100 : null,
-    pnl: row.pnl != null ? Number(row.pnl) : null,
-    winRate: normalizeWinRate(row.win_rate as number | null),
-    maxDrawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
-    tradesCount: row.trades_count != null ? Number(row.trades_count) : null,
-    followers: row.followers != null ? Number(row.followers) : null,
-    arenaScore: row.arena_score != null ? Number(row.arena_score) : null,
-    returnScore: row.profitability_score != null ? Number(row.profitability_score) : null,
-    pnlScore: row.score_completeness != null ? Number(row.score_completeness) : null,
-    drawdownScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
-    stabilityScore: row.execution_score != null ? Number(row.execution_score) : null,
-    profitabilityScore: row.profitability_score != null ? Number(row.profitability_score) : null,
-    riskControlScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
-    executionScore: row.execution_score != null ? Number(row.execution_score) : null,
-    period,
-    lastUpdated: (row.captured_at as string) || null,
-  }
-}
-
-/**
- * Map trader_snapshots_v2 row -> Partial<UnifiedTrader>.
- *
- * DB column → App field (see SNAPSHOTS_V2_FIELDS in schema-mapping.ts):
- *   platform    → platform  (same name)
- *   trader_key  → traderKey
- *   window      → period
- *   roi_pct     → roi (already percentage)
- *   pnl_usd     → pnl (already USD)
- */
-export function mapV2Snapshot(
-  row: Record<string, unknown>,
-  period?: TradingPeriod
-): Partial<UnifiedTrader> {
-  return {
-    platform: String(row.platform || ''),
-    traderKey: String(row.trader_key || ''),
-    // v2 roi_pct is already percentage
-    roi: row.roi_pct != null ? Number(row.roi_pct) : null,
-    pnl: row.pnl_usd != null ? Number(row.pnl_usd) : null,
-    winRate: normalizeWinRate(row.win_rate as number | null),
-    maxDrawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
-    tradesCount: row.trades_count != null ? Number(row.trades_count) : null,
-    followers: row.followers != null ? Number(row.followers) : null,
-    copiers: row.copiers != null ? Number(row.copiers) : null,
-    sharpeRatio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
-    sortinoRatio: row.sortino_ratio != null ? Number(row.sortino_ratio) : null,
-    calmarRatio: row.calmar_ratio != null ? Number(row.calmar_ratio) : null,
-    arenaScore: row.arena_score != null ? Number(row.arena_score) : null,
-    returnScore: row.return_score != null ? Number(row.return_score) : null,
-    drawdownScore: row.drawdown_score != null ? Number(row.drawdown_score) : null,
-    stabilityScore: row.stability_score != null ? Number(row.stability_score) : null,
-    period: period || normalizePeriod(row.window as string),
-    lastUpdated: (row.updated_at as string) || (row.created_at as string) || null,
   }
 }

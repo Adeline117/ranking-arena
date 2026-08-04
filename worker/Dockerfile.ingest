@@ -20,13 +20,12 @@
 ARG PW_VERSION=v1.59.1-jammy
 
 # ── deps: deterministic full install (incl devDeps tsx/dotenv — runtime needs them) ──
-# Built on node:20 (npm 10) — the SAME toolchain that generated package-lock.json
-# (the existing CI + the tarball artifact pipeline also pin node 20). The Playwright
-# base image ships node 24 / npm 11, whose stricter optional-peer resolution
-# (jsdom/react-native) rejects this lock as "out of sync" — so deps are NOT built on
-# it. The resulting tree is portable to the runtime stage: all native addons here are
-# NAPI prebuilds (ABI-stable across node versions) and Linux-x64 on both stages.
-FROM node:20-bookworm-slim AS deps
+# Built on Node 22, matching CI and the native artifact pipeline. The Playwright
+# runtime image ships Node 24; both supported LTS majors are covered by the root
+# engine contract. Dependencies remain built separately because the runtime image's
+# npm major has stricter optional-peer resolution. All native addons here use N-API
+# prebuilds and both stages are Linux x64.
+FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 # .npmrc carries `legacy-peer-deps=true` — REQUIRED: the privy/solana passkey deps
 # have a peerOptional typescript/@solana-kit conflict that strict `npm ci` rejects
