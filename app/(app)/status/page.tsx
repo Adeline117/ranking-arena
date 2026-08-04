@@ -5,9 +5,9 @@
 // 全量 key,零键名泄漏、零水合错配,页面保持静态预渲染。
 import enFull from '@/lib/i18n/en'
 import { registerFullDict } from '@/lib/i18n'
-registerFullDict('en', enFull as unknown as Record<string, string>)
+registerFullDict('en', enFull)
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Text, Button } from '@/app/components/base'
 import ErrorState from '@/app/components/ui/ErrorState'
@@ -15,22 +15,17 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import Metric from '@/app/components/ui/Metric'
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
-
-interface HealthData {
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  timestamp: string
-  version: string
-  uptime: number
-  checks: Record<string, { status: 'pass' | 'fail' | 'skip'; message?: string; latency?: number }>
-}
-
-interface PlatformHealthData {
-  platforms: Array<{ platform: string; status: string; last_check?: string }>
-  freshness: Record<string, string>
-}
+import { apiFetch } from '@/lib/utils/api-fetch'
+import {
+  PUBLIC_STATUS_REQUEST_TIMEOUT_MS,
+  readPublicHealthSnapshot,
+  readPublicPlatformHealthSnapshot,
+  type PublicHealthSnapshot,
+  type PublicPlatformHealthSnapshot,
+} from '@/lib/status/status-client-contract'
 
 /** Semantic health level, decoupled from the various raw status strings. */
-type Level = 'operational' | 'degraded' | 'down'
+type Level = 'operational' | 'degraded' | 'down' | 'unknown'
 
 const STALE_MS = 3600000 // 1h — a platform not refreshed within this is "degraded"
 
@@ -69,11 +64,13 @@ const LEVEL_COLOR: Record<Level, string> = {
   operational: tokens.colors.accent.success,
   degraded: tokens.colors.accent.warning,
   down: tokens.colors.accent.error,
+  unknown: tokens.colors.text.tertiary,
 }
 const LEVEL_LABEL_KEY: Record<Level, string> = {
   operational: 'statusLevelOperational',
   degraded: 'statusLevelDegraded',
   down: 'statusLevelDown',
+  unknown: 'dataUnknown',
 }
 
 /**
@@ -123,6 +120,15 @@ function StatusIcon({
       </svg>
     )
   }
+  if (level === 'unknown') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.8 9a2.4 2.4 0 014.6.9c0 1.7-2.4 2-2.4 3.7" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    )
+  }
   // down: circle + x
   return (
     <svg {...common}>
@@ -142,49 +148,89 @@ interface Incident {
 
 export default function StatusPage() {
   const { t, language } = useLanguage()
-  const [health, setHealth] = useState<HealthData | null>(null)
-  const [platforms, setPlatforms] = useState<PlatformHealthData | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [health, setHealth] = useState<PublicHealthSnapshot | null>(null)
+  const [platforms, setPlatforms] = useState<PublicPlatformHealthSnapshot | null>(null)
+  const [statusError, setStatusError] = useState(false)
   const [loading, setLoading] = useState(true)
+  const mountedRef = useRef(false)
+  const requestSequenceRef = useRef(0)
+  const activeRequestRef = useRef<{
+    sequence: number
+    controller: AbortController
+    promise: Promise<void>
+  } | null>(null)
 
-  const fetchData = useCallback(async () => {
-    setError(null)
-    try {
-      const [hRes, pRes] = await Promise.all([
-        fetch('/api/health', { cache: 'no-store' }),
-        fetch('/api/platforms/health', { cache: 'no-store' }),
+  const fetchData = useCallback((): Promise<void> => {
+    const current = activeRequestRef.current
+    if (current) return current.promise
+
+    const controller = new AbortController()
+    const sequence = ++requestSequenceRef.current
+    setLoading(true)
+
+    const promise = (async () => {
+      const [healthResult, platformsResult] = await Promise.allSettled([
+        apiFetch<unknown>('/api/health', {
+          acceptedStatuses: [202, 503],
+          cache: 'no-store',
+          signal: controller.signal,
+          timeoutMs: PUBLIC_STATUS_REQUEST_TIMEOUT_MS,
+        }),
+        apiFetch<unknown>('/api/platforms/health', {
+          cache: 'no-store',
+          signal: controller.signal,
+          timeoutMs: PUBLIC_STATUS_REQUEST_TIMEOUT_MS,
+        }),
       ])
-      // /api/health returns 503/202 on degraded/unhealthy but with a valid body —
-      // only treat a truly unreadable response as a hard error.
-      let parsedHealth: HealthData | null = null
-      try {
-        parsedHealth = (await hRes.json()) as HealthData
-      } catch {
-        parsedHealth = null
+
+      if (
+        !mountedRef.current ||
+        controller.signal.aborted ||
+        activeRequestRef.current?.sequence !== sequence
+      ) {
+        return
       }
-      if (parsedHealth && parsedHealth.checks) {
-        setHealth(parsedHealth)
+
+      let failed = false
+      if (healthResult.status === 'fulfilled') {
+        const snapshot = readPublicHealthSnapshot(healthResult.value)
+        if (snapshot) setHealth(snapshot)
+        else failed = true
       } else {
-        throw new Error(`Health endpoint returned ${hRes.status} with no readable body`)
+        failed = true
       }
-      if (pRes.ok) {
-        try {
-          setPlatforms((await pRes.json()) as PlatformHealthData)
-        } catch {
-          /* platform data is supplementary — non-fatal */
-        }
+
+      if (platformsResult.status === 'fulfilled') {
+        const snapshot = readPublicPlatformHealthSnapshot(platformsResult.value)
+        if (snapshot) setPlatforms(snapshot)
+        else failed = true
+      } else {
+        failed = true
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('statusFetchFailed'))
-    } finally {
-      setLoading(false)
-    }
-  }, [t])
+
+      setStatusError(failed)
+    })().finally(() => {
+      if (activeRequestRef.current?.sequence !== sequence) return
+      activeRequestRef.current = null
+      if (mountedRef.current) setLoading(false)
+    })
+
+    activeRequestRef.current = { sequence, controller, promise }
+    return promise
+  }, [])
 
   useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
+    mountedRef.current = true
+    void fetchData()
+    const interval = setInterval(() => void fetchData(), 30000)
+    return () => {
+      mountedRef.current = false
+      clearInterval(interval)
+      activeRequestRef.current?.controller.abort(
+        new DOMException('Status page unmounted', 'AbortError')
+      )
+      activeRequestRef.current = null
+    }
   }, [fetchData])
 
   // Live "current availability": fraction of MONITORED components (health checks
@@ -246,7 +292,7 @@ export default function StatusPage() {
   // 则总状态至少 degraded。
   const baseLevel: Level = health ? levelFor(health.status) : 'degraded'
   const componentsDegraded =
-    incidents.length > 0 || (availabilityPct != null && availabilityPct < 100)
+    statusError || incidents.length > 0 || (availabilityPct != null && availabilityPct < 100)
   const overallLevel: Level =
     baseLevel === 'down' ? 'down' : componentsDegraded ? 'degraded' : baseLevel
 
@@ -276,7 +322,8 @@ export default function StatusPage() {
   }
 
   // Hard failure with no data at all → real error surface, not a blank page.
-  const hardError = !!error && !health
+  const hardError = statusError && !health
+  const partialError = statusError && !!health
 
   return (
     <div
@@ -311,29 +358,80 @@ export default function StatusPage() {
             <Text as="p" size="sm" color="secondary">
               {loading && !health
                 ? t('checking')
-                : error
-                  ? error
-                  : t('statusLastChecked').replace(
-                      '{ago}',
-                      health ? formatTimeAgo(health.timestamp, language) : '—'
-                    )}
+                : t('statusLastChecked').replace(
+                    '{ago}',
+                    health ? formatTimeAgo(health.timestamp, language) : '—'
+                  )}
             </Text>
           </div>
-          <Button variant="secondary" size="sm" onClick={fetchData} disabled={loading}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void fetchData()}
+            disabled={loading}
+            aria-busy={loading}
+            style={{ minHeight: 44, minWidth: 44 }}
+          >
             {t('refresh')}
           </Button>
         </header>
 
+        {loading && !health && !hardError && (
+          <div
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            style={{
+              ...cardStyle,
+              minHeight: 128,
+              display: 'grid',
+              placeItems: 'center',
+              color: tokens.colors.text.secondary,
+            }}
+          >
+            {t('checking')}
+          </div>
+        )}
+
         {hardError && (
           <ErrorState
             title={t('statusUnableToLoad')}
-            description={error || t('statusServiceUnavailable')}
-            retry={fetchData}
+            description={t('statusServiceUnavailable')}
+            retry={() => void fetchData()}
           />
         )}
 
         {!hardError && (
           <>
+            {partialError && (
+              <div
+                role="alert"
+                style={{
+                  ...cardStyle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: tokens.spacing[4],
+                  borderColor: tokens.colors.accent.warning,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Text as="p" size="sm" color="secondary">
+                  {t('statusServiceUnavailable')}
+                </Text>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void fetchData()}
+                  disabled={loading}
+                  aria-busy={loading}
+                  style={{ minHeight: 44 }}
+                >
+                  {t('retry')}
+                </Button>
+              </div>
+            )}
+
             {/* Overall availability + status */}
             {health && (
               <div
@@ -359,7 +457,9 @@ export default function StatusPage() {
                       ? t('statusAllOperational')
                       : overallLevel === 'degraded'
                         ? t('statusDegraded')
-                        : t('statusDisruption')}
+                        : overallLevel === 'down'
+                          ? t('statusDisruption')
+                          : t('dataUnknown')}
                   </span>
                 </div>
                 {availabilityPct != null && (
@@ -441,7 +541,7 @@ export default function StatusPage() {
               <div className="card-hover" style={cardStyle}>
                 <h2 style={sectionHeadingStyle}>{t('statusServices')}</h2>
                 {Object.entries(health.checks).map(([name, check]) => {
-                  const level = check.status === 'skip' ? 'degraded' : levelFor(check.status)
+                  const level = check.status === 'skip' ? 'unknown' : levelFor(check.status)
                   return (
                     <div key={name} style={rowStyle}>
                       <div style={{ display: 'flex', alignItems: 'center' }}>
