@@ -20,6 +20,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
       (
         ({
           activityFeedEmpty: 'No activity events yet.',
+          activityFeedLoading: 'Loading activity...',
           activityFeedLive: 'Live',
           activityFeedTitle: 'Activity feed',
           loadFailed: 'Failed to load',
@@ -86,5 +87,14 @@ describe('ActivityFeed failure state', () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
     expect(await screen.findByText('No activity events yet.')).toBeInTheDocument()
     expect(screen.queryAllByText('Failed to load')).toHaveLength(0)
+  })
+
+  it('renders an honest, reserved loading state instead of an empty panel', () => {
+    mockFetch.mockReturnValue(new Promise(() => undefined))
+
+    renderFeed()
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading activity...')
+    expect(screen.queryByText('Live')).not.toBeInTheDocument()
   })
 })

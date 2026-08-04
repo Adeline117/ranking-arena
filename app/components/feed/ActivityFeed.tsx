@@ -292,9 +292,11 @@ export default function ActivityFeed({
               ? t('activityFeedLive')
               : newestAt
                 ? `${t('activityFeedUpdatedPrefix')} ${formatTimeAgo(newestAt, language)}`
-                : error
-                  ? t('loadFailed')
-                  : t('activityFeedLive')}
+                : loading
+                  ? t('activityFeedLoading')
+                  : error
+                    ? t('loadFailed')
+                    : t('activityFeedLive')}
           </span>
         </div>
       </div>
@@ -368,8 +370,25 @@ export default function ActivityFeed({
       </div>
 
       {/* Activity list */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {visibleActivities.length === 0 && !loading && !error ? (
+      <div aria-busy={loading} style={{ display: 'flex', flexDirection: 'column' }}>
+        {visibleActivities.length === 0 && loading ? (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              minHeight: 128,
+              padding: tokens.spacing[8],
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: tokens.colors.text.tertiary,
+              fontSize: tokens.typography.fontSize.sm,
+              fontFamily: tokens.typography.fontFamily.sans.join(', '),
+            }}
+          >
+            {t('activityFeedLoading')}
+          </div>
+        ) : visibleActivities.length === 0 && !error ? (
           following ? (
             // Personalized feed empty: no follows yet, or followed traders were
             // quiet this window. Nudge toward Discover instead of a dead-end.
