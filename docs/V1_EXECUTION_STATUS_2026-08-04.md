@@ -71,9 +71,8 @@ PostgreSQL 17 验证。当前没有任何生产迁移授权。
 
 联合分支 `codex/v1-combined-20260804` 整合了 migration/NFT blocker、backup
 hardening、V1 candidate、线上 token containment 和 `brace-expansion` 5.0.9
-修复。验证树在文档更新前的 Git checkpoint 为
-`be7f784c53187a1e02424053acb0c168a159eb21`；最终 PR SHA 由 Git/GitHub 记录，
-不在提交内容中自引用。
+修复。PR #254 已完成 hosted 验证的精确候选提交为
+`a760bbfb16f80df0d6caca882e659c80a5e02e59`。
 
 - 第二台 Mac mini 使用 Node `22.23.2` 完成 lockfile clean install；
   `package-lock.json` SHA-256 为
@@ -90,26 +89,69 @@ hardening、V1 candidate、线上 token containment 和 `brace-expansion` 5.0.9
 - 全量 Jest coverage 在 Redis 7.4.9 下以已写入 CI 的 `--maxWorkers=2` 完成：
   1084 suites passed、2 skipped；12334 tests passed、17 skipped。
 - 同一应用源码树完成 Next.js 16.2.11 production-like build、161 个静态页面和
-  1094 个浏览器 chunk 的 BigInt postbuild 检查。之后的变更仅限 CI/QA、文档和
-  Lighthouse dev dependency；最终精确提交仍须由 PR Build 复验。
+  1094 个浏览器 chunk 的 BigInt postbuild 检查。
 - 私有、无 secret 的 Lighthouse 门禁在显式 `127.0.0.1` 回环端口对 `/`、
   `/methodology`、`/about` 各运行 3 次，共 9 次全部通过且没有公开上传报告。每页
   最低 performance 分别为 0.84、0.98、0.96；最低 accessibility 为
   0.96、0.99、0.96；最低 best-practices 均为 0.96；HTTP audit 均为 1.0。
+- 精确提交 `a760bbfb1` 的 hosted CI run `30949124995` 已全部成功，包含 Types
+  contract、Pre-flight、Lint & Type、Unit 和 Build；hosted Lighthouse run
+  `30949124593` 也已成功。production-only/live-secret jobs 按设计保持 skipped，
+  不把缺少生产凭据伪装成绿色。
 - GitHub artifact API 仍保留 1979 条记录、名义 88.20 GB，但 1727 条已 expired；
   真正未过期的 252 条合计约 266.7 MB。combined PR 路径不上传 coverage、`.next`
   或 Lighthouse artifact，因此 quota 不阻断 PR CI；本次未删除任何审计或发布证据。
 
+## Supabase Preview 与 canonical baseline 边界
+
+Supabase Preview 对 PR #254 采用 ledger-driven reconstruction；它不是上述 hosted
+CI/Lighthouse 的一部分。该已验证候选在历史 migration
+`00008_admin_features.sql` 创建 admin policy 时以 SQLSTATE `42703` 失败：policy
+先读取 `user_profiles.role`，而该列在同一历史文件的更后位置才创建。
+
+在 disposable PostgreSQL 17 上仅作诊断性前探后，还依次定位到 `00010`、`00014`、
+`00015`、`00017`、`00019`、`00023`、`00024`、`00026`、`00027` 的后续重放阻断。
+这些结果证明完整历史目录不是可直接 fresh replay 的 canonical source；它们不是
+生产补跑清单，也不授权修改已经应用并由 hash 锁定的旧 migration。
+
+修复必须作为独立、单独评审的 canonical-baseline maintenance wave：生成明确的
+canonical 起点，在空白 PostgreSQL 17 重放，并与冻结的生产 catalogue/ledger 做
+只读等价核对。本轮没有完成或提交 baseline。曾尝试通过 session pooler 5432 以
+`verify-full` 获取 schema-only capture，但因缺少项目 CA 证书而 fail-closed；没有
+降低 TLS 校验，也没有发生数据库变更。当前两台可用 Mac 均没有约 100 GiB 的
+scratch 空间，因此完整恢复认证仍需 managed PostgreSQL 17 目标。
+
+已实现的离线 maintenance scaffold 仍保持 **candidate/not-deployable**，且当前候选
+目录为空。它把 source witness、规范化 catalogue/ledger、hash-pinned 非生产
+foundation、app schema、ledger-bound baseline boundary 与完整 forward epoch 绑定为
+一个 contract；boundary 必须是 source ledger 最新且唯一的 14 位版本，并对应仓库中
+真实 migration；完整 modern migration inventory digest 会让后续倒序新增的文件立即使
+候选失效。managed relation/type 也纳入 foundation prerequisite catalogue delta，
+unit sweep 会枚举全部候选。回放只接受 candidate directory，内部先复验 manifest，
+再二次验 hash 并把确定字节复制到私有 staging；app mutation scope 正向限定为
+`public`/`arena`，并拒绝 psql meta-command、sequence restart、server-file `COPY`、
+显式事务控制、`CONCURRENTLY`、常见 host/outbound capability、外部数据库环境和
+PostgreSQL `<17.6`。集群只监听短 Unix socket、HOME/libpq credential path 为空；
+foundation 不能预建 `arena` 或 `public`/`arena` 应用对象。stop 失败时保留精确临时
+目录，不删除可能仍活跃的 data dir。foundation/forward 仍是必须人工评审的可信仓库
+输入；保守 body scan 不是任意动态 SQL 的 hostile sandbox。成功只表示 local
+dependency replay，不表示 Supabase 等价或可部署。
+
+该 scaffold 的完整回归共 347 个顶层测试、391 条断言：390 条通过、0 条失败；唯一
+默认 skip 是需显式启用的真实集群测试，随后使用 PostgreSQL 17 单独启用回放亦通过。
+候选清单仍为空，因此这些证据只验证 guardrail/harness，不验证任何 canonical
+baseline。
+
 ## 剩余门禁（严格顺序）
 
-1. 推送已完成离线验证的联合候选并建立新的统一 PR；以该精确提交的 GitHub CI、
-   Build、Lighthouse 全绿作为合并门禁。新 PR 建立后再把冲突的旧 PR #253 标记
-   superseded；不得因为仓库当前无 required-check 保护而跳过人工门禁。
-2. 等待 Supabase 官方事故恢复；获取受控的非 pooler backup/restore 通道，在至少
+1. 等待 Supabase 官方事故恢复；获取项目 CA 与受控的 backup/restore 通道，在至少
    约 100 GiB 的 managed scratch 完成全量恢复、CRC/tail、索引、RLS/auth、关键表
    及应用只读 smoke。
+2. 独立评审并实现 canonical baseline；不得改写旧 migration。先在空白 PostgreSQL
+   17 完整重放，再对冻结 catalogue/ledger 做等价核对，并让 ledger-driven Preview
+   通过。此前不得把 PR #254 的仓库 CI/Lighthouse 全绿解释为可合并或可发布。
 3. 逐项对账 5 个缺失 RPC 和 101 个 advisory migration 候选，在 disposable
-   PostgreSQL 17 重放并生成精确 predeploy/postdeploy 清单；禁止对生产 `db push`。
+   PostgreSQL 17 验证并生成精确 predeploy/postdeploy 清单；禁止对生产 `db push`。
 4. 建立 exact-SHA 非生产环境并验证 schema、缓存预热、token containment、告警真实
    投递和 rollback；随后完成 48 小时无未授权写入的 drain 证据。
 5. 经 owner 明确 GO 后才允许受控 predeploy。先单 worker canary，观察一个完整调度

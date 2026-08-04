@@ -72,13 +72,16 @@ The clean offline candidate validation completed with the following evidence:
 - Full Jest coverage with Redis 7.4.9 and a reproducible two-worker budget:
   1084 suites passed, 2 skipped; 12334 tests passed, 17 skipped.
 - Next.js 16.2.11 production-like build passed, including 161 static pages and
-  the postbuild BigInt scan across 1094 browser chunks. Later candidate changes
-  affect only workflows, QA, documentation, and a dev-only Lighthouse package;
-  the exact PR commit must still pass the hosted Build job.
+  the postbuild BigInt scan across 1094 browser chunks.
 - Private Lighthouse collection made nine runs across `/`, `/methodology`, and
   `/about`. Minimum per-page performance was 0.84/0.98/0.96, accessibility
   0.96/0.99/0.96, best-practices 0.96 for all pages, and HTTP-status 1.0 for
   every run. Reports stayed on the validation host.
+- The validated PR #254 candidate
+  `a760bbfb16f80df0d6caca882e659c80a5e02e59` passed hosted CI run
+  `30949124995`, including Types contract, Pre-flight, Lint & Type, Unit, and
+  Build. Hosted Lighthouse run `30949124593` also passed. Production-only and
+  live-secret jobs remained intentionally skipped.
 
 The migration lint now derives the exact PR merge-base or push before/after
 state, scans committed regular blobs, handles renames and root/non-fast-forward
@@ -104,6 +107,60 @@ inside a quoted default `SET NOT NULL` false-negative.
   follow-up rather than a reason to delete release evidence during this change.
 - PR 253 has six real conflicts with main and is superseded for integration
   review by this combined branch after the `5ed4718b6` containment forward-port.
+
+## Supabase Preview reconstruction boundary
+
+The Supabase Preview check is separate from the green hosted CI and Lighthouse
+runs. It performs ledger-driven reconstruction and fails at historical migration
+`00008_admin_features.sql` with SQLSTATE `42703`: an admin policy references
+`user_profiles.role` before that column is added later in the same file.
+
+Diagnostic forward replay on disposable PostgreSQL 17 subsequently exposed
+additional blockers in `00010`, `00014`, `00015`, `00017`, `00019`, `00023`,
+`00024`, `00026`, and `00027`. This is evidence that the historical directory
+is not a fresh-replay canonical source, not a list authorized for production
+application. Applied, hash-locked migration files must not be rewritten merely
+to make Preview green.
+
+Remediation is a separate, independently reviewed canonical-baseline maintenance
+wave. It must establish an explicit canonical starting point, replay fully on
+empty PostgreSQL 17, and prove read-only equivalence against the frozen live
+catalogue and ledger. No baseline was completed or committed in this wave.
+
+The maintenance scaffold now has a fail-closed offline candidate contract and
+disposable replay harness, but still no candidate. A candidate must pin its
+source witness, normalized catalogue/ledger, non-production Supabase foundation,
+application schema, explicit ledger-bound baseline boundary, and the complete
+hash-attested forward epoch. A complete modern-repository inventory digest also
+invalidates the candidate if a later migration is backdated across the cutoff.
+The boundary is the latest unique 14-digit source ledger version and must name
+an existing repository migration; a future cutoff cannot erase the forward set.
+Managed relation/type prerequisites are part of the exact foundation catalogue
+delta. The unit sweep inventories every candidate directory. Before `initdb`,
+the replay path validates the full manifest, limits
+app mutations to `public`/`arena`, rejects psql meta-command escapes, sequence
+restart, server-file `COPY`, and common host/outbound capabilities, re-reads
+every executable hash, and copies only those bytes into private staging. It
+requires one exact PostgreSQL `17.6+` toolchain, an empty credential home, a
+private Unix socket, and one transaction per pre-scanned file. Failed server
+shutdown preserves the exact temporary cluster instead of deleting a possibly
+live data directory. Foundation and forward SQL remain trusted, reviewed inputs:
+the conservative body scan is not a hostile-input sandbox. A pass is labelled
+dependency replay only; it is not managed-Supabase equivalence or promotion
+evidence.
+
+The completed scaffold regression run contained 347 top-level tests and 391
+total assertions: 390 passed, zero failed, and the one default skip was the
+opt-in real-cluster check. Running that check explicitly against PostgreSQL
+17 also passed. Candidate inventory remained empty, so this evidence validates
+only the guardrail and harness implementation, not any canonical baseline.
+
+A schema-only capture was attempted through the session pooler on port 5432 with
+TLS `verify-full`. It failed closed because the project CA certificate was not
+available; TLS verification was not downgraded and no database change occurred.
+Neither available Mac currently has the approximately 100 GiB of scratch space
+required for full restore certification, so a managed PostgreSQL 17 target is
+still required. Production remains **NO-GO**.
 
 ## Production read-only catalogue freeze
 
