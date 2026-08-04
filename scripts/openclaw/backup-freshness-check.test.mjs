@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -9,8 +13,10 @@ import {
 import {
   assertFreshBackupHead,
   checkBackupFreshness,
+  R2_REQUEST_TIMEOUT_MS,
   runBackupFreshnessCli,
   sendTelegramAlert,
+  TELEGRAM_REQUEST_TIMEOUT_MS,
 } from './backup-freshness-check.mjs'
 
 const COMPLETION_TOKEN = 'a'.repeat(64)
@@ -48,11 +54,14 @@ function completeHead({ mode = 'schemas', Metadata, ...overrides } = {}) {
 
 function fakeS3(handler) {
   const calls = []
+  const requestOptions = []
   return {
     calls,
-    send: async (command) => {
+    requestOptions,
+    send: async (command, options) => {
       calls.push(command)
-      return handler(command, calls.length - 1)
+      requestOptions.push(options)
+      return handler(command, calls.length - 1, options)
     },
   }
 }
@@ -118,6 +127,12 @@ test('paginates, ignores arbitrary gzip and old no-suffix partial, then HEADs on
     Prefix: 'db-backups/',
     ContinuationToken: undefined,
   })
+  assert.equal(R2_REQUEST_TIMEOUT_MS, 20_000)
+  assert.equal(s3.requestOptions.length, 3)
+  for (const options of s3.requestOptions) {
+    assert.ok(options.abortSignal instanceof AbortSignal)
+    assert.equal(options.abortSignal.aborted, false)
+  }
 })
 
 test('retains legacy complete schemas filename compatibility with current completion evidence', async () => {
@@ -388,7 +403,7 @@ test('Telegram webhook accepts a 2xx response and sends the configured chat payl
     env,
     fetchImpl: async (url, options) => {
       request = { url, options }
-      return { status: 204 }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
     },
     logger: { log() {}, error() {} },
   })
@@ -398,8 +413,40 @@ test('Telegram webhook accepts a 2xx response and sends the configured chat payl
   assert.deepEqual(JSON.parse(request.options.body), {
     chat_id: 'chat-id',
     text: 'contract alert',
-    parse_mode: 'Markdown',
   })
+  assert.equal(TELEGRAM_REQUEST_TIMEOUT_MS, 10_000)
+  assert.ok(request.options.signal instanceof AbortSignal)
+  assert.equal(request.options.signal.aborted, false)
+})
+
+test('Telegram webhook requires a JSON ok=true delivery acknowledgement', async () => {
+  const env = { TELEGRAM_BOT_TOKEN: 'bot-token', TELEGRAM_ALERT_CHAT_ID: 'chat-id' }
+  await assert.rejects(
+    sendTelegramAlert('contract alert', {
+      env,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: false }),
+      }),
+      logger: { log() {}, error() {} },
+    }),
+    /did not confirm delivery/
+  )
+  await assert.rejects(
+    sendTelegramAlert('contract alert', {
+      env,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('invalid response body')
+        },
+      }),
+      logger: { log() {}, error() {} },
+    }),
+    /invalid JSON/
+  )
 })
 
 test('Telegram webhook rejects contradictory ok=true with a non-2xx status', async () => {
@@ -412,4 +459,33 @@ test('Telegram webhook rejects contradictory ok=true with a non-2xx status', asy
     }),
     /non-2xx HTTP 503/
   )
+})
+
+test('the executable runs through a symlink instead of silently skipping the CLI', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'arena-backup-freshness-'))
+  const link = join(directory, 'backup-freshness-check.mjs')
+  try {
+    symlinkSync(realpathSync('scripts/openclaw/backup-freshness-check.mjs'), link)
+    const env = { ...process.env }
+    for (const key of [
+      'R2_ACCOUNT_ID',
+      'R2_ACCESS_KEY_ID',
+      'R2_SECRET_ACCESS_KEY',
+      'TELEGRAM_BOT_TOKEN',
+      'TELEGRAM_ALERT_CHAT_ID',
+      'TELEGRAM_CHAT_ID',
+    ]) {
+      env[key] = ''
+    }
+
+    const result = spawnSync(process.execPath, [link], {
+      cwd: process.cwd(),
+      env,
+      encoding: 'utf8',
+    })
+    assert.equal(result.status, 2)
+    assert.match(result.stderr, /Missing R2 credentials/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })

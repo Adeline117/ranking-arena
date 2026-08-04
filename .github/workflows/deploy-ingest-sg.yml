@@ -5,8 +5,13 @@ name: Deploy Ingest Worker (SG)
 # and after the remote cutover. The artifact manifest is verified independently
 # in the deploy job; it is never sourced as shell code.
 
+# SECURITY SUSPENDED (V1 NO-GO): this reusable workflow may be invoked through
+# workflow_call, but every job is fail-closed below. Restore only with
+# environment-only INGEST_SG_* secrets in ingest-sg-production, a required reviewer,
+# a protected-main deployment policy, and an explicitly reopened
+# incident release gate.
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       target_sha:
         description: 'Exact 40-character lowercase main commit to deploy'
@@ -14,9 +19,8 @@ on:
         type: string
       mode:
         description: 'full (rebuild + ship deps) or code-only (reuse validated SG deps)'
-        required: true
-        type: choice
-        options: [full, code-only]
+        required: false
+        type: string
         default: full
 
 permissions:
@@ -30,7 +34,9 @@ jobs:
   build-deps:
     # A code-only deployment reuses the dependency tree checked by the remote
     # deploy script, so this intentionally reports "skipped" in that mode.
-    if: ${{ inputs.mode != 'code-only' }}
+    # Resume condition after the external controls above exist:
+    # ${{ inputs.mode != 'code-only' }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -147,7 +153,8 @@ jobs:
     needs: [build-deps]
     # A skipped build is valid only for code-only. Full mode must prove that the
     # build job succeeded before this job can reach any remote mutation.
-    if: ${{ !cancelled() }}
+    # Resume condition after the external controls above exist: ${{ !cancelled() }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ingest-sg-production

@@ -64,6 +64,8 @@ export const GET = withAdminAuth(
       newSignups: metrics?.newSignups ?? null,
       activated7d: metrics?.activated7d ?? null,
       activationEligible: metrics?.activationEligible ?? null,
+      activationDefinitionVersion: metrics?.activationDefinitionVersion ?? null,
+      activationMeasurementStartedAt: metrics?.activationMeasurementStartedAt ?? null,
       funnel: metrics?.funnel ?? null,
       eventCollectionStartedAt: metrics?.eventCollectionStartedAt ?? null,
       measurementAvailable: metrics !== null,

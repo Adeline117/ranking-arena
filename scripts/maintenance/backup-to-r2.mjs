@@ -14,8 +14,9 @@
 
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { createReadStream, createWriteStream, unlinkSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { createReadStream, createWriteStream, mkdtempSync, rmSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, join, resolve } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { pathToFileURL } from 'node:url'
@@ -230,17 +231,51 @@ export async function uploadAndAttestBackupArtifact({
   client,
   bucket,
   key,
+  body,
   localPath,
   size,
   metadata,
   UploadClass = Upload,
 }) {
+  const uploaded = await uploadBackupArtifact({
+    client,
+    bucket,
+    key,
+    body,
+    localPath,
+    size,
+    metadata,
+    UploadClass,
+  })
+  return attestUploadedBackupArtifact({
+    client,
+    bucket,
+    key,
+    size,
+    metadata,
+    uploadETag: uploaded.ETag,
+  })
+}
+
+export async function uploadBackupArtifact({
+  client,
+  bucket,
+  key,
+  body,
+  localPath,
+  size,
+  metadata,
+  UploadClass = Upload,
+}) {
+  if (!body && !localPath) {
+    throw new Error('multipart upload requires a sealed body or local path')
+  }
   const uploader = new UploadClass({
     client,
     params: {
       Bucket: bucket,
       Key: key,
-      Body: createReadStream(localPath),
+      Body: body ?? createReadStream(localPath),
       ContentType: 'application/gzip',
       ContentLength: size,
       Metadata: metadata,
@@ -253,19 +288,29 @@ export async function uploadAndAttestBackupArtifact({
   if (!normalizeETag(uploaded?.ETag)) {
     throw new Error('multipart upload did not return an ETag identity')
   }
+  return uploaded
+}
 
+export async function attestUploadedBackupArtifact({
+  client,
+  bucket,
+  key,
+  size,
+  metadata,
+  uploadETag,
+}) {
   const head = await client.send(
     new HeadObjectCommand({
       Bucket: bucket,
       Key: key,
-      IfMatch: uploaded.ETag,
+      IfMatch: uploadETag,
     })
   )
   return assertUploadedBackupObject({
     key,
     expectedSize: size,
     expectedMetadata: metadata,
-    uploadETag: uploaded.ETag,
+    uploadETag,
     head,
   })
 }
@@ -378,6 +423,14 @@ function childOutcome(child, label, timeoutMs) {
   })
 }
 
+export function createBackupWorkspace(filename) {
+  if (basename(filename) !== filename || !IMMUTABLE_BACKUP_FILENAME_PATTERN.test(filename)) {
+    throw new Error('backup filename is invalid')
+  }
+  const directory = mkdtempSync(join(tmpdir(), 'arena-backup-'))
+  return { directory, localPath: join(directory, filename) }
+}
+
 /**
  * Keep production side effects behind a validated local artifact. Injection is
  * deliberate: tests execute the real producer and prove rejected artifacts
@@ -435,7 +488,9 @@ async function run() {
   console.log(`[backup] Starting ${modeLabel} backup — ${now.toISOString()}`)
 
   const selectionArgs = schemaMode ? backupSchemas.flatMap((s) => ['-n', s]) : [] // full mode dumps everything
-  const { localPath, r2Key } = identity
+  const { filename, r2Key } = identity
+  const workspace = createBackupWorkspace(filename)
+  const { localPath } = workspace
 
   try {
     // pg_dump → gzip (PostgreSQL 17 匹配 Supabase 服务器)
@@ -488,7 +543,9 @@ async function run() {
     } catch (cleanupError) {
       console.error('[backup] Failed to remove local artifact:', cleanupError.message)
     }
-    process.exit(1)
+    process.exitCode = 1
+  } finally {
+    rmSync(workspace.directory, { force: true, recursive: true })
   }
 }
 

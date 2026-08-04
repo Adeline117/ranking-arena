@@ -15,28 +15,66 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import Metric from '@/app/components/ui/Metric'
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { PRODUCT_FACTS } from '@/lib/config/product-facts'
+
+interface RankingFreshnessDetails {
+  checkedAt: string
+  sourceSummary: {
+    total: number
+    fresh: number
+    stale: number
+    critical: number
+    unknown: number
+  }
+  coverage: {
+    expectedSourceBoards: number
+    visibleSourceBoards: number
+  }
+  thresholds: {
+    staleHours: number
+    criticalHours: number
+  }
+  latestSuccessfulPublicationAt: string | null
+  publicationSeason: '90D'
+  sources: Array<{
+    platform: string
+    displayName: string
+    lastUpdate: string | null
+    ageHours: number | null
+    status: 'fresh' | 'stale' | 'critical' | 'unknown'
+    recordCount: number
+  }>
+}
+
+interface HealthCheck {
+  status: 'pass' | 'fail' | 'skip'
+  message?: string
+  latency?: number
+  details?: RankingFreshnessDetails
+}
 
 interface HealthData {
   status: 'healthy' | 'degraded' | 'unhealthy'
   timestamp: string
   version: string
   uptime: number
-  checks: Record<string, { status: 'pass' | 'fail' | 'skip'; message?: string; latency?: number }>
-}
-
-interface PlatformHealthData {
-  platforms: Array<{ platform: string; status: string; last_check?: string }>
-  freshness: Record<string, string>
+  checks: Record<string, HealthCheck>
 }
 
 /** Semantic health level, decoupled from the various raw status strings. */
 type Level = 'operational' | 'degraded' | 'down'
 
-const STALE_MS = 3600000 // 1h — a platform not refreshed within this is "degraded"
+const STATUS_FETCH_TIMEOUT_MS = 12_000
 
 function levelFor(raw: string): Level {
   if (raw === 'pass' || raw === 'healthy' || raw === 'ok') return 'operational'
   if (raw === 'fail' || raw === 'unhealthy' || raw === 'down') return 'down'
+  return 'degraded'
+}
+
+function levelForSource(raw: RankingFreshnessDetails['sources'][number]['status']): Level {
+  if (raw === 'fresh') return 'operational'
+  if (raw === 'critical') return 'down'
   return 'degraded'
 }
 
@@ -143,17 +181,22 @@ interface Incident {
 export default function StatusPage() {
   const { t, language } = useLanguage()
   const [health, setHealth] = useState<HealthData | null>(null)
-  const [platforms, setPlatforms] = useState<PlatformHealthData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
     setError(null)
+    setLoading(true)
+    const controller = new AbortController()
+    const timeout = setTimeout(
+      () => controller.abort(new Error('Status request deadline exceeded')),
+      STATUS_FETCH_TIMEOUT_MS
+    )
     try {
-      const [hRes, pRes] = await Promise.all([
-        fetch('/api/health', { cache: 'no-store' }),
-        fetch('/api/platforms/health', { cache: 'no-store' }),
-      ])
+      const hRes = await fetch('/api/health', {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
       // /api/health returns 503/202 on degraded/unhealthy but with a valid body —
       // only treat a truly unreadable response as a hard error.
       let parsedHealth: HealthData | null = null
@@ -167,16 +210,10 @@ export default function StatusPage() {
       } else {
         throw new Error(`Health endpoint returned ${hRes.status} with no readable body`)
       }
-      if (pRes.ok) {
-        try {
-          setPlatforms((await pRes.json()) as PlatformHealthData)
-        } catch {
-          /* platform data is supplementary — non-fatal */
-        }
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : t('statusFetchFailed'))
     } finally {
+      clearTimeout(timeout)
       setLoading(false)
     }
   }, [t])
@@ -188,7 +225,7 @@ export default function StatusPage() {
   }, [fetchData])
 
   // Live "current availability": fraction of MONITORED components (health checks
-  // that ran, excluding skipped/unconfigured ones, + tracked platforms) that are
+  // that ran, excluding skipped/unconfigured ones) that are
   // currently operational. This is a real, live figure derived from the health
   // API — NOT a fabricated historical uptime SLA.
   const { availabilityPct, operationalCount, monitoredCount, incidents } = useMemo(() => {
@@ -214,21 +251,6 @@ export default function StatusPage() {
       }
     }
 
-    if (platforms?.freshness) {
-      for (const [platform, ts] of Object.entries(platforms.freshness)) {
-        monitored++
-        const stale = Date.now() - new Date(ts).getTime() > STALE_MS
-        if (!stale) operational++
-        else
-          inc.push({
-            key: `plat:${platform}`,
-            name: formatComponentName(platform),
-            level: 'degraded',
-            message: t('statusDataAgo').replace('{ago}', formatTimeAgo(ts, language)),
-          })
-      }
-    }
-
     const pct = monitored > 0 ? (operational / monitored) * 100 : null
     // Sort worst-first so real outages surface above stale-data warnings.
     inc.sort((a, b) => (a.level === 'down' ? 0 : 1) - (b.level === 'down' ? 0 : 1))
@@ -238,7 +260,9 @@ export default function StatusPage() {
       monitoredCount: monitored,
       incidents: inc,
     }
-  }, [health, platforms, t, language])
+  }, [health, t])
+
+  const freshnessDetails = health?.checks.freshness?.details
 
   // 2026-07-04 修 U12:此前总状态只看 health.status,忽略被监控平台的陈旧/退化,
   // 导致顶部绿勾「所有系统正常」与下方 57.1%/4-of-7 组件退化自相矛盾(数据可信度打脸)。
@@ -456,13 +480,23 @@ export default function StatusPage() {
                           textAlign: 'right',
                         }}
                       >
-                        {check.latency != null
-                          ? `${check.latency}ms`
-                          : check.message || check.status}
+                        {check.message
+                          ? `${check.message}${check.latency != null ? ` · ${check.latency}ms` : ''}`
+                          : check.latency != null
+                            ? `${check.latency}ms`
+                            : check.status}
                       </span>
                     </div>
                   )
                 })}
+                <Text
+                  as="p"
+                  size="xs"
+                  color="tertiary"
+                  style={{ marginTop: tokens.spacing[3], lineHeight: 1.6 }}
+                >
+                  {t('statusCoreApiNote')}
+                </Text>
                 <div
                   style={{
                     display: 'flex',
@@ -480,37 +514,184 @@ export default function StatusPage() {
               </div>
             )}
 
-            {/* Platform data freshness */}
-            {platforms && Object.keys(platforms.freshness).length > 0 && (
+            {/* Ranking freshness and publication evidence. The structured
+                details come from the same registry authority as /api/health;
+                missing details stay explicitly unknown instead of becoming 0. */}
+            {health && (
               <div className="card-hover" style={cardStyle}>
                 <h2 style={sectionHeadingStyle}>{t('statusDataFreshness')}</h2>
-                {Object.entries(platforms.freshness)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([platform, timestamp]) => {
-                    const stale = Date.now() - new Date(timestamp).getTime() > STALE_MS
-                    const level: Level = stale ? 'degraded' : 'operational'
-                    return (
-                      <div key={platform} style={rowStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <StatusIcon level={level} t={t} />
-                          <span>{formatComponentName(platform)}</span>
-                        </div>
-                        <span
-                          style={{
-                            fontSize: tokens.typography.fontSize.xs,
-                            color: stale
-                              ? tokens.colors.accent.warning
-                              : tokens.colors.text.tertiary,
-                            fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                          }}
-                        >
-                          {formatTimeAgo(timestamp, language)}
+                {freshnessDetails ? (
+                  <>
+                    <div style={rowStyle}>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <StatusIcon
+                          level={
+                            freshnessDetails.coverage.expectedSourceBoards > 0 &&
+                            freshnessDetails.coverage.visibleSourceBoards ===
+                              freshnessDetails.coverage.expectedSourceBoards
+                              ? 'operational'
+                              : 'degraded'
+                          }
+                          t={t}
+                        />
+                        <span>{t('statusSourceBoardCoverage')}</span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                          textAlign: 'right',
+                        }}
+                      >
+                        {t('statusBoardsVisible')
+                          .replace(
+                            '{visible}',
+                            String(freshnessDetails.coverage.visibleSourceBoards)
+                          )
+                          .replace(
+                            '{expected}',
+                            String(freshnessDetails.coverage.expectedSourceBoards)
+                          )}
+                      </span>
+                    </div>
+
+                    <div style={rowStyle}>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <StatusIcon
+                          level={
+                            freshnessDetails.sourceSummary.total > 0 &&
+                            freshnessDetails.sourceSummary.fresh ===
+                              freshnessDetails.sourceSummary.total
+                              ? 'operational'
+                              : 'degraded'
+                          }
+                          t={t}
+                        />
+                        <span>{t('statusRankingSourceFreshness')}</span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                          textAlign: 'right',
+                        }}
+                      >
+                        {t('statusSourcesFresh')
+                          .replace('{fresh}', String(freshnessDetails.sourceSummary.fresh))
+                          .replace('{total}', String(freshnessDetails.sourceSummary.total))}
+                      </span>
+                    </div>
+
+                    <div style={rowStyle}>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <StatusIcon
+                          level={
+                            freshnessDetails.latestSuccessfulPublicationAt
+                              ? 'operational'
+                              : 'degraded'
+                          }
+                          t={t}
+                        />
+                        <span>
+                          {t('statusLatestPublication').replace(
+                            '{season}',
+                            freshnessDetails.publicationSeason
+                          )}
                         </span>
                       </div>
-                    )
-                  })}
+                      <span
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                          textAlign: 'right',
+                        }}
+                      >
+                        {freshnessDetails.latestSuccessfulPublicationAt
+                          ? formatTimeAgo(freshnessDetails.latestSuccessfulPublicationAt, language)
+                          : t('unknown')}
+                      </span>
+                    </div>
+
+                    {freshnessDetails.sources
+                      .slice()
+                      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+                      .map((source) => {
+                        const level = levelForSource(source.status)
+                        return (
+                          <div key={source.platform} style={rowStyle}>
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <StatusIcon level={level} t={t} />
+                              <span>{source.displayName}</span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: tokens.typography.fontSize.xs,
+                                color:
+                                  level === 'operational'
+                                    ? tokens.colors.text.tertiary
+                                    : LEVEL_COLOR[level],
+                                fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                                textAlign: 'right',
+                              }}
+                            >
+                              {source.lastUpdate
+                                ? formatTimeAgo(source.lastUpdate, language)
+                                : t('unknown')}
+                            </span>
+                          </div>
+                        )
+                      })}
+                  </>
+                ) : (
+                  <div style={rowStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <StatusIcon
+                        level={health.checks.freshness?.status === 'fail' ? 'down' : 'degraded'}
+                        t={t}
+                      />
+                      <span>{t('statusRankingAuthority')}</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: tokens.typography.fontSize.xs,
+                        color: tokens.colors.accent.warning,
+                        fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        textAlign: 'right',
+                      }}
+                    >
+                      {t('statusAuthorityUnavailable')}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
+
+            <div className="card-hover" style={cardStyle}>
+              <h2 style={sectionHeadingStyle}>{t('statusKnownLimitations')}</h2>
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: tokens.spacing[5],
+                  color: tokens.colors.text.secondary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  lineHeight: 1.7,
+                }}
+              >
+                <li>
+                  {t('statusLimitationCadence')
+                    .replace('{leaderboard}', `${PRODUCT_FACTS.leaderboardRefreshHours}h`)
+                    .replace(
+                      '{sources}',
+                      `${PRODUCT_FACTS.sourceRefreshHours.min}-${PRODUCT_FACTS.sourceRefreshHours.max}h`
+                    )}
+                </li>
+                <li>{t('statusLimitationCoverage')}</li>
+                <li>{t('statusLimitationAvailability')}</li>
+              </ul>
+            </div>
           </>
         )}
 

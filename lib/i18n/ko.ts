@@ -113,8 +113,9 @@ const ko = {
   writeComment: '댓글을 작성하세요...',
   // Exchange binding related
   bindExchangeAccount: '거래소 계정 연결',
-  bindExchangeDescription: '연결 후 상세 거래 통계를 확인할 수 있습니다',
-  bindExchangeAccountFull: '거래소 계정을 연결하면 상세 거래 통계를 확인할 수 있습니다',
+  bindExchangeDescription: '비공개 읽기 전용 거래소 계정 연결 저장',
+  bindExchangeAccountFull:
+    '읽기 전용 거래소 연결을 저장하고 연결 상태를 수동으로 확인하거나 새로고침할 수 있습니다.',
   bindExchange: '연결',
   goToSettings: '설정으로 이동',
   connected: '연결됨',
@@ -125,14 +126,13 @@ const ko = {
   disconnectFailed: '연결 해제 실패',
   disconnected: '연결 해제됨',
   pleaseLogin: '먼저 로그인해 주세요',
-  syncSuccess: '데이터가 성공적으로 동기화되었습니다!',
+  syncSuccess: '연결 상태를 새로고침했습니다.',
   syncError: '동기화 실패',
   lastSync: '마지막 동기화: ',
   syncErrorMsg: '동기화 오류: ',
-  clickToBind:
-    '버튼을 클릭하여 {exchange} 로그인 페이지로 이동합니다. 로그인 성공 후 시스템이 자동으로 거래 데이터를 가져옵니다.',
-  bindSuccess: '연결 성공! 데이터가 동기화되었습니다.',
-  bindSuccessSyncing: '연결 성공! 데이터 동기화 중...',
+  clickToBind: 'Arena의 {exchange} API Key 안내를 열어 읽기 전용 계정 연결을 저장합니다.',
+  bindSuccess: '읽기 전용 계정 연결이 저장되었습니다.',
+  bindSuccessSyncing: '읽기 전용 계정 연결이 저장되었습니다.',
   completeBind: '완료',
   binding: '연결 중...',
   bindTip:
@@ -341,7 +341,7 @@ const ko = {
   // API Key binding related
   apiKeyBindTitle: 'API Key로 거래소 연결',
   apiKeyBindDesc:
-    '아래 단계를 따라 읽기 전용 API Key를 생성하고 거래 데이터를 안전하게 동기화하세요',
+    '비공개 계정 연결용 읽기 전용 API Key를 만드세요. 리더보드 프로필을 인증하거나 공개하지 않습니다.',
   selectExchange: '거래소 선택',
   operationStepsLabel: '단계',
   estimatedTime: '약 2분',
@@ -3103,7 +3103,7 @@ const ko = {
   // Exchange binding banner
   bindExchangeBannerTitle: '거래소 계정 연결',
   bindExchangeBannerDesc:
-    '읽기 전용 API로 실제 포지션과 성과를 포트폴리오에 동기화합니다 (순위표 트레이더 신원 인증과 다릅니다)',
+    '비공개 읽기 전용 연결을 저장하고 상태를 수동으로 확인합니다. 포트폴리오나 리더보드 프로필을 게시하지 않습니다.',
   goToBind: '연결하기',
 
   // Search dropdown
@@ -3515,16 +3515,15 @@ const ko = {
   adminReportOther2: '기타',
 
   // Trader Authorize Page
-  authorizeTitle: '실거래 데이터 인증',
-  authorizeDesc:
-    '인증 후 실거래 데이터가 리더보드에 실시간으로 표시되어 높은 신뢰성과 관심을 얻을 수 있습니다.',
-  authorizeBenefits: '혜택:',
-  authorizeRealTimePositions: '실시간 포지션 표시',
-  authorizeSuccess: '인증 완료! 설정으로 이동합니다...',
+  authorizeTitle: '읽기 전용 거래소 연결 저장',
+  authorizeDesc: '비공개 계정 연결을 저장합니다. 리더보드 프로필을 인증하거나 공개하지 않습니다.',
+  authorizeBenefits: '연결 범위:',
+  authorizeRealTimePositions: '읽기 전용 계정 접근',
+  authorizeSuccess: '연결을 저장했습니다! 설정으로 이동합니다...',
   authorizeSecurityNote:
     'API 자격 증명은 AES-256으로 암호화되어 저장되며 거래 데이터 조회에만 사용됩니다. 거래 조작은 불가능합니다. 읽기 전용 API Key를 생성하실 것을 권장합니다.',
-  authorizeSubmitSuccess: '인증이 완료되었습니다!',
-  authorizeSubmitButton: '데이터 표시 인증',
+  authorizeSubmitSuccess: '연결을 저장했습니다!',
+  authorizeSubmitButton: '연결 저장',
   authorizeStep1: '거래소 계정에 로그인하여 API 관리로 이동하세요',
   authorizeStep2: '권한: "읽기" 권한만 체크하고, 거래 또는 출금 권한은 활성화하지 마세요',
   authorizeStep3: '선택사항: 보안 강화를 위해 IP 화이트리스트를 설정하세요',
@@ -3789,13 +3788,13 @@ const ko = {
   // Round 18 i18n - trader/authorize (unique keys only)
   pleaseLoginTitle: '로그인해 주세요',
   loginToAuthorize: '거래 계정을 인증하려면 로그인이 필요합니다',
-  authorizeRealData: '실제 거래 데이터 인증',
-  authBenefitsTitle: '혜택:',
-  authBenefitRealtime: '실시간 포지션 표시',
-  authBenefitWeight: '더 높은 순위 가중치',
-  authBenefitBadge: '공식 인증 배지',
-  authBenefitPriority: '우선 추천',
-  authSuccessRedirecting: '인증 성공! 설정으로 이동합니다...',
+  authorizeRealData: '읽기 전용 거래소 연결 저장',
+  authBenefitsTitle: '연결 범위:',
+  authBenefitRealtime: '읽기 전용 계정 접근',
+  authBenefitWeight: '순위 가중치 없음',
+  authBenefitBadge: '인증 배지 없음',
+  authBenefitPriority: '공개 프로필 게시 없음',
+  authSuccessRedirecting: '연결을 저장했습니다! 설정으로 이동합니다...',
   connectExchange: '거래소 연결',
   apiKey: 'API Key',
   apiSecret: 'API Secret',
@@ -4436,8 +4435,24 @@ const ko = {
   statusActiveIncidents: '진행 중인 장애',
   statusNoIncidents: '진행 중인 장애 없음',
   statusNoIncidentsDesc: '모니터링 중인 모든 서비스와 데이터 피드가 정상 작동 중입니다.',
-  statusServices: '서비스',
+  statusServices: '핵심 API 및 종속성',
+  statusCoreApiNote:
+    '공개 /api/rankings 및 /api/traders 경로는 위의 API, 데이터베이스, 신선도 권한에 의존합니다. 권한을 사용할 수 없으면 정상 상태로 추정하지 않습니다.',
   statusDataFreshness: '데이터 신선도',
+  statusSourceBoardCoverage: '랭킹 소스 보드 범위',
+  statusBoardsVisible: '예상 {expected}개 보드 중 {visible}개 표시 가능',
+  statusRankingSourceFreshness: '랭킹 소스 신선도',
+  statusSourcesFresh: '{fresh}/{total}개 소스 신선',
+  statusLatestPublication: '최근 성공한 {season} 게시',
+  statusRankingAuthority: '랭킹 신선도 및 게시 권한',
+  statusAuthorityUnavailable: '알 수 없음 — 권한 사용 불가',
+  statusKnownLimitations: '알려진 제한 사항',
+  statusLimitationCadence:
+    '랭킹은 {leaderboard}마다 재계산되며 상위 소스 보드는 보통 {sources}마다 갱신됩니다. 개별 소스는 다를 수 있습니다.',
+  statusLimitationCoverage:
+    '범위와 사용 가능한 지표는 소스마다 다릅니다. 누락되거나 오래되거나 증명되지 않은 기간은 실패로 닫힙니다.',
+  statusLimitationAvailability:
+    '여기 표시된 가용성은 현재 스냅샷이며 과거 가동률, SLA 또는 실시간 데이터 보장이 아닙니다.',
   statusUnableToLoad: '상태를 불러올 수 없습니다',
   statusLastChecked: '마지막 확인 {ago}',
   statusAutoRefresh: '30초마다 자동 새로고침',
@@ -4613,6 +4628,12 @@ const ko = {
   // Portfolio page
   portfolioPageTitle: '포트폴리오',
   portfolioTitle: '포트폴리오',
+  portfolioLegacyCleanup: '레거시 연결 정리',
+  portfolioLegacyTitle: '레거시 포트폴리오 연결은 V1에서 종료되었습니다',
+  portfolioLegacyDescription:
+    '새 연결과 동기화는 비활성화되었습니다. 기존 암호화 자격 증명은 Arena 사본을 삭제할 수 있도록 목록에만 표시되며 V1 순위나 프로필 인증에 사용되지 않습니다. 각 거래소에서도 기존 키를 폐기하거나 교체하세요.',
+  portfolioLegacySuccessor: 'V1 비공개 연결 절차 열기',
+  portfolioLegacyEmpty: '남아 있는 레거시 포트폴리오 연결이 없습니다.',
   portfolioConnectExchange: '거래소 연결',
   portfolioEmptyTitle: '거래소를 연결하여 포트폴리오를 추적하세요',
   portfolioConnectedExchanges: '연결된 거래소',
@@ -4940,23 +4961,26 @@ const ko = {
   claimWalletExpired: '서명이 만료되었습니다. 다시 서명해 주세요.',
 
   // Claim - API key verification
-  claimApiKeyVerifyTitle: 'API 키 소유권 확인',
+  claimApiKeyVerifyTitle: 'CEX 계정 연결',
   claimApiKeyVerifyDesc:
-    '거래소 API 키와 시크릿을 입력하여 이 트레이더 계정의 소유자임을 확인하세요. 읽기 전용 권한만 사용합니다.',
-  claimApiKeyMismatch: '이 API 키는 이 트레이더 계정에 속하지 않습니다.',
+    '읽기 전용 API 키는 퍼스트파티 계정 데이터 동기화 전용입니다. 공개 리더보드 프로필 소유권을 증명하지 못하며 V1 신청에는 사용할 수 없습니다.',
+  claimApiKeyMismatch: 'API 키를 이 거래소 계정과 일치시킬 수 없습니다.',
   claimWalletToVerifyLabel: '검증할 지갑:',
   claimExchangeErrorPrefix: '거래소 응답:',
-  claimApiKeySuccess: 'API 키 인증 성공!',
+  claimApiKeySuccess: 'CEX 계정 연결 확인 완료!',
 
   // Claim - Methods
-  claimVerifyMethodApi: 'API 키',
+  claimVerifyMethodApi: 'CEX 계정 연결',
   claimVerifyMethodWallet: '지갑 서명',
   claimVerifyAndClaim: '인증하고 소유권 주장',
   claimFormSafeNote:
-    '읽기 전용 API 키(거래 또는 출금 권한 없음)만 필요합니다. 키는 AES-256-GCM으로 암호화되며 로그에 기록되지 않습니다.',
+    '읽기 전용 CEX 키는 암호화되어 퍼스트파티 계정 동기화에만 사용됩니다. V1 리더보드 신청 증명으로는 허용되지 않습니다.',
   claimSupportedExchanges: '지원 거래소',
-  claimDexPlatforms: 'DEX 플랫폼 (지갑 인증)',
-  claimCexPlatforms: 'CEX 플랫폼 (API 키 인증)',
+  claimDexPlatforms: 'V1 신청 (Hyperliquid·GMX 지갑)',
+  claimCexPlatforms: 'CEX 계정 연결 (V1 신청 아님)',
+  claimSourceUnsupportedTitle: '이 소스는 아직 프로필 신청을 지원하지 않습니다',
+  claimSourceUnsupportedBody:
+    'V1 프로필 신청은 Hyperliquid와 GMX 지갑 서명만 지원합니다. CEX API 키는 계정 동기화용이며 공개 리더보드 프로필 소유권을 증명하지 못합니다.',
 
   // Claim page
   claimPageTitle: 'Arena에서 트레이더 프로필 신청',
@@ -4972,21 +4996,20 @@ const ko = {
   change: '변경',
   redirectingToProfile: '프로필로 이동 중...',
   claimReadOnlyWarning:
-    '보안을 위해 읽기 전용 API 키를 사용해 주세요. 거래 권한은 필요하지 않습니다.',
-  claimSolanaWalletRequired: '확인을 위해 Solana 지갑(예: Phantom)을 설치해 주세요.',
+    'CEX API 키는 퍼스트파티 계정 동기화 전용이며 V1 프로필 신청 증명으로 사용할 수 없습니다.',
   claimPageFaqTitle: '자주 묻는 질문',
   claimPageFaqWhat: '프로필 신청이란?',
   claimPageFaqWhatAnswer:
     '신청은 Arena의 트레이더 프로필 뒤에 있는 실제 본인임을 확인하는 것입니다. 인증되면 배지가 부여되고, 프로필 편집 및 독점 기능에 접근할 수 있습니다.',
   claimPageFaqHow: '본인 확인은 어떻게 하나요?',
   claimPageFaqHowAnswer:
-    'CEX 트레이더(Binance, Bybit, OKX 등)는 읽기 전용 API 키를 제공합니다. DEX 트레이더(Hyperliquid, GMX 등)는 지갑으로 메시지에 서명합니다. 두 방법 모두 거래 계정의 소유권을 확인합니다. 인증 후 간단한 수동 검토(보통 24시간 이내)를 거쳐 배지가 활성화됩니다.',
-  claimPageFaqExchanges: '어떤 거래소가 지원되나요?',
+    'V1에서는 Hyperliquid 또는 GMX 프로필을 선택하고 동일한 지갑으로 서버가 발급한 정확한 challenge에 서명합니다. 서명 후에도 수동 검토가 끝나기 전에는 배지가 활성화되지 않습니다.',
+  claimPageFaqExchanges: 'V1 신청을 지원하는 소스는 무엇인가요?',
   claimPageFaqExchangesAnswer:
-    'CEX: Binance, Bybit, OKX, Bitget, Gate.io, HTX. DEX: Hyperliquid, GMX, Gains, Aevo, Kwenta, Vertex, dYdX, Jupiter Perps, Drift.',
-  claimPageFaqSafe: 'API 키를 제공하는 것이 안전한가요?',
+    'Hyperliquid와 GMX만 지원합니다. Binance, Bybit, OKX 등 CEX API 키는 별도 계정 동기화에는 사용할 수 있지만 리더보드 프로필 신청에는 사용할 수 없습니다.',
+  claimPageFaqSafe: 'CEX API 키로 프로필을 신청할 수 있나요?',
   claimPageFaqSafeAnswer:
-    '네. 읽기 전용 API 키(거래 또는 출금 권한 없음)만 필요합니다. 키는 AES-256-GCM으로 암호화되며 로그에 기록되지 않습니다.',
+    '아니요. CEX 계정 UID와 공개 리더보드 프로필 식별자가 같다는 것을 증명할 수 없으므로 V1은 안전하게 거부합니다.',
   claimPageCta: '내 프로필 찾기',
   claimPageSeoTitle: '크립토 트레이더 프로필 신청 | Arena',
   claimPageSeoDesc:
@@ -5341,7 +5364,8 @@ const ko = {
   dataSourcePublic: '공개 데이터',
   dataSourceDerived: '파생 데이터',
   dataSourceHistorical: '과거 데이터',
-  dataSourceVerifiedTooltip: '이 트레이더는 신원을 확인하고 실시간 데이터 접근을 승인했습니다',
+  dataSourceVerifiedTooltip:
+    '이 데이터에는 검토된 신원과 계정 직접 연결 출처가 있습니다. 표시된 기준 시각으로 최신성을 확인하세요.',
   dataSourcePublicTooltip: '공개 거래소 API에서 가져온 데이터',
   bindApiKey: 'API 키 연결',
   connectWallet: '지갑 연결',
@@ -6025,10 +6049,10 @@ const ko = {
   provenanceSource: '데이터 출처',
   provenanceTracked: '추적 데이터',
   provenanceTrackedTip:
-    '지표는 거래소 공개 리더보드에서 수집한 것으로, API를 통한 독립 검증을 거치지 않았습니다. 읽기 전용 API 키를 연결하면 ✓ 인증됨 배지를 받을 수 있습니다.',
+    '지표는 거래소 공개 리더보드에서 가져옵니다. 별도의 비공개 CEX 연결은 이 프로필을 인증, 변경 또는 게시하지 않습니다.',
   provenanceVerified: '인증됨',
   provenanceVerifiedTip:
-    '읽기 전용 API로 체결 확인 — 수치는 거래소 계정에서 직접 가져온 것으로 스크래핑이 아닙니다.',
+    '계정 직접 연결 데이터는 신원 매핑 검토 후에만 게시됩니다. 최신성은 표시된 기준 시각을 따릅니다.',
   provenanceAsOf: '업데이트',
   recordProvenanceSourceAsOf: '원본 데이터 기준',
   recordProvenanceObservedAt: 'Arena 수집 시각',
@@ -6662,7 +6686,8 @@ const ko = {
   wauSub: '최근 7일 실제 하트비트가 있는 사용자',
   newSignups7d: '신규 가입 (7일)',
   activation7d: '7일 활성화',
-  activationSub: '대상 {eligible}명 중 {activated}명이 2일 이상 활동',
+  activationSub: '대상 {eligible}명 중 {activated}명이 2개의 UTC 날짜에 상세 보기와 추적을 완료',
+  activationMeasuredSince: '활성화 V2는 {time}부터 측정하며 이전 활동은 기준선에서 제외합니다.',
   journeyFunnel: 'B2C 여정 (중복 제거 인원)',
   collectionSince: '퍼스트파티 이벤트는 {time}부터 수집되며 이전 기록은 소급하지 않습니다.',
   collectionPending: '아직 이벤트가 수신되지 않았습니다. 0은 과거 사용자가 없었다는 뜻이 아닙니다.',

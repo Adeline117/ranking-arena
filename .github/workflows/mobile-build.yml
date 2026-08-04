@@ -1,20 +1,17 @@
 name: Mobile App Build
 
+# SECURITY SUSPENDED (V1 NO-GO): release tags and manual refs must not receive
+# signing, Firebase, or App Store credentials. Restore only with environment-only
+# credentials, a required reviewer, protected tag/release policies, and exact
+# protected-main ancestry verification.
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       platform:
         description: 'Platform to build'
-        required: true
+        required: false
         default: 'both'
-        type: choice
-        options:
-          - android
-          - ios
-          - both
+        type: string
 
 env:
   NODE_VERSION: '20'
@@ -22,7 +19,8 @@ env:
 jobs:
   # Build Android APK/AAB
   build-android:
-    if: github.event.inputs.platform == 'android' || github.event.inputs.platform == 'both' || github.event_name == 'push'
+    # Resume only inside a reviewer-protected Android/Firebase environment.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -99,7 +97,8 @@ jobs:
 
   # Build iOS (requires macOS runner)
   build-ios:
-    if: github.event.inputs.platform == 'ios' || github.event.inputs.platform == 'both' || github.event_name == 'push'
+    # Resume only inside a reviewer-protected iOS/App Store environment.
+    if: ${{ false }}
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -197,7 +196,8 @@ jobs:
   # Create GitHub Release
   create-release:
     needs: [build-android, build-ios]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # Resume only after both protected release jobs attest the same approved tag.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Download Android AAB

@@ -18,7 +18,6 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
-import { trackEvent } from '@/lib/analytics/track'
 import { authedFetch } from '@/lib/api/client'
 import {
   captureSettingsViewer,
@@ -151,7 +150,6 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
       }
       return
     }
-    trackEvent('create_trader_alert', { traderId, source: source || '', step: 'open' })
     setOpen(true)
   }
 

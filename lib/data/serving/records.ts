@@ -337,6 +337,19 @@ export async function getRecordsPage(
   cursor: string | null,
   limit = 50
 ): Promise<RecordsPage | null> {
+  // The legacy RPC projects position-history rows that are not bound to the
+  // parser-conservation receipt contract. Fail closed before parsing cursors
+  // or touching PostgREST so a stale caller cannot read the legacy archive.
+  if (kind === 'position_history') {
+    return {
+      rows: [],
+      nextCursor: null,
+      provenance: recordProvenance(source, {}),
+      cacheState: 'warm',
+      completeness: unknownHistoryCompleteness(),
+    }
+  }
+
   const { data, error } = await supabase.rpc('arena_records_page', {
     p_source: source,
     p_trader: exchangeTraderId,

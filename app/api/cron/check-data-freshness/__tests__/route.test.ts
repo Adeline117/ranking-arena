@@ -340,7 +340,9 @@ describe('GET /api/cron/check-data-freshness', () => {
     ])
     expect(mockFrom).toHaveBeenCalledTimes(1)
     expect(mockFrom).toHaveBeenCalledWith('leaderboard_source_freshness')
-    expect(mockWatermarkSelect).toHaveBeenCalledWith('season_id,source,source_as_of')
+    expect(mockWatermarkSelect).toHaveBeenCalledWith(
+      'season_id,source,source_as_of,recorded_at,score_cohort_id,published_rank_count'
+    )
     expect(mockWatermarkIn).toHaveBeenCalledWith('season_id', [...SEASONS])
     expect(mockPlogSuccess).toHaveBeenCalledWith(
       2,
@@ -603,7 +605,9 @@ describe('GET /api/cron/check-data-freshness', () => {
     expect(builder).toContain("rpc('arena_freshness_expected_sources')")
     expect(builder).toContain("rpc('arena_visible_sources'")
     expect(builder).toContain("from('leaderboard_source_freshness')")
-    expect(builder).toContain("select('season_id,source,source_as_of')")
+    expect(builder).toContain(
+      "select('season_id,source,source_as_of,recorded_at,score_cohort_id,published_rank_count')"
+    )
     expect(route).toContain("acquireCronLock('check-data-freshness'")
     expect(route).not.toContain('sendScraperAlert')
   })

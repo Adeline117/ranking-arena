@@ -56,10 +56,12 @@ export async function downsampleOldSeries(keepDays = 90): Promise<DownsampleResu
 
 /** Keep monthly partitions 2 months ahead on all partitioned arena tables. */
 export async function ensurePartitions(): Promise<number> {
+  // position_history is intentionally absent. The fail-closed bridge retires
+  // automatic mutation before the 040410 writer cutover; recreating a child
+  // would reopen an unreviewed maintenance write path after that boundary.
   const tables = [
     'leaderboard_entries',
     'trader_series',
-    'position_history',
     'order_records',
     'transfer_history',
     'copier_records',
@@ -105,9 +107,11 @@ export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number
  * passed snapshot within the last 30 days.
  */
 export async function pruneLongTailHistories(retentionDays = 180): Promise<number> {
-  const tables = ['position_history', 'order_records', 'transfer_history', 'copier_records']
+  // Do not mutate arena.position_history after the fail-closed bridge. Its
+  // retained rows are evidence, and retirement/retention now requires a
+  // separately reviewed parser-conservation contract.
+  const tables = ['order_records', 'transfer_history', 'copier_records']
   const tsCol: Record<string, string> = {
-    position_history: 'closed_at',
     order_records: 'ts',
     transfer_history: 'ts',
     copier_records: 'ts',

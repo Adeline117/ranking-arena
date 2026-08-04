@@ -26,6 +26,49 @@ const PRIVATE_NO_STORE_HEADERS = {
   Pragma: 'no-cache',
 } as const
 
+interface LinkedTraderSingleRowRpcBuilder {
+  single(): Promise<{
+    data: Record<string, unknown> | null
+    error: { code?: string; message?: string } | null
+  }>
+}
+
+interface LinkedTraderMutationRpcClient {
+  rpc(
+    functionName: 'set_primary_linked_trader_v2',
+    args: {
+      p_user_id: string
+      p_link_id: string
+    }
+  ): LinkedTraderSingleRowRpcBuilder
+  rpc(
+    functionName: 'update_linked_trader_metadata_v1',
+    args: {
+      p_user_id: string
+      p_link_id: string
+      p_update_label: boolean
+      p_label: string | null
+      p_update_display_order: boolean
+      p_display_order: number | null
+    }
+  ): LinkedTraderSingleRowRpcBuilder
+  rpc(
+    functionName: 'unlink_linked_trader_v2',
+    args: {
+      p_user_id: string
+      p_link_id: string
+    }
+  ): Promise<{
+    data: Array<{
+      remaining_count: number
+      removed_trader_id: string
+      removed_source: string
+      promoted_link_id: string | null
+    }> | null
+    error: { code?: string; message?: string } | null
+  }>
+}
+
 function withPrivateNoStore<T extends Response>(response: T): T {
   for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
     response.headers.set(name, value)
@@ -154,28 +197,29 @@ export async function PATCH(request: NextRequest) {
         throw ApiError.validation('Primary selection cannot be combined with other updates')
       }
 
-      const { data, error } = await supabase.rpc('set_primary_linked_trader', {
-        p_link_id: id,
-        p_user_id: user.id,
-      })
+      const mutationRpc = supabase as unknown as LinkedTraderMutationRpcClient
+      const { data, error } = await mutationRpc
+        .rpc('set_primary_linked_trader_v2', {
+          p_link_id: id,
+          p_user_id: user.id,
+        })
+        .single()
       if (error) throwRpcError(error)
       if (!data) throw ApiError.notFound('Linked trader not found')
       await invalidateLinkedTraderCache(user.id)
       return withPrivateNoStore(success({ linked_trader: data }))
     }
 
-    const updateData: { display_order?: number; label?: string | null; updated_at: string } = {
-      updated_at: new Date().toISOString(),
-    }
+    let normalizedLabel: string | null = null
     if (hasLabel) {
       if (body.label !== null && typeof body.label !== 'string') {
         throw ApiError.validation('Label must be a string or null')
       }
-      const normalizedLabel = typeof body.label === 'string' ? body.label.trim() : null
+      normalizedLabel = typeof body.label === 'string' ? body.label.trim() : null
       if (normalizedLabel && normalizedLabel.length > 50) {
         throw ApiError.validation('Label must be 50 characters or fewer')
       }
-      updateData.label = normalizedLabel || null
+      normalizedLabel = normalizedLabel || null
     }
     if (hasDisplayOrder) {
       if (
@@ -185,18 +229,24 @@ export async function PATCH(request: NextRequest) {
       ) {
         throw ApiError.validation('Display order must be an integer between 0 and 10000')
       }
-      updateData.display_order = body.display_order as number
     }
 
-    const { data, error } = await supabase
-      .from('user_linked_traders')
-      .update(updateData)
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .select()
-      .maybeSingle()
+    // Phase B removes service-role table DML so immutable deployments cannot
+    // bypass unlink/primary invariants. Metadata edits use the only narrow,
+    // owner-scoped definer RPC instead of a direct table update.
+    const mutationRpc = supabase as unknown as LinkedTraderMutationRpcClient
+    const { data, error } = await mutationRpc
+      .rpc('update_linked_trader_metadata_v1', {
+        p_user_id: user.id,
+        p_link_id: id,
+        p_update_label: hasLabel,
+        p_label: hasLabel ? normalizedLabel : null,
+        p_update_display_order: hasDisplayOrder,
+        p_display_order: hasDisplayOrder ? (body.display_order as number) : null,
+      })
+      .single()
 
-    if (error) throw error
+    if (error) throwRpcError(error)
     if (!data) throw ApiError.notFound('Linked trader not found')
     await invalidateLinkedTraderCache(user.id)
     return withPrivateNoStore(success({ linked_trader: data }))
@@ -222,7 +272,8 @@ export async function DELETE(request: NextRequest) {
     rejectUnknownFields(body, new Set(['id']))
     const id = requireLinkedTraderId(body)
 
-    const { data, error } = await supabase.rpc('unlink_linked_trader', {
+    const mutationRpc = supabase as unknown as LinkedTraderMutationRpcClient
+    const { data, error } = await mutationRpc.rpc('unlink_linked_trader_v2', {
       p_link_id: id,
       p_user_id: user.id,
     })

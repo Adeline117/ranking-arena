@@ -3,7 +3,7 @@
  */
 
 const mockJsonFn = jest.fn()
-const mockBuildFreshnessReport = jest.fn()
+const mockBuildFreshnessAuthoritySnapshot = jest.fn()
 const mockLoggerWarn = jest.fn()
 const mockFrom = jest.fn()
 const mockRedisPing = jest.fn()
@@ -16,6 +16,24 @@ function abortableResult<T>(result: T | Promise<T>) {
       observedSupabaseSignals.push(signal)
       return Promise.resolve(result)
     },
+  }
+}
+
+function freshnessSnapshot(
+  report: Record<string, unknown>,
+  overrides: Partial<{
+    coverage: { expectedSourceBoards: number; visibleSourceBoards: number }
+    latestSuccessfulPublication: { season: '90D'; publishedAt: string } | null
+  }> = {}
+) {
+  return {
+    report,
+    coverage: { expectedSourceBoards: 32, visibleSourceBoards: 32 },
+    latestSuccessfulPublication: {
+      season: '90D' as const,
+      publishedAt: '2026-07-21T20:00:00.000Z',
+    },
+    ...overrides,
   }
 }
 
@@ -44,7 +62,8 @@ function installFetchMock(implementation?: jest.Mock) {
 }
 
 jest.mock('@/lib/rankings/build-freshness-report', () => ({
-  buildFreshnessReport: (...args: unknown[]) => mockBuildFreshnessReport(...args),
+  buildFreshnessAuthoritySnapshot: (...args: unknown[]) =>
+    mockBuildFreshnessAuthoritySnapshot(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -103,13 +122,15 @@ describe('GET /api/health', () => {
     jest.resetModules()
     jest.clearAllMocks()
     observedSupabaseSignals.length = 0
-    mockBuildFreshnessReport.mockResolvedValue({
-      ok: true,
-      checked_at: '2026-07-21T20:00:00.000Z',
-      summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
-      thresholds: { stale_hours: 8, critical_hours: 24 },
-      platforms: [],
-    })
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValue(
+      freshnessSnapshot({
+        ok: true,
+        checked_at: '2026-07-21T20:00:00.000Z',
+        summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+        thresholds: { stale_hours: 8, critical_hours: 24 },
+        platforms: [],
+      })
+    )
     mockFrom.mockImplementation((table: string) => {
       if (table !== 'trader_sources') throw new Error(`unexpected table: ${table}`)
       return {
@@ -160,6 +181,21 @@ describe('GET /api/health', () => {
     }
   })
 
+  it('exposes bounded ranking coverage, freshness, and publication evidence', async () => {
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(body.checks.freshness.details).toMatchObject({
+      sourceSummary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+      coverage: { expectedSourceBoards: 32, visibleSourceBoards: 32 },
+      thresholds: { staleHours: 8, criticalHours: 24 },
+      publicationSeason: '90D',
+      latestSuccessfulPublicationAt: '2026-07-21T20:00:00.000Z',
+      sources: [],
+    })
+  })
+
   it('should set no-cache headers', async () => {
     const { GET } = await import('../route')
     const response = await GET()
@@ -194,13 +230,15 @@ describe('GET /api/health', () => {
   })
 
   it('degrades when any expected source authority is stale, critical, or unknown', async () => {
-    mockBuildFreshnessReport.mockResolvedValueOnce({
-      ok: false,
-      checked_at: '2026-07-21T20:00:00.000Z',
-      summary: { total: 32, fresh: 15, stale: 1, critical: 15, unknown: 1 },
-      thresholds: { stale_hours: 8, critical_hours: 24 },
-      platforms: [],
-    })
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot({
+        ok: false,
+        checked_at: '2026-07-21T20:00:00.000Z',
+        summary: { total: 32, fresh: 15, stale: 1, critical: 15, unknown: 1 },
+        thresholds: { stale_hours: 8, critical_hours: 24 },
+        platforms: [],
+      })
+    )
 
     const { GET } = await import('../route')
     const response = await GET()
@@ -214,8 +252,88 @@ describe('GET /api/health', () => {
     })
   })
 
+  it('fails closed when source freshness is healthy but board coverage is incomplete', async () => {
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot(
+        {
+          ok: true,
+          checked_at: '2026-07-21T20:00:00.000Z',
+          summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        },
+        { coverage: { expectedSourceBoards: 32, visibleSourceBoards: 31 } }
+      )
+    )
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.status).toBe('degraded')
+    expect(body.checks.freshness).toMatchObject({
+      status: 'fail',
+      message: '32/32 sources fresh; 0 stale; 0 critical; 0 unknown; 31/32 source boards visible',
+    })
+  })
+
+  it('fails closed when no expected source-board authority is available', async () => {
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot(
+        {
+          ok: true,
+          checked_at: '2026-07-21T20:00:00.000Z',
+          summary: { total: 0, fresh: 0, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        },
+        { coverage: { expectedSourceBoards: 0, visibleSourceBoards: 0 } }
+      )
+    )
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.status).toBe('degraded')
+    expect(body.checks.freshness).toMatchObject({
+      status: 'fail',
+      message:
+        '0/0 sources fresh; 0 stale; 0 critical; 0 unknown; Source-board coverage authority unavailable',
+    })
+  })
+
+  it('fails closed when source freshness and coverage are healthy but 90D proof is missing', async () => {
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot(
+        {
+          ok: true,
+          checked_at: '2026-07-21T20:00:00.000Z',
+          summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        },
+        { latestSuccessfulPublication: null }
+      )
+    )
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.status).toBe('degraded')
+    expect(body.checks.freshness).toMatchObject({
+      status: 'fail',
+      message:
+        '32/32 sources fresh; 0 stale; 0 critical; 0 unknown; 90D publication proof unavailable',
+    })
+  })
+
   it('fails closed without exposing authority errors', async () => {
-    mockBuildFreshnessReport.mockRejectedValueOnce(
+    mockBuildFreshnessAuthoritySnapshot.mockRejectedValueOnce(
       new Error('postgres://service-role:secret@private-host')
     )
 
@@ -229,6 +347,7 @@ describe('GET /api/health', () => {
       status: 'fail',
       message: 'Freshness authority unavailable',
     })
+    expect(body.checks.freshness.details).toBeUndefined()
     expect(JSON.stringify(body)).not.toContain('private-host')
   })
 
@@ -250,7 +369,7 @@ describe('GET /api/health', () => {
 
   it('clears health timers after a fast authority rejection', async () => {
     jest.useFakeTimers()
-    mockBuildFreshnessReport.mockRejectedValueOnce(new Error('authority unavailable'))
+    mockBuildFreshnessAuthoritySnapshot.mockRejectedValueOnce(new Error('authority unavailable'))
 
     try {
       const { GET } = await import('../route')
@@ -267,7 +386,7 @@ describe('GET /api/health', () => {
 
   it('fails closed when the complete authority exceeds its health budget', async () => {
     jest.useFakeTimers()
-    mockBuildFreshnessReport.mockReturnValueOnce(new Promise(() => undefined))
+    mockBuildFreshnessAuthoritySnapshot.mockReturnValueOnce(new Promise(() => undefined))
 
     try {
       const { GET } = await import('../route')
@@ -281,7 +400,9 @@ describe('GET /api/health', () => {
         status: 'fail',
         message: 'Freshness authority timed out',
       })
-      expect((mockBuildFreshnessReport.mock.calls[0][0] as AbortSignal).aborted).toBe(true)
+      expect((mockBuildFreshnessAuthoritySnapshot.mock.calls[0][0] as AbortSignal).aborted).toBe(
+        true
+      )
       expect(jest.getTimerCount()).toBe(0)
     } finally {
       jest.useRealTimers()
@@ -513,14 +634,16 @@ describe('GET /api/health', () => {
     mockGetSharedRedis.mockImplementationOnce(() =>
       delayed({ ping: jest.fn().mockResolvedValue('PONG') })
     )
-    mockBuildFreshnessReport.mockImplementationOnce(() =>
-      delayed({
-        ok: true,
-        checked_at: '2026-07-28T00:00:00.000Z',
-        summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
-        thresholds: { stale_hours: 8, critical_hours: 24 },
-        platforms: [],
-      })
+    mockBuildFreshnessAuthoritySnapshot.mockImplementationOnce(() =>
+      delayed(
+        freshnessSnapshot({
+          ok: true,
+          checked_at: '2026-07-28T00:00:00.000Z',
+          summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        })
+      )
     )
 
     try {

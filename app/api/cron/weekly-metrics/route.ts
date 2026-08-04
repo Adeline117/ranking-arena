@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
         `<b>New paying this week:</b> ${metrics?.newPaying ?? '<i>failed</i>'}`,
         `<b>New signups:</b> ${metrics?.newSignups ?? '<i>failed</i>'}`,
         `<b>7d activation:</b> ${metrics ? `${metrics.activated7d}/${metrics.activationEligible}${activationRate === null ? '' : ` (${activationRate}%)`}` : '<i>failed</i>'}`,
+        `<i>Activation contract: ${metrics ? `${metrics.activationDefinitionVersion}, since ${metrics.activationMeasurementStartedAt}` : 'unavailable'}</i>`,
         `<b>Journey:</b> ${funnel.landing_view ?? 0} land → ${funnel.ranking_visible ?? 0} rank → ${funnel.view_trader ?? 0} trader → ${funnel.signup ?? 0} signup → ${funnel.start_checkout ?? 0} checkout`,
         `<i>Event collection: ${metrics?.eventCollectionStartedAt ?? 'not started; funnel zeros are not historical zeros'}</i>`,
         trustRatio != null && trustTotal
