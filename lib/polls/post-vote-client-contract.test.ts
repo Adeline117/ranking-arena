@@ -3,6 +3,9 @@ import {
   POST_CUSTOM_POLL_READ_OPERATION,
   POST_CUSTOM_POLL_VOTE_OPERATION,
   createPostVoteRequestId,
+  isDefinitivePostBuiltInVoteRejection,
+  nextPostBuiltInVoteState,
+  postBuiltInVoteCountDelta,
   readPostBuiltInVoteAcknowledgement,
   readPostCustomPollAcknowledgement,
   readPostCustomPollVoteAcknowledgement,
@@ -19,7 +22,7 @@ function builtInReceipt(overrides: Record<string, unknown> = {}) {
     post_id: POST_ID,
     request_id: REQUEST_ID,
     operation: POST_BUILT_IN_VOTE_OPERATION,
-    requested_choice: 'bull',
+    desired_choice: 'bull',
     action: 'added',
     vote: 'bull',
     poll: { bull: 2, bear: 1, wait: 0 },
@@ -77,13 +80,13 @@ describe('post vote client contracts', () => {
     expect(createPostVoteRequestId()).toMatch(/^[0-9a-f]{32}$/)
   })
 
-  it('accepts the exact built-in toggle receipt with absolute counts', () => {
+  it('accepts the exact built-in desired-state receipt with absolute counts', () => {
     expect(
       readPostBuiltInVoteAcknowledgement(builtInReceipt(), {
         actorId: ACTOR_ID,
         postId: POST_ID,
         requestId: REQUEST_ID,
-        choice: 'bull',
+        desiredChoice: 'bull',
       })
     ).toMatchObject({ action: 'added', vote: 'bull', poll: { bull: 2, bear: 1, wait: 0 } })
   })
@@ -92,7 +95,7 @@ describe('post vote client contracts', () => {
     ['another actor', { actor_id: POLL_ID }],
     ['another post', { post_id: POLL_ID }],
     ['another nonce', { request_id: 'b'.repeat(32) }],
-    ['another choice', { requested_choice: 'bear' }],
+    ['another desired choice', { desired_choice: 'bear' }],
     ['an impossible removed result', { action: 'removed', vote: 'bull' }],
     ['a negative count', { poll: { bull: -1, bear: 1, wait: 0 } }],
     ['an extra field', { invented: true }],
@@ -102,10 +105,90 @@ describe('post vote client contracts', () => {
         actorId: ACTOR_ID,
         postId: POST_ID,
         requestId: REQUEST_ID,
-        choice: 'bull',
+        desiredChoice: 'bull',
       })
     ).toBeNull()
   })
+
+  it.each([
+    [
+      'an unchanged replay',
+      { action: 'unchanged' },
+      { desiredChoice: 'bull' as const, action: 'unchanged', vote: 'bull' },
+    ],
+    [
+      'an explicit removal',
+      {
+        desired_choice: null,
+        action: 'removed',
+        vote: null,
+        poll: { bull: 0, bear: 1, wait: 0 },
+      },
+      { desiredChoice: null, action: 'removed', vote: null },
+    ],
+    [
+      'an unchanged absence',
+      {
+        desired_choice: null,
+        action: 'unchanged',
+        vote: null,
+        poll: { bull: 0, bear: 1, wait: 0 },
+      },
+      { desiredChoice: null, action: 'unchanged', vote: null },
+    ],
+  ])('accepts %s without toggle semantics', (_name, overrides, expectedResult) => {
+    expect(
+      readPostBuiltInVoteAcknowledgement(builtInReceipt(overrides), {
+        actorId: ACTOR_ID,
+        postId: POST_ID,
+        requestId: REQUEST_ID,
+        desiredChoice: expectedResult.desiredChoice,
+      })
+    ).toMatchObject(expectedResult)
+  })
+
+  it.each([
+    ['a removed action for a desired vote', { action: 'removed', vote: null }],
+    ['an added action for desired absence', { desired_choice: null, action: 'added', vote: null }],
+    ['a mismatched result', { vote: 'bear' }],
+    ['an impossible zero own-choice count', { poll: { bull: 0, bear: 1, wait: 0 } }],
+  ])('rejects %s', (_name, overrides) => {
+    expect(
+      readPostBuiltInVoteAcknowledgement(builtInReceipt(overrides), {
+        actorId: ACTOR_ID,
+        postId: POST_ID,
+        requestId: REQUEST_ID,
+        desiredChoice: 'bull',
+      })
+    ).toBeNull()
+  })
+
+  it.each([
+    [null, 'bull', 'bull'],
+    ['bull', 'bull', null],
+    ['bear', 'bull', 'bull'],
+    [null, 'wait', 'wait'],
+  ] as const)('maps built-in vote intent %s + %s to %s', (current, selected, desired) => {
+    expect(nextPostBuiltInVoteState(current, selected)).toBe(desired)
+  })
+
+  it.each([
+    [null, 'bull', 1, 0, 0],
+    ['bull', null, -1, 0, 0],
+    ['bull', 'bear', -1, 1, 0],
+    ['wait', 'bull', 1, 0, -1],
+  ] as const)('computes built-in count delta %s -> %s', (current, desired, bull, bear, wait) => {
+    expect(postBuiltInVoteCountDelta(current, desired)).toEqual({ bull, bear, wait })
+  })
+
+  it.each([400, 401, 403, 404, 409, 422, 429])(
+    'treats built-in vote HTTP %i as definitive',
+    (status) => expect(isDefinitivePostBuiltInVoteRejection(status)).toBe(true)
+  )
+
+  it.each([0, 200, 408, 425, 500, 503])('treats built-in vote HTTP %i as uncertain', (status) =>
+    expect(isDefinitivePostBuiltInVoteRejection(status)).toBe(false)
+  )
 
   it('accepts exact found and absent custom-poll snapshots', () => {
     expect(

@@ -2,12 +2,12 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const REQUEST_ID_PATTERN = /^[0-9a-f]{32}$/
 
 export const POST_VOTE_REQUEST_TIMEOUT_MS = 15_000
-export const POST_BUILT_IN_VOTE_OPERATION = 'toggle' as const
+export const POST_BUILT_IN_VOTE_OPERATION = 'set_vote' as const
 export const POST_CUSTOM_POLL_READ_OPERATION = 'read' as const
 export const POST_CUSTOM_POLL_VOTE_OPERATION = 'set_vote' as const
 
 export type PostBuiltInVoteChoice = 'bull' | 'bear' | 'wait'
-export type PostBuiltInVoteAction = 'added' | 'removed' | 'changed'
+export type PostBuiltInVoteAction = 'added' | 'removed' | 'changed' | 'unchanged'
 export type PostCustomPollType = 'single' | 'multiple'
 export type PostCustomPollLoadState = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 
@@ -16,7 +16,7 @@ export type PostBuiltInVoteAcknowledgement = {
   postId: string
   requestId: string
   operation: typeof POST_BUILT_IN_VOTE_OPERATION
-  requestedChoice: PostBuiltInVoteChoice
+  desiredChoice: PostBuiltInVoteChoice | null
   action: PostBuiltInVoteAction
   vote: PostBuiltInVoteChoice | null
   poll: { bull: number; bear: number; wait: number }
@@ -136,10 +136,33 @@ export function createPostVoteRequestId(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+export function nextPostBuiltInVoteState(
+  current: PostBuiltInVoteChoice | null,
+  selected: PostBuiltInVoteChoice
+): PostBuiltInVoteChoice | null {
+  return current === selected ? null : selected
+}
+
+export function postBuiltInVoteCountDelta(
+  current: PostBuiltInVoteChoice | null,
+  desired: PostBuiltInVoteChoice | null
+): { bull: number; bear: number; wait: number } {
+  return {
+    bull: Number(desired === 'bull') - Number(current === 'bull'),
+    bear: Number(desired === 'bear') - Number(current === 'bear'),
+    wait: Number(desired === 'wait') - Number(current === 'wait'),
+  }
+}
+
+/** A bounded 4xx proves the route rejected the command before commit. */
+export function isDefinitivePostBuiltInVoteRejection(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408 && status !== 425
+}
+
 /**
- * Accept only the absolute-count toggle receipt for the exact viewer, post,
- * request nonce and clicked choice. The nonce binds this HTTP exchange; the
- * database does not persist it as an idempotency ledger.
+ * Accept only the identity- and request-bound receipt for this exact desired
+ * state. Replaying the command is intrinsically safe and may acknowledge an
+ * unchanged state without toggling it away.
  */
 export function readPostBuiltInVoteAcknowledgement(
   value: unknown,
@@ -147,7 +170,7 @@ export function readPostBuiltInVoteAcknowledgement(
     actorId: string
     postId: string
     requestId: string
-    choice: PostBuiltInVoteChoice
+    desiredChoice: PostBuiltInVoteChoice | null
   }
 ): PostBuiltInVoteAcknowledgement | null {
   if (
@@ -155,16 +178,19 @@ export function readPostBuiltInVoteAcknowledgement(
     !hasExactKeys(value, [
       'action',
       'actor_id',
+      'desired_choice',
       'operation',
       'poll',
       'post_id',
       'request_id',
-      'requested_choice',
       'vote',
     ]) ||
     value.operation !== POST_BUILT_IN_VOTE_OPERATION ||
-    value.requested_choice !== expected.choice ||
-    (value.action !== 'added' && value.action !== 'removed' && value.action !== 'changed') ||
+    value.desired_choice !== expected.desiredChoice ||
+    (value.action !== 'added' &&
+      value.action !== 'removed' &&
+      value.action !== 'changed' &&
+      value.action !== 'unchanged') ||
     !isRecord(value.poll) ||
     !hasExactKeys(value.poll, ['bear', 'bull', 'wait']) ||
     !isNonnegativeSafeInteger(value.poll.bull) ||
@@ -196,16 +222,21 @@ export function readPostBuiltInVoteAcknowledgement(
 
   const vote = value.vote
   const validVote =
-    (value.action === 'removed' && vote === null) ||
-    ((value.action === 'added' || value.action === 'changed') && vote === expected.choice)
-  if (!validVote || (vote !== null && (value.poll[expected.choice] as number) < 1)) return null
+    vote === expected.desiredChoice &&
+    !(
+      (value.action === 'removed' && expected.desiredChoice !== null) ||
+      ((value.action === 'added' || value.action === 'changed') && expected.desiredChoice === null)
+    )
+  if (!validVote || (vote !== null && (value.poll[vote as PostBuiltInVoteChoice] as number) < 1)) {
+    return null
+  }
 
   return {
     actorId,
     postId,
     requestId,
     operation: POST_BUILT_IN_VOTE_OPERATION,
-    requestedChoice: expected.choice,
+    desiredChoice: expected.desiredChoice,
     action: value.action,
     vote: vote as PostBuiltInVoteChoice | null,
     poll: {

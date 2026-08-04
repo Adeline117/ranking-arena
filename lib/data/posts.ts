@@ -990,6 +990,95 @@ export async function togglePostVote(
 }
 
 /**
+ * Converge one actor's built-in sentiment vote to an absolute desired state.
+ * Replaying the same state after a lost response is safe and cannot remove or
+ * reverse a vote that already committed.
+ */
+export async function setPostVoteDesiredState(
+  supabase: SupabaseClient,
+  postId: string,
+  userId: string,
+  desiredChoice: 'bull' | 'bear' | 'wait' | null
+): Promise<{
+  action: 'added' | 'removed' | 'changed' | 'unchanged'
+  vote: 'bull' | 'bear' | 'wait' | null
+  poll: { bull: number; bear: number; wait: number }
+}> {
+  const { data, error } = await supabase.rpc('set_post_vote_desired_state_atomic', {
+    p_actor_id: userId,
+    p_post_id: postId,
+    p_desired_choice: desiredChoice,
+  })
+
+  if (error) throw error
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new PostInteractionMutationError('invalid_ack')
+  }
+
+  const result = data as Record<string, unknown>
+  const resultKeys = Object.keys(result).sort()
+  if (
+    resultKeys.length === 1 &&
+    resultKeys[0] === 'status' &&
+    (result.status === 'not_found' || result.status === 'invalid')
+  ) {
+    throw new PostInteractionMutationError(result.status)
+  }
+
+  const expectedResultKeys = ['action', 'poll', 'status', 'vote'].sort()
+  const action = result.action
+  const vote = result.vote
+  const validAction =
+    action === 'added' || action === 'removed' || action === 'changed' || action === 'unchanged'
+  const actionMatchesDesired =
+    (action === 'removed' && desiredChoice === null) ||
+    ((action === 'added' || action === 'changed') && desiredChoice !== null) ||
+    action === 'unchanged'
+  const poll = result.poll
+
+  if (
+    resultKeys.length !== expectedResultKeys.length ||
+    !resultKeys.every((key, index) => key === expectedResultKeys[index]) ||
+    result.status !== action ||
+    !validAction ||
+    !actionMatchesDesired ||
+    vote !== desiredChoice ||
+    !poll ||
+    typeof poll !== 'object' ||
+    Array.isArray(poll)
+  ) {
+    throw new PostInteractionMutationError('invalid_ack')
+  }
+
+  const counts = poll as Record<string, unknown>
+  const countKeys = Object.keys(counts).sort()
+  const expectedCountKeys = ['bear', 'bull', 'wait'].sort()
+  if (
+    countKeys.length !== expectedCountKeys.length ||
+    !countKeys.every((key, index) => key === expectedCountKeys[index]) ||
+    !Number.isSafeInteger(counts.bull) ||
+    (counts.bull as number) < 0 ||
+    !Number.isSafeInteger(counts.bear) ||
+    (counts.bear as number) < 0 ||
+    !Number.isSafeInteger(counts.wait) ||
+    (counts.wait as number) < 0 ||
+    (vote !== null && (counts[vote as 'bull' | 'bear' | 'wait'] as number) < 1)
+  ) {
+    throw new PostInteractionMutationError('invalid_ack')
+  }
+
+  return {
+    action,
+    vote: vote as 'bull' | 'bear' | 'wait' | null,
+    poll: {
+      bull: counts.bull as number,
+      bear: counts.bear as number,
+      wait: counts.wait as number,
+    },
+  }
+}
+
+/**
  * 批量获取用户对帖子的反应状态
  */
 export async function getUserPostReactions(

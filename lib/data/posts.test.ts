@@ -19,6 +19,7 @@ import {
   setPostReactionDesiredState,
   togglePostReaction,
   getUserPostVote,
+  setPostVoteDesiredState,
   togglePostVote,
   getUserPostReactions,
   getUserPostVotes,
@@ -724,6 +725,78 @@ describe('togglePostVote', () => {
     await expect(
       togglePostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
     ).rejects.toMatchObject({ kind: 'not_found' })
+  })
+})
+
+describe('setPostVoteDesiredState', () => {
+  test.each([
+    ['adds', 'bull', 'added'],
+    ['changes', 'bear', 'changed'],
+    ['removes', null, 'removed'],
+    ['replays', 'wait', 'unchanged'],
+  ] as const)('%s an absolute vote through the atomic RPC', async (_label, desired, action) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: {
+        status: action,
+        action,
+        vote: desired,
+        poll: {
+          bull: desired === 'bull' ? 1 : 0,
+          bear: desired === 'bear' ? 1 : 0,
+          wait: desired === 'wait' ? 1 : 0,
+        },
+      },
+      error: null,
+    })
+
+    await expect(
+      setPostVoteDesiredState(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', desired)
+    ).resolves.toMatchObject({ action, vote: desired })
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('set_post_vote_desired_state_atomic', {
+      p_actor_id: 'user1',
+      p_post_id: 'post1',
+      p_desired_choice: desired,
+    })
+  })
+
+  test.each([
+    null,
+    { status: 'unexpected' },
+    {
+      status: 'added',
+      action: 'added',
+      vote: 'bear',
+      poll: { bull: 1, bear: 0, wait: 0 },
+    },
+    {
+      status: 'unchanged',
+      action: 'unchanged',
+      vote: 'bull',
+      poll: { bull: 0, bear: 0, wait: 0 },
+    },
+    {
+      status: 'added',
+      action: 'added',
+      vote: 'bull',
+      poll: { bull: 1, bear: 0, wait: 0, invented: 1 },
+    },
+  ])('fails closed for malformed desired-vote acknowledgement %#', async (data) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({ data, error: null })
+
+    await expect(
+      setPostVoteDesiredState(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
+    ).rejects.toThrow('invalid acknowledgement')
+  })
+
+  test.each(['not_found', 'invalid'] as const)('surfaces a canonical %s denial', async (status) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({ data: { status }, error: null })
+
+    await expect(
+      setPostVoteDesiredState(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
+    ).rejects.toMatchObject({ kind: status })
   })
 })
 

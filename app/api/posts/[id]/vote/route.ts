@@ -6,7 +6,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
-import { PostInteractionMutationError, togglePostVote } from '@/lib/data/posts'
+import { PostInteractionMutationError, setPostVoteDesiredState } from '@/lib/data/posts'
 import { socialFeatureGuard } from '@/lib/features'
 import {
   POST_BUILT_IN_VOTE_OPERATION,
@@ -18,9 +18,11 @@ const PostVoteSchema = z
   .object({
     operation: z.literal(POST_BUILT_IN_VOTE_OPERATION),
     request_id: z.string().refine(isCanonicalPostVoteRequestId),
-    choice: z.enum(['bull', 'bear', 'wait'], {
-      message: 'choice must be bull, bear, or wait',
-    }),
+    desired_choice: z
+      .enum(['bull', 'bear', 'wait'], {
+        message: 'desired_choice must be bull, bear, wait, or null',
+      })
+      .nullable(),
   })
   .strict()
 
@@ -66,16 +68,16 @@ const postVoteHandler = withAuth(
         )
       )
     }
-    const { choice, request_id: requestId } = parsed.data
+    const { desired_choice: desiredChoice, request_id: requestId } = parsed.data
 
-    // 执行投票操作
+    // Converge to the requested state; retrying the same command cannot toggle it away.
     let result
     try {
-      result = await togglePostVote(
+      result = await setPostVoteDesiredState(
         supabase,
         postId.data.toLowerCase(),
         actorId.data.toLowerCase(),
-        choice
+        desiredChoice
       )
     } catch (error) {
       if (error instanceof PostInteractionMutationError) {
@@ -97,7 +99,7 @@ const postVoteHandler = withAuth(
         post_id: postId.data.toLowerCase(),
         request_id: requestId,
         operation: POST_BUILT_IN_VOTE_OPERATION,
-        requested_choice: choice,
+        desired_choice: desiredChoice,
         action: result.action,
         vote: result.vote,
         poll: result.poll,
