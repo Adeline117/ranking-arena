@@ -283,6 +283,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -335,18 +336,29 @@ jobs:
 
       - name: Migration lint — block dangerous DDL
         run: |
-          CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
-          if [ -n "$CHANGED" ]; then
-            DANGEROUS=$(echo "$CHANGED" | xargs grep -iEn 'DROP TABLE|DROP COLUMN|ALTER.*NOT NULL(?!.*DEFAULT)' 2>/dev/null || true)
-            if [ -n "$DANGEROUS" ]; then
-              echo "::error::Dangerous migration patterns detected (review manually before merging):"
-              echo "$DANGEROUS"
-              exit 1
+          set -euo pipefail
+
+          BASE_SHA=$(node -e '
+            const { readFileSync } = require("node:fs")
+            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"))
+            process.stdout.write(event.pull_request?.base?.sha ?? event.before ?? "")
+          ')
+
+          if [ -z "$BASE_SHA" ] ||
+            [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+              echo "No parent revision exists; no migration diff to lint"
+              exit 0
             fi
-            echo "Migration lint passed — no dangerous DDL found"
-          else
-            echo "No migration changes to lint"
+            BASE_SHA=$(git rev-parse HEAD^)
           fi
+
+          if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Migration lint received an invalid base revision"
+            exit 2
+          fi
+
+          node scripts/qa/migration-dangerous-ddl-check.mjs "$BASE_SHA" HEAD
 
   # ─────────────────────────────────────────────
   # Stage 3a: Unit Tests (parallel with build)
