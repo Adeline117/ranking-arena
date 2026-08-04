@@ -37,20 +37,46 @@ export interface ExchangeRankings {
 
 const PRODUCT_TYPES: ReadonlySet<string> = new Set(['spot', 'futures', 'cfd', 'onchain'])
 const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
+// The route has a 4s outer render deadline. Abort slightly earlier so the
+// PostgREST request releases its connection instead of continuing after the
+// page has already rendered a retry state.
+export const EXCHANGE_RANKINGS_QUERY_TIMEOUT_MS = 3_500
 
-function numOrNull(v: unknown): number | null {
-  if (v === null || v === undefined) return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
+function isNullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value))
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value)
+  return actual.length === expected.length && actual.every((key) => expected.includes(key))
 }
 
 export async function getExchangeRankings(
   supabase: SupabaseClient,
   timeframe: ExchangeRankingsTimeframe
 ): Promise<ExchangeRankings> {
-  const { data, error } = await supabase.rpc('arena_exchange_rankings', {
-    p_timeframe: timeframe,
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), EXCHANGE_RANKINGS_QUERY_TIMEOUT_MS)
+  let response: Awaited<ReturnType<SupabaseClient['rpc']>>
+  try {
+    const request = supabase
+      .rpc('arena_exchange_rankings', { p_timeframe: timeframe })
+      .abortSignal(controller.signal)
+    const interrupted = new Promise<never>((_resolve, reject) => {
+      controller.signal.addEventListener(
+        'abort',
+        () => reject(new Error(`Exchange rankings ${timeframe}D query timed out`)),
+        { once: true }
+      )
+    })
+    response = await Promise.race([request, interrupted])
+  } catch (cause) {
+    throw new Error(`Exchange rankings request failed for ${timeframe}D`, { cause })
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  const { data, error } = response
   logRpcError('arena_exchange_rankings', error)
   if (error) {
     throw new Error(`Exchange rankings request failed for ${timeframe}D`, { cause: error })
@@ -59,43 +85,107 @@ export async function getExchangeRankings(
     throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
   }
   const d = data as Record<string, unknown>
-  const nonLegacyCount = numOrNull(d.nonLegacyCount)
-  if (nonLegacyCount === null || !Array.isArray(d.rows)) {
+  if (
+    !hasExactKeys(d, ['nonLegacyCount', 'timeframe', 'rows']) ||
+    !Number.isSafeInteger(d.nonLegacyCount) ||
+    Number(d.nonLegacyCount) < 0 ||
+    d.timeframe !== timeframe ||
+    !Array.isArray(d.rows) ||
+    d.rows.length > Number(d.nonLegacyCount)
+  ) {
     throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
   }
 
   const rows: ExchangeRankingRow[] = []
+  const seenSources = new Set<string>()
   for (const raw of d.rows) {
-    if (!raw || typeof raw !== 'object') continue
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
+    }
     const r = raw as Record<string, unknown>
-    if (typeof r.source !== 'string' || typeof r.asOf !== 'string') continue
+    const source = r.source
+    const exchangeSlug = r.exchangeSlug
+    const exchangeName = r.exchangeName
+    const productType = r.productType
+    const currency = r.currency
+    const asOf = r.asOf
+    const rankedTraders = r.rankedTraders
+    const copierPnl = r.copierPnl
+    if (
+      !hasExactKeys(r, [
+        'source',
+        'exchangeSlug',
+        'exchangeName',
+        'productType',
+        'currency',
+        'derived',
+        'asOf',
+        'rankedTraders',
+        'medianRoi',
+        'topDecileRoi',
+        'pctProfitable',
+        'copierPnl',
+        'botShare',
+      ]) ||
+      typeof source !== 'string' ||
+      source.length === 0 ||
+      seenSources.has(source) ||
+      typeof exchangeSlug !== 'string' ||
+      exchangeSlug.length === 0 ||
+      typeof exchangeName !== 'string' ||
+      exchangeName.length === 0 ||
+      !PRODUCT_TYPES.has(productType as string) ||
+      !CURRENCIES.has(currency as string) ||
+      typeof r.derived !== 'boolean' ||
+      typeof asOf !== 'string' ||
+      !Number.isFinite(Date.parse(asOf)) ||
+      !Number.isSafeInteger(rankedTraders) ||
+      Number(rankedTraders) < 0 ||
+      !isNullableFiniteNumber(r.medianRoi) ||
+      !isNullableFiniteNumber(r.topDecileRoi) ||
+      !isNullableFiniteNumber(r.pctProfitable) ||
+      !isNullableFiniteNumber(r.botShare)
+    ) {
+      throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
+    }
 
-    const currency = CURRENCIES.has(r.currency as string) ? (r.currency as ServingCurrency) : 'USDT'
-    const copierPnlValue =
-      r.copierPnl && typeof r.copierPnl === 'object'
-        ? numOrNull((r.copierPnl as Record<string, unknown>).value)
-        : null
+    let parsedCopierPnl: Money | null = null
+    if (copierPnl !== null) {
+      if (!copierPnl || typeof copierPnl !== 'object' || Array.isArray(copierPnl)) {
+        throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
+      }
+      const money = copierPnl as Record<string, unknown>
+      if (
+        !hasExactKeys(money, ['value', 'currency']) ||
+        typeof money.value !== 'number' ||
+        !Number.isFinite(money.value) ||
+        money.currency !== currency
+      ) {
+        throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
+      }
+      parsedCopierPnl = { value: money.value, currency: currency as ServingCurrency }
+    }
+
+    seenSources.add(source)
 
     rows.push({
-      source: r.source,
-      exchangeSlug: typeof r.exchangeSlug === 'string' ? r.exchangeSlug : r.source,
-      exchangeName: typeof r.exchangeName === 'string' ? r.exchangeName : r.source,
-      productType: PRODUCT_TYPES.has(r.productType as string)
-        ? (r.productType as ExchangeRankingRow['productType'])
-        : 'futures',
-      currency,
-      rankedTraders: numOrNull(r.rankedTraders) ?? 0,
-      medianRoi: numOrNull(r.medianRoi),
-      topDecileRoi: numOrNull(r.topDecileRoi),
-      pctProfitable: numOrNull(r.pctProfitable),
-      copierPnl: copierPnlValue === null ? null : { value: copierPnlValue, currency },
-      botShare: numOrNull(r.botShare),
-      provenance: { source: r.source, asOf: r.asOf, derived: r.derived === true },
+      source,
+      exchangeSlug,
+      exchangeName,
+      productType: productType as ExchangeRankingRow['productType'],
+      currency: currency as ServingCurrency,
+      rankedTraders: Number(rankedTraders),
+      medianRoi: r.medianRoi,
+      topDecileRoi: r.topDecileRoi,
+      pctProfitable: r.pctProfitable,
+      copierPnl: parsedCopierPnl,
+      botShare: r.botShare,
+      provenance: { source, asOf, derived: r.derived },
     })
   }
 
   return {
-    nonLegacyCount,
+    nonLegacyCount: Number(d.nonLegacyCount),
     timeframe,
     rows,
   }

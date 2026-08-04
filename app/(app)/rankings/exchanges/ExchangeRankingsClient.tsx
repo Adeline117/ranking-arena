@@ -11,7 +11,7 @@
  * and row hover affordance.
  */
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -48,7 +48,7 @@ const PRODUCT_I18N = {
 const TH_STYLE: React.CSSProperties = {
   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
   fontSize: tokens.typography.fontSize.xs,
-  fontWeight: 600,
+  fontWeight: tokens.typography.fontWeight.semibold,
   color: 'var(--color-text-tertiary)',
   textAlign: 'right',
   whiteSpace: 'nowrap',
@@ -74,6 +74,7 @@ const SORT_BTN_STYLE: React.CSSProperties = {
   color: 'inherit',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
+  minHeight: tokens.touchTarget.min,
 }
 
 // ── Sorting ──────────────────────────────────────────────────────────────
@@ -190,7 +191,7 @@ function ExchangeLogo({ source, name }: { source: string; name: string }) {
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: tokens.typography.fontSize.xs,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
         }}
       >
         {name.slice(0, 1).toUpperCase()}
@@ -235,7 +236,26 @@ export default function ExchangeRankingsClient({
   const [sortKey, setSortKey] = useState<SortKey>('rankedTraders')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const data = byTimeframe[tf]
+  // A failed refresh must not erase rows that this mounted page has already
+  // rendered successfully. Keep one in-memory last-known-good snapshot per
+  // timeframe; the incomplete-data notice makes the degraded state explicit.
+  const [lastGoodByTimeframe, setLastGoodByTimeframe] = useState(byTimeframe)
+  useEffect(() => {
+    setLastGoodByTimeframe((previous) => {
+      let changed = false
+      const next = { ...previous }
+      for (const timeframe of TIMEFRAMES) {
+        const fresh = byTimeframe[timeframe]
+        if (fresh && fresh !== previous[timeframe]) {
+          next[timeframe] = fresh
+          changed = true
+        }
+      }
+      return changed ? next : previous
+    })
+  }, [byTimeframe])
+
+  const data = byTimeframe[tf] ?? lastGoodByTimeframe[tf]
   const selectedTimeframeFailed = failedTimeframes.includes(tf)
   const rows = useMemo(() => data?.rows ?? [], [data])
 
@@ -302,6 +322,7 @@ export default function ExchangeRankingsClient({
         .exr-row:hover td { background: var(--color-bg-tertiary); }
         .exr-row:hover .exr-frozen { background: var(--color-bg-tertiary); }
         .exr-row:focus-within td { background: var(--color-bg-tertiary); }
+        .exr-error-panel button { min-width: 44px; }
       `}</style>
 
       <Box
@@ -339,6 +360,8 @@ export default function ExchangeRankingsClient({
                 border: '1px solid var(--color-border-primary)',
                 borderRadius: tokens.radius.md,
                 cursor: 'pointer',
+                minWidth: tokens.touchTarget.min,
+                minHeight: tokens.touchTarget.min,
               }}
             >
               {option}D
@@ -347,7 +370,7 @@ export default function ExchangeRankingsClient({
         </Box>
       </Box>
 
-      {failedTimeframes.length > 0 && !selectedTimeframeFailed && (
+      {failedTimeframes.length > 0 && (!selectedTimeframeFailed || data !== null) && (
         <Box
           role="status"
           aria-busy={isRetrying}
@@ -378,6 +401,8 @@ export default function ExchangeRankingsClient({
               cursor: isRetrying ? 'wait' : 'pointer',
               font: 'inherit',
               fontWeight: tokens.typography.fontWeight.semibold,
+              minWidth: tokens.touchTarget.min,
+              minHeight: tokens.touchTarget.min,
             }}
           >
             {isRetrying ? t('retrying') : t('retry')}
@@ -385,8 +410,9 @@ export default function ExchangeRankingsClient({
         </Box>
       )}
 
-      {selectedTimeframeFailed ? (
+      {selectedTimeframeFailed && data === null ? (
         <Box
+          className="exr-error-panel"
           {...tfTabsA11y.getSharedPanelProps()}
           aria-busy={isRetrying}
           style={{
@@ -399,6 +425,7 @@ export default function ExchangeRankingsClient({
             description={t('loadFailedRetryShort')}
             retry={retryFailedTimeframes}
             variant="compact"
+            retryButtonSize="md"
           />
         </Box>
       ) : rows.length === 0 ? (

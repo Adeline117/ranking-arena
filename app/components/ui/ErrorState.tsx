@@ -10,6 +10,7 @@ type ErrorStateProps = {
   description?: string
   retry?: () => void
   variant?: 'default' | 'compact'
+  retryButtonSize?: 'sm' | 'md' | 'lg'
 }
 
 export default function ErrorState({
@@ -17,6 +18,7 @@ export default function ErrorState({
   description,
   retry,
   variant = 'default',
+  retryButtonSize = 'sm',
 }: ErrorStateProps) {
   const { t } = useLanguage()
   const isCompact = variant === 'compact'
@@ -100,7 +102,7 @@ export default function ErrorState({
 
       {/* Retry button — always shown; defaults to page reload if no retry prop */}
       <Box style={{ marginTop: tokens.spacing[4] }}>
-        <Button variant="secondary" size="sm" onClick={retryFn}>
+        <Button variant="secondary" size={retryButtonSize} onClick={retryFn}>
           {t('retry')}
         </Button>
       </Box>

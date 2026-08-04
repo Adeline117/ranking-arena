@@ -26,11 +26,35 @@ import ExchangeRankingsClient from './ExchangeRankingsClient'
 export const dynamic = 'force-dynamic'
 
 const MIN_SERVING_SOURCES = 3
+// Keep this below the first visual-audit capture window. A cache miss can
+// otherwise leave the inherited rankings skeleton mounted indefinitely when
+// PostgREST accepts the request but never settles it.
+export const EXCHANGE_RANKINGS_SSR_TIMEOUT_MS = 4_000
 const getCachedExchangeRankings = unstable_cache(
   (timeframe: ExchangeRankingsTimeframe) => getExchangeRankings(getReadReplica(), timeframe),
   ['rankings-exchange-rankings-v1'],
   { revalidate: 1800, tags: ['rankings', 'exchange-rankings'] }
 )
+
+async function withExchangeSsrTimeout<T>(
+  promise: Promise<T>,
+  timeframe: ExchangeRankingsTimeframe
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Exchange rankings ${timeframe}D SSR timed out`)),
+          EXCHANGE_RANKINGS_SSR_TIMEOUT_MS
+        )
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
 
 export const metadata: Metadata = {
   title: 'Exchange Rankings — Copy Trading Leaderboards Compared',
@@ -69,7 +93,9 @@ const TIMEFRAMES: ExchangeRankingsTimeframe[] = [7, 30, 90]
 
 export default async function ExchangeRankingsPage() {
   const settled = await Promise.allSettled(
-    TIMEFRAMES.map((timeframe) => getCachedExchangeRankings(timeframe))
+    TIMEFRAMES.map((timeframe) =>
+      withExchangeSsrTimeout(getCachedExchangeRankings(timeframe), timeframe)
+    )
   )
   const byTimeframe = {} as Record<ExchangeRankingsTimeframe, ExchangeRankings | null>
   const failedTimeframes: ExchangeRankingsTimeframe[] = []
@@ -82,14 +108,8 @@ export default async function ExchangeRankingsPage() {
     }
     byTimeframe[timeframe] = null
     failedTimeframes.push(timeframe)
+    console.error(`[exchange-rankings] ${timeframe}D load failed`, result.reason)
   })
-
-  if (failedTimeframes.length === TIMEFRAMES.length) {
-    throw new AggregateError(
-      settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])),
-      'Exchange rankings are unavailable'
-    )
-  }
 
   // Gate (plan E.11): the page only exists once >= 3 sources read from
   // arena.* — below that a cross-exchange comparison is noise, not signal.
@@ -101,7 +121,10 @@ export default async function ExchangeRankingsPage() {
     0,
     ...TIMEFRAMES.map((timeframe) => byTimeframe[timeframe]?.nonLegacyCount ?? 0)
   )
-  if (gateCount < MIN_SERVING_SOURCES) {
+  // Total transport failure is not a successful zero-source response. Leave
+  // all three entries null so the client renders its localized retry panel
+  // instead of disguising the outage as an empty board.
+  if (failedTimeframes.length < TIMEFRAMES.length && gateCount < MIN_SERVING_SOURCES) {
     console.error(
       `[serving-gate] /rankings/exchanges gate triggered (nonLegacyCount=${gateCount} < ${MIN_SERVING_SOURCES}) — rendering empty state instead of 404`
     )

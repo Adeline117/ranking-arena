@@ -23,7 +23,7 @@ jest.mock('../ExchangeRankingsClient', () => ({
   default: () => null,
 }))
 
-import ExchangeRankingsPage, { dynamic } from '../page'
+import ExchangeRankingsPage, { dynamic, EXCHANGE_RANKINGS_SSR_TIMEOUT_MS } from '../page'
 
 type ExchangePageProps = {
   byTimeframe: Record<ExchangeRankingsTimeframe, ExchangeRankings | null>
@@ -39,14 +39,73 @@ function rankings(timeframe: ExchangeRankingsTimeframe): ExchangeRankings {
 }
 
 describe('exchange rankings SSR failure state', () => {
+  let consoleError: jest.SpyInstance
+
   beforeEach(() => {
     mockGetExchangeRankings.mockReset()
+    consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined)
   })
 
-  it('propagates total upstream failure to the retryable route error boundary', async () => {
+  afterEach(() => {
+    consoleError.mockRestore()
+  })
+
+  it('renders total upstream failure as localized retryable client state', async () => {
     mockGetExchangeRankings.mockRejectedValue(new Error('database unavailable'))
 
-    await expect(ExchangeRankingsPage()).rejects.toThrow('Exchange rankings are unavailable')
+    const element = (await ExchangeRankingsPage()) as ReactElement<ExchangePageProps>
+    expect(element.props.failedTimeframes).toEqual([7, 30, 90])
+    expect(element.props.byTimeframe).toEqual({ 7: null, 30: null, 90: null })
+    expect(consoleError).toHaveBeenCalledTimes(3)
+  })
+
+  it('bounds a never-settling timeframe so the inherited route skeleton cannot remain forever', async () => {
+    jest.useFakeTimers()
+    try {
+      mockGetExchangeRankings.mockImplementation(
+        (_client: unknown, timeframe: ExchangeRankingsTimeframe) =>
+          timeframe === 90 ? new Promise(() => undefined) : Promise.resolve(rankings(timeframe))
+      )
+
+      const page = ExchangeRankingsPage()
+      await jest.advanceTimersByTimeAsync(EXCHANGE_RANKINGS_SSR_TIMEOUT_MS)
+
+      const element = (await page) as ReactElement<ExchangePageProps>
+      expect(element.props.failedTimeframes).toEqual([90])
+      expect(element.props.byTimeframe[90]).toBeNull()
+      expect(element.props.byTimeframe[7]).toEqual(rankings(7))
+      expect(element.props.byTimeframe[30]).toEqual(rankings(30))
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('does not let a response that settles after its deadline mutate the rendered result', async () => {
+    jest.useFakeTimers()
+    try {
+      let resolveLate: ((value: ExchangeRankings) => void) | undefined
+      mockGetExchangeRankings.mockImplementation(
+        (_client: unknown, timeframe: ExchangeRankingsTimeframe) =>
+          timeframe === 90
+            ? new Promise<ExchangeRankings>((resolve) => {
+                resolveLate = resolve
+              })
+            : Promise.resolve(rankings(timeframe))
+      )
+
+      const page = ExchangeRankingsPage()
+      await jest.advanceTimersByTimeAsync(EXCHANGE_RANKINGS_SSR_TIMEOUT_MS)
+      const element = (await page) as ReactElement<ExchangePageProps>
+      expect(element.props.byTimeframe[90]).toBeNull()
+
+      resolveLate?.(rankings(90))
+      await Promise.resolve()
+
+      expect(element.props.byTimeframe[90]).toBeNull()
+      expect(element.props.failedTimeframes).toEqual([90])
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('is request-rendered so transient RPC failures cannot fail the production build', () => {

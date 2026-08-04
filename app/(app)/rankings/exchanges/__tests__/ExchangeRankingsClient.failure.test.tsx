@@ -68,7 +68,11 @@ describe('ExchangeRankingsClient failure states', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('failedToLoadRankings')
     expect(screen.queryByText('exchangeRankingsEmpty')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'retry' }))
+    const retry = screen.getByRole('button', { name: 'retry' })
+    expect(window.getComputedStyle(retry).minHeight).toBe('44px')
+    expect(window.getComputedStyle(retry).minWidth).toBe('44px')
+
+    fireEvent.click(retry)
     expect(mockRefresh).toHaveBeenCalledTimes(1)
   })
 
@@ -83,6 +87,47 @@ describe('ExchangeRankingsClient failure states', () => {
     expect(screen.getByRole('status')).toHaveTextContent('dataLoadIncomplete')
     expect(screen.getByRole('link', { name: 'Hyperliquid' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps last-known-good rows visible when a later refresh fails', () => {
+    const view = render(
+      <ExchangeRankingsClient
+        byTimeframe={{ 7: result(7), 30: result(30), 90: result(90, [row]) }}
+      />
+    )
+
+    view.rerender(
+      <ExchangeRankingsClient
+        byTimeframe={{ 7: result(7), 30: result(30), 90: null }}
+        failedTimeframes={[90]}
+      />
+    )
+
+    expect(screen.getByRole('link', { name: 'Hyperliquid' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('dataLoadIncomplete')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('exchangeRankingsEmpty')).not.toBeInTheDocument()
+  })
+
+  it('keeps timeframe, retry, and table-sort touch targets at least 44px tall', () => {
+    render(
+      <ExchangeRankingsClient
+        byTimeframe={{ 7: null, 30: result(30), 90: result(90, [row]) }}
+        failedTimeframes={[7]}
+      />
+    )
+
+    expect(screen.getByRole('tab', { name: '90D' })).toHaveStyle({
+      minWidth: '44px',
+      minHeight: '44px',
+    })
+    expect(screen.getByRole('button', { name: 'retry' })).toHaveStyle({
+      minWidth: '44px',
+      minHeight: '44px',
+    })
+    expect(screen.getByRole('button', { name: 'sortBy exchangeRankingsColExchange' })).toHaveStyle({
+      minHeight: '44px',
+    })
   })
 
   it('renders genuine successful emptiness without an error state', () => {
