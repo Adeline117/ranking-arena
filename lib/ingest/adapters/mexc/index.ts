@@ -35,6 +35,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseMexcHistory,
   parseMexcLeaderboardPage,
@@ -324,12 +325,17 @@ const mexcAdapter: SourceAdapter = {
         method: 'GET',
         headers: HEADERS,
       })
-      const rows = parseMexcHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
+      const candidateCount = extractCopierCandidateRecords({
+        src,
+        exchangeTraderId,
+        pageIndex,
+        payload,
+      }).candidates.length
+      if (candidateCount === 0) return
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       const totalPage = Number((payload as { data?: { totalPage?: unknown } })?.data?.totalPage)
       if (Number.isFinite(totalPage) && totalPage > 0 && pageIndex >= totalPage) return
-      if (rows.length < limit) return
+      if (candidateCount < limit) return
     }
   },
 
