@@ -64,8 +64,10 @@ Production/staging database execution remains a separate explicit gate.
 ## Current CI interpretation
 
 - Frozen main `046a44d33` preflight is blocked by the `brace-expansion`
-  GHSA-rgw5-rvv9-x895 dependency finding; remediation is owned by a separate
-  dependency change and is not silently folded into this integration.
+  GHSA-rgw5-rvv9-x895 dependency finding. This combined tree already contains
+  the byte-identical `5.0.8` -> `5.0.9` compatibility-facade and lockfile fix;
+  acceptance still requires a clean install, the exact-version compatibility
+  test, and an audit showing zero high/critical findings.
 - `types-live` failures caused by missing Actions `DATABASE_URL`,
   `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are credential-context
   failures. This branch retains V1's explicit disabled/fail-closed
@@ -76,3 +78,47 @@ Production/staging database execution remains a separate explicit gate.
   until artifact retention is repaired.
 - PR 253 has six real conflicts with main and is superseded for integration
   review by this combined branch after the `5ed4718b6` containment forward-port.
+
+## Production read-only catalogue freeze
+
+At `2026-08-04T19:15:53.362Z`, production was inventoried read-only before any
+migration planning. No database write or migration was performed.
+
+- Functions: 396; SHA-256
+  `393a49396f9ebaf261df4f61ec979d62e2ab2af3608e3627bdc9cebbfca1ad79`
+- Tables: 197; SHA-256
+  `d72712a1b991ebd0070d1012e82c23f79d212b30fc722a814a92e97256a23276`
+- Columns (197 tables): SHA-256
+  `4ea4554a58ef626c31328e941d4b3c692a91c6e30529a4536f0cc1b90077d304`
+- Migration ledger: 546 entries; SHA-256
+  `7d7b7a1ef44d412665383ede22877c577f29641a9986718491f620ca9ce03e31`
+- Full inventory: SHA-256
+  `34e627455ce0b3ba7a663e5004526088d5b81c51fae30f6711df3a3d71eee2d0`
+
+The live schema contract is missing exactly five required RPCs:
+`get_popular_tokens_v2`, `get_token_ranking_publication_head`,
+`get_token_trader_rankings_v2`,
+`refresh_public_rank_count_cache_for_seasons`, and
+`rerank_public_eligible_leaderboard`. Migration QA also reports 101 repository
+filename candidates absent from the live ledger. That count is advisory: many
+files are renamed or already have equivalent live effects, so it is not an
+authorization to batch-apply 101 migrations. Each candidate must be reconciled
+against the frozen catalogue and then proved on disposable PostgreSQL 17.
+
+## Recovery rehearsal evidence
+
+The 5,112,388,073-byte 2026-07-26 legacy object and its server-side incident
+hold have matching sizes and ETags. A direct streamed restore into isolated
+PostgreSQL 17.8 produced 345 user tables and positive critical-table counts,
+including `arena.traders=217938`, `arena.trader_stats=552870`, and
+`public.leaderboard_ranks=41760`. This disproves the earlier inference that the
+object lacked leaderboard rows.
+
+The rehearsal was deliberately terminated after 880 seconds when the partial
+database reached about 22 GB and the remote disk fell to 8.2 GiB free. It was
+still in `COPY public.tph_2026_05`; data loading, indexes, full stream CRC/tail,
+RLS/auth and application smoke were therefore incomplete. The disposable
+partial database was dropped, while the R2 source and
+`incident-hold/2026-08-04/arena-backup-20260726-schemas.sql.gz` remain intact.
+Full certification requires a managed PostgreSQL 17 scratch target with at
+least about 100 GiB free and remains a release blocker.
