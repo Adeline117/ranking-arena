@@ -4,7 +4,7 @@
 > 按钮。本文说明“点击后去哪、谁能点、成功/失败应看到什么”，不把 API 存在
 > 当作 UI 已可用。动态路由必须使用真实 canonical identity，不能用过期固定样本。
 
-## 2026-08-03 增量进展（`485f5a550` 之后，截至 `982d33130`）
+## 2026-08-03 增量进展（`485f5a550` 之后，截至 `d93a7b99f`）
 
 - 付款结果：`9bd89c219` 将成功限定为 viewer/session-bound exact authority；
   `a78c1e707` 补齐 verifying/success/error、Retry、结果焦点、ARIA、320px 响应式与
@@ -17,9 +17,36 @@
   receipt、`1470d448a` disconnect 均在不完整或 owner/exchange 不匹配时 fail-closed。
   真实 read-only credential 的 connect/list/sync/disconnect 生产 canary 未做。
 - Settings：`ad9b727eb` 只在唯一 exact `{ success: true }` 回执后显示 unblock 成功；
-  仓库：`23590c072` / `4af1016fb` 删除两个退休入口并用 cleanup contract 防回归。
-- 本地定向证据：上述改动触及的 Jest **17 suites / 188 tests** 通过；
-  repository-cleanup Node 合同 **3/3** 通过。整体生产仍是 **NO-GO**：数据库恢复/精确
+  `8dba0f30a` 至 `c2635955a` 还逐域绑定认领、主页、关注、小组/聊天设置、2FA、收藏与举报
+  的 exact 回执；`f8daad80a`、`5864861c1`、`ba07aa2d9` 关闭成员偏好和关注分页的旧 scope/timeout 假真值。
+- Tip / Referral：`32f99908e` 只接受 durable payment truth；`31c6c538b` 保留并原子消费归因
+  intent；`d561dc612` / `66cfb27a6` 用 qualification + entitlement grant 区分 pending、scheduled、
+  active、expired、revoked，只有 active 显示 unlocked，409 会 GET 对账而非无限重试。
+- Post reaction：`9f2ea9355` 绑定 actor/post/request/action/count，补 15 秒硬超时、viewer scope、
+  回滚和迟到 ACK 隔离。底层仍是 toggle；响应超时时再次点击可能反向，后续需 desired-state/
+  idempotency authority，当前不伪称彻底清零。
+- Comment reaction：`ec688dd0b` 再绑定 actor/post/comment/operation/requested reaction；不确定
+  结果优先 canonical GET，读不到才回滚 last-good。跨客户端仍是 toggle，靠 refresh/realtime 收敛。
+- Activity Feed：`5fed64896` 将首次加载的空白列表和虚假 `Live` 改成预留稳定高度的 Loading，
+  加 `aria-live` / `aria-busy`；375px after 截图无重叠。
+- Rankings / Search：`6ca74b703`、`0a309e690`、`1006d4e66`、`ee05be684` 分别收紧
+  token index、weekly、全局搜索和 exchange leaderboard；transport 与 JSON 都有物理截止，
+  旧查询不能覆盖新 scope，loading/last-good/partial/error/empty 不再混用。
+- Shared HTTP：`4764a4156` 让共用请求 helper 即使遇到忽略 AbortSignal 的 transport/body
+  也会在真实 deadline 结束，调用方取消和迟到结果不会继续落入 UI。
+- Bookmark / token detail：`8b6f7529b` 绑定收藏 actor/post/request/folder 与完整批量状态；
+  `1a862e542` 绑定 token/period/page 并补 viewer/query 迟到隔离、错误/空态和 44px 控件。
+- Hot / reactions：`91281603e` 严格校验 posts/groups 并保留 last-good；`e37e04911` / `257ed300f`
+  将 Hot、Groups、共享 store 统一到 exact reaction receipt 和 scope single-flight。底层 toggle
+  仍没有 operation ID/desired-state，不能把超时后的服务端状态写成已确定。
+- Compare：`d93a7b99f` 严格绑定有序 source/account 分区、following composite identity 与计数，
+  为订阅/关注/搜索/对比各请求 lane 增加物理截止、owner/query generation、last-good/error、
+  精确 401 登录恢复和至少 44px 的交互目标。
+- 仓库/QA：`2c198f9f6` / `06614c69e` 删除退休入口与 442 行零调用帖子 hooks；`2069f462c`
+  给 visual/button sweep 动态 sampler 加稳定 User-Agent。核心本地截图 10 路由 × 2 视口
+  **20/20** 成功且均 HTTP 200，动态 trader authority 不健康被明确 skip。
+- 本地定向证据：每个切片均通过相关 Jest/Node 合同、ESLint、全量 TypeScript 与 diff-check。
+  整体生产仍是 **NO-GO**：数据库恢复/精确
   migration ledger、CopyTrading cap、凭据轮换、Stripe readiness、部署 SHA 与生产 E2E 仍是外部
   或 owner blockers。核心流程与 source freshness 仍未做生产验证，只保留已有的
   **37 registered boards / 34 public-ranking allowed / 23 families** 仓库口径，不得宣称“44 所交易所”。

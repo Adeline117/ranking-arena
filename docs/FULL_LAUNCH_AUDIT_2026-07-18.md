@@ -45,23 +45,38 @@ P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布�
 
 ### P1 — 重要：当前清单
 
-| ID    | 问题                                                                                               | 当前处置                                                                                                                                  |
-| ----- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                                    | 根因是 `responsive.css` 被 `media=print` 延迟；现改为首屏阻塞加载并锁定唯一 stylesheet，hydration 前 1440px 已是三栏。✅                  |
-| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                                      | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                                                |
-| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                                              | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy` 与 40px 触控高度。✅                                              |
-| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。                         | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                                                            |
-| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。                   | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                                                  |
-| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。                | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅                                       |
-| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                               | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。                              |
-| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。                          | 🔄 按公开主流程优先继续；排行榜日文 320/375px 工具栏裁切已修并留几何/截图证据，其余页面继续。                                             |
-| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                                 | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                                                            |
-| P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                         | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。 |
-| P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。      | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅             |
-| P1-12 | 上传后取消/失败、编辑移除或删帖会遗留 `posts` Storage 对象；直接查引用后删除又会产生并发数据丢失。 | 🔄 已锁定删帖 no-Storage 边界并记录全路径；需 `post_media_uploads` registry + mutation 内 claim + durable outbox/lease 后才能安全清理。   |
-| P1-13 | 路由 loading shell 重复预留已存在的导航高度，转场时出现布局 flash。                                | `e3feea06a` 移除重复 nav spacer，并用 shell 几何合同覆盖 route-group 与 page skeleton。✅                                                 |
-| P1-14 | 付款成功页可能将验证中、成功与未确认混为一种界面，或在小屏/键盘下丢失下一步。                      | `9bd89c219` 锁定 exact authority；`a78c1e707` 分离 verifying/success/error、补 retry/焦点/ARIA、320px 几何与 ≥48px 控件。✅               |
-| P1-15 | Groups 管理的解散、广播、邀请、批量成员动作和 Load more 可被双击、旧 scope 或不稳定 cursor 破坏。  | `e261d20dc` / `3725000b` / `b637fc1a` / `982d33130` 补不可逆锁、single-flight/exact ACK、按选择顺序串行批处理和稳定去重分页。✅           |
+| ID    | 问题                                                                                                   | 当前处置                                                                                                                                                                                                                  |
+| ----- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                                        | 根因是 `responsive.css` 被 `media=print` 延迟；现改为首屏阻塞加载并锁定唯一 stylesheet，hydration 前 1440px 已是三栏。✅                                                                                                  |
+| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                                          | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                                                                                                                                |
+| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                                                  | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy` 与 40px 触控高度。✅                                                                                                                              |
+| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。                             | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                                                                                                                                            |
+| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。                       | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                                                                                                                                  |
+| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。                    | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅                                                                                                                       |
+| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                                   | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。                                                                                                              |
+| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。                              | 🔄 按公开主流程优先继续；排行榜日文 320/375px 工具栏裁切已修并留几何/截图证据，其余页面继续。                                                                                                                             |
+| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                                     | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                                                                                                                                            |
+| P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                             | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。                                                                                 |
+| P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。          | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅                                                                                             |
+| P1-12 | 上传后取消/失败、编辑移除或删帖会遗留 `posts` Storage 对象；直接查引用后删除又会产生并发数据丢失。     | 🔄 已锁定删帖 no-Storage 边界并记录全路径；需 `post_media_uploads` registry + mutation 内 claim + durable outbox/lease 后才能安全清理。                                                                                   |
+| P1-13 | 路由 loading shell 重复预留已存在的导航高度，转场时出现布局 flash。                                    | `e3feea06a` 移除重复 nav spacer，并用 shell 几何合同覆盖 route-group 与 page skeleton。✅                                                                                                                                 |
+| P1-14 | 付款成功页可能将验证中、成功与未确认混为一种界面，或在小屏/键盘下丢失下一步。                          | `9bd89c219` 锁定 exact authority；`a78c1e707` 分离 verifying/success/error、补 retry/焦点/ARIA、320px 几何与 ≥48px 控件。✅                                                                                               |
+| P1-15 | Groups 管理的解散、广播、邀请、批量成员动作和 Load more 可被双击、旧 scope 或不稳定 cursor 破坏。      | `e261d20dc` / `3725000b` / `b637fc1a` / `982d33130` 补不可逆锁、single-flight/exact ACK、按选择顺序串行批处理和稳定去重分页。✅                                                                                           |
+| P1-16 | 点赞/点踩只相信宽松 2xx，旧 viewer、错 post 或迟到响应可能覆盖当前帖子状态；请求悬挂时按钮永久锁死。   | `9f2ea9355` 绑定 actor/post/requested reaction 与 exact RPC/HTTP receipt，补 15 秒硬超时、scope guard、迟到响应隔离和回滚。✅；底层仍是 toggle，超时后的再次点击存在反向风险，需 desired-state/idempotency authority。    |
+| P1-17 | 邀请奖励 UI 可能把资格数当已授权权益、跨标签页重复创建邀请码，或把 pending/revoked 显示成已解锁。      | `d561dc612` 以 qualification + entitlement grant 为服务端真值；`66cfb27a6` 对 409 做 GET 对账、区分全部奖励状态，只有 active 显示 unlocked。✅；生产 cron/migration 仍待验证。                                            |
+| P1-18 | 视觉/按钮巡检的动态样本请求没有稳定 User-Agent，可能被 API 代理拒绝而漏掉真实 trader/post/profile。    | `2069f462c` 让 public sweep sampler 显式标识自己，并以合同测试锁定；样本 API 不健康时仍明确 skip，不使用退休 fixture。✅                                                                                                  |
+| P1-19 | 评论点赞/点踩可接受错 actor/post/comment、额外字段或非 JSON 的宽松 2xx；悬挂与旧 scope 会留下假状态。  | `ec688dd0b` 绑定 exact toggle receipt，补 per-resource lock、15 秒 hard abort、viewer/session/post guard，并在不确定结果时优先 canonical read、否则回滚 last-good。✅；跨客户端仍是非幂等 toggle。                        |
+| P1-20 | Activity Feed 首次加载时列表完全空白，但 freshness 标题误报 `Live`，用户无法区分加载与无数据。         | `5fed64896` 把标题改为 Loading，列表预留 128px 可见 loading status，补 `aria-live` / `aria-busy`；375px 回归截图无重叠。✅                                                                                                |
+| P1-21 | Token 排名索引的 transport/body 可悬挂，失败、真空和旧结果混在一起。                                   | `6ca74b703` 给 fetch 与 JSON 共用 15 秒物理截止，严格校验响应与当前查询 scope，分离 loading/last-good/error/empty，并补可重试与 44px 控件。✅                                                                             |
+| P1-22 | Weekly 排名服务端等待无界，authority 故障时整页可能长期 skeleton。                                     | `0a309e690` 给服务端读取和页面外层都加有界截止，只有完整合法周榜可替换 last-good；部分、错误与真空不再互相伪装。✅                                                                                                        |
+| P1-23 | 全局 Search 接受宽松结果，旧关键词/迟到响应或畸形 2xx 可覆盖当前页面。                                 | `1006d4e66` 绑定规范查询、分页与四类结果，fetch/JSON 同一物理截止；查询 generation 隔离，保留同 scope last-good，并明确 error/retry/empty。✅                                                                             |
+| P1-24 | Exchange leaderboard 的 RPC 或页面请求可悬挂，金额/来源/周期形状不足时仍可能发布。                     | `ee05be684` 加 RPC 3.5 秒与页面 4 秒双层真实截止，严格 timeframe/source/row/money schema，分离 partial/last-good/error/empty，并使用稳定 loading shell。✅                                                                |
+| P1-25 | 共用 HTTP helper 只触发 AbortSignal，transport 或 `response.json()` 忽略 signal 时仍会永久等待。       | `4764a4156` 把物理 deadline 覆盖到 fetch 与 body 消费，并传播调用方取消；迟到工作被观察但不可再落入 UI。✅                                                                                                                |
+| P1-26 | 帖子 Bookmark 批量状态、toggle 回执或 folder scope 不完整时可跨用户写入假收藏状态。                    | `8b6f7529b` 绑定 actor/post/request/operation/action/bookmarked/count/folder；批量状态绑定 viewer、请求顺序和完整映射，不确定结果用 canonical status 对账。✅；底层 toggle 仍应升级为 desired-state/idempotent mutation。 |
+| P1-27 | Token 详情切周期时迟到响应、错误或畸形账户列表会覆盖当前 token，并把失败画成空数据。                   | `1a862e542` 绑定 token/period/limit/offset，fetch/JSON 15 秒物理截止；URL、viewer/query generation、last-good/error/empty 与 44px 控件均独立。✅                                                                          |
+| P1-28 | Hot 发现页把 500/畸形响应当空列表，group 请求悬挂，旧 viewer 请求可覆盖当前内容。                      | `91281603e` 对 posts/groups 使用严格合同和 15 秒物理截止，补 viewer/query 迟到隔离、last-good/error/retry，并把 tabs、retry、modal、show-more 触控目标提升到至少 44px。✅                                                 |
+| P1-29 | Hot、Groups 与共享 store 的帖子 reaction 仍有宽松或重复 parser，跨 actor/post 的回执可能落入错误表面。 | `e37e04911` / `257ed300f` 将所有现存调用方统一到 exact reaction contract，补 scope single-flight 与迟到隔离并删除退休 parser。✅；底层无 operation ID 的 toggle 和跨 surface 全局协调仍未解决。                           |
+| P1-30 | Compare 的订阅、关注、搜索、对比任一请求可无界等待；畸形/缺项响应会伪装为空，跨账户迟到结果会串线。    | `d93a7b99f` 严格绑定 ordered source/account partition 与 following identity/count，所有私有 lane 有物理截止、owner/query generation、last-good/error/401 恢复；交互目标至少 44px。✅                                      |
 
 ### P2 — 边缘：明确上线后
 
@@ -105,20 +120,30 @@ checked-in serving 证据是 2026-07-16 的 34 个 source boards，不能冒充 
   无 blank/crash/error boundary；发现的 token 500 与 period click timeout 已代码修复，
   WalletConnect explorer 噪声归 P2。修复后仍须在最终 SHA 重跑生产 sweep。
 
-### 自 `485f5a550` 后的增量证据（截至 `982d33130`）
+### 自 `485f5a550` 后的增量证据（截至 `d93a7b99f`）
 
-| 优先级               | 领域                     | 已证实修复与提交                                                                                                                                         | 仍未解阻塞                                                                                              |
-| -------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| P0 authority / P1 UI | Stripe checkout 成功闭环 | `9bd89c219` 要求 exact verify-session/subscription authority；`a78c1e707` 将成功页拆成可访问的 verifying/success/error 状态。                            | Stripe live readiness、旧 writer 撤权、test/live canary 仍是 owner gate；代码测试不证明真实收费可开启。 |
-| P0 authority         | 只读交易所连接           | `7516d39ea` connect、`ec54092a9` list/projection、`dd784a481` sync/generation receipt、`1470d448a` disconnect 均对 owner/exchange/响应形状 fail-closed。 | 健康生产库上的真实 read-only credential 连接、列表、同步、断开 canary 未做。                            |
-| P1                   | Settings / layout        | `ad9b727eb` 只在 exact unblock ACK 后移除屏蔽项；`e3feea06a` 移除 loading shell 的重复 nav spacer。                                                      | 最终 SHA 的双账号 Settings E2E 与多视口路由转场截图未做。                                               |
-| P1                   | Groups 管理              | `e261d20dc` 锁定解散，`3725000b` 绑定广播 ACK/single-flight，`b637fc1a` 串行成员批处理与绑定邀请，`982d33130` 稳定帖子分页/cursor/去重。                 | 真实 owner/admin/member fixture 与生产权限、并发、分页 E2E 未做。                                       |
-| P2 maintenance       | 仓库清理                 | `23590c072` 删除退休 scraper validation；`4af1016fb` 删除退休固定路由 screenshot 脚本，保留支持的 serving/visual-audit 入口。                            | 不是上线解阻器；后续清理仍必须证明无 operator/cron 用途。                                               |
+| 优先级               | 领域                                      | 已证实修复与提交                                                                                                                                                                                                  | 仍未解阻塞                                                                                                        |
+| -------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| P0 authority / P1 UI | Stripe checkout 成功闭环                  | `9bd89c219` 要求 exact verify-session/subscription authority；`a78c1e707` 将成功页拆成可访问的 verifying/success/error 状态。                                                                                     | Stripe live readiness、旧 writer 撤权、test/live canary 仍是 owner gate；代码测试不证明真实收费可开启。           |
+| P0 authority         | 只读交易所连接                            | `7516d39ea` connect、`ec54092a9` list/projection、`dd784a481` sync/generation receipt、`1470d448a` disconnect 均对 owner/exchange/响应形状 fail-closed。                                                          | 健康生产库上的真实 read-only credential 连接、列表、同步、断开 canary 未做。                                      |
+| P1                   | Settings / layout                         | `ad9b727eb` 只在 exact unblock ACK 后移除屏蔽项；`e3feea06a` 移除 loading shell 的重复 nav spacer。                                                                                                               | 最终 SHA 的双账号 Settings E2E 与多视口路由转场截图未做。                                                         |
+| P1                   | Groups 管理                               | `e261d20dc` 锁定解散，`3725000b` 绑定广播 ACK/single-flight，`b637fc1a` 串行成员批处理与绑定邀请，`982d33130` 稳定帖子分页/cursor/去重。                                                                          | 真实 owner/admin/member fixture 与生产权限、并发、分页 E2E 未做。                                                 |
+| P0/P1 authority      | Claim / Follow / Settings / Social writes | `8dba0f30a` 至 `c2635955a` 逐域绑定认领状态/证明、主页编辑、认领提交/审核、交易员关注、小组/聊天设置、2FA、收藏夹保存和举报证据回执；`f8daad80a`、`5864861c1`、`ba07aa2d9` 再补成员偏好和关注列表 scope/timeout。 | 每个域仍须最终候选 SHA 的双账号生产 E2E；代码回执不能替代数据库迁移与真实权限 fixture。                           |
+| P0/P1 authority      | Tip / Referral                            | `32f99908e` 只用 durable payment authority 确认 tip；`31c6c538b` 保留并 compare-and-consume 邀请归因 intent；`d561dc612` / `66cfb27a6` 让奖励资格与 UI 同 entitlement authority。                                 | Stripe live 保持关闭；邀请 qualification cron、grant migration 与真实归因/权益 canary 未验证。                    |
+| P1                   | Post / comment reactions                  | `9f2ea9355` 对帖子 actor/post/request/action/count 使用 exact receipt；`ec688dd0b` 对评论再绑定 comment/operation，并补超时、scope、canonical read/回滚与迟到响应隔离。                                           | 两层 RPC 仍是 toggle；服务端已提交但 ACK 丢失时仍需靠 refresh/realtime 收敛，最终宜改 desired-state/idempotency。 |
+| P1 UI                | Activity Feed loading                     | `5fed64896` 取消“空白列表 + Live”假状态，增加有稳定几何和 ARIA 的 Loading；本地 375px after screenshot 已复核。                                                                                                   | 最终候选仍须连接健康真实 feed authority 重跑 desktop/mobile 截图与交互。                                          |
+| P1 loading truth     | Rankings / Search / shared HTTP           | `6ca74b703` / `0a309e690` / `1006d4e66` / `ee05be684` / `4764a4156` 将 token index、weekly、search、exchange 和共用 fetch 的 transport+JSON 等待全部物理有界，并区分 last-good、partial、error 与真空。           | last-good 只覆盖当前挂载或当前服务进程；最终 SHA 仍需健康真实 authority 的 slow/error/refresh 浏览器闭环。        |
+| P1 authority / UI    | Bookmark / token detail                   | `8b6f7529b` 绑定 bookmark actor/post/request/folder 与批量状态；`1a862e542` 绑定 token/period/page 响应、迟到隔离和 44px 控件。                                                                                   | Bookmark 底层仍是 toggle；token 详情尚未用真实动态样本完成最终生产验收。                                          |
+| P1 authority / UI    | Hot / remaining reactions                 | `91281603e` 严格化 Hot posts/groups loading；`e37e04911` / `257ed300f` 统一 Hot、Groups、store 的 reaction exact contract、scope 与 single-flight，并删除旧 parser。                                              | Reaction RPC 无 operation ID/desired-state；跨 surface 没有全局 mutation coordinator。                            |
+| P1 authority / UI    | Compare private loading                   | `d93a7b99f` 严格验证 ordered account partition 与 following composite identity，给订阅/关注/搜索/对比各 lane 加物理截止、owner/query generation、last-good/error/401 恢复及 44px 控件。                           | 成功响应尚不回显 authenticated viewer；依赖 bearer、private/no-store 与客户端 generation 防串线。                 |
+| P2 maintenance       | 仓库与 QA 清理                            | `23590c072` / `4af1016fb` / `2c198f9f6` 删除退休 scraper、固定路由截图、schema/VPS 一次性入口；`06614c69e` 删除 442 行无调用旧帖子 hooks；`2069f462c` 保留并加固受支持 sweep。                                    | 不是上线解阻器；后续清理仍必须证明无 operator/cron 用途。                                                         |
 
-在共享工作树上重跑上述提交触及的定向回归：Jest **17 suites / 188 tests**
-全部通过；`node --test scripts/qa/repository-cleanup-contract.test.mjs` **3/3** 通过。
-这些是本地代码/交互合同证据，不替代迁移、部署、生产数据 freshness 或同 SHA E2E；
-因此整体结论仍为 **NO-GO**。
+每个切片均通过自身相关 Jest/Node 合同、ESLint、全量 TypeScript 与 diff-check；其中 post
+reaction 核心为 **4 suites / 102 tests**，comment reaction 为 **4 suites / 110 tests**，Referral 服务端/UI 合并门禁为
+**4 suites / 46 tests**，当前 repository cleanup 与 public sampler 合同为 **12/12**。
+本地视觉采集另有 10 条核心静态路由 × desktop/mobile = **20/20** 张成功且均 HTTP 200；
+动态 trader 因本地 authority 不健康被明确跳过，不能算通过。这些本地代码/交互证据不替代
+迁移、部署、生产 freshness 或同 SHA E2E；因此整体结论仍为 **NO-GO**。
 
 ## 0. 结论与状态口径
 
@@ -138,8 +163,9 @@ checked-in serving 证据是 2026-07-16 的 34 个 source boards，不能冒充 
 
 当前软件分支已经完成的修复不能替代最后三道门：
 
-1. 55 个 predeploy、2 个 postdeploy、5 个 concurrent recovery、3 个
-   transactional recovery 必须在生产 exact ledger；当前已通过只读复核；
+1. 187 个 predeploy、16 个 postdeploy、5 个 concurrent recovery、3 个
+   transactional recovery、1 个 quarantined、1 个 superseded（共 213 个唯一成员）
+   必须在生产 exact ledger；当前只完成仓库 runner 证明；
 2. 最终应用必须持久进入 `main`，且生产健康端点返回该 release 的精确 SHA；
 3. 生产浏览器和数据验收必须在同一个 SHA 开始并结束，owner 还须关闭外部
    合约与凭据 P0。
@@ -527,6 +553,11 @@ flowchart LR
 - `23590c072` 删除退休的 `scripts/lib/data-validation.mjs`，`4af1016fb` 删除退休的
   `scripts/qa-ui-check.mjs`；两者都在 repository-cleanup 合同中锁定不得回归，并指向现行
   diagnose/serving/visual-audit 入口。
+- `2c198f9f6` 再删除退休 screenshot/schema/VPS 一次性文件；`06614c69e` 删除已被 React
+  Query feed 与当前收藏实现取代、且全仓零调用的 `usePostFeedData` / `useBookmarkRepost`
+  （净减 442 行），cleanup 合同阻止旧副本回归。
+- `2069f462c` 让受支持的 visual/button sweep 动态 API sampler 使用稳定 QA User-Agent，
+  避免代理拒绝后把核心动态页面静默漏审。
 - 清理后做 orphan page 检查、TypeScript 和相关测试。
 
 明确保留：
