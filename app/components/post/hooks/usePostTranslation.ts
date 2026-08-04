@@ -2,12 +2,53 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
+import {
+  requestBatchTranslation,
+  requestSingleTranslation,
+  type BatchTranslationItem,
+  type TranslationTargetLanguage,
+} from '@/lib/translations/translation-client-contract'
 import type { Comment } from './usePostComments'
 
 type Post = {
   id: string
   title?: string | null
   content?: string | null
+}
+
+type TranslationScope = {
+  accessToken: string
+  language: string | undefined
+  generation: number
+}
+
+type ActiveRequest = {
+  key: string
+  sequence: number
+  scope: TranslationScope
+  controller: AbortController
+  promise: Promise<void>
+}
+
+type CachedTranslation = {
+  source: string
+  targetLang: TranslationTargetLanguage
+  translatedText: string
+}
+
+type ListPart = 'title' | 'body'
+
+type ListDescriptor = {
+  item: BatchTranslationItem
+  postId: string
+  part: ListPart
+  laneKey: string
+}
+
+type CommentDescriptor = {
+  item: BatchTranslationItem
+  commentId: string
+  laneKey: string
 }
 
 export interface PostTranslationState {
@@ -28,6 +69,22 @@ export interface PostTranslationState {
   translateComments: (comments: Comment[], targetLang: 'zh' | 'en') => Promise<void>
 }
 
+function laneKey(...parts: string[]): string {
+  return JSON.stringify(parts)
+}
+
+function appendImages(translatedText: string, images: readonly string[]): string {
+  return images.length > 0 ? `${translatedText}\n\n${images.join('\n')}` : translatedText
+}
+
+function sameScope(left: TranslationScope, right: TranslationScope): boolean {
+  return (
+    left.accessToken === right.accessToken &&
+    left.language === right.language &&
+    left.generation === right.generation
+  )
+}
+
 export function usePostTranslation({
   accessToken,
   showToast,
@@ -37,14 +94,12 @@ export function usePostTranslation({
   accessToken: string | null
   showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
   t: (key: string) => string
-  /** Current UI language — switching it clears all translation caches so posts
-   *  re-translate for the new language instead of showing stale results. */
+  /** Current UI language. Viewer or language changes invalidate every local result. */
   language?: string
 }): PostTranslationState {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [showingOriginal, setShowingOriginal] = useState(true)
   const [translating, setTranslating] = useState(false)
-  const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
   const [translatedListPosts, setTranslatedListPosts] = useState<
     Record<string, { title?: string; body?: string }>
   >({})
@@ -52,34 +107,86 @@ export function usePostTranslation({
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({})
   const [translatingComments, setTranslatingComments] = useState(false)
 
-  // Clear every translation cache when the UI language changes. Without this the
-  // id-keyed caches (translatedListPosts / translatedComments) would keep serving
-  // the previous language's translation (and the skip-guards below would never
-  // re-translate), which is the "translation stops working after switching
-  // language" bug. The first render (mount) is skipped so we don't wipe SSR/初始 state.
-  const langMountRef = useRef(true)
-  useEffect(() => {
-    if (langMountRef.current) {
-      langMountRef.current = false
-      return
-    }
-    setTranslatedListPosts({})
-    setTranslatedComments({})
-    setTranslationCache({})
-    setTranslatedContent(null)
-    setShowingOriginal(true)
-  }, [language])
+  const mountedRef = useRef(false)
+  const renderScopeRef = useRef({ accessToken, language })
+  renderScopeRef.current = { accessToken, language }
+  const scopeGenerationRef = useRef(0)
+  const previousScopeRef = useRef({ accessToken, language })
+  const sequenceRef = useRef(0)
 
-  // Refs to hold current state values inside stable callbacks (prevents infinite re-render loops
-  // when translateListPosts/translateComments are used as useEffect dependencies in consumers)
   const translatedListPostsRef = useRef(translatedListPosts)
   translatedListPostsRef.current = translatedListPosts
   const translatedCommentsRef = useRef(translatedComments)
   translatedCommentsRef.current = translatedComments
-  const translatingListRef = useRef(translatingList)
-  translatingListRef.current = translatingList
-  const translatingCommentsRef = useRef(translatingComments)
-  translatingCommentsRef.current = translatingComments
+
+  const contentCacheRef = useRef(new Map<string, CachedTranslation>())
+  const listCacheRef = useRef(new Map<string, CachedTranslation>())
+  const commentCacheRef = useRef(new Map<string, CachedTranslation>())
+  const activeContentRef = useRef<ActiveRequest | null>(null)
+  const activeListRef = useRef<ActiveRequest | null>(null)
+  const activeCommentsRef = useRef<ActiveRequest | null>(null)
+
+  const abortActiveRequests = useCallback(() => {
+    const reason = new DOMException('Translation scope changed', 'AbortError')
+    for (const active of [
+      activeContentRef.current,
+      activeListRef.current,
+      activeCommentsRef.current,
+    ]) {
+      if (active && !active.controller.signal.aborted) active.controller.abort(reason)
+    }
+    activeContentRef.current = null
+    activeListRef.current = null
+    activeCommentsRef.current = null
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      scopeGenerationRef.current += 1
+      abortActiveRequests()
+    }
+  }, [abortActiveRequests])
+
+  useEffect(() => {
+    const previous = previousScopeRef.current
+    if (previous.accessToken === accessToken && previous.language === language) return
+
+    previousScopeRef.current = { accessToken, language }
+    scopeGenerationRef.current += 1
+    abortActiveRequests()
+    contentCacheRef.current.clear()
+    listCacheRef.current.clear()
+    commentCacheRef.current.clear()
+    translatedListPostsRef.current = {}
+    translatedCommentsRef.current = {}
+    setTranslatedListPosts({})
+    setTranslatedComments({})
+    setTranslatedContent(null)
+    setShowingOriginal(true)
+    setTranslating(false)
+    setTranslatingList(false)
+    setTranslatingComments(false)
+  }, [accessToken, abortActiveRequests, language])
+
+  const captureScope = useCallback((token: string): TranslationScope => {
+    return {
+      accessToken: token,
+      language: renderScopeRef.current.language,
+      generation: scopeGenerationRef.current,
+    }
+  }, [])
+
+  const isScopeCurrent = useCallback((scope: TranslationScope): boolean => {
+    const current = renderScopeRef.current
+    return (
+      mountedRef.current &&
+      current.accessToken === scope.accessToken &&
+      current.language === scope.language &&
+      scopeGenerationRef.current === scope.generation
+    )
+  }, [])
 
   const isChineseText = useCallback((text: string) => {
     if (!text) return false
@@ -93,9 +200,7 @@ export function usePostTranslation({
     const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
     const images: string[] = []
     let match
-    while ((match = imageRegex.exec(content)) !== null) {
-      images.push(match[0])
-    }
+    while ((match = imageRegex.exec(content)) !== null) images.push(match[0])
     return images
   }, [])
 
@@ -107,215 +212,401 @@ export function usePostTranslation({
   }, [])
 
   const translateContent = useCallback(
-    async (postId: string, content: string, targetLang: 'zh' | 'en') => {
-      if (!accessToken) return
-      const cacheKey = `${postId}-content-${targetLang}`
-      const originalImages = extractImagesFromContent(content)
+    async (postId: string, content: string, targetLang: TranslationTargetLanguage) => {
+      const token = accessToken
+      if (!token || !postId || !content) return
 
-      if (translationCache[cacheKey]) {
-        let cachedWithImages = translationCache[cacheKey]
-        if (originalImages.length > 0 && !cachedWithImages.includes('![')) {
-          cachedWithImages += '\n\n' + originalImages.join('\n')
-        }
-        setTranslatedContent(cachedWithImages)
-        setShowingOriginal(false)
+      const source = removeImagesFromContent(content)
+      const images = extractImagesFromContent(content)
+      const cacheKey = laneKey(postId, targetLang)
+      const requestKey = laneKey(postId, targetLang, source)
+      const scope = captureScope(token)
+      const existing = activeContentRef.current
+      if (existing && existing.key === requestKey && sameScope(existing.scope, scope)) {
+        return existing.promise
+      }
+
+      if (existing && !existing.controller.signal.aborted) {
+        existing.controller.abort(new DOMException('Translation request superseded', 'AbortError'))
+      }
+      activeContentRef.current = null
+      sequenceRef.current += 1
+
+      if (!source) {
+        setTranslatedContent(null)
+        setShowingOriginal(true)
+        setTranslating(false)
         return
       }
 
-      setTranslating(true)
-      try {
-        const textToTranslate = removeImagesFromContent(content)
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders(),
-        }
-        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            text: textToTranslate,
-            targetLang,
-            contentType: 'post_content',
-            contentId: postId,
-          }),
-          signal: AbortSignal.timeout(30000),
-        })
-        const data = await response.json()
-
-        if (response.ok && data.success && data.data?.translatedText) {
-          let translated = data.data.translatedText
-          if (originalImages.length > 0) translated += '\n\n' + originalImages.join('\n')
-          setTranslatedContent(translated)
-          setShowingOriginal(false)
-          setTranslationCache((prev) => ({ ...prev, [cacheKey]: data.data.translatedText }))
-        } else {
-          showToast(data.error || t('translationFailed'), 'error')
-        }
-      } catch {
-        showToast(t('translationServiceError'), 'error')
-      } finally {
+      const cached = contentCacheRef.current.get(cacheKey)
+      if (cached && cached.source === source && cached.targetLang === targetLang) {
+        setTranslatedContent(appendImages(cached.translatedText, images))
+        setShowingOriginal(false)
         setTranslating(false)
+        return
       }
+      contentCacheRef.current.delete(cacheKey)
+      setTranslatedContent(null)
+      setTranslating(true)
+
+      const controller = new AbortController()
+      const sequence = sequenceRef.current
+      const promise = (async () => {
+        try {
+          const receipt = await requestSingleTranslation(
+            {
+              text: source,
+              targetLang,
+              contentType: 'post_content',
+              contentId: postId,
+            },
+            {
+              accessToken: token,
+              csrfHeaders: getCsrfHeaders(),
+              signal: controller.signal,
+            }
+          )
+          const active = activeContentRef.current
+          if (!active || active.sequence !== sequence || !isScopeCurrent(scope)) {
+            return
+          }
+
+          if (receipt.sameLanguage) {
+            contentCacheRef.current.delete(cacheKey)
+            setTranslatedContent(null)
+            setShowingOriginal(true)
+            return
+          }
+
+          contentCacheRef.current.set(cacheKey, {
+            source,
+            targetLang,
+            translatedText: receipt.translatedText,
+          })
+          setTranslatedContent(appendImages(receipt.translatedText, images))
+          setShowingOriginal(false)
+        } catch {
+          const active = activeContentRef.current
+          if (
+            active?.sequence === sequence &&
+            isScopeCurrent(scope) &&
+            !controller.signal.aborted
+          ) {
+            setTranslatedContent(null)
+            setShowingOriginal(true)
+            showToast(t('translationServiceError'), 'error')
+          }
+        } finally {
+          const active = activeContentRef.current
+          if (active?.sequence === sequence && isScopeCurrent(scope)) {
+            activeContentRef.current = null
+            setTranslating(false)
+          }
+        }
+      })()
+      activeContentRef.current = { key: requestKey, sequence, scope, controller, promise }
+      return promise
     },
-    [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken]
+    [
+      accessToken,
+      captureScope,
+      extractImagesFromContent,
+      isScopeCurrent,
+      removeImagesFromContent,
+      showToast,
+      t,
+    ]
   )
+
+  const removeStaleListParts = useCallback((stale: readonly [string, ListPart][]) => {
+    if (stale.length === 0) return
+    const current = translatedListPostsRef.current
+    let next = current
+    for (const [postId, part] of stale) {
+      if (!next[postId]?.[part]) continue
+      if (next === current) next = { ...current }
+      const post = { ...next[postId] }
+      delete post[part]
+      if (post.title || post.body) next[postId] = post
+      else delete next[postId]
+    }
+    if (next !== current) {
+      translatedListPostsRef.current = next
+      setTranslatedListPosts(next)
+    }
+  }, [])
 
   const translateListPosts = useCallback(
-    async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
-      if (!accessToken) return
-      // Use refs to avoid stale closures without adding state to deps (prevents infinite re-render loop)
-      if (translatingListRef.current) return
-      const currentTranslated = translatedListPostsRef.current
-      const needsTranslation = postsToTranslate.filter((p) => {
-        if (currentTranslated[p.id]?.title && currentTranslated[p.id]?.body) return false
-        const titleIsChinese = p.title ? isChineseText(p.title) : false
-        const contentIsChinese = p.content ? isChineseText(p.content) : false
-        return (
-          (p.title && (targetLang === 'en' ? titleIsChinese : !titleIsChinese)) ||
-          (p.content && (targetLang === 'en' ? contentIsChinese : !contentIsChinese))
-        )
-      })
-      if (needsTranslation.length === 0) return
+    async (postsToTranslate: Post[], targetLang: TranslationTargetLanguage) => {
+      const token = accessToken
+      if (!token) return
 
-      setTranslatingList(true)
-      try {
-        const items: Array<{
-          id: string
-          text: string
-          contentType: 'post_title' | 'post_content'
-          contentId: string
-        }> = []
-        for (const post of needsTranslation.slice(0, 10)) {
-          if (post.title && !currentTranslated[post.id]?.title) {
-            items.push({
-              id: `${post.id}_title`,
-              text: post.title,
-              contentType: 'post_title',
-              contentId: post.id,
-            })
-          }
-          if (post.content && !currentTranslated[post.id]?.body) {
-            const contentPreview = removeImagesFromContent(post.content).slice(0, 200)
-            if (contentPreview)
-              items.push({
-                id: `${post.id}_body`,
-                text: contentPreview,
-                contentType: 'post_content',
-                contentId: post.id,
-              })
-          }
+      const descriptors: ListDescriptor[] = []
+      const stale: Array<[string, ListPart]> = []
+      const seenLanes = new Set<string>()
+      const addPart = (
+        postId: string,
+        part: ListPart,
+        source: string,
+        needsTranslation: boolean
+      ) => {
+        const partLaneKey = laneKey(postId, part)
+        if (seenLanes.has(partLaneKey)) return
+        seenLanes.add(partLaneKey)
+        const cached = listCacheRef.current.get(partLaneKey)
+        if (
+          !needsTranslation ||
+          !source ||
+          !cached ||
+          cached.source !== source ||
+          cached.targetLang !== targetLang
+        ) {
+          if (cached) listCacheRef.current.delete(partLaneKey)
+          stale.push([postId, part])
         }
-        if (items.length === 0) {
-          setTranslatingList(false)
-          return
-        }
-
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ items, targetLang }),
-          signal: AbortSignal.timeout(30000),
-        })
-        const data = await response.json()
-        if (response.ok && data.success && data.data?.results) {
-          const results = data.data.results as Record<
-            string,
-            { translatedText: string; cached: boolean }
-          >
-          // Map each item id -> the source text we sent, so we can drop identity
-          // "translations" (translatedText === source). Same-language posts otherwise
-          // rendered a translation row that duplicated the original verbatim (U8-10).
-          const sourceById = new Map(items.map((it) => [it.id, it.text]))
-          setTranslatedListPosts((prev) => {
-            const updated = { ...prev }
-            for (const [id, result] of Object.entries(results)) {
-              const source = sourceById.get(id)
-              if (source && result.translatedText.trim() === source.trim()) continue
-              const [postId, type] = id.split('_')
-              if (!updated[postId]) updated[postId] = {}
-              if (type === 'title') updated[postId].title = result.translatedText
-              else if (type === 'body') updated[postId].body = result.translatedText
-            }
-            return updated
+        if (
+          needsTranslation &&
+          source &&
+          (!cached || cached.source !== source || cached.targetLang !== targetLang)
+        ) {
+          const id = `item-${descriptors.length}`
+          descriptors.push({
+            item: {
+              id,
+              text: source,
+              contentType: part === 'title' ? 'post_title' : 'post_content',
+              contentId: postId,
+              targetLang,
+            },
+            postId,
+            part,
+            laneKey: partLaneKey,
           })
         }
-      } catch {
-        /* silent */
-      } finally {
-        setTranslatingList(false)
       }
+
+      for (const post of postsToTranslate.slice(0, 10)) {
+        if (!post.id) continue
+        if (post.title) {
+          const hasChinese = isChineseText(post.title)
+          addPart(post.id, 'title', post.title, targetLang === 'en' ? hasChinese : !hasChinese)
+        }
+        if (post.content) {
+          const source = removeImagesFromContent(post.content).slice(0, 200)
+          const hasChinese = isChineseText(source)
+          addPart(post.id, 'body', source, targetLang === 'en' ? hasChinese : !hasChinese)
+        }
+      }
+      removeStaleListParts(stale)
+      if (descriptors.length === 0) return
+
+      const scope = captureScope(token)
+      const requestKey = JSON.stringify({
+        targetLang,
+        items: descriptors.map(({ item, postId, part }) => [item.id, postId, part, item.text]),
+      })
+      const existing = activeListRef.current
+      if (existing && existing.key === requestKey && sameScope(existing.scope, scope)) {
+        return existing.promise
+      }
+      if (existing && !existing.controller.signal.aborted) {
+        existing.controller.abort(new DOMException('Translation request superseded', 'AbortError'))
+      }
+
+      const controller = new AbortController()
+      const sequence = ++sequenceRef.current
+      setTranslatingList(true)
+      const promise = (async () => {
+        try {
+          const receipt = await requestBatchTranslation(
+            descriptors.map(({ item }) => item),
+            targetLang,
+            {
+              accessToken: token,
+              csrfHeaders: getCsrfHeaders(),
+              signal: controller.signal,
+            }
+          )
+          const active = activeListRef.current
+          if (!active || active.sequence !== sequence || !isScopeCurrent(scope)) {
+            return
+          }
+
+          const current = translatedListPostsRef.current
+          const next = { ...current }
+          for (const descriptor of descriptors) {
+            const result = receipt.results[descriptor.item.id]
+            if (result.translatedText.trim() === descriptor.item.text.trim()) {
+              listCacheRef.current.delete(descriptor.laneKey)
+              continue
+            }
+            listCacheRef.current.set(descriptor.laneKey, {
+              source: descriptor.item.text,
+              targetLang,
+              translatedText: result.translatedText,
+            })
+            next[descriptor.postId] = {
+              ...next[descriptor.postId],
+              [descriptor.part]: result.translatedText,
+            }
+          }
+          translatedListPostsRef.current = next
+          setTranslatedListPosts(next)
+        } catch {
+          // Automatic list translation is best-effort; invalid/partial results
+          // remain unpublished and must not create a toast loop.
+        } finally {
+          const active = activeListRef.current
+          if (active?.sequence === sequence && isScopeCurrent(scope)) {
+            activeListRef.current = null
+            setTranslatingList(false)
+          }
+        }
+      })()
+      activeListRef.current = { key: requestKey, sequence, scope, controller, promise }
+      return promise
     },
-    [isChineseText, removeImagesFromContent, accessToken]
+    [
+      accessToken,
+      captureScope,
+      isChineseText,
+      isScopeCurrent,
+      removeImagesFromContent,
+      removeStaleListParts,
+    ]
   )
 
-  const translateComments = useCallback(
-    async (commentsToTranslate: Comment[], targetLang: 'zh' | 'en') => {
-      if (!accessToken) return
-      // Use refs to avoid stale closures without adding state to deps (prevents infinite re-render loop)
-      if (translatingCommentsRef.current) return
-      const currentTranslatedComments = translatedCommentsRef.current
-      const allComments: Comment[] = []
-      commentsToTranslate.forEach((c) => {
-        if (!currentTranslatedComments[c.id] && c.content) {
-          const hasChinese = isChineseText(c.content)
-          if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese))
-            allComments.push(c)
-        }
-        if (c.replies) {
-          c.replies.forEach((r) => {
-            if (!currentTranslatedComments[r.id] && r.content) {
-              const hasChinese = isChineseText(r.content)
-              if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese))
-                allComments.push(r)
-            }
-          })
-        }
-      })
-      if (allComments.length === 0) return
+  const removeStaleComments = useCallback((commentIds: readonly string[]) => {
+    if (commentIds.length === 0) return
+    const current = translatedCommentsRef.current
+    let next = current
+    for (const commentId of commentIds) {
+      if (!Object.prototype.hasOwnProperty.call(next, commentId)) continue
+      if (next === current) next = { ...current }
+      delete next[commentId]
+    }
+    if (next !== current) {
+      translatedCommentsRef.current = next
+      setTranslatedComments(next)
+    }
+  }, [])
 
-      setTranslatingComments(true)
-      try {
-        const items = allComments.slice(0, 20).map((comment) => ({
-          id: comment.id,
-          text: comment.content || '',
-          contentType: 'comment' as const,
-          contentId: comment.id,
-        }))
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ items, targetLang }),
-          signal: AbortSignal.timeout(30000),
-        })
-        const data = await response.json()
-        if (response.ok && data.success && data.data?.results) {
-          const results = data.data.results as Record<
-            string,
-            { translatedText: string; cached: boolean }
-          >
-          setTranslatedComments((prev) => {
-            const updated = { ...prev }
-            for (const [id, result] of Object.entries(results)) updated[id] = result.translatedText
-            return updated
+  const translateComments = useCallback(
+    async (commentsToTranslate: Comment[], targetLang: TranslationTargetLanguage) => {
+      const token = accessToken
+      if (!token) return
+
+      const candidates: Comment[] = []
+      for (const comment of commentsToTranslate) {
+        candidates.push(comment)
+        if (comment.replies) candidates.push(...comment.replies)
+      }
+
+      const descriptors: CommentDescriptor[] = []
+      const stale: string[] = []
+      const seenIds = new Set<string>()
+      for (const comment of candidates) {
+        const source = comment.content || ''
+        if (!comment.id || !source || seenIds.has(comment.id)) continue
+        seenIds.add(comment.id)
+        const hasChinese = isChineseText(source)
+        const needsTranslation = targetLang === 'en' ? hasChinese : !hasChinese
+        const commentLaneKey = laneKey(comment.id)
+        const cached = commentCacheRef.current.get(commentLaneKey)
+        if (
+          !needsTranslation ||
+          !cached ||
+          cached.source !== source ||
+          cached.targetLang !== targetLang
+        ) {
+          if (cached) commentCacheRef.current.delete(commentLaneKey)
+          stale.push(comment.id)
+        }
+        if (
+          needsTranslation &&
+          (!cached || cached.source !== source || cached.targetLang !== targetLang) &&
+          descriptors.length < 20
+        ) {
+          const id = `item-${descriptors.length}`
+          descriptors.push({
+            item: {
+              id,
+              text: source,
+              contentType: 'comment',
+              contentId: comment.id,
+              targetLang,
+            },
+            commentId: comment.id,
+            laneKey: commentLaneKey,
           })
         }
-      } catch {
-        /* silent */
-      } finally {
-        setTranslatingComments(false)
       }
+      removeStaleComments(stale)
+      if (descriptors.length === 0) return
+
+      const scope = captureScope(token)
+      const requestKey = JSON.stringify({
+        targetLang,
+        items: descriptors.map(({ item, commentId }) => [item.id, commentId, item.text]),
+      })
+      const existing = activeCommentsRef.current
+      if (existing && existing.key === requestKey && sameScope(existing.scope, scope)) {
+        return existing.promise
+      }
+      if (existing && !existing.controller.signal.aborted) {
+        existing.controller.abort(new DOMException('Translation request superseded', 'AbortError'))
+      }
+
+      const controller = new AbortController()
+      const sequence = ++sequenceRef.current
+      setTranslatingComments(true)
+      const promise = (async () => {
+        try {
+          const receipt = await requestBatchTranslation(
+            descriptors.map(({ item }) => item),
+            targetLang,
+            {
+              accessToken: token,
+              csrfHeaders: getCsrfHeaders(),
+              signal: controller.signal,
+            }
+          )
+          const active = activeCommentsRef.current
+          if (!active || active.sequence !== sequence || !isScopeCurrent(scope)) {
+            return
+          }
+
+          const next = { ...translatedCommentsRef.current }
+          for (const descriptor of descriptors) {
+            const result = receipt.results[descriptor.item.id]
+            if (result.translatedText.trim() === descriptor.item.text.trim()) {
+              commentCacheRef.current.delete(descriptor.laneKey)
+              continue
+            }
+            commentCacheRef.current.set(descriptor.laneKey, {
+              source: descriptor.item.text,
+              targetLang,
+              translatedText: result.translatedText,
+            })
+            next[descriptor.commentId] = result.translatedText
+          }
+          translatedCommentsRef.current = next
+          setTranslatedComments(next)
+        } catch {
+          // Automatic comment translation follows the same fail-closed policy.
+        } finally {
+          const active = activeCommentsRef.current
+          if (active?.sequence === sequence && isScopeCurrent(scope)) {
+            activeCommentsRef.current = null
+            setTranslatingComments(false)
+          }
+        }
+      })()
+      activeCommentsRef.current = { key: requestKey, sequence, scope, controller, promise }
+      return promise
     },
-    [isChineseText, accessToken]
+    [accessToken, captureScope, isChineseText, isScopeCurrent, removeStaleComments]
   )
 
   return {
