@@ -245,6 +245,8 @@ jobs:
         run: node --test scripts/maintenance/backup-to-r2.test.mjs
       - name: Restore pipeline fail-closed contract
         run: node --test scripts/maintenance/restore-from-r2.test.mjs
+      - name: Auth recovery preflight fail-closed contract
+        run: npm run qa:auth-recovery-preflight
       - name: Backup freshness fail-closed contract
         run: node --test scripts/openclaw/backup-freshness-check.test.mjs
       - run: npm run lint
