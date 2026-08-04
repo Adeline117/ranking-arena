@@ -337,28 +337,8 @@ jobs:
       - name: Migration lint — block dangerous DDL
         run: |
           set -euo pipefail
-
-          BASE_SHA=$(node -e '
-            const { readFileSync } = require("node:fs")
-            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"))
-            process.stdout.write(event.pull_request?.base?.sha ?? event.before ?? "")
-          ')
-
-          if [ -z "$BASE_SHA" ] ||
-            [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
-            if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-              echo "No parent revision exists; no migration diff to lint"
-              exit 0
-            fi
-            BASE_SHA=$(git rev-parse HEAD^)
-          fi
-
-          if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Migration lint received an invalid base revision"
-            exit 2
-          fi
-
-          node scripts/qa/migration-dangerous-ddl-check.mjs "$BASE_SHA" HEAD
+          node scripts/qa/migration-dangerous-ddl-check.mjs \
+            --event "$GITHUB_EVENT_PATH" HEAD
 
   # ─────────────────────────────────────────────
   # Stage 3a: Unit Tests (parallel with build)

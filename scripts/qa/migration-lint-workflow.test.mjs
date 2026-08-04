@@ -15,20 +15,19 @@ const migrationLint = lintTypecheck.steps.find(
 test('migration lint has enough Git history to compare the actual event range', () => {
   assert.ok(checkout)
   assert.equal(checkout.with['fetch-depth'], 0)
+  assert.equal(checkout.with['persist-credentials'], false)
   assert.ok(migrationLint)
   assert.equal(migrationLint.env, undefined)
-  assert.match(migrationLint.run, /process\.env\.GITHUB_EVENT_PATH/)
-  assert.match(migrationLint.run, /event\.pull_request\?\.base\?\.sha \?\? event\.before/)
-  assert.match(migrationLint.run, /\^\[0-9a-f\]\{40\}\$/)
-  assert.match(migrationLint.run, /git rev-parse HEAD\^/)
+  assert.deepEqual(workflow.permissions, { contents: 'read' })
 })
 
 test('migration lint delegates to the fail-closed Node scanner', () => {
   assert.match(migrationLint.run, /set -euo pipefail/)
   assert.match(
     migrationLint.run,
-    /node scripts\/qa\/migration-dangerous-ddl-check\.mjs "\$BASE_SHA" HEAD/
+    /node scripts\/qa\/migration-dangerous-ddl-check\.mjs[\s\\]+\n\s+--event "\$GITHUB_EVENT_PATH" HEAD/
   )
-  assert.doesNotMatch(migrationLint.run, /NOT NULL\(\?!\.\*DEFAULT\)/)
+  assert.doesNotMatch(migrationLint.run, /HEAD\^/)
+  assert.doesNotMatch(migrationLint.run, /\${{\s*secrets\./)
   assert.doesNotMatch(migrationLint.run, /\|\| true/)
 })
