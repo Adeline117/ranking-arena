@@ -279,7 +279,6 @@ function historyRowsForRender(
         direction: row.direction,
         asset: row.asset,
         amount: row.amount,
-        currency,
       }
     }
     throw new Error('[tier-c] copier row reached the public render mapper')

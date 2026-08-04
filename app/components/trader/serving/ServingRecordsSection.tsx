@@ -65,8 +65,7 @@ export const RECORD_COLUMNS: Record<Exclude<RecordKind, 'copiers'>, RecordColumn
   transfers: [
     { key: 'ts', i18nKey: 'colTime', format: 'datetime' },
     { key: 'direction', i18nKey: 'colDirection' },
-    { key: 'asset', i18nKey: 'colAsset' },
-    { key: 'amount', i18nKey: 'colAmount', format: 'money', align: 'right' },
+    { key: 'amount', i18nKey: 'colAmount', format: 'asset_quantity', align: 'right' },
   ],
 }
 

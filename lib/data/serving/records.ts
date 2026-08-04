@@ -54,10 +54,6 @@ const HISTORY_BLOCKER_REASONS: ReadonlySet<HistoryCompletenessBlockerReason> = n
   'upstream_error',
 ])
 
-function asCurrency(v: unknown): ServingCurrency {
-  return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : 'USDT'
-}
-
 function validTimestampOrNull(value: unknown): string | null {
   return typeof value === 'string' &&
     value.length > 0 &&
@@ -187,7 +183,6 @@ export function sanitizeRecordRow(
     direction: direction === 'in' || direction === 'out' ? direction : null,
     asset: stringOrNull(ownValue(row, 'asset')),
     amount: finiteNumberOrNull(ownValue(row, 'amount')),
-    currency: currencyOrNull(ownValue(row, 'currency')),
   }
 }
 
@@ -347,14 +342,17 @@ export async function getCopierAggregate(
   }
 
   const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
+  const currency = currencyOrNull(d.currency)
   const depth =
     d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
 
   return {
     copierCount: nonNegativeSafeIntegerOrNull(d.copierCount),
     copierCountMax: nonNegativeSafeIntegerOrNull(d.copierCountMax),
-    totalCopierPnl: totalPnl === null ? null : money(totalPnl, asCurrency(d.currency)),
-    pnlDistribution: distribution,
+    totalCopierPnl: totalPnl === null || currency === null ? null : money(totalPnl, currency),
+    // Bucket labels/thresholds share the aggregate's money unit. Without a
+    // validated unit they are not safe to interpret either.
+    pnlDistribution: currency === null ? [] : distribution,
     depth,
     provenance: recordProvenance(source, d),
     // `depth=full` describes the upstream product surface, not proof that the

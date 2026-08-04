@@ -62,6 +62,13 @@ const EMPTY_POSITION_HISTORY_ROW = {
   currency: null,
 }
 
+const EMPTY_TRANSFER_ROW = {
+  ts: null,
+  direction: null,
+  asset: null,
+  amount: null,
+}
+
 describe('copier PII rule (spec §6)', () => {
   it('the records RPC SQL hard-blocks the copiers kind and never selects copier_label', () => {
     const sql = readFileSync(
@@ -196,6 +203,26 @@ describe('copier PII rule (spec §6)', () => {
     // The serialized aggregate must contain no copier identifiers anywhere.
     expect(JSON.stringify(aggregate)).not.toMatch(/copier_label|copierLabel|email/)
   })
+
+  it.each([undefined, 'BTC', 'usdt'])(
+    'does not invent a copier PnL unit for %s currency',
+    async (currency) => {
+      const aggregate = await getCopierAggregate(
+        rpcClient({
+          copierCount: 2,
+          totalCopierPnl: 12,
+          currency,
+          depth: 'full',
+          pnlDistribution: [{ bucket: '0~1000', count: 2 }],
+        }),
+        'bitget_futures',
+        'abc'
+      )
+
+      expect(aggregate?.totalCopierPnl).toBeNull()
+      expect(aggregate?.pnlDistribution).toEqual([])
+    }
+  )
 })
 
 describe('getRecordsPage', () => {
@@ -504,6 +531,31 @@ describe('recordsPageFromTierC', () => {
     ])
     expect(page!.nextCursor).toBe('positions-next')
     expect(page!.completeness).toBeUndefined()
+  })
+
+  it('serves transfer amounts only in their asset unit', () => {
+    const page = recordsPageFromTierC('gtrade', 'transfers', {
+      rows: [
+        {
+          ts: '2026-08-03T12:00:00Z',
+          direction: 'in',
+          asset: 'BTC',
+          amount: 0.5,
+          currency: 'USDC',
+        },
+      ],
+    })
+
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_TRANSFER_ROW,
+        ts: '2026-08-03T12:00:00.000Z',
+        direction: 'in',
+        asset: 'BTC',
+        amount: 0.5,
+      },
+    ])
+    expect(page!.rows[0]).not.toHaveProperty('currency')
   })
 
   it('returns null when the payload has no rows array', () => {
