@@ -25,17 +25,21 @@ test('retired standalone diagnostics stay removed in favor of supported entrypoi
   }
 })
 
-test('retired pre-arena write scripts stay removed', () => {
-  const retiredWriters = ['scripts/generate-trader-bios.ts']
+test('retired pre-arena tools stay removed', () => {
+  const retiredPreArenaTools = [
+    'scripts/generate-trader-bios.ts',
+    'scripts/lib/base-importer.mjs',
+    'scripts/lib/platform-config.mjs',
+  ]
 
   assert.deepEqual(
-    retiredWriters.filter((path) => existsSync(join(repoRoot, path))),
+    retiredPreArenaTools.filter((path) => existsSync(join(repoRoot, path))),
     [],
-    'retired writers targeting dropped or non-serving schemas must be rewritten, not restored'
+    'retired tools targeting dropped or non-serving schemas must be rewritten, not restored'
   )
 
   const packageCommands = Object.values(packageJson.scripts).join('\n')
-  for (const retiredWriter of retiredWriters) {
-    assert.doesNotMatch(packageCommands, new RegExp(retiredWriter.replaceAll('.', '\\.')))
+  for (const retiredTool of retiredPreArenaTools) {
+    assert.doesNotMatch(packageCommands, new RegExp(retiredTool.replaceAll('.', '\\.')))
   }
 })
