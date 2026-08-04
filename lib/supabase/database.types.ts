@@ -5289,6 +5289,41 @@ export type Database = {
         }
         Relationships: []
       }
+      ranking_snapshot_create_operation_results: {
+        Row: {
+          actor_id: string
+          created_at: string
+          intent_digest: string
+          request_id: string
+          result: Json
+          snapshot_id: string
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          intent_digest: string
+          request_id: string
+          result: Json
+          snapshot_id: string
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          intent_digest?: string
+          request_id?: string
+          result?: Json
+          snapshot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'ranking_snapshot_create_snapshot_fkey'
+            columns: ['snapshot_id']
+            isOneToOne: false
+            referencedRelation: 'ranking_snapshots'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       ranking_snapshots: {
         Row: {
           category: string | null
@@ -11714,6 +11749,16 @@ export type Database = {
           p_poll_type: string | null
           p_title: string
           p_visibility: string
+        }
+        Returns: Json
+      }
+      create_ranking_snapshot_atomic: {
+        Args: {
+          p_actor_id: string
+          p_exchange: string
+          p_request_id: string
+          p_time_range: string
+          p_traders: Json
         }
         Returns: Json
       }

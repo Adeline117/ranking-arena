@@ -217,6 +217,7 @@ PREDEPLOY_MIGRATIONS=(
   20260729185500_post_media_storage.sql
   20260729186500_atomic_post_edit_facets.sql
   20260803100000_atomic_custom_poll_expected_identity.sql
+  20260803100500_atomic_ranking_snapshot_create.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

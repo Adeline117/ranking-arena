@@ -178,6 +178,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729187000_close_legacy_post_edit_signature.sql'
   const customPollExpectedIdentityMigration =
     '20260803100000_atomic_custom_poll_expected_identity.sql'
+  const atomicRankingSnapshotCreateMigration = '20260803100500_atomic_ranking_snapshot_create.sql'
   const accountHardDeleteRecoveryBarrierMigration =
     '20260729075300_account_hard_delete_recovery_barrier.sql'
   const verifiedAuthProfileEmailMigration = '20260729075400_verified_auth_profile_email.sql'
@@ -244,11 +245,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     postMediaStorageMigration,
     atomicPostEditFacetsMigration,
     customPollExpectedIdentityMigration,
+    atomicRankingSnapshotCreateMigration,
   ]
   const inactiveAuthSubjectMutationBarrierMigration =
     '20260729154500_inactive_auth_subject_mutation_barrier.sql'
 
-  assert.equal(predeploy.length, 188)
+  assert.equal(predeploy.length, 189)
   assert.ok(predeploy.includes(accountHardDeleteRecoveryBarrierMigration))
   assert.ok(predeploy.includes(verifiedAuthProfileEmailMigration))
   assert.ok(predeploy.includes(accountRecoveryAuthEmailMigration))
@@ -395,7 +397,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 214)
+  assert.equal(new Set(all).size, 215)
   assert.equal(
     postdeploy.filter((migration) => migration === postCreateDirectWriteClosureMigration).length,
     1
@@ -580,7 +582,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-147), [
+  assert.deepEqual(predeploy.slice(-148), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -782,8 +784,22 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!recovery.includes(customPollExpectedIdentityMigration))
   assert.ok(!quarantined.includes(customPollExpectedIdentityMigration))
   assert.ok(!superseded.includes(customPollExpectedIdentityMigration))
-  assert.equal(predeploy.at(-1), customPollExpectedIdentityMigration)
-  assert.deepEqual(predeploy.slice(-76), [
+  assert.equal(
+    predeploy.filter((migration) => migration === atomicRankingSnapshotCreateMigration).length,
+    1
+  )
+  assert.ok(!postdeploy.includes(atomicRankingSnapshotCreateMigration))
+  assert.ok(!recoveryPrerequisites.includes(atomicRankingSnapshotCreateMigration))
+  assert.ok(!concurrentRecovery.includes(atomicRankingSnapshotCreateMigration))
+  assert.ok(!recovery.includes(atomicRankingSnapshotCreateMigration))
+  assert.ok(!quarantined.includes(atomicRankingSnapshotCreateMigration))
+  assert.ok(!superseded.includes(atomicRankingSnapshotCreateMigration))
+  assert.equal(
+    predeploy.indexOf(atomicRankingSnapshotCreateMigration),
+    predeploy.indexOf(customPollExpectedIdentityMigration) + 1
+  )
+  assert.equal(predeploy.at(-1), atomicRankingSnapshotCreateMigration)
+  assert.deepEqual(predeploy.slice(-77), [
     '20260729059000_atomic_referral_attribution.sql',
     '20260729060000_retryable_referral_qualification.sql',
     '20260729061000_source_legacy_platform_alias_contract.sql',
