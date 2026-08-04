@@ -3,6 +3,7 @@ import type {
   SelectedCopierSnapshotVerifier,
 } from '../../core/adapter'
 import type { HistoryTerminalVerificationInput } from '../../history-acquisition'
+import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { dedupeHash } from './parsers'
 
 export const OKX_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
@@ -16,8 +17,7 @@ const DAY_MS = 86_400_000
 type Dict = Record<string, unknown>
 
 interface ValidatedSnapshot {
-  block: Dict | null
-  rows: Dict[]
+  candidates: Dict[]
 }
 
 function isRecord(value: unknown): value is Dict {
@@ -38,11 +38,11 @@ function canonicalLabel(value: unknown): string | null {
 }
 
 function canonicalNumericString(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value) &&
-    Number.isFinite(Number(value))
-  )
+  if (typeof value !== 'string' || !/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value)) {
+    return false
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && !Object.is(parsed, -0)
 }
 
 function canonicalPositiveEpoch(value: unknown): value is string {
@@ -96,7 +96,7 @@ function validateEnvelope(value: unknown): ValidatedSnapshot | null {
     return null
   }
 
-  if (value.data.length === 0) return { block: null, rows: [] }
+  if (value.data.length === 0) return { candidates: [] }
 
   const block = value.data[0]
   if (
@@ -119,7 +119,7 @@ function validateEnvelope(value: unknown): ValidatedSnapshot | null {
     return null
   }
 
-  return { block, rows: block.copyTraders }
+  return { candidates: block.copyTraders }
 }
 
 function validatePages(
@@ -154,61 +154,58 @@ function verifyTerminal(input: HistoryTerminalVerificationInput) {
     : ({ verified: false } as const)
 }
 
-function derivedRawMatches(rowRaw: Dict, sourceRow: Dict, block: Dict): boolean {
-  const expected = {
-    ...sourceRow,
-    copy_total_pnl: block.copyTotalPnl,
-    copy_trader_num_chg: block.copyTraderNumChg,
-  }
-  return (
-    exactKeys(rowRaw, Object.keys(expected)) &&
-    Object.entries(expected).every(([key, value]) => rowRaw[key] === value)
-  )
-}
-
 function verifyConservation(input: CopierSnapshotVerificationInput) {
   const snapshot = validatePages(input.pages, input.exchangeTraderId)
-  if (!snapshot || snapshot.rows.length !== input.rows.length) {
+  if (!snapshot || snapshot.candidates.length !== input.rows.length) {
     return { verified: false } as const
   }
 
-  if (snapshot.rows.length === 0) {
+  if (snapshot.candidates.length === 0) {
     return { verified: true, envelopeRowCount: 0 } as const
   }
-  if (snapshot.block === null) return { verified: false } as const
+
+  // OKX exposes no copier event timestamp. The parser stamps every candidate
+  // with one job-scoped clock captured before the immutable page was fetched.
+  // Prove that shared clock instead of accepting independently forged row
+  // timestamps whose derived durations merely happen to be self-consistent.
+  const parsedAt = input.rows[0]?.ts ?? null
+  const fetchedAt = input.pages[0]?.fetchedAt
+  if (
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(fetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(fetchedAt)
+  ) {
+    return { verified: false } as const
+  }
+  const parsedAtMs = Date.parse(parsedAt)
 
   const hashes = new Set<string>()
   for (const [index, row] of input.rows.entries()) {
-    const sourceRow = snapshot.rows[index]
+    const sourceRow = snapshot.candidates[index]
     const label = canonicalLabel(sourceRow.nickName)
     const beginCopyTime = Number(sourceRow.beginCopyTime)
-    const rowTimestamp = Date.parse(row.ts)
     const expectedDuration =
-      Number.isFinite(rowTimestamp) && rowTimestamp > beginCopyTime
-        ? Math.floor((rowTimestamp - beginCopyTime) / DAY_MS)
-        : null
+      parsedAtMs > beginCopyTime ? Math.floor((parsedAtMs - beginCopyTime) / DAY_MS) : null
     const expectedHash = dedupeHash('okx_cp', label, sourceRow.beginCopyTime)
 
     if (
       label === null ||
       row.kind !== 'copiers' ||
-      !Number.isFinite(rowTimestamp) ||
-      new Date(rowTimestamp).toISOString() !== row.ts ||
+      row.ts !== parsedAt ||
       row.copierLabel !== label ||
-      row.copierPnl !== Number(sourceRow.pnl) ||
+      !Object.is(row.copierPnl, Number(sourceRow.pnl)) ||
       row.copierInvested !== null ||
-      row.copyDurationDays !== expectedDuration ||
+      !Object.is(row.copyDurationDays, expectedDuration) ||
       row.dedupeHash !== expectedHash ||
       hashes.has(row.dedupeHash) ||
-      !isRecord(row.raw) ||
-      !derivedRawMatches(row.raw, sourceRow, snapshot.block)
+      row.raw !== sourceRow
     ) {
       return { verified: false } as const
     }
     hashes.add(row.dedupeHash)
   }
 
-  return { verified: true, envelopeRowCount: snapshot.rows.length } as const
+  return { verified: true, envelopeRowCount: snapshot.candidates.length } as const
 }
 
 export const okxCopierSnapshotVerifier: SelectedCopierSnapshotVerifier = Object.freeze({

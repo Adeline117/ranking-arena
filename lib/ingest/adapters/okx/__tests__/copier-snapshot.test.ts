@@ -116,6 +116,9 @@ describe('OKX copier snapshot authority', () => {
     expect(verifier()).toMatchObject({
       contract: 'arena.ingest.history-terminal-verifier.okx.copiers@1',
     })
+    expect(okxAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
+    expect(okxAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
+    expect(okxAdapter.verifyCopierSnapshot?.(source({ trader_kind_scope: 'bot' }))).toBeNull()
     expect(okxAdapter.verifyCopierSnapshot?.(source({ copier_table_depth: 'full' }))).toBeNull()
     expect(okxAdapter.verifyCopierSnapshot?.(source({ currency: 'USDC' }))).toBeNull()
     expect(
@@ -149,7 +152,17 @@ describe('OKX copier snapshot authority', () => {
     })
 
     const rows = parseRows(acquisition.pages)
+    const capturedBlock = (acquisition.pages[0].payload as { data: Array<{ copyTraders: Dict[] }> })
+      .data[0]
     expect(rows).toHaveLength(10)
+    rows.forEach((row, index) => expect(row.raw).toBe(capturedBlock.copyTraders[index]))
+    expect(rows[0].raw).not.toHaveProperty('copy_total_pnl')
+    expect(rows[0].raw).not.toHaveProperty('copy_trader_num_chg')
+    expect(capturedBlock).toMatchObject({
+      copyTotalPnl: '4915.5927501606778108',
+      copyTraderNumChg: '284',
+      copyTraderNumChgRatio: '2.4912',
+    })
     expect(
       verifier().verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
@@ -196,6 +209,57 @@ describe('OKX copier snapshot authority', () => {
       expect.any(Object)
     )
     expect(acquisition.artifact.termination.evidence_state).toBe('verified')
+  })
+
+  it.each([
+    [
+      'currency',
+      (block: Dict) => {
+        block.ccy = 'USDC'
+      },
+    ],
+    [
+      'total PnL type',
+      (block: Dict) => {
+        block.copyTotalPnl = 4915
+      },
+    ],
+    [
+      'trader-count change value',
+      (block: Dict) => {
+        block.copyTraderNumChg = 'NaN'
+      },
+    ],
+    [
+      'trader-count ratio canonical form',
+      (block: Dict) => {
+        block.copyTraderNumChgRatio = ' 2.4912'
+      },
+    ],
+    [
+      'missing aggregate field',
+      (block: Dict) => {
+        delete block.copyTotalPnl
+      },
+    ],
+  ] as const)('rejects capture-level aggregate envelope drift: %s', async (_label, mutate) => {
+    const payload = clone<{ data: Dict[] }>(fixture('copy-traders.json'))
+    mutate(payload.data[0])
+    const acquisition = await capture(payload)
+
+    expect(acquisition.pages).toHaveLength(1)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
+    })
+    expect(
+      verifier().verifyConservation({
+        exchangeTraderId: UNIQUE_CODE,
+        pages: acquisition.pages,
+        rows: parseRows(acquisition.pages),
+      })
+    ).toEqual({ verified: false })
   })
 
   it.each([
@@ -265,7 +329,70 @@ describe('OKX copier snapshot authority', () => {
     expect(acquisition.artifact.termination.evidence_state).toBe('rejected')
   })
 
-  it('rejects parser omission, row reordering, derived-raw drift and duplicate hashes', async () => {
+  it.each([
+    ['snapshot timestamp', (row: ParsedCopierRow) => ({ ...row, ts: '2026-08-03T10:00:01.000Z' })],
+    [
+      'copier label',
+      (row: ParsedCopierRow) => ({ ...row, copierLabel: `${row.copierLabel}-drift` }),
+    ],
+    ['copier PnL', (row: ParsedCopierRow) => ({ ...row, copierPnl: (row.copierPnl ?? 0) + 1 })],
+    ['copier invested', (row: ParsedCopierRow) => ({ ...row, copierInvested: 1 })],
+    [
+      'copy duration',
+      (row: ParsedCopierRow) => ({
+        ...row,
+        copyDurationDays: (row.copyDurationDays ?? 0) + 1,
+      }),
+    ],
+  ] as const)('rejects parsed projection drift independently: %s', async (_label, mutate) => {
+    const acquisition = await capture(fixture('copy-traders.json'))
+    const rows = parseRows(acquisition.pages)
+    const selected = verifier()
+    const verify = (candidate: readonly ParsedCopierRow[]) =>
+      selected.verifyConservation({
+        exchangeTraderId: UNIQUE_CODE,
+        pages: acquisition.pages,
+        rows: candidate,
+      })
+
+    expect(verify(rows.map((row, index) => (index === 0 ? mutate(row) : row)))).toEqual({
+      verified: false,
+    })
+  })
+
+  it('requires the exact candidate RAW reference, not a deep-equal clone or derived object', async () => {
+    const acquisition = await capture(fixture('copy-traders.json'))
+    const rows = parseRows(acquisition.pages)
+    const selected = verifier()
+    const verify = (candidate: readonly ParsedCopierRow[]) =>
+      selected.verifyConservation({
+        exchangeTraderId: UNIQUE_CODE,
+        pages: acquisition.pages,
+        rows: candidate,
+      })
+
+    expect(
+      verify(rows.map((row, index) => (index === 0 ? { ...row, raw: clone(row.raw) } : row)))
+    ).toEqual({ verified: false })
+    expect(
+      verify(
+        rows.map((row, index) =>
+          index === 0
+            ? {
+                ...row,
+                raw: {
+                  ...row.raw,
+                  copy_total_pnl: '4915.5927501606778108',
+                  copy_trader_num_chg: '284',
+                },
+              }
+            : row
+        )
+      )
+    ).toEqual({ verified: false })
+  })
+
+  it('rejects row-count and source-order drift independently', async () => {
     const acquisition = await capture(fixture('copy-traders.json'))
     const rows = parseRows(acquisition.pages)
     const selected = verifier()
@@ -277,10 +404,26 @@ describe('OKX copier snapshot authority', () => {
       })
 
     expect(verify(rows.slice(1))).toEqual({ verified: false })
+    expect(verify([...rows, rows[0]])).toEqual({ verified: false })
     expect(verify([...rows].reverse())).toEqual({ verified: false })
+  })
+
+  it('rejects expected-hash drift and duplicate hashes independently', async () => {
+    const acquisition = await capture(fixture('copy-traders.json'))
+    const rows = parseRows(acquisition.pages)
+    const selected = verifier()
+    const verify = (candidate: readonly ParsedCopierRow[]) =>
+      selected.verifyConservation({
+        exchangeTraderId: UNIQUE_CODE,
+        pages: acquisition.pages,
+        rows: candidate,
+      })
+
     expect(
       verify(
-        rows.map((row, index) => (index === 0 ? { ...row, raw: { ...row.raw, total: 10 } } : row))
+        rows.map((row, index) =>
+          index === 0 ? { ...row, dedupeHash: '0'.repeat(row.dedupeHash.length) } : row
+        )
       )
     ).toEqual({ verified: false })
     expect(

@@ -400,12 +400,10 @@ export function parseOkxCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[]
           ? Math.floor((scrapedMs - begin) / 86_400_000)
           : null,
       dedupeHash: dedupeHash('okx_cp', label, item.beginCopyTime),
-      raw: {
-        ...item,
-        // aggregate context rides along on each row (spec §3 raw note)
-        copy_total_pnl: block.copyTotalPnl ?? null,
-        copy_trader_num_chg: block.copyTraderNumChg ?? null,
-      },
+      // Preserve the exact upstream candidate object. Capture-level aggregate
+      // fields remain in the immutable page envelope and must never be copied
+      // into a person-level row that participates in parser conservation.
+      raw: item,
     })
   }
   return out

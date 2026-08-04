@@ -332,8 +332,15 @@ describe('parseOkxHistory', () => {
     expect(first.dedupeHash).not.toBe(second.dedupeHash)
   })
 
-  it('copiers: top-10 list with derived copy duration; aggregate rides in raw', () => {
-    const rows = parseOkxHistory(fixture('copy-traders.json'), 'copiers', ctx)
+  it('copiers: preserves each exact candidate while aggregate fields stay in the envelope', () => {
+    const payload = fixture('copy-traders.json') as {
+      data: Array<{
+        copyTotalPnl: string
+        copyTraderNumChg: string
+        copyTraders: Array<Record<string, unknown>>
+      }>
+    }
+    const rows = parseOkxHistory(payload, 'copiers', ctx)
     expect(rows).toHaveLength(10)
     const first = rows[0]
     expect(first).toMatchObject({ kind: 'copiers', ts: ctx.scrapedAt })
@@ -345,7 +352,14 @@ describe('parseOkxHistory', () => {
       expect(first.copyDurationDays).toBeLessThan(60)
       expect(first.copierInvested).toBeNull()
     }
-    expect((first.raw as Record<string, unknown>).copy_total_pnl).toBe('4915.5927501606778108')
+    expect(first.raw).toBe(payload.data[0].copyTraders[0])
+    expect(first.raw).toEqual(payload.data[0].copyTraders[0])
+    expect(first.raw).not.toHaveProperty('copy_total_pnl')
+    expect(first.raw).not.toHaveProperty('copy_trader_num_chg')
+    expect(payload.data[0]).toMatchObject({
+      copyTotalPnl: '4915.5927501606778108',
+      copyTraderNumChg: '284',
+    })
   })
 
   it('orders / transfers throw (not exposed publicly)', () => {

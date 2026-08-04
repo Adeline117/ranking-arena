@@ -179,8 +179,11 @@ const okxAdapter: SourceAdapter = {
 
   verifyCopierSnapshot(src) {
     return src.slug === 'okx_futures' &&
+      src.status === 'active' &&
+      src.serving_mode === 'serving' &&
       src.adapter_slug === 'okx' &&
       src.product_type === 'futures' &&
+      src.trader_kind_scope === 'human' &&
       src.currency === 'USDT' &&
       src.copier_table_depth === 'top10' &&
       supportsSwapRecords(src) &&
