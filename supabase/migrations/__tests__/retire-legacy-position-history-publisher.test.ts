@@ -206,15 +206,25 @@ describe('legacy position-history publisher retirement', () => {
       'readonly values: readonly [number, string, number | null, string]'
     )
     expect(publish).toContain(
-      "type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history'>"
+      "type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history' | 'copiers'>"
     )
     const guard = publish.indexOf("if (kind === 'position_history')")
     const emptyReturn = publish.indexOf('if (rows.length === 0) return 0', guard)
     expect(guard).toBeGreaterThan(-1)
     expect(emptyReturn).toBeGreaterThan(guard)
     expect(publish).toContain('position_history requires parser-conservation publication')
+    const copierGuard = publish.indexOf("if (kind === 'copiers')")
+    const copierEmptyReturn = publish.indexOf('if (rows.length === 0) return 0', copierGuard)
+    expect(copierGuard).toBeGreaterThan(-1)
+    expect(copierEmptyReturn).toBeGreaterThan(copierGuard)
+    expect(publish).toContain('copiers require snapshot-receipt publication')
+    expect(publish).not.toContain('INSERT INTO arena.copier_records')
 
-    expect(manualSmoke).toContain("for (const kind of ['copiers'] as const)")
+    expect(manualSmoke).toContain('skipped; use the receipt-bound worker path')
+    expect(manualSmoke).not.toContain('publishHistoryRows')
+    expect(manualSmoke).not.toContain('getHistoryCursor')
+    expect(manualSmoke).not.toContain('publishCopierSnapshot(')
+    expect(manualSmoke).not.toContain('publishCopierSnapshotInTransaction(')
     expect(manualSmoke).not.toMatch(
       /for \(const kind of \[[^\]]*position_history[^\]]*\] as const\)/
     )

@@ -181,8 +181,12 @@ async function main() {
          WHERE t.source_id = $1) AS positions,
        (SELECT count(*) FROM arena.position_history ph JOIN arena.traders t ON t.id = ph.trader_id
          WHERE t.source_id = $1) AS position_history,
-       (SELECT count(*) FROM arena.copier_records cr JOIN arena.traders t ON t.id = cr.trader_id
-         WHERE t.source_id = $1) AS copier_records`,
+       (SELECT count(*) FROM arena.copier_snapshot_publications publication
+         WHERE publication.source_id = $1) AS copier_snapshot_publications,
+       (SELECT count(*) FROM arena.copier_snapshot_rows row_value
+          JOIN arena.copier_snapshot_publications publication
+            ON publication.publication_id = row_value.publication_id
+         WHERE publication.source_id = $1) AS copier_snapshot_rows`,
     [src.id]
   )
   console.log('serving rows:', verify.rows[0])
