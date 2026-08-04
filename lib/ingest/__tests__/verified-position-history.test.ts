@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
   BINANCE_POSITION_HISTORY_URL,
@@ -26,6 +28,8 @@ import {
   type HistoryTerminalClaim,
   type SelectedHistoryTerminalVerifier,
 } from '@/lib/ingest/history-acquisition'
+import { buildReviewedPositionHistoryEvidence } from '@/lib/ingest/reviewed-position-history'
+import { strictCanonicalJson } from '@/lib/ingest/strict-canonical-json'
 import {
   BITGET_POSITION_HISTORY_SOURCE_CONTRACT,
   isPreparedVerifiedPositionHistoryPublication,
@@ -34,6 +38,7 @@ import {
   PUBLISH_VERIFIED_POSITION_HISTORY_SQL,
   validateVerifiedPositionHistoryPublicationReceipt,
   VERIFIED_POSITION_HISTORY_RPC_PAYLOAD_CONTRACT,
+  validateVerifiedPositionHistoryBindingSet,
   type PrepareVerifiedPositionHistoryPublicationInput,
   type PreparedVerifiedPositionHistoryPublication,
 } from '@/lib/ingest/verified-position-history'
@@ -67,20 +72,24 @@ const FACT_KEYS = [
 ] as const
 
 const ROW_BINDING_KEYS = [
+  'binding_ordinal',
+  'classification',
   'fact_canonical_json',
-  'input_ordinal',
+  'fact_ordinal',
+  'fact_sha256',
   'page_fetched_at',
   'page_ordinal',
   'page_payload_sha256',
   'page_stored_index',
   'raw_row_canonical_json',
   'raw_row_sha256',
-  'row_sha256',
   'source_row_ordinal',
 ] as const
 
 const RPC_PAYLOAD_KEYS = [
   'adapter_slug',
+  'binding_set_sha256',
+  'bindings_canonical_json',
   'contract',
   'exchange_trader_id',
   'history_kind',
@@ -89,8 +98,6 @@ const RPC_PAYLOAD_KEYS = [
   'parser_contract',
   'previous_publication_id',
   'raw_object_id',
-  'row_set_sha256',
-  'rows_canonical_json',
   'serialization_contract',
   'source_contract',
   'source_id',
@@ -263,6 +270,7 @@ async function okxInput(): Promise<PrepareVerifiedPositionHistoryPublicationInpu
     subPosId: 'sub-position-1',
     instId: 'BTC-USDT-SWAP',
     ccy: 'USDT',
+    instType: 'SWAP',
     posSide: 'long',
     openTime: openedMs,
     closeTime: closedMs,
@@ -272,6 +280,7 @@ async function okxInput(): Promise<PrepareVerifiedPositionHistoryPublicationInpu
     closeAvgPx: '110',
     pnl: '20',
     pnlRatio: '0.2',
+    uniqueCode: exchangeTraderId,
   }
   const firstUrl =
     'https://www.okx.com/api/v5/copytrading/public-subpositions-history?' +
@@ -308,6 +317,43 @@ async function okxInput(): Promise<PrepareVerifiedPositionHistoryPublicationInpu
   return inputFor(captured, { id: 9, slug: 'okx_futures', adapter_slug: 'okx' }, rows)
 }
 
+async function okxFullFixtureInput(): Promise<PrepareVerifiedPositionHistoryPublicationInput> {
+  const fixture = JSON.parse(
+    readFileSync(join(__dirname, '../adapters/okx/__tests__/fixtures/history-page.json'), 'utf8')
+  ) as { data: Array<Record<string, unknown>> }
+  const fixtureIdentity = String(fixture.data[0].uniqueCode)
+  const firstUrl =
+    'https://www.okx.com/api/v5/copytrading/public-subpositions-history?' +
+    `instType=SWAP&limit=100&uniqueCode=${fixtureIdentity}`
+  const lastSubPositionId = String(fixture.data.at(-1)?.subPosId)
+  const captured = await capture(
+    { id: 9, slug: 'okx_futures' },
+    [
+      {
+        pageIndex: 1,
+        url: firstUrl,
+        fetchedAt,
+        payload: { historyTraderIdentity: fixtureIdentity, data: fixture.data },
+      },
+      {
+        pageIndex: 2,
+        url: `${firstUrl}&after=${lastSubPositionId}`,
+        fetchedAt: '2026-08-03T10:00:01.000Z',
+        payload: { historyTraderIdentity: fixtureIdentity, data: [] },
+      },
+    ],
+    terminalClaim([{ segment_id: 'default', reason: 'empty_page', page_ordinal: 2 }]),
+    okxPositionHistoryTerminalVerifier,
+    fixtureIdentity
+  )
+  const evidence = buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
+  return inputFor(
+    captured,
+    { id: 9, slug: 'okx_futures', adapter_slug: 'okx' },
+    evidence.canonicalRows
+  )
+}
+
 describe('verified position-history publication preparation', () => {
   it.each([
     ['Bitget', bitgetInput],
@@ -321,17 +367,19 @@ describe('verified position-history publication preparation', () => {
       expect(isPreparedVerifiedPositionHistoryPublication(prepared)).toBe(true)
       expect(prepared.rows).toHaveLength(1)
       expect(prepared.rowBindings[0]).toMatchObject({
+        binding_ordinal: 1,
+        classification: 'canonical_materialized',
         fact_canonical_json: expect.any(String),
-        input_ordinal: 1,
+        fact_ordinal: 1,
+        fact_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
         page_ordinal: 1,
         source_row_ordinal: 1,
         page_payload_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
         page_fetched_at: fetchedAt,
         raw_row_canonical_json: expect.any(String),
         raw_row_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-        row_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       })
-      expect(prepared.rowSetSha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(prepared.bindingSetSha256).toMatch(/^[0-9a-f]{64}$/)
       expect(prepared.publicationSha256).toMatch(/^[0-9a-f]{64}$/)
       expect(Object.isFrozen(prepared)).toBe(true)
       expect(Object.isFrozen(prepared.rows[0].raw)).toBe(true)
@@ -400,7 +448,7 @@ describe('verified position-history publication preparation', () => {
     const prepared = prepareVerifiedPositionHistoryPublication(await bitgetInput())
     const call = prepareVerifiedPositionHistoryRpcCall(prepared)
     const payload = JSON.parse(call.values[3])
-    const bindings = JSON.parse(payload.rows_canonical_json)
+    const bindings = JSON.parse(payload.bindings_canonical_json)
     const binding = bindings[0]
     const fact = JSON.parse(binding.fact_canonical_json)
     const raw = JSON.parse(binding.raw_row_canonical_json)
@@ -415,7 +463,7 @@ describe('verified position-history publication preparation', () => {
       source_run_id: prepared.sourceRunId,
       raw_object_id: 501,
       history_kind: 'position_history',
-      row_set_sha256: prepared.rowSetSha256,
+      binding_set_sha256: prepared.bindingSetSha256,
     })
     expect(payload).not.toHaveProperty('publication_sha256')
     expect(payload).not.toHaveProperty('rows')
@@ -425,15 +473,149 @@ describe('verified position-history publication preparation', () => {
       source_row_ordinal: 1,
       page_payload_sha256: prepared.rowBindings[0].page_payload_sha256,
       page_fetched_at: fetchedAt,
-      row_sha256: prepared.rowBindings[0].row_sha256,
+      fact_sha256: prepared.rowBindings[0].fact_sha256,
     })
     expect(Object.keys(fact).sort()).toEqual(FACT_KEYS)
     expect(raw).toEqual(fact.raw)
-    expect(sha256Utf8(binding.fact_canonical_json)).toBe(binding.row_sha256)
+    expect(sha256Utf8(binding.fact_canonical_json)).toBe(binding.fact_sha256)
     expect(sha256Utf8(binding.raw_row_canonical_json)).toBe(binding.raw_row_sha256)
-    expect(sha256Utf8(payload.rows_canonical_json)).toBe(payload.row_set_sha256)
+    expect(sha256Utf8(payload.bindings_canonical_json)).toBe(payload.binding_set_sha256)
     expect(sha256Utf8(call.values[3])).toBe(prepared.publicationSha256)
     expect(call.values[3]).toBe(prepared.rpcPayloadCanonicalJson)
+  })
+
+  it('binds the complete real OKX fixture as two facts plus one explicit partial omission', async () => {
+    const input = await okxFullFixtureInput()
+    const prepared = prepareVerifiedPositionHistoryPublication(input)
+    const bindings = JSON.parse(prepared.rpcPayload.bindings_canonical_json) as Array<
+      Record<string, unknown>
+    >
+
+    expect(input.rows).toHaveLength(2)
+    expect(prepared.rows).toHaveLength(2)
+    expect(bindings).toHaveLength(3)
+    expect(bindings.map((binding) => binding.classification)).toEqual([
+      'source_partial_omitted',
+      'canonical_materialized',
+      'canonical_materialized',
+    ])
+    expect(bindings.map((binding) => binding.binding_ordinal)).toEqual([1, 2, 3])
+    expect(bindings.map((binding) => binding.fact_ordinal)).toEqual([null, 1, 2])
+    expect(bindings[0]).toMatchObject({
+      fact_canonical_json: null,
+      fact_sha256: null,
+      page_ordinal: 1,
+      source_row_ordinal: 1,
+    })
+    expect(JSON.parse(String(bindings[0].raw_row_canonical_json))).toMatchObject({
+      closeTime: '',
+      uniqueCode: input.acquisition.trader.exchange_trader_id,
+    })
+  })
+
+  it('rejects missing, duplicate, cross-page, false-partial and fact-shape binding attacks', async () => {
+    const input = await okxFullFixtureInput()
+    const evidence = buildReviewedPositionHistoryEvidence(input.acquisition, input.sourceRunId)
+    const prepared = prepareVerifiedPositionHistoryPublication(input)
+    const bindings = JSON.parse(JSON.stringify(prepared.rowBindings)) as Array<
+      Record<string, unknown>
+    >
+
+    expect(validateVerifiedPositionHistoryBindingSet(bindings, evidence)).toHaveLength(3)
+    expect(() => validateVerifiedPositionHistoryBindingSet(bindings.slice(1), evidence)).toThrow(
+      'binding count does not exactly match'
+    )
+
+    const duplicate = JSON.parse(JSON.stringify(bindings)) as Array<Record<string, unknown>>
+    duplicate[1] = { ...duplicate[0], binding_ordinal: 2 }
+    expect(() => validateVerifiedPositionHistoryBindingSet(duplicate, evidence)).toThrow(
+      'exact manifest coordinate order'
+    )
+
+    const crossPage = JSON.parse(JSON.stringify(bindings)) as Array<Record<string, unknown>>
+    crossPage[0].page_ordinal = 2
+    expect(() => validateVerifiedPositionHistoryBindingSet(crossPage, evidence)).toThrow(
+      'exact manifest coordinate order'
+    )
+
+    const partialWithFact = JSON.parse(JSON.stringify(bindings)) as Array<Record<string, unknown>>
+    partialWithFact[0].fact_ordinal = 1
+    partialWithFact[0].fact_canonical_json = partialWithFact[1].fact_canonical_json
+    partialWithFact[0].fact_sha256 = partialWithFact[1].fact_sha256
+    expect(() => validateVerifiedPositionHistoryBindingSet(partialWithFact, evidence)).toThrow(
+      'partial binding must not carry a materialized fact'
+    )
+
+    const materializedWithoutFact = JSON.parse(JSON.stringify(bindings)) as Array<
+      Record<string, unknown>
+    >
+    materializedWithoutFact[1].fact_ordinal = null
+    materializedWithoutFact[1].fact_canonical_json = null
+    materializedWithoutFact[1].fact_sha256 = null
+    expect(() =>
+      validateVerifiedPositionHistoryBindingSet(materializedWithoutFact, evidence)
+    ).toThrow('materialized binding must carry an exact fact')
+
+    const falsePartial = JSON.parse(JSON.stringify(bindings)) as Array<Record<string, unknown>>
+    const falsePartialRaw = JSON.parse(String(falsePartial[0].raw_row_canonical_json)) as Record<
+      string,
+      unknown
+    >
+    falsePartialRaw.closeTime = String(Number(falsePartialRaw.openTime) + 1_000)
+    const falsePartialCanonicalRaw = strictCanonicalJson(falsePartialRaw)
+    const falsePartialRawSha256 = sha256Utf8(falsePartialCanonicalRaw)
+    falsePartial[0].raw_row_canonical_json = falsePartialCanonicalRaw
+    falsePartial[0].raw_row_sha256 = falsePartialRawSha256
+    const falsePartialEvidence = {
+      ...evidence,
+      pageManifest: evidence.pageManifest.map((page, pageIndex) =>
+        pageIndex === 0
+          ? {
+              ...page,
+              source_rows: page.source_rows.map((sourceRow, rowIndex) =>
+                rowIndex === 0
+                  ? { ...sourceRow, source_row_sha256: falsePartialRawSha256 }
+                  : sourceRow
+              ),
+            }
+          : page
+      ),
+    }
+    expect(() =>
+      validateVerifiedPositionHistoryBindingSet(falsePartial, falsePartialEvidence)
+    ).toThrow('does not carry exact OKX omission evidence')
+  })
+
+  it('never accepts source-partial classification for a non-OKX manifest', async () => {
+    const input = await bitgetInput()
+    const evidence = buildReviewedPositionHistoryEvidence(input.acquisition, input.sourceRunId)
+    const prepared = prepareVerifiedPositionHistoryPublication(input)
+    const binding = {
+      ...prepared.rowBindings[0],
+      classification: 'source_partial_omitted',
+      fact_canonical_json: null,
+      fact_ordinal: null,
+      fact_sha256: null,
+    }
+    const forgedEvidence = {
+      ...evidence,
+      pageManifest: evidence.pageManifest.map((page, pageIndex) =>
+        pageIndex === 0
+          ? {
+              ...page,
+              source_rows: page.source_rows.map((sourceRow, rowIndex) =>
+                rowIndex === 0
+                  ? { ...sourceRow, classification: 'source_partial_omitted' as const }
+                  : sourceRow
+              ),
+            }
+          : page
+      ),
+    }
+
+    expect(() => validateVerifiedPositionHistoryBindingSet([binding], forgedEvidence)).toThrow(
+      'source partial omission is allowed only for reviewed OKX history'
+    )
   })
 
   it.each([
@@ -643,8 +825,10 @@ describe('verified position-history publication preparation', () => {
       'https://www.okx.com/api/v5/copytrading/public-subpositions-history?' +
       `instType=SWAP&limit=100&uniqueCode=${exchangeTraderId}`
     const rawRows = Array.from({ length: 101 }, (_, index) => ({
+      ccy: 'USDT',
       subPosId: `oversized-${index + 1}`,
       instId: 'BTC-USDT-SWAP',
+      instType: 'SWAP',
       posSide: 'long',
       openTime: openedMs,
       closeTime: closedMs,
@@ -654,6 +838,7 @@ describe('verified position-history publication preparation', () => {
       closeAvgPx: '110',
       pnl: '20',
       pnlRatio: '0.2',
+      uniqueCode: exchangeTraderId,
     }))
     const captured = await capture(
       { id: 9, slug: 'okx_futures' },
@@ -695,8 +880,10 @@ describe('verified position-history publication preparation', () => {
       `instType=SWAP&limit=100&uniqueCode=${exchangeTraderId}`
     const nextUrl = `${firstUrl}&after=duplicate-sub-position`
     const raw = {
+      ccy: 'USDT',
       subPosId: 'duplicate-sub-position',
       instId: 'BTC-USDT-SWAP',
+      instType: 'SWAP',
       posSide: 'long',
       openTime: openedMs,
       closeTime: closedMs,
@@ -706,6 +893,7 @@ describe('verified position-history publication preparation', () => {
       closeAvgPx: '110',
       pnl: '20',
       pnlRatio: '0.2',
+      uniqueCode: exchangeTraderId,
     }
     const captured = await capture(
       { id: 9, slug: 'okx_futures' },

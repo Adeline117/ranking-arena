@@ -68,7 +68,7 @@ import {
 import { runHistoryTransaction } from '../history-transaction'
 
 const sourceRunId = 'a'.repeat(64)
-const rowSetSha256 = 'b'.repeat(64)
+const bindingSetSha256 = 'b'.repeat(64)
 const publicationSha256 = 'c'.repeat(64)
 const rpcPayload = '{"exact":"canonical-payload"}'
 const rpcValues = Object.freeze([501, sourceRunId, 40, rpcPayload] as const)
@@ -76,14 +76,23 @@ const rpcCall = Object.freeze({ text: 'SELECT verified_publish($1,$2,$3,$4)', va
 
 function preparedPublication(
   rowCount = 2,
-  previousPublicationId: number | null = 40
+  previousPublicationId: number | null = 40,
+  partialRowCount = 0
 ): PreparedVerifiedPositionHistoryPublication {
   const publication = {} as PreparedVerifiedPositionHistoryPublication
   return Object.assign(publication, {
     previousPublicationId,
     publicationSha256,
     rawObjectId: 501,
-    rowSetSha256,
+    bindingSetSha256,
+    rowBindings: [
+      ...Array.from({ length: partialRowCount }, () =>
+        Object.freeze({ classification: 'source_partial_omitted' as const })
+      ),
+      ...Array.from({ length: rowCount }, () =>
+        Object.freeze({ classification: 'canonical_materialized' as const })
+      ),
+    ],
     rows: Array.from({ length: rowCount }, () => Object.freeze({})),
     sourceRunId,
   })
@@ -115,7 +124,11 @@ function reconciliationRow(
     publication_id: 41,
     previous_publication_id: publication.previousPublicationId,
     parsed_row_count: publication.rows.length,
-    row_set_sha256: publication.rowSetSha256,
+    binding_count: publication.rowBindings.length,
+    partial_row_count: publication.rowBindings.filter(
+      (binding) => binding.classification === 'source_partial_omitted'
+    ).length,
+    binding_set_sha256: publication.bindingSetSha256,
     publication_sha256: publication.publicationSha256,
     publication_payload: rpcPayload,
     raw_object_id: publication.rawObjectId,
@@ -165,6 +178,78 @@ function scriptedClient(options: ScriptedClientOptions = {}) {
 
 function pgError(code: string, message: string): Error & { code: string } {
   return Object.assign(new Error(message), { code })
+}
+
+function rawReconciliationFixture() {
+  const artifact = {
+    contract: 'arena.ingest.history-acquisition-artifact@1',
+    serialization_contract: 'arena.strict-canonical-json@1',
+    source: { id: 7, slug: 'bitget_futures' },
+    trader: { id: 41, exchange_trader_id: 'leader-1' },
+    history_kind: 'orders',
+    attempt_started_at: '2026-08-03T10:00:00.000Z',
+    starting_cursor: null,
+    capture_config: { caller_page_cap: null },
+    pages: [],
+    termination: {
+      evidence_state: 'missing',
+      claim_observations: [],
+      verifier_contract: null,
+      scan_terminal_state: 'unknown',
+      terminal_cursor_value: null,
+      overlap_event_at: null,
+      blocker_reasons: ['terminal_claim_missing'],
+    },
+  } as WriteHistoryRawArtifactInput['artifact']
+  const rawSourceRunId = strictCanonicalSha256(artifact)
+  const input = Object.freeze({ artifact, sourceRunId: rawSourceRunId })
+  const jsonBytes = Buffer.from(strictCanonicalJson(artifact), 'utf8')
+  const compressedBytes = gzipSync(jsonBytes).byteLength
+  const storagePath =
+    `bitget_futures/history_trust/orders/${rawSourceRunId}/` +
+    `event_history_${rawSourceRunId}.json.gz`
+  const row = {
+    id: 501,
+    source_id: 7,
+    job_type: 'history:orders',
+    trader_id: 41,
+    timeframe: null,
+    fetched_at: '2026-08-03T10:00:00.000Z',
+    storage_path: storagePath,
+    bytes: compressedBytes,
+    content_hash: rawSourceRunId,
+    quarantined: false,
+    meta: {
+      surface: 'orders',
+      data_contract: artifact.contract,
+      history_evidence_contract: 'arena.event-history-publication-evidence@1',
+      source_run_id: rawSourceRunId,
+      source_slug: 'bitget_futures',
+      exchange_trader_id: 'leader-1',
+      history_kind: 'orders',
+      attempt_started_at: artifact.attempt_started_at,
+      starting_cursor: null,
+      capture_config: artifact.capture_config,
+      observed_at: artifact.attempt_started_at,
+      page_count: 0,
+      terminal_evidence_state: 'missing',
+      scan_terminal_state: 'unknown',
+      verifier_contract: null,
+      termination: artifact.termination,
+      raw_integrity: {
+        version: 1,
+        content_type: 'application/json',
+        encoding: 'utf-8',
+        compression: 'gzip',
+        hash_algorithm: 'sha256',
+        hash_scope: 'json_utf8',
+        serialization_contract: 'arena.strict-canonical-json@1',
+        compressed_bytes: compressedBytes,
+        uncompressed_bytes: jsonBytes.byteLength,
+      },
+    },
+  }
+  return { input, rawSourceRunId, row, storagePath }
 }
 
 describe('verified Tier-B position-history publisher', () => {
@@ -349,6 +434,23 @@ describe('verified Tier-B position-history publisher', () => {
     expect(mockIngestClientConnect).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    ['binding count', { binding_count: 2 }],
+    ['partial row count', { partial_row_count: 0 }],
+  ] as const)(
+    'rejects a reconciled %s that loses mixed-binding audit state',
+    async (_label, drift) => {
+      const publication = preparedPublication(2, 40, 1)
+      const client = scriptedClient({ operationError: pgError('40001', 'database conflict') })
+      mockIngestClientConnect.mockResolvedValue(client)
+      mockPoolQuery.mockResolvedValue({ rows: [reconciliationRow(publication, drift)] })
+
+      await expect(publishPreparedVerifiedPositionHistory(publication)).rejects.toThrow(
+        'immutable source-run reconciliation does not match the prepared call'
+      )
+    }
+  )
+
   it('never reloads a head or rebases when a stale 40001 has no exact source-run hit', async () => {
     const publication = preparedPublication()
     const client = scriptedClient({ operationError: pgError('40001', 'stale head') })
@@ -532,28 +634,7 @@ describe('verified Tier-B position-history publisher', () => {
   })
 
   it('reconciles a RAW commit before any typed publication can run', async () => {
-    const artifact = {
-      contract: 'arena.ingest.history-acquisition-artifact@1',
-      serialization_contract: 'arena.strict-canonical-json@1',
-      source: { id: 7, slug: 'bitget_futures' },
-      trader: { id: 41, exchange_trader_id: 'leader-1' },
-      history_kind: 'orders',
-      attempt_started_at: '2026-08-03T10:00:00.000Z',
-      starting_cursor: null,
-      capture_config: { caller_page_cap: null },
-      pages: [],
-      termination: {
-        evidence_state: 'missing',
-        claim_observations: [],
-        verifier_contract: null,
-        scan_terminal_state: 'unknown',
-        terminal_cursor_value: null,
-        overlap_event_at: null,
-        blocker_reasons: ['terminal_claim_missing'],
-      },
-    } as WriteHistoryRawArtifactInput['artifact']
-    const rawSourceRunId = strictCanonicalSha256(artifact)
-    const input = Object.freeze({ artifact, sourceRunId: rawSourceRunId })
+    const { input, rawSourceRunId, row, storagePath } = rawReconciliationFixture()
     const client = scriptedClient({ commitError: new Error('RAW commit response lost') })
     // The RAW writer uses the supplied real transaction runner, but its body
     // does not issue the publisher RPC.
@@ -562,57 +643,7 @@ describe('verified Tier-B position-history publisher', () => {
       transactionRunner(async () => rawReceipt)
     )
     mockIngestClientConnect.mockResolvedValue(client)
-    const jsonBytes = Buffer.from(strictCanonicalJson(artifact), 'utf8')
-    const compressedBytes = gzipSync(jsonBytes).byteLength
-    mockPoolQuery.mockResolvedValue({
-      rows: [
-        {
-          id: 501,
-          source_id: 7,
-          job_type: 'history:orders',
-          trader_id: 41,
-          timeframe: null,
-          fetched_at: '2026-08-03T10:00:00.000Z',
-          storage_path:
-            `bitget_futures/history_trust/orders/${rawSourceRunId}/` +
-            `event_history_${rawSourceRunId}.json.gz`,
-          bytes: compressedBytes,
-          content_hash: rawSourceRunId,
-          quarantined: false,
-          meta: {
-            surface: 'orders',
-            data_contract: artifact.contract,
-            history_evidence_contract: 'arena.event-history-publication-evidence@1',
-            source_run_id: rawSourceRunId,
-            source_slug: 'bitget_futures',
-            exchange_trader_id: 'leader-1',
-            history_kind: 'orders',
-            attempt_started_at: artifact.attempt_started_at,
-            starting_cursor: null,
-            capture_config: artifact.capture_config,
-            observed_at: artifact.attempt_started_at,
-            page_count: 0,
-            terminal_evidence_state: 'missing',
-            scan_terminal_state: 'unknown',
-            verifier_contract: null,
-            termination: artifact.termination,
-            raw_integrity: {
-              version: 1,
-              content_type: 'application/json',
-              encoding: 'utf-8',
-              compression: 'gzip',
-              hash_algorithm: 'sha256',
-              hash_scope: 'json_utf8',
-              serialization_contract: 'arena.strict-canonical-json@1',
-              compressed_bytes: compressedBytes,
-              uncompressed_bytes: jsonBytes.byteLength,
-            },
-          },
-          source_run_id: rawSourceRunId,
-          trust_artifact_role: 'event_history',
-        },
-      ],
-    })
+    mockPoolQuery.mockResolvedValue({ rows: [row] })
     const runtime: VerifiedPositionHistoryPublisherRuntime = {
       database: { query: (...args) => mockPoolQuery(...args) } as IngestQueryExecutor,
       runTransaction: runHistoryTransaction,
@@ -625,6 +656,61 @@ describe('verified Tier-B position-history publisher', () => {
     })
     expect(rawWriter).toHaveBeenCalledTimes(1)
     expect(mockPoolQuery).toHaveBeenCalledTimes(1)
+    const [reconciliationSql, reconciliationValues] = mockPoolQuery.mock.calls[0]
+    expect(String(reconciliationSql)).toContain('WHERE storage_path = $1')
+    expect(String(reconciliationSql)).not.toContain('source_run_id')
+    expect(String(reconciliationSql)).not.toContain('trust_artifact_role')
+    expect(reconciliationValues).toEqual([storagePath])
+  })
+
+  it('rejects every security-relevant RAW pointer drift during ambiguous reconciliation', async () => {
+    const { input, rawSourceRunId, row } = rawReconciliationFixture()
+    const attacks = [
+      ['source', { source_id: 8 }],
+      ['job role', { job_type: 'history:position_history' }],
+      ['trader', { trader_id: 42 }],
+      ['timeframe', { timeframe: '1h' }],
+      ['fetched time', { fetched_at: '2026-08-03T10:00:00.001Z' }],
+      ['storage path', { storage_path: `${row.storage_path}.tampered` }],
+      ['content hash', { content_hash: 'f'.repeat(64) }],
+      ['quarantine state', { quarantined: true }],
+      ['metadata source run', { meta: { ...row.meta, source_run_id: 'f'.repeat(64) } }],
+      [
+        'metadata durable byte count',
+        {
+          meta: {
+            ...row.meta,
+            raw_integrity: {
+              ...row.meta.raw_integrity,
+              compressed_bytes: row.bytes + 1,
+            },
+          },
+        },
+      ],
+    ] as const
+
+    for (const [label, drift] of attacks) {
+      mockIngestClientConnect.mockReset()
+      mockPoolQuery.mockReset()
+      const client = scriptedClient({ commitError: new Error(`RAW ${label} commit response lost`) })
+      const rawReceipt = { id: 501, storagePath: 'unused', contentHash: rawSourceRunId }
+      const rawWriter = jest.fn((_input, transactionRunner) =>
+        transactionRunner(async () => rawReceipt)
+      )
+      mockIngestClientConnect.mockResolvedValue(client)
+      mockPoolQuery.mockResolvedValue({ rows: [{ ...row, ...drift }] })
+      const runtime: VerifiedPositionHistoryPublisherRuntime = {
+        database: { query: (...args) => mockPoolQuery(...args) } as IngestQueryExecutor,
+        runTransaction: runHistoryTransaction,
+        writeRawArtifact: rawWriter,
+      }
+
+      await expect(persistHistoryRawArtifactFirst(input, runtime)).rejects.toThrow(
+        'RAW source-run reconciliation does not match the captured artifact'
+      )
+      expect(rawWriter).toHaveBeenCalledTimes(1)
+      expect(mockPoolQuery).toHaveBeenCalledTimes(1)
+    }
   })
 
   it('does not turn a not-committed RAW 23505 into success from a superficial pointer hit', async () => {

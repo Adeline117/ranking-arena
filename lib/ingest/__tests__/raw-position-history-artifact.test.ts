@@ -318,6 +318,7 @@ describe('writePositionHistoryRawArtifact', () => {
     expect(sourceRows).toHaveLength(1)
     expect(Object.keys(sourceRows[0]).sort()).toEqual(POSITION_HISTORY_SOURCE_ROW_MANIFEST_KEYS)
     expect(sourceRows[0]).toEqual({
+      classification: 'canonical_materialized',
       source_row_ordinal: 1,
       source_row_sha256: strictCanonicalSha256(sourceRow),
     })

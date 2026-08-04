@@ -3,7 +3,10 @@ import { binancePositionHistoryTerminalVerifier } from './adapters/binance/histo
 import { dedupeHash as bitgetDedupeHash, parseBitgetHistory } from './adapters/bitget/parsers'
 import { bitgetPositionHistoryTerminalVerifier } from './adapters/bitget/history-terminal'
 import { dedupeHash as okxDedupeHash, parseOkxHistory } from './adapters/okx/parsers'
-import { okxPositionHistoryTerminalVerifier } from './adapters/okx/history-terminal'
+import {
+  classifyOkxPositionHistorySourceRow,
+  okxPositionHistoryTerminalVerifier,
+} from './adapters/okx/history-terminal'
 import { parsedPositionHistoryRowSchema } from './core/schemas'
 import type {
   ParseCtx,
@@ -24,6 +27,7 @@ import {
   canonicalPositionHistoryText,
   canonicalPositionHistoryTimestamp,
   POSITION_HISTORY_TEXT_LIMITS,
+  positionHistorySourceEpochTimestamp,
 } from './position-history-publication-values'
 import {
   STRICT_CANONICAL_JSON_CONTRACT,
@@ -32,7 +36,7 @@ import {
 } from './strict-canonical-json'
 
 export const POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
-  'arena.position-history-publication-evidence@1' as const
+  'arena.position-history-publication-evidence@2' as const
 
 export const BINANCE_POSITION_HISTORY_SOURCE_CONTRACT =
   'arena.ingest.position-history-source.binance_futures@1' as const
@@ -556,9 +560,13 @@ function assertReviewedTerminalEvidence(
 }
 
 export type PositionHistoryPageClassification = 'canonical_materialized' | 'verifier_only'
+export type PositionHistorySourceRowClassification =
+  | PositionHistoryPageClassification
+  | 'source_partial_omitted'
 export type PositionHistoryPageSegment = 'closing' | 'opening' | 'default'
 
 export interface PositionHistorySourceRowManifest {
+  readonly classification: PositionHistorySourceRowClassification
   readonly source_row_ordinal: number
   readonly source_row_sha256: string
 }
@@ -579,8 +587,13 @@ export interface ReviewedPositionHistoryCandidate {
   readonly sourceRowOrdinal: number
 }
 
+export interface ReviewedPositionHistoryBindingCandidate extends ReviewedPositionHistoryCandidate {
+  readonly classification: Exclude<PositionHistorySourceRowClassification, 'verifier_only'>
+}
+
 export interface ReviewedPositionHistoryEvidence {
   readonly artifact: HistoryAcquisitionArtifact
+  readonly bindingRows: readonly ReviewedPositionHistoryBindingCandidate[]
   readonly canonicalRows: readonly ReviewedPositionHistoryCandidate[]
   readonly contract: ReviewedPositionHistoryContract
   readonly observedAt: string
@@ -609,6 +622,77 @@ function pageClassification(
   return pageOrdinal <= closing.page_ordinal
     ? { classification: 'canonical_materialized', segment_id: 'closing' }
     : { classification: 'verifier_only', segment_id: 'opening' }
+}
+
+function sourceRowClassification(
+  contract: ReviewedPositionHistoryContract,
+  page: HistoryAcquisitionArtifact['pages'][number],
+  pageClassificationValue: PositionHistoryPageClassification,
+  raw: Readonly<Record<string, unknown>>,
+  exchangeTraderId: string
+): PositionHistorySourceRowClassification {
+  if (pageClassificationValue === 'verifier_only') return 'verifier_only'
+  if (contract.sourceSlug !== 'okx_futures') return 'canonical_materialized'
+
+  const classified = classifyOkxPositionHistorySourceRow(
+    raw,
+    Date.parse(page.fetched_at),
+    exchangeTraderId
+  )
+  if (classified === null) {
+    throw contractError(
+      `OKX page ${page.ordinal} contains a row outside the reviewed lifecycle domain`,
+      'terminal_evidence_not_verified'
+    )
+  }
+  return classified.classification
+}
+
+function assertReviewedOkxPartialRow(
+  contract: ReviewedPositionHistoryContract,
+  row: ParsedPositionHistoryRow,
+  pagePayload: unknown,
+  pageFetchedAt: string,
+  exchangeTraderId: string
+): void {
+  if (contract.sourceSlug !== 'okx_futures') {
+    throw contractError('source partial omission is allowed only for reviewed OKX history')
+  }
+  const classified = classifyOkxPositionHistorySourceRow(
+    row.raw,
+    Date.parse(pageFetchedAt),
+    exchangeTraderId
+  )
+  if (classified?.classification !== 'source_partial_omitted') {
+    throw contractError('OKX source partial row does not carry the exact empty closeTime marker')
+  }
+  if (
+    row.closedAt !== null ||
+    row.sourceLifecycleMarker !== null ||
+    row.openedAt !== positionHistorySourceEpochTimestamp(row.raw.openTime) ||
+    row.symbol !== row.raw.instId ||
+    row.side !== row.raw.posSide ||
+    !row.limitations?.includes('source_lifecycle_marker_missing') ||
+    !row.limitations.includes('source_lifecycle_marker_partial')
+  ) {
+    throw contractError('OKX source partial row does not match the reviewed parser omission shape')
+  }
+  const identity = reviewedPositionHistoryFactIdentity(contract, row, pagePayload)
+  canonicalPositionHistoryText(
+    identity.sourceFactId,
+    'sourceFactId',
+    POSITION_HISTORY_TEXT_LIMITS.sourceFactId.minimum,
+    POSITION_HISTORY_TEXT_LIMITS.sourceFactId.maximum,
+    contractError
+  )
+  canonicalPositionHistoryText(
+    identity.dedupeHash,
+    'dedupeHash',
+    POSITION_HISTORY_TEXT_LIMITS.dedupeHash.minimum,
+    POSITION_HISTORY_TEXT_LIMITS.dedupeHash.maximum,
+    contractError
+  )
+  assertReviewedPositionHistoryCurrency(contract, row)
 }
 
 type ParsedPositionHistorySchemaOutput = ReturnType<typeof parsedPositionHistoryRowSchema.parse>
@@ -710,11 +794,13 @@ export function buildReviewedPositionHistoryEvidence(
   }
   assertReviewedTerminalEvidence(artifact, contract)
 
+  const bindingRows: ReviewedPositionHistoryBindingCandidate[] = []
   const canonicalRows: ReviewedPositionHistoryCandidate[] = []
   const pageManifest: PositionHistoryPageManifest[] = []
+  let hasSourcePartialRows = false
   artifact.pages.forEach((page, pageIndex) => {
     const sourceRows = pageRows[pageIndex]
-    const classification = pageClassification(artifact, contract, page.ordinal)
+    const pageClassificationValue = pageClassification(artifact, contract, page.ordinal)
     let parsedRows: ParsedHistoryRow[]
     try {
       parsedRows = contract.parser(page.payload, 'position_history', {
@@ -738,6 +824,13 @@ export function buildReviewedPositionHistoryEvidence(
 
     const sourceRowManifest: PositionHistorySourceRowManifest[] = []
     parsedRows.forEach((parsedRow, rowIndex) => {
+      const rowClassification = sourceRowClassification(
+        contract,
+        page,
+        pageClassificationValue.classification,
+        sourceRows[rowIndex],
+        artifact.trader.exchange_trader_id
+      )
       if (parsedRow.kind !== 'position_history') {
         throw contractError(`reviewed parser emitted a non-position row on page ${page.ordinal}`)
       }
@@ -754,7 +847,7 @@ export function buildReviewedPositionHistoryEvidence(
           `reviewed parser emitted an empty field source path on page ${page.ordinal}`
         )
       }
-      if (classification.classification === 'canonical_materialized') {
+      if (rowClassification !== 'verifier_only') {
         assertPostgresJsonbTextCompatible(row, `canonical row on page ${page.ordinal}`)
       }
       assertReviewedPositionHistoryFieldSources(contract, row)
@@ -763,7 +856,7 @@ export function buildReviewedPositionHistoryEvidence(
           `reviewed parser changed source candidate order or RAW on page ${page.ordinal}`
         )
       }
-      if (classification.classification === 'canonical_materialized') {
+      if (rowClassification === 'canonical_materialized') {
         canonicalPositionHistoryCandidateValues(
           contract.sourceSlug,
           contract.servingReturnScale,
@@ -774,34 +867,61 @@ export function buildReviewedPositionHistoryEvidence(
         )
         reviewedPositionHistoryFactIdentity(contract, row, page.payload)
         assertReviewedPositionHistoryCurrency(contract, row)
+      } else if (rowClassification === 'source_partial_omitted') {
+        assertReviewedOkxPartialRow(
+          contract,
+          row,
+          page.payload,
+          page.fetched_at,
+          artifact.trader.exchange_trader_id
+        )
+        hasSourcePartialRows = true
       }
       const sourceRowOrdinal = rowIndex + 1
       sourceRowManifest.push(
         deepFreezeJson({
+          classification: rowClassification,
           source_row_ordinal: sourceRowOrdinal,
           source_row_sha256: strictCanonicalSha256(row.raw),
         })
       )
-      if (classification.classification === 'canonical_materialized') {
-        canonicalRows.push(Object.freeze({ pageOrdinal: page.ordinal, row, sourceRowOrdinal }))
+      if (rowClassification !== 'verifier_only') {
+        const candidate = Object.freeze({
+          classification: rowClassification,
+          pageOrdinal: page.ordinal,
+          row,
+          sourceRowOrdinal,
+        })
+        bindingRows.push(candidate)
+        if (rowClassification === 'canonical_materialized') {
+          canonicalRows.push(Object.freeze({ pageOrdinal: page.ordinal, row, sourceRowOrdinal }))
+        }
       }
     })
 
     pageManifest.push(
       deepFreezeJson({
-        classification: classification.classification,
+        classification: pageClassificationValue.classification,
         fetched_at: page.fetched_at,
         ordinal: page.ordinal,
         payload_sha256: page.payload_sha256,
-        segment_id: classification.segment_id,
+        segment_id: pageClassificationValue.segment_id,
         source_rows: sourceRowManifest,
         stored_page_index: page.stored_page_index,
       })
     )
   })
 
+  if (hasSourcePartialRows && artifact.termination.scan_terminal_state !== 'exhausted') {
+    throw contractError(
+      'OKX source partial rows require a verified exhausted acquisition',
+      'terminal_evidence_not_verified'
+    )
+  }
+
   return Object.freeze({
     artifact,
+    bindingRows: Object.freeze(bindingRows),
     canonicalRows: Object.freeze(canonicalRows),
     contract,
     observedAt,
@@ -909,6 +1029,7 @@ export const POSITION_HISTORY_PAGE_MANIFEST_KEYS = Object.freeze([
 ] as const)
 
 export const POSITION_HISTORY_SOURCE_ROW_MANIFEST_KEYS = Object.freeze([
+  'classification',
   'source_row_ordinal',
   'source_row_sha256',
 ] as const)

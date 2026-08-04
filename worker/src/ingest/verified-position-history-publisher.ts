@@ -64,7 +64,9 @@ const VERIFIED_POSITION_HISTORY_RECONCILE_SQL = `
   SELECT publication.publication_id,
          publication.previous_publication_id,
          publication.parsed_row_count,
-         publication.row_set_sha256,
+         publication.binding_count,
+         publication.partial_row_count,
+         publication.binding_set_sha256,
          publication.publication_sha256,
          publication.publication_payload,
          acquisition.raw_object_id,
@@ -89,11 +91,10 @@ const VERIFIED_POSITION_HISTORY_RECONCILE_SQL = `
 
 const HISTORY_RAW_RECONCILE_SQL = `
   SELECT id, source_id, job_type, trader_id, timeframe,
-         fetched_at, storage_path, bytes, content_hash, quarantined, meta,
-         source_run_id, trust_artifact_role
+         fetched_at::text AS fetched_at, storage_path,
+         bytes, content_hash, quarantined, meta
     FROM arena.raw_objects
-   WHERE source_run_id = $1
-     AND trust_artifact_role = 'event_history'
+   WHERE storage_path = $1
    ORDER BY id
    LIMIT 2
 ` as const
@@ -107,7 +108,9 @@ interface PositionHistoryReconciliationRow {
   publication_id: unknown
   previous_publication_id: unknown
   parsed_row_count: unknown
-  row_set_sha256: unknown
+  binding_count: unknown
+  partial_row_count: unknown
+  binding_set_sha256: unknown
   publication_sha256: unknown
   publication_payload: unknown
   raw_object_id: unknown
@@ -126,8 +129,6 @@ interface HistoryRawReconciliationRow {
   content_hash: unknown
   quarantined: unknown
   meta: unknown
-  source_run_id: unknown
-  trust_artifact_role: unknown
 }
 
 export interface VerifiedPositionHistoryHead {
@@ -278,12 +279,13 @@ async function reconcileRawObject(
   database: IngestQueryExecutor,
   input: WriteHistoryRawArtifactInput
 ): Promise<RawObjectReceipt | null> {
-  const { artifact, sourceRunId } = input
+  const { artifact } = input
+  const locator = prepareHistoryRawArtifactReconciliationExpectation(input)
   const { rows } = await database.query<HistoryRawReconciliationRow>(HISTORY_RAW_RECONCILE_SQL, [
-    sourceRunId,
+    locator.storagePath,
   ])
   if (rows.length === 0) return null
-  if (rows.length !== 1) throw publisherError('RAW source run is not globally unique')
+  if (rows.length !== 1) throw publisherError('RAW storage path is not globally unique')
 
   const row = rows[0]
   const durableCompressedBytes = positiveSafeInteger(row.bytes, 'RAW compressed byte count')
@@ -302,11 +304,9 @@ async function reconcileRawObject(
     normalizedTimestamp(row.fetched_at, 'RAW fetched at') !== expected.fetchedAt ||
     row.storage_path !== expected.storagePath ||
     durableCompressedBytes !== expected.bytes ||
-    row.content_hash !== sourceRunId ||
+    row.content_hash !== expected.contentHash ||
     row.quarantined !== false ||
-    !expected.metaCandidatesCanonicalJson.includes(metaCanonicalJson) ||
-    row.source_run_id !== sourceRunId ||
-    row.trust_artifact_role !== 'event_history'
+    !expected.metaCandidatesCanonicalJson.includes(metaCanonicalJson)
   ) {
     throw publisherError('RAW source-run reconciliation does not match the captured artifact')
   }
@@ -402,10 +402,20 @@ async function reconcilePreparedPublication(
       ? null
       : positiveSafeInteger(row.previous_publication_id, 'reconciled previous publication id')
   const parsedRowCount = nonNegativeSafeInteger(row.parsed_row_count, 'reconciled parsed row count')
+  const bindingCount = nonNegativeSafeInteger(row.binding_count, 'reconciled binding count')
+  const partialRowCount = nonNegativeSafeInteger(
+    row.partial_row_count,
+    'reconciled partial row count'
+  )
+  const expectedPartialRowCount = publication.rowBindings.filter(
+    (binding) => binding.classification === 'source_partial_omitted'
+  ).length
   if (
     previousPublicationId !== publication.previousPublicationId ||
     parsedRowCount !== publication.rows.length ||
-    row.row_set_sha256 !== publication.rowSetSha256 ||
+    bindingCount !== publication.rowBindings.length ||
+    partialRowCount !== expectedPartialRowCount ||
+    row.binding_set_sha256 !== publication.bindingSetSha256 ||
     row.publication_sha256 !== publication.publicationSha256 ||
     row.publication_payload !== rpcCall.values[3] ||
     row.raw_object_id !== publication.rawObjectId

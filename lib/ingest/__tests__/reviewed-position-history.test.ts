@@ -177,6 +177,8 @@ async function okxCapture(
     instId: 'BTC-USDT-SWAP',
     ccy: 'USDT',
     posSide: 'long',
+    instType: 'SWAP',
+    uniqueCode: capturedExchangeTraderId,
     openTime: openedMs,
     closeTime: closedMs,
     lever: '5',
@@ -188,9 +190,17 @@ async function okxCapture(
     ...overrides,
   }
   if (Object.hasOwn(overrides, 'ccy') && overrides.ccy === undefined) delete raw.ccy
+  return okxRowsCapture([raw], capturedExchangeTraderId)
+}
+
+async function okxRowsCapture(
+  rows: readonly Record<string, unknown>[],
+  capturedExchangeTraderId: string
+): Promise<CapturedHistoryAcquisition> {
   const firstUrl =
     'https://www.okx.com/api/v5/copytrading/public-subpositions-history?' +
     `instType=SWAP&limit=100&uniqueCode=${encodeURIComponent(capturedExchangeTraderId)}`
+  const lastSubPositionId = rows.at(-1)?.subPosId
   return capture(
     { id: 9, slug: 'okx_futures' },
     [
@@ -198,11 +208,11 @@ async function okxCapture(
         pageIndex: 1,
         url: firstUrl,
         fetchedAt,
-        payload: { historyTraderIdentity: capturedExchangeTraderId, data: [raw] },
+        payload: { historyTraderIdentity: capturedExchangeTraderId, data: rows },
       },
       {
         pageIndex: 2,
-        url: `${firstUrl}&after=${String(raw.subPosId)}`,
+        url: `${firstUrl}&after=${encodeURIComponent(String(lastSubPositionId))}`,
         fetchedAt: '2026-08-03T10:00:01.000Z',
         payload: { historyTraderIdentity: capturedExchangeTraderId, data: [] },
       },
@@ -274,7 +284,8 @@ describe('shared reviewed position-history evidence contract', () => {
 
     const binance = await binanceCapture(binanceFixture.data.list[0])
     const bitget = await bitgetCapture([bitgetFixture.data.rows[0]])
-    const okx = await okxCapture(okxFixture.data[1])
+    const okxIdentity = String(okxFixture.data[0].uniqueCode)
+    const okx = await okxRowsCapture(okxFixture.data, okxIdentity)
 
     expect(
       buildReviewedPositionHistoryEvidence(binance.artifact, binance.sourceRunId).canonicalRows
@@ -282,12 +293,20 @@ describe('shared reviewed position-history evidence contract', () => {
     expect(
       buildReviewedPositionHistoryEvidence(bitget.artifact, bitget.sourceRunId).canonicalRows
     ).toHaveLength(1)
-    expect(
-      buildReviewedPositionHistoryEvidence(okx.artifact, okx.sourceRunId).canonicalRows
-    ).toHaveLength(1)
+    const okxEvidence = buildReviewedPositionHistoryEvidence(okx.artifact, okx.sourceRunId)
+    expect(okxEvidence.canonicalRows).toHaveLength(2)
+    expect(okxEvidence.bindingRows).toHaveLength(3)
+    expect(okxEvidence.pageManifest[0].source_rows.map((row) => row.classification)).toEqual([
+      'source_partial_omitted',
+      'canonical_materialized',
+      'canonical_materialized',
+    ])
   })
 
   it('uses one reviewed registry for source, adapter, parser, verifier, page-size, and paths', () => {
+    expect(POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT).toBe(
+      'arena.position-history-publication-evidence@2'
+    )
     expect(REVIEWED_POSITION_HISTORY_CONTRACTS.binance_futures).toMatchObject({
       adapterSlug: 'binance',
       expectedCurrency: 'USDT',
@@ -312,7 +331,7 @@ describe('shared reviewed position-history evidence contract', () => {
       pageSize: 100,
       servingReturnScale: 100,
       verifier: {
-        contract: 'arena.ingest.history-terminal-verifier.okx.position_history@1',
+        contract: 'arena.ingest.history-terminal-verifier.okx.position_history@2',
       },
     })
     expect(REVIEWED_POSITION_HISTORY_CONTRACTS.binance_futures.fieldPaths.sourceFactId).toEqual([
@@ -346,6 +365,8 @@ describe('shared reviewed position-history evidence contract', () => {
     expect(evidence.pageManifest[0].source_rows[0].source_row_sha256).toBe(
       strictCanonicalSha256(evidence.canonicalRows[0].row.raw)
     )
+    expect(evidence.pageManifest[0].source_rows[0].classification).toBe('canonical_materialized')
+    expect(evidence.pageManifest[1].source_rows[0].classification).toBe('verifier_only')
   })
 
   it('keeps empty reviewed source containers explicit without inventing rows', async () => {
@@ -537,14 +558,12 @@ describe('shared reviewed position-history evidence contract', () => {
   })
 
   it('counts PostgreSQL characters rather than UTF-16 code units at text and numeric limits', async () => {
-    const sideAtMaximum = await okxCapture({ posSide: '🚀'.repeat(64) })
+    const errorFactory = (detail: string) => new Error(detail)
+    expect(canonicalPositionHistoryText('🚀'.repeat(64), 'side', 1, 64, errorFactory)).toBe(
+      '🚀'.repeat(64)
+    )
     expect(() =>
-      buildReviewedPositionHistoryEvidence(sideAtMaximum.artifact, sideAtMaximum.sourceRunId)
-    ).not.toThrow()
-
-    const sideOverMaximum = await okxCapture({ posSide: '🚀'.repeat(65) })
-    expect(() =>
-      buildReviewedPositionHistoryEvidence(sideOverMaximum.artifact, sideOverMaximum.sourceRunId)
+      canonicalPositionHistoryText('🚀'.repeat(65), 'side', 1, 64, errorFactory)
     ).toThrow('1-64')
 
     const numericAtMaximum = await bitgetCapture([bitgetRaw({ openLevel: '🚀'.repeat(128) })])
@@ -778,12 +797,6 @@ describe('shared reviewed position-history evidence contract', () => {
       '1-128',
     ],
     [
-      'side',
-      () => okxCapture({ posSide: 's'.repeat(64) }),
-      () => okxCapture({ posSide: 's'.repeat(65) }),
-      '1-64',
-    ],
-    [
       'sourceFactId',
       () => bitgetCapture([bitgetRaw({ orderNo: 'o'.repeat(1024) })]),
       () => bitgetCapture([bitgetRaw({ orderNo: 'o'.repeat(1025) })]),
@@ -818,18 +831,27 @@ describe('shared reviewed position-history evidence contract', () => {
         delete raw.tokenId
         return bitgetCapture([raw])
       },
+      'canonical row currency must be exact USDT',
     ],
-    ['Bitget drifted tokenId', () => bitgetCapture([bitgetRaw({ tokenId: 'USDC' })])],
-    ['Bitget non-string tokenId', () => bitgetCapture([bitgetRaw({ tokenId: 7 })])],
-    ['OKX missing ccy', () => okxCapture({ ccy: undefined })],
-    ['OKX drifted ccy', () => okxCapture({ ccy: 'USDC' })],
-    ['OKX non-string ccy', () => okxCapture({ ccy: 7 })],
-  ] as const)('rejects %s instead of assuming USDT', async (_label, make) => {
+    [
+      'Bitget drifted tokenId',
+      () => bitgetCapture([bitgetRaw({ tokenId: 'USDC' })]),
+      'canonical row currency must be exact USDT',
+    ],
+    [
+      'Bitget non-string tokenId',
+      () => bitgetCapture([bitgetRaw({ tokenId: 7 })]),
+      'canonical row currency must be exact USDT',
+    ],
+    ['OKX missing ccy', () => okxCapture({ ccy: undefined }), 'exact reviewed terminal evidence'],
+    ['OKX drifted ccy', () => okxCapture({ ccy: 'USDC' }), 'exact reviewed terminal evidence'],
+    ['OKX non-string ccy', () => okxCapture({ ccy: 7 }), 'exact reviewed terminal evidence'],
+  ] as const)('rejects %s instead of assuming USDT', async (_label, make, message) => {
     const captured = await make()
 
     expect(() =>
       buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
-    ).toThrow('canonical row currency must be exact USDT')
+    ).toThrow(message)
   })
 
   it.each([

@@ -70,10 +70,22 @@ function historyVerifier(src: SourceRow) {
 
 function positionHistoryRow(subPosId: string, closeTime = HISTORY_CLOSE_TIME) {
   return {
+    ccy: 'USDT',
     subPosId,
     instId: 'BTC-USDT-SWAP',
+    instType: 'SWAP',
     openTime: String(closeTime - 60_000),
     closeTime: String(closeTime),
+    posSide: 'long',
+    uniqueCode: UNIQUE_CODE,
+  }
+}
+
+function partialPositionHistoryRow(subPosId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    ...positionHistoryRow(subPosId),
+    closeTime: '',
+    ...overrides,
   }
 }
 
@@ -131,7 +143,7 @@ describe('OKX product-specific record contracts', () => {
   it('selects terminal verification only for the reviewed production endpoint', () => {
     const futures = source('futures', 'SWAP')
     expect(okxAdapter.historyTerminalVerifier?.(futures, 'position_history')).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.okx.position_history@1',
+      contract: 'arena.ingest.history-terminal-verifier.okx.position_history@2',
     })
     expect(okxAdapter.historyTerminalVerifier?.(futures, 'orders')).toBeNull()
     expect(
@@ -238,18 +250,14 @@ describe('OKX product-specific record contracts', () => {
     const pages = [
       [
         {
-          subPosId: 'newer-close',
-          instId: 'BTC-USDT-SWAP',
+          ...positionHistoryRow('newer-close', Date.parse('2026-07-10T00:00:00.000Z')),
           openTime: String(Date.parse('2026-06-01T00:00:00.000Z')),
-          closeTime: String(Date.parse('2026-07-10T00:00:00.000Z')),
         },
       ],
       [
         {
-          subPosId: 'cursor-overlap',
-          instId: 'BTC-USDT-SWAP',
+          ...positionHistoryRow('cursor-overlap', Date.parse('2026-06-30T00:00:00.000Z')),
           openTime: String(Date.parse('2026-05-01T00:00:00.000Z')),
-          closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
         },
       ],
     ]
@@ -331,6 +339,143 @@ describe('OKX product-specific record contracts', () => {
     ).toEqual({ verified: true, scanTerminalState: 'exhausted' })
   })
 
+  it('accepts exact partial rows before closed rows only when exhaustion is captured', () => {
+    expect(
+      verifyExhaustion([
+        historyPage(1, [
+          partialPositionHistoryRow('partial-row'),
+          positionHistoryRow('closed-row'),
+        ]),
+        historyPage(2, [], 'closed-row'),
+      ])
+    ).toEqual({ verified: true, scanTerminalState: 'exhausted' })
+  })
+
+  it.each([null, 0, '0', ' ', '\t', undefined] as const)(
+    'rejects closeTime %p instead of laundering it as source partial evidence',
+    (closeTime) => {
+      expect(
+        verifyExhaustion([
+          historyPage(1, [partialPositionHistoryRow('bad-partial', { closeTime })]),
+          historyPage(2, [], 'bad-partial'),
+        ])
+      ).toEqual({ verified: false })
+    }
+  )
+
+  it.each([
+    ['wrong uniqueCode', { uniqueCode: 'another-trader' }],
+    ['wrong instType', { instType: 'SPOT' }],
+    ['wrong ccy', { ccy: 'USDC' }],
+    ['empty-base symbol', { instId: '-USDT-SWAP' }],
+    ['wrong symbol suffix', { instId: 'BTC-USDC-SWAP' }],
+    ['wrong side', { posSide: 'Long' }],
+    ['future openTime', { openTime: String(Date.parse(HISTORY_FETCHED_AT) + 1) }],
+  ] as const)('rejects partial and closed rows with %s', (_label, overrides) => {
+    for (const row of [
+      partialPositionHistoryRow('bad-partial-domain', overrides),
+      { ...positionHistoryRow('bad-closed-domain'), ...overrides },
+    ]) {
+      expect(
+        verifyExhaustion([historyPage(1, [row]), historyPage(2, [], String(row.subPosId))])
+      ).toEqual({ verified: false })
+    }
+  })
+
+  it('rejects a partial subPosId containing the legacy dedupe delimiter', () => {
+    expect(
+      verifyExhaustion([
+        historyPage(1, [partialPositionHistoryRow('partial|identity')]),
+        historyPage(2, [], 'partial|identity'),
+      ])
+    ).toEqual({ verified: false })
+  })
+
+  it('rejects a partial row after completed history and a duplicate partial/closed identity', () => {
+    expect(
+      verifyExhaustion([
+        historyPage(1, [
+          positionHistoryRow('closed-first'),
+          partialPositionHistoryRow('partial-late'),
+        ]),
+        historyPage(2, [], 'partial-late'),
+      ])
+    ).toEqual({ verified: false })
+
+    expect(
+      verifyExhaustion([
+        historyPage(1, [
+          partialPositionHistoryRow('same-identity'),
+          positionHistoryRow('same-identity'),
+        ]),
+        historyPage(2, [], 'same-identity'),
+      ])
+    ).toEqual({ verified: false })
+  })
+
+  it('rejects cursor-overlap proof whenever any captured row is partial', () => {
+    const futures = source('futures', 'SWAP')
+    const cursor = new Date(HISTORY_CLOSE_TIME).toISOString()
+
+    expect(
+      historyVerifier(futures).verify({
+        claim: {
+          contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+          observations: [{ segment_id: 'default', reason: 'cursor_overlap', page_ordinal: 1 }],
+        },
+        pages: [
+          historyPage(1, [
+            partialPositionHistoryRow('partial-row'),
+            positionHistoryRow('overlap-row', HISTORY_CLOSE_TIME - 1_000),
+          ]),
+        ],
+        cursor,
+        source: futures,
+        traderId: 99,
+        exchangeTraderId: UNIQUE_CODE,
+        kind: 'position_history',
+      })
+    ).toEqual({ verified: false })
+  })
+
+  it('scans to an empty page instead of stopping at cursor overlap after seeing a partial row', async () => {
+    const responses = [
+      [
+        partialPositionHistoryRow('partial-row'),
+        positionHistoryRow('overlap-row', Date.parse('2026-06-30T00:00:00.000Z')),
+      ],
+      [],
+    ]
+    let responseIndex = 0
+    global.fetch = jest.fn(async () =>
+      ok(responses[responseIndex++] ?? [])
+    ) as unknown as typeof fetch
+    const futures = source('futures', 'SWAP')
+
+    const acquisition = await captureHistoryAcquisition({
+      source: futures,
+      traderId: 99,
+      exchangeTraderId: UNIQUE_CODE,
+      kind: 'position_history',
+      cursor: '2026-07-01T00:00:00.000Z',
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: okxAdapter.getHistory(
+        session(),
+        futures,
+        UNIQUE_CODE,
+        'position_history',
+        '2026-07-01T00:00:00.000Z'
+      ),
+      terminalVerifier: historyVerifier(futures),
+    })
+
+    expect(acquisition.pages).toHaveLength(2)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      scan_terminal_state: 'exhausted',
+    })
+  })
+
   it('rejects terminal proof when one RAW page contains 101 rows', () => {
     const rows = Array.from({ length: 101 }, (_, index) =>
       positionHistoryRow(`row-${index}`, HISTORY_CLOSE_TIME - index)
@@ -342,11 +487,7 @@ describe('OKX product-specific record contracts', () => {
   })
 
   it('rejects terminal proof when any non-terminal row lacks subPosId', () => {
-    const rowWithoutSubPosId = {
-      instId: 'BTC-USDT-SWAP',
-      openTime: String(HISTORY_CLOSE_TIME - 60_000),
-      closeTime: String(HISTORY_CLOSE_TIME),
-    }
+    const rowWithoutSubPosId = { ...positionHistoryRow('removed-id'), subPosId: undefined }
 
     expect(
       verifyExhaustion([
@@ -375,9 +516,8 @@ describe('OKX product-specific record contracts', () => {
 
   it('rejects terminal proof when a RAW row lacks canonical instId', () => {
     const rowWithoutInstrument = {
-      subPosId: 'missing-inst-id',
-      openTime: String(HISTORY_CLOSE_TIME - 60_000),
-      closeTime: String(HISTORY_CLOSE_TIME),
+      ...positionHistoryRow('missing-inst-id'),
+      instId: undefined,
     }
 
     expect(
@@ -421,10 +561,8 @@ describe('OKX product-specific record contracts', () => {
         payload: {
           data: [
             {
-              subPosId: 'row-1',
-              instId: 'BTC-USDT-SWAP',
+              ...positionHistoryRow('row-1', Date.parse('2026-06-30T00:00:00.000Z')),
               openTime: String(Date.parse('2026-06-29T00:00:00.000Z')),
-              closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
             },
           ],
           historyTraderIdentity: UNIQUE_CODE,
@@ -462,16 +600,13 @@ describe('OKX product-specific record contracts', () => {
     global.fetch = jest.fn(async () =>
       ok([
         {
-          subPosId: 'bad-time',
-          instId: 'BTC-USDT-SWAP',
+          ...positionHistoryRow('bad-time'),
           openTime: String(Date.parse('2026-06-29T00:00:00.000Z')),
           closeTime: 'not-an-epoch',
         },
         {
-          subPosId: 'cursor-overlap',
-          instId: 'BTC-USDT-SWAP',
+          ...positionHistoryRow('cursor-overlap', Date.parse('2026-06-30T00:00:00.000Z')),
           openTime: String(Date.parse('2026-06-28T00:00:00.000Z')),
-          closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
         },
       ])
     ) as unknown as typeof fetch

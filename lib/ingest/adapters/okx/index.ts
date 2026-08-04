@@ -315,6 +315,7 @@ const okxAdapter: SourceAdapter = {
       Number(src.meta.history_max_pages ?? DEFAULT_HISTORY_MAX_PAGES) || DEFAULT_HISTORY_MAX_PAGES
     const cursorMs = cursor ? Date.parse(cursor) : NaN
     let after: string | null = null
+    let sawSourcePartial = false
     for (let page = 1; page <= maxPages; page++) {
       const url =
         `${base(src)}/public-subpositions-history?instType=${it}` +
@@ -334,6 +335,8 @@ const okxAdapter: SourceAdapter = {
         }
       }
 
+      if (data.some((row) => row.closeTime === '')) sawSourcePartial = true
+
       const last = data[data.length - 1]
       const lastId = String(last.subPosId ?? '')
       if (!lastId) {
@@ -349,7 +352,7 @@ const okxAdapter: SourceAdapter = {
           .filter((closeTime) => Number.isFinite(closeTime) && closeTime > 0)
         const oldest = closeTimes.length > 0 ? Math.min(...closeTimes) : Number.NaN
         // Overlap reached: this page already dips into stored close history.
-        if (Number.isFinite(oldest) && oldest <= cursorMs) {
+        if (!sawSourcePartial && Number.isFinite(oldest) && oldest <= cursorMs) {
           return {
             contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
             observations: [{ segment_id: 'default', reason: 'cursor_overlap', page_ordinal: page }],
