@@ -413,12 +413,20 @@ FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何�
    5. `20260804043000_retire_legacy_token_rankings.sql`
    6. `20260804044000_freeze_legacy_position_history_relations.sql`
    7. `20260804045000_quarantine_bingx_rank_authority.sql`
+   8. `20260804050000_harden_serving_trader_resolver.sql`
+   9. `20260804051000_harden_serving_source_capabilities.sql`
+   10. `20260804052000_fail_closed_unbound_copier_aggregates.sql`
+   11. `20260804053000_copier_snapshot_publication_substrate.sql`
+   12. `20260804054000_publish_copier_snapshot_atomically.sql`
 
    第五个迁移必须把旧 Token 排名固定为未发布；第六个迁移必须把所有 ledger、
    手工 cutover、分区和保留的 `tph_*` 关系收敛为只读取证档案；第七个迁移保留
    BingX 采集、档案和 RAW 证据，但把 `bingx`、`bingx_futures`、`bingx_spot` 的
    排名、新鲜度和计数面归档后清空，并把两个物理来源留在 active/shadow。任一迁移
    失败、超时、版本缺失或出现对象/权限漂移，立即 No-Go，不得跳过或手工放宽 ACL。
+   第八至第十二个迁移依次收紧公开 trader resolver、source capability、未绑定 copier
+   聚合，并且先建立私有 copier snapshot substrate、最后安装原子发布函数。`040540`
+   依赖 `040530`，二者又依赖 `040520` 的 fail-closed 状态，不得按文件之外的顺序拆装。
 
 2. 等待相关迁移内的 `NOTIFY pgrst, 'reload schema'` 生效。生产 PostgREST 的唯一
    合法 Token head 是固定的 generation zero；它不能带任何伪造的发布时间或来源

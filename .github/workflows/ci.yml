@@ -224,6 +224,21 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:records-page-quarantine-pg17
 
+      - name: Prove all legacy position-history relations are frozen
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:legacy-position-history-freeze-pg17
+
+      - name: Prove live serving resolver and capability boundaries
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:serving-boundary-pg17
+
+      - name: Prove fail-closed copier containment and atomic publication
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:copier-publication-pg17
+
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check
   # ─────────────────────────────────────────────
