@@ -239,22 +239,24 @@ export default function FollowListModal({
           }
         )
         if (
-          controller.signal.aborted ||
+          (controller.signal.aborted && !timedOut) ||
           requestIdRef.current !== requestId ||
           !scopeIsCurrent(scope, scopeRef.current)
         ) {
           return
         }
+        if (timedOut) throw new Error('Follow list request timed out')
         if (response.status !== 200) throw new Error(`Follow list returned ${response.status}`)
 
         const body: unknown = await response.json()
         if (
-          controller.signal.aborted ||
+          (controller.signal.aborted && !timedOut) ||
           requestIdRef.current !== requestId ||
           !scopeIsCurrent(scope, scopeRef.current)
         ) {
           return
         }
+        if (timedOut) throw new Error('Follow list request timed out')
         const page = readFollowListPage(body, {
           viewerId: scope.userId,
           targetHandle: scope.handle,

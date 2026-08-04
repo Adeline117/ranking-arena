@@ -178,6 +178,31 @@ describe('FollowListModal exact read and identity isolation', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('does not turn a timed-out response into an empty list when fetch resolves after abort', async () => {
+    jest.useFakeTimers()
+    try {
+      const latePage = deferred<FetchResponse>()
+      fetchMock.mockImplementationOnce(() => latePage.promise)
+      renderModal()
+
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await Promise.resolve()
+      })
+      await act(async () => {
+        latePage.resolve(response(200, page()))
+        await latePage.promise
+        await Promise.resolve()
+      })
+
+      expect(screen.getByRole('alert')).toHaveTextContent('loadFailed')
+      expect(screen.queryByText('noFollowersYet')).not.toBeInTheDocument()
+      expect(screen.queryByText('bob')).not.toBeInTheDocument()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('retains a same-resource last-good page when load-more fails, then retries it', async () => {
     fetchMock
       .mockResolvedValueOnce(
