@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { usePostComments, type Comment } from '../usePostComments'
 
 const mockAuthedFetch = jest.fn()
+const mockReserveReactionIntentFetch = jest.fn()
 const mockSetStoreComments = jest.fn()
 const mockAddStoreComment = jest.fn()
 const mockUpdatePostCommentCount = jest.fn()
@@ -13,11 +14,16 @@ const REACTION_COMMENT_ID_2 = '44444444-4444-4444-8444-444444444444'
 const REACTION_REQUEST_ID = '0123456789abcdef0123456789abcdef'
 const REACTION_REQUEST_ID_2 = 'fedcba9876543210fedcba9876543210'
 const REACTION_REQUEST_ID_3 = '11111111111111111111111111111111'
+const REACTION_INTENT_SEQUENCE = '1'
 const REACTION_TIMESTAMP = '2026-08-03T21:30:00.000Z'
+const REACTION_INTENT_EXPIRES_AT = '2026-08-03T21:45:00.000Z'
 const mockCreateCommentReactionRequestId = jest.fn()
 
 jest.mock('@/lib/api/client', () => ({
-  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
+  authedFetch: (...args: unknown[]) =>
+    String(args[0]).endsWith('/comments/like/intents')
+      ? mockReserveReactionIntentFetch(...args)
+      : mockAuthedFetch(...args),
   getHttpErrorMessage: (_status: number, fallback: string) => fallback,
 }))
 
@@ -110,6 +116,7 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
       comment_id: REACTION_COMMENT_ID,
       request_id: REACTION_REQUEST_ID,
       operation: 'set_reaction',
+      intent_sequence: REACTION_INTENT_SEQUENCE,
       desired_reaction: 'like',
       action: 'added',
       reaction: 'like',
@@ -117,10 +124,41 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
       disliked: false,
       like_count: 3,
       dislike_count: 1,
+      replayed: false,
       ...overrides,
     },
     meta: { timestamp: REACTION_TIMESTAMP },
   }
+}
+
+function reactionIntentReceipt(
+  body: Record<string, unknown>,
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    success: true,
+    data: {
+      actor_id: REACTION_ACTOR_ID,
+      post_id: REACTION_POST_ID,
+      comment_id: body.comment_id,
+      request_id: body.request_id,
+      operation: 'reserve_reaction_intent',
+      desired_reaction: body.desired_reaction,
+      status: 'issued',
+      intent_sequence: REACTION_INTENT_SEQUENCE,
+      expires_at: REACTION_INTENT_EXPIRES_AT,
+      replayed: false,
+      ...overrides,
+    },
+    meta: { timestamp: REACTION_TIMESTAMP },
+  }
+}
+
+async function flushReactionReservation() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
 }
 
 function failedResult(status = 500) {
@@ -147,6 +185,10 @@ describe('usePostComments reactions', () => {
     jest.clearAllMocks()
     localStorage.clear()
     mockCreateCommentReactionRequestId.mockReturnValue(REACTION_REQUEST_ID)
+    mockReserveReactionIntentFetch.mockImplementation(
+      (_url: string, _method: string, _token: string, body: Record<string, unknown>) =>
+        Promise.resolve({ ok: true, status: 200, data: reactionIntentReceipt(body) })
+    )
   })
 
   it('reads the latest loaded comment state instead of a stale callback closure', async () => {
@@ -222,6 +264,7 @@ describe('usePostComments reactions', () => {
     act(() => {
       request = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
     const realtimeTruth = makeReactionComment({ user_liked: true, like_count: 3 })
     act(() => result.current.setComments([realtimeTruth]))
 
@@ -268,6 +311,7 @@ describe('usePostComments reactions', () => {
       firstRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
       duplicateRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
     expect(result.current.comments[0]).toMatchObject({
@@ -332,6 +376,7 @@ describe('usePostComments reactions', () => {
       second = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
       third = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
     expect(mockCreateCommentReactionRequestId).toHaveBeenCalledTimes(3)
@@ -366,6 +411,7 @@ describe('usePostComments reactions', () => {
       likeRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
       dislikeRequest = result.current.toggleCommentDislike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
     expect(result.current.comments[0]).toMatchObject({
       user_liked: false,
       user_disliked: true,
@@ -430,6 +476,81 @@ describe('usePostComments reactions', () => {
     expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 3 })
   })
 
+  it('retries a lost reservation with one identity before applying its exact ticket', async () => {
+    mockReserveReactionIntentFetch
+      .mockResolvedValueOnce({ ok: false, status: 503, data: null })
+      .mockImplementationOnce(
+        (_url: string, _method: string, _token: string, body: Record<string, unknown>) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            data: reactionIntentReceipt(body, {
+              status: 'replayed',
+              intent_sequence: '42',
+              replayed: true,
+            }),
+          })
+      )
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: reactionReceipt({ intent_sequence: '42' }),
+    })
+    const { result } = renderReactionHook()
+    act(() => result.current.setComments([makeReactionComment()]))
+
+    await act(async () => {
+      await result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+
+    expect(mockReserveReactionIntentFetch).toHaveBeenCalledTimes(2)
+    expect(mockReserveReactionIntentFetch.mock.calls[0]?.[3]).toEqual(
+      mockReserveReactionIntentFetch.mock.calls[1]?.[3]
+    )
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      `/api/posts/${REACTION_POST_ID}/comments/like`,
+      'POST',
+      'token',
+      expect.objectContaining({
+        request_id: REACTION_REQUEST_ID,
+        intent_sequence: '42',
+        desired_reaction: 'like',
+      }),
+      15_000,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+  })
+
+  it('reconciles canonical truth when another instance supersedes its ticket', async () => {
+    const canonicalTruth = makeReactionComment({
+      user_liked: false,
+      user_disliked: true,
+      like_count: 7,
+      dislike_count: 5,
+    })
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        data: {
+          success: false,
+          code: 'COMMENT_REACTION_STALE',
+          error: 'Reaction intent is stale',
+        },
+      })
+      .mockResolvedValueOnce(commentsPage([canonicalTruth], 1))
+    const { result, showToast } = renderReactionHook()
+    act(() => result.current.setComments([makeReactionComment()]))
+
+    await act(async () => {
+      await result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+
+    expect(result.current.comments).toEqual([canonicalTruth])
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(showToast).not.toHaveBeenCalled()
+  })
+
   it('runs different comment lanes concurrently and accepts out-of-order ACKs independently', async () => {
     mockCreateCommentReactionRequestId
       .mockReturnValueOnce(REACTION_REQUEST_ID)
@@ -458,6 +579,7 @@ describe('usePostComments reactions', () => {
       first = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
       second = result.current.toggleCommentDislike(REACTION_POST_ID, REACTION_COMMENT_ID_2)
     })
+    await flushReactionReservation()
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
     await act(async () => {
@@ -533,6 +655,7 @@ describe('usePostComments reactions', () => {
     act(() => {
       reactionRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
     await act(async () => result.current.loadComments(REACTION_POST_ID))
 
     expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 6 })
@@ -572,6 +695,7 @@ describe('usePostComments reactions', () => {
     act(() => {
       reactionRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
     await act(async () => result.current.loadComments(REACTION_POST_ID))
     expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 10 })
 
@@ -602,6 +726,7 @@ describe('usePostComments reactions', () => {
     act(() => {
       request = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
 
     act(() => {
       result.current.setComments([
@@ -731,6 +856,23 @@ describe('usePostComments reactions', () => {
       await result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
 
+    expect(mockReserveReactionIntentFetch).toHaveBeenCalledWith(
+      `/api/posts/${REACTION_POST_ID}/comments/like/intents`,
+      'POST',
+      'token',
+      {
+        operation: 'reserve_reaction_intent',
+        request_id: REACTION_REQUEST_ID,
+        comment_id: REACTION_COMMENT_ID,
+        desired_reaction: 'like',
+      },
+      15_000,
+      {
+        expectedUserId: REACTION_ACTOR_ID,
+        expectedSessionGeneration: 1,
+        signal: expect.any(AbortSignal),
+      }
+    )
     expect(mockAuthedFetch).toHaveBeenNthCalledWith(
       1,
       `/api/posts/${REACTION_POST_ID}/comments/like`,
@@ -740,6 +882,7 @@ describe('usePostComments reactions', () => {
         operation: 'set_reaction',
         request_id: REACTION_REQUEST_ID,
         comment_id: REACTION_COMMENT_ID,
+        intent_sequence: REACTION_INTENT_SEQUENCE,
         desired_reaction: 'like',
       },
       15_000,
@@ -793,6 +936,7 @@ describe('usePostComments reactions', () => {
     act(() => {
       reactionRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
     rerender({ actorId: '44444444-4444-4444-8444-444444444444', generation: 2 })
     await act(async () => reactionRequest)
 
@@ -825,6 +969,7 @@ describe('usePostComments reactions', () => {
     act(() => {
       reactionRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
+    await flushReactionReservation()
     await act(async () => {
       await result.current.loadComments(nextPostId)
       await reactionRequest

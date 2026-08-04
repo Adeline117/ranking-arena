@@ -13,6 +13,7 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 import {
+  COMMENT_REACTION_INTENT_OPERATION,
   COMMENT_REACTION_OPERATION,
   COMMENT_REACTION_REQUEST_TIMEOUT_MS,
   commentReactionCountDelta,
@@ -20,6 +21,8 @@ import {
   isDefinitiveCommentReactionRejection,
   nextCommentReactionState,
   readCommentReactionAcknowledgement,
+  readCommentReactionFailure,
+  readCommentReactionIntentAcknowledgement,
   type CommentReaction,
   type CommentReactionAcknowledgement,
 } from '@/lib/comments/comment-reaction-client-contract'
@@ -243,6 +246,7 @@ type CommentReactionIntent = {
   desired: CommentReaction | null
   revision: number
   requestId: string
+  intentSequence?: string
   projection: CommentReactionTruth
   // Scope-wide on purpose: any concurrent tree mutation makes a stale ACK
   // reconcile instead of relying on projection equality (which has ABA cases).
@@ -257,6 +261,7 @@ type CommentReactionTruth = {
 
 type CommentReactionCommandOutcome =
   | { kind: 'acknowledged'; acknowledgement: CommentReactionAcknowledgement }
+  | { kind: 'superseded'; error: string | null }
   | { kind: 'definitive-rejection'; error: string | null; status: number }
   | { kind: 'uncertain'; error: unknown }
 
@@ -752,8 +757,77 @@ export function usePostComments({
       ): Promise<CommentReactionCommandOutcome> => {
         let lastError: unknown = new Error('Comment reaction acknowledgement unavailable')
 
-        // An absolute desired state is safe to retry. Reuse the exact request
-        // identity so a lost response cannot be confused with a newer click.
+        // Reserve the actor/comment sequence before applying the state. Both
+        // phases reuse the same request identity, so a lost reserve response
+        // cannot allocate a second ticket and a delayed apply cannot overtake
+        // a newer ticket reserved by another tab or application instance.
+        for (let attempt = 0; !command.intentSequence && attempt < 2; attempt += 1) {
+          if (signal.aborted || !scopeIsCurrent(capturedScope)) {
+            return { kind: 'uncertain', error: signal.reason ?? lastError }
+          }
+          try {
+            const result = await authedFetch<unknown>(
+              `/api/posts/${postId}/comments/like/intents`,
+              'POST',
+              accessToken,
+              {
+                operation: COMMENT_REACTION_INTENT_OPERATION,
+                request_id: command.requestId,
+                comment_id: commentId,
+                desired_reaction: command.desired,
+              },
+              COMMENT_REACTION_REQUEST_TIMEOUT_MS,
+              {
+                expectedUserId: capturedScope.userId,
+                expectedSessionGeneration: capturedScope.sessionGeneration,
+                signal,
+              }
+            )
+            if (signal.aborted || !scopeIsCurrent(capturedScope) || result.stale) {
+              return { kind: 'uncertain', error: signal.reason ?? lastError }
+            }
+
+            const acknowledgement =
+              result.ok && result.status === 200
+                ? readCommentReactionIntentAcknowledgement(result.data, {
+                    actorId,
+                    postId,
+                    commentId,
+                    requestId: command.requestId,
+                    desiredReaction: command.desired,
+                  })
+                : null
+            if (acknowledgement) {
+              command.intentSequence = acknowledgement.intentSequence
+              break
+            }
+
+            const failure = readCommentReactionFailure(result.data, result.status)
+            const error = commentReactionError(result.data)
+            if (
+              failure &&
+              (failure.kind === 'stale' ||
+                failure.kind === 'expired' ||
+                failure.kind === 'unknown_ticket')
+            ) {
+              return { kind: 'superseded', error }
+            }
+            if (isDefinitiveCommentReactionRejection(result.status)) {
+              return { kind: 'definitive-rejection', error, status: result.status }
+            }
+            lastError = error ? new Error(error) : lastError
+          } catch (error) {
+            lastError = error
+          }
+        }
+
+        if (!command.intentSequence) {
+          return { kind: 'uncertain', error: lastError }
+        }
+
+        // The desired-state phase is also safe to retry with the exact ticket.
+        // The database replays the current ticket and rejects every stale one
+        // without touching the source reaction or its cached counters.
         for (let attempt = 0; attempt < 2; attempt += 1) {
           if (signal.aborted || !scopeIsCurrent(capturedScope)) {
             return { kind: 'uncertain', error: signal.reason ?? lastError }
@@ -767,6 +841,7 @@ export function usePostComments({
                 operation: COMMENT_REACTION_OPERATION,
                 request_id: command.requestId,
                 comment_id: commentId,
+                intent_sequence: command.intentSequence,
                 desired_reaction: command.desired,
               },
               COMMENT_REACTION_REQUEST_TIMEOUT_MS,
@@ -787,12 +862,22 @@ export function usePostComments({
                     postId,
                     commentId,
                     requestId: command.requestId,
+                    intentSequence: command.intentSequence,
                     desiredReaction: command.desired,
                   })
                 : null
             if (acknowledgement) return { kind: 'acknowledged', acknowledgement }
 
+            const failure = readCommentReactionFailure(result.data, result.status)
             const error = commentReactionError(result.data)
+            if (
+              failure &&
+              (failure.kind === 'stale' ||
+                failure.kind === 'expired' ||
+                failure.kind === 'unknown_ticket')
+            ) {
+              return { kind: 'superseded', error }
+            }
             if (isDefinitiveCommentReactionRejection(result.status)) {
               return { kind: 'definitive-rejection', error, status: result.status }
             }
@@ -870,6 +955,23 @@ export function usePostComments({
                   stateRevisionRef.current.get(commentViewerScopeKey(capturedScope)) || 0
               }
             }
+            continue
+          }
+
+          if (outcome.kind === 'superseded') {
+            // A newer server-issued ticket exists (or this ticket can no
+            // longer be proven). Never inverse an optimistic transition from
+            // local history: read canonical truth and preserve any newer
+            // in-lane projection over that snapshot.
+            const commandIsLatest = latestIntent?.revision === command.revision
+            if (commandIsLatest) {
+              commentReactionIntentRef.current.delete(laneKey)
+            }
+            const reconciled = await reconcileCanonicalComments(postId, 'best', capturedScope)
+            if (!reconciled && commandIsLatest && scopeIsCurrent(capturedScope)) {
+              showToast(t('networkError'), 'error')
+            }
+            if (commandIsLatest) return
             continue
           }
 

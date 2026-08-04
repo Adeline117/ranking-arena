@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { usePostComments, type Comment } from '../usePostComments'
 
 const mockAuthedFetch = jest.fn()
+const mockReserveReactionIntentFetch = jest.fn()
 const mockSetStoreComments = jest.fn()
 const mockAddStoreComment = jest.fn()
 const mockUpdatePostCommentCount = jest.fn()
@@ -9,11 +10,16 @@ const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const REACTION_POST_ID = '22222222-2222-4222-8222-222222222222'
 const REACTION_COMMENT_ID = '33333333-3333-4333-8333-333333333333'
 const REACTION_REQUEST_ID = '0123456789abcdef0123456789abcdef'
+const REACTION_INTENT_SEQUENCE = '1'
 const REACTION_TIMESTAMP = '2026-08-03T21:30:00.000Z'
+const REACTION_INTENT_EXPIRES_AT = '2026-08-03T21:45:00.000Z'
 const mockCreateCommentReactionRequestId = jest.fn()
 
 jest.mock('@/lib/api/client', () => ({
-  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
+  authedFetch: (...args: unknown[]) =>
+    String(args[0]).endsWith('/comments/like/intents')
+      ? mockReserveReactionIntentFetch(...args)
+      : mockAuthedFetch(...args),
   getHttpErrorMessage: (_status: number, fallback: string) => fallback,
 }))
 
@@ -131,6 +137,7 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
       comment_id: REACTION_COMMENT_ID,
       request_id: REACTION_REQUEST_ID,
       operation: 'set_reaction',
+      intent_sequence: REACTION_INTENT_SEQUENCE,
       desired_reaction: 'like',
       action: 'added',
       reaction: 'like',
@@ -138,7 +145,27 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
       disliked: false,
       like_count: 1,
       dislike_count: 0,
+      replayed: false,
       ...overrides,
+    },
+    meta: { timestamp: REACTION_TIMESTAMP },
+  }
+}
+
+function reactionIntentReceipt(body: Record<string, unknown>) {
+  return {
+    success: true,
+    data: {
+      actor_id: REACTION_ACTOR_ID,
+      post_id: REACTION_POST_ID,
+      comment_id: body.comment_id,
+      request_id: body.request_id,
+      operation: 'reserve_reaction_intent',
+      desired_reaction: body.desired_reaction,
+      status: 'issued',
+      intent_sequence: REACTION_INTENT_SEQUENCE,
+      expires_at: REACTION_INTENT_EXPIRES_AT,
+      replayed: false,
     },
     meta: { timestamp: REACTION_TIMESTAMP },
   }
@@ -159,6 +186,10 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
     jest.clearAllMocks()
     localStorage.clear()
     mockCreateCommentReactionRequestId.mockReturnValue(REACTION_REQUEST_ID)
+    mockReserveReactionIntentFetch.mockImplementation(
+      (_url: string, _method: string, _token: string, body: Record<string, unknown>) =>
+        Promise.resolve({ ok: true, status: 200, data: reactionIntentReceipt(body) })
+    )
   })
 
   it('does not undo a committed comment when Realtime arrives before the response is lost', async () => {
