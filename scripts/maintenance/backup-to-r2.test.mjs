@@ -3,9 +3,12 @@ import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { gunzipSync, gzipSync } from 'node:zlib'
+import { gzipSync } from 'node:zlib'
 
-import { arenaBackupCompletionSentinel } from './backup-restore-contract.mjs'
+import {
+  arenaBackupCompletionSentinel,
+  MINIMUM_APPLICATION_BACKUP_RELATIONS,
+} from './backup-restore-contract.mjs'
 
 import {
   assertBackupArtifact,
@@ -392,13 +395,9 @@ test('a failed pg_dump cannot be hidden by a successful gzip', async () => {
         )
     )
 
-    // gzip still emitted an artifact, proving the regression exercises the
-    // exact false-success shape. Neither remote side effect was reached.
-    assert.ok((await stat(output)).size > 0)
-    assert.doesNotMatch(
-      gunzipSync(await readFile(output)).toString('utf8'),
-      /ARENA BACKUP COMPLETE/
-    )
+    // A producer failure removes its local partial and cannot reach either
+    // remote side effect.
+    await assert.rejects(stat(output), { code: 'ENOENT' })
     assert.equal(uploads, 0)
     assert.equal(prunes, 0)
     await assert.rejects(stat(bashEnvMarker), { code: 'ENOENT' })
@@ -442,7 +441,7 @@ test('passes literal argv and only target auth through a scrubbed pg_dump env', 
           ])
         )
         const literalSchema = `arena; touch ${injectedPath}`
-        runPgDumpPipeline({
+        await runPgDumpPipeline({
           pgDumpPath: pgDump,
           connectionUrl: 'postgresql://backup@db.example.com/app?sslmode=require',
           password: 'p@ss:word',
@@ -457,13 +456,18 @@ test('passes literal argv and only target auth through a scrubbed pg_dump env', 
           literalSchema,
           '--no-owner',
           `--restrict-key=${COMPLETION_TOKEN}`,
-          'postgresql://backup@db.example.com/app?sslmode=require',
         ])
         assert.equal(await readFile(passwordLog, 'utf8'), 'p@ss:word')
         const childEnv = await readFile(envLog, 'utf8')
         assert.deepEqual(
-          childEnv.split('\n').filter((line) => /^PG[A-Z0-9_]*=/.test(line)),
-          ['PGPASSWORD=p@ss:word']
+          childEnv
+            .split('\n')
+            .filter((line) => /^PG[A-Z0-9_]*=/.test(line))
+            .sort(),
+          [
+            'PGDATABASE=postgresql://backup@db.example.com/app?sslmode=require',
+            'PGPASSWORD=p@ss:word',
+          ]
         )
         for (const name of [
           'DATABASE_URL',
@@ -480,6 +484,7 @@ test('passes literal argv and only target auth through a scrubbed pg_dump env', 
         assert.ok(
           (await assertBackupArtifact(output, 1, { completionToken: COMPLETION_TOKEN })) > 0
         )
+        assert.equal((await stat(output)).mode & 0o777, 0o600)
       }
     )
   })
@@ -500,7 +505,7 @@ test('a passwordless target cannot inherit ambient libpq authentication variable
         FAKE_ENV_LOG: envLog,
       },
       async () => {
-        runPgDumpPipeline({
+        await runPgDumpPipeline({
           pgDumpPath: pgDump,
           connectionUrl: 'postgresql://backup@db.example.com/app',
           password: undefined,
@@ -512,8 +517,33 @@ test('a passwordless target cannot inherit ambient libpq authentication variable
       }
     )
 
-    assert.doesNotMatch(await readFile(envLog, 'utf8'), /^PG[A-Z0-9_]*=/m)
+    const passwordlessEnv = await readFile(envLog, 'utf8')
+    assert.match(passwordlessEnv, /^PGDATABASE=postgresql:\/\/backup@db\.example\.com\/app$/m)
+    assert.doesNotMatch(passwordlessEnv, /^PG(?:PASSWORD|PASSFILE|SERVICE)=/m)
     assert.ok((await assertBackupArtifact(output, 1, { completionToken: COMPLETION_TOKEN })) > 0)
+  })
+})
+
+test('refuses to overwrite an existing local artifact path', async () => {
+  await withTempDir(async (directory) => {
+    const pgDump = join(directory, 'fake-pg-dump')
+    const output = join(directory, 'existing.sql.gz')
+    await writeExecutable(pgDump, successfulPgDumpShell())
+    await writeFile(output, 'operator-owned-file', { mode: 0o600 })
+
+    await assert.rejects(
+      runPgDumpPipeline({
+        pgDumpPath: pgDump,
+        connectionUrl: 'postgresql://backup@db.example.com/app',
+        password: undefined,
+        pgDumpArgs: [],
+        outputPath: output,
+        completionToken: COMPLETION_TOKEN,
+        timeoutMs: 5_000,
+      }),
+      /EEXIST|file already exists/
+    )
+    assert.equal(await readFile(output, 'utf8'), 'operator-owned-file')
   })
 })
 
@@ -569,7 +599,7 @@ test('rejects undersized or corrupt artifacts before upload eligibility', async 
   })
 })
 
-test('uploads and prunes only after a valid artifact, then removes the local copy', async () => {
+test('uploads a valid artifact without deleting remote retention objects', async () => {
   await withTempDir(async (directory) => {
     const pgDump = join(directory, 'fake-pg-dump')
     const output = join(directory, 'valid.sql.gz')
@@ -594,12 +624,9 @@ test('uploads and prunes only after a valid artifact, then removes the local cop
         events.push(`upload:${validatedSize}`)
         assert.equal((await stat(output)).size, validatedSize)
       },
-      prune: async () => {
-        events.push('prune')
-      },
     })
 
-    assert.deepEqual(events, [`upload:${size}`, 'prune'])
+    assert.deepEqual(events, [`upload:${size}`])
     await assert.rejects(stat(output), { code: 'ENOENT' })
   })
 })
@@ -621,6 +648,30 @@ test('accepts exact PG17 legacy and Arena completion suffixes in one full gzip p
 
     assert.ok((await assertBackupArtifact(restricted, 1)) > 0)
     assert.ok((await assertBackupArtifact(arena, 1, { completionToken: COMPLETION_TOKEN })) > 0)
+  })
+})
+
+test('rejects a complete large-enough dump that omits the minimum application scope', async () => {
+  await withTempDir(async (directory) => {
+    const artifact = join(directory, 'missing-critical-relations.sql.gz')
+    await writeFile(
+      artifact,
+      gzipSync(
+        pgDumpFixture({
+          token: COMPLETION_TOKEN,
+          body: 'CREATE TABLE arena.traders (id bigint);\n',
+          arenaToken: COMPLETION_TOKEN,
+        })
+      )
+    )
+
+    await assert.rejects(
+      assertBackupArtifact(artifact, 1, {
+        completionToken: COMPLETION_TOKEN,
+        requiredRelations: MINIMUM_APPLICATION_BACKUP_RELATIONS,
+      }),
+      /missing required relations: arena\.trader_stats, public\.leaderboard_ranks/
+    )
   })
 })
 
@@ -718,13 +769,15 @@ test('keeps exact EOF semantics across a large multi-chunk tail window', async (
   })
 })
 
-test('the executable uses the safe pipeline and CI runs the behavioral contract', async () => {
+test('the executable uses a shell-free non-pruning pipeline and CI runs the contract', async () => {
   const source = await readFile(new URL('./backup-to-r2.mjs', import.meta.url), 'utf8')
   const ci = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
 
-  assert.match(source, /execFileSync\(\s*'\/bin\/bash'/)
-  assert.match(source, /'pipefail'/)
-  assert.match(source, /\{ "\$@" && printf "%s" "\$sentinel"; \} \|/)
+  assert.match(source, /spawn\(pgDumpPath/)
+  assert.match(source, /PGDATABASE: connectionUrl/)
+  assert.match(source, /createGzip\(\)/)
+  assert.doesNotMatch(source, /\/bin\/bash|pipefail/)
+  assert.doesNotMatch(source, /DeleteObjectsCommand|pruneOldBackups/)
   assert.match(source, /--restrict-key=/)
   assert.match(source, /'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT/)
   assert.match(source, /'completion-token': completionToken/)

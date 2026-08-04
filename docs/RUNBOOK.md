@@ -334,7 +334,11 @@ Sources: `lib/utils/arena-score.ts`,
 **备份是什么**:`backup-to-r2.mjs` 每日 dump `-n arena -n public`(PLAIN SQL,
 `--no-owner --no-privileges`)→ gzip → multipart upload → 条件 HEAD 验证，写入
 `db-backups/YYYY/MM/arena-backup-<UTC毫秒>-<run-id>-schemas.sql.gz`（schema 产物
-保留 14 天）。这是**应用数据备份**，不含 `auth`/`storage`；用户身份当前只有
+不会由上传命令自动删除或 prune；保留/删除必须作为独立人工审查操作）。生产器
+不经过 shell，连接 URI 不进入子进程 argv；`pg_dump` 非零会删除本地 partial。
+上传前必须同时通过 gzip/pg_dump 完成尾标、1 GiB 最小大小以及
+`arena.traders`、`arena.trader_stats`、`public.leaderboard_ranks` 最小范围校验。
+这是**应用数据备份**，不含 `auth`/`storage`；用户身份当前只有
 Supabase 托管 PITR，R2 没有已验证的独立恢复副本。
 
 **列出对象清单**（只读，只验证凭据；清单出现不等于对象可恢复）：
@@ -364,7 +368,10 @@ scratch 项目完成 catalog 指纹、身份/应用数据、权限、RLS、登�
 
 **脚本安全**:`RESTORE_TARGET_URL == DATABASE_URL`(生产)时硬拒绝,除非
 `--force-prod`(几乎永远不该用)。缺少 `DATABASE_URL` 生产身份基准时默认硬拒绝；
-只有已独立证明 scratch 隔离后才可显式传 `--allow-unverified-target`。
+只有已独立证明 scratch 隔离后才可显式传 `--allow-unverified-target`。下载先写
+`0600` 的随机 sibling partial，再以不覆盖语义发布本地文件；失败会清除 partial。
+低层 gunzip→psql helper 不经过 shell，目标 URI 只经 scrubbed `PGDATABASE` 传递，
+不进入 `psql` argv。自动 apply 仍保持禁用。
 
 ## Deployment Rollback
 

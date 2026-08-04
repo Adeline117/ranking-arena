@@ -12,17 +12,15 @@
  * Requires: DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */
 
-import { execFileSync } from 'child_process'
+import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { createReadStream, unlinkSync } from 'fs'
-import { resolve } from 'path'
-import { pathToFileURL } from 'url'
-import {
-  S3Client,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  DeleteObjectsCommand,
-} from '@aws-sdk/client-s3'
+import { createReadStream, createWriteStream, unlinkSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { pathToFileURL } from 'node:url'
+import { createGzip } from 'node:zlib'
+import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import 'dotenv/config'
 import {
@@ -32,6 +30,7 @@ import {
   arenaBackupCompletionSentinel,
   COMPLETE_BACKUP_MIN_BYTES,
   IMMUTABLE_BACKUP_FILENAME_PATTERN,
+  MINIMUM_APPLICATION_BACKUP_RELATIONS,
   parseCompleteBackupFilename,
   preparePostgresConnection,
   unverifiedBackupRecoveryMetadata,
@@ -40,12 +39,16 @@ import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
 
 export { assertBackupArtifact, COMPLETE_BACKUP_MIN_BYTES, IMMUTABLE_BACKUP_FILENAME_PATTERN }
 
-// Retention: daily schema backups are kept this many days; full backups keep
-// the N newest regardless of age.
-const DAILY_RETENTION_DAYS = 14
-const FULL_BACKUPS_TO_KEEP = 3
 export const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024
 export const MULTIPART_QUEUE_SIZE = 4
+
+function removeLocalArtifact(path) {
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+}
 
 const DATABASE_URL = process.env.DATABASE_URL
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
@@ -140,6 +143,8 @@ export function buildBackupArtifactIdentity({ now, mode, runId }) {
   }
 }
 
+// Kept as a pure compatibility helper for backup inventory/reporting. Backup
+// creation no longer invokes an object-deletion retention phase.
 export function backupDateFromKey(key) {
   if (typeof key !== 'string') return ''
   const filename = key.split('/').at(-1)
@@ -267,22 +272,19 @@ export async function uploadAndAttestBackupArtifact({
 
 /**
  * Keep database credentials out of pg_dump's argv. libpq accepts the password
- * through PGPASSWORD, while the remaining URI (including SSL/query settings)
- * stays as the database argument.
+ * through PGPASSWORD; the sanitized URI is later supplied through PGDATABASE.
  */
 export function preparePgDumpConnection(databaseUrl) {
   return preparePostgresConnection(databaseUrl, 'DATABASE_URL')
 }
 
 /**
- * Stream pg_dump through gzip while preserving both programs' exit status.
- *
- * Bash receives every dynamic value as a positional argument, so database
- * URLs, paths, schemas, and tables are never interpolated into shell source.
- * `pipefail` is essential: without it a failed pg_dump followed by a successful
- * gzip produces a valid 20-byte empty gzip and the backup falsely succeeds.
+ * Stream pg_dump through Node's gzip implementation without a shell. The
+ * sanitized libpq URI is supplied through PGDATABASE, never process argv.
+ * The completion sentinel is emitted only after pg_dump has closed with zero,
+ * so a partial producer can never become an upload-eligible gzip.
  */
-export function runPgDumpPipeline({
+export async function runPgDumpPipeline({
   pgDumpPath,
   connectionUrl,
   password,
@@ -291,10 +293,10 @@ export function runPgDumpPipeline({
   completionToken,
   timeoutMs = 1_800_000,
 }) {
-  const pgDumpEnv = cleanPostgresConnectionEnv(
-    process.env,
-    password === undefined ? {} : { PGPASSWORD: password }
-  )
+  const pgDumpEnv = cleanPostgresConnectionEnv(process.env, {
+    PGDATABASE: connectionUrl,
+    ...(password === undefined ? {} : { PGPASSWORD: password }),
+  })
   for (const name of [
     'DATABASE_URL',
     'R2_ACCOUNT_ID',
@@ -306,47 +308,97 @@ export function runPgDumpPipeline({
   }
   const completionSentinel = arenaBackupCompletionSentinel(completionToken)
 
-  execFileSync(
-    '/bin/bash',
-    [
-      '-o',
-      'pipefail',
-      '-c',
-      'output=$1; sentinel=$2; shift 2; { "$@" && printf "%s" "$sentinel"; } | /usr/bin/gzip -c > "$output"',
-      'arena-backup-pipeline',
-      outputPath,
-      completionSentinel,
-      pgDumpPath,
-      ...pgDumpArgs,
-      `--restrict-key=${completionToken}`,
-      connectionUrl,
-    ],
-    {
-      env: pgDumpEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: timeoutMs,
+  const pgDump = spawn(pgDumpPath, [...pgDumpArgs, `--restrict-key=${completionToken}`], {
+    env: pgDumpEnv,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  const outcome = childOutcome(pgDump, 'pg_dump', timeoutMs)
+  const completionGate = new Transform({
+    transform(chunk, _encoding, callback) {
+      callback(null, chunk)
+    },
+    flush(callback) {
+      outcome.then(({ error }) => {
+        if (error) callback(error)
+        else callback(null, completionSentinel)
+      })
+    },
+  })
+  let outputCreated = false
+  const gzipOutput = createWriteStream(outputPath, { flags: 'wx', mode: 0o600 })
+  gzipOutput.once('open', () => {
+    outputCreated = true
+  })
+
+  try {
+    await pipeline(pgDump.stdout, completionGate, createGzip(), gzipOutput)
+    const { error } = await outcome
+    if (error) throw error
+  } catch (error) {
+    if (pgDump.exitCode === null && pgDump.signalCode === null) pgDump.kill('SIGKILL')
+    await outcome
+    if (outputCreated) removeLocalArtifact(outputPath)
+    throw error
+  }
+}
+
+function childOutcome(child, label, timeoutMs) {
+  let stderr = ''
+  child.stderr?.on('data', (chunk) => {
+    if (stderr.length < 16_384) stderr += chunk.toString('utf8').slice(0, 16_384 - stderr.length)
+  })
+
+  return new Promise((resolveOutcome) => {
+    let settled = false
+    const finish = (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolveOutcome({ error })
     }
-  )
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      const error = new Error(`${label} timed out after ${timeoutMs}ms`)
+      error.code = 'ETIMEDOUT'
+      finish(error)
+    }, timeoutMs)
+    timer.unref?.()
+
+    child.once('error', finish)
+    child.once('close', (code, signal) => {
+      if (code === 0 && signal === null) return finish(null)
+      const detail = stderr.trim() ? `: ${stderr.trim()}` : ''
+      const error = new Error(
+        `${label} failed with ${signal ? `signal ${signal}` : `status ${String(code)}`}${detail}`
+      )
+      error.status = code
+      error.signal = signal
+      finish(error)
+    })
+  })
 }
 
 /**
  * Keep production side effects behind a validated local artifact. Injection is
  * deliberate: tests execute the real producer and prove rejected artifacts
- * cannot reach either the upload or retention boundary.
+ * cannot reach the upload boundary. Retention deletion is a separate, manual
+ * operation and is intentionally absent from this command.
  */
 export async function produceAndCommitBackup({
   produce,
   localPath,
   minimumBytes,
   completionToken,
+  requiredRelations = [],
   upload,
-  prune,
 }) {
   await produce()
-  const size = await assertBackupArtifact(localPath, minimumBytes, { completionToken })
+  const size = await assertBackupArtifact(localPath, minimumBytes, {
+    completionToken,
+    requiredRelations,
+  })
   await upload(size)
   unlinkSync(localPath)
-  await prune()
   return size
 }
 
@@ -411,6 +463,7 @@ async function run() {
       localPath,
       minimumBytes,
       completionToken,
+      requiredRelations: MINIMUM_APPLICATION_BACKUP_RELATIONS,
       upload: async (size) => {
         const sizeMB = (size / 1024 / 1024).toFixed(1)
         console.log(`[backup] Dump complete: ${sizeMB} MB`)
@@ -427,73 +480,15 @@ async function run() {
           `[backup] ✓ Uploaded and attested: ${r2Key} (${sizeMB} MB, ETag ${remote.ETag})`
         )
       },
-      prune: pruneOldBackups,
     })
   } catch (err) {
     console.error(`[backup] ✗ Failed:`, err.message)
     try {
-      unlinkSync(localPath)
-    } catch {}
-    process.exit(1)
-  }
-}
-
-// Prune objects outside retention. Failures here must never fail the backup
-// run itself — the upload already succeeded.
-async function pruneOldBackups() {
-  try {
-    let token
-    const all = []
-    do {
-      const r = await s3.send(
-        new ListObjectsV2Command({
-          Bucket: R2_BUCKET,
-          Prefix: 'db-backups/',
-          ContinuationToken: token,
-        })
-      )
-      all.push(...(r.Contents || []))
-      token = r.NextContinuationToken
-    } while (token)
-
-    const isFull = (k) => k.includes('-full')
-    const cutoffDate = new Date(Date.now() - DAILY_RETENTION_DAYS * 86_400_000)
-    const cutoff = cutoffDate.toISOString().slice(0, 10).replace(/-/g, '')
-    const keepFulls = new Set(
-      all
-        .filter((o) => isFull(o.Key))
-        .sort(
-          (a, b) =>
-            backupDateFromKey(b.Key).localeCompare(backupDateFromKey(a.Key)) ||
-            String(b.Key).localeCompare(String(a.Key))
-        )
-        .slice(0, FULL_BACKUPS_TO_KEEP)
-        .map((o) => o.Key)
-    )
-    const toDelete = all.filter((o) =>
-      isFull(o.Key)
-        ? !keepFulls.has(o.Key)
-        : backupDateFromKey(o.Key) !== '' && backupDateFromKey(o.Key) < cutoff
-    )
-    if (toDelete.length === 0) {
-      console.log('[backup] Retention: nothing to prune')
-      return
+      removeLocalArtifact(localPath)
+    } catch (cleanupError) {
+      console.error('[backup] Failed to remove local artifact:', cleanupError.message)
     }
-    const freedMB = (toDelete.reduce((s, o) => s + o.Size, 0) / 1048576).toFixed(0)
-    // DeleteObjects caps at 1000 keys per call; retention never approaches that
-    const r = await s3.send(
-      new DeleteObjectsCommand({
-        Bucket: R2_BUCKET,
-        Delete: { Objects: toDelete.map((o) => ({ Key: o.Key })) },
-      })
-    )
-    const errs = r.Errors || []
-    console.log(
-      `[backup] Retention: pruned ${(r.Deleted || []).length} objects (${freedMB} MB)` +
-        (errs.length ? `, ${errs.length} errors: ${errs.map((e) => e.Key).join(', ')}` : '')
-    )
-  } catch (err) {
-    console.error('[backup] Retention prune failed (backup itself succeeded):', err.message)
+    process.exit(1)
   }
 }
 
