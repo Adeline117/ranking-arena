@@ -156,6 +156,7 @@ PREDEPLOY_MIGRATIONS=(
   20260803153000_stripe_webhook_event_lease_and_retention_authority.sql
   20260803170000_atomic_verified_trader_profile_revision.sql
   20260803180000_hashtag_read_authority.sql
+  20260803183000_post_interaction_read_privacy.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

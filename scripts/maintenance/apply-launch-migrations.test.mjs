@@ -151,8 +151,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const verifiedTraderProfileRevisionMigration =
     '20260803170000_atomic_verified_trader_profile_revision.sql'
   const hashtagReadAuthorityMigration = '20260803180000_hashtag_read_authority.sql'
+  const postInteractionReadPrivacyMigration = '20260803183000_post_interaction_read_privacy.sql'
 
-  assert.equal(predeploy.length, 127)
+  assert.equal(predeploy.length, 128)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -252,6 +253,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           stripeWebhookAuthorityMigration,
           verifiedTraderProfileRevisionMigration,
           hashtagReadAuthorityMigration,
+          postInteractionReadPrivacyMigration,
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -270,7 +272,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 142)
+  assert.equal(new Set(all).size, 143)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -306,6 +308,16 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!recovery.includes(hashtagReadAuthorityMigration))
   assert.ok(!quarantined.includes(hashtagReadAuthorityMigration))
   assert.ok(!superseded.includes(hashtagReadAuthorityMigration))
+  assert.equal(
+    predeploy.filter((migration) => migration === postInteractionReadPrivacyMigration).length,
+    1
+  )
+  assert.ok(!postdeploy.includes(postInteractionReadPrivacyMigration))
+  assert.ok(!recoveryPrerequisites.includes(postInteractionReadPrivacyMigration))
+  assert.ok(!concurrentRecovery.includes(postInteractionReadPrivacyMigration))
+  assert.ok(!recovery.includes(postInteractionReadPrivacyMigration))
+  assert.ok(!quarantined.includes(postInteractionReadPrivacyMigration))
+  assert.ok(!superseded.includes(postInteractionReadPrivacyMigration))
   assert.ok(!predeploy.includes(legacyApiTierCleanupMigration))
   assert.ok(!postdeploy.includes(additiveApiTierMigration))
   assert.ok(!recoveryPrerequisites.includes(legacyApiTierCleanupMigration))
@@ -314,7 +326,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-86), [
+  assert.deepEqual(predeploy.slice(-87), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -401,6 +413,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     stripeWebhookAuthorityMigration,
     verifiedTraderProfileRevisionMigration,
     hashtagReadAuthorityMigration,
+    postInteractionReadPrivacyMigration,
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -491,7 +504,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729080000_api_tier_recovery_payment_authority.sql'))
   assert.ok(predeploy.includes(verifiedTraderProfileRevisionMigration))
   assert.ok(predeploy.includes(hashtagReadAuthorityMigration))
-  assert.deepEqual(predeploy.slice(-7), [
+  assert.ok(predeploy.includes(postInteractionReadPrivacyMigration))
+  assert.deepEqual(predeploy.slice(-8), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
@@ -499,6 +513,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     stripeWebhookAuthorityMigration,
     verifiedTraderProfileRevisionMigration,
     hashtagReadAuthorityMigration,
+    postInteractionReadPrivacyMigration,
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
   assert.ok(
@@ -643,6 +658,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   )
   assert.ok(!recoveryPrerequisites.includes(verifiedTraderProfileRevisionMigration))
   assert.ok(!recoveryPrerequisites.includes(hashtagReadAuthorityMigration))
+  assert.ok(!recoveryPrerequisites.includes(postInteractionReadPrivacyMigration))
   assert.ok(!predeploy.includes('20260722054000_metric_trust_source_page_lineage.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
