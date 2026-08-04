@@ -182,7 +182,11 @@ CREATE TABLE IF NOT EXISTS public.post_interaction_count_repair_queue (
   -- without depending on FK trigger order inside the parent delete.
   post_id uuid PRIMARY KEY,
   enqueued_at timestamptz NOT NULL
-    DEFAULT pg_catalog.statement_timestamp()
+    DEFAULT pg_catalog.statement_timestamp(),
+  next_attempt_at timestamptz NOT NULL
+    DEFAULT pg_catalog.statement_timestamp(),
+  attempt_count integer NOT NULL DEFAULT 0
+    CHECK (attempt_count >= 0 AND attempt_count <= 1000000)
 );
 
 LOCK TABLE public.post_interaction_count_repair_queue
@@ -190,6 +194,7 @@ IN ACCESS EXCLUSIVE MODE;
 
 CREATE INDEX IF NOT EXISTS idx_post_interaction_count_repair_queue_oldest
   ON public.post_interaction_count_repair_queue (
+    next_attempt_at,
     enqueued_at,
     post_id
   );
@@ -243,7 +248,7 @@ END
 $function$;
 
 CREATE OR REPLACE FUNCTION public.repair_post_interaction_counts_atomic(
-  p_limit integer DEFAULT 100
+  p_limit integer DEFAULT 1
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -271,7 +276,7 @@ DECLARE
   v_discarded_count integer := 0;
   v_contended_count integer := 0;
   v_updated_count integer := 0;
-  v_scan_limit integer;
+  v_deferred_count integer := 0;
   v_remaining_count bigint;
   v_oldest_enqueued_at timestamptz;
   v_has_more boolean;
@@ -281,10 +286,12 @@ BEGIN
       ERRCODE = '42501',
       MESSAGE = 'service role required';
   END IF;
-  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 500 THEN
+  -- Exactly one post per transaction keeps every advisory/row lock lifetime
+  -- short. The application may loop bounded RPC calls, each with an independent
+  -- commit, but no database caller can create a 500-post lock convoy.
+  IF p_limit IS DISTINCT FROM 1 THEN
     RETURN pg_catalog.jsonb_build_object('status', 'invalid');
   END IF;
-  v_scan_limit := LEAST(p_limit * 5, 500);
 
   -- Read candidates without a queue lock. The canonical post advisory lock
   -- must always precede queue-row ownership, otherwise a live RPC
@@ -294,8 +301,11 @@ BEGIN
   FROM (
     SELECT repair_queue.post_id, repair_queue.enqueued_at
     FROM public.post_interaction_count_repair_queue AS repair_queue
-    ORDER BY repair_queue.enqueued_at, repair_queue.post_id
-    LIMIT v_scan_limit
+    WHERE repair_queue.next_attempt_at <= pg_catalog.statement_timestamp()
+    ORDER BY repair_queue.next_attempt_at,
+             repair_queue.enqueued_at,
+             repair_queue.post_id
+    LIMIT 1
   ) AS candidate;
 
   v_selected_count := COALESCE(pg_catalog.cardinality(v_candidates), 0);
@@ -310,6 +320,23 @@ BEGIN
         0
       )
     ) THEN
+      -- No P lock is held. Move this hot identity behind other due work before
+      -- returning, so a permanently busy oldest post cannot starve row 501.
+      WITH retryable AS (
+        SELECT repair_queue.post_id
+        FROM public.post_interaction_count_repair_queue AS repair_queue
+        WHERE repair_queue.post_id = v_post_id
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE public.post_interaction_count_repair_queue AS repair_queue
+      SET attempt_count = LEAST(repair_queue.attempt_count + 1, 1000000),
+          next_attempt_at = pg_catalog.statement_timestamp()
+            + pg_catalog.make_interval(
+              secs => LEAST((repair_queue.attempt_count + 1) * 5, 300)
+            )
+      FROM retryable
+      WHERE repair_queue.post_id = retryable.post_id;
+      GET DIAGNOSTICS v_deferred_count = ROW_COUNT;
       v_contended_count := v_contended_count + 1;
       CONTINUE;
     END IF;
@@ -334,6 +361,21 @@ BEGIN
       )
       INTO v_post_still_exists;
       IF v_post_still_exists THEN
+        WITH retryable AS (
+          SELECT repair_queue.post_id
+          FROM public.post_interaction_count_repair_queue AS repair_queue
+          WHERE repair_queue.post_id = v_post_id
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE public.post_interaction_count_repair_queue AS repair_queue
+        SET attempt_count = LEAST(repair_queue.attempt_count + 1, 1000000),
+            next_attempt_at = pg_catalog.statement_timestamp()
+              + pg_catalog.make_interval(
+                secs => LEAST((repair_queue.attempt_count + 1) * 5, 300)
+              )
+        FROM retryable
+        WHERE repair_queue.post_id = retryable.post_id;
+        GET DIAGNOSTICS v_deferred_count = ROW_COUNT;
         v_contended_count := v_contended_count + 1;
         CONTINUE;
       END IF;
@@ -425,10 +467,15 @@ BEGIN
   END LOOP;
 
   SELECT pg_catalog.count(*),
-         pg_catalog.min(repair_queue.enqueued_at)
-  INTO v_remaining_count, v_oldest_enqueued_at
+         pg_catalog.min(repair_queue.enqueued_at),
+         COALESCE(
+           pg_catalog.bool_or(
+             repair_queue.next_attempt_at <= pg_catalog.statement_timestamp()
+           ),
+           false
+         )
+  INTO v_remaining_count, v_oldest_enqueued_at, v_has_more
   FROM public.post_interaction_count_repair_queue AS repair_queue;
-  v_has_more := v_remaining_count > 0;
 
   RETURN pg_catalog.jsonb_build_object(
     'status', 'processed',
@@ -467,6 +514,46 @@ EXECUTE FUNCTION public.enqueue_post_interaction_count_repair();
 
 REVOKE ALL ON TABLE public.post_interaction_count_repair_queue
   FROM PUBLIC, anon, authenticated, authenticator, service_role;
+DO $revoke_queue_column_acl_drift$
+DECLARE
+  v_role text;
+  v_grantee text;
+  v_column record;
+BEGIN
+  FOREACH v_role IN ARRAY ARRAY[
+    'PUBLIC',
+    'anon',
+    'authenticated',
+    'authenticator',
+    'service_role'
+  ]::text[]
+  LOOP
+    v_grantee := CASE
+      WHEN v_role = 'PUBLIC' THEN 'PUBLIC'
+      ELSE pg_catalog.quote_ident(v_role)
+    END;
+
+    FOR v_column IN
+      SELECT attribute.attname
+      FROM pg_catalog.pg_attribute AS attribute
+      WHERE attribute.attrelid =
+        'public.post_interaction_count_repair_queue'::pg_catalog.regclass
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+      ORDER BY attribute.attnum
+    LOOP
+      EXECUTE pg_catalog.format(
+        'REVOKE SELECT (%I), INSERT (%I), UPDATE (%I), REFERENCES (%I) ON TABLE public.post_interaction_count_repair_queue FROM %s',
+        v_column.attname,
+        v_column.attname,
+        v_column.attname,
+        v_column.attname,
+        v_grantee
+      );
+    END LOOP;
+  END LOOP;
+END
+$revoke_queue_column_acl_drift$;
 REVOKE ALL ON FUNCTION public.enqueue_post_interaction_count_repair()
   FROM PUBLIC, anon, authenticated, authenticator, service_role;
 REVOKE ALL ON FUNCTION public.repair_post_interaction_counts_atomic(integer)
@@ -584,7 +671,9 @@ BEGIN
       AND NOT attribute.attisdropped
   ) IS DISTINCT FROM ARRAY[
     'post_id',
-    'enqueued_at'
+    'enqueued_at',
+    'next_attempt_at',
+    'attempt_count'
   ]::text[] THEN
     RAISE EXCEPTION 'post interaction count repair queue column set drifted';
   END IF;
@@ -618,6 +707,55 @@ BEGIN
           ) = 'statement_timestamp()'
   ) THEN
     RAISE EXCEPTION 'post interaction count repair queue column shape drifted';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_attrdef AS default_row
+      ON default_row.adrelid = attribute.attrelid
+     AND default_row.adnum = attribute.attnum
+    WHERE attribute.attrelid =
+      'public.post_interaction_count_repair_queue'::pg_catalog.regclass
+      AND attribute.attname = 'next_attempt_at'
+      AND attribute.atttypid = 'timestamptz'::pg_catalog.regtype
+      AND attribute.attnotnull
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND pg_catalog.pg_get_expr(
+            default_row.adbin,
+            default_row.adrelid
+          ) = 'statement_timestamp()'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_attrdef AS default_row
+      ON default_row.adrelid = attribute.attrelid
+     AND default_row.adnum = attribute.attnum
+    WHERE attribute.attrelid =
+      'public.post_interaction_count_repair_queue'::pg_catalog.regclass
+      AND attribute.attname = 'attempt_count'
+      AND attribute.atttypid = 'integer'::pg_catalog.regtype
+      AND attribute.attnotnull
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND pg_catalog.pg_get_expr(
+            default_row.adbin,
+            default_row.adrelid
+          ) = '0'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid =
+      'public.post_interaction_count_repair_queue'::pg_catalog.regclass
+      AND constraint_row.contype = 'c'
+      AND constraint_row.convalidated
+      AND pg_catalog.pg_get_constraintdef(
+            constraint_row.oid,
+            true
+          ) = 'CHECK (attempt_count >= 0 AND attempt_count <= 1000000)'
+  ) THEN
+    RAISE EXCEPTION 'post interaction count repair retry shape drifted';
   END IF;
 
   IF NOT EXISTS (
@@ -665,8 +803,8 @@ BEGIN
       AND NOT index_row.indisunique
       AND index_row.indpred IS NULL
       AND index_row.indexprs IS NULL
-      AND index_row.indnatts = 2
-      AND index_row.indnkeyatts = 2
+      AND index_row.indnatts = 3
+      AND index_row.indnkeyatts = 3
       AND (
         SELECT pg_catalog.array_agg(attribute.attname::text ORDER BY key_column.ordinality)
         FROM pg_catalog.unnest(index_row.indkey::smallint[])
@@ -674,7 +812,7 @@ BEGIN
         JOIN pg_catalog.pg_attribute AS attribute
           ON attribute.attrelid = index_row.indrelid
          AND attribute.attnum = key_column.attnum
-      ) = ARRAY['enqueued_at', 'post_id']::text[]
+      ) = ARRAY['next_attempt_at', 'enqueued_at', 'post_id']::text[]
   ) THEN
     RAISE EXCEPTION 'post interaction count repair queue index drifted';
   END IF;

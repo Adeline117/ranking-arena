@@ -52,6 +52,8 @@ describe('durable post interaction count repair migration', () => {
 
     expect(tableBody).toContain('post_id uuid PRIMARY KEY')
     expect(tableBody).toContain('enqueued_at timestamptz NOT NULL')
+    expect(tableBody).toContain('next_attempt_at timestamptz NOT NULL')
+    expect(tableBody).toContain('attempt_count integer NOT NULL DEFAULT 0')
     expect(tableBody).not.toContain('REFERENCES')
     expect(migration).toContain('ENABLE ROW LEVEL SECURITY')
     expect(migration).toContain('FORCE ROW LEVEL SECURITY')
@@ -62,6 +64,7 @@ describe('durable post interaction count repair migration', () => {
     expect(migration).toContain('public.increment_like_count(uuid)')
     expect(migration).toContain('public.decrement_like_count(uuid)')
     expect(migration).toContain('legacy arithmetic like counter RPC remains callable')
+    expect(migration).toContain('DO $revoke_queue_column_acl_drift$')
   })
 
   it('enqueues every row mutation without taking post or auth locks', () => {
@@ -105,12 +108,15 @@ describe('durable post interaction count repair migration', () => {
     expect(repair).not.toContain('pg_advisory_xact_lock(')
   })
 
-  it('bounds work, scans around contention, and returns backlog telemetry', () => {
+  it('uses one post per transaction, defers contention, and returns backlog telemetry', () => {
     const repair = functionBody('repair_post_interaction_counts_atomic')
-    expect(repair).toContain('p_limit integer DEFAULT 100')
-    expect(repair).toContain('p_limit < 1 OR p_limit > 500')
-    expect(repair).toContain('v_scan_limit := LEAST(p_limit * 5, 500)')
+    expect(repair).toContain('p_limit integer DEFAULT 1')
+    expect(repair).toContain('p_limit IS DISTINCT FROM 1')
+    expect(repair).toContain('LIMIT 1')
     expect(repair).toContain('EXIT WHEN v_processed_count >= p_limit')
+    expect(repair).toContain('next_attempt_at <= pg_catalog.statement_timestamp()')
+    expect(repair).toContain('attempt_count = LEAST(repair_queue.attempt_count + 1, 1000000)')
+    expect(repair).toContain('pg_catalog.make_interval')
     for (const key of [
       'selected_count',
       'processed_count',

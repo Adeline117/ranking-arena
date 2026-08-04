@@ -301,7 +301,7 @@ assert_scalar '1' \
 assert_service 'processed|1|1|0|0|false' \
   "SELECT result->>'status', result->>'processed_count', result->>'repaired_count',
           result->>'discarded_count', result->>'contended_count', result->>'has_more'
-     FROM public.repair_post_interaction_counts_atomic(100) AS result"
+     FROM public.repair_post_interaction_counts_atomic(1) AS result"
 assert_scalar '1|1|1|0|1' \
   "SELECT like_count, dislike_count, poll_bull, poll_bear, poll_wait
      FROM public.posts
@@ -339,7 +339,7 @@ assert_scalar '1' \
 assert_service 'processed|1|1|0' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'discarded_count'
-     FROM public.repair_post_interaction_counts_atomic(100) AS result"
+     FROM public.repair_post_interaction_counts_atomic(1) AS result"
 assert_scalar '2|1|1|1|0' \
   "SELECT like_count, dislike_count, poll_bull, poll_bear, poll_wait
      FROM public.posts
@@ -361,7 +361,7 @@ assert_scalar '2|1|1|1|0|1' \
 assert_service 'processed|1|1|0' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'discarded_count'
-     FROM public.repair_post_interaction_counts_atomic(100) AS result"
+     FROM public.repair_post_interaction_counts_atomic(1) AS result"
 assert_scalar '1|1|0|1|0' \
   "SELECT like_count, dislike_count, poll_bull, poll_bear, poll_wait
      FROM public.posts
@@ -383,7 +383,7 @@ SQL
 assert_service 'processed|1|0|1' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'discarded_count'
-     FROM public.repair_post_interaction_counts_atomic(100) AS result"
+     FROM public.repair_post_interaction_counts_atomic(1) AS result"
 
 # A concurrent post hard-delete owns the parent row before cascading through
 # child triggers. The worker must skip the locked post without ever claiming Q;
@@ -410,10 +410,14 @@ wait_for_activity \
   "application_name = 'concurrent_post_delete' AND wait_event = 'PgSleep'" \
   '1' \
   'concurrent post delete gate did not become ready'
-assert_service 'processed|0|0|1|true' \
+assert_service 'processed|0|0|1|false' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'contended_count', result->>'has_more'
      FROM public.repair_post_interaction_counts_atomic(1) AS result"
+assert_scalar '1|t' \
+  "SELECT attempt_count, next_attempt_at > statement_timestamp()
+     FROM public.post_interaction_count_repair_queue
+    WHERE post_id = '20000000-0000-0000-0000-000000000003'"
 wait "$POST_DELETE_PID"
 if [[ -s "$TMP_ROOT/post-delete.err" ]]; then
   cat "$TMP_ROOT/post-delete.err" >&2
@@ -425,6 +429,10 @@ assert_scalar '0|1' \
        WHERE id = '20000000-0000-0000-0000-000000000003'),
      (SELECT count(*) FROM public.post_interaction_count_repair_queue
        WHERE post_id = '20000000-0000-0000-0000-000000000003')"
+psql_cmd -c \
+  "UPDATE public.post_interaction_count_repair_queue
+      SET next_attempt_at = statement_timestamp()
+    WHERE post_id = '20000000-0000-0000-0000-000000000003'"
 assert_service 'processed|1|0|1|false' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'discarded_count', result->>'has_more'
@@ -487,7 +495,7 @@ assert_scalar '1|0|1' \
 assert_service 'processed|1|1|0' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'discarded_count'
-     FROM public.repair_post_interaction_counts_atomic(100) AS result"
+     FROM public.repair_post_interaction_counts_atomic(1) AS result"
 assert_scalar '0|0|0' \
   "SELECT target.like_count,
           (SELECT count(*) FROM public.post_likes AS reaction
@@ -521,7 +529,7 @@ wait_for_activity \
   "application_name = 'live_post_authority' AND wait_event = 'PgSleep'" \
   '1' \
   'live post authority gate did not become ready'
-assert_service 'processed|0|0|1|true' \
+assert_service 'processed|0|0|1|false' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'contended_count', result->>'has_more'
      FROM public.repair_post_interaction_counts_atomic(1) AS result"
@@ -530,6 +538,10 @@ if [[ -s "$TMP_ROOT/live-authority.err" ]]; then
   cat "$TMP_ROOT/live-authority.err" >&2
   exit 1
 fi
+psql_cmd -c \
+  "UPDATE public.post_interaction_count_repair_queue
+      SET next_attempt_at = statement_timestamp()
+    WHERE post_id = '20000000-0000-0000-0000-000000000001'"
 assert_service 'processed|1|1|0|false' \
   "SELECT result->>'status', result->>'processed_count',
           result->>'repaired_count', result->>'contended_count', result->>'has_more'
@@ -537,7 +549,27 @@ assert_service 'processed|1|1|0|false' \
 
 # Replaying the migration converges trigger/ACL definitions and re-enqueues the
 # bounded source/cached candidate set without creating duplicate obligations.
+psql_cmd <<'SQL'
+GRANT SELECT (post_id)
+  ON public.post_interaction_count_repair_queue TO authenticated;
+GRANT UPDATE (next_attempt_at)
+  ON public.post_interaction_count_repair_queue TO service_role;
+SQL
 psql_cmd -f "$MIGRATION"
+assert_scalar 'f|f' \
+  "SELECT
+     has_column_privilege(
+       'authenticated',
+       'public.post_interaction_count_repair_queue',
+       'post_id',
+       'SELECT'
+     ),
+     has_column_privilege(
+       'service_role',
+       'public.post_interaction_count_repair_queue',
+       'next_attempt_at',
+       'UPDATE'
+     )"
 assert_scalar '1' \
   "SELECT count(*) FROM pg_catalog.pg_trigger
     WHERE tgrelid = 'public.post_likes'::regclass
@@ -550,7 +582,7 @@ assert_scalar '1' \
       AND NOT tgisinternal"
 assert_service 'processed' \
   "SELECT result->>'status'
-     FROM public.repair_post_interaction_counts_atomic(100) AS result"
+     FROM public.repair_post_interaction_counts_atomic(1) AS result"
 
 # The migration refuses a live authority that no longer participates in the
 # canonical shared post lock, then succeeds after the dependency is restored.
