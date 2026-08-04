@@ -84,22 +84,30 @@ export async function GET(
         kind,
         cursor
       )
-      // Cursor pages and non-empty first pages are warm truth; an empty
-      // cursorless page may just be a cold cache → try the Tier-C bridge.
-      if (page && (page.rows.length > 0 || cursor)) {
+      // Cursor pages and non-empty first pages are warm truth for surfaces with
+      // an active publication contract. position_history is intentionally
+      // excluded until arena_records_page is receipt-bound; its current rows
+      // are legacy typed projections and may only trigger a Tier-C preview.
+      if (kind !== 'position_history' && page && (page.rows.length > 0 || cursor)) {
         return withCache(apiSuccess<RecordsPage>(page), {
           maxAge: 30,
           staleWhileRevalidate: 120,
         })
       }
 
-      const payload = await requestTierC({
-        sourceSlug: resolved.source,
-        fetchRegion: resolved.fetchRegion,
-        exchangeTraderId: resolved.exchangeTraderId,
-        timeframe: tfToInt(tf),
-        surface: kind,
-      })
+      // Tier-C history is a bounded, non-pageable preview. A stale client may
+      // still send a legacy history cursor; never turn that into a duplicate
+      // first-page preview.
+      const payload =
+        kind === 'position_history' && cursor
+          ? null
+          : await requestTierC({
+              sourceSlug: resolved.source,
+              fetchRegion: resolved.fetchRegion,
+              exchangeTraderId: resolved.exchangeTraderId,
+              timeframe: tfToInt(tf),
+              surface: kind,
+            })
       if (payload) {
         const fetched = recordsPageFromTierC(resolved.source, kind, payload)
         if (fetched) {
@@ -108,7 +116,9 @@ export async function GET(
       }
 
       const pending: RecordsPage = {
-        rows: page?.rows ?? [],
+        // Do not echo legacy warm history when the bounded preview is
+        // unavailable. Only the Tier-C branch above may return history rows.
+        rows: kind === 'position_history' ? [] : (page?.rows ?? []),
         nextCursor: null,
         provenance: page?.provenance ?? {
           source: resolved.source,
