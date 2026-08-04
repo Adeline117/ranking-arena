@@ -38,6 +38,12 @@ import {
   type ChannelMessage,
   type GroupChannel as Channel,
 } from './channel-page-client'
+import {
+  CHANNEL_CONTEXT_MENU_ESTIMATED_HEIGHT,
+  CHANNEL_CONTEXT_MENU_GAP,
+  CHANNEL_CONTEXT_MENU_WIDTH,
+  getChannelContextMenuPlacement,
+} from './channel-context-menu-position'
 
 type ChannelMemberMutationScope = {
   actorId: string
@@ -1309,9 +1315,11 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                     {msg.reactions.map((r) => (
                       <button
                         key={r.emoji}
+                        type="button"
                         onClick={() => handleToggleReaction(msg.id, r.emoji)}
                         className="interactive-scale"
-                        aria-label={`React ${r.emoji}`}
+                        aria-label={r.emoji}
+                        aria-pressed={r.mine}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -1622,11 +1630,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             </Text>
           </Box>
           <button
+            type="button"
             onClick={() => setReplyingTo(null)}
-            aria-label="Cancel reply"
+            aria-label={`${t('cancel')}: ${t('reply')}`}
+            title={`${t('cancel')}: ${t('reply')}`}
             style={{
-              width: 28,
-              height: 28,
+              width: tokens.touchTarget.min,
+              height: tokens.touchTarget.min,
               borderRadius: '50%',
               border: 'none',
               background: 'var(--color-accent-error-15)',
@@ -1672,10 +1682,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             {pendingAttachment.originalName}
           </Text>
           <button
+            type="button"
             onClick={() => setPendingAttachment(null)}
+            aria-label={`${t('remove')}: ${pendingAttachment.originalName}`}
+            title={t('remove')}
             style={{
-              width: 24,
-              height: 24,
+              width: tokens.touchTarget.min,
+              height: tokens.touchTarget.min,
               borderRadius: '50%',
               border: 'none',
               background: 'var(--color-accent-error-15)',
@@ -1684,6 +1697,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
             <svg
@@ -1721,11 +1735,14 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           }}
         >
           <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
+            aria-label={`${t('upload')}: ${t('file')}`}
+            title={`${t('upload')}: ${t('file')}`}
             style={{
-              width: 36,
-              height: 36,
+              width: tokens.touchTarget.min,
+              height: tokens.touchTarget.min,
               borderRadius: '50%',
               border: 'none',
               background: 'transparent',
@@ -1764,6 +1781,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             rows={1}
             style={{
               flex: 1,
+              minWidth: 0,
               padding: '8px 0',
               border: 'none',
               background: 'transparent',
@@ -1777,12 +1795,14 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             }}
           />
           <button
+            type="button"
             onClick={handleSend}
-            aria-label="Send message"
+            aria-label={t('send')}
+            title={t('send')}
             disabled={(!newMessage.trim() && !pendingAttachment) || sending}
             style={{
-              width: 42,
-              height: 42,
+              width: tokens.touchTarget.min,
+              height: tokens.touchTarget.min,
               borderRadius: '50%',
               border: 'none',
               background:
@@ -1812,20 +1832,26 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         (() => {
           const ctxMsg = messages.find((m) => m.id === ctxMenu.msgId)
           if (!ctxMsg) return null
+          const menuPlacement = getChannelContextMenuPlacement(ctxMenu, {
+            width: typeof window === 'undefined' ? 0 : window.innerWidth,
+            height: typeof window === 'undefined' ? 0 : window.innerHeight,
+          })
           return (
             <div
               ref={ctxMenuRef}
               style={{
                 position: 'fixed',
-                top: ctxMenu.y || '50%',
-                left: ctxMenu.x || '50%',
-                transform: ctxMenu.x ? 'none' : 'translate(-50%, -50%)',
+                ...menuPlacement,
                 zIndex: tokens.zIndex.max,
                 background: tokens.colors.bg.secondary,
                 border: `1px solid ${tokens.colors.border.primary}`,
                 borderRadius: tokens.radius.lg,
                 boxShadow: tokens.shadow.xl,
-                overflow: 'hidden',
+                width: CHANNEL_CONTEXT_MENU_WIDTH,
+                maxWidth: `calc(100vw - ${CHANNEL_CONTEXT_MENU_GAP * 2}px)`,
+                maxHeight: `min(${CHANNEL_CONTEXT_MENU_ESTIMATED_HEIGHT}px, calc(100dvh - ${CHANNEL_CONTEXT_MENU_GAP * 2}px))`,
+                overflowX: 'hidden',
+                overflowY: 'auto',
                 minWidth: 140,
               }}
             >
@@ -1843,12 +1869,16 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                 {DM_REACTION_EMOJIS.map((emoji) => (
                   <button
                     key={emoji}
+                    type="button"
                     onClick={() => handleToggleReaction(ctxMsg.id, emoji)}
                     className="interactive-scale"
-                    aria-label={`React ${emoji}`}
+                    aria-label={emoji}
+                    aria-pressed={ctxMsg.reactions?.some(
+                      (reaction) => reaction.emoji === emoji && reaction.mine
+                    )}
                     style={{
-                      width: 32,
-                      height: 32,
+                      width: tokens.touchTarget.min,
+                      height: tokens.touchTarget.min,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1865,18 +1895,20 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               </div>
               {/* Reply */}
               <button
+                type="button"
                 onClick={() => {
                   setReplyingTo(ctxMsg)
                   setCtxMenu(null)
                   inputRef.current?.focus()
                 }}
-                aria-label="Reply"
+                aria-label={t('reply')}
                 className="hover-bg-tertiary"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                   width: '100%',
+                  minHeight: tokens.touchTarget.min,
                   padding: '10px 16px',
                   border: 'none',
                   background: 'transparent',
@@ -1905,6 +1937,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               {/* Copy text */}
               {ctxMsg.content && !ctxMsg.content.startsWith('[') && (
                 <button
+                  type="button"
                   onClick={() => {
                     fireAndForget(
                       navigator.clipboard.writeText(ctxMsg.content),
@@ -1919,6 +1952,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                     alignItems: 'center',
                     gap: 8,
                     width: '100%',
+                    minHeight: tokens.touchTarget.min,
                     padding: '10px 16px',
                     border: 'none',
                     background: 'transparent',
