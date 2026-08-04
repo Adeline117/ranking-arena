@@ -56,7 +56,10 @@ jest.mock('../components/MemberList', () => ({ __esModule: true, default: () => 
 jest.mock('../components/ContentManagement', () => ({
   __esModule: true,
   default: (props: {
+    posts: Array<{ id: string; deleted_at?: string | null }>
+    comments: Array<{ id: string; deleted_at?: string | null }>
     onDeletePost(postId: string): void
+    onDeleteComment(commentId: string): void
     onPinPost(postId: string): void
     pinningPost: string | null
   }) => (
@@ -73,6 +76,18 @@ jest.mock('../components/ContentManagement', () => ({
       >
         pin
       </button>
+      <button
+        data-testid="content-delete-comment"
+        onClick={() => props.onDeleteComment('99999999-9999-4999-8999-999999999999')}
+      >
+        delete comment
+      </button>
+      <span data-testid="content-post-state">
+        {props.posts[0]?.deleted_at ? 'deleted' : 'active'}
+      </span>
+      <span data-testid="content-comment-state">
+        {props.comments[0]?.deleted_at ? 'deleted' : 'active'}
+      </span>
       <span data-testid="content-pin-state">{props.pinningPost ? 'loading' : 'idle'}</span>
     </div>
   ),
@@ -124,6 +139,7 @@ const APPLICATION_ID = '44444444-4444-4444-8444-444444444444'
 const AUDIT_LOG_A = '77777777-7777-4777-8777-777777777777'
 const AUDIT_LOG_B = '88888888-8888-4888-8888-888888888888'
 const POST_ID = '66666666-6666-4666-8666-666666666666'
+const COMMENT_ID = '99999999-9999-4999-8999-999999999999'
 
 function token(subject: string, marker: string): string {
   const payload = btoa(JSON.stringify({ sub: subject, marker }))
@@ -277,7 +293,20 @@ function installSupabaseMock({ groupError = null }: { groupError?: unknown } = {
                   ],
                   error: null,
                 }
-              : { data: [], error: null }
+              : table === 'comments'
+                ? {
+                    data: [
+                      {
+                        id: COMMENT_ID,
+                        post_id: POST_ID,
+                        content: 'Comment',
+                        author_handle: 'owner',
+                        created_at: '2026-07-16T00:00:00.000Z',
+                      },
+                    ],
+                    error: null,
+                  }
+                : { data: [], error: null }
       ).then(resolve)
     return builder
   })
@@ -436,6 +465,53 @@ describe('group profile edit submit operation', () => {
 
     expect(mockFetch).not.toHaveBeenCalled()
     expect(showToast).not.toHaveBeenCalled()
+  })
+
+  it('single-flights post deletion before confirmation and trusts only its exact ACK', async () => {
+    const confirmation = deferred<boolean>()
+    const response = deferred<{
+      ok: boolean
+      json(): Promise<{ success: true }>
+    }>()
+    mockShowDangerConfirm.mockReturnValue(confirmation.promise)
+    mockFetch.mockReturnValue(response.promise)
+    render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await openContent()
+
+    fireEvent.click(screen.getByTestId('content-delete-post'))
+    fireEvent.click(screen.getByTestId('content-delete-post'))
+    expect(mockShowDangerConfirm).toHaveBeenCalledTimes(1)
+
+    await act(async () => confirmation.resolve(true))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    await act(async () => response.resolve({ ok: true, json: async () => ({ success: true }) }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('content-post-state')).toHaveTextContent('deleted')
+    )
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('postDeleted', 'success')
+  })
+
+  it('keeps comment state intact when a 2xx deletion response has extra fields', async () => {
+    mockShowDangerConfirm.mockResolvedValue(true)
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        affected_count: 1,
+        comment_count: 0,
+        unexpected: true,
+      }),
+    })
+    render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await openContent()
+
+    fireEvent.click(screen.getByTestId('content-delete-comment'))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(screen.getByTestId('content-comment-state')).toHaveTextContent('active')
+    expect(showToast).toHaveBeenCalledWith('deleteFailed', 'error')
   })
 
   it('cannot let a G1 mutation response toast or clear G2 mutation ownership', async () => {

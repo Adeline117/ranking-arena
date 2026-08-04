@@ -32,6 +32,11 @@ import {
   type GroupApplicationOperation,
 } from '@/lib/groups/application-operation'
 import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
+import { readGroupCommentDeleteAcknowledgement } from '@/lib/groups/group-manage-mutation-contract'
+import {
+  readPostDeleteAcknowledgement,
+  readPostDeleteError,
+} from '@/lib/posts/post-delete-contract'
 import { postBelongsToPinScope, readPostPinAcknowledgement } from '@/lib/posts/post-pin-client'
 
 import MemberList from './components/MemberList'
@@ -402,6 +407,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [notifySending, setNotifySending] = useViewerSlotState(manageStateOwnerKey, false)
   const notificationOperationsRef = useRef(new GroupNotificationOperationLedger())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
+  const destructiveRequestLockRef = useRef<Set<string>>(new Set())
   const profileEditSubmitOperationIdRef = useRef<Record<string, string>>({})
   const profileEditContextRef = useRef({
     accessToken,
@@ -952,29 +958,33 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     const requestGroupId = requestScope.groupId
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
     if (!requestToken || !requestGroupId || !canManage || !requestIsCurrent()) return
-    const confirmed = await showDangerConfirm(t('deletePost'), t('confirmDeletePost'))
-    if (!confirmed || !requestIsCurrent()) return
+    const requestLockKey = `${manageStateOwnerKey}\u0000delete-post\u0000${postId.toLowerCase()}`
+    if (destructiveRequestLockRef.current.has(requestLockKey)) return
+    destructiveRequestLockRef.current.add(requestLockKey)
     try {
+      const confirmed = await showDangerConfirm(t('deletePost'), t('confirmDeletePost'))
+      if (!confirmed || !requestIsCurrent()) return
       const res = await fetch(`/api/groups/${requestGroupId}/posts/${postId}/delete`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      const data: unknown = await res.json().catch(() => null)
       if (!requestIsCurrent()) return
-      if (res.ok) {
+      if (res.ok && readPostDeleteAcknowledgement(data)) {
         setPosts((prev) =>
           prev.map((p) => (p.id === postId ? { ...p, deleted_at: new Date().toISOString() } : p))
         )
         showToast(t('postDeleted'), 'success')
       } else {
-        const data = await res.json()
-        if (!requestIsCurrent()) return
-        showToast(data.error || t('deleteFailed'), 'error')
+        showToast(readPostDeleteError(data) || t('deleteFailed'), 'error')
       }
     } catch (err) {
       if (requestIsCurrent()) {
         logger.error('Delete post error:', err)
         showToast(t('networkErrorRetry'), 'error')
       }
+    } finally {
+      destructiveRequestLockRef.current.delete(requestLockKey)
     }
   }
 
@@ -984,29 +994,33 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     const requestGroupId = requestScope.groupId
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
     if (!requestToken || !requestGroupId || !canManage || !requestIsCurrent()) return
-    const confirmed = await showDangerConfirm(t('deleteComment'), t('confirmDeleteComment'))
-    if (!confirmed || !requestIsCurrent()) return
+    const requestLockKey = `${manageStateOwnerKey}\u0000delete-comment\u0000${commentId.toLowerCase()}`
+    if (destructiveRequestLockRef.current.has(requestLockKey)) return
+    destructiveRequestLockRef.current.add(requestLockKey)
     try {
+      const confirmed = await showDangerConfirm(t('deleteComment'), t('confirmDeleteComment'))
+      if (!confirmed || !requestIsCurrent()) return
       const res = await fetch(`/api/groups/${requestGroupId}/comments/${commentId}/delete`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      const data: unknown = await res.json().catch(() => null)
       if (!requestIsCurrent()) return
-      if (res.ok) {
+      if (res.ok && readGroupCommentDeleteAcknowledgement(data)) {
         setComments((prev) =>
           prev.map((c) => (c.id === commentId ? { ...c, deleted_at: new Date().toISOString() } : c))
         )
         showToast(t('commentDeleted'), 'success')
       } else {
-        const data = await res.json()
-        if (!requestIsCurrent()) return
-        showToast(data.error || t('deleteFailed'), 'error')
+        showToast(readPostDeleteError(data) || t('deleteFailed'), 'error')
       }
     } catch (err) {
       if (requestIsCurrent()) {
         logger.error('Delete comment error:', err)
         showToast(t('networkErrorRetry'), 'error')
       }
+    } finally {
+      destructiveRequestLockRef.current.delete(requestLockKey)
     }
   }
 
