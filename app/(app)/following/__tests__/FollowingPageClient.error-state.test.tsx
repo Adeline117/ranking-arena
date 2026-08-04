@@ -287,11 +287,34 @@ describe('FollowingPageClient load errors', () => {
     expect((await screen.findAllByText('Bob private copy')).length).toBeGreaterThan(0)
 
     resolveUnfollow?.({
-      data: { data: { following: false }, success: true },
+      data: {
+        success: true,
+        data: { following: false, traderId: 'alice-id', source: 'binance_futures' },
+      },
       ok: true,
       status: 200,
     })
     await waitFor(() => expect(screen.getAllByText('Bob private copy').length).toBeGreaterThan(0))
+    expect(mockShowToast).not.toHaveBeenCalledWith('followingUnfollowed', 'success')
+  })
+
+  it('restores the exact trader when an unfollow acknowledgement names another account', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(response({ hasMore: false, items: [alice] }))
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          data: { following: false, traderId: 'alice-id', source: 'bybit' },
+        })
+      )
+
+    render(<FollowingPageClient />)
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'followingUnfollowTitle' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error'))
+    expect(screen.getAllByText('Alice').length).toBeGreaterThan(0)
     expect(mockShowToast).not.toHaveBeenCalledWith('followingUnfollowed', 'success')
   })
 })

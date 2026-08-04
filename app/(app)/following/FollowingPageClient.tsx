@@ -26,6 +26,7 @@ import {
   isSettingsViewerCurrent,
   type SettingsViewerSnapshot,
 } from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import { readTraderFollowAcknowledgement } from '@/lib/follows/trader-follow-contract'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -138,21 +139,15 @@ function readFollowingPayload(value: FollowingPayload | null): {
   return { hasMore: value.hasMore, items: value.items }
 }
 
-function isUnfollowAcknowledgement(
-  value: UnfollowPayload | null,
-  type: FollowItem['type']
-): boolean {
+function isUserUnfollowAcknowledgement(value: UnfollowPayload | null): boolean {
   if (!isRecord(value)) return false
-  if (type === 'user') {
-    return (
-      value.success === true &&
-      value.following === false &&
-      typeof value.followedBy === 'boolean' &&
-      typeof value.mutual === 'boolean' &&
-      value.mutual === false
-    )
-  }
-  return value.success === true && isRecord(value.data) && value.data.following === false
+  return (
+    value.success === true &&
+    value.following === false &&
+    typeof value.followedBy === 'boolean' &&
+    typeof value.mutual === 'boolean' &&
+    value.mutual === false
+  )
 }
 
 // ============================================
@@ -361,7 +356,18 @@ function ViewerScopedFollowingPage({
           unfollowOperationRef.current?.id === operation.id &&
           isSettingsViewerCurrent(operation.viewer, authRef.current)
         if (result.stale || !operationIsCurrent) return
-        if (!result.ok || !isUnfollowAcknowledgement(result.data, operation.item.type)) {
+        const acknowledged =
+          result.ok &&
+          (operation.item.type === 'user'
+            ? isUserUnfollowAcknowledgement(result.data)
+            : Boolean(
+                readTraderFollowAcknowledgement(result.data, {
+                  following: false,
+                  traderId: operation.item.id,
+                  source: operation.item.source ?? null,
+                })
+              ))
+        if (!acknowledged) {
           throw new Error(`Unfollow failed (${result.status})`)
         }
         showToast(t('followingUnfollowed'), 'success')

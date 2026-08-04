@@ -53,7 +53,7 @@ describe('onboarding follow transport contract', () => {
       const fetcher = jest.fn().mockResolvedValue(
         response({
           success: true,
-          data: { following },
+          data: { following, traderId: 'trader-1', source: 'bybit' },
         })
       )
       const intent = issueIntent(action)
@@ -77,9 +77,42 @@ describe('onboarding follow transport contract', () => {
   )
 
   it.each([
-    [{ success: true, data: { following: false } }, 200],
+    [
+      {
+        success: true,
+        data: { following: false, traderId: 'trader-1', source: 'bybit' },
+      },
+      200,
+    ],
     [{ following: true }, 200],
-    [{ success: true, data: { following: true } }, 503],
+    [
+      {
+        success: true,
+        data: { following: true, traderId: 'trader-1', source: 'bybit' },
+      },
+      503,
+    ],
+    [
+      {
+        success: true,
+        data: { following: true, traderId: 'other-trader', source: 'bybit' },
+      },
+      200,
+    ],
+    [
+      {
+        success: true,
+        data: { following: true, traderId: 'trader-1', source: 'binance' },
+      },
+      200,
+    ],
+    [
+      {
+        success: true,
+        data: { following: true, traderId: 'trader-1', source: 'bybit', extra: true },
+      },
+      200,
+    ],
   ])(
     'fails closed on a rejected or contradictory follow acknowledgement',
     async (payload, status) => {

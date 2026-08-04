@@ -97,7 +97,12 @@ describe('TraderFollowButton legacy pending-login follow', () => {
   })
 
   it('clears a stale legacy record without executing its mutation', async () => {
-    mockAuthedFetch.mockResolvedValue(response({ data: { following: false }, success: true }))
+    mockAuthedFetch.mockResolvedValue(
+      response({
+        success: true,
+        data: { following: false, traderId: 'trader-1', source: 'binance' },
+      })
+    )
     queuePendingFollow()
 
     renderLoggedInButton()

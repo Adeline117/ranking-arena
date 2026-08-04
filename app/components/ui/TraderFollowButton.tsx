@@ -23,6 +23,7 @@ import {
   isSettingsViewerCurrent,
   type SettingsViewerSnapshot,
 } from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import { readTraderFollowAcknowledgement } from '@/lib/follows/trader-follow-contract'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -34,39 +35,14 @@ type TraderFollowButtonProps = {
   onFollowChange?: (following: boolean) => void
 }
 
-type FollowResponse = {
-  data?: unknown
-  error?: unknown
-  following?: unknown
-  success?: unknown
-  tableNotFound?: unknown
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function followResponseData(value: FollowResponse | null): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object') return null
-  const nested =
-    value.data && typeof value.data === 'object' && !Array.isArray(value.data)
-      ? (value.data as Record<string, unknown>)
-      : null
-  return nested ?? (value as Record<string, unknown>)
-}
-
-function readFollowing(value: FollowResponse | null): boolean | null {
-  const data = followResponseData(value)
-  return typeof data?.following === 'boolean' ? data.following : null
-}
-
-function isFollowAcknowledgement(
-  value: FollowResponse | null,
-  expectedFollowing: boolean
-): boolean {
-  return (
-    value?.success === true && isRecord(value.data) && value.data.following === expectedFollowing
-  )
+function readApiErrorMessage(value: unknown): string {
+  if (!isRecord(value)) return ''
+  if (typeof value.error === 'string') return value.error
+  return isRecord(value.error) && typeof value.error.message === 'string' ? value.error.message : ''
 }
 
 /**
@@ -197,7 +173,7 @@ export default function TraderFollowButton({
     try {
       const query = new URLSearchParams({ traderId })
       if (source) query.set('source', source)
-      const result = await authedFetch<FollowResponse>(
+      const result = await authedFetch<unknown>(
         `/api/follow?${query.toString()}`,
         'GET',
         viewer.accessToken,
@@ -209,11 +185,18 @@ export default function TraderFollowButton({
         }
       )
       if (result.stale || !viewerIsCurrent(viewer) || !result.ok) return
-      const actualFollowing = readFollowing(result.data)
-      if (actualFollowing !== null) {
-        setFollowing(actualFollowing)
-        onFollowChange?.(actualFollowing)
+      const acknowledgement = readTraderFollowAcknowledgement(result.data, {
+        traderId,
+        source,
+        allowTableNotFound: true,
+      })
+      if (!acknowledgement) return
+      if (acknowledgement.tableNotFound) {
+        setFeatureDisabled(true)
+        return
       }
+      setFollowing(acknowledgement.following)
+      onFollowChange?.(acknowledgement.following)
     } catch {
       // Intentionally swallowed: follow state refresh failed, UI uses cached/optimistic value
     }
@@ -251,7 +234,7 @@ export default function TraderFollowButton({
 
       try {
         const result = await Promise.race([
-          authedFetch<FollowResponse>(
+          authedFetch<unknown>(
             '/api/follow',
             'POST',
             operation.viewer.accessToken,
@@ -291,34 +274,24 @@ export default function TraderFollowButton({
           return false
         }
 
-        const data = followResponseData(result.data)
-
         pendingRef.current = false
         // NOTE: do NOT clear expectedStateRef here — the catch block relies on
         // it to roll back the optimistic flip when the server returns an error.
         // (Previously it was nulled before the response.ok check, so a 500 left
         // the button stuck in the optimistic "Following" state.)
 
-        if (data?.tableNotFound === true) {
-          expectedStateRef.current = null
-          setFeatureDisabled(true)
-          showToast(t('followFeatureComingSoon'), 'info')
-          return false
-        }
-
         if (!result.ok) {
-          // API error payload may be a string or { code, message } object
-          const apiErr = data?.error
-          const apiErrMsg =
-            typeof apiErr === 'string'
-              ? apiErr
-              : isRecord(apiErr) && typeof apiErr.message === 'string'
-                ? apiErr.message
-                : ''
+          const apiErrMsg = readApiErrorMessage(result.data)
           throw new Error(apiErrMsg || t('operationFailed'))
         }
         const expectedFollowing = action === 'follow'
-        if (!isFollowAcknowledgement(result.data, expectedFollowing)) {
+        if (
+          !readTraderFollowAcknowledgement(result.data, {
+            following: expectedFollowing,
+            traderId,
+            source,
+          })
+        ) {
           throw new Error(t('operationFailed'))
         }
 
@@ -443,7 +416,7 @@ export default function TraderFollowButton({
       try {
         const query = new URLSearchParams({ traderId })
         if (source) query.set('source', source)
-        const result = await authedFetch<FollowResponse>(
+        const result = await authedFetch<unknown>(
           `/api/follow?${query.toString()}`,
           'GET',
           viewer.accessToken,
@@ -456,10 +429,18 @@ export default function TraderFollowButton({
           }
         )
         if (result.stale || !viewerIsCurrent(viewer) || !result.ok) return
-        const actualFollowing = readFollowing(result.data)
+        const acknowledgement = readTraderFollowAcknowledgement(result.data, {
+          traderId,
+          source,
+          allowTableNotFound: true,
+        })
+        if (acknowledgement?.tableNotFound) {
+          if (!pendingRef.current) setFeatureDisabled(true)
+          return
+        }
         // 只有在没有待处理操作时才更新状态
-        if (!pendingRef.current && actualFollowing !== null) {
-          setFollowing(actualFollowing)
+        if (!pendingRef.current && acknowledgement) {
+          setFollowing(acknowledgement.following)
         }
       } catch (error) {
         if (viewerIsCurrent(viewer) && (error as Error).name !== 'AbortError') {

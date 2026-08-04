@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
-import { success, badRequest, serverError } from '@/lib/api/response'
+import { badRequest, serverError } from '@/lib/api/response'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { getFeatureLimits, PRO_FREE_PROMO } from '@/lib/types/premium'
 import { sendNotification } from '@/lib/data/notifications'
@@ -35,16 +35,20 @@ const TraderSourceSchema = z
 // pre-composite rows are surfaced by /api/following with source=null so users
 // can remove them precisely instead of leaving an invisible/undeletable edge.
 const FollowActionSchema = z.discriminatedUnion('action', [
-  z.object({
-    traderId: TraderIdSchema,
-    source: TraderSourceSchema,
-    action: z.literal('follow'),
-  }),
-  z.object({
-    traderId: TraderIdSchema,
-    source: TraderSourceSchema.nullable(),
-    action: z.literal('unfollow'),
-  }),
+  z
+    .object({
+      traderId: TraderIdSchema,
+      source: TraderSourceSchema,
+      action: z.literal('follow'),
+    })
+    .strict(),
+  z
+    .object({
+      traderId: TraderIdSchema,
+      source: TraderSourceSchema.nullable(),
+      action: z.literal('unfollow'),
+    })
+    .strict(),
 ])
 
 export const dynamic = 'force-dynamic'
@@ -154,15 +158,17 @@ function parseMutationAck(value: unknown): FollowMutationAck | null {
  */
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
-    const traderId = request.nextUrl.searchParams.get('traderId')
-    const source = request.nextUrl.searchParams.get('source')
+    const parsedTraderId = TraderIdSchema.safeParse(request.nextUrl.searchParams.get('traderId'))
+    const parsedSource = TraderSourceSchema.safeParse(request.nextUrl.searchParams.get('source'))
 
-    if (!traderId) {
+    if (!parsedTraderId.success) {
       return badRequest('Missing traderId parameter')
     }
-    if (!source) {
+    if (!parsedSource.success) {
       return badRequest('Missing source parameter')
     }
+    const traderId = parsedTraderId.data
+    const source = parsedSource.data
 
     const query = supabase
       .from('trader_follows')
@@ -176,13 +182,13 @@ export const GET = withAuth(
       // 如果表不存在，返回未关注状态
       if (error.message?.includes('Could not find the table')) {
         logger.warn('trader_follows 表不存在')
-        return success({ following: false, tableNotFound: true })
+        return { following: false, traderId, source, tableNotFound: true as const }
       }
       logger.error('查询关注状态失败', { error, traderId, userId: user.id })
       return serverError('Query failed')
     }
 
-    return { following: !!data }
+    return { following: !!data, traderId, source }
   },
   {
     name: 'follow-check',
@@ -197,7 +203,7 @@ export const GET = withAuth(
  */
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    let body: Record<string, unknown>
+    let body: unknown
     try {
       body = await request.json()
     } catch {
@@ -278,7 +284,7 @@ export const POST = withAuth(
 
     if (action === 'follow') {
       if (ack.status === 'already_following') {
-        return { following: true }
+        return { following: true, traderId, source }
       }
       logger.info('用户关注交易员', { userId: user.id, traderId, source })
       fireAndForget(invalidateFollowingCache(user.id), 'invalidate-following-cache')
@@ -311,15 +317,15 @@ export const POST = withAuth(
         'Trader follow notification lookup'
       )
 
-      return { following: true }
+      return { following: true, traderId, source }
     } else {
       if (ack.status === 'not_following') {
-        return { following: false }
+        return { following: false, traderId, source }
       }
 
       logger.info('用户取消关注交易员', { userId: user.id, traderId, source })
       fireAndForget(invalidateFollowingCache(user.id), 'invalidate-following-cache')
-      return { following: false }
+      return { following: false, traderId, source }
     }
   },
   {

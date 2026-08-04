@@ -270,9 +270,10 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      // withApiMiddleware wraps result as { success: true, data: { following: false } }
-      const following = body.data?.following ?? body.following
-      expect(following).toBe(false)
+      expect(body).toEqual({
+        success: true,
+        data: { following: false, traderId: 'trader-abc', source: 'bybit' },
+      })
     })
 
     it('returns following: true when already following', async () => {
@@ -286,8 +287,48 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      const following = body.data?.following ?? body.following
-      expect(following).toBe(true)
+      expect(body).toEqual({
+        success: true,
+        data: { following: true, traderId: 'trader-abc', source: 'bybit' },
+      })
+    })
+
+    it('returns the canonical trimmed identity used by the query', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      mockGetSupabaseAdmin.mockReturnValue(createMockSupabase({ data: null, error: null }))
+
+      const req = new NextRequest(
+        'http://localhost/api/follow?traderId=%20trader-abc%20&source=%20bybit%20'
+      )
+      const res = await GET(req)
+
+      await expect(res.json()).resolves.toEqual({
+        success: true,
+        data: { following: false, traderId: 'trader-abc', source: 'bybit' },
+      })
+    })
+
+    it('keeps the table-missing degraded state inside the same exact envelope', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      mockGetSupabaseAdmin.mockReturnValue(
+        createMockSupabase({
+          data: null,
+          error: { message: 'Could not find the table trader_follows' },
+        })
+      )
+
+      const req = new NextRequest('http://localhost/api/follow?traderId=trader-abc&source=bybit')
+      const res = await GET(req)
+
+      await expect(res.json()).resolves.toEqual({
+        success: true,
+        data: {
+          following: false,
+          traderId: 'trader-abc',
+          source: 'bybit',
+          tableNotFound: true,
+        },
+      })
     })
   })
 
@@ -350,8 +391,10 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      const followResult = body.data?.following ?? body.following
-      expect(followResult).toBe(true)
+      expect(body).toEqual({
+        success: true,
+        data: { following: true, traderId: 'trader-abc', source: 'bybit' },
+      })
     })
 
     it('successfully unfollows a trader', async () => {
@@ -366,8 +409,10 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      const unfollowResult = body.data?.following ?? body.following
-      expect(unfollowResult).toBe(false)
+      expect(body).toEqual({
+        success: true,
+        data: { following: false, traderId: 'trader-abc', source: 'bybit' },
+      })
     })
 
     it('rejects a follow or unfollow that omits the account source', async () => {
@@ -382,6 +427,26 @@ describe('/api/follow', () => {
         const res = await POST(req)
         expect(res.status).toBe(400)
       }
+    })
+
+    it('rejects extra mutation fields before invoking the authority', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      const supabase = createMockSupabase({ data: null, error: null })
+      mockGetSupabaseAdmin.mockReturnValue(supabase)
+
+      const req = new NextRequest('http://localhost/api/follow', {
+        method: 'POST',
+        body: {
+          traderId: 'trader-abc',
+          source: 'bybit',
+          action: 'follow',
+          userId: 'another-user',
+        },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(400)
+      expect(supabase.rpc).not.toHaveBeenCalled()
     })
 
     it('unfollows only the requested source when two exchanges reuse the same trader id', async () => {

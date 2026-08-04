@@ -131,7 +131,12 @@ describe('TraderFollowButton login intent', () => {
 
   it('rolls back and re-authenticates an expired follow request', async () => {
     mockAuthedFetch
-      .mockResolvedValueOnce(response({ success: true, data: { following: false } }))
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          data: { following: false, traderId: 'trader-1', source: 'binance' },
+        })
+      )
       .mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401))
 
     render(
@@ -159,7 +164,12 @@ describe('TraderFollowButton login intent', () => {
 
   it('retains an expired unfollow as an unfollow intent', async () => {
     mockAuthedFetch
-      .mockResolvedValueOnce(response({ success: true, data: { following: true } }))
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          data: { following: true, traderId: 'trader-1', source: 'binance' },
+        })
+      )
       .mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401))
 
     render(
@@ -196,7 +206,12 @@ describe('TraderFollowButton login intent', () => {
       '',
       new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
     )
-    mockAuthedFetch.mockResolvedValue(response({ data: { following: true }, success: true }))
+    mockAuthedFetch.mockResolvedValue(
+      response({
+        success: true,
+        data: { following: true, traderId: 'trader-1', source: 'binance' },
+      })
+    )
 
     render(
       <TraderFollowButton
@@ -265,7 +280,12 @@ describe('TraderFollowButton login intent', () => {
           resolveMutation = resolve
         })
       }
-      return Promise.resolve(response({ data: { following: false }, success: true }))
+      return Promise.resolve(
+        response({
+          success: true,
+          data: { following: false, traderId: 'trader-1', source: 'binance' },
+        })
+      )
     })
 
     const { rerender } = render(
@@ -292,7 +312,10 @@ describe('TraderFollowButton login intent', () => {
     mockAuth = signedIn(VIEWER_B, 'access-token-b', 2)
     rerender(<TraderFollowButton traderId="trader-1" source="binance" userId={VIEWER_B} />)
     resolveMutation?.({
-      data: { data: { following: true }, success: true },
+      data: {
+        success: true,
+        data: { following: true, traderId: 'trader-1', source: 'binance' },
+      },
       ok: true,
       status: 200,
     })
@@ -306,5 +329,30 @@ describe('TraderFollowButton login intent', () => {
     expect(mockBroadcast).not.toHaveBeenCalled()
     expect(mockShowToast).not.toHaveBeenCalledWith('followSuccess', 'success')
     expect(mockAuthedFetch.mock.calls.filter((call) => call[1] === 'POST')).toHaveLength(1)
+  })
+
+  it.each([
+    ['mismatched trader', { following: true, traderId: 'other-trader', source: 'binance' }],
+    ['mismatched source', { following: true, traderId: 'trader-1', source: 'bybit' }],
+    ['extra field', { following: true, traderId: 'trader-1', source: 'binance', stale: false }],
+  ])('rolls back a follow on a %s acknowledgement', async (_label, data) => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          data: { following: false, traderId: 'trader-1', source: 'binance' },
+        })
+      )
+      .mockResolvedValueOnce(response({ success: true, data }))
+
+    render(<TraderFollowButton traderId="trader-1" source="binance" userId={VIEWER_A} />)
+    fireEvent.click(screen.getByRole('button', { name: 'followTrader' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error'))
+    expect(screen.getByRole('button', { name: 'followTrader' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(mockBroadcast).not.toHaveBeenCalled()
   })
 })

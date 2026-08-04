@@ -1,3 +1,5 @@
+import { readTraderFollowAcknowledgement } from '@/lib/follows/trader-follow-contract'
+
 export type OnboardingFollowAction = 'follow' | 'unfollow'
 
 export type OnboardingFollowScope = {
@@ -20,19 +22,6 @@ type FollowFetch = (
   input: string,
   init: RequestInit
 ) => Promise<Pick<Response, 'json' | 'ok' | 'status'>>
-
-function isFollowAcknowledgement(action: OnboardingFollowAction, value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-
-  const envelope = value as Record<string, unknown>
-  const data =
-    envelope.data && typeof envelope.data === 'object' && !Array.isArray(envelope.data)
-      ? (envelope.data as Record<string, unknown>)
-      : null
-  const expected = action === 'follow'
-
-  return envelope.success === true && data?.following === expected
-}
 
 /**
  * A revision per exchange account makes a later click authoritative even when
@@ -134,7 +123,14 @@ export async function sendOnboardingFollowIntent(
   })
 
   const payload = await response.json().catch(() => null)
-  if (!response.ok || !isFollowAcknowledgement(intent.action, payload)) {
+  if (
+    !response.ok ||
+    !readTraderFollowAcknowledgement(payload, {
+      following: intent.action === 'follow',
+      traderId: intent.traderId,
+      source: intent.source,
+    })
+  ) {
     throw new Error(`Trader follow request failed with status ${response.status}`)
   }
 }

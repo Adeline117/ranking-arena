@@ -144,7 +144,7 @@ describe('POST /api/follow atomic limit authority', () => {
       request({ traderId: `  ${TRADER_ID}  `, source: ` ${SOURCE} `, action: 'follow' })
     )
 
-    expect(response).toEqual({ following: true })
+    expect(response).toEqual({ following: true, traderId: TRADER_ID, source: SOURCE })
     expect(mockRpc).toHaveBeenCalledWith('mutate_trader_follow_atomic', {
       p_actor_id: USER_ID,
       p_trader_id: TRADER_ID,
@@ -163,7 +163,7 @@ describe('POST /api/follow atomic limit authority', () => {
 
     const response = await POST(request({ traderId: TRADER_ID, source: SOURCE, action: 'follow' }))
 
-    expect(response).toEqual({ following: true })
+    expect(response).toEqual({ following: true, traderId: TRADER_ID, source: SOURCE })
     expect(mockInvalidateFollowingCache).not.toHaveBeenCalled()
     expect(mockFireAndForget).not.toHaveBeenCalled()
   })
@@ -187,7 +187,7 @@ describe('POST /api/follow atomic limit authority', () => {
 
     const response = await POST(request({ traderId: TRADER_ID, source: null, action: 'unfollow' }))
 
-    expect(response).toEqual({ following: false })
+    expect(response).toEqual({ following: false, traderId: TRADER_ID, source: null })
     expect(mockRpc).toHaveBeenCalledWith(
       'mutate_trader_follow_atomic',
       expect.objectContaining({
@@ -205,7 +205,7 @@ describe('POST /api/follow atomic limit authority', () => {
       request({ traderId: TRADER_ID, source: SOURCE, action: 'unfollow' })
     )
 
-    expect(response).toEqual({ following: false })
+    expect(response).toEqual({ following: false, traderId: TRADER_ID, source: SOURCE })
     expect(mockInvalidateFollowingCache).not.toHaveBeenCalled()
     expect(mockFireAndForget).not.toHaveBeenCalled()
   })
@@ -246,6 +246,8 @@ describe('POST /api/follow atomic limit authority', () => {
     { traderId: 'x'.repeat(256), source: SOURCE, action: 'follow' },
     { traderId: TRADER_ID, source: 'bad\u0000source', action: 'follow' },
     { traderId: TRADER_ID, source: null, action: 'follow' },
+    { traderId: TRADER_ID, source: SOURCE, action: 'follow', unexpected: true },
+    { traderId: TRADER_ID, source: SOURCE, action: 'unfollow', unexpected: true },
   ])('rejects malformed identity input before the RPC', async (body) => {
     await expect(POST(request(body))).rejects.toThrow('Invalid input')
     expect(mockRpc).not.toHaveBeenCalled()
