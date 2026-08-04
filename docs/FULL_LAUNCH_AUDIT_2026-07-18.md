@@ -23,22 +23,22 @@
 
 ### P0 — 致命：当前完整清单
 
-| ID    | 问题/风险                                                                                              | 已完成的代码处置                                                                                                                                            | 上线状态                                                                                                                         |
-| ----- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| P0-01 | CopyTrading v1 可绕过网页直调，旧合约缺少足够资金安全边界。                                            | 网页、地址与产品入口永久 fail-closed；保留隔离 runbook。                                                                                                    | 👤 owner 仍须把 `maxFollowersPerTrader` 从实时 getter 的 `100` 改为 `0`。                                                        |
-| P0-02 | 生产数据库不可达时，榜单水位、写入和迁移状态都无法证明；本轮 build/页面请求观察到 Cloudflare 522。     | sitemap/build 和只读页面在 authority 故障时诚实降级，不伪造数据。                                                                                           | 👤 恢复数据库后重跑 exact ledger、schema/type、health 和同 SHA 浏览器验收。                                                      |
-| P0-03 | 数据库密码以及 Alchemy/Brave 凭据曾进入受控诊断输出。                                                  | 代码和文档不复述值，后续诊断不打印继承环境。                                                                                                                | 👤 轮换、更新所有运行环境并撤销旧值。                                                                                            |
-| P0-04 | Stripe live 可能存在订阅投影漂移、旧 writer、重复购买或错误撤权。                                      | checkout、webhook、退款、争议、entitlement、账户删除结算均 fail-closed；真实收费继续关闭。                                                                  | 👤 readiness 清零、旧 writer 撤权、test/live canary 全过后才能开收费。                                                           |
-| P0-05 | Stripe Portal/Checkout 成功响应若携带恶意 URL，浏览器可能被导向第三方。                                | Portal 只信任规范 `https://billing.stripe.com`；Checkout 只信任规范 `https://checkout.stripe.com`，拒绝凭据、自定义端口、伪子域、空白和 HTTP。              | ✅ 代码、前后端双层校验与回归测试已推送；⏳待部署。                                                                              |
-| P0-06 | 账户删除可能先删 auth、后结算失败，或在重试/恢复时产生重复资金动作、复活已删除主体。                   | 删除 intent、一次性 settlement barrier、billing recovery、auth invalidation、hard-delete recovery 全部持久化并串行化；OTP-only 用户不再被不存在的密码卡死。 | ✅ 代码/PG17；⏳迁移与生产恢复演练。                                                                                             |
-| P0-07 | 旧 JWT、封禁/删除用户、SIWE/WebAuthn/2FA 并发可能继续写库或重放凭据。                                  | 请求 admission、数据库 mutation barrier、SIWE nonce/wallet、WebAuthn assertion/counter/credential、2FA 都绑定 active profile 与原子 authority。             | ✅ 代码/PG17；⏳迁移与生产认证 E2E。                                                                                             |
-| P0-08 | 交易所 OAuth/API key、portfolio、trader claim/primary link 与账户删除并发时可能残留凭据或错误 owner。  | OAuth state 原子 claim；refresh 串行；credential、portfolio、claim、primary trader 全部绑定账户生命周期；只读 credential 证明被保留。                       | ✅ 代码/PG17；⏳迁移与真实只读连接 canary。                                                                                      |
-| P0-09 | 私聊列表、搜索、会话创建/读取/设置、reaction 和附件若分步查询，可能越权、泄露私有媒体或返回撕裂快照。  | service-only 原子 RPC；附件 bucket 私有化并在每次读取重签名；删除内容不再读出；actor/recipient 生命周期同快照复核。                                         | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                                                                               |
-| P0-10 | Watchlist/Favorites 分步 mutation/read 会出现 UI 假成功、订阅漂移、私密 folder/post 泄露或跨用户误写。 | mutation、subscription、folder lifecycle、四类 read snapshot 均原子化；API 使用 verified bearer user client 调 authenticated RPC；完整性不足 fail-closed。  | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                                                                               |
-| P0-11 | 通知过滤后分页、mark-read/delete/create 和排名批量通知分步执行，会漏项、重复、串用户或误发 push。      | 原子 filtered page/mutation/create/batch authority；稳定 event identity 去重；500 分片、逐条 ACK 绑定，只对 `CREATED` 发 push。                             | ✅ 代码/PG17；⏳迁移与通知/推送 E2E。                                                                                            |
-| P0-12 | leaderboard 直接 writer、零行成功、过期 edge cache 或不完整来源可把错误排名发布给所有用户。            | publication fence、typed batch receipt、sealed rankings/source freshness、零行/部分写 fail-closed、旧 writer 关闭、last-good 保留。                         | ✅ 代码/PG17；⏳生产数据链和 release SHA 实证。                                                                                  |
-| P0-13 | API key 创建/列出/撤销若相信残缺响应，会泄露完整 secret、展示错套餐额度或把失败当成功。                | 创建、列表、撤销均验证 exact ACK；列表验证 owner/tier/limit/usage/time 并脱敏；一次性 secret 在后续刷新失败时仍保留给用户。                                 | ✅ 代码与前端回归；⏳部署后真实 key canary。                                                                                     |
-| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260729187000` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                    | ✅ 187 predeploy、16 postdeploy、5 concurrent recovery、3 recovery、1 quarantined、1 superseded，共 213 项唯一迁移；⏳生产执行。 |
+| ID    | 问题/风险                                                                                              | 已完成的代码处置                                                                                                                                                                       | 上线状态                                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| P0-01 | CopyTrading v1 可绕过网页直调，旧合约缺少足够资金安全边界。                                            | 网页、地址与产品入口永久 fail-closed；保留隔离 runbook。                                                                                                                               | 👤 owner 仍须把 `maxFollowersPerTrader` 从实时 getter 的 `100` 改为 `0`。                                                        |
+| P0-02 | 生产数据库不可达时，榜单水位、写入和迁移状态都无法证明；本轮 build/页面请求观察到 Cloudflare 522。     | sitemap/build 和只读页面在 authority 故障时诚实降级，不伪造数据。                                                                                                                      | 👤 恢复数据库后重跑 exact ledger、schema/type、health 和同 SHA 浏览器验收。                                                      |
+| P0-03 | 数据库密码以及 Alchemy/Brave 凭据曾进入受控诊断输出。                                                  | 代码和文档不复述值，后续诊断不打印继承环境。                                                                                                                                           | 👤 轮换、更新所有运行环境并撤销旧值。                                                                                            |
+| P0-04 | Stripe live 可能存在订阅投影漂移、旧 writer、重复购买或错误撤权。                                      | checkout、webhook、退款、争议、entitlement、账户删除结算均 fail-closed；成功页只接受绑定当前 viewer/session 的 exact checkout/entitlement authority；真实收费继续关闭。                | ✅ `9bd89c219` / `a78c1e707` 定向回归；👤 readiness 清零、旧 writer 撤权、test/live canary 全过后才能开收费。                    |
+| P0-05 | Stripe Portal/Checkout 成功响应若携带恶意 URL，浏览器可能被导向第三方。                                | Portal 只信任规范 `https://billing.stripe.com`；Checkout 只信任规范 `https://checkout.stripe.com`，拒绝凭据、自定义端口、伪子域、空白和 HTTP。                                         | ✅ 代码、前后端双层校验与回归测试已推送；⏳待部署。                                                                              |
+| P0-06 | 账户删除可能先删 auth、后结算失败，或在重试/恢复时产生重复资金动作、复活已删除主体。                   | 删除 intent、一次性 settlement barrier、billing recovery、auth invalidation、hard-delete recovery 全部持久化并串行化；OTP-only 用户不再被不存在的密码卡死。                            | ✅ 代码/PG17；⏳迁移与生产恢复演练。                                                                                             |
+| P0-07 | 旧 JWT、封禁/删除用户、SIWE/WebAuthn/2FA 并发可能继续写库或重放凭据。                                  | 请求 admission、数据库 mutation barrier、SIWE nonce/wallet、WebAuthn assertion/counter/credential、2FA 都绑定 active profile 与原子 authority。                                        | ✅ 代码/PG17；⏳迁移与生产认证 E2E。                                                                                             |
+| P0-08 | 交易所 OAuth/API key、portfolio、trader claim/primary link 与账户删除并发时可能残留凭据或错误 owner。  | OAuth state 原子 claim；refresh 串行；credential、portfolio、claim、primary trader 绑定账户生命周期；connect/list/sync/disconnect 只信任完整且绑定 viewer/exchange/generation 的回执。 | ✅ `7516d39ea` / `ec54092a9` / `dd784a481` / `1470d448a` 定向回归；⏳迁移与真实只读连接 canary。                                 |
+| P0-09 | 私聊列表、搜索、会话创建/读取/设置、reaction 和附件若分步查询，可能越权、泄露私有媒体或返回撕裂快照。  | service-only 原子 RPC；附件 bucket 私有化并在每次读取重签名；删除内容不再读出；actor/recipient 生命周期同快照复核。                                                                    | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                                                                               |
+| P0-10 | Watchlist/Favorites 分步 mutation/read 会出现 UI 假成功、订阅漂移、私密 folder/post 泄露或跨用户误写。 | mutation、subscription、folder lifecycle、四类 read snapshot 均原子化；API 使用 verified bearer user client 调 authenticated RPC；完整性不足 fail-closed。                             | ✅ 代码/PG17；⏳迁移与双账号 E2E。                                                                                               |
+| P0-11 | 通知过滤后分页、mark-read/delete/create 和排名批量通知分步执行，会漏项、重复、串用户或误发 push。      | 原子 filtered page/mutation/create/batch authority；稳定 event identity 去重；500 分片、逐条 ACK 绑定，只对 `CREATED` 发 push。                                                        | ✅ 代码/PG17；⏳迁移与通知/推送 E2E。                                                                                            |
+| P0-12 | leaderboard 直接 writer、零行成功、过期 edge cache 或不完整来源可把错误排名发布给所有用户。            | publication fence、typed batch receipt、sealed rankings/source freshness、零行/部分写 fail-closed、旧 writer 关闭、last-good 保留。                                                    | ✅ 代码/PG17；⏳生产数据链和 release SHA 实证。                                                                                  |
+| P0-13 | API key 创建/列出/撤销若相信残缺响应，会泄露完整 secret、展示错套餐额度或把失败当成功。                | 创建、列表、撤销均验证 exact ACK；列表验证 owner/tier/limit/usage/time 并脱敏；一次性 secret 在后续刷新失败时仍保留给用户。                                                            | ✅ 代码与前端回归；⏳部署后真实 key canary。                                                                                     |
+| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260729187000` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                                               | ✅ 187 predeploy、16 postdeploy、5 concurrent recovery、3 recovery、1 quarantined、1 superseded，共 213 项唯一迁移；⏳生产执行。 |
 
 P0 的“代码已修”不等于“生产已清零”。P0-01 至 P0-04 的 owner/基础设施动作、
 P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布结论保持 **NO-GO**。
@@ -59,6 +59,9 @@ P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布�
 | P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                         | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。 |
 | P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。      | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅             |
 | P1-12 | 上传后取消/失败、编辑移除或删帖会遗留 `posts` Storage 对象；直接查引用后删除又会产生并发数据丢失。 | 🔄 已锁定删帖 no-Storage 边界并记录全路径；需 `post_media_uploads` registry + mutation 内 claim + durable outbox/lease 后才能安全清理。   |
+| P1-13 | 路由 loading shell 重复预留已存在的导航高度，转场时出现布局 flash。                                | `e3feea06a` 移除重复 nav spacer，并用 shell 几何合同覆盖 route-group 与 page skeleton。✅                                                 |
+| P1-14 | 付款成功页可能将验证中、成功与未确认混为一种界面，或在小屏/键盘下丢失下一步。                      | `9bd89c219` 锁定 exact authority；`a78c1e707` 分离 verifying/success/error、补 retry/焦点/ARIA、320px 几何与 ≥48px 控件。✅               |
+| P1-15 | Groups 管理的解散、广播、邀请、批量成员动作和 Load more 可被双击、旧 scope 或不稳定 cursor 破坏。  | `e261d20dc` / `3725000b` / `b637fc1a` / `982d33130` 补不可逆锁、single-flight/exact ACK、按选择顺序串行批处理和稳定去重分页。✅           |
 
 ### P2 — 边缘：明确上线后
 
@@ -101,6 +104,21 @@ checked-in serving 证据是 2026-07-16 的 34 个 source boards，不能冒充 
 - production read-only button sweep：69 routes × 2 viewports 共 138 次均 HTTP 200，
   无 blank/crash/error boundary；发现的 token 500 与 period click timeout 已代码修复，
   WalletConnect explorer 噪声归 P2。修复后仍须在最终 SHA 重跑生产 sweep。
+
+### 自 `485f5a550` 后的增量证据（截至 `982d33130`）
+
+| 优先级               | 领域                     | 已证实修复与提交                                                                                                                                         | 仍未解阻塞                                                                                              |
+| -------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| P0 authority / P1 UI | Stripe checkout 成功闭环 | `9bd89c219` 要求 exact verify-session/subscription authority；`a78c1e707` 将成功页拆成可访问的 verifying/success/error 状态。                            | Stripe live readiness、旧 writer 撤权、test/live canary 仍是 owner gate；代码测试不证明真实收费可开启。 |
+| P0 authority         | 只读交易所连接           | `7516d39ea` connect、`ec54092a9` list/projection、`dd784a481` sync/generation receipt、`1470d448a` disconnect 均对 owner/exchange/响应形状 fail-closed。 | 健康生产库上的真实 read-only credential 连接、列表、同步、断开 canary 未做。                            |
+| P1                   | Settings / layout        | `ad9b727eb` 只在 exact unblock ACK 后移除屏蔽项；`e3feea06a` 移除 loading shell 的重复 nav spacer。                                                      | 最终 SHA 的双账号 Settings E2E 与多视口路由转场截图未做。                                               |
+| P1                   | Groups 管理              | `e261d20dc` 锁定解散，`3725000b` 绑定广播 ACK/single-flight，`b637fc1a` 串行成员批处理与绑定邀请，`982d33130` 稳定帖子分页/cursor/去重。                 | 真实 owner/admin/member fixture 与生产权限、并发、分页 E2E 未做。                                       |
+| P2 maintenance       | 仓库清理                 | `23590c072` 删除退休 scraper validation；`4af1016fb` 删除退休固定路由 screenshot 脚本，保留支持的 serving/visual-audit 入口。                            | 不是上线解阻器；后续清理仍必须证明无 operator/cron 用途。                                               |
+
+在共享工作树上重跑上述提交触及的定向回归：Jest **17 suites / 188 tests**
+全部通过；`node --test scripts/qa/repository-cleanup-contract.test.mjs` **3/3** 通过。
+这些是本地代码/交互合同证据，不替代迁移、部署、生产数据 freshness 或同 SHA E2E；
+因此整体结论仍为 **NO-GO**。
 
 ## 0. 结论与状态口径
 
@@ -506,6 +524,9 @@ flowchart LR
 - 删除旧版 Following 的 4 个零引用 UI/type 文件，并移除 Claim/Following/Trader
   中只为压制未使用变量保留的空参数/状态（500 行）。
 - 退休 raw-id alert helper 后，broadcast/follow activity reference 和链接也改为 source-aware。
+- `23590c072` 删除退休的 `scripts/lib/data-validation.mjs`，`4af1016fb` 删除退休的
+  `scripts/qa-ui-check.mjs`；两者都在 repository-cleanup 合同中锁定不得回归，并指向现行
+  diagnose/serving/visual-audit 入口。
 - 清理后做 orphan page 检查、TypeScript 和相关测试。
 
 明确保留：

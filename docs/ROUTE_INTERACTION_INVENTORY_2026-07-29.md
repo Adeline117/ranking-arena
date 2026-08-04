@@ -4,6 +4,26 @@
 > 按钮。本文说明“点击后去哪、谁能点、成功/失败应看到什么”，不把 API 存在
 > 当作 UI 已可用。动态路由必须使用真实 canonical identity，不能用过期固定样本。
 
+## 2026-08-03 增量进展（`485f5a550` 之后，截至 `982d33130`）
+
+- 付款结果：`9bd89c219` 将成功限定为 viewer/session-bound exact authority；
+  `a78c1e707` 补齐 verifying/success/error、Retry、结果焦点、ARIA、320px 响应式与
+  ≥48px 操作控件。这是代码与 P1 UI 证据，Stripe live 仍被 P0 owner gate 关闭。
+- 全局 layout：`e3feea06a` 取消 loading shell 对持久导航的重复高度预留，避免路由转场
+  flash；最终 SHA 多视口截图仍待做。
+- Groups：`e261d20dc` 解散锁，`3725000b` 广播 single-flight/exact ACK，`b637fc1a`
+  成员批处理串行、邀请绑定与旧 scope 隔离，`982d33130` 管理帖子稳定 cursor/去重分页。
+- Exchange：`7516d39ea` connect、`ec54092a9` list/projection、`dd784a481` sync/generation
+  receipt、`1470d448a` disconnect 均在不完整或 owner/exchange 不匹配时 fail-closed。
+  真实 read-only credential 的 connect/list/sync/disconnect 生产 canary 未做。
+- Settings：`ad9b727eb` 只在唯一 exact `{ success: true }` 回执后显示 unblock 成功；
+  仓库：`23590c072` / `4af1016fb` 删除两个退休入口并用 cleanup contract 防回归。
+- 本地定向证据：上述改动触及的 Jest **17 suites / 188 tests** 通过；
+  repository-cleanup Node 合同 **3/3** 通过。整体生产仍是 **NO-GO**：数据库恢复/精确
+  migration ledger、CopyTrading cap、凭据轮换、Stripe readiness、部署 SHA 与生产 E2E 仍是外部
+  或 owner blockers。核心流程与 source freshness 仍未做生产验证，只保留已有的
+  **37 registered boards / 34 public-ranking allowed / 23 families** 仓库口径，不得宣称“44 所交易所”。
+
 ## 1. 全局交互合同
 
 所有页面和按钮共用以下规则：
@@ -24,6 +44,8 @@
    Watch、Compare、Share、Alert、Claim 都必须保留 source。
 9. 帖子媒体成功回执必须精确绑定当前 viewer、`posts/<owner>/...` 对象路径、配置的
    Supabase origin 和服务器验证的 MIME/size；URL-only、跨 owner、外域或扩展字段均失败。
+10. App route loading shell 复用已持久渲染的 TopNav 几何，不再添加第二个 nav spacer；
+    验证结束的 success/error 标题接收焦点，loading/error 有对应 live-region 语义。
 
 ## 2. 排名数据到用户动作的核心链路
 
@@ -72,27 +94,27 @@ arena.sources / region routing
 
 ## 4. 登录、账户、认领和个人主页
 
-| 路由                        | 主要入口和按钮                                                                                                                     | 点击结果与状态合同                                                                                                          |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `/login`                    | OAuth/邮箱或 OTP、Passkey、Submit、Forgot/Reset、Terms、返回                                                                       | 成功回 `next`；provider 原始错误不回显；auth restore 期间不重复提交；被删/封禁主体 fail-closed。                            |
-| `/auth/callback`            | 自动完成、Retry、返回登录                                                                                                          | 校验 state/session 后按 onboarding truth 跳转；超时和失败有显式 UI，不能按“注册不足 30 秒”猜新用户。                        |
-| `/logout`                   | 自动登出、返回登录/首页                                                                                                            | 清理当前 session 与本地 viewer cache；失败不能展示仍已退出的假状态。                                                        |
-| `/reset-password`           | 发送验证码、New password、Confirm、Submit、返回登录                                                                                | 中性提示避免泄漏账号存在；密码策略与注册一致；验证码/更新 ACK 不完整即失败。                                                |
-| `/onboarding`               | 语言、主题、兴趣、推荐 trader Follow、推荐 group Join、Back/Next/Skip/Finish                                                       | Follow/Join intents 全部落库或明确失败后才完成；同一 viewer scope；Skip 也持久化 completion。                               |
-| `/claim`                    | Search、结果卡、Back/change trader、CEX/DEX method、Verify & Claim、FAQ                                                            | 见下方按钮级流程；所有步骤保存 source+account，失败可重试且不变成“无结果”。                                                 |
-| `/trader/authorize`         | 旧授权入口                                                                                                                         | 服务端重定向到 canonical `/claim`，不显示 2 秒空白或宣传未实现 copy-trade。                                                 |
-| `/exchange/auth`            | 选择交易所/OAuth/API-key、Continue、Cancel                                                                                         | 只允许支持的 read-only 连接路径；保留返回路径；权限说明在提交前可见。                                                       |
-| `/exchange/auth/api-key`    | Exchange、API key/secret/passphrase、权限说明、Connect、Cancel                                                                     | 拒绝可交易/提现凭据；成功保存只读 proof 并进入 Portfolio/Settings；失败不缓存明文。                                         |
-| `/exchange/auth/callback`   | OAuth state 完成、Retry、返回                                                                                                      | state 只能原子消费一次；owner/account lifecycle 不匹配即拒绝。                                                              |
-| `/u/[handle]`               | Following/Followers、Follow/Unfollow、Message、Edit Profile、返回榜单、Posts/Stats/Portfolio tabs、linked trader tabs、Create post | viewer 与 owner 分离；隐私设置关闭时关系数不可点；Edit 仅 owner→`/settings`；Message 受 DM 权限；非交易员隐藏无意义 stats。 |
-| `/u/[handle]/new`           | Edit/Preview tabs、正文、图片/视频上传、插入/删除/拖动、Sticker、Poll 开关/选项/单双选、Cancel、Publish                            | owner-only；上传私有/受控资源；离开有 unsaved guard；重复点击只发布一次；失败保留草稿和媒体。                               |
-| `/user-center`              | Profile、活动/账户 tabs、Edit/Settings、查看内容                                                                                   | 当前 viewer 数据；auth 未恢复不先显示陌生空态；导航 section 可键盘切换。                                                    |
-| `/settings/linked-accounts` | Connect/Disconnect OAuth/social account、返回 Settings                                                                             | 只操作当前 viewer；disconnect 二次确认；最后一个登录方式受保护，失败保留原连接。                                            |
-| `/portfolio`                | Add exchange/wallet、Sync、Remove、资产/positions/analytics tabs、Retry                                                            | credential 只读；单源同步失败不清空其他来源；Remove 等服务器确认；equity projection 原子发布。                              |
-| `/referral`                 | Copy code/link、Share、查看进度/奖励、返回                                                                                         | attribution 原子且可重试；不能靠客户端计数发权益；分享失败仍可手动复制。                                                    |
-| `/pricing`                  | Monthly/Yearly/Lifetime、Subscribe/Start、Manage billing、FAQ                                                                      | 套餐和 price 必须明确；未登录保存 intent；浏览器只跳规范 Stripe Checkout/Portal；readiness 未通过时真实收费关闭。           |
-| `/pricing/success`          | Verify、前往首价值动作、收据/管理、Referral                                                                                        | 只有已验证 session/entitlement 才显示成功；pending 有重试，不能用 query string 自证 Pro。                                   |
-| `/tip/success`              | 验证付款、返回原帖/收款人、Share                                                                                                   | 绑定真实 checkout/tip identity；pending/failed 与 success 分开，不在前端猜金额或收款人。                                    |
+| 路由                        | 主要入口和按钮                                                                                                                     | 点击结果与状态合同                                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `/login`                    | OAuth/邮箱或 OTP、Passkey、Submit、Forgot/Reset、Terms、返回                                                                       | 成功回 `next`；provider 原始错误不回显；auth restore 期间不重复提交；被删/封禁主体 fail-closed。                                       |
+| `/auth/callback`            | 自动完成、Retry、返回登录                                                                                                          | 校验 state/session 后按 onboarding truth 跳转；超时和失败有显式 UI，不能按“注册不足 30 秒”猜新用户。                                   |
+| `/logout`                   | 自动登出、返回登录/首页                                                                                                            | 清理当前 session 与本地 viewer cache；失败不能展示仍已退出的假状态。                                                                   |
+| `/reset-password`           | 发送验证码、New password、Confirm、Submit、返回登录                                                                                | 中性提示避免泄漏账号存在；密码策略与注册一致；验证码/更新 ACK 不完整即失败。                                                           |
+| `/onboarding`               | 语言、主题、兴趣、推荐 trader Follow、推荐 group Join、Back/Next/Skip/Finish                                                       | Follow/Join intents 全部落库或明确失败后才完成；同一 viewer scope；Skip 也持久化 completion。                                          |
+| `/claim`                    | Search、结果卡、Back/change trader、CEX/DEX method、Verify & Claim、FAQ                                                            | 见下方按钮级流程；所有步骤保存 source+account，失败可重试且不变成“无结果”。                                                            |
+| `/trader/authorize`         | 旧授权入口                                                                                                                         | 服务端重定向到 canonical `/claim`，不显示 2 秒空白或宣传未实现 copy-trade。                                                            |
+| `/exchange/auth`            | 选择交易所/OAuth/API-key、Continue、Cancel                                                                                         | 只允许支持的 read-only 连接路径；保留返回路径；权限说明在提交前可见。                                                                  |
+| `/exchange/auth/api-key`    | Exchange、API key/secret/passphrase、权限说明、Connect、Cancel                                                                     | 拒绝可交易/提现凭据；只有 exact viewer+exchange connect 回执才进入 Portfolio/Settings；失败不缓存明文。                                |
+| `/exchange/auth/callback`   | OAuth state 完成、Retry、返回                                                                                                      | state 只能原子消费一次；owner/account lifecycle 不匹配即拒绝。                                                                         |
+| `/u/[handle]`               | Following/Followers、Follow/Unfollow、Message、Edit Profile、返回榜单、Posts/Stats/Portfolio tabs、linked trader tabs、Create post | viewer 与 owner 分离；隐私设置关闭时关系数不可点；Edit 仅 owner→`/settings`；Message 受 DM 权限；非交易员隐藏无意义 stats。            |
+| `/u/[handle]/new`           | Edit/Preview tabs、正文、图片/视频上传、插入/删除/拖动、Sticker、Poll 开关/选项/单双选、Cancel、Publish                            | owner-only；上传私有/受控资源；离开有 unsaved guard；重复点击只发布一次；失败保留草稿和媒体。                                          |
+| `/user-center`              | Profile、活动/账户 tabs、Edit/Settings、查看内容                                                                                   | 当前 viewer 数据；auth 未恢复不先显示陌生空态；导航 section 可键盘切换。                                                               |
+| `/settings/linked-accounts` | Connect/Disconnect OAuth/social account、返回 Settings                                                                             | 只操作当前 viewer；disconnect 二次确认；最后一个登录方式受保护，失败保留原连接。                                                       |
+| `/portfolio`                | Add exchange/wallet、Sync、Remove、资产/positions/analytics tabs、Retry                                                            | 列表只接受 owner-bound 安全投影；Sync 绑定 exchange+credential generation 回执；Remove 需 exact disconnect ACK；单源失败不清空其他源。 |
+| `/referral`                 | Copy code/link、Share、查看进度/奖励、返回                                                                                         | attribution 原子且可重试；不能靠客户端计数发权益；分享失败仍可手动复制。                                                               |
+| `/pricing`                  | Monthly/Yearly/Lifetime、Subscribe/Start、Manage billing、FAQ                                                                      | 套餐和 price 必须明确；未登录保存 intent；浏览器只跳规范 Stripe Checkout/Portal；readiness 未通过时真实收费关闭。                      |
+| `/pricing/success`          | Verify、Retry、前往 Rankings/Compare/Settings、收据/管理、Referral                                                                 | 只有 exact session/entitlement authority 才显示成功；verifying 不可交互、error 可重试；结果焦点/ARIA 明确，小屏控件 ≥48px。            |
+| `/tip/success`              | 验证付款、返回原帖/收款人、Share                                                                                                   | 绑定真实 checkout/tip identity；pending/failed 与 success 分开，不在前端猜金额或收款人。                                               |
 
 ### 4.1 Claim 按钮级路径
 
@@ -122,7 +144,7 @@ arena.sources / region routing
 | `api-keys`             | Create、一次性 Reveal/Copy、查看 30 天 Usage、Retry、Revoke、Upgrade                                                                  | 列表/usage 验证 exact payload；失败不显示 0；完整 secret 只出现一次；刷新失败时保留尚未复制的 secret；revoke exact ACK。                    |
 | `alerts`               | Enable/Edit/Delete trader alert、历史、Browse traders                                                                                 | 绑定 source/account；保存失败保留编辑值；Browse 回 `/`。                                                                                    |
 | `notifications`        | Follow/Like/Comment/Mention/Message/Trader events、Email digest、Haptic toggles                                                       | 单项保存；失败回滚 toggle；通知 authority 不可达不显示已保存。                                                                              |
-| `privacy`              | Show followers/following/Pro badge、DM permission、Blocked users、Retry、Unblock                                                      | 关系隐私立即影响 public profile；block list 错误不显示空；unblock exact ACK。                                                               |
+| `privacy`              | Show followers/following/Pro badge、DM permission、Blocked users、Retry、Unblock                                                      | 关系隐私立即影响 public profile；block list 错误不显示空；unblock 只接受唯一 exact `{ success: true }` ACK，否则保留列表并报错。            |
 | `referral` 卡片        | Copy/Share、查看进度                                                                                                                  | 只展示服务端资格；复制失败给可选中文本。                                                                                                    |
 | `account`              | Export data、Download、Logout、Delete account、Cancel/Confirm                                                                         | export 校验 MIME/长度/文件名；删除 modal 对 password/OTP provider 采用真实 proof，先持久化 settlement intent，再删除 auth；可安全恢复重试。 |
 
@@ -157,20 +179,20 @@ Settings 左侧/顶部 section 导航更新 `?section=` 并支持浏览器前进
 
 ## 6. 帖子、Feed 与 Groups 社交交互
 
-| 路由                  | 主要入口和按钮                                                                                     | 点击结果与状态合同                                                                                                                |
-| --------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `/feed`               | Following/推荐流、排序、帖子卡、Like/Downvote、Bookmark、Repost、Share、Report、Comment、Load more | optimistic 动作失败 rollback；分页不混入无权限帖子；登录 intent 回原位置。                                                        |
-| `/feed/[id]`          | Back、目标 activity/post、完整互动条、Comments                                                     | SSR 目标实体；不存在或不可见明确 404/permission；不以全局 feed 模态冒充详情。                                                     |
-| `/hot`                | 时间/类别 tabs、帖子卡、互动、Load more、Refresh                                                   | hot score authority 漂移时 fail-closed/last-good；tab 用标准键盘语义。                                                            |
-| `/post/[id]`          | Back、Like/Downvote、Bookmark、Repost、Share、Report、Comment/Reply/Reaction；owner Edit/Delete    | 只渲染该帖和 thread；canonical audience；Delete 要 owner 双谓词、exact 单行 DB/客户端 ACK；registry 上线前不得直接删除 Storage。  |
-| `/post/[id]/edit`     | Edit/Preview、正文/媒体、@mention picker、图片移动/删除、Cancel、Save                              | owner-only；鉴权失败跳回带 redirect 的登录或明确错误；unsaved guard；正文/facet/join/count 原子 CAS；严格媒体/ACK；失败保留草稿。 |
-| `/my-posts`           | Draft/Published 等分类、Open、Edit/Delete、Retry                                                   | 当前 viewer scope；解析 profile 期间有稳定占位；删除确认后才移除。                                                                |
-| `/hashtag/[tag]`      | 标签 header、排序、帖子互动、Load more                                                             | tag 贯穿所有分页；不能首屏按 tag、后续混入全局帖子。                                                                              |
-| `/groups`             | 推荐/已加入/我管理、Search、group 卡、Follow/Join/Apply、Create/Apply                              | 未登录保留 intent；每类独立状态；权限/会员级别在服务端决定。                                                                      |
-| `/groups/apply`       | 小组资料、规则、头像、Edit/Preview、Cancel、Submit                                                 | 必填/长度内联校验；头像回执绑定当前 owner/path/origin；账户切换丢弃旧完成；unsaved guard；重复提交 single-flight；失败保留表单。  |
-| `/groups/[id]`        | Follow、Join/Apply/Leave、频道/帖子/成员 tabs、创建帖子、成员卡、Share/Report                      | private/premium/member/admin audience 在同一 authority；Leave/Follow exact ACK；tab 深链可恢复。                                  |
-| `/groups/[id]/new`    | Edit/Preview、正文/图片/视频/投票、@mention、Cancel、Publish                                       | member permission 每次提交复核；媒体回执绑定 owner/path/origin/MIME/size；原子发布与严格 ACK；unsaved guard；失败保留内容。       |
-| `/groups/[id]/manage` | Applications、Members、Roles、Mute/Remove/Ban、Channels、Broadcast、Settings、Dissolve             | owner/admin fail-closed；review/role/moderation/channel/broadcast/dissolve 使用原子 authority；所有破坏性动作确认并写 audit log。 |
+| 路由                  | 主要入口和按钮                                                                                        | 点击结果与状态合同                                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/feed`               | Following/推荐流、排序、帖子卡、Like/Downvote、Bookmark、Repost、Share、Report、Comment、Load more    | optimistic 动作失败 rollback；分页不混入无权限帖子；登录 intent 回原位置。                                                                                 |
+| `/feed/[id]`          | Back、目标 activity/post、完整互动条、Comments                                                        | SSR 目标实体；不存在或不可见明确 404/permission；不以全局 feed 模态冒充详情。                                                                              |
+| `/hot`                | 时间/类别 tabs、帖子卡、互动、Load more、Refresh                                                      | hot score authority 漂移时 fail-closed/last-good；tab 用标准键盘语义。                                                                                     |
+| `/post/[id]`          | Back、Like/Downvote、Bookmark、Repost、Share、Report、Comment/Reply/Reaction；owner Edit/Delete       | 只渲染该帖和 thread；canonical audience；Delete 要 owner 双谓词、exact 单行 DB/客户端 ACK；registry 上线前不得直接删除 Storage。                           |
+| `/post/[id]/edit`     | Edit/Preview、正文/媒体、@mention picker、图片移动/删除、Cancel、Save                                 | owner-only；鉴权失败跳回带 redirect 的登录或明确错误；unsaved guard；正文/facet/join/count 原子 CAS；严格媒体/ACK；失败保留草稿。                          |
+| `/my-posts`           | Draft/Published 等分类、Open、Edit/Delete、Retry                                                      | 当前 viewer scope；解析 profile 期间有稳定占位；删除确认后才移除。                                                                                         |
+| `/hashtag/[tag]`      | 标签 header、排序、帖子互动、Load more                                                                | tag 贯穿所有分页；不能首屏按 tag、后续混入全局帖子。                                                                                                       |
+| `/groups`             | 推荐/已加入/我管理、Search、group 卡、Follow/Join/Apply、Create/Apply                                 | 未登录保留 intent；每类独立状态；权限/会员级别在服务端决定。                                                                                               |
+| `/groups/apply`       | 小组资料、规则、头像、Edit/Preview、Cancel、Submit                                                    | 必填/长度内联校验；头像回执绑定当前 owner/path/origin；账户切换丢弃旧完成；unsaved guard；重复提交 single-flight；失败保留表单。                           |
+| `/groups/[id]`        | Follow、Join/Apply/Leave、频道/帖子/成员 tabs、创建帖子、成员卡、Share/Report                         | private/premium/member/admin audience 在同一 authority；Leave/Follow exact ACK；tab 深链可恢复。                                                           |
+| `/groups/[id]/new`    | Edit/Preview、正文/图片/视频/投票、@mention、Cancel、Publish                                          | member permission 每次提交复核；媒体回执绑定 owner/path/origin/MIME/size；原子发布与严格 ACK；unsaved guard；失败保留内容。                                |
+| `/groups/[id]/manage` | Applications、Members、Roles、Mute/Remove/Ban、Invite、Broadcast、Posts Load more、Settings、Dissolve | owner/admin fail-closed；解散在 confirm 期间即锁定；广播/邀请/批量成员动作 single-flight 且 scope-bound；批处理串行；分页用 pin+time+id 稳定 cursor 去重。 |
 
 ### 6.1 帖子与评论按钮真值
 
