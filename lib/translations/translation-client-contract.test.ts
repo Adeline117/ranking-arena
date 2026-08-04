@@ -135,6 +135,38 @@ describe('translation client contract', () => {
     ).toBeNull()
   })
 
+  it.each(['ja', 'ko'] as const)(
+    'binds supported %s targets without weakening identity checks',
+    (targetLang) => {
+      const request = { ...singleRequest, targetLang }
+      expect(
+        readSingleTranslationResponse(
+          singleEnvelope({
+            targetLang,
+            translatedText: targetLang === 'ja' ? '取引戦略' : '거래 전략',
+          }),
+          request
+        )
+      ).toMatchObject({ sameLanguage: false })
+      expect(
+        readSingleTranslationResponse(singleEnvelope({ targetLang: 'fr' }), request)
+      ).toBeNull()
+      expect(
+        readSingleTranslationResponse(singleEnvelope({ targetLang: 'fr' }), {
+          ...request,
+          targetLang: 'fr' as never,
+        })
+      ).toBeNull()
+    }
+  )
+
+  it('accepts complete Japanese and Korean batches under the same exact-ID contract', () => {
+    for (const targetLang of ['ja', 'ko'] as const) {
+      const items = batchItems.map((item) => ({ ...item, targetLang }))
+      expect(readBatchTranslationResponse(batchEnvelope(), items)).toMatchObject({ total: 2 })
+    }
+  })
+
   it('accepts a batch only when every requested ID has one exact result', () => {
     expect(readBatchTranslationResponse(batchEnvelope(), batchItems)).toMatchObject({ total: 2 })
     expect(

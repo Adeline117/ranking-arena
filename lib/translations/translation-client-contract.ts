@@ -2,7 +2,7 @@ import { apiFetch } from '@/lib/utils/api-fetch'
 
 export const TRANSLATION_REQUEST_TIMEOUT_MS = 15_000
 
-export type TranslationTargetLanguage = 'zh' | 'en'
+export type TranslationTargetLanguage = 'zh' | 'en' | 'ja' | 'ko'
 
 export type SingleTranslationRequest = {
   text: string
@@ -47,6 +47,16 @@ function isTranslationText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
+function isTranslationTarget(value: unknown): value is TranslationTargetLanguage {
+  return value === 'zh' || value === 'en' || value === 'ja' || value === 'ko'
+}
+
+function isTranslationContentType(
+  value: unknown
+): value is SingleTranslationRequest['contentType'] {
+  return value === 'post_title' || value === 'post_content' || value === 'comment'
+}
+
 /**
  * Bind a successful single-item response to the exact source text and target
  * language that the caller sent. The API explicitly marks its legitimate
@@ -56,7 +66,13 @@ export function readSingleTranslationResponse(
   value: unknown,
   expected: Pick<SingleTranslationRequest, 'text' | 'targetLang'>
 ): SingleTranslationReceipt | null {
-  if (!isRecord(value) || !hasExactKeys(value, ['data', 'success']) || value.success !== true) {
+  if (
+    !isTranslationText(expected.text) ||
+    !isTranslationTarget(expected.targetLang) ||
+    !isRecord(value) ||
+    !hasExactKeys(value, ['data', 'success']) ||
+    value.success !== true
+  ) {
     return null
   }
   if (!isRecord(value.data)) return null
@@ -109,7 +125,8 @@ export function readBatchTranslationResponse(
         !item.id ||
         !item.contentId ||
         !isTranslationText(item.text) ||
-        (item.targetLang !== 'zh' && item.targetLang !== 'en')
+        !isTranslationContentType(item.contentType) ||
+        !isTranslationTarget(item.targetLang)
     ) ||
     new Set(expectedItems.map((item) => item.id)).size !== expectedItems.length ||
     !isRecord(value) ||

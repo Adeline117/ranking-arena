@@ -36,12 +36,77 @@ import {
   readHotGroupsPage,
   readHotPostsPage,
 } from '@/lib/hot/hot-discovery-client-contract'
+import {
+  requestBatchTranslation,
+  requestSingleTranslation,
+  type BatchTranslationItem,
+  type TranslationTargetLanguage,
+} from '@/lib/translations/translation-client-contract'
 import type { Post, Comment } from './types'
 import { useCommentDraftPersistence } from '@/app/components/post/hooks/useCommentDraftPersistence'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 interface UseHotPageDataOptions {
   initialPosts?: Post[]
+}
+
+type HotTranslationScope = {
+  viewerKey: string
+  sessionGeneration: number
+  userId: string | null
+  accessToken: string
+  language: TranslationTargetLanguage
+  generation: number
+}
+
+type HotTranslationRequest = {
+  key: string
+  sequence: number
+  scope: HotTranslationScope
+  controller: AbortController
+  promise: Promise<void>
+}
+
+type HotCachedTranslation = {
+  source: string
+  targetLang: TranslationTargetLanguage
+  translatedText: string
+}
+
+type HotListTranslationDescriptor = {
+  item: BatchTranslationItem
+  postId: string
+  part: 'title' | 'body'
+  laneKey: string
+}
+
+function translationLaneKey(...parts: string[]): string {
+  return JSON.stringify(parts)
+}
+
+function needsHotTranslation(
+  sourceIsChinese: boolean,
+  targetLang: TranslationTargetLanguage
+): boolean {
+  switch (targetLang) {
+    case 'en':
+      return sourceIsChinese
+    case 'zh':
+      return !sourceIsChinese
+    default:
+      return true
+  }
+}
+
+function sameTranslationScope(left: HotTranslationScope, right: HotTranslationScope): boolean {
+  return (
+    left.viewerKey === right.viewerKey &&
+    left.sessionGeneration === right.sessionGeneration &&
+    left.userId === right.userId &&
+    left.accessToken === right.accessToken &&
+    left.language === right.language &&
+    left.generation === right.generation
+  )
 }
 
 function applyReactionAcknowledgement(
@@ -86,11 +151,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   )
   const [showingOriginal, setShowingOriginal] = useViewerOwnedState(true, () => true, scopeKey)
   const [translating, setTranslating] = useViewerOwnedState(false, () => false, scopeKey)
-  const [translationCache, setTranslationCache] = useViewerOwnedState<Record<string, string>>(
-    {},
-    () => ({}),
-    scopeKey
-  )
   const [translatedListPosts, setTranslatedListPosts] = useViewerOwnedState<
     Record<string, { title?: string; body?: string }>
   >({}, () => ({}), scopeKey)
@@ -158,6 +218,18 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const openPostIdRef = useRef<string | null>(null)
   const commentLoadGenerationRef = useRef(new Map<string, number>())
   const commentLoadMoreGenerationRef = useRef(new Map<string, number>())
+  const translationMountedRef = useRef(false)
+  const translationGenerationRef = useRef(0)
+  const translationSequenceRef = useRef(0)
+  const previousTranslationScopeRef = useRef({ scopeKey, accessToken, language })
+  const contentTranslationCacheRef = useRef(new Map<string, HotCachedTranslation>())
+  const listTranslationCacheRef = useRef(new Map<string, HotCachedTranslation>())
+  const translatedListPostsRef = useRef(translatedListPosts)
+  translatedListPostsRef.current = translatedListPosts
+  const activeContentTranslationRef = useRef<HotTranslationRequest | null>(null)
+  const activeListTranslationRef = useRef<HotTranslationRequest | null>(null)
+  const openPostTranslationRef = useRef<{ postId: string; content: string } | null>(null)
+  openPostTranslationRef.current = openPost ? { postId: openPost.id, content: openPost.body } : null
 
   // Comment pagination
   const COMMENTS_PER_PAGE = 10
@@ -181,6 +253,90 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     []
   )
 
+  const captureTranslationScope = useCallback(
+    (token: string, targetLang: TranslationTargetLanguage): HotTranslationScope => ({
+      ...activeScopeRef.current,
+      accessToken: token,
+      language: targetLang,
+      generation: translationGenerationRef.current,
+    }),
+    []
+  )
+
+  const translationScopeIsCurrent = useCallback((scope: HotTranslationScope): boolean => {
+    const current = activeScopeRef.current
+    return (
+      translationMountedRef.current &&
+      current.viewerKey === scope.viewerKey &&
+      current.sessionGeneration === scope.sessionGeneration &&
+      current.userId === scope.userId &&
+      accessTokenRef.current === scope.accessToken &&
+      activeLanguageRef.current === scope.language &&
+      translationGenerationRef.current === scope.generation
+    )
+  }, [])
+
+  const abortTranslationRequests = useCallback(() => {
+    const reason = new DOMException('Hot translation scope changed', 'AbortError')
+    for (const active of [activeContentTranslationRef.current, activeListTranslationRef.current]) {
+      if (active && !active.controller.signal.aborted) active.controller.abort(reason)
+    }
+    activeContentTranslationRef.current = null
+    activeListTranslationRef.current = null
+  }, [])
+
+  const cancelContentTranslation = useCallback(() => {
+    const active = activeContentTranslationRef.current
+    if (active && !active.controller.signal.aborted) {
+      active.controller.abort(new DOMException('Hot content translation cancelled', 'AbortError'))
+    }
+    activeContentTranslationRef.current = null
+    translationSequenceRef.current += 1
+    setTranslating(false)
+  }, [setTranslating])
+
+  useEffect(() => {
+    translationMountedRef.current = true
+    return () => {
+      translationMountedRef.current = false
+      translationGenerationRef.current += 1
+      abortTranslationRequests()
+    }
+  }, [abortTranslationRequests])
+
+  useEffect(() => {
+    const previous = previousTranslationScopeRef.current
+    if (
+      previous.scopeKey === scopeKey &&
+      previous.accessToken === accessToken &&
+      previous.language === language
+    ) {
+      return
+    }
+
+    previousTranslationScopeRef.current = { scopeKey, accessToken, language }
+    translationGenerationRef.current += 1
+    abortTranslationRequests()
+    contentTranslationCacheRef.current.clear()
+    listTranslationCacheRef.current.clear()
+    translatedListPostsRef.current = {}
+    setTranslatedContent(null)
+    setShowingOriginal(true)
+    setTranslating(false)
+    setTranslatedListPosts({})
+    setTranslatingList(false)
+  }, [
+    abortTranslationRequests,
+    accessToken,
+    language,
+    scopeKey,
+    setShowingOriginal,
+    setTranslatedContent,
+    setTranslatedListPosts,
+    setTranslating,
+    setTranslatingList,
+  ])
+
   useEffect(() => {
     if (previousScopeKeyRef.current === scopeKey) return
     previousScopeKeyRef.current = scopeKey
@@ -197,7 +353,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     setTranslatedContent(null)
     setShowingOriginal(true)
     setTranslating(false)
-    setTranslationCache({})
     setTranslatedListPosts({})
     setTranslatingList(false)
     setExpandedPosts({})
@@ -219,7 +374,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     setTranslatedListPosts,
     setTranslating,
     setTranslatingList,
-    setTranslationCache,
   ])
 
   // AbortController for loadPosts — prevents stale setState after unmount
@@ -626,205 +780,317 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     return chineseRatio > 0.1
   }, [])
 
-  // Batch translate list posts
-  const translateListPosts = useCallback(
-    async (postsToTranslate: Post[], targetLang: 'zh' | 'en' | 'ja' | 'ko') => {
-      if (translatingList) return
-      // /api/translate requires auth (Bearer header) — skip for anonymous visitors
-      if (!accessToken) return
-      const capturedScope = activeScopeRef.current
-
-      const needsTranslation = postsToTranslate.filter((p) => {
-        if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
-        if (!p.title && !p.body) return false
-        // ja/ko targets: sources are a mix of zh and en, translate anything with text.
-        if (targetLang === 'ja' || targetLang === 'ko') return true
-        const titleIsChinese = isChineseText(p.title || '')
-        const bodyIsChinese = isChineseText(p.body || '')
-        return targetLang === 'en'
-          ? titleIsChinese || bodyIsChinese
-          : !titleIsChinese || !bodyIsChinese
-      })
-
-      if (needsTranslation.length === 0) return
-
-      setTranslatingList(true)
-
-      try {
-        const items: Array<{
-          id: string
-          text: string
-          contentType: 'post_title' | 'post_content'
-          contentId: string
-        }> = []
-
-        needsTranslation.slice(0, 10).forEach((post) => {
-          if (post.title && !translatedListPosts[post.id]?.title) {
-            items.push({
-              id: `${post.id}_title`,
-              text: post.title,
-              contentType: 'post_title',
-              contentId: post.id,
-            })
-          }
-          if (post.body && !translatedListPosts[post.id]?.body) {
-            items.push({
-              id: `${post.id}_body`,
-              text: post.body.slice(0, 500),
-              contentType: 'post_content',
-              contentId: post.id,
-            })
-          }
-        })
-
-        if (items.length === 0) return
-
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ items, targetLang }),
-        })
-        const data = await response.json()
-
-        if (
-          response.ok &&
-          data.success &&
-          data.data?.results &&
-          scopeIsCurrent(capturedScope) &&
-          activeLanguageRef.current === targetLang
-        ) {
-          const results = data.data.results as Record<
-            string,
-            { translatedText: string; cached: boolean }
-          >
-
-          setTranslatedListPosts((prev) => {
-            const updated = { ...prev }
-            for (const [id, result] of Object.entries(results)) {
-              const [postId, type] = id.split('_')
-              if (!updated[postId]) {
-                updated[postId] = {}
-              }
-              if (type === 'title') {
-                updated[postId].title = result.translatedText
-              } else if (type === 'body') {
-                updated[postId].body = result.translatedText
-              }
-            }
-            return updated
-          })
-        }
-      } catch {
-        // Translation failed, silent
-      } finally {
-        if (scopeIsCurrent(capturedScope) && activeLanguageRef.current === targetLang) {
-          setTranslatingList(false)
-        }
+  const removeStaleListTranslations = useCallback(
+    (stale: readonly [string, 'title' | 'body'][]) => {
+      if (stale.length === 0) return
+      const current = translatedListPostsRef.current
+      let next = current
+      for (const [postId, part] of stale) {
+        if (!next[postId]?.[part]) continue
+        if (next === current) next = { ...current }
+        const post = { ...next[postId] }
+        delete post[part]
+        if (post.title || post.body) next[postId] = post
+        else delete next[postId]
+      }
+      if (next !== current) {
+        translatedListPostsRef.current = next
+        setTranslatedListPosts(next)
       }
     },
-    [
-      accessToken,
-      isChineseText,
-      scopeIsCurrent,
-      setTranslatedListPosts,
-      setTranslatingList,
-      translatedListPosts,
-      translatingList,
-    ]
+    [setTranslatedListPosts]
   )
 
-  // Clear the id-keyed title/body cache when language changes so posts
-  // re-translate for the new language instead of showing the previous one.
-  const hotLangMountRef = useRef(true)
-  useEffect(() => {
-    if (hotLangMountRef.current) {
-      hotLangMountRef.current = false
-      return
-    }
-    setTranslatedListPosts({})
-  }, [language, setTranslatedListPosts])
+  // Batch translate list posts. The route does not expose an explicit partial
+  // partition, so the shared contract publishes only a complete result set.
+  const translateListPosts = useCallback(
+    async (postsToTranslate: Post[], targetLang: TranslationTargetLanguage) => {
+      // /api/translate requires auth (Bearer header) — skip for anonymous visitors
+      const token = accessToken
+      if (!token || activeLanguageRef.current !== targetLang) return
 
-  // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
-  useEffect(() => {
-    if (posts.length > 0 && email) {
-      // Translate posts into the active UI language (zh/en/ja/ko).
-      translateListPosts(posts, language)
-    }
-  }, [posts, language, translateListPosts, email])
+      const descriptors: HotListTranslationDescriptor[] = []
+      const stale: Array<[string, 'title' | 'body']> = []
+      const seenLanes = new Set<string>()
+      const addPart = (
+        postId: string,
+        part: 'title' | 'body',
+        source: string,
+        needsTranslation: boolean
+      ) => {
+        const laneKey = translationLaneKey(postId, part)
+        if (seenLanes.has(laneKey)) return
+        seenLanes.add(laneKey)
+        const cached = listTranslationCacheRef.current.get(laneKey)
+        const cacheMatches =
+          cached?.source === source && cached.targetLang === targetLang && needsTranslation
+        if (!cacheMatches) {
+          listTranslationCacheRef.current.delete(laneKey)
+          stale.push([postId, part])
+        }
+        if (needsTranslation && source && !cacheMatches) {
+          descriptors.push({
+            item: {
+              id: `item-${descriptors.length}`,
+              text: source,
+              contentType: part === 'title' ? 'post_title' : 'post_content',
+              contentId: postId,
+              targetLang,
+            },
+            postId,
+            part,
+            laneKey,
+          })
+        }
+      }
 
-  // Translate post content (with cache)
-  const translateContent = useCallback(
-    async (postId: string, content: string, targetLang: 'zh' | 'en' | 'ja' | 'ko') => {
-      // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
-      if (!email || !accessToken) return
-      const capturedScope = activeScopeRef.current
-      const cacheKey = `${postId}-content-${targetLang}`
+      for (const post of postsToTranslate.slice(0, 10)) {
+        if (!post.id) continue
+        if (post.title) {
+          const titleIsChinese = isChineseText(post.title)
+          const needsTitle =
+            targetLang === 'ja' || targetLang === 'ko'
+              ? true
+              : targetLang === 'en'
+                ? titleIsChinese
+                : !titleIsChinese
+          addPart(post.id, 'title', post.title, needsTitle)
+        }
+        if (post.body) {
+          const source = post.body.slice(0, 500)
+          const bodyIsChinese = isChineseText(source)
+          const needsBody =
+            targetLang === 'ja' || targetLang === 'ko'
+              ? true
+              : targetLang === 'en'
+                ? bodyIsChinese
+                : !bodyIsChinese
+          addPart(post.id, 'body', source, needsBody)
+        }
+      }
+      removeStaleListTranslations(stale)
 
-      if (translationCache[cacheKey]) {
-        if (
-          scopeIsCurrent(capturedScope) &&
-          activeLanguageRef.current === targetLang &&
-          openPostIdRef.current === postId
-        ) {
-          setTranslatedContent(translationCache[cacheKey])
-          setShowingOriginal(false)
+      if (descriptors.length === 0) {
+        const active = activeListTranslationRef.current
+        if (active && !active.controller.signal.aborted) {
+          active.controller.abort(new DOMException('Hot translation batch replaced', 'AbortError'))
+          activeListTranslationRef.current = null
+          translationSequenceRef.current += 1
+          setTranslatingList(false)
         }
         return
       }
 
-      setTranslating(true)
-      try {
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({
-            text: content,
-            targetLang,
-            contentType: 'post_content',
-            contentId: postId,
-          }),
-        })
-        const data = await response.json()
+      const scope = captureTranslationScope(token, targetLang)
+      const requestKey = JSON.stringify({
+        targetLang,
+        items: descriptors.map(({ item, postId, part }) => [item.id, postId, part, item.text]),
+      })
+      const existing = activeListTranslationRef.current
+      if (existing && existing.key === requestKey && sameTranslationScope(existing.scope, scope)) {
+        return existing.promise
+      }
+      if (existing && !existing.controller.signal.aborted) {
+        existing.controller.abort(
+          new DOMException('Hot translation batch superseded', 'AbortError')
+        )
+      }
 
+      const controller = new AbortController()
+      const sequence = ++translationSequenceRef.current
+      setTranslatingList(true)
+      const promise = (async () => {
+        try {
+          const receipt = await requestBatchTranslation(
+            descriptors.map(({ item }) => item),
+            targetLang,
+            {
+              accessToken: token,
+              csrfHeaders: getCsrfHeaders(),
+              signal: controller.signal,
+            }
+          )
+          const active = activeListTranslationRef.current
+          if (!active || active.sequence !== sequence || !translationScopeIsCurrent(scope)) return
+
+          const current = translatedListPostsRef.current
+          let next = current
+          for (const descriptor of descriptors) {
+            const result = receipt.results[descriptor.item.id]
+            if (result.translatedText.trim() === descriptor.item.text.trim()) {
+              listTranslationCacheRef.current.delete(descriptor.laneKey)
+              continue
+            }
+            listTranslationCacheRef.current.set(descriptor.laneKey, {
+              source: descriptor.item.text,
+              targetLang,
+              translatedText: result.translatedText,
+            })
+            if (next === current) next = { ...current }
+            next[descriptor.postId] = {
+              ...next[descriptor.postId],
+              [descriptor.part]: result.translatedText,
+            }
+          }
+          if (next !== current) {
+            translatedListPostsRef.current = next
+            setTranslatedListPosts(next)
+          }
+        } catch {
+          // Automatic translation remains silent and publishes no partial cache.
+        } finally {
+          const active = activeListTranslationRef.current
+          if (active?.sequence === sequence && translationScopeIsCurrent(scope)) {
+            activeListTranslationRef.current = null
+            setTranslatingList(false)
+          }
+        }
+      })()
+      activeListTranslationRef.current = { key: requestKey, sequence, scope, controller, promise }
+      return promise
+    },
+    [
+      accessToken,
+      captureTranslationScope,
+      isChineseText,
+      removeStaleListTranslations,
+      setTranslatedListPosts,
+      setTranslatingList,
+      translationScopeIsCurrent,
+    ]
+  )
+
+  // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
+  useEffect(() => {
+    if (posts.length > 0 && accessToken) {
+      // Translate posts into the active UI language (zh/en/ja/ko).
+      translateListPosts(posts, language)
+    }
+  }, [accessToken, posts, language, translateListPosts])
+
+  // Translate post content (with cache)
+  const translateContent = useCallback(
+    async (postId: string, content: string, targetLang: TranslationTargetLanguage) => {
+      // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
+      const token = accessToken
+      if (!token || !postId || !content || activeLanguageRef.current !== targetLang) return
+      const scope = captureTranslationScope(token, targetLang)
+      const cacheKey = translationLaneKey(postId, targetLang)
+      const requestKey = translationLaneKey(postId, targetLang, content)
+      const existing = activeContentTranslationRef.current
+      if (existing && existing.key === requestKey && sameTranslationScope(existing.scope, scope)) {
+        return existing.promise
+      }
+      if (existing && !existing.controller.signal.aborted) {
+        existing.controller.abort(
+          new DOMException('Hot content translation superseded', 'AbortError')
+        )
+      }
+      activeContentTranslationRef.current = null
+      translationSequenceRef.current += 1
+
+      const cached = contentTranslationCacheRef.current.get(cacheKey)
+      if (cached && cached.source === content && cached.targetLang === targetLang) {
+        const currentPost = openPostTranslationRef.current
         if (
-          response.ok &&
-          data.success &&
-          data.data?.translatedText &&
-          scopeIsCurrent(capturedScope) &&
-          activeLanguageRef.current === targetLang &&
-          openPostIdRef.current === postId
+          translationScopeIsCurrent(scope) &&
+          currentPost?.postId === postId &&
+          currentPost.content === content
         ) {
-          const translated = data.data.translatedText
-          setTranslatedContent(translated)
+          setTranslatedContent(cached.translatedText)
           setShowingOriginal(false)
-          setTranslationCache((prev) => ({ ...prev, [cacheKey]: translated }))
-        } else if (scopeIsCurrent(capturedScope) && activeLanguageRef.current === targetLang) {
-          showToast(data.error || t('translationFailed'), 'error')
-        }
-      } catch {
-        if (scopeIsCurrent(capturedScope) && activeLanguageRef.current === targetLang) {
-          showToast(t('translationServiceError'), 'error')
-        }
-      } finally {
-        if (
-          scopeIsCurrent(capturedScope) &&
-          activeLanguageRef.current === targetLang &&
-          openPostIdRef.current === postId
-        ) {
           setTranslating(false)
         }
+        return
       }
+      contentTranslationCacheRef.current.delete(cacheKey)
+
+      setTranslatedContent(null)
+      setTranslating(true)
+      const controller = new AbortController()
+      const sequence = translationSequenceRef.current
+      const promise = (async () => {
+        try {
+          const receipt = await requestSingleTranslation(
+            {
+              text: content,
+              targetLang,
+              contentType: 'post_content',
+              contentId: postId,
+            },
+            {
+              accessToken: token,
+              csrfHeaders: getCsrfHeaders(),
+              signal: controller.signal,
+            }
+          )
+          const active = activeContentTranslationRef.current
+          const currentPost = openPostTranslationRef.current
+          if (
+            !active ||
+            active.sequence !== sequence ||
+            !translationScopeIsCurrent(scope) ||
+            currentPost?.postId !== postId ||
+            currentPost.content !== content
+          ) {
+            return
+          }
+
+          if (receipt.sameLanguage) {
+            contentTranslationCacheRef.current.delete(cacheKey)
+            setTranslatedContent(null)
+            setShowingOriginal(true)
+            return
+          }
+
+          contentTranslationCacheRef.current.set(cacheKey, {
+            source: content,
+            targetLang,
+            translatedText: receipt.translatedText,
+          })
+          setTranslatedContent(receipt.translatedText)
+          setShowingOriginal(false)
+        } catch {
+          const active = activeContentTranslationRef.current
+          const currentPost = openPostTranslationRef.current
+          if (
+            active?.sequence === sequence &&
+            translationScopeIsCurrent(scope) &&
+            currentPost?.postId === postId &&
+            currentPost.content === content &&
+            !controller.signal.aborted
+          ) {
+            setTranslatedContent(null)
+            setShowingOriginal(true)
+            showToast(t('translationServiceError'), 'error')
+          }
+        } finally {
+          const active = activeContentTranslationRef.current
+          if (active?.sequence === sequence && translationScopeIsCurrent(scope)) {
+            activeContentTranslationRef.current = null
+            setTranslating(false)
+          }
+        }
+      })()
+      activeContentTranslationRef.current = {
+        key: requestKey,
+        sequence,
+        scope,
+        controller,
+        promise,
+      }
+      return promise
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [translationCache, showToast, email, accessToken, scopeIsCurrent]
+    [
+      accessToken,
+      captureTranslationScope,
+      setShowingOriginal,
+      setTranslatedContent,
+      setTranslating,
+      showToast,
+      t,
+      translationScopeIsCurrent,
+    ]
   )
 
   // Track whether this modal was opened via navigation
@@ -842,6 +1108,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     (post: Post, fromUrlRestore = false) => {
       justClosedIdRef.current = null
       openPostIdRef.current = post.id
+      openPostTranslationRef.current = { postId: post.id, content: post.body }
       setOpenPost(post)
       setComments([])
       setCommentsOffset(0)
@@ -860,15 +1127,19 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         const isChinese = isChineseText(post.body)
         // zh → translate non-Chinese posts; en → translate Chinese posts;
         // ja/ko → translate anything (sources are a zh/en mix).
-        const needsTranslation =
-          language === 'zh' ? !isChinese : language === 'en' ? isChinese : true
+        const needsTranslation = needsHotTranslation(isChinese, language)
 
         if (needsTranslation) {
           translateContent(post.id, post.body, language)
+        } else {
+          cancelContentTranslation()
         }
+      } else {
+        cancelContentTranslation()
       }
     },
     [
+      cancelContentTranslation,
       isChineseText,
       language,
       router,
@@ -887,13 +1158,24 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const handleClosePost = useCallback(() => {
     justClosedIdRef.current = searchParams.get('post')
     openPostIdRef.current = null
+    openPostTranslationRef.current = null
+    cancelContentTranslation()
+    setTranslatedContent(null)
+    setShowingOriginal(true)
     setOpenPost(null)
     openedViaNav.current = false
     const params = new URLSearchParams(searchParams.toString())
     params.delete('post')
     const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
     router.replace(newUrl, { scroll: false })
-  }, [router, searchParams, setOpenPost])
+  }, [
+    cancelContentTranslation,
+    router,
+    searchParams,
+    setOpenPost,
+    setShowingOriginal,
+    setTranslatedContent,
+  ])
 
   useModalA11y({ open: !!openPost, onClose: handleClosePost })
 
@@ -917,6 +1199,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     const handlePopState = () => {
       const urlParams = new URLSearchParams(window.location.search)
       if (!urlParams.get('post') && openPost) {
+        openPostIdRef.current = null
+        openPostTranslationRef.current = null
         setOpenPost(null)
       }
     }
@@ -928,21 +1212,37 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     }
   }, [handleClosePost, handleOpenPost, openPost, posts, searchParams, setOpenPost])
 
-  // Re-translate when language changes
+  // Re-evaluate the open post whenever its viewer token, language, identity or
+  // source content changes. Exact in-flight requests coalesce in translateContent.
+  const openTranslationPostId = openPost?.id
+  const openTranslationContent = openPost?.body
   useEffect(() => {
-    if (openPost && openPost.body) {
-      const isChinese = isChineseText(openPost.body)
-      const needsTranslation = language === 'zh' ? !isChinese : language === 'en' ? isChinese : true
+    if (openTranslationPostId && openTranslationContent && accessToken) {
+      const isChinese = isChineseText(openTranslationContent)
+      const needsTranslation = needsHotTranslation(isChinese, language)
 
       setTranslatedContent(null)
       setShowingOriginal(true)
 
       if (needsTranslation) {
-        translateContent(openPost.id, openPost.body, language)
+        translateContent(openTranslationPostId, openTranslationContent, language)
+      } else {
+        cancelContentTranslation()
       }
+    } else if (!openTranslationPostId) {
+      cancelContentTranslation()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-translate when language changes; openPost and translateContent are stable refs
-  }, [language])
+  }, [
+    accessToken,
+    cancelContentTranslation,
+    isChineseText,
+    language,
+    openTranslationContent,
+    openTranslationPostId,
+    setShowingOriginal,
+    setTranslatedContent,
+    translateContent,
+  ])
 
   // Submit comment
   const submitComment = useCallback(
@@ -1120,6 +1420,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     expandedPosts,
     setExpandedPosts,
     translatedListPosts,
+    translatingList,
     getHotTag,
     handleOpenPost,
 

@@ -295,7 +295,15 @@ describe('useHotPageData comment mutation reconciliation', () => {
         ok: true,
         status: 200,
         json: () =>
-          Promise.resolve({ success: true, data: { translatedText: 'A private translation' } }),
+          Promise.resolve({
+            success: true,
+            data: {
+              translatedText: 'A private translation',
+              originalText: '中文内容',
+              targetLang: 'en',
+              cached: false,
+            },
+          }),
       })
       await Promise.resolve()
     })
@@ -305,7 +313,16 @@ describe('useHotPageData comment mutation reconciliation', () => {
       translations.get('Bearer token-b')?.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ success: true, data: { translatedText: 'B translation' } }),
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: {
+              translatedText: 'B translation',
+              originalText: '中文内容',
+              targetLang: 'en',
+              cached: false,
+            },
+          }),
       })
       await Promise.resolve()
     })
