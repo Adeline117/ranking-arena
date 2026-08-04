@@ -375,6 +375,42 @@ expect_failure_contains \
   "unknown-claim-key" \
   "terminal evidence is invalid" \
   "SET ROLE service_role; SELECT arena.publish_verified_position_history(1,NULL,NULL,'[]'::jsonb,'tier_b','arena.ingest.position-history-publisher.worker@1')"
+
+psql_cmd -q <<'SQL'
+UPDATE arena.raw_objects
+SET meta = (
+  fixture.history_meta(source_run_id,fetched_at,NULL,'exhausted')
+  - 'history_evidence_contract'
+) || jsonb_build_object(
+  'data_contract', 'arena.ingest.history-acquisition-artifact@2',
+  'acquisition_contract', 'arena.ingest.history-acquisition-artifact@1',
+  'acquisition_source_run_id', repeat('9',64),
+  'candidate_ledger_contract',
+    'arena.ingest.position-history-source-fact-ledger@1',
+  'candidate_ledger_sha256', repeat('a',64),
+  'source_fact_contract',
+    'arena.ingest.position-history-source-facts.binance.position_history@1',
+  'observed_candidate_count', 1,
+  'unique_source_fact_count', 1,
+  'fact_set_sha256', repeat('b',64)
+)
+WHERE source_run_id=repeat('8',64);
+SQL
+V2_REJECTION_STATE_BEFORE="$(psql_cmd -Atq -c "SELECT (SELECT count(*) FROM arena.record_surface_publications) || '|' || (SELECT count(*) FROM arena.position_history) || '|' || (SELECT count(*) FROM arena.ingest_cursors)")"
+if [[ "$V2_REJECTION_STATE_BEFORE" != '0|0|0' ]]; then
+  echo "[verified-history-writer] @2 rejection fixture started with serving state: $V2_REJECTION_STATE_BEFORE" >&2
+  exit 1
+fi
+expect_failure_contains \
+  "v2-acquisition-is-raw-only" \
+  "RAW evidence binding is invalid" \
+  "SET ROLE service_role; SELECT arena.publish_verified_position_history(1,NULL,NULL,'[]'::jsonb,'tier_b','arena.ingest.position-history-publisher.worker@1')"
+V2_REJECTION_STATE_AFTER="$(psql_cmd -Atq -c "SELECT (SELECT count(*) FROM arena.record_surface_publications) || '|' || (SELECT count(*) FROM arena.position_history) || '|' || (SELECT count(*) FROM arena.ingest_cursors)")"
+if [[ "$V2_REJECTION_STATE_AFTER" != "$V2_REJECTION_STATE_BEFORE" ]]; then
+  echo "[verified-history-writer] rejected @2 RAW mutated serving state: $V2_REJECTION_STATE_AFTER" >&2
+  exit 1
+fi
+
 psql_cmd -q -c "DELETE FROM arena.raw_objects WHERE source_run_id=repeat('8',64)"
 psql_cmd -q -c "ALTER SEQUENCE arena.raw_objects_id_seq RESTART WITH 1"
 
