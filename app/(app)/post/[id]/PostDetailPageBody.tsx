@@ -337,11 +337,12 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           translatedListPosts={translatedListPosts}
           removeImagesFromContent={removeImagesFromContent}
           customPoll={actions.customPoll}
-          loadingCustomPoll={actions.loadingCustomPoll}
+          customPollLoadState={actions.customPollLoadState}
           customPollUserVotes={actions.customPollUserVotes}
           selectedPollOptions={actions.selectedPollOptions}
           setSelectedPollOptions={actions.setSelectedPollOptions}
           votingCustomPoll={actions.votingCustomPoll}
+          loadCustomPoll={actions.loadCustomPoll}
           submitCustomPollVote={actions.submitCustomPollVote}
           userReaction={post.user_reaction}
           userBookmarks={actions.userBookmarks}

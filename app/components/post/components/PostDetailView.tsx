@@ -13,6 +13,7 @@ import LevelBadge from '@/app/components/user/LevelBadge'
 import type { PostWithUserState } from '@/lib/types'
 import type { Comment } from '../hooks/usePostComments'
 import type { ReplyTarget, ReplyTargetSetter } from '../comments/reply-types'
+import type { PostCustomPollLoadState } from '@/lib/polls/post-vote-client-contract'
 
 type Post = PostWithUserState
 
@@ -48,11 +49,12 @@ interface PostDetailViewProps {
     showResults: boolean
     totalVotes: number | null
   } | null
-  loadingCustomPoll: boolean
+  customPollLoadState: PostCustomPollLoadState
   customPollUserVotes: number[]
   selectedPollOptions: number[]
   setSelectedPollOptions: React.Dispatch<React.SetStateAction<number[]>>
   votingCustomPoll: boolean
+  loadCustomPoll: (postId: string) => Promise<void>
   submitCustomPollVote: (postId: string) => Promise<void>
   // Actions
   userReaction: string | null | undefined
@@ -104,11 +106,12 @@ export default function PostDetailView({
   translatedListPosts,
   removeImagesFromContent,
   customPoll,
-  loadingCustomPoll,
+  customPollLoadState,
   customPollUserVotes,
   selectedPollOptions,
   setSelectedPollOptions,
   votingCustomPoll,
+  loadCustomPoll,
   submitCustomPollVote,
   userBookmarks,
   bookmarkCounts,
@@ -365,7 +368,7 @@ export default function PostDetailView({
       {openPost.poll_id && (
         <CustomPollCard
           poll={customPoll}
-          loading={loadingCustomPoll}
+          loadState={customPollLoadState}
           userVotes={customPollUserVotes}
           selectedOptions={selectedPollOptions}
           onSelectOption={(index) => {
@@ -376,6 +379,7 @@ export default function PostDetailView({
               )
           }}
           onSubmitVote={() => submitCustomPollVote(openPost.id)}
+          onRetry={() => loadCustomPoll(openPost.id)}
           votingInProgress={votingCustomPoll}
           language={language}
           t={t}

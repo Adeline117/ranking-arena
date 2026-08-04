@@ -145,6 +145,7 @@ describe('PostFeed comment loading stability', () => {
       bookmarkingPostId: null,
       customPoll: {},
       customPollUserVotes: {},
+      customPollLoadState: 'idle',
       editingPost: null,
       editTitle: '',
       editContent: '',

@@ -43,6 +43,18 @@ import {
   createPostRepostRequestId,
   readPostRepostAcknowledgement,
 } from '@/lib/reposts/post-repost-client-contract'
+import {
+  POST_BUILT_IN_VOTE_OPERATION,
+  POST_CUSTOM_POLL_READ_OPERATION,
+  POST_CUSTOM_POLL_VOTE_OPERATION,
+  POST_VOTE_REQUEST_TIMEOUT_MS,
+  createPostVoteRequestId,
+  readPostBuiltInVoteAcknowledgement,
+  readPostCustomPollAcknowledgement,
+  readPostCustomPollVoteAcknowledgement,
+  type PostCustomPoll,
+  type PostCustomPollLoadState,
+} from '@/lib/polls/post-vote-client-contract'
 
 type Post = PostWithUserState
 
@@ -125,17 +137,9 @@ async function readCurrentPostBookmarkStatus(input: {
 }
 
 interface CustomPollState {
-  customPoll: {
-    id: string
-    question: string
-    options: { text: string; votes: number | null }[]
-    type: 'single' | 'multiple'
-    endAt: string | null
-    isExpired: boolean
-    showResults: boolean
-    totalVotes: number | null
-  } | null
+  customPoll: PostCustomPoll | null
   customPollUserVotes: number[]
+  customPollLoadState: PostCustomPollLoadState
   loadingCustomPoll: boolean
   votingCustomPoll: boolean
   selectedPollOptions: number[]
@@ -314,21 +318,39 @@ export function usePostActions({
   // Custom poll state
   const [customPoll, setCustomPoll] = useState<CustomPollState['customPoll']>(null)
   const [customPollUserVotes, setCustomPollUserVotes] = useState<number[]>([])
-  const [loadingCustomPoll, setLoadingCustomPoll] = useState(false)
+  const [customPollLoadState, setCustomPollLoadState] = useState<PostCustomPollLoadState>('idle')
   const [votingCustomPoll, setVotingCustomPoll] = useState(false)
   const [selectedPollOptions, setSelectedPollOptionsRaw] = useState<number[]>([])
   const pollOwnerScopeKeyRef = useRef(scopeKey)
+  const pollResourcePostIdRef = useRef<string | null>(null)
+  const pollLoadGenerationRef = useRef(0)
   const claimPollScope = useCallback(() => {
     const current = activeScopeRef.current
     const currentScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
     if (pollOwnerScopeKeyRef.current === currentScopeKey) return
     pollOwnerScopeKeyRef.current = currentScopeKey
+    pollResourcePostIdRef.current = null
+    pollLoadGenerationRef.current += 1
     setCustomPoll(null)
     setCustomPollUserVotes([])
-    setLoadingCustomPoll(false)
+    setCustomPollLoadState('idle')
     setVotingCustomPoll(false)
     setSelectedPollOptionsRaw([])
   }, [])
+  const claimPollResource = useCallback(
+    (postId: string) => {
+      claimPollScope()
+      if (pollResourcePostIdRef.current === postId) return
+      pollResourcePostIdRef.current = postId
+      pollLoadGenerationRef.current += 1
+      setCustomPoll(null)
+      setCustomPollUserVotes([])
+      setCustomPollLoadState('idle')
+      setVotingCustomPoll(false)
+      setSelectedPollOptionsRaw([])
+    },
+    [claimPollScope]
+  )
   const setSelectedPollOptions = useCallback<React.Dispatch<React.SetStateAction<number[]>>>(
     (action) => {
       claimPollScope()
@@ -621,52 +643,82 @@ export function usePostActions({
         if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
-      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000vote-${postId}-${choice}`
+      if (!capturedScope.userId) return
+      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000vote-${postId}`
       if (lockRef.current.has(key)) return
       lockRef.current.add(key)
+      const requestId = createPostVoteRequestId()
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(new DOMException('Post vote request timed out', 'AbortError')),
+        POST_VOTE_REQUEST_TIMEOUT_MS
+      )
       try {
-        const response = await fetch(`/api/posts/${postId}/vote`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ choice }),
-        })
-        const json = await response.json()
+        const response = await waitWithinAbortSignal(
+          fetch(`/api/posts/${postId}/vote`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              ...getCsrfHeaders(),
+            },
+            body: JSON.stringify({
+              operation: POST_BUILT_IN_VOTE_OPERATION,
+              request_id: requestId,
+              choice,
+            }),
+            cache: 'no-store',
+            signal: controller.signal,
+          }),
+          controller.signal
+        )
+        const json: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
         if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok && json.success) {
-          const result = json.data
+        const acknowledgement =
+          response.ok && response.status === 200
+            ? readPostBuiltInVoteAcknowledgement(json, {
+                actorId: capturedScope.userId,
+                postId,
+                requestId,
+                choice,
+              })
+            : null
+        if (acknowledgement) {
           setPosts((prev) =>
             prev.map((p) =>
               p.id === postId
                 ? {
                     ...p,
-                    poll_bull: result.poll.bull,
-                    poll_bear: result.poll.bear,
-                    poll_wait: result.poll.wait,
-                    user_vote: result.vote,
+                    poll_bull: acknowledgement.poll.bull,
+                    poll_bear: acknowledgement.poll.bear,
+                    poll_wait: acknowledgement.poll.wait,
+                    user_vote: acknowledgement.vote,
                   }
                 : p
             )
           )
-          if (!openPostAliasesPosts && openPost?.id === postId)
+          const openedPost = openPostRef.current
+          if (!openPostAliasesPosts && openedPost?.id === postId)
             setOpenPost({
-              ...openPost!,
-              poll_bull: result.poll.bull,
-              poll_bear: result.poll.bear,
-              poll_wait: result.poll.wait,
-              user_vote: result.vote,
+              ...openedPost,
+              poll_bull: acknowledgement.poll.bull,
+              poll_bear: acknowledgement.poll.bear,
+              poll_wait: acknowledgement.poll.wait,
+              user_vote: acknowledgement.vote,
             })
         } else {
-          showToast(json.error || json.message || t('voteFailed'), 'error')
+          const rawError =
+            json !== null && typeof json === 'object' && !Array.isArray(json)
+              ? (json as Record<string, unknown>).error
+              : null
+          showToast(typeof rawError === 'string' ? rawError : t('voteFailed'), 'error')
         }
       } catch (err) {
         if (!scopeIsCurrent(capturedScope)) return
         logger.error('[PostFeed] toggleVote error:', err)
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
+        clearTimeout(timeoutId)
         lockRef.current.delete(key)
       }
     },
@@ -686,29 +738,68 @@ export function usePostActions({
     async (postId: string) => {
       const capturedScope = captureRenderedScope()
       if (!scopeIsCurrent(capturedScope)) return
-      claimPollScope()
-      setLoadingCustomPoll(true)
-      setCustomPoll(null)
-      setCustomPollUserVotes([])
-      setSelectedPollOptions([])
+      claimPollResource(postId)
+      if (accessToken && !capturedScope.userId) {
+        setCustomPollLoadState('error')
+        return
+      }
+      const loadGeneration = ++pollLoadGenerationRef.current
+      const requestId = createPostVoteRequestId()
+      const requestIsCurrent = () =>
+        scopeIsCurrent(capturedScope) &&
+        pollResourcePostIdRef.current === postId &&
+        pollLoadGenerationRef.current === loadGeneration
+      setVotingCustomPoll(false)
+      setCustomPollLoadState('loading')
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(new DOMException('Custom poll request timed out', 'AbortError')),
+        POST_VOTE_REQUEST_TIMEOUT_MS
+      )
       try {
         const headers: Record<string, string> = {}
         if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-        const response = await fetch(`/api/posts/${postId}/poll-vote`, { headers })
-        const data = await response.json()
-        if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok && data.success && data.data?.poll) {
-          setCustomPoll(data.data.poll)
-          setCustomPollUserVotes(data.data.userVotes || [])
-          setSelectedPollOptions(data.data.userVotes || [])
+        const response = await waitWithinAbortSignal(
+          fetch(
+            `/api/posts/${postId}/poll-vote?operation=${POST_CUSTOM_POLL_READ_OPERATION}&request_id=${requestId}`,
+            { headers, cache: 'no-store', signal: controller.signal }
+          ),
+          controller.signal
+        )
+        const data: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
+        if (!requestIsCurrent()) return
+        const acknowledgement =
+          response.ok && response.status === 200
+            ? readPostCustomPollAcknowledgement(data, {
+                actorId: accessToken ? capturedScope.userId : null,
+                postId,
+                requestId,
+              })
+            : null
+        if (!acknowledgement) throw new Error('Custom poll acknowledgement was invalid')
+
+        if (acknowledgement.action === 'found') {
+          setCustomPoll(acknowledgement.poll)
+          setCustomPollUserVotes(acknowledgement.userVotes)
+          setSelectedPollOptionsRaw(acknowledgement.userVotes)
+          setCustomPollLoadState('ready')
+        } else {
+          setCustomPoll(null)
+          setCustomPollUserVotes([])
+          setSelectedPollOptionsRaw([])
+          setCustomPollLoadState('empty')
         }
-      } catch {
-        /* silent */
+      } catch (error) {
+        if (!requestIsCurrent()) return
+        logger.error('[PostFeed] custom poll load failed:', error)
+        // Preserve a same-resource last-known poll, but distinguish the load
+        // failure from an authoritative `absent` snapshot.
+        setCustomPollLoadState('error')
       } finally {
-        if (scopeIsCurrent(capturedScope)) setLoadingCustomPoll(false)
+        clearTimeout(timeoutId)
       }
     },
-    [accessToken, captureRenderedScope, claimPollScope, scopeIsCurrent, setSelectedPollOptions]
+    [accessToken, captureRenderedScope, claimPollResource, scopeIsCurrent]
   )
 
   const submitCustomPollVote = useCallback(
@@ -720,50 +811,116 @@ export function usePostActions({
         if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
-      if (selectedPollOptions.length === 0) {
+      if (!capturedScope.userId) return
+      claimPollScope()
+      const poll = customPoll
+      if (pollResourcePostIdRef.current !== postId || !poll || customPollLoadState !== 'ready') {
+        showToast(t('voteFailed'), 'error')
+        return
+      }
+      const optionIndexes = [...selectedPollOptions].sort((left, right) => left - right)
+      if (
+        optionIndexes.length === 0 ||
+        new Set(optionIndexes).size !== optionIndexes.length ||
+        optionIndexes.some(
+          (index) => !Number.isSafeInteger(index) || index < 0 || index >= poll.options.length
+        ) ||
+        (poll.type === 'single' && optionIndexes.length !== 1)
+      ) {
         showToast(t('selectAtLeastOneOption'), 'warning')
         return
       }
-      claimPollScope()
+      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000custom-poll-${postId}-${poll.id}`
+      if (lockRef.current.has(key)) return
+      lockRef.current.add(key)
+      const loadGeneration = pollLoadGenerationRef.current
+      const requestId = createPostVoteRequestId()
+      const requestIsCurrent = () =>
+        scopeIsCurrent(capturedScope) &&
+        pollResourcePostIdRef.current === postId &&
+        pollLoadGenerationRef.current === loadGeneration
       setVotingCustomPoll(true)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(new DOMException('Custom poll vote timed out', 'AbortError')),
+        POST_VOTE_REQUEST_TIMEOUT_MS
+      )
       try {
-        const response = await fetch(`/api/posts/${postId}/poll-vote`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ optionIndexes: selectedPollOptions }),
-        })
-        const data = await response.json()
-        if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok && data.success) {
+        const response = await waitWithinAbortSignal(
+          fetch(`/api/posts/${postId}/poll-vote`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              ...getCsrfHeaders(),
+            },
+            body: JSON.stringify({
+              operation: POST_CUSTOM_POLL_VOTE_OPERATION,
+              request_id: requestId,
+              poll_id: poll.id,
+              option_indexes: optionIndexes,
+            }),
+            cache: 'no-store',
+            signal: controller.signal,
+          }),
+          controller.signal
+        )
+        const data: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
+        if (!requestIsCurrent()) return
+        const acknowledgement =
+          response.ok && response.status === 200
+            ? readPostCustomPollVoteAcknowledgement(data, {
+                actorId: capturedScope.userId,
+                postId,
+                pollId: poll.id,
+                requestId,
+                pollType: poll.type,
+                optionTexts: poll.options.map((option) => option.text),
+                optionIndexes,
+              })
+            : null
+        if (acknowledgement) {
           setCustomPoll((prev) =>
-            prev
+            prev?.id === acknowledgement.pollId
               ? {
                   ...prev,
-                  options: data.data.poll.options,
+                  options: acknowledgement.options,
                   showResults: true,
-                  totalVotes: data.data.poll.totalVotes,
+                  totalVotes: acknowledgement.totalVotes,
                 }
-              : null
+              : prev
           )
-          setCustomPollUserVotes(data.data.userVotes)
+          setCustomPollUserVotes(acknowledgement.optionIndexes)
+          setSelectedPollOptionsRaw(acknowledgement.optionIndexes)
+          setCustomPollLoadState('ready')
           showToast(t('voted'), 'success')
         } else {
-          showToast(data.error || t('voteFailed'), 'error')
+          const rawError =
+            data !== null && typeof data === 'object' && !Array.isArray(data)
+              ? (data as Record<string, unknown>).error
+              : null
+          showToast(typeof rawError === 'string' ? rawError : t('voteFailed'), 'error')
         }
       } catch (err) {
-        if (!scopeIsCurrent(capturedScope)) return
+        if (!requestIsCurrent()) return
         logger.error('[PostFeed] custom poll vote failed:', err)
-        showToast(t('voteFailed'), 'error')
+        showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
-        if (scopeIsCurrent(capturedScope)) setVotingCustomPoll(false)
+        clearTimeout(timeoutId)
+        if (requestIsCurrent()) setVotingCustomPoll(false)
+        lockRef.current.delete(key)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, captureRenderedScope, claimPollScope, scopeIsCurrent, selectedPollOptions]
+    [
+      accessToken,
+      captureRenderedScope,
+      claimPollScope,
+      customPoll,
+      customPollLoadState,
+      scopeIsCurrent,
+      selectedPollOptions,
+    ]
   )
 
   const redirectBookmarkToLogin = useCallback(
@@ -1590,14 +1747,18 @@ export function usePostActions({
     [accessToken, captureRenderedScope, scopeIsCurrent, setPosts, showToast, t]
   )
 
+  const pollStateOwned =
+    pollOwnerScopeKeyRef.current === scopeKey && pollResourcePostIdRef.current === openPost?.id
+
   return {
     toggleReaction,
     _toggleVote,
-    customPoll: pollOwnerScopeKeyRef.current === scopeKey ? customPoll : null,
-    customPollUserVotes: pollOwnerScopeKeyRef.current === scopeKey ? customPollUserVotes : [],
-    loadingCustomPoll: pollOwnerScopeKeyRef.current === scopeKey ? loadingCustomPoll : false,
-    votingCustomPoll: pollOwnerScopeKeyRef.current === scopeKey ? votingCustomPoll : false,
-    selectedPollOptions: pollOwnerScopeKeyRef.current === scopeKey ? selectedPollOptions : [],
+    customPoll: pollStateOwned ? customPoll : null,
+    customPollUserVotes: pollStateOwned ? customPollUserVotes : [],
+    customPollLoadState: pollStateOwned ? customPollLoadState : 'idle',
+    loadingCustomPoll: pollStateOwned && customPollLoadState === 'loading',
+    votingCustomPoll: pollStateOwned ? votingCustomPoll : false,
+    selectedPollOptions: pollStateOwned ? selectedPollOptions : [],
     setSelectedPollOptions,
     loadCustomPoll,
     submitCustomPollVote,

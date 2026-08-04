@@ -128,6 +128,7 @@ describe('PostDetailPageBody scoped hydration', () => {
     })
     mockUsePostActions.mockReturnValue({
       customPoll: null,
+      customPollLoadState: 'idle',
       loadingCustomPoll: false,
       customPollUserVotes: [],
       selectedPollOptions: [],

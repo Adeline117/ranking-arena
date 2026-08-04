@@ -22,6 +22,8 @@ const REPOST_ROOT_POST_ID = '44444444-4444-4444-8444-444444444444'
 const REPOST_CHILD_POST_ID = '55555555-5555-4555-8555-555555555555'
 const REPOST_ROW_ID = '66666666-6666-4666-8666-666666666666'
 const REPOST_OTHER_ACTOR_ID = '77777777-7777-4777-8777-777777777777'
+const CUSTOM_POLL_ID = '88888888-8888-4888-8888-888888888888'
+const OTHER_CUSTOM_POLL_ID = '99999999-9999-4999-8999-999999999999'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -192,6 +194,65 @@ function repostReceipt(requestId: string, overrides: Record<string, unknown> = {
     action: 'created',
     repost_post_id: REPOST_ROW_ID,
     repost_count: 4,
+    ...overrides,
+  }
+}
+
+function builtInVoteReceipt(requestId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    actor_id: REACTION_ACTOR_ID,
+    post_id: REACTION_POST_ID,
+    request_id: requestId,
+    operation: 'toggle',
+    requested_choice: 'bull',
+    action: 'added',
+    vote: 'bull',
+    poll: { bull: 4, bear: 2, wait: 1 },
+    ...overrides,
+  }
+}
+
+function customPollReadReceipt(requestId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    actor_id: REACTION_ACTOR_ID,
+    post_id: REACTION_POST_ID,
+    request_id: requestId,
+    operation: 'read',
+    action: 'found',
+    poll: {
+      id: CUSTOM_POLL_ID,
+      question: 'Direction?',
+      options: [
+        { text: 'Up', votes: null },
+        { text: 'Down', votes: null },
+      ],
+      type: 'single',
+      end_at: null,
+      is_expired: false,
+      show_results: false,
+      total_votes: null,
+    },
+    user_votes: [],
+    ...overrides,
+  }
+}
+
+function customPollVoteReceipt(requestId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    actor_id: REACTION_ACTOR_ID,
+    post_id: REACTION_POST_ID,
+    poll_id: CUSTOM_POLL_ID,
+    request_id: requestId,
+    operation: 'set_vote',
+    action: 'voted',
+    poll: {
+      options: [
+        { text: 'Up', votes: 2 },
+        { text: 'Down', votes: 1 },
+      ],
+      total_votes: 3,
+    },
+    option_indexes: [0],
     ...overrides,
   }
 }
@@ -1274,42 +1335,373 @@ describe('usePostActions aliased detail state', () => {
     expect(result.current.actions.repostLoading).toEqual({})
   })
 
-  it('fails empty for A poll state on the first B render', async () => {
-    ;(global.fetch as jest.Mock).mockResolvedValue(
-      jsonResponse({
-        success: true,
-        data: {
-          poll: {
-            id: 'poll-a',
-            question: 'A private vote state',
-            options: [],
-            type: 'single',
-            endAt: null,
-            isExpired: false,
-            showResults: true,
-            totalVotes: 1,
-          },
-          userVotes: [0],
-        },
+  it('serializes built-in choices behind one post lock and applies only an exact receipt', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options: RequestInit) => {
+      const requestBody = parsedRequestBody(options)
+      return jsonResponse(builtInVoteReceipt(requestBody.request_id as string))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REACTION_POST_ID,
+        poll_enabled: true,
+        poll_bull: 1,
+        poll_bear: 1,
+        poll_wait: 1,
+      }))
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.actions._toggleVote(REACTION_POST_ID, 'bull')
+      second = result.current.actions._toggleVote(REACTION_POST_ID, 'bear')
+    })
+    await act(async () => Promise.all([first, second]))
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+    expect(parsedRequestBody(options)).toEqual({
+      operation: 'toggle',
+      request_id: expect.stringMatching(/^[0-9a-f]{32}$/),
+      choice: 'bull',
+    })
+    expect(options.cache).toBe('no-store')
+    expect(options.signal).toBeInstanceOf(AbortSignal)
+    expect(result.current.post).toMatchObject({
+      poll_bull: 4,
+      poll_bear: 2,
+      poll_wait: 1,
+      user_vote: 'bull',
+    })
+  })
+
+  it('rejects a built-in vote receipt for another actor without changing last-known counts', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options: RequestInit) => {
+      const requestBody = parsedRequestBody(options)
+      return jsonResponse(
+        builtInVoteReceipt(requestBody.request_id as string, {
+          actor_id: REPOST_OTHER_ACTOR_ID,
+        })
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REACTION_POST_ID,
+        poll_bull: 1,
+        poll_bear: 2,
+        poll_wait: 3,
+      }))
+    })
+
+    await act(async () => result.current.actions._toggleVote(REACTION_POST_ID, 'bull'))
+
+    expect(result.current.post).toMatchObject({
+      poll_bull: 1,
+      poll_bear: 2,
+      poll_wait: 3,
+      user_vote: null,
+    })
+    expect(mockShowToast).toHaveBeenCalledWith('voteFailed', 'error')
+  })
+
+  it('bounds built-in vote JSON parsing and ignores a body that resolves after timeout', async () => {
+    jest.useFakeTimers()
+    try {
+      const lateBody = deferred<unknown>()
+      ;(global.fetch as jest.Mock).mockResolvedValue(responseWithJson(() => lateBody.promise))
+      const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+      act(() => {
+        result.current.setPost((post) => ({
+          ...post,
+          id: REACTION_POST_ID,
+          poll_bull: 1,
+          poll_bear: 2,
+          poll_wait: 3,
+        }))
       })
-    )
+
+      let mutation!: Promise<void>
+      act(() => {
+        mutation = result.current.actions._toggleVote(REACTION_POST_ID, 'bull')
+      })
+      await act(async () => Promise.resolve())
+      const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+      const requestId = parsedRequestBody(options).request_id as string
+
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await mutation
+      })
+      expect(result.current.post.poll_bull).toBe(1)
+
+      await act(async () => {
+        lateBody.resolve(builtInVoteReceipt(requestId, { poll: { bull: 99, bear: 2, wait: 3 } }))
+        await Promise.resolve()
+      })
+      expect(result.current.post.poll_bull).toBe(1)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('fails empty for A poll state on the first B render', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+        'request_id'
+      ) as string
+      return jsonResponse(customPollReadReceipt(requestId))
+    })
     const { result, rerender } = renderHook(
       (viewer: ViewerProps) => useAliasedPostActions(viewer),
-      { initialProps: viewerA }
+      { initialProps: reactionViewer }
     )
-    await act(async () => result.current.actions.loadCustomPoll('post-1'))
-    expect(result.current.actions.customPoll?.id).toBe('poll-a')
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+    expect(result.current.actions.customPoll?.id).toBe(CUSTOM_POLL_ID)
+    expect(result.current.actions.customPollLoadState).toBe('ready')
 
     rerender({
       accessToken: 'token-b',
-      currentUserId: 'viewer-b',
-      viewerKey: 'user:viewer-b',
-      sessionGeneration: 2,
+      currentUserId: REPOST_OTHER_ACTOR_ID,
+      viewerKey: `user:${REPOST_OTHER_ACTOR_ID}`,
+      sessionGeneration: 8,
     })
 
     expect(result.current.actions.customPoll).toBeNull()
     expect(result.current.actions.customPollUserVotes).toEqual([])
     expect(result.current.actions.selectedPollOptions).toEqual([])
+    expect(result.current.actions.customPollLoadState).toBe('idle')
+  })
+
+  it('does not expose one post poll on the first render of another post for the same viewer', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+        'request_id'
+      ) as string
+      return jsonResponse(customPollReadReceipt(requestId))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+    expect(result.current.actions.customPoll?.id).toBe(CUSTOM_POLL_ID)
+
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REPOST_ROOT_POST_ID }))
+    })
+
+    expect(result.current.actions.customPoll).toBeNull()
+    expect(result.current.actions.customPollUserVotes).toEqual([])
+    expect(result.current.actions.selectedPollOptions).toEqual([])
+    expect(result.current.actions.customPollLoadState).toBe('idle')
+  })
+
+  it('preserves a same-poll snapshot while exposing a later load failure', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+        'request_id'
+      ) as string
+      return jsonResponse(customPollReadReceipt(requestId))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+    act(() => result.current.actions.setSelectedPollOptions([1]))
+    ;(global.fetch as jest.Mock).mockRejectedValueOnce(new TypeError('offline'))
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+
+    expect(result.current.actions.customPoll?.id).toBe(CUSTOM_POLL_ID)
+    expect(result.current.actions.selectedPollOptions).toEqual([1])
+    expect(result.current.actions.customPollLoadState).toBe('error')
+    expect(result.current.actions.loadingCustomPoll).toBe(false)
+  })
+
+  it('publishes authoritative custom-poll absence as empty instead of an error', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+        'request_id'
+      ) as string
+      return jsonResponse(
+        customPollReadReceipt(requestId, { action: 'absent', poll: null, user_votes: [] })
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+
+    expect(result.current.actions.customPoll).toBeNull()
+    expect(result.current.actions.customPollLoadState).toBe('empty')
+  })
+
+  it('drops a late custom-poll snapshot after the viewer generation changes', async () => {
+    const response = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: reactionViewer }
+    )
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    let load!: Promise<void>
+    act(() => {
+      load = result.current.actions.loadCustomPoll(REACTION_POST_ID)
+    })
+    const [url] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+    const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+      'request_id'
+    ) as string
+
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: REPOST_OTHER_ACTOR_ID,
+      viewerKey: `user:${REPOST_OTHER_ACTOR_ID}`,
+      sessionGeneration: 8,
+    })
+    await act(async () => {
+      response.resolve(jsonResponse(customPollReadReceipt(requestId)))
+      await load
+    })
+
+    expect(result.current.actions.customPoll).toBeNull()
+    expect(result.current.actions.customPollLoadState).toBe('idle')
+  })
+
+  it('single-flights same-tick custom votes and sends multiple selections in canonical order', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+        'request_id'
+      ) as string
+      const receipt = customPollReadReceipt(requestId)
+      return jsonResponse({
+        ...receipt,
+        poll: { ...(receipt.poll as Record<string, unknown>), type: 'multiple' },
+      })
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+    act(() => result.current.actions.setSelectedPollOptions([1, 0]))
+    ;(global.fetch as jest.Mock).mockClear()
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options: RequestInit) => {
+      const requestBody = parsedRequestBody(options)
+      return jsonResponse(
+        customPollVoteReceipt(requestBody.request_id as string, {
+          option_indexes: [0, 1],
+        })
+      )
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.actions.submitCustomPollVote(REACTION_POST_ID)
+      second = result.current.actions.submitCustomPollVote(REACTION_POST_ID)
+    })
+    await act(async () => Promise.all([first, second]))
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+    expect(parsedRequestBody(options)).toEqual({
+      operation: 'set_vote',
+      request_id: expect.stringMatching(/^[0-9a-f]{32}$/),
+      poll_id: CUSTOM_POLL_ID,
+      option_indexes: [0, 1],
+    })
+    expect(result.current.actions.customPollUserVotes).toEqual([0, 1])
+    expect(result.current.actions.customPoll?.totalVotes).toBe(3)
+    expect(result.current.actions.votingCustomPoll).toBe(false)
+  })
+
+  it('rejects a custom vote receipt for another poll without overwriting the snapshot', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+        'request_id'
+      ) as string
+      return jsonResponse(customPollReadReceipt(requestId))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+    act(() => result.current.actions.setSelectedPollOptions([0]))
+    ;(global.fetch as jest.Mock).mockImplementationOnce(
+      async (_url: string, options: RequestInit) => {
+        const requestBody = parsedRequestBody(options)
+        return jsonResponse(
+          customPollVoteReceipt(requestBody.request_id as string, {
+            poll_id: OTHER_CUSTOM_POLL_ID,
+          })
+        )
+      }
+    )
+
+    await act(async () => result.current.actions.submitCustomPollVote(REACTION_POST_ID))
+
+    expect(result.current.actions.customPollUserVotes).toEqual([])
+    expect(result.current.actions.customPoll?.showResults).toBe(false)
+    expect(mockShowToast).toHaveBeenLastCalledWith('voteFailed', 'error')
+  })
+
+  it('bounds custom-vote JSON parsing and ignores a receipt that arrives after timeout', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const requestId = new URL(url, 'https://www.arenafi.org').searchParams.get(
+        'request_id'
+      ) as string
+      return jsonResponse(customPollReadReceipt(requestId))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    await act(async () => result.current.actions.loadCustomPoll(REACTION_POST_ID))
+    act(() => result.current.actions.setSelectedPollOptions([0]))
+
+    jest.useFakeTimers()
+    try {
+      const lateBody = deferred<unknown>()
+      ;(global.fetch as jest.Mock).mockClear()
+      ;(global.fetch as jest.Mock).mockResolvedValue(responseWithJson(() => lateBody.promise))
+      let mutation!: Promise<void>
+      act(() => {
+        mutation = result.current.actions.submitCustomPollVote(REACTION_POST_ID)
+      })
+      await act(async () => Promise.resolve())
+      const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+      const requestId = parsedRequestBody(options).request_id as string
+
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await mutation
+      })
+      expect(result.current.actions.customPollUserVotes).toEqual([])
+      expect(result.current.actions.customPoll?.showResults).toBe(false)
+      expect(result.current.actions.votingCustomPoll).toBe(false)
+
+      await act(async () => {
+        lateBody.resolve(customPollVoteReceipt(requestId))
+        await Promise.resolve()
+      })
+      expect(result.current.actions.customPollUserVotes).toEqual([])
+      expect(result.current.actions.customPoll?.showResults).toBe(false)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('discards a late A bookmark hydration after B becomes active', async () => {
