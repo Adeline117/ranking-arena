@@ -655,6 +655,39 @@ assert_scalar '2|1|1' \
             WHERE comment_id = comments.id)
    FROM public.comments
    WHERE id = '30000000-0000-0000-0000-000000000001'"
+
+# cascade_then_toggle_absolute_ack: do not run the worker. The next canonical
+# toggle derives its ACK/cache from absolute source truth, not the stale delta.
+assert_service 'added|dislike|1|1|6' \
+  "SELECT (result->>'action') || '|' || (result->>'reaction') || '|' ||
+          (result->>'like_count') || '|' || (result->>'dislike_count') || '|' ||
+          (SELECT count(*) FROM pg_catalog.jsonb_object_keys(result))
+   FROM (SELECT public.toggle_comment_reaction(
+     '20000000-0000-0000-0000-000000000001',
+     '30000000-0000-0000-0000-000000000001',
+     '10000000-0000-0000-0000-000000000002',
+     'dislike'
+   ) AS result) AS toggle_result"
+assert_scalar '1|1|1|1|1' \
+  "SELECT comments.like_count || '|' || comments.dislike_count || '|' ||
+          (SELECT count(*) FROM public.comment_likes AS reaction
+            WHERE reaction.comment_id = comments.id
+              AND reaction.reaction_type = 'like') || '|' ||
+          (SELECT count(*) FROM public.comment_likes AS reaction
+            WHERE reaction.comment_id = comments.id
+              AND reaction.reaction_type = 'dislike') || '|' ||
+          (SELECT count(*) FROM public.comment_reaction_count_repair_queue
+            WHERE comment_id = comments.id)
+   FROM public.comments
+   WHERE id = '30000000-0000-0000-0000-000000000001'"
+assert_service '1|0' \
+  "SELECT (result->>'like_count') || '|' || (result->>'dislike_count')
+   FROM (SELECT public.toggle_comment_reaction(
+     '20000000-0000-0000-0000-000000000001',
+     '30000000-0000-0000-0000-000000000001',
+     '10000000-0000-0000-0000-000000000002',
+     'dislike'
+   ) AS result) AS toggle_result"
 assert_service '1' \
   "SELECT public.repair_comment_reaction_counts_atomic(1)->>'repaired_count'"
 assert_scalar '1|0' \
@@ -799,6 +832,104 @@ assert_scalar 'false|false|false|false' \
 assert_service '0' \
   "SELECT public.repair_comment_reaction_counts_atomic(1)->>'repaired_count'"
 
+# unknown_source_acl_drift: preserve table/column SELECT, while dynamically
+# removing every other PG17 privilege (including MAINTAIN), PUBLIC grants, and
+# a WITH GRANT OPTION downstream chain using CASCADE.
+psql_cmd <<'SQL'
+CREATE ROLE unknown_source_acl_drift NOLOGIN;
+CREATE ROLE unknown_source_acl_downstream NOLOGIN;
+GRANT USAGE ON SCHEMA public
+  TO unknown_source_acl_drift, unknown_source_acl_downstream;
+GRANT SELECT ON TABLE public.comment_likes
+  TO unknown_source_acl_drift;
+GRANT SELECT (reaction_type) ON TABLE public.comment_likes
+  TO unknown_source_acl_downstream;
+GRANT INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
+  ON TABLE public.comment_likes
+  TO unknown_source_acl_drift WITH GRANT OPTION;
+GRANT UPDATE (reaction_type), REFERENCES (reaction_type)
+  ON TABLE public.comment_likes
+  TO unknown_source_acl_drift WITH GRANT OPTION;
+GRANT INSERT, TRUNCATE ON TABLE public.comment_likes TO PUBLIC;
+GRANT UPDATE (reaction_type) ON TABLE public.comment_likes TO PUBLIC;
+SET ROLE unknown_source_acl_drift;
+GRANT UPDATE, DELETE ON TABLE public.comment_likes
+  TO unknown_source_acl_downstream;
+GRANT UPDATE (reaction_type) ON TABLE public.comment_likes
+  TO unknown_source_acl_downstream;
+RESET ROLE;
+SQL
+psql_cmd -f "$MIGRATION"
+assert_scalar '0' \
+  "SELECT count(*)
+   FROM (
+     SELECT acl_entry.grantee, acl_entry.privilege_type
+     FROM pg_catalog.pg_class AS relation
+     CROSS JOIN LATERAL pg_catalog.aclexplode(
+       COALESCE(
+         relation.relacl,
+         pg_catalog.acldefault('r', relation.relowner)
+       )
+     ) AS acl_entry
+     WHERE relation.oid = 'public.comment_likes'::pg_catalog.regclass
+       AND acl_entry.grantee <> pg_catalog.to_regrole('postgres')
+       AND acl_entry.privilege_type <> 'SELECT'
+     UNION ALL
+     SELECT acl_entry.grantee, acl_entry.privilege_type
+     FROM pg_catalog.pg_attribute AS attribute
+     CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+     WHERE attribute.attrelid = 'public.comment_likes'::pg_catalog.regclass
+       AND attribute.attnum > 0
+       AND NOT attribute.attisdropped
+       AND acl_entry.grantee <> pg_catalog.to_regrole('postgres')
+       AND acl_entry.privilege_type <> 'SELECT'
+   ) AS leaked_acl"
+assert_scalar 'true|true|false|false|false|false|false|false' \
+  "SELECT
+     pg_catalog.has_table_privilege(
+       'unknown_source_acl_drift', 'public.comment_likes', 'SELECT'
+     ) || '|' ||
+     pg_catalog.has_column_privilege(
+       'unknown_source_acl_downstream',
+       'public.comment_likes',
+       'reaction_type',
+       'SELECT'
+     ) || '|' ||
+     pg_catalog.has_table_privilege(
+       'unknown_source_acl_drift', 'public.comment_likes', 'INSERT'
+     ) || '|' ||
+     pg_catalog.has_table_privilege(
+       'unknown_source_acl_drift', 'public.comment_likes', 'TRUNCATE'
+     ) || '|' ||
+     pg_catalog.has_table_privilege(
+       'unknown_source_acl_drift', 'public.comment_likes', 'MAINTAIN'
+     ) || '|' ||
+     pg_catalog.has_table_privilege(
+       'unknown_source_acl_downstream', 'public.comment_likes', 'UPDATE'
+     ) || '|' ||
+     pg_catalog.has_column_privilege(
+       'unknown_source_acl_downstream',
+       'public.comment_likes',
+       'reaction_type',
+       'UPDATE'
+     ) || '|' ||
+     pg_catalog.has_column_privilege(
+       'anon',
+       'public.comment_likes',
+       'reaction_type',
+       'UPDATE'
+     )"
+assert_fails unknown_source_dml \
+  "SET ROLE unknown_source_acl_drift;
+   INSERT INTO public.comment_likes (comment_id, user_id, reaction_type)
+   VALUES (
+     '30000000-0000-0000-0000-000000000001',
+     '10000000-0000-0000-0000-000000000002',
+     'like'
+   )"
+assert_fails unknown_source_truncate \
+  "SET ROLE unknown_source_acl_drift; TRUNCATE public.comment_likes"
+
 # wrong_queue_index_drift: IF NOT EXISTS must not bless a same-name DESC index.
 psql_cmd <<'SQL'
 DROP INDEX public.idx_comment_reaction_count_repair_queue_oldest;
@@ -827,6 +958,27 @@ assert_scalar '0' \
 # wrong_trigger_when_false / wrong_update_of_drift: trigger replay converges
 # wrong UPDATE OF vectors and predicates before exact tgattr/tgqual attestation.
 psql_cmd <<'SQL'
+-- source_guard_when_false_missing_delete also replaces the sealed body and
+-- removes DELETE from the trigger before replay restores both contracts.
+CREATE OR REPLACE FUNCTION public.guard_canonical_comment_reaction_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+AS $drift$
+BEGIN
+  RETURN NEW;
+END
+$drift$;
+DROP TRIGGER trg_comment_likes_00_guard_canonical_mutation
+  ON public.comment_likes;
+CREATE TRIGGER trg_comment_likes_00_guard_canonical_mutation
+BEFORE INSERT OR UPDATE
+ON public.comment_likes
+FOR EACH ROW
+WHEN (false)
+EXECUTE FUNCTION public.guard_canonical_comment_reaction_mutation();
+
 DROP TRIGGER trg_comment_likes_20_sync_counts ON public.comment_likes;
 CREATE TRIGGER trg_comment_likes_20_sync_counts
 AFTER INSERT OR DELETE OR UPDATE OF reaction_type
@@ -852,6 +1004,20 @@ WHEN (false)
 EXECUTE FUNCTION public.guard_contract_comment_reaction_counts();
 SQL
 psql_cmd -f "$MIGRATION"
+assert_scalar '31|0|true|0|0|true|true' \
+  "SELECT trigger_row.tgtype || '|' ||
+          pg_catalog.cardinality(trigger_row.tgattr::smallint[]) || '|' ||
+          (trigger_row.tgqual IS NULL) || '|' || trigger_row.tgnargs || '|' ||
+          pg_catalog.octet_length(trigger_row.tgargs) || '|' ||
+          (NOT function_row.prosecdef) || '|' ||
+          (pg_catalog.obj_description(function_row.oid, 'pg_proc') =
+            'comment-reaction-count-repair:source-guard-v1:' ||
+            pg_catalog.md5(function_row.prosrc))
+   FROM pg_catalog.pg_trigger AS trigger_row
+   JOIN pg_catalog.pg_proc AS function_row
+     ON function_row.oid = trigger_row.tgfoid
+   WHERE trigger_row.tgrelid = 'public.comment_likes'::pg_catalog.regclass
+     AND trigger_row.tgname = 'trg_comment_likes_00_guard_canonical_mutation'"
 assert_scalar '29|comment_id,user_id,reaction_type|true' \
   "SELECT trigger_row.tgtype || '|' ||
           (
@@ -932,6 +1098,93 @@ assert_scalar '1|1' \
          AND NOT tgisinternal)"
 assert_service '0' \
   "SELECT public.repair_comment_reaction_counts_atomic(1)->>'repaired_count'"
+
+# worker_shared_gate_blocks_replay: a worker transaction retains the shared
+# migration gate after its RPC. Replay fails fast, then succeeds on retry.
+psql_cmd >"$TMP_ROOT/worker-shared-gate.out" 2>&1 <<'SQL' &
+SET application_name = 'worker_shared_gate_blocks_replay';
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+BEGIN;
+SELECT public.repair_comment_reaction_counts_atomic(1);
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+worker_shared_gate_pid=$!
+wait_for_activity \
+  "application_name = 'worker_shared_gate_blocks_replay' AND state = 'active' AND query LIKE '%pg_sleep%'" \
+  1 \
+  worker_shared_gate_blocks_replay
+assert_scalar '1' \
+  "SELECT count(*)
+   FROM pg_catalog.pg_locks AS held_lock
+   JOIN pg_catalog.pg_stat_activity AS activity
+     ON activity.pid = held_lock.pid
+   WHERE activity.application_name = 'worker_shared_gate_blocks_replay'
+     AND held_lock.locktype = 'advisory'
+     AND held_lock.mode = 'ShareLock'
+     AND held_lock.granted"
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/replay-vs-shared-worker.out" 2>&1; then
+  echo 'worker_shared_gate_blocks_replay unexpectedly allowed replay' >&2
+  exit 1
+fi
+if ! rg -q 'comment reaction count repair migration lock is busy' \
+  "$TMP_ROOT/replay-vs-shared-worker.out"; then
+  echo 'worker_shared_gate_blocks_replay failed for an unexpected reason' >&2
+  cat "$TMP_ROOT/replay-vs-shared-worker.out" >&2
+  exit 1
+fi
+wait_for_activity \
+  "application_name = 'worker_shared_gate_blocks_replay' AND state = 'active'" \
+  1 \
+  worker_shared_gate_survived_replay
+wait "$worker_shared_gate_pid"
+psql_cmd -f "$MIGRATION"
+
+# exclusive_migration_gate_rejects_prelocked_worker: even a transaction that
+# entered with a parent row lock gets 55P03 immediately and releases that row;
+# it can retry after the exclusive migration gate leaves.
+psql_cmd >"$TMP_ROOT/exclusive-migration-gate.out" 2>&1 <<'SQL' &
+SET application_name = 'exclusive_migration_gate_rejects_prelocked_worker';
+BEGIN;
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(
+    'public.comment-reaction-count-repair:migration',
+    0
+  )
+);
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+exclusive_gate_pid=$!
+wait_for_activity \
+  "application_name = 'exclusive_migration_gate_rejects_prelocked_worker' AND state = 'active' AND query LIKE '%pg_sleep%'" \
+  1 \
+  exclusive_migration_gate_rejects_prelocked_worker
+assert_fails prelocked_worker_gate_busy \
+  "BEGIN;
+   SET LOCAL request.jwt.claim.role = 'service_role';
+   SELECT id FROM public.comments
+   WHERE id = '30000000-0000-0000-0000-000000000001'
+   FOR UPDATE;
+   SELECT public.repair_comment_reaction_counts_atomic(1)"
+if ! rg -q 'comment reaction repair migration gate is busy' \
+  "$TMP_ROOT/prelocked_worker_gate_busy.out"; then
+  echo 'prelocked worker failed for an unexpected reason' >&2
+  cat "$TMP_ROOT/prelocked_worker_gate_busy.out" >&2
+  exit 1
+fi
+assert_scalar '30000000-0000-0000-0000-000000000001' \
+  "SELECT id FROM public.comments
+   WHERE id = '30000000-0000-0000-0000-000000000001'
+   FOR UPDATE NOWAIT"
+wait_for_activity \
+  "application_name = 'exclusive_migration_gate_rejects_prelocked_worker' AND state = 'active'" \
+  1 \
+  exclusive_gate_survived_prelocked_worker
+wait "$exclusive_gate_pid"
+assert_service 'processed' \
+  "SELECT public.repair_comment_reaction_counts_atomic(1)->>'status'"
 
 # live_toggle_vs_auth_delete: auth KEY SHARE is acquired before block/post/
 # comment/source. Account deletion waits, then cascades without a deadlock.

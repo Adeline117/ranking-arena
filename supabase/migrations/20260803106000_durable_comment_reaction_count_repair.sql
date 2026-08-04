@@ -360,6 +360,7 @@ BEGIN
       'public.sync_comment_reaction_counts()'::pg_catalog.regprocedure
     AND function_row.prokind = 'f'
     AND function_row.prorettype = 'trigger'::pg_catalog.regtype
+    AND NOT function_row.proretset
     AND function_row.proowner = v_postgres_oid
     AND function_row.prosecdef
     AND function_row.provolatile = 'v';
@@ -465,35 +466,23 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
-    FROM pg_catalog.unnest(
-      ARRAY['anon', 'authenticated', 'authenticator', 'service_role']::text[]
-    ) AS role_name
-    CROSS JOIN pg_catalog.unnest(
-      ARRAY[
-        'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
-      ]::text[]
-    ) AS privilege_name
-    WHERE pg_catalog.has_table_privilege(
-      role_name,
-      'public.comment_likes',
-      privilege_name
-    )
-  ) THEN
-    RAISE EXCEPTION 'comment_likes direct mutation boundary drifted';
-  END IF;
-
-  IF EXISTS (
-    SELECT 1
     FROM pg_catalog.pg_proc AS function_row
     WHERE function_row.pronamespace = 'public'::pg_catalog.regnamespace
       AND function_row.proname IN (
         'enqueue_comment_reaction_count_repair',
+        'guard_canonical_comment_reaction_mutation',
         'repair_comment_reaction_counts_atomic'
       )
       AND function_row.oid NOT IN (
         COALESCE(
           pg_catalog.to_regprocedure(
             'public.enqueue_comment_reaction_count_repair()'
+          )::oid,
+          0::oid
+        ),
+        COALESCE(
+          pg_catalog.to_regprocedure(
+            'public.guard_canonical_comment_reaction_mutation()'
           )::oid,
           0::oid
         ),
@@ -582,8 +571,47 @@ BEGIN
 END
 $function$;
 
+-- Seal the sole top-level source mutation marker. Nested FK cascades remain
+-- legal, but can only enqueue because the synchronous trigger below checks the
+-- transaction-local legacy toggle marker independently.
+CREATE OR REPLACE FUNCTION public.guard_canonical_comment_reaction_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF TG_TABLE_SCHEMA IS DISTINCT FROM 'public'
+     OR TG_TABLE_NAME IS DISTINCT FROM 'comment_likes'
+     OR TG_WHEN IS DISTINCT FROM 'BEFORE'
+     OR TG_LEVEL IS DISTINCT FROM 'ROW'
+     OR TG_OP NOT IN ('INSERT', 'UPDATE', 'DELETE')
+     OR TG_NARGS IS DISTINCT FROM 0
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'canonical comment reaction guard is attached incorrectly';
+  END IF;
+
+  IF pg_catalog.pg_trigger_depth() > 1
+     OR pg_catalog.current_setting('app.comment_reaction_path', true) =
+       'toggle_comment_reaction'
+  THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION USING
+    ERRCODE = '42501',
+    MESSAGE = 'direct comment reaction mutation is disabled; use toggle_comment_reaction';
+END
+$function$;
+
 -- Preserve synchronous legacy toggle ACKs, but never take comments from a
--- cascade/direct child path. Those paths leave Q for the ordered worker.
+-- cascade/direct child path. A canonical toggle recounts absolute source truth
+-- so a previously queued cascade drift cannot contaminate its ACK.
 CREATE OR REPLACE FUNCTION public.sync_comment_reaction_counts()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -594,8 +622,8 @@ SET row_security = off
 AS $function$
 DECLARE
   v_comment_id uuid;
-  v_like_delta integer := 0;
-  v_dislike_delta integer := 0;
+  v_like_count bigint;
+  v_dislike_count bigint;
 BEGIN
   IF pg_catalog.current_setting('app.comment_reaction_path', true)
        IS DISTINCT FROM 'toggle_comment_reaction'
@@ -608,11 +636,6 @@ BEGIN
 
   IF TG_OP <> 'INSERT' THEN
     v_comment_id := OLD.comment_id;
-    IF OLD.reaction_type = 'like' THEN
-      v_like_delta := v_like_delta - 1;
-    ELSIF OLD.reaction_type = 'dislike' THEN
-      v_dislike_delta := v_dislike_delta - 1;
-    END IF;
   END IF;
 
   IF TG_OP <> 'DELETE' THEN
@@ -625,25 +648,29 @@ BEGIN
     END IF;
 
     v_comment_id := NEW.comment_id;
-    IF NEW.reaction_type = 'like' THEN
-      v_like_delta := v_like_delta + 1;
-    ELSIF NEW.reaction_type = 'dislike' THEN
-      v_dislike_delta := v_dislike_delta + 1;
-    END IF;
   END IF;
 
-  IF v_like_delta <> 0 OR v_dislike_delta <> 0 THEN
-    UPDATE public.comments AS target
-    SET like_count = GREATEST(
-          COALESCE(target.like_count, 0) + v_like_delta,
-          0
-        ),
-        dislike_count = GREATEST(
-          COALESCE(target.dislike_count, 0) + v_dislike_delta,
-          0
-        )
-    WHERE target.id = v_comment_id;
+  SELECT
+    pg_catalog.count(*) FILTER (
+      WHERE reaction.reaction_type = 'like'
+    ),
+    pg_catalog.count(*) FILTER (
+      WHERE reaction.reaction_type = 'dislike'
+    )
+  INTO v_like_count, v_dislike_count
+  FROM public.comment_likes AS reaction
+  WHERE reaction.comment_id = v_comment_id;
+
+  IF v_like_count > 2147483647 OR v_dislike_count > 2147483647 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22003',
+      MESSAGE = 'comment reaction counter exceeds integer range';
   END IF;
+
+  UPDATE public.comments AS target
+  SET like_count = v_like_count::integer,
+      dislike_count = v_dislike_count::integer
+  WHERE target.id = v_comment_id;
 
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
@@ -788,6 +815,20 @@ BEGIN
   -- One comment per transaction bounds every post/comment/queue lock lifetime.
   IF p_limit IS DISTINCT FROM 1 THEN
     RETURN pg_catalog.jsonb_build_object('status', 'invalid');
+  END IF;
+
+  -- The migration owns this key exclusively before any table lock. Workers
+  -- take the shared form before their first public-table access, so replay and
+  -- repair fail fast and can retry without entering a DDL/row-lock cycle.
+  IF NOT pg_catalog.pg_try_advisory_xact_lock_shared(
+    pg_catalog.hashtextextended(
+      'public.comment-reaction-count-repair:migration',
+      0
+    )
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55P03',
+      MESSAGE = 'comment reaction repair migration gate is busy';
   END IF;
 
   -- Candidate discovery is deliberately unlocked. Q cannot be owned before
@@ -1061,6 +1102,8 @@ $function$;
 
 ALTER FUNCTION public.enqueue_comment_reaction_count_repair()
   OWNER TO postgres;
+ALTER FUNCTION public.guard_canonical_comment_reaction_mutation()
+  OWNER TO postgres;
 ALTER FUNCTION public.sync_comment_reaction_counts()
   OWNER TO postgres;
 ALTER FUNCTION public.guard_contract_comment_reaction_counts()
@@ -1069,6 +1112,14 @@ ALTER FUNCTION public.toggle_comment_reaction(uuid, uuid, uuid, text)
   OWNER TO postgres;
 ALTER FUNCTION public.repair_comment_reaction_counts_atomic(integer)
   OWNER TO postgres;
+
+DROP TRIGGER IF EXISTS trg_comment_likes_00_guard_canonical_mutation
+  ON public.comment_likes;
+CREATE TRIGGER trg_comment_likes_00_guard_canonical_mutation
+BEFORE INSERT OR UPDATE OR DELETE
+ON public.comment_likes
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_canonical_comment_reaction_mutation();
 
 DROP TRIGGER IF EXISTS trg_comment_likes_20_sync_counts
   ON public.comment_likes;
@@ -1133,13 +1184,19 @@ BEGIN
       ON role_row.oid = grantee_set.grantee
     WHERE grantee_set.grantee <> v_owner
   LOOP
+    IF v_grantee.grantee <> 0 AND v_grantee.rolname IS NULL THEN
+      RAISE EXCEPTION
+        'comment reaction repair queue ACL references missing role oid %',
+        v_grantee.grantee;
+    END IF;
+
     v_grantee_sql := CASE
       WHEN v_grantee.grantee = 0 THEN 'PUBLIC'
       ELSE pg_catalog.quote_ident(v_grantee.rolname)
     END;
 
     EXECUTE pg_catalog.format(
-      'REVOKE ALL PRIVILEGES ON TABLE public.comment_reaction_count_repair_queue FROM %s',
+      'REVOKE ALL PRIVILEGES ON TABLE public.comment_reaction_count_repair_queue FROM %s CASCADE',
       v_grantee_sql
     );
 
@@ -1153,7 +1210,7 @@ BEGIN
       ORDER BY attribute.attnum
     LOOP
       EXECUTE pg_catalog.format(
-        'REVOKE ALL PRIVILEGES (%I) ON TABLE public.comment_reaction_count_repair_queue FROM %s',
+        'REVOKE ALL PRIVILEGES (%I) ON TABLE public.comment_reaction_count_repair_queue FROM %s CASCADE',
         v_column.attname,
         v_grantee_sql
       );
@@ -1161,6 +1218,91 @@ BEGIN
   END LOOP;
 END
 $revoke_queue_acl_drift$;
+
+-- Preserve any intentional read-only grants, but remove every source mutation
+-- grant from every non-owner role, including column ACLs and roles unknown to
+-- this migration. Canonical SECURITY DEFINER functions remain the only path.
+DO $close_comment_likes_mutation_acl_drift$
+DECLARE
+  v_owner oid := pg_catalog.to_regrole('postgres');
+  v_acl record;
+  v_grantee_sql text;
+BEGIN
+  -- Revoke the catalog-reported privilege name instead of hard-coding a
+  -- version-specific list. PostgreSQL 17 MAINTAIN is therefore closed while
+  -- the migration remains parseable by older supported servers.
+  FOR v_acl IN
+    SELECT DISTINCT
+      acl_entry.grantee,
+      acl_entry.privilege_type,
+      role_row.rolname
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(
+        relation.relacl,
+        pg_catalog.acldefault('r', relation.relowner)
+      )
+    ) AS acl_entry
+    LEFT JOIN pg_catalog.pg_roles AS role_row
+      ON role_row.oid = acl_entry.grantee
+    WHERE relation.oid = 'public.comment_likes'::pg_catalog.regclass
+      AND acl_entry.grantee <> v_owner
+      AND acl_entry.privilege_type <> 'SELECT'
+  LOOP
+    IF v_acl.grantee <> 0 AND v_acl.rolname IS NULL THEN
+      RAISE EXCEPTION
+        'comment_likes table ACL references missing role oid %',
+        v_acl.grantee;
+    END IF;
+
+    v_grantee_sql := CASE
+      WHEN v_acl.grantee = 0 THEN 'PUBLIC'
+      ELSE pg_catalog.quote_ident(v_acl.rolname)
+    END;
+
+    EXECUTE pg_catalog.format(
+      'REVOKE %s ON TABLE public.comment_likes FROM %s CASCADE',
+      v_acl.privilege_type,
+      v_grantee_sql
+    );
+  END LOOP;
+
+  FOR v_acl IN
+    SELECT DISTINCT
+      acl_entry.grantee,
+      acl_entry.privilege_type,
+      attribute.attname,
+      role_row.rolname
+    FROM pg_catalog.pg_attribute AS attribute
+    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+    LEFT JOIN pg_catalog.pg_roles AS role_row
+      ON role_row.oid = acl_entry.grantee
+    WHERE attribute.attrelid = 'public.comment_likes'::pg_catalog.regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND acl_entry.grantee <> v_owner
+      AND acl_entry.privilege_type <> 'SELECT'
+  LOOP
+    IF v_acl.grantee <> 0 AND v_acl.rolname IS NULL THEN
+      RAISE EXCEPTION
+        'comment_likes column ACL references missing role oid %',
+        v_acl.grantee;
+    END IF;
+
+    v_grantee_sql := CASE
+      WHEN v_acl.grantee = 0 THEN 'PUBLIC'
+      ELSE pg_catalog.quote_ident(v_acl.rolname)
+    END;
+
+    EXECUTE pg_catalog.format(
+      'REVOKE %s (%I) ON TABLE public.comment_likes FROM %s CASCADE',
+      v_acl.privilege_type,
+      v_acl.attname,
+      v_grantee_sql
+    );
+  END LOOP;
+END
+$close_comment_likes_mutation_acl_drift$;
 
 -- CREATE OR REPLACE preserves arbitrary historical function grants. Converge
 -- all non-owner ACLs, then publish only the legacy route and repair worker.
@@ -1173,6 +1315,7 @@ DECLARE
 BEGIN
   FOREACH v_function IN ARRAY ARRAY[
     'public.enqueue_comment_reaction_count_repair()'::regprocedure,
+    'public.guard_canonical_comment_reaction_mutation()'::regprocedure,
     'public.sync_comment_reaction_counts()'::regprocedure,
     'public.guard_contract_comment_reaction_counts()'::regprocedure,
     'public.toggle_comment_reaction(uuid,uuid,uuid,text)'::regprocedure,
@@ -1198,12 +1341,18 @@ BEGIN
       WHERE function_row.oid = v_function
         AND acl_entry.grantee <> v_owner
     LOOP
+      IF v_grantee.grantee <> 0 AND v_grantee.rolname IS NULL THEN
+        RAISE EXCEPTION
+          'comment reaction repair function ACL references missing role oid %',
+          v_grantee.grantee;
+      END IF;
+
       v_grantee_sql := CASE
         WHEN v_grantee.grantee = 0 THEN 'PUBLIC'
         ELSE pg_catalog.quote_ident(v_grantee.rolname)
       END;
       EXECUTE pg_catalog.format(
-        'REVOKE ALL ON FUNCTION %s FROM %s',
+        'REVOKE ALL ON FUNCTION %s FROM %s CASCADE',
         v_function,
         v_grantee_sql
       );
@@ -1261,12 +1410,18 @@ BEGIN
       WHERE function_row.oid = v_function
         AND acl_entry.grantee <> v_owner
     LOOP
+      IF v_grantee.grantee <> 0 AND v_grantee.rolname IS NULL THEN
+        RAISE EXCEPTION
+          'legacy comment counter function ACL references missing role oid %',
+          v_grantee.grantee;
+      END IF;
+
       v_grantee_sql := CASE
         WHEN v_grantee.grantee = 0 THEN 'PUBLIC'
         ELSE pg_catalog.quote_ident(v_grantee.rolname)
       END;
       EXECUTE pg_catalog.format(
-        'REVOKE ALL ON FUNCTION %s FROM %s',
+        'REVOKE ALL ON FUNCTION %s FROM %s CASCADE',
         v_function,
         v_grantee_sql
       );
@@ -1291,6 +1446,10 @@ BEGIN
         (
           'public.enqueue_comment_reaction_count_repair()'::regprocedure,
           'comment-reaction-count-repair:enqueue-v1:'
+        ),
+        (
+          'public.guard_canonical_comment_reaction_mutation()'::regprocedure,
+          'comment-reaction-count-repair:source-guard-v1:'
         ),
         (
           'public.sync_comment_reaction_counts()'::regprocedure,
@@ -1363,10 +1522,13 @@ DECLARE
   v_source text;
   v_comment text;
   v_enqueue_source text;
+  v_source_guard_source text;
   v_sync_source text;
   v_guard_source text;
   v_wrapper_source text;
   v_worker_source text;
+  v_migration_gate integer;
+  v_candidate_read integer;
   v_post_lock integer;
   v_comment_lock integer;
   v_queue_lock integer;
@@ -1576,6 +1738,32 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(
+        relation.relacl,
+        pg_catalog.acldefault('r', relation.relowner)
+      )
+    ) AS acl_entry
+    WHERE relation.oid = 'public.comment_likes'::pg_catalog.regclass
+      AND acl_entry.grantee <> v_postgres_oid
+      AND acl_entry.privilege_type <> 'SELECT'
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+    WHERE attribute.attrelid = 'public.comment_likes'::pg_catalog.regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND acl_entry.grantee <> v_postgres_oid
+      AND acl_entry.privilege_type <> 'SELECT'
+  ) THEN
+    RAISE EXCEPTION
+      'comment reaction source mutation ACL leaked to a non-owner role';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
     FROM public.comments AS target
     LEFT JOIN (
       SELECT
@@ -1648,6 +1836,56 @@ BEGIN
 
   SELECT function_row.prosrc,
          pg_catalog.obj_description(function_row.oid, 'pg_proc')
+  INTO STRICT v_source_guard_source, v_comment
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid =
+      'public.guard_canonical_comment_reaction_mutation()'::pg_catalog.regprocedure
+    AND function_row.prokind = 'f'
+    AND function_row.prorettype = 'trigger'::pg_catalog.regtype
+    AND NOT function_row.proretset
+    AND function_row.proowner = v_postgres_oid
+    AND NOT function_row.prosecdef
+    AND function_row.provolatile = 'v'
+    AND function_row.prolang = v_plpgsql_oid
+    AND NOT function_row.proisstrict
+    AND function_row.proparallel = 'u'
+    AND NOT function_row.proleakproof
+    AND function_row.pronargs = 0
+    AND function_row.pronargdefaults = 0
+    AND function_row.proargnames IS NULL
+    AND function_row.proallargtypes IS NULL
+    AND function_row.proargmodes IS NULL
+    AND function_row.proargdefaults IS NULL
+    AND function_row.proconfig =
+      ARRAY['search_path=pg_catalog, pg_temp']::text[];
+
+  IF v_comment IS DISTINCT FROM
+       'comment-reaction-count-repair:source-guard-v1:'
+         || pg_catalog.md5(v_source_guard_source)
+     OR pg_catalog.strpos(v_source_guard_source, 'TG_TABLE_SCHEMA') = 0
+     OR pg_catalog.strpos(v_source_guard_source, 'TG_TABLE_NAME') = 0
+     OR pg_catalog.strpos(v_source_guard_source, 'TG_WHEN') = 0
+     OR pg_catalog.strpos(v_source_guard_source, 'TG_LEVEL') = 0
+     OR pg_catalog.strpos(
+       v_source_guard_source,
+       'TG_OP NOT IN (''INSERT'', ''UPDATE'', ''DELETE'')'
+     ) = 0
+     OR pg_catalog.strpos(v_source_guard_source, 'TG_NARGS') = 0
+     OR pg_catalog.strpos(v_source_guard_source, 'pg_trigger_depth() > 1') = 0
+     OR pg_catalog.strpos(
+       v_source_guard_source,
+       'app.comment_reaction_path'
+     ) = 0
+     OR pg_catalog.strpos(
+       v_source_guard_source,
+       'direct comment reaction mutation is disabled'
+     ) = 0
+  THEN
+    RAISE EXCEPTION 'canonical comment reaction source guard drifted';
+  END IF;
+
+  SELECT function_row.prosrc,
+         pg_catalog.obj_description(function_row.oid, 'pg_proc')
   INTO STRICT v_sync_source, v_comment
   FROM pg_catalog.pg_proc AS function_row
   WHERE function_row.oid =
@@ -1668,8 +1906,16 @@ BEGIN
        'comment-reaction-count-repair:sync-v1:' || pg_catalog.md5(v_sync_source)
      OR pg_catalog.strpos(v_sync_source, 'app.comment_reaction_path') = 0
      OR pg_catalog.strpos(v_sync_source, 'toggle_comment_reaction') = 0
-     OR pg_catalog.strpos(v_sync_source, 'UPDATE public.comments') <=
+     OR pg_catalog.strpos(v_sync_source, 'pg_catalog.count(*) FILTER') <=
         pg_catalog.strpos(v_sync_source, 'app.comment_reaction_path')
+     OR pg_catalog.strpos(
+       v_sync_source,
+       'FROM public.comment_likes AS reaction'
+     ) = 0
+     OR pg_catalog.strpos(v_sync_source, 'UPDATE public.comments') <=
+        pg_catalog.strpos(v_sync_source, 'pg_catalog.count(*) FILTER')
+     OR pg_catalog.strpos(v_sync_source, 'v_like_delta') <> 0
+     OR pg_catalog.strpos(v_sync_source, 'v_dislike_delta') <> 0
   THEN
     RAISE EXCEPTION 'cascade-safe comment reaction synchronizer drifted';
   END IF;
@@ -1772,6 +2018,14 @@ BEGIN
       'statement_timeout=30s'
     ]::text[];
 
+  v_migration_gate := pg_catalog.strpos(
+    v_worker_source,
+    'pg_catalog.pg_try_advisory_xact_lock_shared'
+  );
+  v_candidate_read := pg_catalog.strpos(
+    v_worker_source,
+    'FROM public.comment_reaction_count_repair_queue AS repair_queue'
+  );
   v_post_lock := pg_catalog.strpos(
     v_worker_source,
     'INTO v_locked_post_id'
@@ -1800,7 +2054,17 @@ BEGIN
   IF v_comment IS DISTINCT FROM
        'comment-reaction-count-repair:worker-v1:'
          || pg_catalog.md5(v_worker_source)
-     OR v_post_lock = 0
+     OR v_migration_gate = 0
+     OR v_migration_gate <= pg_catalog.strpos(
+       v_worker_source,
+       'service role required'
+     )
+     OR v_migration_gate <= pg_catalog.strpos(
+       v_worker_source,
+       'p_limit IS DISTINCT FROM 1'
+     )
+     OR v_candidate_read <= v_migration_gate
+     OR v_post_lock <= v_candidate_read
      OR v_comment_lock <= v_post_lock
      OR v_queue_lock <= v_comment_lock
      OR v_queue_delete <= v_queue_lock
@@ -1811,12 +2075,58 @@ BEGIN
      OR pg_catalog.strpos(v_worker_source, 'p_limit IS DISTINCT FROM 1') = 0
      OR pg_catalog.strpos(v_worker_source, 'LIMIT 1') = 0
      OR pg_catalog.strpos(v_worker_source, 'service role required') = 0
-     OR pg_catalog.strpos(v_worker_source, 'pg_advisory') <> 0
+     OR pg_catalog.strpos(
+       v_worker_source,
+       'public.comment-reaction-count-repair:migration'
+     ) = 0
+     OR pg_catalog.strpos(
+       v_worker_source,
+       'comment reaction repair migration gate is busy'
+     ) = 0
+     OR pg_catalog.strpos(v_worker_source, '55P03') = 0
+     OR (
+       pg_catalog.length(v_worker_source)
+       - pg_catalog.length(
+         pg_catalog.replace(
+           v_worker_source,
+           'pg_try_advisory_xact_lock_shared',
+           ''
+         )
+       )
+     ) <> pg_catalog.length('pg_try_advisory_xact_lock_shared')
+     OR pg_catalog.strpos(
+       v_worker_source,
+       'pg_advisory_xact_lock_shared('
+     ) <> 0
+     OR pg_catalog.strpos(
+       v_worker_source,
+       'pg_try_advisory_xact_lock('
+     ) <> 0
+     OR pg_catalog.strpos(
+       v_worker_source,
+       'pg_advisory_xact_lock('
+     ) <> 0
   THEN
     RAISE EXCEPTION 'comment reaction count repair worker lock order drifted';
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.comment_likes'::pg_catalog.regclass
+      AND trigger_row.tgname = 'trg_comment_likes_00_guard_canonical_mutation'
+      AND trigger_row.tgfoid =
+        'public.guard_canonical_comment_reaction_mutation()'::pg_catalog.regprocedure
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgtype = 31
+      AND pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 0
+      AND trigger_row.tgqual IS NULL
+      AND trigger_row.tgnargs = 0
+      AND pg_catalog.octet_length(trigger_row.tgargs) = 0
+      AND trigger_row.tgoldtable IS NULL
+      AND trigger_row.tgnewtable IS NULL
+  ) OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgrelid = 'public.comment_likes'::pg_catalog.regclass
@@ -1904,6 +2214,7 @@ BEGIN
        ) AS acl_entry
        WHERE function_row.oid IN (
          'public.enqueue_comment_reaction_count_repair()'::regprocedure,
+         'public.guard_canonical_comment_reaction_mutation()'::regprocedure,
          'public.sync_comment_reaction_counts()'::regprocedure,
          'public.guard_contract_comment_reaction_counts()'::regprocedure,
          'public.toggle_comment_reaction(uuid,uuid,uuid,text)'::regprocedure,
@@ -1915,6 +2226,11 @@ BEGIN
      OR pg_catalog.has_function_privilege(
        'service_role',
        'public.enqueue_comment_reaction_count_repair()',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'service_role',
+       'public.guard_canonical_comment_reaction_mutation()',
        'EXECUTE'
      )
      OR pg_catalog.has_function_privilege(
@@ -1931,19 +2247,6 @@ BEGIN
     RAISE EXCEPTION 'comment reaction count repair function ACL drifted';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM pg_catalog.unnest(
-      ARRAY['anon', 'authenticated', 'authenticator', 'service_role']::text[]
-    ) AS role_name
-    WHERE pg_catalog.has_table_privilege(
-      role_name,
-      'public.comment_likes',
-      'TRUNCATE'
-    )
-  ) THEN
-    RAISE EXCEPTION 'comment reaction source TRUNCATE authority leaked';
-  END IF;
 END
 $postflight$;
 

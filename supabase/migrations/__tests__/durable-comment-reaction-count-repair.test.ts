@@ -31,13 +31,19 @@ describe('durable comment reaction count repair migration', () => {
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
     expect(migration).toContain('public.comment-reaction-count-repair:migration')
 
+    const lockTimeout = migration.indexOf("SET LOCAL lock_timeout = '5s'")
+    const migrationGate = migration.indexOf('pg_catalog.pg_try_advisory_xact_lock(')
     const graphLock = migration.indexOf('LOCK TABLE auth.users,')
     const postLock = migration.indexOf('public.posts,', graphLock)
     const commentLock = migration.indexOf('public.comments,', postLock)
     const sourceLock = migration.indexOf('public.comment_likes', commentLock)
     const preflight = migration.indexOf('DO $preflight$')
     const queueDdl = migration.indexOf('CREATE TABLE IF NOT EXISTS')
-    expect(graphLock).toBeGreaterThan(0)
+    expect(lockTimeout).toBeGreaterThan(0)
+    expect(migrationGate).toBeGreaterThan(lockTimeout)
+    expect(graphLock).toBeGreaterThan(migrationGate)
+    expect(migration.match(/pg_catalog\.pg_try_advisory_xact_lock\(/g)).toHaveLength(1)
+    expect(migration).not.toContain('pg_catalog.pg_advisory_xact_lock(')
     expect(postLock).toBeGreaterThan(graphLock)
     expect(commentLock).toBeGreaterThan(postLock)
     expect(sourceLock).toBeGreaterThan(commentLock)
@@ -86,10 +92,17 @@ describe('durable comment reaction count repair migration', () => {
   it('keeps synchronous counters only inside the canonical legacy toggle path', () => {
     const sync = functionBody('sync_comment_reaction_counts')
     const pathGuard = sync.indexOf("IS DISTINCT FROM 'toggle_comment_reaction'")
+    const absoluteCount = sync.indexOf('pg_catalog.count(*) FILTER')
     const update = sync.indexOf('UPDATE public.comments AS target')
     expect(pathGuard).toBeGreaterThan(0)
-    expect(update).toBeGreaterThan(pathGuard)
+    expect(absoluteCount).toBeGreaterThan(pathGuard)
+    expect(update).toBeGreaterThan(absoluteCount)
     expect(sync).toContain("'app.comment_reaction_path'")
+    expect(sync).toContain('FROM public.comment_likes AS reaction')
+    expect(sync).toContain('like_count = v_like_count::integer')
+    expect(sync).toContain('dislike_count = v_dislike_count::integer')
+    expect(sync).not.toContain('v_like_delta')
+    expect(sync).not.toContain('v_dislike_delta')
     expect(sync).toContain('RETURN OLD')
     expect(sync).toContain('RETURN NEW')
     expect(sync).not.toContain('comment_reaction_count_repair_queue')
@@ -118,6 +131,10 @@ describe('durable comment reaction count repair migration', () => {
 
   it('repairs with post -> comment -> queue ownership before absolute recount', () => {
     const worker = functionBody('repair_comment_reaction_counts_atomic')
+    const migrationGate = worker.indexOf('pg_catalog.pg_try_advisory_xact_lock_shared')
+    const candidateRead = worker.indexOf(
+      'FROM public.comment_reaction_count_repair_queue AS repair_queue'
+    )
     const postLock = worker.indexOf('INTO v_locked_post_id')
     const commentLock = worker.indexOf('INTO v_locked_comment_id')
     const queueLock = worker.indexOf(
@@ -129,7 +146,11 @@ describe('durable comment reaction count repair migration', () => {
     const sourceCount = worker.indexOf('pg_catalog.count(*) FILTER')
     const commentUpdate = worker.indexOf('UPDATE public.comments AS target')
 
-    expect(postLock).toBeGreaterThan(0)
+    expect(migrationGate).toBeGreaterThan(0)
+    expect(migrationGate).toBeGreaterThan(worker.indexOf('service role required'))
+    expect(migrationGate).toBeGreaterThan(worker.indexOf('p_limit IS DISTINCT FROM 1'))
+    expect(candidateRead).toBeGreaterThan(migrationGate)
+    expect(postLock).toBeGreaterThan(candidateRead)
     expect(commentLock).toBeGreaterThan(postLock)
     expect(queueLock).toBeGreaterThan(commentLock)
     expect(queueDelete).toBeGreaterThan(queueLock)
@@ -137,7 +158,13 @@ describe('durable comment reaction count repair migration', () => {
     expect(commentUpdate).toBeGreaterThan(sourceCount)
     expect(worker).toContain('FOR SHARE SKIP LOCKED')
     expect(worker).toContain('FOR UPDATE SKIP LOCKED')
-    expect(worker).not.toContain('pg_advisory')
+    expect(worker).toContain('public.comment-reaction-count-repair:migration')
+    expect(worker).toContain("ERRCODE = '55P03'")
+    expect(worker).toContain('comment reaction repair migration gate is busy')
+    expect(worker.match(/pg_try_advisory_xact_lock_shared/g)).toHaveLength(1)
+    expect(worker).not.toContain('pg_advisory_xact_lock_shared(')
+    expect(worker).not.toContain('pg_try_advisory_xact_lock(')
+    expect(worker).not.toContain('pg_advisory_xact_lock(')
     expect(worker).toContain("reaction.reaction_type = 'like'")
     expect(worker).toContain("reaction.reaction_type = 'dislike'")
     expect(worker).toContain('like_count = v_like_count::integer')
@@ -186,12 +213,39 @@ describe('durable comment reaction count repair migration', () => {
   })
 
   it('attests exact trigger timing, operations, UPDATE OF vectors, and no WHEN predicate', () => {
-    expect(migration.match(/trigger_row\.tgqual IS NULL/g)?.length).toBeGreaterThanOrEqual(3)
+    expect(migration.match(/trigger_row\.tgqual IS NULL/g)?.length).toBeGreaterThanOrEqual(4)
+    expect(migration).toContain('trigger_row.tgtype = 31')
     expect(migration).toContain('trigger_row.tgtype = 29')
     expect(migration).toContain('trigger_row.tgtype = 23')
+    expect(migration).toContain('pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 0')
+    expect(migration).toContain('trigger_row.tgnargs = 0')
+    expect(migration).toContain('pg_catalog.octet_length(trigger_row.tgargs) = 0')
     expect(migration).toContain("ARRAY['comment_id', 'user_id', 'reaction_type']::text[]")
     expect(migration).toContain("ARRAY['comment_id', 'reaction_type']::text[]")
     expect(migration).toContain("ARRAY['like_count', 'dislike_count']::text[]")
+  })
+
+  it('seals the canonical source guard and removes every non-SELECT source ACL', () => {
+    const sourceGuard = functionBody('guard_canonical_comment_reaction_mutation')
+    expect(sourceGuard).toContain("TG_TABLE_SCHEMA IS DISTINCT FROM 'public'")
+    expect(sourceGuard).toContain("TG_TABLE_NAME IS DISTINCT FROM 'comment_likes'")
+    expect(sourceGuard).toContain("TG_OP NOT IN ('INSERT', 'UPDATE', 'DELETE')")
+    expect(sourceGuard).toContain('TG_NARGS IS DISTINCT FROM 0')
+    expect(sourceGuard).toContain('pg_catalog.pg_trigger_depth() > 1')
+    expect(sourceGuard).toContain('app.comment_reaction_path')
+    expect(migration).toContain('comment-reaction-count-repair:source-guard-v1:')
+    expect(migration).toContain('ALTER FUNCTION public.guard_canonical_comment_reaction_mutation()')
+
+    const aclConvergence = migration.slice(
+      migration.indexOf('DO $close_comment_likes_mutation_acl_drift$'),
+      migration.indexOf('DO $converge_function_acls$')
+    )
+    expect(aclConvergence).toContain("acl_entry.privilege_type <> 'SELECT'")
+    expect(aclConvergence).toContain('REVOKE %s ON TABLE public.comment_likes')
+    expect(aclConvergence).toContain('REVOKE %s (%I) ON TABLE public.comment_likes')
+    expect(aclConvergence.match(/CASCADE/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(aclConvergence).toContain('ACL references missing role oid')
+    expect(migration).toContain('comment reaction source mutation ACL leaked to a non-owner role')
   })
 
   it('ships executable PG17 cascade, direct-DML, replay, ACL and lock proofs', () => {
@@ -206,6 +260,11 @@ describe('durable comment reaction count repair migration', () => {
       'wrong_queue_index_drift',
       'wrong_trigger_when_false',
       'wrong_update_of_drift',
+      'source_guard_when_false_missing_delete',
+      'cascade_then_toggle_absolute_ack',
+      'unknown_source_acl_drift',
+      'worker_shared_gate_blocks_replay',
+      'exclusive_migration_gate_rejects_prelocked_worker',
       'live_toggle_vs_auth_delete',
       'worker_vs_comment_delete',
       'worker_vs_post_delete',
