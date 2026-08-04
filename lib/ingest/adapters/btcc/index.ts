@@ -36,6 +36,16 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import { BTCC_COPIER_HISTORY_URL, BTCC_COPIER_PAGE_ENVELOPE_CONTRACT } from './copier-contract'
+import {
+  btccCopierRequest,
+  btccCopierSnapshotVerifier,
+  validateBtccCopierPage,
+} from './copier-snapshot'
+import {
   parseBtccHistory,
   parseBtccLeaderboardPage,
   parseBtccPositions,
@@ -51,6 +61,33 @@ function endpoint(src: SourceRow, key: string, fallback: string): string {
   return endpoints[key] ?? fallback
 }
 
+function isCanonicalBtccCopierSource(src: SourceRow): boolean {
+  return (
+    src.slug === 'btcc_futures' &&
+    src.status === 'active' &&
+    src.serving_mode === 'serving' &&
+    src.adapter_slug === 'btcc' &&
+    src.product_type === 'futures' &&
+    src.trader_kind_scope === 'human' &&
+    src.currency === 'USDT' &&
+    src.copier_table_depth === 'full' &&
+    endpoint(src, 'copiers', BTCC_COPIER_HISTORY_URL) === BTCC_COPIER_HISTORY_URL
+  )
+}
+
+function copierMaxPages(src: SourceRow): number {
+  const value = src.meta.copier_max_pages ?? 100
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    Object.is(value, -0)
+  ) {
+    throw new TypeError('[btcc] copier_max_pages must be a positive safe integer')
+  }
+  return value
+}
+
 async function btccFetcher(session: FetchSession): Promise<JsonFetcher> {
   return apiFetcher(await session.api())
 }
@@ -64,6 +101,10 @@ const btccAdapter: SourceAdapter = {
     orders: false, // no public order-level surface
     transfers: false, // no public balance-history surface
     copiers: true, // POST traderBring/follow/page
+  },
+
+  verifyCopierSnapshot(src) {
+    return isCanonicalBtccCopierSource(src) ? btccCopierSnapshotVerifier : null
   },
 
   /** Native board is 30d only — the scheduler only requests TFs from
@@ -177,7 +218,7 @@ const btccAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     if (kind !== 'position_history' && kind !== 'copiers') {
       throw new Error(`[btcc] history surface ${kind} not supported`)
     }
@@ -210,21 +251,59 @@ const btccAdapter: SourceAdapter = {
       return
     }
 
-    // copiers
-    const url = endpoint(src, 'copiers', `${BASE}/traderBring/follow/page`)
-    const maxPages = Number(src.meta.copier_max_pages) || 30
+    // Copiers are a whole snapshot. Bind every POST request into stored RAW,
+    // then prove every reported row through the exact terminal page.
+    const url = endpoint(src, 'copiers', BTCC_COPIER_HISTORY_URL)
+    const maxPages = copierMaxPages(src)
+    let stableTotal: number | null = null
+    let rowsSeen = 0
+    const identities = new Set<string>()
+
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
-      const payload = await replayJson(session, fetcher, {
+      const request = btccCopierRequest(exchangeTraderId, pageIndex)
+      const response = await replayJson(session, fetcher, {
         url,
         method: 'POST',
         headers: HEADERS,
-        body: { pageNum: pageIndex, pageSize: limit, traderId },
+        body: request,
       })
-      const rows = parseBtccHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
+      const payload = {
+        contract: BTCC_COPIER_PAGE_ENVELOPE_CONTRACT,
+        exchangeTraderId,
+        request,
+        response,
+      }
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      if (rows.length < limit) return
+
+      const page = validateBtccCopierPage(payload, pageIndex, exchangeTraderId)
+      if (page === null) {
+        throw new Error('[btcc] copiers returned a malformed exact page envelope')
+      }
+      if (stableTotal === null) stableTotal = page.total
+      else if (page.total !== stableTotal) {
+        throw new Error('[btcc] copiers changed total during pagination')
+      }
+      for (const row of page.rows) {
+        const identity = String(row.userId)
+        if (identities.has(identity)) {
+          throw new Error('[btcc] copiers returned a duplicate user identity')
+        }
+        identities.add(identity)
+      }
+      rowsSeen += page.rows.length
+
+      if (rowsSeen === stableTotal && identities.size === stableTotal) {
+        return {
+          contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+          observations: [
+            { segment_id: 'default', reason: 'reported_end', page_ordinal: pageIndex },
+          ],
+        }
+      }
     }
+    throw new Error(
+      `[btcc] copiers reached page cap ${maxPages} before reported total ${String(stableTotal)}`
+    )
   },
 
   parseLeaderboard: parseBtccLeaderboardPage,

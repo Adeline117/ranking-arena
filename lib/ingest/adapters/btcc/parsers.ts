@@ -36,6 +36,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { BTCC_COPIER_PAGE_ENVELOPE_CONTRACT } from './copier-contract'
 
 type Dict = Record<string, unknown>
 
@@ -324,9 +325,17 @@ export function parseBtccPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedHi
  * email — stored for dedupe/aggregates only, NEVER rendered (spec §6 PII).
  */
 export function parseBtccCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
+  const wrapper = raw as Dict
+  const response =
+    wrapper?.contract === BTCC_COPIER_PAGE_ENVELOPE_CONTRACT &&
+    wrapper.response !== null &&
+    typeof wrapper.response === 'object' &&
+    !Array.isArray(wrapper.response)
+      ? wrapper.response
+      : raw
   const scraped = Date.parse(ctx.scrapedAt)
   const out: ParsedHistoryRow[] = []
-  for (const item of rows(raw)) {
+  for (const item of rows(response)) {
     if (item.userId === undefined || item.userId === null) continue
     const followMs = num(item.followTime)
     out.push({
