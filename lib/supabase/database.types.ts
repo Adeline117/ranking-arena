@@ -13416,6 +13416,10 @@ export type Database = {
           target_handle: string | null
         }[]
       }
+      cleanup_comment_reaction_intents_atomic: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       repair_comment_reaction_counts_atomic: {
         Args: { p_limit?: number }
         Returns: Json
@@ -13430,6 +13434,27 @@ export type Database = {
           p_comment_id: string
           p_desired_reaction: string | null
           p_post_id: string
+        }
+        Returns: Json
+      }
+      reserve_comment_reaction_intent_atomic: {
+        Args: {
+          p_actor_id: string
+          p_comment_id: string
+          p_desired_reaction: string | null
+          p_post_id: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
+      set_comment_reaction_desired_state_causal_atomic: {
+        Args: {
+          p_actor_id: string
+          p_comment_id: string
+          p_desired_reaction: string | null
+          p_intent_sequence: string
+          p_post_id: string
+          p_request_id: string
         }
         Returns: Json
       }

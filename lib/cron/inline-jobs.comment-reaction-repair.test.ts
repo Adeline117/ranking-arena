@@ -1,8 +1,14 @@
 const mockRpc = jest.fn()
+const mockCleanupRpc = jest.fn()
 const mockCacheDelete = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: () => ({ rpc: (...args: unknown[]) => mockRpc(...args) }),
+  getSupabaseAdmin: () => ({
+    rpc: (...args: unknown[]) =>
+      args[0] === 'cleanup_comment_reaction_intents_atomic'
+        ? mockCleanupRpc(...args)
+        : mockRpc(...args),
+  }),
 }))
 
 jest.mock('@/lib/cache', () => ({
@@ -40,9 +46,19 @@ function acknowledgement(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function cleanupAcknowledgement(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'ok',
+    operations_deleted: 0,
+    heads_deleted: 0,
+    ...overrides,
+  }
+}
+
 describe('repairCommentReactionCountsInline', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockCleanupRpc.mockResolvedValue(rpcResult(cleanupAcknowledgement()))
   })
 
   afterEach(() => {
@@ -89,6 +105,57 @@ describe('repairCommentReactionCountsInline', () => {
     expect(mockRpc).toHaveBeenNthCalledWith(2, 'repair_comment_reaction_counts_atomic', {
       p_limit: 1,
     })
+    expect(mockCleanupRpc).toHaveBeenCalledWith('cleanup_comment_reaction_intents_atomic', {
+      p_limit: 500,
+    })
+  })
+
+  it('reports bounded causal-ticket cleanup after the repair loop', async () => {
+    mockRpc.mockResolvedValueOnce(rpcResult(acknowledgement()))
+    mockCleanupRpc.mockResolvedValueOnce(
+      rpcResult(cleanupAcknowledgement({ operations_deleted: 12, heads_deleted: 3 }))
+    )
+
+    await expect(repairCommentReactionCountsInline()).resolves.toEqual(
+      expect.objectContaining({
+        status: 'success',
+        detail: expect.objectContaining({
+          cleanupOperationsDeleted: 12,
+          cleanupHeadsDeleted: 3,
+        }),
+      })
+    )
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockCleanupRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    cleanupAcknowledgement({ extra: true }),
+    cleanupAcknowledgement({ status: 'processed' }),
+    cleanupAcknowledgement({ operations_deleted: -1 }),
+    cleanupAcknowledgement({ heads_deleted: 501 }),
+  ])('fails closed for an invalid causal-ticket cleanup receipt %#', async (cleanupReceipt) => {
+    mockRpc.mockResolvedValueOnce(rpcResult(acknowledgement()))
+    mockCleanupRpc.mockResolvedValueOnce(rpcResult(cleanupReceipt))
+
+    await expect(repairCommentReactionCountsInline()).resolves.toEqual(
+      expect.objectContaining({
+        status: 'error',
+        error: 'cleanup_comment_reaction_intents_atomic returned an invalid acknowledgement',
+      })
+    )
+  })
+
+  it('fails the heartbeat when causal-ticket cleanup fails', async () => {
+    mockRpc.mockResolvedValueOnce(rpcResult(acknowledgement()))
+    mockCleanupRpc.mockResolvedValueOnce(rpcResult(null, { message: 'cleanup unavailable' }))
+
+    await expect(repairCommentReactionCountsInline()).resolves.toEqual(
+      expect.objectContaining({
+        status: 'error',
+        error: 'cleanup_comment_reaction_intents_atomic failed: cleanup unavailable',
+      })
+    )
   })
 
   it('rejects an acknowledgement with any extra key', async () => {

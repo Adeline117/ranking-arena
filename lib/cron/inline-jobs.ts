@@ -22,6 +22,7 @@ const COMMENT_REACTION_REPAIR_MAX_CALLS = 100
 const COMMENT_REACTION_REPAIR_TIME_BUDGET_MS = 75_000
 const COMMENT_REACTION_REPAIR_MAX_BACKLOG = 1_000
 const COMMENT_REACTION_REPAIR_MAX_AGE_MS = 15 * 60_000
+const COMMENT_REACTION_INTENT_CLEANUP_LIMIT = 500
 const COMMENT_REACTION_REPAIR_ACK_KEYS = [
   'contended_count',
   'discarded_count',
@@ -31,6 +32,11 @@ const COMMENT_REACTION_REPAIR_ACK_KEYS = [
   'remaining_count',
   'repaired_count',
   'selected_count',
+  'status',
+] as const
+const COMMENT_REACTION_INTENT_CLEANUP_ACK_KEYS = [
+  'heads_deleted',
+  'operations_deleted',
   'status',
 ] as const
 const POST_INTERACTION_REPAIR_RPC_LIMIT = 1
@@ -86,6 +92,12 @@ interface CommentReactionRepairAcknowledgement {
   oldest_enqueued_at: string | null
 }
 
+interface CommentReactionIntentCleanupAcknowledgement {
+  status: 'ok'
+  operations_deleted: number
+  heads_deleted: number
+}
+
 type CommentReactionRepairStopReason = 'no-due-work' | 'contention' | 'call-limit' | 'time-budget'
 
 type PostInteractionRepairStopReason = 'no-due-work' | 'contention' | 'call-limit' | 'time-budget'
@@ -98,6 +110,29 @@ function hasExactCommentReactionRepairAcknowledgementKeys(
     keys.length === COMMENT_REACTION_REPAIR_ACK_KEYS.length &&
     COMMENT_REACTION_REPAIR_ACK_KEYS.every((key, index) => keys[index] === key)
   )
+}
+
+function parseCommentReactionIntentCleanupAcknowledgement(
+  value: unknown
+): CommentReactionIntentCleanupAcknowledgement {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('cleanup_comment_reaction_intents_atomic returned an invalid acknowledgement')
+  }
+  const acknowledgement = value as Record<string, unknown>
+  const keys = Object.keys(acknowledgement).sort()
+  if (
+    keys.length !== COMMENT_REACTION_INTENT_CLEANUP_ACK_KEYS.length ||
+    !COMMENT_REACTION_INTENT_CLEANUP_ACK_KEYS.every((key, index) => keys[index] === key) ||
+    acknowledgement.status !== 'ok' ||
+    !isExactMutationCount(acknowledgement.operations_deleted) ||
+    !isExactMutationCount(acknowledgement.heads_deleted) ||
+    Number(acknowledgement.operations_deleted) > COMMENT_REACTION_INTENT_CLEANUP_LIMIT ||
+    Number(acknowledgement.heads_deleted) > COMMENT_REACTION_INTENT_CLEANUP_LIMIT
+  ) {
+    throw new Error('cleanup_comment_reaction_intents_atomic returned an invalid acknowledgement')
+  }
+
+  return acknowledgement as unknown as CommentReactionIntentCleanupAcknowledgement
 }
 
 function hasExactRepairAcknowledgementKeys(
@@ -301,6 +336,16 @@ async function executeCommentReactionRepairRpc(
   return signal ? await request.abortSignal(signal) : await request
 }
 
+async function executeCommentReactionIntentCleanupRpc(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  signal?: AbortSignal
+) {
+  const request = supabase.rpc('cleanup_comment_reaction_intents_atomic', {
+    p_limit: COMMENT_REACTION_INTENT_CLEANUP_LIMIT,
+  })
+  return signal ? await request.abortSignal(signal) : await request
+}
+
 function commentReactionRepairBacklogError(
   acknowledgement: CommentReactionRepairAcknowledgement,
   observedAt: number
@@ -395,6 +440,19 @@ export async function repairCommentReactionCountsInline(
       throw new Error('comment reaction count repair stopped without an acknowledgement')
     }
 
+    throwIfCommentReactionRepairAborted(signal)
+    const { data: cleanupData, error: cleanupError } = await executeCommentReactionIntentCleanupRpc(
+      supabase,
+      signal
+    )
+    throwIfCommentReactionRepairAborted(signal)
+    if (cleanupError) {
+      throw new Error(
+        `cleanup_comment_reaction_intents_atomic failed: ${cleanupError.message || 'database error'}`
+      )
+    }
+    const cleanupAcknowledgement = parseCommentReactionIntentCleanupAcknowledgement(cleanupData)
+
     const observedAt = Date.now()
     const backlogFailure = commentReactionRepairBacklogError(lastAcknowledgement, observedAt)
     const detail = {
@@ -411,6 +469,8 @@ export async function repairCommentReactionCountsInline(
         lastAcknowledgement.oldest_enqueued_at === null
           ? null
           : Math.max(0, observedAt - Date.parse(lastAcknowledgement.oldest_enqueued_at)),
+      cleanupOperationsDeleted: cleanupAcknowledgement.operations_deleted,
+      cleanupHeadsDeleted: cleanupAcknowledgement.heads_deleted,
       stopReason,
     }
 
