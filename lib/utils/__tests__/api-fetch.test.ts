@@ -14,19 +14,9 @@ function mockResponse(body: unknown, init: { status: number; statusText: string;
 const mockFetch = jest.fn() as jest.MockedFunction<typeof fetch>
 global.fetch = mockFetch
 
-// Mock AbortSignal.timeout
-const mockSignal = { aborted: false } as AbortSignal
-const originalTimeout = AbortSignal.timeout
-beforeAll(() => {
-  AbortSignal.timeout = jest.fn(() => mockSignal)
-})
-afterAll(() => {
-  AbortSignal.timeout = originalTimeout
-})
-
 afterEach(() => {
   mockFetch.mockReset()
-  ;(AbortSignal.timeout as jest.Mock).mockClear()
+  jest.useRealTimers()
 })
 
 describe('ApiFetchError', () => {
@@ -44,27 +34,26 @@ describe('ApiFetchError', () => {
 describe('apiFetch', () => {
   it('returns parsed JSON on successful response', async () => {
     const data = { traders: [{ id: 1 }] }
-    mockFetch.mockResolvedValueOnce(
-      mockResponse(data, { status: 200, statusText: 'OK', ok: true }),
-    )
+    mockFetch.mockResolvedValueOnce(mockResponse(data, { status: 200, statusText: 'OK', ok: true }))
 
     const result = await apiFetch<{ traders: { id: number }[] }>('/api/traders')
     expect(result).toEqual(data)
-    expect(mockFetch).toHaveBeenCalledWith('/api/traders', {
-      signal: mockSignal,
-    })
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/traders',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
   })
 
   it('throws ApiFetchError on 404 response', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse(null, { status: 404, statusText: 'Not Found', ok: false }),
+      mockResponse(null, { status: 404, statusText: 'Not Found', ok: false })
     )
 
     await expect(apiFetch('/api/missing')).rejects.toThrow(ApiFetchError)
 
     // Verify error details
     mockFetch.mockResolvedValueOnce(
-      mockResponse(null, { status: 404, statusText: 'Not Found', ok: false }),
+      mockResponse(null, { status: 404, statusText: 'Not Found', ok: false })
     )
     try {
       await apiFetch('/api/missing')
@@ -78,7 +67,7 @@ describe('apiFetch', () => {
 
   it('throws ApiFetchError on 500 response', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse(null, { status: 500, statusText: 'Internal Server Error', ok: false }),
+      mockResponse(null, { status: 500, statusText: 'Internal Server Error', ok: false })
     )
 
     try {
@@ -93,41 +82,64 @@ describe('apiFetch', () => {
     }
   })
 
-  it('uses AbortSignal.timeout with default 15000ms', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({}, { status: 200, statusText: 'OK', ok: true }),
-    )
+  it('physically rejects at the deadline when fetch ignores its AbortSignal', async () => {
+    jest.useFakeTimers()
+    mockFetch.mockReturnValueOnce(new Promise<Response>(() => undefined))
 
-    await apiFetch('/api/test')
-    expect(AbortSignal.timeout).toHaveBeenCalledWith(15_000)
+    const request = apiFetch('/api/test', { timeoutMs: 5_000 })
+    const rejection = expect(request).rejects.toMatchObject({ name: 'TimeoutError' })
+    await jest.advanceTimersByTimeAsync(5_000)
+    await rejection
   })
 
-  it('uses custom timeoutMs when provided', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({}, { status: 200, statusText: 'OK', ok: true }),
-    )
+  it('uses the same physical deadline for a stuck JSON decoder', async () => {
+    jest.useFakeTimers()
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => new Promise<unknown>(() => undefined),
+    } as Response)
 
-    await apiFetch('/api/test', { timeoutMs: 5000 })
-    expect(AbortSignal.timeout).toHaveBeenCalledWith(5000)
+    const request = apiFetch('/api/test', { timeoutMs: 2_000 })
+    const rejection = expect(request).rejects.toMatchObject({ name: 'TimeoutError' })
+    await jest.advanceTimersByTimeAsync(2_000)
+    await rejection
   })
 
-  it('preserves caller-provided signal instead of creating timeout signal', async () => {
-    const customSignal = new AbortController().signal
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({}, { status: 200, statusText: 'OK', ok: true }),
-    )
+  it('combines caller cancellation with the hard deadline', async () => {
+    const caller = new AbortController()
+    mockFetch.mockResolvedValueOnce(mockResponse({}, { status: 200, statusText: 'OK', ok: true }))
 
-    await apiFetch('/api/test', { signal: customSignal })
+    await apiFetch('/api/test', { signal: caller.signal })
 
-    // The caller's signal takes precedence via the ?? operator
     const fetchCall = mockFetch.mock.calls[0]
-    expect(fetchCall[1]?.signal).toBe(customSignal)
+    expect(fetchCall[1]?.signal).toBeInstanceOf(AbortSignal)
+    expect(fetchCall[1]?.signal).not.toBe(caller.signal)
+  })
+
+  it('physically rejects when the caller aborts and fetch ignores it', async () => {
+    const caller = new AbortController()
+    mockFetch.mockReturnValueOnce(new Promise<Response>(() => undefined))
+
+    const request = apiFetch('/api/test', { signal: caller.signal })
+    const rejection = expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    caller.abort(new DOMException('cancelled', 'AbortError'))
+    await rejection
+  })
+
+  it('does not start a request for an already-aborted caller', async () => {
+    const caller = new AbortController()
+    caller.abort(new DOMException('cancelled', 'AbortError'))
+
+    await expect(apiFetch('/api/test', { signal: caller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('passes through additional fetch options', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({}, { status: 200, statusText: 'OK', ok: true }),
-    )
+    mockFetch.mockResolvedValueOnce(mockResponse({}, { status: 200, statusText: 'OK', ok: true }))
 
     await apiFetch('/api/test', {
       method: 'POST',
@@ -138,7 +150,7 @@ describe('apiFetch', () => {
     const fetchCall = mockFetch.mock.calls[0]
     expect(fetchCall[1]?.method).toBe('POST')
     expect((fetchCall[1]?.headers as Record<string, string>)?.['Content-Type']).toBe(
-      'application/json',
+      'application/json'
     )
   })
 
