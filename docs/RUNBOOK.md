@@ -18,7 +18,7 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 > `INGEST_WORKER_DEPLOY.md`; direct PM2 start/restart is prohibited. The current
 > Vercel Preview target inherits production-level secrets, so do not push a
 > candidate branch until Preview has been isolated.
-> The local candidate additionally fixes eleven privileged production
+> The local candidate additionally fixes thirteen privileged production
 > workflows and two CI production-secret jobs to zero runners. This has not been
 > pushed, so it is not evidence that GitHub's live control plane is disabled.
 

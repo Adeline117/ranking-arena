@@ -9,7 +9,7 @@ Beta 只验证一个问题：用户能否借助 Arena 找到值得持续跟踪�
 - `V1_EXECUTION_STATUS_2026-08-03.md` 记录的 current incident **NO-GO** 必须由 owner 明确解除；deploy-force、关闭 gate 或手工 promote 不能代替该决定。
 - Mac mini 与 SG 的主机侧 ingest deploy hold 以及旧 orchestrator compatibility guard 必须仍保持 armed，直到 owner 在同一受控变更中核对全部发布证据并明确解除；任何直接 PM2 start/restart 都是 P0 事故复发，不是 canary。
 - Vercel Preview 必须与 production secrets 完全隔离。Preview 不得持有 production `DATABASE_URL`、Supabase service role、Stripe secret、R2 credentials、`ENCRYPTION_KEY` 或其他高权限值；测试项目必须有独立的 disposable database、Stripe test mode 与受保护 GitHub environment。任意分支 Preview 继承生产权限时禁止 push 候选分支。
-- GitHub `main` 必须有 required PR/check protection；repository/organization 级 production secrets 必须撤销并迁入 `Production`、`ingest-sg-production` 与 `arena-staging-payment-canary`，三个 environment 必须有第二位可信 required reviewer 与 protected-main policy。当前这些保护不存在，payment environment 也不存在；十一个 privileged production workflow 与 CI 两个 secret job 必须保持零 runner，并在控制面修复后逐项恢复，所以任何 workflow 成功都不能替代该门禁。
+- GitHub `main` 必须有 required PR/check protection；repository/organization 级 production secrets 必须撤销并迁入 `Production`、`ingest-sg-production` 与 `arena-staging-payment-canary`，三个 environment 必须有第二位可信 required reviewer 与 protected-main policy。当前这些保护不存在，payment environment 也不存在；十三个 privileged production workflow 与 CI 两个 secret job 必须保持零 runner，并在控制面修复后逐项恢复，所以任何 workflow 成功都不能替代该门禁。
 - 核心 API 连续 24 小时成功，canonical LKG 已预热并完成一次故障降级演练。
 - 每个公开榜单都能显示来源、新鲜度和最近完整发布证明；不可证明时明确 unknown/down。
 - 登录、详情、收藏、关注、持久提醒至少在 desktop 与 iPhone 小屏完成一次真实写入/读取闭环。
