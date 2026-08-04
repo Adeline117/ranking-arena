@@ -275,6 +275,31 @@ test('requires HEAD metadata to prove arena+public completeness before download'
     )
   )
   assert.doesNotThrow(() => assertRestorableObject(arenaSchemasObject()))
+  assert.doesNotThrow(() =>
+    assertRestorableObject(
+      arenaSchemasObject({
+        Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+      })
+    )
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-full.sql.gz`,
+        })
+      ),
+    /full\/all completeness metadata/
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-short-schemas.sql.gz`,
+        })
+      ),
+    /not a complete schemas\/full backup/
+  )
   for (const Metadata of [
     {
       'backup-type': 'schemas:arena+public',

@@ -3,7 +3,7 @@
 /**
  * Long-term database backup to Cloudflare R2
  *
- * Dumps all trader data tables → gzip → upload to R2
+ * Dumps an explicit complete schema set or the full database → gzip → upload to R2
  * Run daily via Mac Mini cron: npm run backup:r2
  * Run manually with full DB: npm run backup:r2:full
  *
@@ -27,56 +27,18 @@ import {
   ARENA_BACKUP_COMPLETION_CONTRACT,
   arenaBackupCompletionSentinel,
   COMPLETE_BACKUP_MIN_BYTES,
+  IMMUTABLE_BACKUP_FILENAME_PATTERN,
+  parseCompleteBackupFilename,
   preparePostgresConnection,
 } from './backup-restore-contract.mjs'
 import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
 
-export { assertBackupArtifact, COMPLETE_BACKUP_MIN_BYTES }
+export { assertBackupArtifact, COMPLETE_BACKUP_MIN_BYTES, IMMUTABLE_BACKUP_FILENAME_PATTERN }
 
-// Retention: daily (trader-tables) backups kept this many days; full backups
-// keep the N newest regardless of age (they are the only complete restore points)
+// Retention: daily schema backups are kept this many days; full backups keep
+// the N newest regardless of age.
 const DAILY_RETENTION_DAYS = 14
 const FULL_BACKUPS_TO_KEEP = 3
-
-const TRADER_TABLES = [
-  // Core trader data
-  'trader_equity_curve',
-  'trader_snapshots',
-  'trader_snapshots_v2',
-  'trader_daily_snapshots',
-  'trader_timeseries',
-  'trader_roi_history',
-  // Position data
-  'trader_position_history',
-  'trader_positions_history',
-  'trader_positions_live',
-  'trader_position_summary',
-  // Asset & trading details
-  'trader_asset_breakdown',
-  'trader_frequently_traded',
-  // Identity & profile
-  'trader_sources',
-  'trader_sources_v2',
-  'traders',
-  'trader_profiles_v2',
-  'trader_stats_detail',
-  'trader_scores',
-  'trader_links',
-  'trader_portfolio',
-  // Flags & quality
-  'trader_flags',
-  'trader_anomalies',
-  'trader_seasons',
-  'trader_merges',
-  // Social
-  'trader_follows',
-  'trader_authorizations',
-  'trader_alerts',
-  // Leaderboard
-  'leaderboard_ranks',
-  'leaderboard_snapshots',
-  'daily_trader_stats',
-]
 
 const DATABASE_URL = process.env.DATABASE_URL
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
@@ -93,14 +55,9 @@ const s3 = new S3Client({
   },
 })
 
-const now = new Date()
-const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
-const fullMode = process.argv.includes('--full')
 // Schema 模式：BACKUP_SCHEMAS=arena,public → dump 这些 schema 全部（含主数据层
-// arena.*）。默认的 public.* TRADER_TABLES 模式**漏掉了 arena.* 主数据层**
-// （数据已迁 arena schema，见 2026-07 发现），GH Actions 备份用此模式抓完整 app 数据，
-// 跳过 storage.objects(2.2GB 文件元数据，实体在 Supabase Storage)/auth 系统 schema。
-const schemasEnv = (process.env.BACKUP_SCHEMAS || '').trim()
+// arena.*）。GH Actions 备份用此模式抓完整 app 数据，跳过
+// storage.objects(2.2GB 文件元数据，实体在 Supabase Storage)/auth 系统 schema。
 
 export function normalizeCompleteBackupSchemas(value) {
   const schemas = [
@@ -117,8 +74,67 @@ export function normalizeCompleteBackupSchemas(value) {
   return schemas
 }
 
-const backupSchemas = normalizeCompleteBackupSchemas(schemasEnv)
-const schemaMode = backupSchemas.length > 0
+/**
+ * Resolve exactly one complete backup mode. The old implicit public-table mode
+ * was incomplete after the authority data moved into arena.*, so absence of an
+ * explicit complete mode must stop before pg_dump or R2 side effects.
+ */
+export function parseBackupMode({ argv = [], schemasEnv = '' } = {}) {
+  if (!Array.isArray(argv) || argv.some((arg) => typeof arg !== 'string')) {
+    throw new Error('backup arguments must be a string array')
+  }
+
+  const unknownArgs = argv.filter((arg) => arg !== '--full')
+  if (unknownArgs.length > 0) {
+    throw new Error('unknown backup argument')
+  }
+  if (argv.filter((arg) => arg === '--full').length > 1) {
+    throw new Error('--full may only be specified once')
+  }
+
+  const schemas = normalizeCompleteBackupSchemas(schemasEnv)
+  const full = argv.includes('--full')
+  if (full && schemas.length > 0) {
+    throw new Error('--full and BACKUP_SCHEMAS are mutually exclusive')
+  }
+  if (full) return { type: 'full', schemas: [] }
+  if (schemas.length > 0) return { type: 'schemas', schemas }
+
+  throw new Error('refusing incomplete backup: set BACKUP_SCHEMAS or pass --full')
+}
+
+const BACKUP_RUN_ID_PATTERN = /^[0-9a-f]{32}$/
+const LEGACY_BACKUP_FILENAME_PATTERN = /^arena-backup-(\d{8})(?:-(?:schemas|full))?\.sql\.gz$/
+
+/** Build one immutable local/R2 artifact identity without reading credentials. */
+export function buildBackupArtifactIdentity({ now, mode, runId }) {
+  if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
+    throw new Error('backup timestamp is invalid')
+  }
+  if (mode?.type !== 'schemas' && mode?.type !== 'full') {
+    throw new Error('backup mode is invalid')
+  }
+  if (!BACKUP_RUN_ID_PATTERN.test(runId)) {
+    throw new Error('backup run id is invalid')
+  }
+
+  const isoTimestamp = now.toISOString()
+  const compactTimestamp = isoTimestamp.replace(/[-:.]/g, '')
+  const filename = `arena-backup-${compactTimestamp}-${runId}-${mode.type}.sql.gz`
+  return {
+    filename,
+    localPath: `/tmp/${filename}`,
+    r2Key: `db-backups/${isoTimestamp.slice(0, 4)}/${isoTimestamp.slice(5, 7)}/${filename}`,
+  }
+}
+
+export function backupDateFromKey(key) {
+  if (typeof key !== 'string') return ''
+  const filename = key.split('/').at(-1)
+  const completeIdentity = parseCompleteBackupFilename(filename)
+  if (completeIdentity) return completeIdentity.date
+  return filename.match(LEGACY_BACKUP_FILENAME_PATTERN)?.[1] ?? ''
+}
 
 /**
  * Keep database credentials out of pg_dump's argv. libpq accepts the password
@@ -206,6 +222,17 @@ export async function produceAndCommitBackup({
 }
 
 async function run() {
+  let mode
+  try {
+    mode = parseBackupMode({
+      argv: process.argv.slice(2),
+      schemasEnv: process.env.BACKUP_SCHEMAS,
+    })
+  } catch (err) {
+    console.error('[backup] Refusing to start:', err.message)
+    process.exit(1)
+  }
+
   if (!DATABASE_URL) {
     console.error('Missing DATABASE_URL')
     process.exit(1)
@@ -215,36 +242,32 @@ async function run() {
     process.exit(1)
   }
 
-  const modeLabel = schemaMode
-    ? `schemas [${backupSchemas.join(',')}]`
-    : fullMode
-      ? 'FULL'
-      : 'trader tables'
+  const now = new Date()
+  const identity = buildBackupArtifactIdentity({
+    now,
+    mode,
+    runId: randomBytes(16).toString('hex'),
+  })
+  const schemaMode = mode.type === 'schemas'
+  const backupSchemas = mode.schemas
+  const modeLabel = schemaMode ? `schemas [${backupSchemas.join(',')}]` : 'FULL'
   console.log(`[backup] Starting ${modeLabel} backup — ${now.toISOString()}`)
 
-  const selectionArgs = schemaMode
-    ? backupSchemas.flatMap((s) => ['-n', s])
-    : fullMode
-      ? [] // dump everything
-      : TRADER_TABLES.flatMap((t) => ['-t', `public.${t}`])
-
-  const modeSuffix = schemaMode ? '-schemas' : fullMode ? '-full' : ''
-  const filename = `arena-backup-${dateStr}${modeSuffix}.sql.gz`
-  const localPath = `/tmp/${filename}`
+  const selectionArgs = schemaMode ? backupSchemas.flatMap((s) => ['-n', s]) : [] // full mode dumps everything
+  const { localPath, r2Key } = identity
 
   try {
     // pg_dump → gzip (PostgreSQL 17 匹配 Supabase 服务器)
     // 路径可 env 覆盖：Mac 本机默认 Homebrew pg17；GH Actions 装 client 后设 PG_DUMP_PATH=pg_dump
     const pgDumpPath = process.env.PG_DUMP_PATH || '/opt/homebrew/opt/postgresql@17/bin/pg_dump'
     console.log(
-      `[backup] Dumping ${schemaMode ? backupSchemas.join('+') + ' schemas' : fullMode ? 'full database' : `${TRADER_TABLES.length} tables`}...`
+      `[backup] Dumping ${schemaMode ? backupSchemas.join('+') + ' schemas' : 'full database'}...`
     )
-    // 30 tables over network to Supabase can take 15-20min depending on
-    // trader_snapshots_v2 size. 30min budget prevents false ETIMEDOUT.
+    // Complete dumps over the network can take 15-20min. A 30min producer
+    // budget prevents false ETIMEDOUT.
     const { connectionUrl, password } = preparePgDumpConnection(DATABASE_URL)
-    const minimumBytes = schemaMode || fullMode ? COMPLETE_BACKUP_MIN_BYTES : 1
+    const minimumBytes = COMPLETE_BACKUP_MIN_BYTES
     const completionToken = randomBytes(32).toString('hex')
-    const r2Key = `db-backups/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${filename}`
     await produceAndCommitBackup({
       produce: () =>
         runPgDumpPipeline({
@@ -271,16 +294,8 @@ async function run() {
             ContentLength: size,
             Metadata: {
               'backup-date': now.toISOString(),
-              'backup-type': schemaMode
-                ? `schemas:${backupSchemas.join('+')}`
-                : fullMode
-                  ? 'full'
-                  : 'trader-tables',
-              tables: schemaMode
-                ? backupSchemas.join(',')
-                : fullMode
-                  ? 'all'
-                  : TRADER_TABLES.join(','),
+              'backup-type': schemaMode ? `schemas:${backupSchemas.join('+')}` : 'full',
+              tables: schemaMode ? backupSchemas.join(',') : 'all',
               'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
               'completion-token': completionToken,
             },
@@ -317,19 +332,24 @@ async function pruneOldBackups() {
       token = r.NextContinuationToken
     } while (token)
 
-    const dateOf = (k) => (k.match(/arena-backup-(\d{8})/) || [])[1] || ''
     const isFull = (k) => k.includes('-full')
     const cutoffDate = new Date(Date.now() - DAILY_RETENTION_DAYS * 86_400_000)
     const cutoff = cutoffDate.toISOString().slice(0, 10).replace(/-/g, '')
     const keepFulls = new Set(
       all
         .filter((o) => isFull(o.Key))
-        .sort((a, b) => dateOf(b.Key).localeCompare(dateOf(a.Key)))
+        .sort(
+          (a, b) =>
+            backupDateFromKey(b.Key).localeCompare(backupDateFromKey(a.Key)) ||
+            String(b.Key).localeCompare(String(a.Key))
+        )
         .slice(0, FULL_BACKUPS_TO_KEEP)
         .map((o) => o.Key)
     )
     const toDelete = all.filter((o) =>
-      isFull(o.Key) ? !keepFulls.has(o.Key) : dateOf(o.Key) !== '' && dateOf(o.Key) < cutoff
+      isFull(o.Key)
+        ? !keepFulls.has(o.Key)
+        : backupDateFromKey(o.Key) !== '' && backupDateFromKey(o.Key) < cutoff
     )
     if (toDelete.length === 0) {
       console.log('[backup] Retention: nothing to prune')
