@@ -1064,6 +1064,8 @@ interface PreparedPositionHistoryRawArtifact extends PreparedDeterministicRawArt
   publicationMetaBase: PositionHistoryPublicationRawMetaBase | null
 }
 
+const INVALID_JSONB_TEXT_AUDIT_MARKER = 'invalid_jsonb_text'
+
 interface PositionHistoryTrustPointerRow {
   id: number
   source_id: number
@@ -1162,7 +1164,11 @@ function preparePositionHistoryRawArtifact(
         data_contract: input.artifact.contract,
         source_run_id: input.sourceRunId,
         source_slug: input.sourceSlug,
-        exchange_trader_id: input.exchangeTraderId,
+        // PostgreSQL jsonb rejects U+0000 even when escaped. The immutable
+        // gzip object retains the exact identity; audit metadata must not.
+        exchange_trader_id: input.exchangeTraderId.includes('\0')
+          ? INVALID_JSONB_TEXT_AUDIT_MARKER
+          : input.exchangeTraderId,
         history_kind: input.artifact.history_kind,
         attempt_started_at: input.artifact.attempt_started_at,
         starting_cursor: input.artifact.starting_cursor,
@@ -1317,7 +1323,10 @@ export function prepareHistoryRawArtifactReconciliationExpectation(
     artifact.durableCompressedBytes = durableCompressedBytes
   }
   const metaCandidates = [positionHistoryArtifactMeta(artifact)]
-  if (normalizedInput.artifact.history_kind === 'position_history') {
+  if (
+    normalizedInput.artifact.history_kind === 'position_history' &&
+    !normalizedInput.exchangeTraderId.includes('\0')
+  ) {
     metaCandidates.push(
       previousPositionHistoryArtifactMeta(normalizedInput, artifact),
       legacyPositionHistoryArtifactMeta(normalizedInput, artifact)
@@ -1376,6 +1385,7 @@ function validatePositionHistoryTrustPointer(
     metaMatches =
       storedMeta === strictCanonicalJson(positionHistoryArtifactMeta(artifact)) ||
       (input.artifact.history_kind === 'position_history' &&
+        !input.exchangeTraderId.includes('\0') &&
         (storedMeta === strictCanonicalJson(previousPositionHistoryArtifactMeta(input, artifact)) ||
           storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact))))
   } catch {

@@ -120,7 +120,8 @@ async function capture(
   source: { id: number; slug: string },
   pages: RawPage[],
   claim: HistoryTerminalClaim,
-  verifier: SelectedHistoryTerminalVerifier
+  verifier: SelectedHistoryTerminalVerifier,
+  capturedExchangeTraderId = exchangeTraderId
 ): Promise<CapturedHistoryAcquisition> {
   async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
     for (const page of pages) yield page
@@ -129,7 +130,7 @@ async function capture(
   return captureHistoryAcquisition({
     source,
     traderId,
-    exchangeTraderId,
+    exchangeTraderId: capturedExchangeTraderId,
     kind: 'position_history',
     cursor: null,
     attemptStartedAt,
@@ -177,7 +178,8 @@ function bitgetRaw(overrides: Record<string, unknown> = {}): Record<string, unkn
 }
 
 async function bitgetInput(
-  rawRows: readonly Record<string, unknown>[] = [bitgetRaw()]
+  rawRows: readonly Record<string, unknown>[] = [bitgetRaw()],
+  capturedExchangeTraderId = exchangeTraderId
 ): Promise<PrepareVerifiedPositionHistoryPublicationInput> {
   const captured = await capture(
     { id: 7, slug: 'bitget_futures' },
@@ -188,14 +190,15 @@ async function bitgetInput(
         fetchedAt,
         payload: {
           contract: BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
-          historyTraderIdentity: exchangeTraderId,
-          request: { pageNo: 1, pageSize: 20, traderUid: exchangeTraderId },
+          historyTraderIdentity: capturedExchangeTraderId,
+          request: { pageNo: 1, pageSize: 20, traderUid: capturedExchangeTraderId },
           response: { code: '00000', data: { rows: rawRows, nextFlag: false } },
         },
       },
     ],
     terminalClaim([{ segment_id: 'default', reason: 'reported_end', page_ordinal: 1 }]),
-    bitgetPositionHistoryTerminalVerifier
+    bitgetPositionHistoryTerminalVerifier,
+    capturedExchangeTraderId
   )
   const rows = positionRows(
     parseBitgetHistory(
@@ -331,6 +334,19 @@ describe('verified position-history publication preparation', () => {
       expect(Object.isFrozen(prepared.rows[0].raw)).toBe(true)
     }
   )
+
+  it.each([
+    ['a RAW string value', () => bitgetInput([bitgetRaw({ note: 'unsafe\0value' })])],
+    ['a RAW object key', () => bitgetInput([bitgetRaw({ ['unsafe\0key']: 'value' })])],
+    ['the outer identity', () => bitgetInput([bitgetRaw()], 'leader\0identity')],
+    ['an empty capture identity', () => bitgetInput([], 'leader\0identity')],
+  ] as const)('does not prepare a publication containing NUL in %s', async (_label, make) => {
+    const input = await make()
+
+    expect(() => prepareVerifiedPositionHistoryPublication(input)).toThrow(
+      'PostgreSQL JSONB cannot represent'
+    )
+  })
 
   it('projects exactly sixteen snake-case fact keys and materializes a missing optional return', async () => {
     const raw = bitgetRaw()

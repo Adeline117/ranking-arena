@@ -133,7 +133,8 @@ function reviewedBitgetRaw(overrides: Record<string, unknown> = {}): Record<stri
 
 async function reviewedBitgetArtifactInput(
   rows: readonly Record<string, unknown>[] = [reviewedBitgetRaw()],
-  terminalVerifier: SelectedHistoryTerminalVerifier = bitgetPositionHistoryTerminalVerifier
+  terminalVerifier: SelectedHistoryTerminalVerifier = bitgetPositionHistoryTerminalVerifier,
+  exchangeTraderId = 'portfolio-1'
 ): Promise<WritePositionHistoryRawArtifactInput> {
   async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
     yield {
@@ -142,8 +143,8 @@ async function reviewedBitgetArtifactInput(
       fetchedAt,
       payload: {
         contract: BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
-        historyTraderIdentity: 'portfolio-1',
-        request: { pageNo: 1, pageSize: 20, traderUid: 'portfolio-1' },
+        historyTraderIdentity: exchangeTraderId,
+        request: { pageNo: 1, pageSize: 20, traderUid: exchangeTraderId },
         response: { code: '00000', data: { rows, nextFlag: false } },
       },
     }
@@ -153,7 +154,7 @@ async function reviewedBitgetArtifactInput(
   const captured = await captureHistoryAcquisition({
     source: { id: 7, slug: 'bitget_futures' },
     traderId: 11,
-    exchangeTraderId: 'portfolio-1',
+    exchangeTraderId,
     kind: 'position_history',
     cursor: null,
     attemptStartedAt,
@@ -414,6 +415,67 @@ describe('writePositionHistoryRawArtifact', () => {
     expect(storage.has(first.storagePath)).toBe(true)
     expect(mockDownload).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    {
+      label: 'RAW string value',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ note: 'unsafe\0value' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
+    {
+      label: 'RAW object key',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ ['unsafe\0key']: 'value' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
+    {
+      label: 'outer identity',
+      make: () =>
+        reviewedBitgetArtifactInput(
+          [reviewedBitgetRaw()],
+          bitgetPositionHistoryTerminalVerifier,
+          'leader\0identity'
+        ),
+      expectedAuditIdentity: 'invalid_jsonb_text',
+    },
+    {
+      label: 'empty verified identity',
+      make: () =>
+        reviewedBitgetArtifactInput([], bitgetPositionHistoryTerminalVerifier, 'leader\0identity'),
+      expectedAuditIdentity: 'invalid_jsonb_text',
+    },
+  ])(
+    'keeps $label as exact gzip RAW with JSONB-safe replayable audit metadata',
+    async ({ make, expectedAuditIdentity }) => {
+      const input = await make()
+      const database = databaseHarness()
+
+      const first = await writePositionHistoryRawArtifact(input, database.runTransaction)
+      const second = await writePositionHistoryRawArtifact(input, database.runTransaction)
+      const expectation = prepareHistoryRawArtifactReconciliationExpectation(input)
+      const meta = database.pointers[0].meta as Record<string, unknown>
+
+      expect(second).toEqual(first)
+      expect(database.pointers).toHaveLength(1)
+      expect(meta).toMatchObject({
+        surface: 'position_history_audit',
+        publication_eligible: false,
+        audit_reason: 'reviewed_contract_rejected',
+        exchange_trader_id: expectedAuditIdentity,
+      })
+      expect(strictCanonicalJson(meta)).not.toContain('\\u0000')
+      expect(expectation.metaCandidatesCanonicalJson).toContain(strictCanonicalJson(meta))
+      expect(expectation.metaCandidatesCanonicalJson).not.toContain(
+        expect.stringContaining('\\u0000')
+      )
+      expect(expectation.metaCandidatesCanonicalJson).toHaveLength(
+        expectedAuditIdentity === 'invalid_jsonb_text' ? 1 : 3
+      )
+      expect(gunzipSync(storage.get(first.storagePath)!)).toEqual(
+        Buffer.from(strictCanonicalJson(input.artifact), 'utf8')
+      )
+      expect(mockDownload).toHaveBeenCalledTimes(1)
+    }
+  )
 
   it('persists a schema-valid nonreviewed source without granting publication metadata', async () => {
     const input = await artifactInput({ sourceSlug: 'candidate_exchange' })

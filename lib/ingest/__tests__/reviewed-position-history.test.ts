@@ -25,6 +25,7 @@ import {
   POSITION_HISTORY_SOURCE_ROW_MANIFEST_KEYS,
   positionHistoryPublicationRawMeta,
   REVIEWED_POSITION_HISTORY_CONTRACTS,
+  reviewedPositionHistoryRejectionCode,
 } from '@/lib/ingest/reviewed-position-history'
 import { strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
 
@@ -45,7 +46,8 @@ async function capture(
   source: { id: number; slug: string },
   pages: RawPage[],
   claim: HistoryTerminalClaim,
-  verifier: SelectedHistoryTerminalVerifier
+  verifier: SelectedHistoryTerminalVerifier,
+  capturedExchangeTraderId = exchangeTraderId
 ): Promise<CapturedHistoryAcquisition> {
   async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
     for (const page of pages) yield page
@@ -54,7 +56,7 @@ async function capture(
   return captureHistoryAcquisition({
     source,
     traderId,
-    exchangeTraderId,
+    exchangeTraderId: capturedExchangeTraderId,
     kind: 'position_history',
     cursor: null,
     attemptStartedAt,
@@ -82,7 +84,8 @@ function bitgetRaw(overrides: Record<string, unknown> = {}): Record<string, unkn
 
 async function bitgetCapture(
   rows: readonly Record<string, unknown>[] = [bitgetRaw()],
-  verifier: SelectedHistoryTerminalVerifier = bitgetPositionHistoryTerminalVerifier
+  verifier: SelectedHistoryTerminalVerifier = bitgetPositionHistoryTerminalVerifier,
+  capturedExchangeTraderId = exchangeTraderId
 ): Promise<CapturedHistoryAcquisition> {
   return capture(
     { id: 7, slug: 'bitget_futures' },
@@ -93,14 +96,15 @@ async function bitgetCapture(
         fetchedAt,
         payload: {
           contract: BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
-          historyTraderIdentity: exchangeTraderId,
-          request: { pageNo: 1, pageSize: 20, traderUid: exchangeTraderId },
+          historyTraderIdentity: capturedExchangeTraderId,
+          request: { pageNo: 1, pageSize: 20, traderUid: capturedExchangeTraderId },
           response: { code: '00000', data: { rows, nextFlag: false } },
         },
       },
     ],
     terminalClaim([{ segment_id: 'default', reason: 'reported_end', page_ordinal: 1 }]),
-    verifier
+    verifier,
+    capturedExchangeTraderId
   )
 }
 
@@ -280,6 +284,48 @@ describe('shared reviewed position-history evidence contract', () => {
     })
     expect(evidence.canonicalRows).toEqual([])
   })
+
+  it.each([
+    ['RAW string value', () => bitgetCapture([bitgetRaw({ note: 'unsafe\0value' })])],
+    ['RAW object key', () => bitgetCapture([bitgetRaw({ ['unsafe\0key']: 'value' })])],
+  ] as const)(
+    'rejects a PostgreSQL JSONB-incompatible %s with a fixed code',
+    async (_label, make) => {
+      const captured = await make()
+
+      try {
+        buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
+        throw new Error('expected reviewed evidence rejection')
+      } catch (cause) {
+        expect(reviewedPositionHistoryRejectionCode(cause)).toBe('reviewed_contract_rejected')
+        expect(String(cause)).toContain('PostgreSQL JSONB cannot represent')
+        expect(String(cause)).not.toContain('unsafe')
+      }
+    }
+  )
+
+  it.each([
+    ['with canonical rows', [bitgetRaw()]],
+    ['for an empty verified capture', []],
+  ] as const)(
+    'rejects a NUL exchange identity %s before metadata construction',
+    async (_label, rows) => {
+      const captured = await bitgetCapture(
+        rows,
+        bitgetPositionHistoryTerminalVerifier,
+        'leader\0identity'
+      )
+
+      try {
+        buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
+        throw new Error('expected reviewed evidence rejection')
+      } catch (cause) {
+        expect(reviewedPositionHistoryRejectionCode(cause)).toBe('reviewed_contract_rejected')
+        expect(String(cause)).toContain('PostgreSQL JSONB cannot represent')
+        expect(String(cause)).not.toContain('leader')
+      }
+    }
+  )
 
   it('rejects malformed containers and unreviewed verifier claims for publication metadata', async () => {
     const missingSymbol = bitgetRaw()

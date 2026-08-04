@@ -222,6 +222,32 @@ function deepFreezeJson<T>(value: T): T {
   return value
 }
 
+/** PostgreSQL jsonb cannot represent U+0000, even when JSON escapes it. */
+function assertPostgresJsonbTextCompatible(value: unknown, label: string): void {
+  const pending: unknown[] = [value]
+  const visited = new Set<object>()
+
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (typeof current === 'string') {
+      if (current.includes('\0')) {
+        throw contractError(`${label} contains text that PostgreSQL JSONB cannot represent`)
+      }
+      continue
+    }
+    if (current === null || typeof current !== 'object' || visited.has(current)) continue
+    visited.add(current)
+
+    for (const key of Reflect.ownKeys(current)) {
+      if (typeof key === 'string' && key.includes('\0')) {
+        throw contractError(`${label} contains an object key PostgreSQL JSONB cannot represent`)
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(current, key)
+      if (descriptor && 'value' in descriptor) pending.push(descriptor.value)
+    }
+  }
+}
+
 function canonicalText(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.length === 0 || value !== value.trim()) {
     throw contractError(`${label} must be non-empty canonical text`)
@@ -534,6 +560,7 @@ export function buildReviewedPositionHistoryEvidence(
   if (historyAcquisitionSourceRunId(artifact) !== sourceRunId) {
     throw contractError('source run id does not match the canonical acquisition artifact')
   }
+  assertPostgresJsonbTextCompatible(artifact.trader.exchange_trader_id, 'exchange trader identity')
   if (artifact.pages.length === 0 || artifact.pages.length > MAX_ACQUISITION_PAGES) {
     throw contractError(
       'reviewed acquisition page count is outside the publication bound',
@@ -600,6 +627,9 @@ export function buildReviewedPositionHistoryEvidence(
         throw contractError(
           `reviewed parser emitted an empty field source path on page ${page.ordinal}`
         )
+      }
+      if (classification.classification === 'canonical_materialized') {
+        assertPostgresJsonbTextCompatible(row, `canonical row on page ${page.ordinal}`)
       }
       assertReviewedPositionHistoryFieldSources(contract, row)
       if (strictCanonicalJson(row.raw) !== strictCanonicalJson(sourceRows[rowIndex])) {
