@@ -20,6 +20,7 @@ import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/i
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
+import { buildPositionHistoryAcquisitionArtifactV2 } from '@/lib/ingest/position-history-acquisition-v2'
 import {
   writePositionHistoryRawArtifact,
   writeRawObject,
@@ -32,7 +33,6 @@ import {
   getPositionHistoryPublicationCheckpoint,
   publishHistoryRows,
   publishProfile,
-  publishTierBVerifiedPositionHistoryInTransaction,
   type PositionHistoryPublicationCheckpoint,
 } from '@/lib/ingest/serving/publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
@@ -59,26 +59,35 @@ import { runHistoryTransaction } from '../history-transaction'
 /** Compatibility marker recording a terminal deep-profile attempt. */
 const PROFILED_CURSOR_KIND = 'tierb_profiled'
 
-/**
- * No source may publish a terminal-verified capture until a versioned RAW
- * candidate ledger and exact parser projection are bound to the receipt.
- * An empty allow-list is intentional: acquisition termination alone does not
- * prove that a page parser observed every upstream fact.
- */
-const POSITION_HISTORY_PARSER_ACCOUNTED_SOURCES = new Set<string>()
-
-function rawObjectReceiptId(receipt: unknown): number {
-  if (
-    receipt === null ||
-    typeof receipt !== 'object' ||
-    !('id' in receipt) ||
-    typeof receipt.id !== 'number' ||
-    !Number.isSafeInteger(receipt.id) ||
-    receipt.id <= 0
-  ) {
-    throw new Error('[tier-b] RAW pointer transaction returned an invalid receipt')
+async function persistPositionHistoryRawOnly(
+  input: Parameters<typeof writePositionHistoryRawArtifact>[0]
+): Promise<void> {
+  let storageDurable = false
+  const markStorageDurable: IngestTransactionRunner = async (persistRawPointer) => {
+    storageDurable = true
+    return runHistoryTransaction(persistRawPointer)
   }
-  return receipt.id
+
+  try {
+    await writePositionHistoryRawArtifact(input, markStorageDurable)
+  } catch (cause) {
+    if (!storageDurable) throw cause
+
+    // The first transaction may have rolled back or committed before its
+    // response was lost. Replay the exact content-addressed artifact once;
+    // pointer validation turns either outcome into the same durable state.
+    try {
+      await writePositionHistoryRawArtifact(input, runHistoryTransaction)
+    } catch (replayCause) {
+      throw new AggregateError(
+        [
+          cause instanceof Error ? cause : new Error(String(cause)),
+          replayCause instanceof Error ? replayCause : new Error(String(replayCause)),
+        ],
+        '[tier-b] history RAW evidence persistence and reconciliation both failed'
+      )
+    }
+  }
 }
 
 async function markProfileAttempted(traderId: number): Promise<void> {
@@ -135,7 +144,6 @@ async function persistPositionHistory(
   adapter: SourceAdapter,
   src: SourceRow,
   trader: NativeCohortTrader,
-  ctx: ParseCtx,
   checkpoint: PositionHistoryPublicationCheckpoint
 ): Promise<number> {
   const cursor = checkpoint.cursor
@@ -159,76 +167,49 @@ async function persistPositionHistory(
   const rawInput = { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId }
 
   if (acquisition.error !== null) {
-    await writePositionHistoryRawArtifact(rawInput, runHistoryTransaction)
+    await persistPositionHistoryRawOnly(rawInput)
     throw acquisition.error
   }
 
-  let storageDurable = false
-  let written = 0
-  const publishWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
-    // writePositionHistoryRawArtifact invokes this only after the immutable
-    // Storage object is durable. An unverified capture is audit evidence, not
-    // serving data: keep it out of the typed table so a later complete receipt
-    // can never make partial rows appear authoritative.
-    storageDurable = true
-    const termination = acquisition.artifact.termination
-    if (termination.evidence_state !== 'verified') {
-      return runHistoryTransaction(persistRawPointer)
-    }
-
-    if (!POSITION_HISTORY_PARSER_ACCOUNTED_SOURCES.has(src.slug)) {
-      throw new Error(
-        `[tier-b] ${src.slug} terminal-verified position history has no receipt-bound parser accounting evidence`
-      )
-    }
-    const rows: ParsedHistoryRow[] = acquisition.pages.flatMap((page) =>
-      adapter.parseHistory(page.payload, 'position_history', ctx)
-    )
-    // A verified overlap with no newer events retains the authoritative head;
-    // null means genesis remained empty, never "forget the receipt cursor".
-    const nextCursor = nextHistoryCursor(rows, cursor) ?? cursor
-
-    return runHistoryTransaction(async (transaction) => {
-      const rawReceipt = await persistRawPointer(transaction)
-      const publication = await publishTierBVerifiedPositionHistoryInTransaction(transaction, {
-        rawObjectId: rawObjectReceiptId(rawReceipt),
-        previousPublicationId: checkpoint.publicationId,
-        effectiveCursorAfter: nextCursor,
-        rows,
-      })
-      written = publication.rowsWritten
-      return rawReceipt
+  let evidenceInput: Parameters<typeof writePositionHistoryRawArtifact>[0] = rawInput
+  let evidenceFailure: string | null = null
+  if (acquisition.artifact.termination.evidence_state === 'verified') {
+    const verifiedEvidence = buildPositionHistoryAcquisitionArtifactV2({
+      acquisition: acquisition.artifact,
+      expectedAcquisition: {
+        sourceRunId: acquisition.sourceRunId,
+        sourceId: src.id,
+        sourceSlug: src.slug,
+        traderId: trader.id,
+        exchangeTraderId: trader.exchange_trader_id,
+      },
     })
+    if (verifiedEvidence.state === 'verified') {
+      // @2 proves terminal acquisition plus framework-enumerated source facts,
+      // but not parser projection or ranking eligibility. Persist only its RAW
+      // pointer; the legacy @1 publication RPC must remain unreachable here.
+      evidenceInput = {
+        artifact: verifiedEvidence.artifact,
+        sourceRunId: verifiedEvidence.sourceRunId,
+      }
+    } else {
+      evidenceFailure = verifiedEvidence.reason
+    }
   }
 
-  try {
-    await writePositionHistoryRawArtifact(rawInput, publishWithRaw)
-  } catch (cause) {
-    if (storageDurable) {
-      // Parsing or the typed publication transaction failed after Storage
-      // became durable. Reconcile only the immutable audit pointer; history
-      // rows and the cursor remain rolled back and retryable.
-      try {
-        await writePositionHistoryRawArtifact(rawInput, runHistoryTransaction)
-      } catch (rawCause) {
-        throw new AggregateError(
-          [
-            cause instanceof Error ? cause : new Error(String(cause)),
-            rawCause instanceof Error ? rawCause : new Error(String(rawCause)),
-          ],
-          '[tier-b] history publication failure and RAW audit persistence both failed'
-        )
-      }
-    }
-    throw cause
+  await persistPositionHistoryRawOnly(evidenceInput)
+  if (evidenceFailure !== null) {
+    throw new Error(
+      `[tier-b] ${src.slug} verified position-history evidence upgrade failed: ${evidenceFailure}`
+    )
   }
-  return written
+  return 0
 }
 
 /**
- * Incremental history pass for ONE trader within the same session (spec
- * §2.3 Histories): newest pages until cursor overlap, idempotent upsert by
- * dedupe_hash, cursor advanced to the newest row seen.
+ * History pass for one trader within the same session. Position history is
+ * acquisition-evidence only until a versioned parser projection and receipt
+ * exist; compatibility history kinds retain their legacy cursor/upsert path.
  */
 async function crawlTraderHistories(
   session: FetchSession,
@@ -241,7 +222,7 @@ async function crawlTraderHistories(
   for (const kind of historyKinds(adapter, src)) {
     if (kind === 'position_history') {
       const checkpoint = await getPositionHistoryPublicationCheckpoint(src.id, trader.id)
-      written += await persistPositionHistory(session, adapter, src, trader, ctx, checkpoint)
+      written += await persistPositionHistory(session, adapter, src, trader, checkpoint)
       continue
     }
     const cursor = await getHistoryCursor(trader.id, kind)
@@ -519,8 +500,9 @@ export async function processTierB(
 
       if (allTimeframesSuccessful) {
         result.tradersCrawled += 1
-        // Histories ride the same session right after the profile (spec
-        // §2.3): incremental, cursor-overlap stop, idempotent upserts.
+        // Histories ride the same session right after the profile (spec §2.3).
+        // Position history remains RAW evidence only; compatibility kinds keep
+        // their incremental cursor/upsert behavior until separately migrated.
         try {
           const ctx: ParseCtx = {
             sourceSlug: src.slug,
