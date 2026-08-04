@@ -148,6 +148,7 @@ export function usePostActions({
   const bookmarkLockRef = useRef<Set<string>>(new Set())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
   const editRequestLockRef = useRef<Set<string>>(new Set())
+  const deleteRequestLockRef = useRef<Set<string>>(new Set())
   const postsRef = useRef(posts)
   postsRef.current = posts
   // Always read the FRESHEST openPost. The toggleReaction callback is memoized on
@@ -1142,9 +1143,12 @@ export function usePostActions({
         showToast(t('pleaseLogin'), 'warning')
         return
       }
-      if (!(await showDangerConfirm(t('deletePost'), t('deletePostConfirm')))) return
-      if (!scopeIsCurrent(capturedScope)) return
+      const requestLockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${post.id}`
+      if (deleteRequestLockRef.current.has(requestLockKey)) return
+      deleteRequestLockRef.current.add(requestLockKey)
       try {
+        if (!(await showDangerConfirm(t('deletePost'), t('deletePostConfirm')))) return
+        if (!scopeIsCurrent(capturedScope)) return
         const response = await fetch(`/api/posts/${post.id}/delete`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
@@ -1161,6 +1165,8 @@ export function usePostActions({
       } catch {
         if (!scopeIsCurrent(capturedScope)) return
         showToast(t('deleteFailed'), 'error')
+      } finally {
+        deleteRequestLockRef.current.delete(requestLockKey)
       }
     },
     [

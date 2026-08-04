@@ -26,6 +26,7 @@ describe('group inline post editor atomic contract', () => {
   })
 
   it('does not remove a post from the group UI on a malformed 2xx delete response', () => {
+    expect(hook).toContain('deleteRequestLockRef.current.has(requestLockKey)')
     expect(hook).toContain('result.ok && readPostDeleteAcknowledgement(result.data)')
     expect(hook).toContain('readPostDeleteError(result.data)')
   })

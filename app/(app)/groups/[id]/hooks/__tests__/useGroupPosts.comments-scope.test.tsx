@@ -563,6 +563,59 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     expect(showToast).toHaveBeenCalledWith('pinned', 'success')
   })
 
+  it('single-flights a destructive group post delete', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: 'user-a',
+      viewerKey: 'user:user-a',
+      isMember: true,
+    }
+    const request = deferred<unknown>()
+    mockAuthedFetch.mockReturnValue(request.promise)
+    const showToast = jest.fn()
+    const { result } = renderGroupHook(props, undefined, showToast)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: 'post-1',
+          group_id: 'group-1',
+          author_id: 'user-a',
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+        },
+      ])
+    })
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.handleDeletePost('post-1')
+      duplicate = result.current.handleDeletePost('post-1')
+    })
+
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/posts/post-1/delete',
+      'DELETE',
+      'token-a',
+      undefined,
+      15_000,
+      { expectedUserId: 'user-a', expectedSessionGeneration: 1 }
+    )
+    expect(result.current.deletingPost).toBe('post-1')
+
+    await act(async () => {
+      request.resolve({ ok: true, status: 200, data: { success: true } })
+      await Promise.all([first, duplicate])
+    })
+
+    expect(result.current.posts).toEqual([])
+    expect(result.current.deletingPost).toBeNull()
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('postDeleted', 'success')
+  })
+
   it('rejects a malformed reaction ACK without changing local state and unlocks retry', async () => {
     const props = {
       ...baseProps,

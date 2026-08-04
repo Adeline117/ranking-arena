@@ -214,6 +214,35 @@ describe('usePostActions aliased detail state', () => {
     expect(mockShowToast).toHaveBeenCalledWith('deleted', 'success')
   })
 
+  it('single-flights delete confirmation and the destructive request', async () => {
+    const response = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
+    const { result } = renderHook(() => useAliasedPostActions())
+    const event = { stopPropagation: jest.fn() } as unknown as React.MouseEvent
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.actions.handleDeletePost(result.current.post, event)
+      duplicate = result.current.actions.handleDeletePost(result.current.post, event)
+    })
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+    expect(global.fetch).toHaveBeenCalledWith('/api/posts/post-1/delete', {
+      method: 'DELETE',
+      headers: expect.objectContaining({ Authorization: 'Bearer token-a' }),
+    })
+
+    await act(async () => {
+      response.resolve(jsonResponse({ success: true }))
+      await Promise.all([first, duplicate])
+    })
+
+    expect(mockSetOpenPost).toHaveBeenCalledTimes(1)
+    expect(mockShowToast).toHaveBeenCalledTimes(1)
+    expect(mockShowToast).toHaveBeenCalledWith('deleted', 'success')
+  })
+
   it('updates the detail post once and preserves optimistic counts when ACK counts are null', async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue(
       jsonResponse({

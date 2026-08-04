@@ -300,6 +300,7 @@ export function useGroupPosts({
   const repostRequestLockRef = useRef<Set<string>>(new Set())
   const editRequestLockRef = useRef<Set<string>>(new Set())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
+  const deleteRequestLockRef = useRef<Set<string>>(new Set())
 
   // Comments state
   // Expansion is resource UI state rather than viewer data. Preserve it across
@@ -507,6 +508,7 @@ export function useGroupPosts({
     likeRequestLockRef.current.clear()
     pinRequestLockRef.current.clear()
     editRequestLockRef.current.clear()
+    deleteRequestLockRef.current.clear()
     setPosts([])
     setHasMorePosts(true)
     setLoadingMore(false)
@@ -972,23 +974,30 @@ export function useGroupPosts({
   const handleDeletePost = useCallback(
     async (postId: string) => {
       const context = captureMutationContext()
-      const confirmed = await showDangerConfirm(t('deletePost'), t('deletePostConfirm'))
-      if (!confirmed || !mutationContextIsCurrent(context)) return
+      const requestLockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
+      if (deleteRequestLockRef.current.has(requestLockKey)) return
+      deleteRequestLockRef.current.add(requestLockKey)
+      try {
+        const confirmed = await showDangerConfirm(t('deletePost'), t('deletePostConfirm'))
+        if (!confirmed || !mutationContextIsCurrent(context)) return
 
-      setDeletingPost(postId)
-      const result = await apiCall(
-        `/api/posts/${postId}/delete`,
-        { method: 'DELETE' },
-        context.scope
-      )
-      if (!mutationContextIsCurrent(context)) return
-      if (result.ok && readPostDeleteAcknowledgement(result.data)) {
-        setPosts((prev) => prev.filter((p) => p.id !== postId))
-        showToast(t('postDeleted'), 'success')
-      } else {
-        showToast(readPostDeleteError(result.data) ?? result.error ?? t('deleteFailed'), 'error')
+        setDeletingPost(postId)
+        const result = await apiCall(
+          `/api/posts/${postId}/delete`,
+          { method: 'DELETE' },
+          context.scope
+        )
+        if (!mutationContextIsCurrent(context)) return
+        if (result.ok && readPostDeleteAcknowledgement(result.data)) {
+          setPosts((prev) => prev.filter((p) => p.id !== postId))
+          showToast(t('postDeleted'), 'success')
+        } else {
+          showToast(readPostDeleteError(result.data) ?? result.error ?? t('deleteFailed'), 'error')
+        }
+      } finally {
+        deleteRequestLockRef.current.delete(requestLockKey)
+        if (mutationContextIsCurrent(context)) setDeletingPost(null)
       }
-      setDeletingPost(null)
     },
     [
       apiCall,
