@@ -5,7 +5,6 @@
  */
 
 import { getConnector } from '@/connectors'
-import { calculateArenaScore as calculateArenaScoreV1 } from '@/workers/arena-score'
 import type { Platform, MarketType, Window, LeaderboardEntry } from '@/connectors/base/types'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -14,6 +13,7 @@ import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { sanitizeRow } from '@/lib/pipeline/validate-before-write'
 // validate-snapshot.ts deleted — consolidated into validate-before-write.ts (P0-1)
+import { calculateArenaScore as calculateArenaScoreV1 } from '@/lib/utils/legacy-arena-score'
 import { createLogger } from '@/lib/utils/logger'
 import { truncateToHour } from '@/lib/utils/date'
 

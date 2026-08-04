@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { LanguageProvider } from '../LanguageProvider'
 import { loadTranslations } from '@/lib/i18n'
+import { useLanguage as useSharedLanguage } from '@/lib/i18n/client'
 
 jest.mock('@/lib/i18n', () => ({
   getLanguage: () => 'en',
@@ -29,5 +30,20 @@ describe('LanguageProvider', () => {
     } finally {
       if (original) window.requestIdleCallback = original
     }
+  })
+
+  it('provides the same context instance to lib consumers', () => {
+    function SharedConsumer() {
+      const { t } = useSharedLanguage()
+      return <div>{t('childLabel')}</div>
+    }
+
+    render(
+      <LanguageProvider>
+        <SharedConsumer />
+      </LanguageProvider>
+    )
+
+    expect(screen.getByText('Child content')).toBeInTheDocument()
   })
 })

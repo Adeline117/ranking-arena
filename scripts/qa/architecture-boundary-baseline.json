@@ -2,66 +2,6 @@
   "version": 1,
   "violations": [
     {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/data/serving/legacy-adapter.ts",
-      "specifier": "@/app/(app)/u/[handle]/components/types"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/data/serving/legacy-adapter.ts",
-      "specifier": "@/app/components/trader/OverviewPerformanceCard"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/hooks/useAchievements.ts",
-      "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/hooks/useAchievements.ts",
-      "specifier": "@/app/components/ui/Toast"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/stripe/index.ts",
-      "specifier": "@/app/(app)/user-center/membership-config"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/stripe/lifetime-entitlement.ts",
-      "specifier": "@/app/(app)/user-center/membership-config"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/useOneClickSiwe.ts",
-      "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/useSiweAuth.ts",
-      "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/Web3ProviderClient.tsx",
-      "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-worker",
-      "source": "lib/ingest/serving/__tests__/board-series-publish.test.ts",
-      "specifier": "@/worker/src/ingest/worker-db-fence"
-    },
-    {
-      "rule": "lib-must-not-import-worker",
-      "source": "lib/ingest/serving/__tests__/metric-trust-publish.test.ts",
-      "specifier": "@/worker/src/ingest/worker-db-fence"
-    },
-    {
-      "rule": "lib-must-not-import-worker",
-      "source": "lib/ingest/serving/__tests__/publish-count-generation.test.ts",
-      "specifier": "@/worker/src/ingest/worker-db-fence"
-    },
-    {
       "rule": "runtime-must-not-import-legacy-connectors",
       "source": "lib/cron/inline-jobs.ts",
       "specifier": "@/connectors"
@@ -70,11 +10,6 @@
       "rule": "runtime-must-not-import-legacy-connectors",
       "source": "lib/cron/inline-jobs.ts",
       "specifier": "@/connectors/base/types"
-    },
-    {
-      "rule": "runtime-must-not-import-legacy-workers",
-      "source": "lib/cron/inline-jobs.ts",
-      "specifier": "@/workers/arena-score"
     }
   ]
 }

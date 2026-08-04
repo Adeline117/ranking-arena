@@ -21,7 +21,7 @@ jest.mock('siwe', () => ({
   })),
 }))
 
-jest.mock('@/app/components/Providers/LanguageProvider', () => ({
+jest.mock('@/lib/i18n/client', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
 }))
 

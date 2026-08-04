@@ -7,7 +7,7 @@ import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme, lightTheme, type Locale } from '@rainbow-me/rainbowkit'
 import { STALE_RELAXED } from '@/lib/hooks/cache-presets'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useLanguage } from '@/lib/i18n/client'
 import { wagmiConfig } from './config'
 
 import '@rainbow-me/rainbowkit/styles.css'

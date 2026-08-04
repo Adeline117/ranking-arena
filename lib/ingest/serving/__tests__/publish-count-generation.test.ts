@@ -1,6 +1,6 @@
 import type { SourceRow } from '../../core/types'
 import type { IngestQueryExecutor } from '../../db'
-import { validateWorkerDbFencedWriteStatement } from '@/worker/src/ingest/worker-db-fence'
+import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
 
 const baselineQuery = jest.fn()
 const clientQuery = jest.fn()
