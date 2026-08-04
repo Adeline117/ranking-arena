@@ -19,6 +19,17 @@ export class ApiFetchError extends Error {
 
 const DEFAULT_TIMEOUT_MS = 15_000
 
+type ApiFetchOptions = RequestInit & {
+  timeoutMs?: number
+  /**
+   * A small set of non-2xx statuses whose JSON body is itself authoritative
+   * application state (for example a health endpoint's degraded response).
+   * Every status must be opted into explicitly; all other non-2xx responses
+   * keep the default fail-closed behavior.
+   */
+  acceptedStatuses?: readonly number[]
+}
+
 function consumePromise(work: Promise<unknown>): void {
   void work.then(
     () => undefined,
@@ -57,13 +68,16 @@ function waitWithinSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> 
   })
 }
 
-export async function apiFetch<T>(
-  url: string,
-  options?: RequestInit & { timeoutMs?: number }
-): Promise<T> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options ?? {}
+export async function apiFetch<T>(url: string, options?: ApiFetchOptions): Promise<T> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, acceptedStatuses = [], ...fetchOptions } = options ?? {}
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new TypeError('apiFetch timeoutMs must be a positive finite number')
+  }
+  if (
+    !Array.isArray(acceptedStatuses) ||
+    acceptedStatuses.some((status) => !Number.isSafeInteger(status) || status < 100 || status > 599)
+  ) {
+    throw new TypeError('apiFetch acceptedStatuses must contain valid HTTP status codes')
   }
 
   const controller = new AbortController()
@@ -92,7 +106,7 @@ export async function apiFetch<T>(
       controller.signal
     )
 
-    if (!response.ok) {
+    if (!response.ok && !acceptedStatuses.includes(response.status)) {
       throw new ApiFetchError(response.status, response.statusText, url)
     }
 

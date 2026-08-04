@@ -82,6 +82,32 @@ describe('apiFetch', () => {
     }
   })
 
+  it('parses only an explicitly accepted non-2xx status without forwarding the option', async () => {
+    const degraded = { status: 'degraded', checks: { database: { status: 'pass' } } }
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(degraded, { status: 503, statusText: 'Service Unavailable', ok: false })
+    )
+
+    await expect(apiFetch('/api/health', { acceptedStatuses: [202, 503] })).resolves.toEqual(
+      degraded
+    )
+    expect(mockFetch.mock.calls[0][1]).not.toHaveProperty('acceptedStatuses')
+
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(degraded, { status: 500, statusText: 'Internal Server Error', ok: false })
+    )
+    await expect(apiFetch('/api/health', { acceptedStatuses: [202, 503] })).rejects.toBeInstanceOf(
+      ApiFetchError
+    )
+  })
+
+  it('rejects invalid accepted status configuration before starting a request', async () => {
+    await expect(apiFetch('/api/health', { acceptedStatuses: [99, 600] })).rejects.toThrow(
+      'valid HTTP status codes'
+    )
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it('physically rejects at the deadline when fetch ignores its AbortSignal', async () => {
     jest.useFakeTimers()
     mockFetch.mockReturnValueOnce(new Promise<Response>(() => undefined))
