@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { HistoryKind, RawPage, SourceRow } from './core/types'
+import { isCanonicalPostgresTimestamp } from './postgres-timestamp'
 import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
@@ -46,11 +47,6 @@ function isSafePositiveInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0 && !Object.is(value, -0)
 }
 
-function isCanonicalTimestamp(value: string): boolean {
-  const timestamp = Date.parse(value)
-  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
-}
-
 function isCanonicalHttpUrl(value: string): boolean {
   if (value.trim() !== value) return false
   try {
@@ -71,7 +67,7 @@ const safePositiveIntegerSchema = z
   .refine(isSafePositiveInteger, 'must be a positive safe integer and not negative zero')
 const canonicalTimestampSchema = z
   .string()
-  .refine(isCanonicalTimestamp, 'must be a canonical ISO timestamp')
+  .refine(isCanonicalPostgresTimestamp, 'must be a canonical ISO timestamp')
 const canonicalHttpUrlSchema = z
   .string()
   .refine(
@@ -568,7 +564,7 @@ function verifiedTerminal(
       return null
     }
     if (!cursor) return null
-    if (!isCanonicalTimestamp(verification.overlapEventAt)) return null
+    if (!isCanonicalPostgresTimestamp(verification.overlapEventAt)) return null
     if (Date.parse(verification.overlapEventAt) > Date.parse(cursor)) return null
     return {
       evidence_state: 'verified',

@@ -120,6 +120,7 @@ function reviewedBitgetRaw(overrides: Record<string, unknown> = {}): Record<stri
     openTime: openedMs,
     closeTime: closedMs,
     symbolDisplayName: 'BTCUSDT',
+    tokenId: 'USDT',
     position: 1,
     openLevel: '5',
     closeDealCount: '2',
@@ -443,6 +444,36 @@ describe('writePositionHistoryRawArtifact', () => {
         reviewedBitgetArtifactInput([], bitgetPositionHistoryTerminalVerifier, 'leader\0identity'),
       expectedAuditIdentity: 'invalid_jsonb_text',
     },
+    {
+      label: 'parser-consumed NBSP numeric string',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ returnRate: '\u00a00.2' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
+    {
+      label: 'parser-consumed negative-zero string',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ netProfit: '-0' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
+    {
+      label: 'parser-null edge-whitespace string',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ openLevel: ' nope ' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
+    {
+      label: 'parser-null radix side string',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ position: '0x3' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
+    {
+      label: 'parser-null negative-zero epoch string',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ openTime: '-0' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
+    {
+      label: 'drifted source currency',
+      make: () => reviewedBitgetArtifactInput([reviewedBitgetRaw({ tokenId: 'USDC' })]),
+      expectedAuditIdentity: 'portfolio-1',
+    },
   ])(
     'keeps $label as exact gzip RAW with JSONB-safe replayable audit metadata',
     async ({ make, expectedAuditIdentity }) => {
@@ -455,6 +486,7 @@ describe('writePositionHistoryRawArtifact', () => {
       const meta = database.pointers[0].meta as Record<string, unknown>
 
       expect(second).toEqual(first)
+      expect(first.contentHash).toBe(input.sourceRunId)
       expect(database.pointers).toHaveLength(1)
       expect(meta).toMatchObject({
         surface: 'position_history_audit',
@@ -476,6 +508,28 @@ describe('writePositionHistoryRawArtifact', () => {
       expect(mockDownload).toHaveBeenCalledTimes(1)
     }
   )
+
+  it('keeps valid surrogate pairs eligible and byte-exact through RAW persistence', async () => {
+    const input = await reviewedBitgetArtifactInput([
+      reviewedBitgetRaw({
+        symbolDisplayName: 'BTC🚀USDT',
+        note: 'valid🚀value',
+        ['asset🚀key']: 'USDT',
+      }),
+    ])
+    const database = databaseHarness()
+
+    const receipt = await writePositionHistoryRawArtifact(input, database.runTransaction)
+
+    expect(database.pointers[0].meta).toMatchObject({
+      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      source_run_id: input.sourceRunId,
+    })
+    expect(database.pointers[0].meta).not.toHaveProperty('audit_reason')
+    expect(gunzipSync(storage.get(receipt.storagePath)!)).toEqual(
+      Buffer.from(strictCanonicalJson(input.artifact), 'utf8')
+    )
+  })
 
   it('persists a schema-valid nonreviewed source without granting publication metadata', async () => {
     const input = await artifactInput({ sourceSlug: 'candidate_exchange' })

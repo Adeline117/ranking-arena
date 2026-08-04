@@ -12,6 +12,11 @@ import {
   parseHistoryAcquisitionArtifact,
   type HistoryAcquisitionArtifact,
 } from './history-acquisition'
+import {
+  canonicalPositionHistoryCandidateValues,
+  canonicalPositionHistoryText,
+  canonicalPositionHistoryTimestamp,
+} from './position-history-publication-values'
 import type { RawObjectReceipt } from './raw'
 import {
   assertReviewedPositionHistoryFieldSources,
@@ -54,14 +59,8 @@ type SourceContract = ReviewedPositionHistorySourceContractValue
 type ParserContract = ReviewedPositionHistoryParserContract
 type ReviewedPositionHistorySourceContract = ReviewedPositionHistoryContract
 
-const CANONICAL_TIMESTAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/
 const SHA256 = /^[0-9a-f]{64}$/
 const MAX_PUBLICATION_ROWS = 100_000
-const FORBIDDEN_LIFECYCLE_LIMITATIONS = new Set<ParsedPositionHistoryLimitation>([
-  'source_lifecycle_marker_missing',
-  'source_lifecycle_marker_partial',
-  'source_lifecycle_marker_unrecognized',
-])
 
 type ParsedPositionHistorySchemaOutput = ReturnType<typeof parsedPositionHistoryRowSchema.parse>
 
@@ -122,14 +121,7 @@ function nonNegativeSafeInteger(value: unknown, label: string): number {
 }
 
 function canonicalTimestamp(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !CANONICAL_TIMESTAMP.test(value)) {
-    throw publicationError(`${label} must be a canonical millisecond UTC timestamp`)
-  }
-  const epochMs = Date.parse(value)
-  if (!Number.isFinite(epochMs) || new Date(epochMs).toISOString() !== value) {
-    throw publicationError(`${label} must be a canonical millisecond UTC timestamp`)
-  }
-  return value
+  return canonicalPositionHistoryTimestamp(value, label, publicationError)
 }
 
 function normalizedDatabaseTimestamp(value: unknown, label: string): string {
@@ -147,25 +139,7 @@ function canonicalText(
   minimumLength: number,
   maximumLength: number
 ): string {
-  if (
-    typeof value !== 'string' ||
-    value !== value.trim() ||
-    value.length < minimumLength ||
-    value.length > maximumLength
-  ) {
-    throw publicationError(
-      `${label} must be trimmed and contain ${minimumLength}-${maximumLength} characters`
-    )
-  }
-  return value
-}
-
-function nullableFiniteNumber(value: unknown, label: string): number | null {
-  if (value === null) return null
-  if (typeof value !== 'number' || !Number.isFinite(value) || Object.is(value, -0)) {
-    throw publicationError(`${label} must be null or a finite non-negative-zero JSON number`)
-  }
-  return value
+  return canonicalPositionHistoryText(value, label, minimumLength, maximumLength, publicationError)
 }
 
 function deepFreezeJson<T>(value: T): T {
@@ -197,51 +171,6 @@ function reviewedSourceContract(
     return reviewedPositionHistoryContract(sourceSlug, source.adapter_slug)
   } catch (cause) {
     throw publicationError(asError(cause).message.replace(/^\[reviewed-position-history\] /, ''))
-  }
-}
-
-function sourceEpochTimestamp(value: unknown): string | null {
-  if (
-    (typeof value !== 'string' && typeof value !== 'number') ||
-    (typeof value === 'string' && (value.length === 0 || value.trim() !== value))
-  ) {
-    return null
-  }
-  const epochMs = Number(value)
-  if (!Number.isSafeInteger(epochMs) || epochMs <= 0) return null
-  try {
-    return new Date(epochMs).toISOString()
-  } catch {
-    return null
-  }
-}
-
-function assertReviewedClosedLifecycle(
-  sourceSlug: ReviewedSourceSlug,
-  row: ParsedPositionHistoryRow,
-  closedAt: string
-): void {
-  const lifecycle = canonicalText(row.sourceLifecycleMarker, 'source lifecycle marker', 1, 256)
-  const limitations = row.limitations ?? []
-  if (limitations.some((limitation) => FORBIDDEN_LIFECYCLE_LIMITATIONS.has(limitation))) {
-    throw publicationError(
-      'partial, missing, or unrecognized lifecycle evidence is not publishable'
-    )
-  }
-
-  if (sourceSlug === 'binance_futures') {
-    if (lifecycle !== 'All Closed' || row.raw.status !== 'All Closed') {
-      throw publicationError('Binance publication requires an exact All Closed source marker')
-    }
-    if (sourceEpochTimestamp(row.raw.closed) !== closedAt) {
-      throw publicationError('Binance closed timestamp does not match the reviewed RAW field')
-    }
-    return
-  }
-
-  const rawCloseTime = row.raw.closeTime
-  if (sourceEpochTimestamp(rawCloseTime) !== closedAt || lifecycle !== String(rawCloseTime)) {
-    throw publicationError(`${sourceSlug} lifecycle does not match the reviewed RAW closeTime`)
   }
 }
 
@@ -364,51 +293,38 @@ function preparedFact(
   observedAt: string,
   contract: ReviewedPositionHistorySourceContract
 ): VerifiedPositionHistoryFact {
-  const openedAt = parsed.openedAt === null ? null : canonicalTimestamp(parsed.openedAt, 'openedAt')
-  const closedAt = canonicalTimestamp(parsed.closedAt, 'closedAt')
-  if (openedAt !== null && Date.parse(openedAt) > Date.parse(closedAt)) {
-    throw publicationError('openedAt must not follow closedAt')
-  }
-  if (Date.parse(closedAt) > Date.parse(pageFetchedAt)) {
-    throw publicationError('closedAt must not follow its bound page fetchedAt')
-  }
-  if (Date.parse(closedAt) > Date.parse(observedAt)) {
-    throw publicationError('closedAt must not follow acquisition observedAt')
-  }
-
-  const symbol = canonicalText(parsed.symbol, 'symbol', 1, 128)
-  const side = parsed.side === null ? null : canonicalText(parsed.side, 'side', 1, 64)
-  const dedupeHash = canonicalText(parsed.dedupeHash, 'dedupeHash', 1, 512)
-  const sourceFactId = canonicalText(parsed.sourceFactId, 'sourceFactId', 1, 1024)
-  const sourceLifecycleMarker =
-    parsed.sourceLifecycleMarker === null || parsed.sourceLifecycleMarker === undefined
-      ? null
-      : canonicalText(parsed.sourceLifecycleMarker, 'sourceLifecycleMarker', 1, 256)
   try {
     assertReviewedPositionHistoryFieldSources(contract, parsed)
   } catch (cause) {
     throw publicationError(asError(cause).message.replace(/^\[reviewed-position-history\] /, ''))
   }
-  assertReviewedClosedLifecycle(contract.sourceSlug, parsed, closedAt)
+  const values = canonicalPositionHistoryCandidateValues(
+    contract.sourceSlug,
+    contract.servingReturnScale,
+    parsed,
+    pageFetchedAt,
+    observedAt,
+    publicationError
+  )
 
   return canonicalClone(
     {
-      closed_at: closedAt,
-      dedupe_hash: dedupeHash,
-      entry_price: nullableFiniteNumber(parsed.entryPrice, 'entryPrice'),
-      exit_price: nullableFiniteNumber(parsed.exitPrice, 'exitPrice'),
+      closed_at: values.closedAt,
+      dedupe_hash: values.dedupeHash,
+      entry_price: values.entryPrice,
+      exit_price: values.exitPrice,
       field_sources: parsed.fieldSources ?? null,
-      leverage: nullableFiniteNumber(parsed.leverage, 'leverage'),
+      leverage: values.leverage,
       limitations: parsed.limitations ?? null,
-      opened_at: openedAt,
+      opened_at: values.openedAt,
       raw: parsed.raw,
-      realized_pnl: nullableFiniteNumber(parsed.realizedPnl, 'realizedPnl'),
-      side,
-      size: nullableFiniteNumber(parsed.size, 'size'),
-      source_fact_id: sourceFactId,
-      source_lifecycle_marker: sourceLifecycleMarker,
-      source_return: nullableFiniteNumber(parsed.sourceReturn ?? null, 'sourceReturn'),
-      symbol,
+      realized_pnl: values.realizedPnl,
+      side: values.side,
+      size: values.size,
+      source_fact_id: values.sourceFactId,
+      source_lifecycle_marker: values.sourceLifecycleMarker,
+      source_return: values.sourceReturn,
+      symbol: values.symbol,
     } satisfies VerifiedPositionHistoryFact,
     'position-history fact'
   )

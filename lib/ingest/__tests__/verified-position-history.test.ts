@@ -166,6 +166,7 @@ function bitgetRaw(overrides: Record<string, unknown> = {}): Record<string, unkn
     openTime: openedMs,
     closeTime: closedMs,
     symbolDisplayName: 'BTCUSDT',
+    tokenId: 'USDT',
     position: 'long',
     openLevel: '5',
     closeDealCount: '2',
@@ -212,12 +213,12 @@ async function bitgetInput(
 
 async function binanceInput(): Promise<PrepareVerifiedPositionHistoryPublicationInput> {
   const raw = {
-    id: 'position-1',
+    id: Number(openedMs),
     symbol: 'BTCUSDT',
     side: 'Long',
     status: 'All Closed',
-    opened: openedMs,
-    closed: closedMs,
+    opened: Number(openedMs),
+    closed: Number(closedMs),
     leverage: '5',
     closedVolume: '2',
     avgCost: '100',
@@ -260,6 +261,7 @@ async function okxInput(): Promise<PrepareVerifiedPositionHistoryPublicationInpu
   const raw = {
     subPosId: 'sub-position-1',
     instId: 'BTC-USDT-SWAP',
+    ccy: 'USDT',
     posSide: 'long',
     openTime: openedMs,
     closeTime: closedMs,
@@ -334,6 +336,26 @@ describe('verified position-history publication preparation', () => {
       expect(Object.isFrozen(prepared.rows[0].raw)).toBe(true)
     }
   )
+
+  it('prepares a canonical fact containing valid surrogate pairs without changing RAW bytes', async () => {
+    const prepared = prepareVerifiedPositionHistoryPublication(
+      await bitgetInput([
+        bitgetRaw({
+          symbolDisplayName: 'BTC🚀USDT',
+          note: 'valid🚀value',
+          ['asset🚀key']: 'USDT',
+        }),
+      ])
+    )
+
+    expect(prepared.rows[0].symbol).toBe('BTC🚀USDT')
+    expect(prepared.rows[0].raw).toMatchObject({
+      symbolDisplayName: 'BTC🚀USDT',
+      note: 'valid🚀value',
+      ['asset🚀key']: 'USDT',
+    })
+    expect(JSON.parse(prepared.rowBindings[0].raw_row_canonical_json)).toEqual(prepared.rows[0].raw)
+  })
 
   it.each([
     ['a RAW string value', () => bitgetInput([bitgetRaw({ note: 'unsafe\0value' })])],

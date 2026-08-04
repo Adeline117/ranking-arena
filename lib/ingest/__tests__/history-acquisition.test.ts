@@ -62,6 +62,17 @@ async function* returned(
 }
 
 describe('history acquisition terminal evidence', () => {
+  it.each([
+    ['year zero', '0000-01-01T00:00:00.000Z'],
+    ['an extended year', '+010000-01-01T00:00:00.000Z'],
+  ] as const)('rejects %s before it can become a RAW artifact clock', async (_label, value) => {
+    await expect(
+      captureHistoryAcquisition(
+        input(returned([page(1)]), { attemptStartedAt: value, cursor: null })
+      )
+    ).rejects.toThrow('must be a canonical ISO timestamp')
+  })
+
   it('keeps a normal generator return unknown instead of inventing completeness', async () => {
     const capture = await captureHistoryAcquisition(input(returned([page(1)])))
 

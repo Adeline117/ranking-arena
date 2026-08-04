@@ -20,6 +20,12 @@ import {
   type SelectedHistoryTerminalVerifier,
 } from './history-acquisition'
 import {
+  canonicalPositionHistoryCandidateValues,
+  canonicalPositionHistoryText,
+  canonicalPositionHistoryTimestamp,
+  POSITION_HISTORY_TEXT_LIMITS,
+} from './position-history-publication-values'
+import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
   strictCanonicalSha256,
@@ -60,10 +66,12 @@ export type ReviewedPositionHistoryFieldPathAllowlist = Readonly<
 
 export interface ReviewedPositionHistoryContract {
   readonly adapterSlug: ReviewedPositionHistoryAdapterSlug
+  readonly expectedCurrency: 'USDT'
   readonly fieldPaths: ReviewedPositionHistoryFieldPathAllowlist
   readonly pageSize: number
   readonly parser: (raw: unknown, kind: 'position_history', ctx: ParseCtx) => ParsedHistoryRow[]
   readonly parserContract: ReviewedPositionHistoryParserContract
+  readonly servingReturnScale: 1 | 100
   readonly sourceContract: ReviewedPositionHistorySourceContract
   readonly sourceSlug: ReviewedPositionHistorySourceSlug
   readonly verifier: SelectedHistoryTerminalVerifier
@@ -130,30 +138,36 @@ export const REVIEWED_POSITION_HISTORY_CONTRACTS: Readonly<
 > = Object.freeze({
   binance_futures: Object.freeze({
     adapterSlug: 'binance',
+    expectedCurrency: 'USDT',
     fieldPaths: BINANCE_FIELD_PATHS,
     pageSize: 50,
     parser: parseBinanceHistory,
     parserContract: BINANCE_POSITION_HISTORY_PARSER_CONTRACT,
+    servingReturnScale: 100,
     sourceContract: BINANCE_POSITION_HISTORY_SOURCE_CONTRACT,
     sourceSlug: 'binance_futures',
     verifier: binancePositionHistoryTerminalVerifier,
   }),
   bitget_futures: Object.freeze({
     adapterSlug: 'bitget',
+    expectedCurrency: 'USDT',
     fieldPaths: BITGET_FIELD_PATHS,
     pageSize: 20,
     parser: parseBitgetHistory,
     parserContract: BITGET_POSITION_HISTORY_PARSER_CONTRACT,
+    servingReturnScale: 1,
     sourceContract: BITGET_POSITION_HISTORY_SOURCE_CONTRACT,
     sourceSlug: 'bitget_futures',
     verifier: bitgetPositionHistoryTerminalVerifier,
   }),
   okx_futures: Object.freeze({
     adapterSlug: 'okx',
+    expectedCurrency: 'USDT',
     fieldPaths: OKX_FIELD_PATHS,
     pageSize: 100,
     parser: parseOkxHistory,
     parserContract: OKX_POSITION_HISTORY_PARSER_CONTRACT,
+    servingReturnScale: 100,
     sourceContract: OKX_POSITION_HISTORY_SOURCE_CONTRACT,
     sourceSlug: 'okx_futures',
     verifier: okxPositionHistoryTerminalVerifier,
@@ -222,15 +236,30 @@ function deepFreezeJson<T>(value: T): T {
   return value
 }
 
-/** PostgreSQL jsonb cannot represent U+0000, even when JSON escapes it. */
-function assertPostgresJsonbTextCompatible(value: unknown, label: string): void {
+/** PostgreSQL jsonb cannot represent U+0000 or unpaired UTF-16 surrogates. */
+export function assertPostgresJsonbTextCompatible(value: unknown, label: string): void {
+  function isIncompatibleText(text: string): boolean {
+    if (text.includes('\0')) return true
+    for (let index = 0; index < text.length; index += 1) {
+      const codeUnit = text.charCodeAt(index)
+      if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+        const next = text.charCodeAt(index + 1)
+        if (next >= 0xdc00 && next <= 0xdfff) index += 1
+        else return true
+      } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+        return true
+      }
+    }
+    return false
+  }
+
   const pending: unknown[] = [value]
   const visited = new Set<object>()
 
   while (pending.length > 0) {
     const current = pending.pop()
     if (typeof current === 'string') {
-      if (current.includes('\0')) {
+      if (isIncompatibleText(current)) {
         throw contractError(`${label} contains text that PostgreSQL JSONB cannot represent`)
       }
       continue
@@ -239,12 +268,29 @@ function assertPostgresJsonbTextCompatible(value: unknown, label: string): void 
     visited.add(current)
 
     for (const key of Reflect.ownKeys(current)) {
-      if (typeof key === 'string' && key.includes('\0')) {
+      if (typeof key === 'string' && isIncompatibleText(key)) {
         throw contractError(`${label} contains an object key PostgreSQL JSONB cannot represent`)
       }
       const descriptor = Object.getOwnPropertyDescriptor(current, key)
       if (descriptor && 'value' in descriptor) pending.push(descriptor.value)
     }
+  }
+}
+
+function assertReviewedPositionHistoryCurrency(
+  contract: ReviewedPositionHistoryContract,
+  row: ParsedPositionHistoryRow
+): void {
+  const rawCurrency =
+    contract.sourceSlug === 'bitget_futures'
+      ? row.raw.tokenId
+      : contract.sourceSlug === 'okx_futures'
+        ? row.raw.ccy
+        : contract.expectedCurrency
+  if (rawCurrency !== contract.expectedCurrency) {
+    throw contractError(
+      `${contract.sourceSlug} canonical row currency must be exact ${contract.expectedCurrency}`
+    )
   }
 }
 
@@ -568,6 +614,54 @@ export function buildReviewedPositionHistoryEvidence(
     )
   }
   const contract = reviewedPositionHistoryContract(artifact.source.slug)
+  canonicalPositionHistoryText(
+    artifact.trader.exchange_trader_id,
+    'exchange trader id',
+    POSITION_HISTORY_TEXT_LIMITS.exchangeTraderId.minimum,
+    POSITION_HISTORY_TEXT_LIMITS.exchangeTraderId.maximum,
+    contractError
+  )
+  canonicalPositionHistoryTimestamp(
+    artifact.attempt_started_at,
+    'acquisition attempt startedAt',
+    contractError
+  )
+  const observedAt = canonicalPositionHistoryTimestamp(
+    artifact.pages.at(-1)!.fetched_at,
+    'acquisition observedAt',
+    contractError
+  )
+  for (const page of artifact.pages) {
+    canonicalPositionHistoryTimestamp(
+      page.fetched_at,
+      `page ${page.ordinal} fetchedAt`,
+      contractError
+    )
+  }
+  if (artifact.starting_cursor !== null) {
+    const startingCursor = canonicalPositionHistoryTimestamp(
+      artifact.starting_cursor,
+      'starting cursor',
+      contractError
+    )
+    if (Date.parse(startingCursor) > Date.parse(observedAt)) {
+      throw contractError('starting cursor must not follow acquisition observedAt')
+    }
+  }
+  if (artifact.termination.terminal_cursor_value !== null) {
+    canonicalPositionHistoryTimestamp(
+      artifact.termination.terminal_cursor_value,
+      'terminal cursor value',
+      contractError
+    )
+  }
+  if (artifact.termination.overlap_event_at !== null) {
+    canonicalPositionHistoryTimestamp(
+      artifact.termination.overlap_event_at,
+      'terminal overlap event',
+      contractError
+    )
+  }
 
   const pageRows = artifact.pages.map((page) =>
     reviewedPositionHistorySourceRows(contract, page.payload, page.ordinal)
@@ -593,7 +687,7 @@ export function buildReviewedPositionHistoryEvidence(
     try {
       parsedRows = contract.parser(page.payload, 'position_history', {
         sourceSlug: contract.sourceSlug,
-        currency: 'USDT',
+        currency: contract.expectedCurrency,
         tfLabelMap: {},
         scrapedAt: page.fetched_at,
         meta: {},
@@ -637,6 +731,18 @@ export function buildReviewedPositionHistoryEvidence(
           `reviewed parser changed source candidate order or RAW on page ${page.ordinal}`
         )
       }
+      if (classification.classification === 'canonical_materialized') {
+        canonicalPositionHistoryCandidateValues(
+          contract.sourceSlug,
+          contract.servingReturnScale,
+          row,
+          page.fetched_at,
+          observedAt,
+          contractError
+        )
+        reviewedPositionHistoryFactIdentity(contract, row, page.payload)
+        assertReviewedPositionHistoryCurrency(contract, row)
+      }
       const sourceRowOrdinal = rowIndex + 1
       sourceRowManifest.push(
         deepFreezeJson({
@@ -666,7 +772,7 @@ export function buildReviewedPositionHistoryEvidence(
     artifact,
     canonicalRows: Object.freeze(canonicalRows),
     contract,
-    observedAt: artifact.pages.at(-1)!.fetched_at,
+    observedAt,
     pageManifest: Object.freeze(pageManifest),
     sourceRunId,
   })

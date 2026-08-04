@@ -40,5 +40,11 @@ describe('strict canonical JSON', () => {
     cycle.self = cycle
     expect(() => strictCanonicalJson(cycle)).toThrow('cycles')
     expect(() => strictCanonicalJson({ value: '\ud800' })).toThrow('isolated surrogate')
+    expect(() => strictCanonicalJson({ value: '\udc00' })).toThrow('isolated surrogate')
+    expect(() => strictCanonicalJson({ ['bad\ud800key']: 'value' })).toThrow('isolated surrogate')
+    expect(() => strictCanonicalJson({ trader: { exchange_trader_id: 'leader\udc00' } })).toThrow(
+      'isolated surrogate'
+    )
+    expect(strictCanonicalJson({ key: 'valid🚀pair' })).toBe('{"key":"valid🚀pair"}')
   })
 })
