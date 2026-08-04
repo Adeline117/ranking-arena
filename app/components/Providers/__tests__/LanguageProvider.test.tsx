@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { LanguageProvider } from '../LanguageProvider'
+import { LanguageProvider, useLanguage as useAppLanguage } from '../LanguageProvider'
 import { loadTranslations } from '@/lib/i18n'
 import { useLanguage as useSharedLanguage } from '@/lib/i18n/client'
 
@@ -34,8 +34,14 @@ describe('LanguageProvider', () => {
 
   it('provides the same context instance to lib consumers', () => {
     function SharedConsumer() {
-      const { t } = useSharedLanguage()
-      return <div>{t('childLabel')}</div>
+      const appContext = useAppLanguage()
+      const sharedContext = useSharedLanguage()
+      return (
+        <>
+          <div data-testid="context-identity">{String(appContext === sharedContext)}</div>
+          <div>{sharedContext.t('childLabel')}</div>
+        </>
+      )
     }
 
     render(
@@ -44,6 +50,7 @@ describe('LanguageProvider', () => {
       </LanguageProvider>
     )
 
+    expect(screen.getByTestId('context-identity')).toHaveTextContent('true')
     expect(screen.getByText('Child content')).toBeInTheDocument()
   })
 })
