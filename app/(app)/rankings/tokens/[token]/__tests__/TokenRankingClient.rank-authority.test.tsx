@@ -102,6 +102,7 @@ describe('TokenRankingClient published token-rank authority', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={snapshot(ranked)}
       />
     )

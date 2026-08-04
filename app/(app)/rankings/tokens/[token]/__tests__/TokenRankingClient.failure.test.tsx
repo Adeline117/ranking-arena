@@ -133,13 +133,136 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={makeSnapshot()}
       />
     )
 
-    await waitFor(() => expect(screen.getAllByText(/tokenRankingNoData/).length).toBeGreaterThan(0))
+    expect(screen.getByText('tokenRankingEmptyCohortTitle')).toBeInTheDocument()
+    expect(screen.getByText('tokenRankingEmptyCohortDescription')).toBeInTheDocument()
+    expect(screen.queryByText(/tokenRankingNoData/)).not.toBeInTheDocument()
     expect(global.fetch).not.toHaveBeenCalled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('does not fetch or expose ranking interactions for a server-confirmed unpublished state', () => {
+    setSearchParams({ generation: '7' })
+    global.fetch = jest.fn()
+
+    render(
+      <TokenRankingClient
+        token="BTC"
+        initialPeriod="90D"
+        initialPage={0}
+        requestedGeneration="7"
+        initialStatus="unpublished"
+        initialSnapshot={null}
+      />
+    )
+
+    expect(screen.getByText('tokenRankingUnpublishedTitle')).toBeInTheDocument()
+    expect(screen.getByText('tokenRankingUnpublishedDescription')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'days7' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/tokenRankingHeader|tokenRankingCount/)).not.toBeInTheDocument()
+  })
+
+  it('turns the exact API unpublished response into a terminal non-retryable state', async () => {
+    setSearchParams({ generation: '7' })
+    global.fetch = jest.fn().mockResolvedValue(
+      fetchResponse(
+        {
+          error: 'Token rankings are withheld while verified authority snapshots are rebuilt',
+          code: 'TOKEN_RANKING_NOT_PUBLISHED',
+        },
+        503
+      )
+    )
+
+    render(
+      <TokenRankingClient
+        token="BTC"
+        initialPeriod="90D"
+        initialPage={0}
+        requestedGeneration="7"
+        initialStatus="error"
+        initialSnapshot={null}
+      />
+    )
+
+    expect(await screen.findByText('tokenRankingUnpublishedTitle')).toBeInTheDocument()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'retry' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'days7' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it('keeps an ordinary 503 as a retryable transport error', async () => {
+    setSearchParams({ generation: '7' })
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ code: 'TOKEN_RANKING_UNAVAILABLE' }, 503))
+
+    render(
+      <TokenRankingClient
+        token="BTC"
+        initialPeriod="90D"
+        initialPage={0}
+        requestedGeneration="7"
+        initialStatus="error"
+        initialSnapshot={null}
+      />
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('failedToLoadRankings')
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument()
+    expect(screen.queryByText('tokenRankingUnpublishedTitle')).not.toBeInTheDocument()
+  })
+
+  it('removes a previously rendered generation when a page request reports unpublished', async () => {
+    setSearchParams({ generation: '7' })
+    global.fetch = jest.fn().mockResolvedValue(
+      fetchResponse(
+        {
+          error: 'Token rankings are withheld while verified authority snapshots are rebuilt',
+          code: 'TOKEN_RANKING_NOT_PUBLISHED',
+        },
+        503
+      )
+    )
+    const initial = makeSnapshot({ total: 51 })
+    const view = render(
+      <TokenRankingClient
+        token="BTC"
+        initialPeriod="90D"
+        initialPage={0}
+        requestedGeneration="7"
+        initialStatus="success"
+        initialSnapshot={initial}
+      />
+    )
+
+    expect(screen.getByText('Trader 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'tokenRankingNext' }))
+    view.rerender(
+      <TokenRankingClient
+        token="BTC"
+        initialPeriod="90D"
+        initialPage={0}
+        requestedGeneration="7"
+        initialStatus="success"
+        initialSnapshot={initial}
+      />
+    )
+
+    expect(await screen.findByText('tokenRankingUnpublishedTitle')).toBeInTheDocument()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Trader 1')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
   it('always sends an explicit generation, exact offset, and no-store on a failed SSR seed', async () => {
@@ -156,6 +279,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="30D"
         initialPage={2}
         requestedGeneration="7"
+        initialStatus="error"
         initialSnapshot={null}
       />
     )
@@ -182,6 +306,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={makeSnapshot({ total: 51 })}
       />
     )
@@ -199,6 +324,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={makeSnapshot()}
       />
     )
@@ -265,6 +391,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={makeSnapshot({ sourceAsOf: null })}
       />
     )
@@ -295,6 +422,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={2}
         requestedGeneration="7"
+        initialStatus="error"
         initialSnapshot={null}
       />
     )
@@ -337,6 +465,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="error"
         initialSnapshot={null}
       />
     )
@@ -372,6 +501,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={initial}
       />
     )
@@ -383,6 +513,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={initial}
       />
     )
@@ -399,6 +530,7 @@ describe('TokenRankingClient generation-bound failure handling', () => {
         initialPeriod="90D"
         initialPage={0}
         requestedGeneration="7"
+        initialStatus="success"
         initialSnapshot={initial}
       />
     )
