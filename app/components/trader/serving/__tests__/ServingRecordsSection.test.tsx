@@ -49,6 +49,8 @@ describe('ServingRecordsSection selection scope', () => {
       isLoading: false,
       isInitialError: false,
       isFetchNextPageError: false,
+      isRefetchError: false,
+      isRefetching: false,
       isFetchingNextPage: false,
       hasNextPage: false,
       fetchNextPage: jest.fn(),
@@ -142,6 +144,44 @@ describe('ServingRecordsSection selection scope', () => {
     )
 
     expect(RecordsTable).not.toHaveBeenCalled()
+  })
+
+  it('discloses a failed background refresh while retaining cached rows', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [{ symbol: 'BTCUSDT' }],
+      provenance: null,
+      completeness: null,
+      isPendingUpstream: false,
+      isLoading: false,
+      isInitialError: false,
+      isFetchNextPageError: false,
+      isRefetchError: true,
+      isRefetching: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      error: new Error('refresh failed'),
+      refetch,
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['positions'])}
+        tf={90}
+      />
+    )
+
+    expect(RecordsTable).toHaveBeenCalledWith(
+      expect.objectContaining({ rows: [{ symbol: 'BTCUSDT' }] }),
+      undefined
+    )
+    const message = screen.getByText('recordsRefreshFailed')
+    expect(message.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite')
+    fireEvent.click(screen.getByRole('button', { name: 'moduleRetry' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 
   it('resets the active kind for a new subject and fails closed after capability shrinkage', () => {

@@ -106,6 +106,57 @@ function ModuleSkeleton({ height }: { height: number }) {
   )
 }
 
+function RecordsRefreshFailureNotice({
+  isRetrying,
+  onRetry,
+}: {
+  isRetrying: boolean
+  onRetry: () => void
+}) {
+  const { t } = useLanguage()
+  return (
+    <Box
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: tokens.spacing[2],
+        padding: tokens.spacing[3],
+        marginBottom: tokens.spacing[3],
+        borderRadius: tokens.radius.md,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.tertiary,
+      }}
+    >
+      <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
+        {t('recordsRefreshFailed')}
+      </Text>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={isRetrying}
+        style={{
+          minHeight: tokens.touchTarget.min,
+          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+          borderRadius: tokens.radius.md,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+          fontSize: tokens.typography.fontSize.sm,
+          cursor: isRetrying ? 'wait' : 'pointer',
+          opacity: isRetrying ? 0.6 : 1,
+        }}
+      >
+        {isRetrying ? t('loading') : t('moduleRetry')}
+      </button>
+    </Box>
+  )
+}
+
 /** One heavy record tab — own component so its hook mounts lazily. */
 function RecordKindPanel({
   source,
@@ -131,6 +182,12 @@ function RecordKindPanel({
       <HistoryCompletenessNotice
         completeness={kind === 'positions' ? null : (records.completeness ?? UNBOUND_HISTORY)}
       />
+      {records.isRefetchError && (
+        <RecordsRefreshFailureNotice
+          isRetrying={records.isRefetching}
+          onRetry={() => void records.refetch()}
+        />
+      )}
       <RecordsTable
         columns={RECORD_COLUMNS[kind]}
         rows={records.rows}

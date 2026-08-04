@@ -6097,6 +6097,7 @@ const ko = {
   tabCopiers: '카피어',
   recordsEmpty: '표시할 기록이 없습니다',
   recordsLoadMore: '더 보기',
+  recordsRefreshFailed: '새로고침에 실패했습니다. 이미 불러온 기록을 표시합니다.',
   historyCompletenessPartialTitle: '일부 거래 내역',
   historyCompletenessPartialDescription:
     '수집된 미리보기만 표시됩니다. 전체 범위는 검증되지 않았으며 순위에 사용되지 않습니다.',
