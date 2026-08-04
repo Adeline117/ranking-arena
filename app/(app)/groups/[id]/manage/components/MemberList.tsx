@@ -7,6 +7,7 @@ import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { readGroupInviteAcknowledgement } from '../group-invite-client'
 import {
   advanceGroupManageResourceScope,
   canonicalGroupManageId,
@@ -103,7 +104,6 @@ export default function MemberList(props: MemberListProps) {
 
 function ScopedMemberList({
   members,
-  groupId,
   userId,
   userRole,
   isOwner,
@@ -133,6 +133,8 @@ function ScopedMemberList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchKicking, setBatchKicking] = useState(false)
   const mountedRef = useRef(true)
+  const inviteRequestLockRef = useRef(false)
+  const batchKickLockRef = useRef(false)
   const accessTokenRef = useRef(accessToken)
   const ownerScopeRef = useRef(ownerScope)
   accessTokenRef.current = accessToken
@@ -165,7 +167,7 @@ function ScopedMemberList({
   const toggleSelect = useCallback(
     (uid: string) => {
       const requestScope = ownerScope
-      if (!isCurrent(requestScope)) return
+      if (batchKickLockRef.current || !isCurrent(requestScope)) return
       setSelectedIds((prev) => {
         const next = new Set(prev)
         if (next.has(uid)) next.delete(uid)
@@ -276,7 +278,80 @@ function ScopedMemberList({
     [isCurrent, ownerScope]
   )
 
+  const handleGenerateInvite = useCallback(async () => {
+    const requestScope = ownerScope
+    const requestGroupId = canonicalGroupManageId(requestScope.groupId)
+    if (
+      !requestGroupId ||
+      !accessToken ||
+      generatingInvite ||
+      inviteRequestLockRef.current ||
+      !isCurrent(requestScope)
+    ) {
+      return
+    }
+
+    inviteRequestLockRef.current = true
+    setGeneratingInvite(true)
+    try {
+      const res = await fetch(`/api/groups/${requestGroupId}/invite`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+        credentials: 'same-origin',
+      })
+      if (!isCurrent(requestScope)) return
+
+      const data: unknown = await res.json().catch(() => null)
+      if (!isCurrent(requestScope)) return
+
+      if (res.ok) {
+        const acknowledgement = readGroupInviteAcknowledgement(
+          data,
+          requestGroupId,
+          window.location.origin
+        )
+        if (!acknowledgement) {
+          showToast(t('generateFailed'), 'error')
+          return
+        }
+
+        setInviteUrl(acknowledgement.inviteUrl)
+        try {
+          await navigator.clipboard.writeText(acknowledgement.inviteUrl)
+          showToast(t('inviteLinkCopied'), 'success')
+        } catch {
+          showToast(t('copyFailed'), 'error')
+        }
+        return
+      }
+
+      const error =
+        data && typeof data === 'object' && !Array.isArray(data) && 'error' in data
+          ? (data as { error?: unknown }).error
+          : null
+      showToast(typeof error === 'string' ? error : t('generateFailed'), 'error')
+    } catch {
+      showToast(t('networkError'), 'error')
+    } finally {
+      inviteRequestLockRef.current = false
+      if (isCurrent(requestScope)) setGeneratingInvite(false)
+    }
+  }, [
+    accessToken,
+    fetch,
+    generatingInvite,
+    isCurrent,
+    navigator.clipboard,
+    ownerScope,
+    setGeneratingInvite,
+    setInviteUrl,
+    showToast,
+    t,
+  ])
+
   const toggleSelectAll = useCallback(() => {
+    const requestScope = ownerScope
+    if (batchKickLockRef.current || !isCurrent(requestScope)) return
     const kickable = paginatedMembers.filter((m) => {
       const memberIsOwner = m.role === 'owner' || (m.role === 'admin' && createdBy === m.user_id)
       return (
@@ -299,21 +374,76 @@ function ScopedMemberList({
         return next
       })
     }
-  }, [paginatedMembers, selectedIds, isOwner, userRole, userId, createdBy])
+  }, [createdBy, isCurrent, isOwner, ownerScope, paginatedMembers, selectedIds, userId, userRole])
+
+  const clearSelection = useCallback(() => {
+    const requestScope = ownerScope
+    if (batchKickLockRef.current || !isCurrent(requestScope)) return
+    setSelectedIds(new Set())
+  }, [isCurrent, ownerScope])
 
   const handleBatchKick = useCallback(async () => {
-    if (selectedIds.size === 0 || batchKicking) return
+    const requestScope = ownerScope
+    if (
+      selectedIds.size === 0 ||
+      !canManage ||
+      batchKicking ||
+      batchKickLockRef.current ||
+      !isCurrent(requestScope)
+    ) {
+      return
+    }
+
+    const targets = Array.from(selectedIds)
+      .map((uid) => members.find((member) => member.user_id === uid))
+      .filter((member): member is GroupMember => {
+        if (!member) return false
+        const memberIsOwner =
+          member.role === 'owner' || (member.role === 'admin' && createdBy === member.user_id)
+        return (
+          (isOwner || (userRole === 'admin' && member.role === 'member')) &&
+          member.user_id !== userId &&
+          !memberIsOwner
+        )
+      })
+    if (targets.length === 0) {
+      setSelectedIds(new Set())
+      return
+    }
+
+    batchKickLockRef.current = true
     setBatchKicking(true)
-    const ids = Array.from(selectedIds)
-    for (const uid of ids) {
-      const member = members.find((m) => m.user_id === uid)
-      if (member) {
-        onKick(uid, member.handle || 'Unknown')
+    let completed = false
+    try {
+      for (const member of targets) {
+        if (!isCurrent(requestScope)) return
+        await onKick(member.user_id, member.handle || 'Unknown')
+      }
+      completed = true
+    } catch {
+      if (isCurrent(requestScope)) showToast(t('networkError'), 'error')
+    } finally {
+      batchKickLockRef.current = false
+      if (isCurrent(requestScope)) {
+        if (completed) setSelectedIds(new Set())
+        setBatchKicking(false)
       }
     }
-    setSelectedIds(new Set())
-    setBatchKicking(false)
-  }, [selectedIds, batchKicking, members, onKick])
+  }, [
+    batchKicking,
+    canManage,
+    createdBy,
+    isCurrent,
+    isOwner,
+    members,
+    onKick,
+    ownerScope,
+    selectedIds,
+    showToast,
+    t,
+    userId,
+    userRole,
+  ])
 
   return (
     <Card title={`${t('memberList')} (${members.length})`}>
@@ -368,37 +498,7 @@ function ScopedMemberList({
             variant="secondary"
             size="sm"
             disabled={generatingInvite}
-            onClick={async () => {
-              setGeneratingInvite(true)
-              try {
-                const res = await fetch(`/api/groups/${groupId}/invite`, {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
-                })
-                if (res.ok) {
-                  const data = await res.json()
-                  if (data.invite_url) {
-                    const fullUrl = `${window.location.origin}${data.invite_url}`
-                    setInviteUrl(fullUrl)
-                    try {
-                      await navigator.clipboard.writeText(fullUrl)
-                      showToast(t('inviteLinkCopied'), 'success')
-                    } catch {
-                      showToast(t('copyFailed'), 'error')
-                    }
-                  } else showToast(t('generateFailed'), 'error')
-                } else {
-                  const data = res.headers.get('content-type')?.includes('application/json')
-                    ? await res.json()
-                    : null
-                  showToast(data?.error || t('generateFailed'), 'error')
-                }
-              } catch {
-                showToast(t('networkError'), 'error')
-              } finally {
-                setGeneratingInvite(false)
-              }
-            }}
+            onClick={handleGenerateInvite}
           >
             {generatingInvite ? '...' : t('inviteLink')}
           </Button>
@@ -427,7 +527,7 @@ function ScopedMemberList({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            background: 'var(--color-accent-error-10, rgba(239,68,68,0.1))',
+            background: 'var(--color-accent-error-10)',
             borderRadius: tokens.radius.md,
             marginBottom: tokens.spacing[2],
           }}
@@ -436,7 +536,7 @@ function ScopedMemberList({
             {selectedIds.size} {t('selected')}
           </Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-            <Button variant="secondary" size="sm" onClick={() => setSelectedIds(new Set())}>
+            <Button variant="secondary" size="sm" disabled={batchKicking} onClick={clearSelection}>
               {t('cancel')}
             </Button>
             <Button
@@ -465,6 +565,7 @@ function ScopedMemberList({
           >
             <input
               type="checkbox"
+              disabled={batchKicking}
               checked={
                 paginatedMembers
                   .filter((m) => {
@@ -531,6 +632,7 @@ function ScopedMemberList({
               {canManageMember && (
                 <input
                   type="checkbox"
+                  disabled={batchKicking}
                   checked={selectedIds.has(member.user_id)}
                   onChange={() => toggleSelect(member.user_id)}
                   style={{ cursor: 'pointer', width: 16, height: 16, flexShrink: 0 }}
@@ -611,11 +713,21 @@ function ScopedMemberList({
               {canManageMember && (
                 <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
                   {isMuted ? (
-                    <Button variant="secondary" size="sm" onClick={() => onUnmute(member.user_id)}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={batchKicking}
+                      onClick={() => onUnmute(member.user_id)}
+                    >
                       {t('unmute')}
                     </Button>
                   ) : (
-                    <Button variant="secondary" size="sm" onClick={() => onMute(member.user_id)}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={batchKicking}
+                      onClick={() => onMute(member.user_id)}
+                    >
                       {t('mute')}
                     </Button>
                   )}
@@ -623,6 +735,7 @@ function ScopedMemberList({
                     <Button
                       variant="secondary"
                       size="sm"
+                      disabled={batchKicking}
                       onClick={() =>
                         onSetRole(member.user_id, member.role === 'admin' ? 'member' : 'admin')
                       }
@@ -635,6 +748,7 @@ function ScopedMemberList({
                   <Button
                     variant="secondary"
                     size="sm"
+                    disabled={batchKicking}
                     onClick={() => onKick(member.user_id, member.handle || 'Unknown')}
                     style={{ color: 'var(--color-accent-error)' }}
                   >
