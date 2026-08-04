@@ -44,7 +44,6 @@ import {
   publishHistoryRows,
   publishPositions,
   publishProfile,
-  resolveTraderId,
 } from '@/lib/ingest/serving/publish'
 import { getIngestPool } from '@/lib/ingest/db'
 import { tierCResultKey, type TierCJobData } from '../queues'
@@ -66,33 +65,43 @@ export async function processTierC(
       `[tier-c] source ${sourceSlug} moved from ${region} to ${src.fetch_region} before fetch`
     )
   }
-  const adapter = getAdapter(src.adapter_slug)
-  const redis = getConnection()
-  const resultKey = tierCResultKey(job.data)
-
-  if (surface !== 'profile') {
-    return processHeavySurface(job, src)
+  if (src.status !== 'active' || src.serving_mode !== 'serving') {
+    throw new Error(
+      `[tier-c] source ${sourceSlug} is not active serving ` +
+        `(status=${src.status}, serving_mode=${src.serving_mode})`
+    )
   }
 
-  // UTA portfolio traders route profile calls by traders.meta (portfolio_id)
-  // — load it so long-tail UTA profiles fetch correctly instead of empty.
   const { rows: traderRows } = await getIngestPool().query<{
     id: number
     meta: Record<string, unknown> | null
   }>(
     `SELECT t.id, t.meta FROM arena.traders t
-      WHERE t.source_id = $1 AND t.exchange_trader_id = $2`,
+      WHERE t.source_id = $1 AND t.exchange_trader_id = $2
+      LIMIT 1`,
     [src.id, exchangeTraderId]
   )
-  const existingTraderId = traderRows[0]?.id ?? null
-  const traderMeta = traderRows[0]?.meta ?? null
+  const trader = traderRows[0]
+  if (!trader) {
+    throw new Error(`[tier-c] trader is not an existing serving subject: ${sourceSlug}`)
+  }
+  const traderId = trader.id
+  const traderMeta = trader.meta ?? null
 
-  // 认领交易员停抓(P3-P2): 第一方 sync 才是权威数据源;按需抓取直接跳过
-  // (/trader/ 页对 claimed 已重定向到 /u/,这里几乎不会被触发,兜底而已)。
+  // First-party sync is authoritative for claimed traders. This guard applies
+  // to every surface, including forged/stale queue jobs that bypass the route.
   if (traderMeta && (traderMeta as { claimed?: unknown }).claimed === true) {
     console.warn(`[tier-c] skip claimed trader ${src.slug}/${exchangeTraderId}`)
     return { surfacesFetched: 0, skipped: 'claimed' }
   }
+
+  if (surface !== 'profile') {
+    return processHeavySurface(job, src, traderId, traderMeta)
+  }
+
+  const adapter = getAdapter(src.adapter_slug)
+  const redis = getConnection()
+  const resultKey = tierCResultKey(job.data)
 
   // The dedicated Tier-C worker runs with concurrency=2. Use two fixed,
   // persistent slots per source so concurrent on-demand jobs cannot share a
@@ -115,7 +124,7 @@ export async function processTierC(
         sourceId: src.id,
         sourceSlug: src.slug,
         jobType: 'tier_c',
-        traderId: existingTraderId,
+        traderId,
         timeframe,
         payload: bundle.pages,
       })
@@ -162,7 +171,7 @@ export async function processTierC(
       }
       await redis.set(resultKey, JSON.stringify(terminalPayload), 'EX', RESULT_TTL_SECONDS)
       return {
-        traderId: existingTraderId,
+        traderId,
         qualityRejected: true,
         reason: qualityRejects[0].reason,
         rejects: qualityRejects.length,
@@ -175,7 +184,6 @@ export async function processTierC(
     const incomplete = findIncompleteProfileWindow(profile)
 
     if (incomplete) {
-      const traderId = await resolveTraderId(src, exchangeTraderId)
       await publishProfile(src, traderId, profile, { fullSeries: false })
       throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
     }
@@ -193,9 +201,9 @@ export async function processTierC(
     await redis.set(resultKey, JSON.stringify(payload), 'EX', RESULT_TTL_SECONDS)
 
     // 2. Persist path (async from the user's perspective — they already
-    //    have the payload): identity + stats/series + profile_cache. RAW was
+    //    have the payload): stats/series + profile_cache for the pre-authorized
+    //    existing trader. RAW was
     //    written before parsing and is deliberately not duplicated here.
-    const traderId = await resolveTraderId(src, exchangeTraderId)
     await publishProfile(src, traderId, profile, { fullSeries: false }) // long tail (spec §13.1)
     await getIngestPool().query(
       `INSERT INTO arena.profile_cache
@@ -295,7 +303,12 @@ function historyRowsForRender(
  * Full rows (including label, PnL, investment, duration, and dedupe identity)
  * only reach arena.copier_records, which has no public access.
  */
-async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Promise<unknown> {
+async function processHeavySurface(
+  job: Job<TierCJobData>,
+  src: TierCSource,
+  traderId: number,
+  traderMeta: Record<string, unknown> | null
+): Promise<unknown> {
   const { sourceSlug, exchangeTraderId, timeframe, surface } = job.data
   const adapter = getAdapter(src.adapter_slug)
   const redis = getConnection()
@@ -327,19 +340,6 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
       scrapedAt,
       meta: src.meta,
     }
-    const traderId = await resolveTraderId(src, exchangeTraderId)
-
-    // Some adapters route record fetches by traders.meta (e.g. bingx detail SPA
-    // needs bingx_api_identity to build the signed detail URL) — load it so the
-    // harvest can navigate; omitting it degrades to an empty surface.
-    const { rows: metaRows } = await getIngestPool().query<{
-      meta: Record<string, unknown>
-    }>(`SELECT t.meta FROM arena.traders t WHERE t.source_id = $1 AND t.exchange_trader_id = $2`, [
-      src.id,
-      exchangeTraderId,
-    ])
-    const traderMeta = metaRows[0]?.meta ?? null
-
     let rows: Record<string, unknown>[] = []
     let rawPayload: unknown = null
     let rawPersisted = false

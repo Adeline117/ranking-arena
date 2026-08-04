@@ -16,7 +16,6 @@ const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
 const mockWritePositionHistoryRawArtifact = jest.fn()
 const mockRecordStagingRejects = jest.fn()
-const mockResolveTraderId = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockGetHistoryCursor = jest.fn()
 const mockNextHistoryCursor = jest.fn()
@@ -53,7 +52,6 @@ jest.mock('@/lib/ingest/serving/publish', () => ({
   publishHistoryRows: (...args: unknown[]) => mockPublishHistoryRows(...args),
   publishPositions: jest.fn(),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
-  resolveTraderId: (...args: unknown[]) => mockResolveTraderId(...args),
 }))
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
@@ -74,6 +72,8 @@ const src = {
   tf_label_map: {},
   meta: {},
   fetch_region: 'local',
+  serving_mode: 'serving',
+  status: 'active',
   profile_cache_ttl_seconds: 3_600,
 } as SourceRow & { profile_cache_ttl_seconds: number }
 
@@ -347,7 +347,6 @@ describe('Tier-C incomplete profile window gate', () => {
       }
       return { rows: [], rowCount: 0 }
     })
-    mockResolveTraderId.mockResolvedValue(42)
     mockWriteRawObject.mockResolvedValue({
       id: 2_081_896,
       storagePath: 'test/tier_c/raw.json.gz',
@@ -502,7 +501,6 @@ describe('Tier-C incomplete profile window gate', () => {
     })
     expect(terminalPayload.stats).toBeUndefined()
     expect(terminalPayload.series).toBeUndefined()
-    expect(mockResolveTraderId).not.toHaveBeenCalled()
     expect(mockPublishProfile).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
@@ -551,7 +549,6 @@ describe('Tier-C incomplete profile window gate', () => {
       reason: 'profile_payload_missing',
       timeframe: 30,
     })
-    expect(mockResolveTraderId).not.toHaveBeenCalled()
     expect(mockPublishProfile).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
@@ -569,7 +566,6 @@ describe('Tier-C incomplete profile window gate', () => {
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
     expect(mockRedisSet).not.toHaveBeenCalled()
-    expect(mockResolveTraderId).not.toHaveBeenCalled()
     expect(mockPublishProfile).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
@@ -921,6 +917,64 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockGetPositions).not.toHaveBeenCalled()
     expect(mockGetSourceBySlug).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    { status: 'inactive' as const, serving_mode: 'serving' as const },
+    { status: 'active' as const, serving_mode: 'shadow' as const },
+    { status: 'dropped' as const, serving_mode: 'legacy' as const },
+  ])(
+    'rejects a non-serving source before subject lookup or network I/O: $status/$serving_mode',
+    async ({ status, serving_mode }) => {
+      mockGetSourceBySlug.mockResolvedValue({ ...src, status, serving_mode })
+
+      await expect(processTierC(job, 'local')).rejects.toThrow('is not active serving')
+
+      expect(mockDbQuery).not.toHaveBeenCalled()
+      expect(mockGetAdapter).not.toHaveBeenCalled()
+      expect(mockOpenSession).not.toHaveBeenCalled()
+      expect(mockWriteRawObject).not.toHaveBeenCalled()
+      expect(mockRedisSet).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['profile', 'copiers'] as const)(
+    'rejects a nonexistent %s subject without creating a trader or opening the network',
+    async (surface) => {
+      mockDbQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await expect(
+        processTierC({ data: { ...job.data, surface } } as Job<TierCJobData>, 'local')
+      ).rejects.toThrow('trader is not an existing serving subject')
+
+      expect(mockDbQuery).toHaveBeenCalledTimes(1)
+      expect(String(mockDbQuery.mock.calls[0][0])).toContain('SELECT t.id, t.meta')
+      expect(mockGetAdapter).not.toHaveBeenCalled()
+      expect(mockOpenSession).not.toHaveBeenCalled()
+      expect(mockWriteRawObject).not.toHaveBeenCalled()
+      expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+      expect(mockRedisSet).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['profile', 'copiers'] as const)(
+    'never lets public Tier-C overwrite a claimed trader %s surface',
+    async (surface) => {
+      const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      mockDbQuery.mockResolvedValue({ rows: [{ id: 42, meta: { claimed: true } }], rowCount: 1 })
+
+      await expect(
+        processTierC({ data: { ...job.data, surface } } as Job<TierCJobData>, 'local')
+      ).resolves.toEqual({ surfacesFetched: 0, skipped: 'claimed' })
+
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('skip claimed trader'))
+      warning.mockRestore()
+      expect(mockGetAdapter).not.toHaveBeenCalled()
+      expect(mockOpenSession).not.toHaveBeenCalled()
+      expect(mockWriteRawObject).not.toHaveBeenCalled()
+      expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+      expect(mockRedisSet).not.toHaveBeenCalled()
+    }
+  )
 
   it.each(['profile', 'positions'] as const)(
     'rechecks the processor source snapshot before opening a %s session',
