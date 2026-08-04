@@ -254,22 +254,10 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     price: p.entryPrice ?? 0,
   }))
 
-  // Position history
-  const positionHistory = detail.positionHistory.map((p) => ({
-    symbol: p.symbol,
-    direction: p.direction || 'long',
-    positionType: '',
-    marginMode: '',
-    openTime: p.openTime || '',
-    closeTime: p.closeTime || '',
-    entryPrice: p.entryPrice ?? 0,
-    exitPrice: p.exitPrice ?? 0,
-    maxPositionSize: 0,
-    closedSize: 0,
-    pnlUsd: p.pnlUsd ?? 0,
-    pnlPct: p.pnlPct ?? 0,
-    status: p.status || 'closed',
-  }))
+  // Never bridge legacy closed-position rows into a response. This adapter has
+  // no terminal acquisition evidence and must not coerce unknown prices/PnL to
+  // measured zeroes. Evidence-bound records use the arena serving contract.
+  const positionHistory: never[] = []
 
   return {
     profile,

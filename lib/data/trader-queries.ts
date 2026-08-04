@@ -426,56 +426,12 @@ export async function getTraderPortfolio(handle: string): Promise<DataResult<Por
  * 获取交易员历史订单
  */
 export async function getTraderPositionHistory(
-  handle: string
+  _handle: string
 ): Promise<DataResult<PositionHistoryItem[]>> {
-  try {
-    const source = await findTraderAcrossSources(handle, { includeWeb3: false })
-    if (!source) return success([])
-
-    const { data, error } = await supabase
-      .from('trader_position_history')
-      .select('symbol, direction, entry_price, exit_price, pnl_pct, open_time, close_time')
-      .eq('source', source.source)
-      .eq('source_trader_id', source.source_trader_id)
-      .gte('open_time', new Date(Date.now() - 90 * 86400000).toISOString())
-      .order('open_time', { ascending: false })
-      .limit(50)
-    if (error)
-      createLogger('trader-data').warn(
-        '[getTraderPositionHistory] trader_position_history query error (drift?):',
-        error.message
-      )
-
-    if (!data) return success([])
-
-    return success(
-      data.map(
-        (item: {
-          symbol: string | null
-          direction: string | null
-          entry_price: number | null
-          exit_price: number | null
-          pnl_pct: number | null
-          open_time: string | null
-          close_time: string | null
-        }) => ({
-          symbol: item.symbol || '',
-          direction: item.direction === 'short' ? 'short' : 'long',
-          entryPrice: item.entry_price || 0,
-          exitPrice: item.exit_price || 0,
-          pnlPct: item.pnl_pct || 0,
-          openTime: item.open_time || '',
-          closeTime: item.close_time || '',
-        })
-      )
-    )
-  } catch (error) {
-    const logger = createLogger('trader-data')
-    logger.error('Error in getTraderPositionHistory', { error, handle })
-    return failure(
-      error instanceof Error ? error.message : 'Unknown error in getTraderPositionHistory'
-    )
-  }
+  // Retained as a source-compatible API during cutover. The legacy relation
+  // cannot prove terminal history, trusted prices, or cost basis, so no row is
+  // eligible for display or downstream metrics.
+  return success([])
 }
 
 /**
