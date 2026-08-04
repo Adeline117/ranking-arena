@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
 
 const mockUpload = jest.fn()
@@ -30,9 +31,11 @@ import {
 } from '@/lib/ingest/position-history-acquisition-v2'
 import {
   EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+  type LockedVerifiedPositionHistoryRawArtifactV2,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   POSITION_HISTORY_RAW_JOB_TYPE,
   type IngestTransactionRunner,
+  withVerifiedPositionHistoryRawArtifactV2,
   writePositionHistoryRawArtifact,
   type WritePositionHistoryRawArtifactInput,
 } from '@/lib/ingest/raw'
@@ -104,7 +107,21 @@ function jsonClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-async function verifiedV2ArtifactInputs(): Promise<{
+function trustedV2ReadInput(
+  input: Pick<WritePositionHistoryRawArtifactInput, 'sourceRunId'>,
+  rawObjectId = 41
+) {
+  return {
+    rawObjectId,
+    expectedSourceId: 1,
+    expectedSourceSlug: 'binance_futures',
+    expectedTraderId: 11,
+    expectedExchangeTraderId: 'portfolio-1',
+    expectedSourceRunId: input.sourceRunId,
+  }
+}
+
+async function verifiedV2ArtifactInputs(options: { empty?: boolean } = {}): Promise<{
   v1: WritePositionHistoryRawArtifactInput
   v2: WritePositionHistoryRawArtifactInput & {
     artifact: PositionHistoryAcquisitionArtifactV2
@@ -125,23 +142,25 @@ async function verifiedV2ArtifactInputs(): Promise<{
       code: '000000',
       success: true,
       data: {
-        total: 1,
-        list: [
-          {
-            id: 'closed-position-1',
-            symbol: 'BTCUSDT',
-            side: 'Long',
-            status: 'All Closed',
-            opened,
-            closed: opened + 60_000,
-            roi: '0.1',
-            leverage: '10',
-            closedVolume: '2',
-            avgCost: '60000',
-            avgClosePrice: '61000',
-            closingPnl: '12.5',
-          },
-        ],
+        total: options.empty ? 0 : 1,
+        list: options.empty
+          ? []
+          : [
+              {
+                id: 'closed-position-1',
+                symbol: 'BTCUSDT',
+                side: 'Long',
+                status: 'All Closed',
+                opened,
+                closed: opened + 60_000,
+                roi: '0.1',
+                leverage: '10',
+                closedVolume: '2',
+                avgCost: '60000',
+                avgClosePrice: '61000',
+                closingPnl: '12.5',
+              },
+            ],
       },
     },
   }
@@ -189,20 +208,61 @@ function downloadBody(payload: Buffer) {
   }
 }
 
-function databaseHarness(initialRows: PointerRow[] = []) {
-  const pointers = initialRows.map((row) => ({ ...row }))
+function pointerSnapshot(row: PointerRow): PointerRow {
+  return { ...row, meta: jsonClone(row.meta) }
+}
+
+function databaseHarness(
+  initialRows: PointerRow[] = [],
+  options: { exactInstant?: boolean; notFuture?: boolean; gcPending?: boolean } = {}
+) {
+  const pointers = initialRows.map(pointerSnapshot)
+  const gcPendingPaths = new Set<string>()
   let nextId = 41
   const query = jest.fn(async (sqlInput: unknown, params: unknown[] = []) => {
     const sql = String(sqlInput)
     if (sql.includes('pg_advisory_xact_lock')) return { rows: [] }
-    if (sql.startsWith('SELECT id, source_id')) {
+    if (sql.startsWith('SELECT fetched_at =')) {
+      const pointer = pointers.find((candidate) => candidate.id === params[0])
       return {
-        rows: pointers.filter(
-          (pointer) =>
-            pointer.storage_path === params[0] ||
-            (pointer.source_run_id === params[1] &&
-              pointer.trust_artifact_role === EVENT_HISTORY_RAW_ARTIFACT_ROLE)
-        ),
+        rows: pointer
+          ? [
+              {
+                exact_instant:
+                  options.exactInstant ??
+                  Date.parse(pointer.fetched_at) === Date.parse(String(params[1])),
+                not_future:
+                  options.notFuture ?? Date.parse(pointer.fetched_at) <= Date.now() + 5 * 60_000,
+              },
+            ]
+          : [],
+      }
+    }
+    if (sql.startsWith('SELECT id, source_id')) {
+      if (sql.includes('AS gc_pending')) {
+        return {
+          rows: pointers
+            .filter(
+              (pointer) =>
+                pointer.id === params[0] ||
+                (pointer.source_run_id === params[1] &&
+                  pointer.trust_artifact_role === EVENT_HISTORY_RAW_ARTIFACT_ROLE)
+            )
+            .map((pointer) => ({
+              ...pointerSnapshot(pointer),
+              gc_pending: (options.gcPending ?? false) || gcPendingPaths.has(pointer.storage_path),
+            })),
+        }
+      }
+      return {
+        rows: pointers
+          .filter(
+            (pointer) =>
+              pointer.storage_path === params[0] ||
+              (pointer.source_run_id === params[1] &&
+                pointer.trust_artifact_role === EVENT_HISTORY_RAW_ARTIFACT_ROLE)
+          )
+          .map(pointerSnapshot),
       }
     }
     if (sql.startsWith('INSERT INTO arena.raw_objects')) {
@@ -230,10 +290,20 @@ function databaseHarness(initialRows: PointerRow[] = []) {
   })
   const transaction = { query } as unknown as IngestQueryExecutor
   const runTransaction = jest.fn(
-    async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> =>
-      operation(transaction)
+    async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> => {
+      const before = pointers.map(pointerSnapshot)
+      const gcBefore = [...gcPendingPaths]
+      try {
+        return await operation(transaction)
+      } catch (error) {
+        pointers.splice(0, pointers.length, ...before)
+        gcPendingPaths.clear()
+        gcBefore.forEach((path) => gcPendingPaths.add(path))
+        throw error
+      }
+    }
   ) as IngestTransactionRunner & jest.Mock
-  return { pointers, query, runTransaction }
+  return { pointers, gcPendingPaths, query, runTransaction, transaction }
 }
 
 describe('writePositionHistoryRawArtifact', () => {
@@ -611,5 +681,665 @@ describe('writePositionHistoryRawArtifact', () => {
     await expect(writePositionHistoryRawArtifact(v2, database.runTransaction)).rejects.toThrow(
       'database pointer 41 does not match the artifact'
     )
+  })
+
+  describe('withVerifiedPositionHistoryRawArtifactV2', () => {
+    it('locks, replays, and exposes acquisition-only evidence inside one transaction', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      database.query.mockClear()
+      mockDownload.mockClear()
+      let captured: LockedVerifiedPositionHistoryRawArtifactV2 | null = null
+      const consume = jest.fn(
+        async (
+          transaction: IngestQueryExecutor,
+          evidence: LockedVerifiedPositionHistoryRawArtifactV2
+        ) => {
+          expect(transaction).toBe(database.transaction)
+          captured = evidence
+          return { projectionReceipt: 'projection-1' }
+        }
+      )
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).resolves.toEqual({ projectionReceipt: 'projection-1' })
+
+      expect(consume).toHaveBeenCalledTimes(1)
+      expect(captured).toEqual({
+        contract: v2.artifact.contract,
+        trustScope: 'acquisition_and_source_facts',
+        acquisitionSourceRunId: v2.artifact.acquisition_source_run_id,
+        pointerSnapshot: {
+          rawObjectId: 41,
+          sourceRunId: v2.sourceRunId,
+          storagePath:
+            `binance_futures/history_trust/position_history/${v2.sourceRunId}/` +
+            `event_history_${v2.sourceRunId}.json.gz`,
+          fetchedAt,
+        },
+        candidateLedgerSha256: v2.artifact.candidate_ledger_sha256,
+        artifact: v2.artifact,
+      })
+      expect(Object.isFrozen(captured)).toBe(true)
+      expect(Object.isFrozen(captured!.pointerSnapshot)).toBe(true)
+      expect(Object.isFrozen(captured!.artifact)).toBe(true)
+      expect(Object.isFrozen(captured!.artifact.acquisition.pages[0])).toBe(true)
+      expect(captured).not.toHaveProperty('parserComplete')
+      expect(captured).not.toHaveProperty('priceComplete')
+      expect(captured).not.toHaveProperty('costBasisComplete')
+      expect(captured).not.toHaveProperty('rankEligible')
+      expect(mockDownload).toHaveBeenCalledTimes(1)
+      expect(database.query).toHaveBeenCalledTimes(4)
+      expect(String(database.query.mock.calls[0][0])).toContain('pg_advisory_xact_lock')
+      expect(
+        database.query.mock.calls.filter(([sql]) => String(sql).includes('AS gc_pending'))
+      ).toHaveLength(2)
+      expect(
+        database.query.mock.calls
+          .filter(([sql]) => String(sql).includes('AS gc_pending'))
+          .every(([sql]) => String(sql).includes('FOR SHARE'))
+      ).toBe(true)
+      expect(String(database.query.mock.calls[2][0])).toContain(
+        'fetched_at = $2::timestamptz AS exact_instant'
+      )
+    })
+
+    it('accepts a terminally verified true-empty @2 history without inventing candidates', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs({ empty: true })
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async (_transaction, evidence) => ({
+            observed: evidence.artifact.candidate_ledger.observed_candidate_count,
+            facts: evidence.artifact.candidate_ledger.unique_source_fact_count,
+          })
+        )
+      ).resolves.toEqual({ observed: 0, facts: 0 })
+    })
+
+    it('rejects @1, legacy @1 metadata, and unknown contracts before Storage download', async () => {
+      const input = await artifactInput()
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(input, database.runTransaction)
+      mockDownload.mockClear()
+      const consume = jest.fn(async () => null)
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(input),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+
+      const meta = database.pointers[0].meta as Record<string, unknown>
+      delete meta.history_evidence_contract
+      delete meta.attempt_started_at
+      delete meta.starting_cursor
+      delete meta.capture_config
+      delete meta.observed_at
+      delete meta.termination
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(input),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+
+      const unknownMeta = database.pointers[0].meta as Record<string, unknown>
+      unknownMeta.data_contract = 'arena.position-history-acquisition-artifact@999'
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(input),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+      expect(mockDownload).not.toHaveBeenCalled()
+      expect(consume).not.toHaveBeenCalled()
+    })
+
+    it('rejects every external coordinate drift and nested @1 digest before download', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      mockDownload.mockClear()
+      const valid = trustedV2ReadInput(v2)
+      const invalidInputs = [
+        { ...valid, expectedSourceId: 2 },
+        { ...valid, expectedSourceSlug: 'other_source' },
+        { ...valid, expectedTraderId: 12 },
+        { ...valid, expectedExchangeTraderId: 'portfolio-2' },
+        { ...valid, expectedSourceRunId: v2.artifact.acquisition_source_run_id },
+      ]
+
+      for (const invalid of invalidInputs) {
+        await expect(
+          withVerifiedPositionHistoryRawArtifactV2(
+            invalid,
+            database.runTransaction,
+            async () => null
+          )
+        ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+      }
+      expect(mockDownload).not.toHaveBeenCalled()
+    })
+
+    it('rejects pointer identity, quarantine, role, and integrity drift before download', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      mockDownload.mockClear()
+      const original = pointerSnapshot(database.pointers[0])
+      const mutations: Array<(pointer: PointerRow) => void> = [
+        (pointer) => {
+          pointer.job_type = 'history:orders'
+        },
+        (pointer) => {
+          pointer.timeframe = 7
+        },
+        (pointer) => {
+          pointer.fetched_at = 'not-a-timestamp'
+        },
+        (pointer) => {
+          pointer.storage_path = `${pointer.storage_path}.moved`
+        },
+        (pointer) => {
+          pointer.bytes += 1
+        },
+        (pointer) => {
+          pointer.content_hash = 'f'.repeat(64)
+        },
+        (pointer) => {
+          pointer.quarantined = true
+        },
+        (pointer) => {
+          pointer.source_run_id = 'f'.repeat(64)
+        },
+        (pointer) => {
+          pointer.trust_artifact_role = 'manifest'
+        },
+        (pointer) => {
+          const meta = pointer.meta as Record<string, unknown>
+          const integrity = meta.raw_integrity as Record<string, unknown>
+          integrity.serialization_contract = 'arena.raw-json-stringify@1'
+        },
+        (pointer) => {
+          const meta = pointer.meta as Record<string, unknown>
+          const integrity = meta.raw_integrity as Record<string, unknown>
+          integrity.uncompressed_bytes = 256 * 1024 * 1024 + 1
+        },
+      ]
+
+      for (const mutate of mutations) {
+        database.pointers.splice(0, 1, pointerSnapshot(original))
+        mutate(database.pointers[0])
+        await expect(
+          withVerifiedPositionHistoryRawArtifactV2(
+            trustedV2ReadInput(v2),
+            database.runTransaction,
+            async () => null
+          )
+        ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+      }
+      expect(mockDownload).not.toHaveBeenCalled()
+    })
+
+    it('rejects duplicate run pointers, tombstones, and pending GC paths before download', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      mockDownload.mockClear()
+      const original = pointerSnapshot(database.pointers[0])
+
+      database.pointers.push({
+        ...pointerSnapshot(original),
+        id: 42,
+        storage_path: `${original.storage_path}.duplicate`,
+      })
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => null
+        )
+      ).rejects.toThrow('expected one locked pointer for the outer source run, found 2')
+
+      database.pointers.splice(0, database.pointers.length)
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => null
+        )
+      ).rejects.toThrow('expected one locked pointer for the outer source run, found 0')
+
+      const gcDatabase = databaseHarness([original], { gcPending: true })
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          gcDatabase.runTransaction,
+          async () => null
+        )
+      ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+      expect(mockDownload).not.toHaveBeenCalled()
+    })
+
+    it('requires exact current @2 metadata after replay, with no missing or extra fields', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      mockDownload.mockClear()
+      const originalMeta = jsonClone(database.pointers[0].meta) as Record<string, unknown>
+      const consume = jest.fn(async () => null)
+
+      const extraMeta = jsonClone(originalMeta)
+      extraMeta.rank_eligible = true
+      database.pointers[0].meta = extraMeta
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('locked pointer metadata is not the exact @2 evidence contract')
+
+      const missingMeta = jsonClone(originalMeta)
+      delete missingMeta.candidate_ledger_sha256
+      database.pointers[0].meta = missingMeta
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('locked pointer metadata is not the exact @2 evidence contract')
+      expect(mockDownload).toHaveBeenCalledTimes(2)
+      expect(consume).not.toHaveBeenCalled()
+    })
+
+    it('uses PostgreSQL equality and clock bounds for the exact observation instant', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness([], { exactInstant: false })
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      database.pointers[0].fetched_at = '2026-08-03T10:00:01.000001Z'
+      expect(Date.parse(database.pointers[0].fetched_at)).toBe(Date.parse(fetchedAt))
+      const consume = jest.fn(async () => null)
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('locked pointer timestamp does not match the @2 observation clock')
+      expect(consume).not.toHaveBeenCalled()
+
+      storage.clear()
+      const futureDatabase = databaseHarness([], { notFuture: false })
+      await writePositionHistoryRawArtifact(v2, futureDatabase.runTransaction)
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          futureDatabase.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('locked pointer timestamp does not match the @2 observation clock')
+      expect(consume).not.toHaveBeenCalled()
+    })
+
+    it('rejects unavailable, truncated, corrupt, non-UTF8, invalid, and noncanonical Storage', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      const receipt = await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      const originalPointer = pointerSnapshot(database.pointers[0])
+      const originalGzip = Buffer.from(storage.get(receipt.storagePath)!)
+      const consume = jest.fn(async () => null)
+
+      function reset(): void {
+        database.pointers.splice(0, database.pointers.length, pointerSnapshot(originalPointer))
+        storage.clear()
+        storage.set(originalPointer.storage_path, Buffer.from(originalGzip))
+      }
+
+      function rebindUncompressedBytes(bytes: Buffer) {
+        const pointer = database.pointers[0]
+        const sourceRunId = createHash('sha256').update(bytes).digest('hex')
+        const gz = gzipSync(bytes)
+        storage.delete(pointer.storage_path)
+        pointer.storage_path =
+          `binance_futures/history_trust/position_history/${sourceRunId}/` +
+          `event_history_${sourceRunId}.json.gz`
+        pointer.bytes = gz.byteLength
+        pointer.content_hash = sourceRunId
+        pointer.source_run_id = sourceRunId
+        const meta = pointer.meta as Record<string, unknown>
+        meta.source_run_id = sourceRunId
+        const integrity = meta.raw_integrity as Record<string, unknown>
+        integrity.compressed_bytes = gz.byteLength
+        integrity.uncompressed_bytes = bytes.byteLength
+        storage.set(pointer.storage_path, gz)
+        return { ...trustedV2ReadInput(v2), expectedSourceRunId: sourceRunId }
+      }
+
+      storage.delete(receipt.storagePath)
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('RAW download failed')
+
+      reset()
+      mockDownload.mockImplementationOnce(async () => ({
+        data: {
+          arrayBuffer: async () => {
+            throw new Error('stream failed')
+          },
+        },
+        error: null,
+      }))
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('RAW download body failed')
+
+      reset()
+      storage.set(receipt.storagePath, Buffer.concat([originalGzip, Buffer.from([0])]))
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('compressed byte count mismatch')
+
+      reset()
+      const badHeader = Buffer.from([0, 0, 0])
+      storage.set(receipt.storagePath, badHeader)
+      database.pointers[0].bytes = badHeader.byteLength
+      const badHeaderMeta = database.pointers[0].meta as Record<string, unknown>
+      ;(badHeaderMeta.raw_integrity as Record<string, unknown>).compressed_bytes =
+        badHeader.byteLength
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('invalid gzip header')
+
+      reset()
+      const badGzip = Buffer.from([0x1f, 0x8b, 0x08, 0])
+      storage.set(receipt.storagePath, badGzip)
+      database.pointers[0].bytes = badGzip.byteLength
+      const badGzipMeta = database.pointers[0].meta as Record<string, unknown>
+      ;(badGzipMeta.raw_integrity as Record<string, unknown>).compressed_bytes = badGzip.byteLength
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('gzip payload or trailer is corrupt')
+
+      reset()
+      const wrongUncompressedMeta = database.pointers[0].meta as Record<string, unknown>
+      const wrongUncompressedIntegrity = wrongUncompressedMeta.raw_integrity as Record<
+        string,
+        unknown
+      >
+      wrongUncompressedIntegrity.uncompressed_bytes =
+        Number(wrongUncompressedIntegrity.uncompressed_bytes) + 1
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('raw_integrity.uncompressed_bytes mismatch')
+
+      reset()
+      const foreignJson = Buffer.from('{}', 'utf8')
+      const foreignGzip = gzipSync(foreignJson)
+      storage.set(receipt.storagePath, foreignGzip)
+      database.pointers[0].bytes = foreignGzip.byteLength
+      const foreignMeta = database.pointers[0].meta as Record<string, unknown>
+      const foreignIntegrity = foreignMeta.raw_integrity as Record<string, unknown>
+      foreignIntegrity.compressed_bytes = foreignGzip.byteLength
+      foreignIntegrity.uncompressed_bytes = foreignJson.byteLength
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('SHA-256 checksum mismatch')
+
+      reset()
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          rebindUncompressedBytes(Buffer.from([0xc3, 0x28])),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('payload is not valid UTF-8')
+
+      reset()
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          rebindUncompressedBytes(Buffer.from('not-json', 'utf8')),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('payload is not valid JSON')
+
+      reset()
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          rebindUncompressedBytes(Buffer.from(JSON.stringify(v2.artifact, null, 2), 'utf8')),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('strict canonical serialization mismatch')
+      expect(consume).not.toHaveBeenCalled()
+    })
+
+    it('semantically rejects fully rehashed terminal forgery and candidate omission', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      const receipt = await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      const originalPointer = pointerSnapshot(database.pointers[0])
+      const originalGzip = Buffer.from(storage.get(receipt.storagePath)!)
+      const consume = jest.fn(async () => null)
+
+      function reset(): void {
+        database.pointers.splice(0, database.pointers.length, pointerSnapshot(originalPointer))
+        storage.clear()
+        storage.set(originalPointer.storage_path, Buffer.from(originalGzip))
+      }
+
+      function rebindArtifact(artifact: PositionHistoryAcquisitionArtifactV2) {
+        const json = strictCanonicalJson(artifact)
+        const bytes = Buffer.from(json, 'utf8')
+        const gz = gzipSync(bytes)
+        const sourceRunId = strictCanonicalSha256(artifact)
+        const pointer = database.pointers[0]
+        storage.delete(pointer.storage_path)
+        pointer.storage_path =
+          `binance_futures/history_trust/position_history/${sourceRunId}/` +
+          `event_history_${sourceRunId}.json.gz`
+        pointer.bytes = gz.byteLength
+        pointer.content_hash = sourceRunId
+        pointer.source_run_id = sourceRunId
+        const meta = pointer.meta as Record<string, unknown>
+        meta.source_run_id = sourceRunId
+        meta.acquisition_source_run_id = artifact.acquisition_source_run_id
+        meta.candidate_ledger_sha256 = artifact.candidate_ledger_sha256
+        meta.observed_candidate_count = artifact.candidate_ledger.observed_candidate_count
+        meta.unique_source_fact_count = artifact.candidate_ledger.unique_source_fact_count
+        meta.fact_set_sha256 = artifact.candidate_ledger.fact_set_sha256
+        const integrity = meta.raw_integrity as Record<string, unknown>
+        integrity.compressed_bytes = gz.byteLength
+        integrity.uncompressed_bytes = bytes.byteLength
+        storage.set(pointer.storage_path, gz)
+        return { ...trustedV2ReadInput(v2), expectedSourceRunId: sourceRunId }
+      }
+
+      const terminalForgery = jsonClone(v2.artifact)
+      ;(terminalForgery.acquisition.pages[0].payload as { portfolioId: string }).portfolioId =
+        'another-trader'
+      terminalForgery.acquisition.pages[0].payload_sha256 = strictCanonicalSha256(
+        terminalForgery.acquisition.pages[0].payload
+      )
+      terminalForgery.acquisition_source_run_id = strictCanonicalSha256(terminalForgery.acquisition)
+      terminalForgery.candidate_ledger.acquisition_source_run_id =
+        terminalForgery.acquisition_source_run_id
+      terminalForgery.candidate_ledger_sha256 = strictCanonicalSha256(
+        terminalForgery.candidate_ledger
+      )
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          rebindArtifact(terminalForgery),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('@2 semantic replay failed')
+
+      reset()
+      const omission = jsonClone(v2.artifact)
+      omission.candidate_ledger.segments[0].pages[0].occurrences = []
+      omission.candidate_ledger.segments[0].pages[0].candidate_count = 0
+      omission.candidate_ledger.observed_candidate_count = 0
+      omission.candidate_ledger.source_facts = []
+      omission.candidate_ledger.unique_source_fact_count = 0
+      omission.candidate_ledger.fact_set_sha256 = strictCanonicalSha256([])
+      omission.candidate_ledger_sha256 = strictCanonicalSha256(omission.candidate_ledger)
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          rebindArtifact(omission),
+          database.runTransaction,
+          consume
+        )
+      ).rejects.toThrow('@2 semantic replay failed')
+      expect(consume).not.toHaveBeenCalled()
+    })
+
+    it('detects and rolls back consumer pointer, deletion, quarantine, and GC mutations', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      const original = pointerSnapshot(database.pointers[0])
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => {
+            const meta = database.pointers[0].meta as Record<string, unknown>
+            meta.consumer_mutation = true
+          }
+        )
+      ).rejects.toThrow('locked pointer changed during @2 consumption')
+      expect(database.pointers).toEqual([original])
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => {
+            database.pointers[0].quarantined = true
+          }
+        )
+      ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+      expect(database.pointers).toEqual([original])
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => {
+            database.pointers.splice(0, 1)
+          }
+        )
+      ).rejects.toThrow('expected one locked pointer for the outer source run, found 0')
+      expect(database.pointers).toEqual([original])
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => {
+            database.pointers.push({
+              ...pointerSnapshot(original),
+              id: 42,
+              storage_path: `${original.storage_path}.consumer-duplicate`,
+            })
+          }
+        )
+      ).rejects.toThrow('expected one locked pointer for the outer source run, found 2')
+      expect(database.pointers).toEqual([original])
+
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => {
+            database.gcPendingPaths.add(original.storage_path)
+          }
+        )
+      ).rejects.toThrow('locked pointer does not match the expected @2 identity')
+      expect(database.gcPendingPaths).toEqual(new Set())
+      expect(database.pointers).toEqual([original])
+    })
+
+    it('validates the runner and consumer before any I/O and preserves consumer errors', async () => {
+      const { v2 } = await verifiedV2ArtifactInputs()
+      const database = databaseHarness()
+      const unsafeRead = withVerifiedPositionHistoryRawArtifactV2 as unknown as (
+        input: ReturnType<typeof trustedV2ReadInput>,
+        runner?: IngestTransactionRunner,
+        consume?: (
+          transaction: IngestQueryExecutor,
+          evidence: LockedVerifiedPositionHistoryRawArtifactV2
+        ) => Promise<unknown>
+      ) => Promise<unknown>
+
+      await expect(unsafeRead(trustedV2ReadInput(v2))).rejects.toThrow(
+        'a claimed transaction runner is required'
+      )
+      await expect(unsafeRead(trustedV2ReadInput(v2), database.runTransaction)).rejects.toThrow(
+        'a locked consumer is required'
+      )
+      expect(database.runTransaction).not.toHaveBeenCalled()
+      expect(mockDownload).not.toHaveBeenCalled()
+
+      await writePositionHistoryRawArtifact(v2, database.runTransaction)
+      const consumerError = new Error('projection consumer failed')
+      await expect(
+        withVerifiedPositionHistoryRawArtifactV2(
+          trustedV2ReadInput(v2),
+          database.runTransaction,
+          async () => {
+            throw consumerError
+          }
+        )
+      ).rejects.toBe(consumerError)
+    })
   })
 })

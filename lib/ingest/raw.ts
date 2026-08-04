@@ -56,6 +56,7 @@ let storageClient: SupabaseClient | null = null
 const RAW_UPLOAD_ATTEMPTS = 3
 const RAW_UPLOAD_RETRY_BASE_MS = 750
 const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_queue', 0)"
+const POSITION_HISTORY_RAW_MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 
 export const RAW_JSON_STRINGIFY_CONTRACT = 'arena.raw-json-stringify@1' as const
 export const POSITION_HISTORY_RAW_JOB_TYPE = 'history:position_history' as const
@@ -1029,6 +1030,29 @@ export interface WritePositionHistoryRawArtifactInput {
   artifact: PositionHistoryRawArtifact
 }
 
+export interface ReadVerifiedPositionHistoryRawArtifactV2Input {
+  rawObjectId: number
+  expectedSourceId: number
+  expectedSourceSlug: string
+  expectedTraderId: number
+  expectedExchangeTraderId: string
+  expectedSourceRunId: string
+}
+
+export type LockedVerifiedPositionHistoryRawArtifactV2 = Readonly<{
+  contract: typeof POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT
+  trustScope: 'acquisition_and_source_facts'
+  acquisitionSourceRunId: string
+  pointerSnapshot: Readonly<{
+    rawObjectId: number
+    sourceRunId: string
+    storagePath: string
+    fetchedAt: string
+  }>
+  candidateLedgerSha256: string
+  artifact: PositionHistoryAcquisitionArtifactV2
+}>
+
 interface NormalizedPositionHistoryRawArtifactInput {
   sourceId: number
   sourceSlug: string
@@ -1058,6 +1082,10 @@ interface PositionHistoryTrustPointerRow {
   meta: unknown
   source_run_id: string | null
   trust_artifact_role: string | null
+}
+
+interface LockedPositionHistoryTrustPointerRow extends PositionHistoryTrustPointerRow {
+  gc_pending: boolean
 }
 
 function positionHistoryArtifactError(detail: string): Error {
@@ -1170,6 +1198,12 @@ function preparePositionHistoryRawArtifact(
 ): PreparedPositionHistoryRawArtifact {
   const { json } = serializeRawPayload(input.artifact, STRICT_CANONICAL_JSON_CONTRACT)
   const jsonBytes = Buffer.from(json, 'utf8')
+  if (
+    input.artifact.contract === POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT &&
+    jsonBytes.byteLength > POSITION_HISTORY_RAW_MAX_UNCOMPRESSED_BYTES
+  ) {
+    throw positionHistoryArtifactError('verified @2 artifact exceeds the trusted replay limit')
+  }
   const gzipBytes = gzipSync(jsonBytes)
   const contentHash = createHash('sha256').update(jsonBytes).digest('hex')
   if (contentHash !== input.sourceRunId) {
@@ -1463,23 +1497,17 @@ export async function writeRawObject(
   return persistRawObjectPointer(getIngestPool(), prepared)
 }
 
-/**
- * Re-read a stored raw payload (re-parse path, spec §5.5).
- * This generic compatibility reader verifies stored bytes, not trust-pointer
- * identity or source-specific semantics. Callers must not use it as a trusted
- * position-history @2 replay or publication authority.
- */
-export async function readRawObject(rawObjectId: number): Promise<unknown> {
-  const { rows } = await getIngestPool().query<RawObjectPointer>(
-    `SELECT storage_path, bytes, content_hash, meta
-     FROM arena.raw_objects
-     WHERE id = $1`,
-    [rawObjectId]
-  )
-  if (rows.length === 0) {
-    throw new Error(`[ingest] raw object ${rawObjectId} not found`)
-  }
-  const pointer = rows[0]
+interface ReadRawPayloadResult {
+  payload: unknown
+  compressedBytes: number
+  uncompressedBytes: number
+}
+
+async function readRawPayload(
+  rawObjectId: number,
+  pointer: RawObjectPointer,
+  options: { maxUncompressedBytes?: number } = {}
+): Promise<ReadRawPayloadResult> {
   const { data, error } = await getStorageClient()
     .storage.from(RAW_BUCKET)
     .download(pointer.storage_path)
@@ -1517,7 +1545,12 @@ export async function readRawObject(rawObjectId: number): Promise<unknown> {
   let jsonBytes: Buffer
   try {
     // gunzip validates the gzip trailer CRC32 and original-size fields.
-    jsonBytes = gunzipSync(gz)
+    jsonBytes = gunzipSync(
+      gz,
+      options.maxUncompressedBytes === undefined
+        ? undefined
+        : { maxOutputLength: options.maxUncompressedBytes }
+    )
   } catch {
     throw rawIntegrityError(rawObjectId, pointer.storage_path, 'gzip payload or trailer is corrupt')
   }
@@ -1572,7 +1605,313 @@ export async function readRawObject(rawObjectId: number): Promise<unknown> {
       )
     }
   }
-  return payload
+  return {
+    payload,
+    compressedBytes: gz.byteLength,
+    uncompressedBytes: jsonBytes.byteLength,
+  }
+}
+
+/**
+ * Re-read a stored raw payload (re-parse path, spec §5.5).
+ * This generic compatibility reader verifies stored bytes, not trust-pointer
+ * identity or source-specific semantics. Callers must not use it as a trusted
+ * position-history @2 replay or publication authority.
+ */
+export async function readRawObject(rawObjectId: number): Promise<unknown> {
+  const { rows } = await getIngestPool().query<RawObjectPointer>(
+    `SELECT storage_path, bytes, content_hash, meta
+     FROM arena.raw_objects
+     WHERE id = $1`,
+    [rawObjectId]
+  )
+  if (rows.length === 0) {
+    throw new Error(`[ingest] raw object ${rawObjectId} not found`)
+  }
+  return (await readRawPayload(rawObjectId, rows[0])).payload
+}
+
+function verifiedPositionHistoryRawReadError(rawObjectId: number, detail: string): Error {
+  return new Error(
+    `[ingest] verified position-history RAW read failed (id=${rawObjectId}): ${detail}`
+  )
+}
+
+function validateVerifiedPositionHistoryRawReadInput(
+  input: ReadVerifiedPositionHistoryRawArtifactV2Input
+): void {
+  if (!Number.isSafeInteger(input.rawObjectId) || input.rawObjectId <= 0) {
+    throw verifiedPositionHistoryRawReadError(input.rawObjectId, 'raw object id is invalid')
+  }
+  if (!Number.isSafeInteger(input.expectedSourceId) || input.expectedSourceId <= 0) {
+    throw verifiedPositionHistoryRawReadError(input.rawObjectId, 'expected source id is invalid')
+  }
+  if (!Number.isSafeInteger(input.expectedTraderId) || input.expectedTraderId <= 0) {
+    throw verifiedPositionHistoryRawReadError(input.rawObjectId, 'expected trader id is invalid')
+  }
+  if (!/^[a-z0-9_]+$/.test(input.expectedSourceSlug)) {
+    throw verifiedPositionHistoryRawReadError(input.rawObjectId, 'expected source slug is invalid')
+  }
+  if (
+    typeof input.expectedExchangeTraderId !== 'string' ||
+    input.expectedExchangeTraderId.length === 0 ||
+    input.expectedExchangeTraderId.trim() !== input.expectedExchangeTraderId
+  ) {
+    throw verifiedPositionHistoryRawReadError(
+      input.rawObjectId,
+      'expected exchange trader id is invalid'
+    )
+  }
+  if (!/^[0-9a-f]{64}$/.test(input.expectedSourceRunId)) {
+    throw verifiedPositionHistoryRawReadError(
+      input.rawObjectId,
+      'expected outer source run id is invalid'
+    )
+  }
+}
+
+async function loadLockedPositionHistoryTrustPointers(
+  transaction: IngestQueryExecutor,
+  input: ReadVerifiedPositionHistoryRawArtifactV2Input
+): Promise<LockedPositionHistoryTrustPointerRow[]> {
+  const { rows } = await transaction.query<LockedPositionHistoryTrustPointerRow>(
+    `SELECT id, source_id, job_type, trader_id, timeframe,
+            fetched_at::text AS fetched_at, storage_path,
+            bytes, content_hash, quarantined, meta,
+            source_run_id, trust_artifact_role,
+            EXISTS (
+              SELECT 1
+              FROM arena.raw_object_gc_queue AS gc
+              WHERE gc.storage_path = raw_object.storage_path
+            ) AS gc_pending
+       FROM arena.raw_objects AS raw_object
+      WHERE raw_object.id = $1
+         OR (
+           raw_object.source_run_id = $2
+           AND raw_object.trust_artifact_role = 'event_history'
+         )
+      ORDER BY raw_object.id
+      FOR SHARE`,
+    [input.rawObjectId, input.expectedSourceRunId]
+  )
+  return rows
+}
+
+function validateLockedPositionHistoryV2Pointer(
+  rows: readonly LockedPositionHistoryTrustPointerRow[],
+  input: ReadVerifiedPositionHistoryRawArtifactV2Input
+): LockedPositionHistoryTrustPointerRow {
+  if (rows.length !== 1) {
+    throw verifiedPositionHistoryRawReadError(
+      input.rawObjectId,
+      `expected one locked pointer for the outer source run, found ${rows.length}`
+    )
+  }
+  const pointer = rows[0]
+  const expectedStoragePath =
+    `${input.expectedSourceSlug}/history_trust/position_history/` +
+    `${input.expectedSourceRunId}/${EVENT_HISTORY_RAW_ARTIFACT_ROLE}_` +
+    `${input.expectedSourceRunId}.json.gz`
+  const fetchedAt = Date.parse(pointer.fetched_at)
+  const meta = pointer.meta
+  const rawIntegrity = isRecord(meta) ? meta.raw_integrity : null
+  if (
+    pointer.id !== input.rawObjectId ||
+    pointer.source_id !== input.expectedSourceId ||
+    pointer.job_type !== POSITION_HISTORY_RAW_JOB_TYPE ||
+    pointer.trader_id !== input.expectedTraderId ||
+    pointer.timeframe !== null ||
+    !Number.isFinite(fetchedAt) ||
+    pointer.storage_path !== expectedStoragePath ||
+    !Number.isSafeInteger(pointer.bytes) ||
+    pointer.bytes <= 0 ||
+    pointer.content_hash !== input.expectedSourceRunId ||
+    pointer.quarantined !== false ||
+    pointer.gc_pending !== false ||
+    pointer.source_run_id !== input.expectedSourceRunId ||
+    pointer.trust_artifact_role !== EVENT_HISTORY_RAW_ARTIFACT_ROLE ||
+    !isRecord(meta) ||
+    meta.surface !== 'position_history' ||
+    meta.data_contract !== POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT ||
+    meta.source_run_id !== input.expectedSourceRunId ||
+    meta.source_slug !== input.expectedSourceSlug ||
+    meta.exchange_trader_id !== input.expectedExchangeTraderId ||
+    meta.history_kind !== 'position_history' ||
+    !isRecord(rawIntegrity) ||
+    rawIntegrity.version !== 1 ||
+    rawIntegrity.content_type !== 'application/json' ||
+    rawIntegrity.encoding !== 'utf-8' ||
+    rawIntegrity.compression !== 'gzip' ||
+    rawIntegrity.hash_algorithm !== 'sha256' ||
+    rawIntegrity.hash_scope !== 'json_utf8' ||
+    rawIntegrity.serialization_contract !== STRICT_CANONICAL_JSON_CONTRACT ||
+    rawIntegrity.compressed_bytes !== pointer.bytes ||
+    !Number.isSafeInteger(rawIntegrity.uncompressed_bytes) ||
+    Number(rawIntegrity.uncompressed_bytes) <= 0 ||
+    Number(rawIntegrity.uncompressed_bytes) > POSITION_HISTORY_RAW_MAX_UNCOMPRESSED_BYTES
+  ) {
+    throw verifiedPositionHistoryRawReadError(
+      input.rawObjectId,
+      'locked pointer does not match the expected @2 identity'
+    )
+  }
+  return pointer
+}
+
+async function validateLockedPositionHistoryFetchedAt(
+  transaction: IngestQueryExecutor,
+  rawObjectId: number,
+  expectedFetchedAt: string
+): Promise<void> {
+  const { rows } = await transaction.query<{
+    exact_instant: boolean
+    not_future: boolean
+  }>(
+    `SELECT fetched_at = $2::timestamptz AS exact_instant,
+            fetched_at <= pg_catalog.statement_timestamp() + interval '5 minutes' AS not_future
+       FROM arena.raw_objects
+      WHERE id = $1`,
+    [rawObjectId, expectedFetchedAt]
+  )
+  if (rows.length !== 1 || rows[0].exact_instant !== true || rows[0].not_future !== true) {
+    throw verifiedPositionHistoryRawReadError(
+      rawObjectId,
+      'locked pointer timestamp does not match the @2 observation clock'
+    )
+  }
+}
+
+/**
+ * Lock and semantically replay one position-history @2 acquisition under its
+ * independently captured source/trader/run anchor, then consume it inside the
+ * same caller-owned transaction. The advisory and row locks keep GC,
+ * quarantine, and pointer rebinding from racing the Storage read or consumer.
+ * The snapshot proves acquisition and source facts only; retaining it after
+ * the callback does not confer parser, price/cost, publication, or rank trust.
+ * It also does not attest the current sources/traders rows: a projection or
+ * publication consumer must re-lock and bind those identities in this same
+ * transaction instead of treating the expected input as current authority.
+ */
+export async function withVerifiedPositionHistoryRawArtifactV2<T>(
+  input: ReadVerifiedPositionHistoryRawArtifactV2Input,
+  runTransaction: IngestTransactionRunner,
+  consume: (
+    transaction: IngestQueryExecutor,
+    evidence: LockedVerifiedPositionHistoryRawArtifactV2
+  ) => Promise<T>
+): Promise<T> {
+  validateVerifiedPositionHistoryRawReadInput(input)
+  if (typeof runTransaction !== 'function') {
+    throw verifiedPositionHistoryRawReadError(
+      input.rawObjectId,
+      'a claimed transaction runner is required'
+    )
+  }
+  if (typeof consume !== 'function') {
+    throw verifiedPositionHistoryRawReadError(input.rawObjectId, 'a locked consumer is required')
+  }
+
+  return runTransaction(async (transaction) => {
+    await transaction.query(
+      `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+      [`arena.position-history-raw-artifact:${input.expectedSourceRunId}`]
+    )
+    const pointer = validateLockedPositionHistoryV2Pointer(
+      await loadLockedPositionHistoryTrustPointers(transaction, input),
+      input
+    )
+    const rawIntegrity = (pointer.meta as Record<string, unknown>).raw_integrity as Record<
+      string,
+      unknown
+    >
+    const raw = await readRawPayload(input.rawObjectId, pointer, {
+      maxUncompressedBytes: Number(rawIntegrity.uncompressed_bytes),
+    })
+    const verification = revalidatePositionHistoryAcquisitionArtifactV2({
+      artifact: raw.payload,
+      expectedSourceRunId: input.expectedSourceRunId,
+    })
+    if (!verification.verified) {
+      throw verifiedPositionHistoryRawReadError(
+        input.rawObjectId,
+        `@2 semantic replay failed: ${verification.reason}`
+      )
+    }
+
+    const artifact = verification.artifact
+    const acquisition = artifact.acquisition
+    const fetchedAt = acquisition.pages.at(-1)?.fetched_at ?? acquisition.attempt_started_at
+    if (
+      acquisition.source.id !== input.expectedSourceId ||
+      acquisition.source.slug !== input.expectedSourceSlug ||
+      acquisition.trader.id !== input.expectedTraderId ||
+      acquisition.trader.exchange_trader_id !== input.expectedExchangeTraderId
+    ) {
+      throw verifiedPositionHistoryRawReadError(
+        input.rawObjectId,
+        '@2 payload coordinates do not match the locked pointer'
+      )
+    }
+    await validateLockedPositionHistoryFetchedAt(transaction, input.rawObjectId, fetchedAt)
+
+    const normalized: NormalizedPositionHistoryRawArtifactInput = {
+      sourceId: input.expectedSourceId,
+      sourceSlug: input.expectedSourceSlug,
+      traderId: input.expectedTraderId,
+      exchangeTraderId: input.expectedExchangeTraderId,
+      sourceRunId: input.expectedSourceRunId,
+      fetchedAt,
+      artifact,
+      acquisition,
+    }
+    const expectedMeta = rawIntegrityMeta(
+      positionHistoryArtifactMetaBase(normalized),
+      STRICT_CANONICAL_JSON_CONTRACT,
+      raw.compressedBytes,
+      raw.uncompressedBytes
+    )
+    let metaMatches = false
+    try {
+      metaMatches = strictCanonicalJson(pointer.meta) === strictCanonicalJson(expectedMeta)
+    } catch {
+      metaMatches = false
+    }
+    if (!metaMatches) {
+      throw verifiedPositionHistoryRawReadError(
+        input.rawObjectId,
+        'locked pointer metadata is not the exact @2 evidence contract'
+      )
+    }
+
+    const evidence: LockedVerifiedPositionHistoryRawArtifactV2 = Object.freeze({
+      contract: POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT,
+      trustScope: 'acquisition_and_source_facts',
+      acquisitionSourceRunId: artifact.acquisition_source_run_id,
+      pointerSnapshot: Object.freeze({
+        rawObjectId: input.rawObjectId,
+        sourceRunId: input.expectedSourceRunId,
+        storagePath: pointer.storage_path,
+        fetchedAt,
+      }),
+      candidateLedgerSha256: verification.candidateLedgerSha256,
+      artifact,
+    })
+    const result = await consume(transaction, evidence)
+
+    // The consumer shares this transaction so it can persist a projection,
+    // but it must never mutate the evidence pointer that authorizes its work.
+    const reloaded = validateLockedPositionHistoryV2Pointer(
+      await loadLockedPositionHistoryTrustPointers(transaction, input),
+      input
+    )
+    if (strictCanonicalJson(reloaded) !== strictCanonicalJson(pointer)) {
+      throw verifiedPositionHistoryRawReadError(
+        input.rawObjectId,
+        'locked pointer changed during @2 consumption'
+      )
+    }
+    return result
+  })
 }
 
 async function readRawObjectGcBatch(client: PoolClient): Promise<RawObjectGcPointer[]> {
