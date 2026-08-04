@@ -6054,6 +6054,7 @@ const zh = {
   metricTradedTokens: '交易代币数',
   metricTotalTxns: '交易笔数',
   tabPositions: '当前仓位',
+  recordsTabs: '交易记录标签页',
   tabPositionHistory: '历史仓位',
   tabOrders: '订单记录',
   tabTransfers: '划转记录',

@@ -5860,6 +5860,7 @@ const ja = {
   metricTradedTokens: '取引銘柄数',
   metricTotalTxns: '取引回数',
   tabPositions: 'ポジション',
+  recordsTabs: '取引記録タブ',
   tabPositionHistory: 'ポジション履歴',
   tabOrders: '注文記録',
   tabTransfers: '振替履歴',
