@@ -353,6 +353,11 @@ function xtDedupeHash(...fields: unknown[]): string {
     .digest('hex')
 }
 
+/** Reviewed copier identity projection shared with the snapshot verifier. */
+export function xtCopierDedupeHash(identity: string): string {
+  return xtDedupeHash('xt_cp', identity)
+}
+
 /** ms epoch → ISO, or null. */
 function isoMs(v: unknown): string | null {
   const n = num(v)
@@ -399,6 +404,7 @@ export function parseXtHistory(raw: unknown, kind: HistoryKind, ctx: ParseCtx): 
     const out: ParsedHistoryRow[] = []
     for (const c of list) {
       const label = typeof c.followerName === 'string' ? c.followerName : null
+      const identity = c.id ?? label
       out.push({
         kind: 'copiers',
         ts: ctx.scrapedAt,
@@ -406,7 +412,10 @@ export function parseXtHistory(raw: unknown, kind: HistoryKind, ctx: ParseCtx): 
         copierPnl: num(c.followProfitU),
         copierInvested: num(c.followMarginU ?? c.followAmountTotal),
         copyDurationDays: int(c.days),
-        dedupeHash: xtDedupeHash('xt_cp', c.id ?? label),
+        dedupeHash:
+          typeof identity === 'string'
+            ? xtCopierDedupeHash(identity)
+            : xtDedupeHash('xt_cp', identity),
         raw: c,
       })
     }

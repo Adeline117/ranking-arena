@@ -18,20 +18,15 @@
  * its tail with all-zero placeholder rows once real traders run out (spec
  * §5.6) — parseXtLeaderboardPage drops them for the spot board.
  *
- * GAP (documented): the per-trader profile page (Copy Trading Overview per-TF
- * charts, Current Orders / History / Follower tabs) lives behind a
- * click-guarded SPA route whose JSON endpoints were not cleanly capturable
- * headless. Per-TF stats are fully covered by the per-TF board crawl
- * (income/incomeRate/winRate/maxRetraction/followerProfit + cumulative chart
- * land in leaderboard_entries.raw); positions/histories/copiers are left
- * disabled until that route is reached (likely on the VPS with a real click).
+ * Per-TF stats are covered by the board crawl. Public unsigned record endpoints
+ * now cover closed position history and the complete futures follower snapshot;
+ * current positions remain disabled because the public endpoint is login-gated.
  *
  * WORKER-ONLY MODULE (imported via adapters/register in the worker).
  */
 
 import type {
   HistoryKind,
-  ParsedHistoryRow,
   ParsedPosition,
   RankingTimeframe,
   RawBundle,
@@ -40,8 +35,20 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
+import { assertSourceSurfaceSupported } from '../../core/surface-capabilities'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import {
+  XT_COPIER_PAGE_SIZE,
+  validateXtCopierPage,
+  xtCopierHistoryUrl,
+  xtCopierIdentity,
+  xtCopierSnapshotVerifier,
+} from './copier-snapshot'
 import {
   parseXtHistory,
   parseXtLeaderboardPage,
@@ -65,6 +72,30 @@ function base(src: SourceRow): string {
   return override ?? BASES[boardKey(src)]
 }
 
+function isCanonicalXtCopierSource(src: SourceRow): boolean {
+  return (
+    src.slug === 'xt_futures' &&
+    src.status === 'active' &&
+    src.serving_mode === 'serving' &&
+    src.adapter_slug === 'xt' &&
+    src.product_type === 'futures' &&
+    src.trader_kind_scope === 'human' &&
+    src.currency === 'USDT' &&
+    src.copier_table_depth === 'full' &&
+    src.meta.boardKey === 'futures' &&
+    base(src) === BASES.futures
+  )
+}
+
+function historyMaxPages(src: SourceRow): number {
+  const value = src.meta.history_max_pages ?? 10
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new TypeError('[xt] history_max_pages must be a positive safe integer')
+  }
+  return parsed
+}
+
 const xtAdapter: SourceAdapter = {
   slug: 'xt',
   capabilities: {
@@ -78,6 +109,14 @@ const xtAdapter: SourceAdapter = {
     orders: false,
     transfers: false,
     copiers: true,
+  },
+
+  supportsSurface(src, surface) {
+    return surface === 'copiers' ? isCanonicalXtCopierSource(src) : true
+  },
+
+  verifyCopierSnapshot(src) {
+    return isCanonicalXtCopierSource(src) ? xtCopierSnapshotVerifier : null
   },
 
   async *listLeaderboard(
@@ -185,10 +224,10 @@ const xtAdapter: SourceAdapter = {
   },
 
   /**
-   * Public unsigned record surfaces (`leaderAccountId` param, {result:{items,
-   * hasNext}} envelope): position_history ← leader-order-history (closed
-   * round-trips), copiers ← leader-follower-page. Paginate until !hasNext /
-   * short page; position_history also stops on cursor overlap (closeTime).
+   * Public unsigned record surfaces (`leaderAccountId` param). Copier snapshots
+   * use the exact {returnCode,msgInfo,error,result:{page,ps,total,items}}
+   * contract and exhaust `total`; position_history retains its separate
+   * hasNext/short-page protocol and may stop on closeTime cursor overlap.
    */
   async *getHistory(
     session: FetchSession,
@@ -196,15 +235,61 @@ const xtAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     let endpointName: string
     if (kind === 'position_history') endpointName = 'leader-order-history'
     else if (kind === 'copiers') endpointName = 'leader-follower-page'
     else return // orders / transfers / current positions not exposed publicly
 
+    if (kind === 'copiers') {
+      assertSourceSurfaceSupported(xtAdapter, src, 'copiers')
+    }
     const fetcher = apiFetcher(await session.api())
-    const size = Number(src.meta.history_page_size) || 20
-    const maxPages = Number(src.meta.history_max_pages ?? 10) || 10
+    const maxPages = historyMaxPages(src)
+
+    if (kind === 'copiers') {
+      let stableTotal: number | null = null
+      let rowsSeen = 0
+      const identities = new Set<string>()
+
+      for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+        const url = xtCopierHistoryUrl(exchangeTraderId, pageNo)
+        const payload = await replayJson(session, fetcher, {
+          url,
+          method: 'GET',
+          headers: HEADERS,
+        })
+        yield { pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() }
+
+        const page = validateXtCopierPage(payload, pageNo)
+        if (page === null) {
+          throw new Error('[xt] copiers returned a malformed exact page envelope')
+        }
+        if (stableTotal === null) stableTotal = page.total
+        else if (page.total !== stableTotal) {
+          throw new Error('[xt] copiers changed total during pagination')
+        }
+        for (const row of page.rows) {
+          const identity = xtCopierIdentity(row)
+          if (identity === null || identities.has(identity)) {
+            throw new Error('[xt] copiers returned a missing or duplicate identity')
+          }
+          identities.add(identity)
+        }
+        rowsSeen += page.rows.length
+        if (rowsSeen === stableTotal) {
+          return {
+            contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+            observations: [{ segment_id: 'default', reason: 'reported_end', page_ordinal: pageNo }],
+          }
+        }
+      }
+      throw new Error(
+        `[xt] copiers reached page cap ${maxPages} before reported total ${stableTotal}`
+      )
+    }
+
+    const size = Number(src.meta.history_page_size) || XT_COPIER_PAGE_SIZE
     const cursorMs = cursor ? Date.parse(cursor) : NaN
 
     for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
@@ -229,6 +314,7 @@ const xtAdapter: SourceAdapter = {
       }
       if (result?.hasNext === false || rows.length < size) break
     }
+    return undefined
   },
 
   parseLeaderboard: parseXtLeaderboardPage,
