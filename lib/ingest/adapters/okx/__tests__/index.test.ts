@@ -12,6 +12,8 @@ import {
 import { okxAdapter } from '../index'
 
 const UNIQUE_CODE = 'F503A5D5F1F6989F'
+const HISTORY_FETCHED_AT = '2026-08-03T10:00:00.000Z'
+const HISTORY_CLOSE_TIME = Date.parse('2026-08-03T09:00:00.000Z')
 
 function source(productType: 'spot' | 'futures', instType: string): SourceRow {
   return {
@@ -64,6 +66,48 @@ function historyVerifier(src: SourceRow) {
   const verifier = okxAdapter.historyTerminalVerifier?.(src, 'position_history')
   if (!verifier) throw new Error('expected the reviewed OKX position-history verifier')
   return verifier
+}
+
+function positionHistoryRow(subPosId: string, closeTime = HISTORY_CLOSE_TIME) {
+  return {
+    subPosId,
+    instId: 'BTC-USDT-SWAP',
+    openTime: String(closeTime - 60_000),
+    closeTime: String(closeTime),
+  }
+}
+
+function historyPage(
+  pageIndex: number,
+  data: unknown[],
+  after: string | null = null,
+  fetchedAt = HISTORY_FETCHED_AT
+): RawPage {
+  return {
+    pageIndex,
+    payload: { data, historyTraderIdentity: UNIQUE_CODE },
+    url:
+      'https://www.okx.com/api/v5/copytrading/public-subpositions-history' +
+      `?instType=SWAP&uniqueCode=${UNIQUE_CODE}&limit=100` +
+      (after === null ? '' : `&after=${encodeURIComponent(after)}`),
+    fetchedAt,
+  }
+}
+
+function verifyExhaustion(pages: RawPage[]) {
+  const futures = source('futures', 'SWAP')
+  return historyVerifier(futures).verify({
+    claim: {
+      contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+      observations: [{ segment_id: 'default', reason: 'empty_page', page_ordinal: pages.length }],
+    },
+    pages,
+    cursor: null,
+    source: futures,
+    traderId: 99,
+    exchangeTraderId: UNIQUE_CODE,
+    kind: 'position_history',
+  })
 }
 
 describe('OKX product-specific record contracts', () => {
@@ -195,6 +239,7 @@ describe('OKX product-specific record contracts', () => {
       [
         {
           subPosId: 'newer-close',
+          instId: 'BTC-USDT-SWAP',
           openTime: String(Date.parse('2026-06-01T00:00:00.000Z')),
           closeTime: String(Date.parse('2026-07-10T00:00:00.000Z')),
         },
@@ -202,6 +247,7 @@ describe('OKX product-specific record contracts', () => {
       [
         {
           subPosId: 'cursor-overlap',
+          instId: 'BTC-USDT-SWAP',
           openTime: String(Date.parse('2026-05-01T00:00:00.000Z')),
           closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
         },
@@ -268,6 +314,104 @@ describe('OKX product-specific record contracts', () => {
     })
   })
 
+  it('accepts a row-complete, unique and monotonic multi-page exhaustion proof', () => {
+    expect(
+      verifyExhaustion([
+        historyPage(1, [
+          positionHistoryRow('newest-row'),
+          positionHistoryRow('continuation-row', HISTORY_CLOSE_TIME - 1_000),
+        ]),
+        historyPage(
+          2,
+          [positionHistoryRow('oldest-row', HISTORY_CLOSE_TIME - 2_000)],
+          'continuation-row'
+        ),
+        historyPage(3, [], 'oldest-row'),
+      ])
+    ).toEqual({ verified: true, scanTerminalState: 'exhausted' })
+  })
+
+  it('rejects terminal proof when one RAW page contains 101 rows', () => {
+    const rows = Array.from({ length: 101 }, (_, index) =>
+      positionHistoryRow(`row-${index}`, HISTORY_CLOSE_TIME - index)
+    )
+
+    expect(verifyExhaustion([historyPage(1, rows), historyPage(2, [], 'row-100')])).toEqual({
+      verified: false,
+    })
+  })
+
+  it('rejects terminal proof when any non-terminal row lacks subPosId', () => {
+    const rowWithoutSubPosId = {
+      instId: 'BTC-USDT-SWAP',
+      openTime: String(HISTORY_CLOSE_TIME - 60_000),
+      closeTime: String(HISTORY_CLOSE_TIME),
+    }
+
+    expect(
+      verifyExhaustion([
+        historyPage(1, [
+          rowWithoutSubPosId,
+          positionHistoryRow('continuation-row', HISTORY_CLOSE_TIME - 1_000),
+        ]),
+        historyPage(2, [], 'continuation-row'),
+      ])
+    ).toEqual({ verified: false })
+  })
+
+  it('rejects duplicate subPosId values across pages even when closeTime differs', () => {
+    expect(
+      verifyExhaustion([
+        historyPage(1, [positionHistoryRow('duplicate-row')]),
+        historyPage(
+          2,
+          [positionHistoryRow('duplicate-row', HISTORY_CLOSE_TIME - 1_000)],
+          'duplicate-row'
+        ),
+        historyPage(3, [], 'duplicate-row'),
+      ])
+    ).toEqual({ verified: false })
+  })
+
+  it('rejects terminal proof when a RAW row lacks canonical instId', () => {
+    const rowWithoutInstrument = {
+      subPosId: 'missing-inst-id',
+      openTime: String(HISTORY_CLOSE_TIME - 60_000),
+      closeTime: String(HISTORY_CLOSE_TIME),
+    }
+
+    expect(
+      verifyExhaustion([
+        historyPage(1, [rowWithoutInstrument]),
+        historyPage(2, [], 'missing-inst-id'),
+      ])
+    ).toEqual({ verified: false })
+  })
+
+  it('rejects terminal proof when closeTime precedes openTime', () => {
+    const closeTime = HISTORY_CLOSE_TIME - 1
+    const reversedLifecycle = {
+      ...positionHistoryRow('reversed-lifecycle', closeTime),
+      openTime: String(HISTORY_CLOSE_TIME),
+    }
+
+    expect(
+      verifyExhaustion([
+        historyPage(1, [reversedLifecycle]),
+        historyPage(2, [], 'reversed-lifecycle'),
+      ])
+    ).toEqual({ verified: false })
+  })
+
+  it('rejects terminal proof when closeTime follows its page fetchedAt', () => {
+    const fetchedAtMs = Date.parse(HISTORY_FETCHED_AT)
+    const futureLifecycle = positionHistoryRow('future-close', fetchedAtMs + 1)
+
+    expect(
+      verifyExhaustion([historyPage(1, [futureLifecycle]), historyPage(2, [], 'future-close')])
+    ).toEqual({ verified: false })
+  })
+
   it('rejects a terminal claim when the captured request chain has extra query inputs', async () => {
     const futures = source('futures', 'SWAP')
     const fetchedAt = new Date().toISOString()
@@ -278,6 +422,8 @@ describe('OKX product-specific record contracts', () => {
           data: [
             {
               subPosId: 'row-1',
+              instId: 'BTC-USDT-SWAP',
+              openTime: String(Date.parse('2026-06-29T00:00:00.000Z')),
               closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
             },
           ],
@@ -315,9 +461,16 @@ describe('OKX product-specific record contracts', () => {
   it('rejects an adapter overlap claim when any captured close time is malformed', async () => {
     global.fetch = jest.fn(async () =>
       ok([
-        { subPosId: 'bad-time', closeTime: 'not-an-epoch' },
+        {
+          subPosId: 'bad-time',
+          instId: 'BTC-USDT-SWAP',
+          openTime: String(Date.parse('2026-06-29T00:00:00.000Z')),
+          closeTime: 'not-an-epoch',
+        },
         {
           subPosId: 'cursor-overlap',
+          instId: 'BTC-USDT-SWAP',
+          openTime: String(Date.parse('2026-06-28T00:00:00.000Z')),
           closeTime: String(Date.parse('2026-06-30T00:00:00.000Z')),
         },
       ])

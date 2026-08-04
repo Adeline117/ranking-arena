@@ -8,6 +8,7 @@ export const OKX_POSITION_HISTORY_TERMINAL_VERIFIER_CONTRACT =
 
 const OKX_ORIGIN = 'https://www.okx.com'
 const OKX_HISTORY_PATH = '/api/v5/copytrading/public-subpositions-history'
+const OKX_HISTORY_PAGE_SIZE = 100
 
 type Dict = Record<string, unknown>
 
@@ -20,6 +21,10 @@ function canonicalSourceId(value: unknown): string | null {
     return value.length > 0 && value.trim() === value ? value : null
   }
   return Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null
+}
+
+function canonicalSourceText(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value.trim() === value ? value : null
 }
 
 function positiveEpochMs(value: unknown): number | null {
@@ -97,14 +102,18 @@ function validatePages(input: HistoryTerminalVerificationInput): ValidatedOkxPag
   const validated: ValidatedOkxPage[] = []
   let expectedAfter: string | null = null
   let previousCloseTime = Number.POSITIVE_INFINITY
+  const subPositionIds = new Set<string>()
 
   for (const [index, page] of input.pages.entries()) {
+    const fetchedAtMs = Date.parse(page.fetchedAt)
     if (
+      !Number.isFinite(fetchedAtMs) ||
       page.pageIndex !== index + 1 ||
       !exactHistoryUrl(page.url, input.exchangeTraderId, expectedAfter) ||
       !isRecord(page.payload) ||
       page.payload.historyTraderIdentity !== input.exchangeTraderId ||
       !Array.isArray(page.payload.data) ||
+      page.payload.data.length > OKX_HISTORY_PAGE_SIZE ||
       !page.payload.data.every(isRecord)
     ) {
       return null
@@ -112,15 +121,30 @@ function validatePages(input: HistoryTerminalVerificationInput): ValidatedOkxPag
 
     const rows = page.payload.data
     const closeTimes: number[] = []
+    let lastId: string | null = null
     for (const row of rows) {
+      const subPositionId = canonicalSourceId(row.subPosId)
+      const instrumentId = canonicalSourceText(row.instId)
+      const openTime = positiveEpochMs(row.openTime)
       const closeTime = positiveEpochMs(row.closeTime)
-      if (closeTime === null || closeTime > previousCloseTime) return null
+      if (
+        subPositionId === null ||
+        instrumentId === null ||
+        openTime === null ||
+        closeTime === null ||
+        closeTime < openTime ||
+        closeTime > fetchedAtMs ||
+        closeTime > previousCloseTime ||
+        subPositionIds.has(subPositionId)
+      ) {
+        return null
+      }
+      subPositionIds.add(subPositionId)
       closeTimes.push(closeTime)
       previousCloseTime = closeTime
+      lastId = subPositionId
     }
 
-    const lastId = rows.length === 0 ? null : canonicalSourceId(rows.at(-1)?.subPosId)
-    if (rows.length > 0 && lastId === null) return null
     validated.push({ rows, closeTimes })
     expectedAfter = lastId
   }
