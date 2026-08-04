@@ -501,6 +501,12 @@ current incident NO-GO 期间，本节只定义 owner 操作门禁，不授权�
 environment。当前计划无法配置 required reviewer 或 protected `main`，所以 16 个
 repository workflow 必须继续保持 disabled；Dependabot dynamic workflow 仍 active。
 
+恢复 workflow 不是把 `if: false` 改成可运行。恢复前必须逐 job 在 YAML 中实际绑定
+只含该 job 最小凭据的受保护 `environment:`，由 required reviewer 与 protected
+source/source-trust 规则共同约束，并以契约测试证明不存在 repository-secret fallback。
+注释、同名 Environment 的存在或 branch policy 本身都不能替代 job 级绑定；任一条件
+缺失时该 job 必须继续保持零 runner。
+
 ### Vercel Deployment Protection bypass 轮换门禁
 
 Deployment Protection bypass credential 与 deploy-force 标记是两个不同的能力，两者都不能覆盖 current incident NO-GO。本次发布前必须完成：
@@ -515,13 +521,13 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 
 旧值仍能访问、新值出现在非受控环境，或无法绑定轮换证据时，发布维持 NO-GO。
 
-### V1 完整十六迁移数据库门禁（待执行 / 待证明）
+### V1 当前 ordered migration 数据库门禁（待执行 / 待证明）
 
-本节与下方“排名权威数据库先行门禁”共同构成一条门禁，不是生产执行记录，也不是十六个文件连续批量应用的授权。任何 ranking 数据库写入前，必须先用独立 edge deny 或从 production exact SHA 派生的最小 fail-closed hotfix 关闭全部 token API/页面并留下 HTTP negative proof；当前整分支包含 schema-coupled 变更，不能拿它冒充该最小止损包。随后冻结完整 predeploy ordered baseline，逐项裁决全部 `51` 个缺项与 ledger drift；四个 ranking-authority 文件本身属于这 `51` 项，只有抵达各自在 manifest 中的位置且所有前序 exact 时，才按固定顺序逐文件补齐。五个额外身份/凭据安全前置 `20260716093000_user_linked_traders_server_write_only.sql`、`20260716112000_exchange_connections_server_only.sql`、`20260716178000_user_profile_write_authority.sql`、`20260716179100_user_profile_read_audience.sql`、`20260716179200_user_profile_wallet_authority.sql` 也须同时证明。四个 ranking 文件 exact 后，在同一维护窗口立即单独执行 token-ranking retirement，再依次执行 record provenance clocks → publication substrate → verified position-history writer → activation → 受保护部署 exact RAW-only/fail-closed bridge SHA 并排空所有 legacy position-history calls/transactions → legacy relation freeze → legacy writer retirement → records-page quarantine → 排空 legacy Tier-A writer/queue 后单独补 missing postdeploy → authorization → legacy Portfolio retirement → Claim Phase A → 使用同一 SHA 成功 smoke → Claim Phase B。这些安全前置和 Tier-A postdeploy 不计入十六个核心产品 migration，但任一未证明即维持 NO-GO。
+本节与下方“排名权威数据库先行门禁”共同构成一条门禁，不是生产执行记录，也不是批量应用 migration 的授权。任何 ranking 数据库写入前，必须先用独立 edge deny 或从 production exact SHA 派生的最小 fail-closed hotfix 关闭全部 token API/页面并留下 HTTP negative proof；当前整分支包含 schema-coupled 变更，不能拿它冒充该最小止损包。随后按当前候选 cutoff 冻结完整 predeploy ordered baseline，逐项重新裁决 `exact / missing / drift`、依赖与重放安全；旧缺项总数不得复用。五个额外身份/凭据安全前置 `20260716093000_user_linked_traders_server_write_only.sql`、`20260716112000_exchange_connections_server_only.sql`、`20260716178000_user_profile_write_authority.sql`、`20260716179100_user_profile_read_audience.sql`、`20260716179200_user_profile_wallet_authority.sql` 也须同时证明。position-history 必须经过 legacy retirement/quarantine/freeze 与 RAW prerequisites，最终由 `040500` 前向重开严格 verified `@2`；Tier-A postdeploy 仍是独立门禁。任一门禁未证明即维持 NO-GO。
 
-2026-08-04 02:24Z 的显式 `READ ONLY` production 审计已证明：完整 predeploy manifest 为 `114` 中 `63 exact / 51 missing`；四个 ranking-authority migration 及三个直接前序依赖均 ledger missing + live fail。三个 record/publication 基础 migration 均 ledger/live missing，且 `20260803090000` 要求的 records/copier RPC 哈希与生产现状不匹配。postdeploy `3` 中 `2 exact / 1 missing`；缺项为 `20260729061000_tier_a_execution_claim_enforcement.sql`，live marker 也不存在。五个身份/凭据 ACL 前置中四个 exact + live pass；`20260716093000` 的 name/body/created_by 与 live ACL 正确，但 idempotency key drift，是明确 ledger/live 冲突。五个较晚的 2026-08 migration 也全部 ledger missing + live fail。05:55Z 的第二次显式 `READ ONLY` 复核确认 `20260804041000` 与 `20260804042000` ledger missing、live retirement/quarantine fail；06:30Z 的第三次复核确认 `20260804043000_retire_legacy_token_rankings.sql` ledger/head/head reader/v2 reader 均不存在，旧 refresh 函数仍存在且 body 尚未退役。随后主干新增 `20260804044000_freeze_legacy_position_history_relations.sql`；它晚于上述快照且没有任何 apply 证据，所以按 fail-closed 证据口径计为第 `64` 个 gap，production exact ledger/live catalog 仍须再次只读核验，不能把“无 apply 证据”写成已完成 live postflight。production 也不具备 `040430` 的 generation-barrier 前态；不得直接补四个 ranking 文件、跳过 token-ranking retirement、把六个 record/publication/retirement/freeze 文件批量重放、手改 ledger 或跳过 drift。先冻结完整 ordered baseline，为每个缺项建立依赖/重放安全证据和 ADR-023 单文件记录。transaction pooler 只用于本次取证，不是 migration writer；`5432 + verify-full` session 通道仍须另证。
+旧的 2026-08-04 `READ ONLY` production 审计早于 `20260804045000_verified_position_history_raw_prerequisites.sql` 与 `20260804050000_verified_position_history_publication_authority.sql`，其 predeploy/postdeploy 总数、gap 数、missing/live 结论和函数状态只能作为历史线索。当前 production 状态统一为 **PENDING RE-AUDIT**：先冻结当前完整 ordered manifest、ledger、函数 overload、ACL、trigger、relation OID 与 live catalog，再逐项记录 `exact / missing / drift`；新审计完成前不得写总数或批准 DDL。transaction pooler 只用于只读取证，不是 migration writer；`5432 + verify-full` session 通道仍须另证。
 
-以下十二个 2026-08 核心 migration 目前只有仓库代码和隔离测试能力，尚未在 staging 或 production 获得完整 apply 证据；这是 inventory，不是 apply 顺序，各项最终 pass 仍须绑定同一个 exact candidate SHA：
+以下十四个 2026-08 migration 是当前仓库 inventory；production apply 状态待重新只读复核。这不是 apply 授权，最终 pass 必须绑定同一个 exact candidate SHA：
 
 1. `20260803090000_record_provenance_clocks.sql`
 2. `20260803100000_record_surface_publication_substrate.sql`
@@ -535,43 +541,45 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 10. `20260804042000_fail_closed_position_history_records_page.sql`
 11. `20260804043000_retire_legacy_token_rankings.sql`
 12. `20260804044000_freeze_legacy_position_history_relations.sql`
+13. `20260804045000_verified_position_history_raw_prerequisites.sql`
+14. `20260804050000_verified_position_history_publication_authority.sql`
 
 必须使用以下有序流程：
 
-0. 当前 legacy token-ranking surface 是 **ACTIVE-EXPOSURE**。2026-08-04 00:04 PDT 的公开只读复核中，detail API 仍为 HTTP 200 / `total=82`，popular API 为 HTTP 200 / 50 tokens，两个 API 都带 `Cache-Control: public`，index/detail 页面也仍为 HTTP 200。任何 predeploy/ranking migration 前，custom domain 与全部别名上的 `/api/rankings/by-token` detail/popular 请求必须固定 fail closed，`/rankings/tokens` 与 `/rankings/tokens/*` 不得渲染或请求旧排名；响应必须不可缓存，且日志/测试证明零 Supabase/Redis 调用。优先使用获准、可回滚且覆盖所有别名的 edge deny；若用代码，只能从 production exact SHA 建立 allowlist 极小的独立 hotfix。该负向门禁从第一项 ranking migration 前持续到 `040430` exact proof；未完成即数据库零写入。
-1. 冻结全部 `51` 个 predeploy 缺项的 ordered baseline，为每项建立依赖/重放安全证据并裁决 `20260716093000` drift。四个 ranking 文件就是这 `51` 项中的四项，不是“其余 51 项全部完成后的额外批次”；只有 manifest 中位于目标文件之前的每一项 exact、目标确认缺失且 live catalog 与迁移前契约兼容时，才在抵达其位置后按四文件固定顺序逐文件补齐。全部 `51` 项最终 exact 前，predeploy 门禁仍未闭合，也不开始后续 2026-08 数据库变更。
-2. 在任何 2026-08 migration 前，用 production exact ledger 与 live ACL catalog 同时证明五个额外安全前置。`20260716093000` 必须令 `user_linked_traders` 对 browser/PUBLIC 无 DML、authenticated 仅 own SELECT、service role CRUD 且 policy 精确收敛；`20260716112000` 必须令 `user_exchange_connections` 对 browser/PUBLIC 无 table/column 路径、service CRUD 且只有精确 service policy；`20260716178000`/`179100`/`179200` 必须共同保护 profile 写入/读取/钱包权威，尤其 authenticated 不可更新 `is_verified_trader`、`verified_trader_id`、`verified_trader_source`、`linked_trader_count`。仅当只读检查确认某 ledger 缺失、live catalog 仍与迁移前基线兼容时，才按时间顺序通过 ADR-023 获准单文件通道补齐并重复 ACL 证明；ledger/catalog 冲突时停止，不修 ledger、不盲目重放。这五个文件不计入十六个核心产品 migration。
-3. 四个 ranking-authority migration 均 exact 后，经 ADR-023 单文件应用 `20260804043000_retire_legacy_token_rankings.sql`。它必须以 publication-head `FOR UPDATE NOWAIT` 证明没有在途 refresh，并精确匹配 generation-barrier 前态；随后证明 durable/RPC head 为 generation zero + unpublished、exact cron identity 保留但 inactive、七个函数和两个 MV OID/内容保留、除 service-only head getter 外 reader/writer 与所有非 owner MV ACL 均返回精确 fail-closed 状态，且重放 byte-stable。当前 production 缺少 head/generation barrier，不是可执行前态；任何 prerequisite、hash、overload、ACL、在途 refresh 或 ledger/live drift 都停止。
-4. 完整 predeploy/ranking/retirement baseline 与 `20260803090000` 现有函数哈希漂移经独立审查闭合后，在受保护 staging 按 `20260803090000` → `20260803100000` → `20260803101000` 逐文件应用 record/publication 基础链。逐项证明 record provenance/observation/publication clocks、private immutable publication chain、`position_history.verified_publication_id` 绑定、checkpoint/chain-health RPC，以及由同一原子 writer 产生的 verified publication receipt。position-history artifact `@2` 可持久化，并可在 advisory lock、RAW pointer row lock 与重新验证下重放 acquisition/source facts；目前没有 production projection consumer，也没有 parser/rank receipt。在 `040410` 之前旧 writer 只可作为短暂迁移 substrate，候选 app/worker 不得再调用；无 parser-conservation receipt-bound projection 前不得重开。任何 preflight、ACL、链完整性、artifact 版本混用或 ledger/live drift 都停止。
+0. 在针对当前 production exact SHA 的新 HTTP/cache/zero-backend probe 完成前，把 legacy token-ranking surface 按 **ACTIVE-EXPOSURE** 处理；2026-08-04 00:04 PDT 的历史公开探针只作为事故线索，不冒充当前数字。任何 predeploy/ranking migration 前，custom domain 与全部别名上的 `/api/rankings/by-token` detail/popular 请求必须固定 fail closed，`/rankings/tokens` 与 `/rankings/tokens/*` 不得渲染或请求旧排名；响应必须不可缓存，且日志/测试证明零 Supabase/Redis 调用。优先使用获准、可回滚且覆盖所有别名的 edge deny；若用代码，只能从 production exact SHA 建立 allowlist 极小的独立 hotfix。该负向门禁从第一项 ranking migration 前持续到 `040430` exact proof；未完成即数据库零写入。
+1. 以当前候选 cutoff 冻结完整 predeploy ordered baseline，为每项重新建立 `exact / missing / drift`、依赖与重放安全证据。四个 ranking 文件是 manifest 内的普通有序项，不是可跳过前序的额外批次；只有位于目标文件之前的每一项 exact、目标确认 missing 且 live catalog 与迁移前契约兼容时，才在抵达其位置后按四文件固定顺序逐文件补齐。当前 manifest 全部 exact 前，predeploy 门禁仍未闭合，也不开始后续 2026-08 数据库变更。
+2. 在任何 2026-08 migration 前，用 production exact ledger 与 live ACL catalog 同时证明五个额外安全前置。`20260716093000` 必须令 `user_linked_traders` 对 browser/PUBLIC 无 DML、authenticated 仅 own SELECT、service role CRUD 且 policy 精确收敛；`20260716112000` 必须令 `user_exchange_connections` 对 browser/PUBLIC 无 table/column 路径、service CRUD 且只有精确 service policy；`20260716178000`/`179100`/`179200` 必须共同保护 profile 写入/读取/钱包权威，尤其 authenticated 不可更新 `is_verified_trader`、`verified_trader_id`、`verified_trader_source`、`linked_trader_count`。仅当当前只读检查确认某 ledger missing、live catalog 仍与迁移前基线兼容时，才按时间顺序通过 ADR-023 获准单文件通道补齐并重复 ACL 证明；ledger/catalog 冲突时停止，不修 ledger、不盲目重放。
+3. 四个 ranking-authority migration 均 exact 后，为 `20260804043000_retire_legacy_token_rankings.sql` 准备独立 ADR-023 门禁，但不得把它提前到 ordered manifest 的位置之前。实际执行点位于 `040420` 与 `040440` 之间；届时必须以 publication-head `FOR UPDATE NOWAIT` 证明没有在途 refresh 并精确匹配 generation-barrier 前态，随后证明 generation-zero unpublished head、exact cron inactive、七个函数和两个 MV OID/内容保留、reader/writer/MV ACL fail closed 且重放 byte-stable。当前 production 前态待重新只读复核；任何 prerequisite、hash、overload、ACL、在途 refresh 或 ledger/live drift 都停止。
+4. 完整 predeploy/ranking baseline 与所有 drift 经独立审查闭合后，在受保护 staging 按 `20260803090000` → `20260803100000` → `20260803101000` 逐文件建立 record/publication 基础链。逐项证明 provenance/observation/publication clocks、private immutable publication chain、legacy verified writer、checkpoint/chain-health RPC 与原子 receipt。后续 retirement/reopen 由步骤 7 按真实顺序处理；任何 preflight、ACL、链完整性、artifact 版本混用或 ledger/live drift 都停止。
 5. 在受保护 staging 单文件通道应用 activation migration，证明 epoch 行、v2 RPC、`service_role` 只读指标契约和旧事件解析兼容。
-6. 在 authorization、Portfolio retirement 与 Claim Phase A 尚未应用时，通过受保护发布管线部署候选 exact RAW-only/fail-closed bridge SHA。证明旧 connect、bind、sync 与 OAuth 入口无条件固定 410；两个 auth-first tombstone `/api/exchange/verify-ownership` 和 `/api/traders/claim/verify-wallet` 必须分别为匿名 401、已登录 410，且没有凭据读取、proof consumption 或 direct-table fallback。另证明新的 authorize POST/Claim 写路径因 RPC 缺失而 fail closed，旧 Portfolio 四入口固定 410，snapshot cron 为认证 no-op 且未调度；Portfolio export RPC 尚不存在时，已认证 export 必须返回 500。保留的 EVM address portfolio/suggestions 不属于旧凭据面。还必须证明 app/worker 不再调用 legacy position-history publisher，records 层在 PostgREST 前短路且 Tier-C position acquisition 不读取 legacy cursor，maintenance partition/prune 不再包含 `position_history`，data bridge、API、warm cache 与 UI 均不再暴露 legacy history；隔离测试须断言旧 RPC/cursor/maintenance 零调用。保持两台 writer 停止，排空所有 legacy publisher、reader、maintenance partition/prune 调用及已进入事务；记录 exact SHA，到 Phase B 后验证结束不得换包。
-7. 保持该 exact bridge SHA 和 writer 停止；只有 web、cron、两台 worker、queue、分区创建器调用和已进入事务全部排空后，才经 ADR-023 先单文件应用 `20260804044000_freeze_legacy_position_history_relations.sql`。它必须保持所有旧 relation/OID/数据用于取证，只给 `service_role` 非 grantable SELECT，撤销所有 runtime DML/DDL 间接能力，安装无条件 I/U/D/TRUNCATE guard，并把 `create_next_tph_partition()` 固定为 retired stub；只读 postflight 的 `legacy_history_frozen` 必须为 true，不要用真实 production 写入试探。随后单文件应用 `20260804041000_retire_legacy_position_history_publisher.sql`，证明 arena writer OID、receipt chain 与 checkpoint reader 保留，但所有 application role 无 execute、typed INSERT/UPDATE fail closed、既有 cleanup 仍可用；最后单文件应用 `20260804042000_fail_closed_position_history_records_page.sql`，证明仅 `position_history` 返回 `rows=[]`、所有 clocks 为 null、`completeness.state=unknown`/`reason=history_evidence_not_bound`，其他 record kinds 保持原契约。三个 migration 在 schema 上无直接依赖，但先冻结仍对外直达的 public legacy relation 可缩短暴露并让复杂 topology preflight 先失败；`040440` 不得机械紧跟 `040430`，也不得先于 exact bridge 与全调用排空。任一排空、preflight、ACL、hash、ledger/live 或 PostgREST reload 证明失败都停止。
-8. 继续保持 writer 停止，证明所有 legacy Tier-A worker/queue 已排空且完整 predeploy manifest exact，再通过 ADR-023 单文件应用 `20260729061000_tier_a_execution_claim_enforcement.sql`。核对 exact ledger、live marker、触发器、ACL、旧 unclaimed RPC 拒绝和 claimed worker 契约；它不计入十六个核心 migration。任何残留 writer/queue 或 catalog drift 都停止。
+6. 在 authorization、Portfolio retirement 与 Claim Phase A 尚未应用时，通过受保护发布管线部署候选 exact bridge SHA。证明旧 connect、bind、sync 与 OAuth 入口无条件固定 410；两个 auth-first tombstone `/api/exchange/verify-ownership` 和 `/api/traders/claim/verify-wallet` 必须分别为匿名 401、已登录 410，且没有凭据读取、proof consumption 或 direct-table fallback。另证明新的 authorize POST/Claim 写路径因 RPC 缺失而 fail closed，旧 Portfolio 四入口固定 410，snapshot cron 为认证 no-op 且未调度；Portfolio export RPC 尚不存在时，已认证 export 必须返回 500。保留的 EVM address portfolio/suggestions 不属于旧凭据面。还必须证明 app/worker 不调用 legacy position-history publisher/cursor/maintenance；legacy、漂移或自报 complete 的 history 在 data/API/warm-cache/UI 边界继续 quarantine。Tier-C 仅可提供无 cursor、限页、partial 的 RAW-backed preview，不能写 typed history 或作为排名证据。保持两台 writer 停止，排空 legacy publisher、reader、maintenance、partition creator、queue 与在途事务；记录 exact SHA，到 Phase B 后验证结束不得换包。
+7. 保持该 exact bridge SHA 和 writer 停止，严格按当前文件顺序单文件执行 `040410` → `040420` → `040430` → `040440` → `040450` → `040500`。其中 `040430` 只验收步骤 3 的独立 token-ranking retirement，不属于 position-history 依赖链，但也不得跳位或提前。`040410` 保留 legacy writer OID/audit/checkpoint chain 但撤销 application execute；`040420` 在过渡阶段把 legacy page 固定为 exact empty/unknown；`040440` 保留旧 relation OID/数据供取证，但撤销 runtime DML/DDL、启用 guard、退役 partition creator，并要求只读 postflight `legacy_history_frozen=true`；`040450` 证明 immutable RAW pointer、source run、artifact/version 与 publication prerequisites；`040500` 仅允许 reviewed 四参数 publisher，以 HMAC cursor 和完整 `arena.position-history-completeness@2` contract 前向重开 verified page。必须分别 smoke：无 publication 首屏 empty/unknown、旧 cursor 无 publication 返回 reset 冲突、合法首屏/续页稳定、legacy overload 与漂移/自报 payload 不可服务、Tier-C 始终 partial 且无 cursor。不要用真实 production 写入试探；任一排空、preflight、ACL、hash、ledger/live、PostgREST reload 或 completeness 证明失败都停止。
+8. 继续保持 writer 停止，证明所有 legacy Tier-A worker/queue 已排空且完整 predeploy manifest exact，再重新只读审计 `20260729061000_tier_a_execution_claim_enforcement.sql`。仅当它确认为 missing 且 live catalog 与 preflight 兼容时，才通过 ADR-023 单文件应用并核对 exact ledger、live marker、触发器、ACL、旧 unclaimed RPC 拒绝和 claimed worker 契约。任何残留 writer/queue 或 catalog drift 都停止。
 9. 保持该 bridge SHA，再应用 authorization migration。它的 preflight 必须拒绝未满足上述 exchange-connection ACL 的环境；迁移必须隔离 active legacy alias、OAuth 或缺少 attestation 的 connection，并撤销没有同用户、同 exact canonical exchange 与同 verified UID 的 active connection 支撑的 authorization。这些账户必须由用户显式 rebind，不得自动提升旧记录。随后证明两张凭据表对 browser roles/PUBLIC 均无 table/column 路径，bind/revoke 两个原子 RPC 均无 browser/PUBLIC execute 路径且仅 service role 可调用。在 disposable fixture 依次证明公开选择器只有 Binance、Bybit、Bitget；首次绑定同时写入两张投影；同一 canonical exchange 重绑撤销旧 active authorization；两种 revoke selector 都同时停用 connection 并撤销全部匹配 authorization；绑定或撤销任一投影失败时整条 RPC 原子回滚。最后运行只读反连接，结果必须为零：每条 active authorization 都必须有同用户、同 exact canonical exchange、同 verified UID 的 active connection。这个顺序有意不按文件时间排序。
 10. 单独应用 Portfolio retirement。核对三表/cascade FK exact shape；browser/PUBLIC 零 table/column 权限；service 无直接 DML、无密文/positions/snapshots direct SELECT，仅有五个 metadata 列 SELECT；唯一 policy 为 service metadata read；`export_legacy_portfolio_data_v1(uuid)` 与 delete RPC 仅 service 可执行。行级 fixture 只在 staging 建立：证明 authenticated RPC deny、HTTP export 固定传认证 user id、迁移后返回 200，`account.legacy_portfolios` 与 manifest 完整包含 portfolios/positions/snapshots 三项及 fixture owner rows，字段精确白名单、无 user id/密文且 child 不越出 owner portfolio set；任一组超过 250,000 行必须返回 413，而不是截断或返回部分成功。同时覆盖跨 owner delete false、parent/child cascade、故障回滚、重放，以及迁移不删除 owner 行、不改写密文。production inventory 若仍为零，只验证 ACL/RPC 与完整空 manifest，不创建 disposable 行；若非零，才导出 owner/交易所 metadata 清单并要求 owner 下载、交易所侧 revoke/rotate 和 Arena 清理裁决。
 11. Claim Phase A 前只读证明 migration role exact 拥有 `trader_claims`，再应用 Phase A。核对 typed submit/reject/cancel、guard、ledger/reload，并证明 legacy activation 与 Arena claimed helper 均不可执行。Phase A 没有批准能力，不是“可批准的向后兼容层”。
 12. 使用同一 exact bridge SHA 完成 authorization 和 Hyperliquid/GMX challenge → submit → `reviewing` → reject/cancel smoke；legacy 与 V2 approval 此时都须 fail closed。所有 CEX claim 均 unsupported，CEX API key 不得创建 claim/badge。
 13. Phase B 前只读证明 migration role exact 拥有 migration preflight 列出的全部 relation。只在同一 SHA 成功 smoke 后单独应用 Phase B，证明 legacy submit/direct DML fail closed、canonical `activate_trader_claim_v2` 管理员批准成功并原子更新 badge/link/profile/Arena，且 unlink 仅 service 可执行、任一步失败全部回滚。Phase A/B 不得批量连续应用。
-14. staging 通过后 production 严格重复：先维持 token surface HTTP containment，再执行四项 ranking authority → token-ranking retirement → record provenance clocks → publication substrate → verified position-history writer → activation → exact RAW-only/fail-closed bridge SHA 并排空 legacy calls/transactions → legacy relation freeze → legacy writer retirement → records-page quarantine → legacy Tier-A 排空与单文件 postdeploy → authorization → Portfolio retirement → Claim Phase A → 同一 SHA 成功 smoke → Claim Phase B。每个文件单独提交并核对 exact ledger/live catalog/ACL/RPC/reload；不得用 `db push`、历史批量重放或禁用 writer 替代。
+14. staging 通过后 production 按当前 ordered manifest 严格重复：维持 token surface HTTP containment；完成 ranking authority prerequisites 与 record provenance/publication/legacy writer 基础链；部署并验证同一 exact bridge；再按 `040410` retirement → `040420` quarantine → `040430` 独立 token-ranking retirement → `040440` freeze → `040450` RAW prerequisites → `040500` verified `@2` authority执行，之后完成 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Claim Phase B。每个文件单独提交并核对 exact ledger/live catalog/ACL/RPC/reload；不得用 `db push`、历史批量重放或仅停 writer 替代。
 15. production 未获准时不创建 disposable claim 或 portfolio。Phase B 后 legacy application 不是有效回滚目标。
-16. 只有五个额外 ACL 前置、missing Tier-A postdeploy 与全部十六个 production migration 的 exact proof、token-ranking 与 record publication/retirement/freeze、authorization、Portfolio 和 Claim 全生命周期 smoke 闭合后，才能从 production 运行 `npm run gen:types`。
-17. 运行 migration history shape、前置与 2026-07 suites；`npm run qa:public-rank-authority-pg17` 必须覆盖 token-ranking retirement 的在途 refresh 回滚/排空重试、generation-zero head、reader/writer/MV ACL fail-closed、OID/MV 内容保持、cron identity 保持和 byte-stable replay。再运行三个 record/publication 基础 PG17 suite、`npm run qa:retire-legacy-position-history-pg17`、`npm run qa:records-page-quarantine-pg17`、`supabase/migrations/__tests__/legacy-position-history-partition-freeze.pg17.sh`，以及 activation、authorization、legacy-portfolio-retirement、claim-cutover 四项 PG17 suite（覆盖五个较晚的 2026-08 migration）。任何证据不完整即 NO-GO。
+16. 只有五个额外 ACL 前置、Tier-A postdeploy 当前状态裁决、当前 production manifest 的全部 exact proof、token-ranking、完整 position-history verified `@2` authority、authorization、Portfolio 和 Claim 全生命周期 smoke 闭合后，才能从 production 运行 `npm run gen:types`。
+17. 运行 migration history shape、前置与 2026-07 suites；`npm run qa:public-rank-authority-pg17` 必须覆盖 token-ranking retirement 的在途 refresh 回滚/排空重试、generation-zero head、reader/writer/MV ACL fail-closed、OID/MV 内容保持、cron identity 保持和 byte-stable replay。再运行 record/publication 基础、legacy writer retirement、records quarantine、relation freeze、`040450` RAW prerequisites 和 `040500` verified publication authority 的全部静态/PG17 suites，以及 activation、authorization、legacy-portfolio-retirement、claim-cutover suites。任何证据不完整即 NO-GO。
 18. Phase B 后重新 inventory 历史 verified rows 与 legacy Portfolio key；零行记录 `zero / N/A`，只对非零行逐项审计身份投影或完成 revoke/rotate、联系与归属裁决。
 19. 从 exact bridge 停止所有旧公开 first-party writer 起等待至少 48 小时，并只读证明没有 fresh `provenance='first_party'` 排名输入后，才可重算或开放 Beta。
 
 ### 排名权威数据库先行门禁（BLOCKED / 已取证）
 
-以下步骤是完整十六迁移门禁的第一阶段，不是生产执行授权。当前 legacy token-ranking surface 是 **ACTIVE-EXPOSURE**：2026-08-04 00:04 PDT 的公开只读探针仍返回 detail HTTP 200 / `total=82`、popular HTTP 200 / 50 tokens，且 API 可公开缓存；index/detail 页面也仍为 200。此前 production 只读数据库审计同时证明四个 ranking-authority migration 均为 ledger missing + live fail，后继 token-ranking retirement 也 ledger/live missing；完整 predeploy manifest 还有 47 个其他缺项，且 `20260716093000` 存在 idempotency ledger drift。结论是 **BLOCKED**；不得把“已确认五个 ranking 文件缺失”误解为可以直接补文件，更不得批量重放或手改 ledger。
+以下步骤是当前 ordered migration 门禁的一部分，不是生产执行授权。2026-08-04 00:04 PDT 的历史公开探针曾证明 legacy token-ranking surface 为 **ACTIVE-EXPOSURE**，但 Beta/release 前仍须针对当前 production exact SHA 重新探测 HTTP、cache 与零后端调用。旧 production 数据库审计早于当前 manifest，其 ranking ledger/live 与其他缺项结论必须重新只读复核；结论在新证据闭合前仍为 **BLOCKED**。不得把历史“missing”记录误解为可以直接补文件，更不得批量重放或手改 ledger。
 
 0. 在任何 ranking DB 写入前，先以获准 edge deny 或独立最小 hotfix 封闭 custom domain 与全部别名上的 token detail/popular API、index/detail 页面、导航和 sitemap 发现入口。API 必须固定 503（或经单独评审固定 410）、无 traders/tokens/total、`Cache-Control: private, no-store, max-age=0, must-revalidate`，页面不得挂载会 fetch 的 client；日志和测试必须证明零 Supabase/Redis 调用。发布后从两个网络点以不同 query 验证无旧 public cache，并绑定 exact deployment SHA。该门禁持续到 `040430` exact；通过前不应用任何 predeploy/ranking migration。
-1. 在应用候选版本前，先冻结并复核完整 `114` 项 predeploy manifest、production ledger 与 live catalog 快照。对全部 `51` 个缺项逐个建立依赖、现有 catalog 兼容性与重放安全证据；对每个确需应用的文件建立 ADR-023 单文件记录。四个 ranking 文件属于这 `51` 项；`20260716093000` 的 name/body/creator 与 live ACL pass、idempotency key drift 必须单独裁决。任一目标文件的全部 manifest 前序或 drift 未闭合时，该文件及其后续所有写入均禁止执行。
+1. 在应用候选版本前，以当前 cutoff 冻结完整 predeploy manifest、production ledger 与 live catalog 快照。逐项重建 `exact / missing / drift`、现有 catalog 兼容性、依赖与重放安全证据，并为每个确需应用的文件建立 ADR-023 单文件记录。四个 ranking 文件属于该 ordered manifest；任一目标文件的全部前序或 drift 未闭合时，该文件及其后续写入均禁止执行。
 2. 只有四个目标各自的完整 manifest 前序已闭合、`5432 + verify-full` 获准 migration writer 已证明、且每个文件的 ADR-023 审批齐全后，才可在 ordered manifest 抵达它们时严格按以下顺序逐文件提交；每次只提交一个完整文件并立即核对 exact ledger/live catalog，不得使用本地 `db push`、批量历史重放或脚本中已禁用的 psql 写命令：
    1. `20260729223000_rerank_public_eligible_rows_only.sql`
    2. `20260729224000_rank_eligible_leaderboard_count_cache.sql`
    3. `20260729225000_token_trader_rank_authority.sql`
    4. `20260729230000_token_ranking_generation_barrier.sql`
-3. 第四个 migration exact 后，不调用 `refresh_popular_tokens_mv()`，不等待 cron 发布，不读取或展示 legacy/v2 token-ranking payload，也不要求 `generation_seq > 0`。这些数据缺少 frozen rank-eligible authority snapshot；生成一个新 generation 只会扩大不可信发布面，绝不是 `040430` 的前置。只通过获准 `READ ONLY` catalog 审计确认七个 callable、两个 populated MV、publication-head singleton、唯一 exact cron identity 与 predecessor body/ACL shape 均匹配，并确认当前没有 refresh 在途；最终并发屏障仍由 `040430` 的 `FOR UPDATE NOWAIT` 负责。四个 predecessor 与 retirement 必须安排在同一维护窗口，不能在两者之间开放 token 榜或留到下一次 cron 调度。
-4. 前述只读 preflight 通过后，立即通过 ADR-023 单文件应用 `20260804043000_retire_legacy_token_rankings.sql`。若 publication-head 锁冲突，整事务失败，先排空 refresh 再重试；不得手动触发 refresh 作为“修复”。提交后核对 exact ledger、PostgREST reload、durable/RPC head 的 `generation_seq=0` 与其余时间字段为 NULL、两个 row count 为 0；核对 exact `refresh-mv-popular-tokens` cron job identity 保持且 `active=false`。七个函数和两个 MV 的 OID、MV definition/populated/content 必须保持；除 service-role head getter 外，六个关闭函数、两个 MV 的 table/column/delegated ACL 对全部 runtime role 均不可用，所有 retired reader/writer 探针返回精确 SQLSTATE `55000`。最后重放一次并证明 catalog/ACL/body hash byte-stable。只读 HTTP head 核验必须使用 `/rest/v1/rpc/get_token_ranking_publication_head` 并满足：
+3. 第四个 ranking-authority migration exact 后，不调用 `refresh_popular_tokens_mv()`，不等待 cron 发布，不读取或展示 legacy/v2 token-ranking payload，也不要求 `generation_seq > 0`。这些数据缺少 frozen rank-eligible authority snapshot；生成新 generation 只会扩大不可信发布面。只通过获准 `READ ONLY` catalog 审计确认七个 callable、两个 populated MV、publication-head singleton、唯一 exact cron identity 与 predecessor body/ACL shape，并确认没有 refresh 在途。token containment 必须持续，但 `040430` 不得提前越过 ordered manifest 中的 `030900`、`031000`、`031010`、V1 `0321*`、`040410` 与 `040420`。
+4. 当前 ordered manifest 到达 `040420` 后、`040440` 前，才通过 ADR-023 单文件应用 `20260804043000_retire_legacy_token_rankings.sql`。最终并发屏障由 `FOR UPDATE NOWAIT` 负责；若 publication-head 锁冲突，整事务失败，先排空 refresh 再重试，不得手动触发 refresh 作为“修复”。提交后核对 exact ledger、PostgREST reload、durable/RPC head 的 `generation_seq=0` 与其余时间字段为 NULL、两个 row count 为 0；核对 exact `refresh-mv-popular-tokens` cron job identity 保持且 `active=false`。七个函数和两个 MV 的 OID、MV definition/populated/content 必须保持；除 service-role head getter 外，六个关闭函数、两个 MV 的 table/column/delegated ACL 对全部 runtime role 均不可用，所有 retired reader/writer 探针返回精确 SQLSTATE `55000`。最后重放一次并证明 catalog/ACL/body hash byte-stable。只读 HTTP head 核验必须使用 `/rest/v1/rpc/get_token_ranking_publication_head` 并满足：
 
    ```bash
    TOKEN_HEAD_JSON="$(curl -fsS -X POST \
@@ -597,7 +605,7 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
    同一 `READ ONLY` catalog 证明必须记录 `legacy_token_rpcs_closed=true` 与 `legacy_token_mvs_closed=true`。任一 prerequisite、overload、hash、ACL、OID、MV 内容、cron identity 或 replay 不符都停止。
 
 5. `040430` 提交后的公开 smoke 必须在所有域名上保持 detail/popular API 为 HTTP 503、`TOKEN_RANKING_NOT_PUBLISHED`、`private, no-store`，Token 页面不渲染旧榜；不得重新打开前置 edge/hotfix containment。Token 榜只能由后续单独评审的 authority-snapshot migration 重新开放；新发布器必须从 `arena.token_trade_fact_authority_shadow` 的 `rank_eligible=true` frozen cohort 构建，绑定非 NULL source watermark，并证明 history、price、cost basis 与 FX 全部可信。
-6. `040430` retirement exact proof 完成后，才允许进入 2026-08 record/publication/retirement/freeze → activation/authorization/Claim 门禁；后续候选版本的发布与 production smoke 必须遵守上方 token-ranking retirement → record provenance clocks → publication substrate → verified position-history writer → activation → exact RAW-only/fail-closed bridge SHA 并排空 legacy calls/transactions → `20260804044000_freeze_legacy_position_history_relations.sql` → legacy writer retirement → records-page quarantine → legacy Tier-A writer/queue 排空并单文件 postdeploy → authorization → Portfolio retirement → Phase A → 同一 SHA 成功 smoke → Phase B 顺序。
+6. `040430` retirement exact proof 完成后，保持 token HTTP containment，并按 ordered manifest 继续 `040440` relation freeze → `040450` RAW prerequisites → `040500` verified `@2` publication authority。随后必须完成 verified 首屏/续页/reset/quarantine smoke 和 Tier-C partial/no-cursor 负向证明，再继续 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Phase B；不得回到旧的 freeze → writer retirement → records quarantine 顺序。
    第二个迁移会在同一事务中切换 legacy rerank wrapper、重排三个 season 并重建
    rank-derived count；第三个迁移是 token 榜 `token_rank` 应用契约的数据库先行
    条件；第四个迁移是跨页 generation read barrier；第五个核心 ranking migration
@@ -686,8 +694,10 @@ does not yet close legacy submit or direct service-role table DML. The security
 gate is not complete until Phase B commits and its checks pass. The application
 bridge must already retire every known HTTP writer before authorization,
 Portfolio retirement, and Phase A; do not describe that bridge as a database-DML
-cutoff before Phase B. The same bridge must be RAW-only for position history and
-must quarantine every known legacy history read before the database retirement.
+cutoff before Phase B. The same bridge must quarantine every legacy history path,
+serve warm rows only from the strict verified `@2` authority once installed, and
+keep Tier-C preview bounded, partial, cursorless, and ineligible for typed persistence
+or ranking.
 
 1. After activation passes but before authorization, Portfolio retirement, or Claim Phase A, deploy
    the exact bridge SHA through the protected pipeline. Prove that
@@ -703,22 +713,22 @@ must quarantine every known legacy history read before the database retirement.
    RPC is not installed yet, authenticated `POST /api/settings/export` must return
    500 fail closed; a 200 response with `legacy_portfolios` silently omitted is a
    release failure. Also prove app/worker no longer call the legacy position-history
-   publisher, maintenance partition/prune no longer includes `position_history`, and
-   data/API/warm-cache/UI responses quarantine legacy history as empty/unknown. Record
-   that SHA with every result. Keep both ingest writers stopped and drain all legacy
-   publisher calls, maintenance partition/prune calls, partition-creator calls, queues,
-   and in-flight transactions. Through ADR-023, first apply
-   `20260804044000_freeze_legacy_position_history_relations.sql` alone and prove that
-   surviving `public.trader_position_history`/`tph_*` relations retain OIDs/data but
-   have no runtime DML/DDL path, all guards are enabled, and the partition creator is a
-   retired stub. Then apply `20260804041000_retire_legacy_position_history_publisher.sql`
-   alone and prove the retained audit/checkpoint chain plus zero application-role
-   execute; finally apply `20260804042000_fail_closed_position_history_records_page.sql`
-   alone and prove the exact empty/unknown position-history response with other record
-   kinds unchanged. Only after all three are exact, prove every legacy Tier-A queue is
-   drained and apply
-   `20260729061000_tier_a_execution_claim_enforcement.sql` alone; require exact ledger
-   plus live marker/trigger/ACL evidence.
+   publisher or cursor, maintenance partition/prune no longer includes legacy
+   `position_history`, and legacy/drifted/self-asserted responses remain quarantined.
+   A Tier-C response may contain only bounded partial RAW-backed preview rows, with no
+   cursor and no typed-history or ranking promotion. Record that SHA with every result.
+   Keep both ingest writers stopped and drain all legacy publisher/read/maintenance/
+   partition-creator calls, queues, and in-flight transactions. Through ADR-023, follow
+   the current file order: `040410` retires legacy application execute, `040420`
+   establishes the transitional exact empty/unknown response, `040430` independently
+   retires token ranking, `040440` freezes legacy relations and the partition creator,
+   `040450` installs immutable RAW/source-run prerequisites, and `040500` forward-reopens
+   only the reviewed four-argument verified `@2` authority. Prove HMAC first/next-page
+   behavior, no-publication empty/unknown, reset-required legacy cursors, and quarantine
+   of legacy/drifted/self-asserted payloads. Only after this chain is exact, drain every
+   legacy Tier-A queue and re-audit
+   `20260729061000_tier_a_execution_claim_enforcement.sql`; apply it alone only if the
+   current ledger/live proof shows it missing and its preflight is compatible.
 2. Keeping that same SHA deployed, apply the authorization migration. Prove its
    quarantine of active legacy alias, OAuth, and unattested connections and its
    revocation of authorizations without an exact canonical connection. Affected
@@ -766,6 +776,7 @@ must quarantine every known legacy history read before the database retirement.
 7. Run `npm run qa:public-rank-authority-pg17`,
    `npm run qa:retire-legacy-position-history-pg17`,
    `npm run qa:records-page-quarantine-pg17`,
+   `npm run qa:verified-position-history-pg17`,
    `npm run qa:trader-claim-v2-pg17`, and
    `npm run qa:legacy-portfolio-retirement-pg17`, then verify production ACLs with
    read-only catalog queries, including denial of browser execution and forced
