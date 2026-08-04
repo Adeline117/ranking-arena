@@ -117,6 +117,7 @@ export class PipelineLogger {
     'link-entities',
     'batch-5min',
     'repair-post-interaction-counts',
+    'repair-comment-reaction-counts',
 
     // Market data
     'fetch-market-data',

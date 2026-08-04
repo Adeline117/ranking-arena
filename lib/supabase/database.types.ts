@@ -13416,6 +13416,10 @@ export type Database = {
           target_handle: string | null
         }[]
       }
+      repair_comment_reaction_counts_atomic: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       repair_post_interaction_counts_atomic: {
         Args: { p_limit?: number }
         Returns: Json

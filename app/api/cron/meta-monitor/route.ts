@@ -35,6 +35,7 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'link-entities': 1440,
   'batch-5min': 10,
   'repair-post-interaction-counts': 10,
+  'repair-comment-reaction-counts': 10,
 
   // Market data
   'fetch-market-data': 120,

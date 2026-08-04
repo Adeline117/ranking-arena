@@ -17,6 +17,22 @@ export interface InlineJobResult {
 }
 
 const HOT_POSTS_CACHE_KEY = 'hot_posts:top50'
+const COMMENT_REACTION_REPAIR_RPC_LIMIT = 1
+const COMMENT_REACTION_REPAIR_MAX_CALLS = 100
+const COMMENT_REACTION_REPAIR_TIME_BUDGET_MS = 75_000
+const COMMENT_REACTION_REPAIR_MAX_BACKLOG = 1_000
+const COMMENT_REACTION_REPAIR_MAX_AGE_MS = 15 * 60_000
+const COMMENT_REACTION_REPAIR_ACK_KEYS = [
+  'contended_count',
+  'discarded_count',
+  'has_more',
+  'oldest_enqueued_at',
+  'processed_count',
+  'remaining_count',
+  'repaired_count',
+  'selected_count',
+  'status',
+] as const
 const POST_INTERACTION_REPAIR_RPC_LIMIT = 1
 const POST_INTERACTION_REPAIR_MAX_CALLS = 100
 const POST_INTERACTION_REPAIR_TIME_BUDGET_MS = 75_000
@@ -58,7 +74,31 @@ interface PostInteractionRepairAcknowledgement {
   oldest_enqueued_at: string | null
 }
 
+interface CommentReactionRepairAcknowledgement {
+  status: 'processed'
+  selected_count: number
+  processed_count: number
+  repaired_count: number
+  discarded_count: number
+  contended_count: number
+  has_more: boolean
+  remaining_count: number
+  oldest_enqueued_at: string | null
+}
+
+type CommentReactionRepairStopReason = 'no-due-work' | 'contention' | 'call-limit' | 'time-budget'
+
 type PostInteractionRepairStopReason = 'no-due-work' | 'contention' | 'call-limit' | 'time-budget'
+
+function hasExactCommentReactionRepairAcknowledgementKeys(
+  value: Record<string, unknown>
+): value is Record<(typeof COMMENT_REACTION_REPAIR_ACK_KEYS)[number], unknown> {
+  const keys = Object.keys(value).sort()
+  return (
+    keys.length === COMMENT_REACTION_REPAIR_ACK_KEYS.length &&
+    COMMENT_REACTION_REPAIR_ACK_KEYS.every((key, index) => keys[index] === key)
+  )
+}
 
 function hasExactRepairAcknowledgementKeys(
   value: Record<string, unknown>
@@ -76,6 +116,70 @@ function isIsoTimestamp(value: unknown): value is string {
     ISO_TIMESTAMP_WITH_TIMEZONE.test(value) &&
     Number.isFinite(Date.parse(value))
   )
+}
+
+function parseCommentReactionRepairAcknowledgement(
+  value: unknown
+): CommentReactionRepairAcknowledgement {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    !hasExactCommentReactionRepairAcknowledgementKeys(value as Record<string, unknown>)
+  ) {
+    throw new Error('repair_comment_reaction_counts_atomic returned an invalid acknowledgement')
+  }
+
+  const acknowledgement = value as Record<
+    (typeof COMMENT_REACTION_REPAIR_ACK_KEYS)[number],
+    unknown
+  >
+  if (
+    acknowledgement.status !== 'processed' ||
+    typeof acknowledgement.has_more !== 'boolean' ||
+    !isExactMutationCount(acknowledgement.selected_count) ||
+    !isExactMutationCount(acknowledgement.processed_count) ||
+    !isExactMutationCount(acknowledgement.repaired_count) ||
+    !isExactMutationCount(acknowledgement.discarded_count) ||
+    !isExactMutationCount(acknowledgement.contended_count) ||
+    !isExactMutationCount(acknowledgement.remaining_count) ||
+    (acknowledgement.oldest_enqueued_at !== null &&
+      !isIsoTimestamp(acknowledgement.oldest_enqueued_at))
+  ) {
+    throw new Error('repair_comment_reaction_counts_atomic returned an invalid acknowledgement')
+  }
+
+  const parsed: CommentReactionRepairAcknowledgement = {
+    status: acknowledgement.status,
+    selected_count: acknowledgement.selected_count,
+    processed_count: acknowledgement.processed_count,
+    repaired_count: acknowledgement.repaired_count,
+    discarded_count: acknowledgement.discarded_count,
+    contended_count: acknowledgement.contended_count,
+    has_more: acknowledgement.has_more,
+    remaining_count: acknowledgement.remaining_count,
+    oldest_enqueued_at: acknowledgement.oldest_enqueued_at,
+  }
+  const selectedCount = parsed.selected_count
+  const processedCount = parsed.processed_count
+  const repairedCount = parsed.repaired_count
+  const discardedCount = parsed.discarded_count
+  const contendedCount = parsed.contended_count
+  const remainingCount = parsed.remaining_count
+
+  if (
+    selectedCount > COMMENT_REACTION_REPAIR_RPC_LIMIT ||
+    processedCount > COMMENT_REACTION_REPAIR_RPC_LIMIT ||
+    repairedCount + discardedCount !== processedCount ||
+    processedCount + contendedCount !== selectedCount ||
+    (remainingCount === 0 && (parsed.has_more || parsed.oldest_enqueued_at !== null)) ||
+    (remainingCount > 0 && parsed.oldest_enqueued_at === null) ||
+    (parsed.has_more && remainingCount === 0)
+  ) {
+    throw new Error('repair_comment_reaction_counts_atomic returned an invalid acknowledgement')
+  }
+
+  return parsed
 }
 
 function parsePostInteractionRepairAcknowledgement(
@@ -179,6 +283,161 @@ function repairBacklogError(
         oldestAgeMs,
       }
     : null
+}
+
+function throwIfCommentReactionRepairAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  if (signal.reason instanceof Error) throw signal.reason
+  throw new Error('comment reaction count repair aborted')
+}
+
+async function executeCommentReactionRepairRpc(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  signal?: AbortSignal
+) {
+  const request = supabase.rpc('repair_comment_reaction_counts_atomic', {
+    p_limit: COMMENT_REACTION_REPAIR_RPC_LIMIT,
+  })
+  return signal ? await request.abortSignal(signal) : await request
+}
+
+function commentReactionRepairBacklogError(
+  acknowledgement: CommentReactionRepairAcknowledgement,
+  observedAt: number
+): { message: string; oldestAgeMs: number | null } | null {
+  const oldestAgeMs =
+    acknowledgement.oldest_enqueued_at === null
+      ? null
+      : Math.max(0, observedAt - Date.parse(acknowledgement.oldest_enqueued_at))
+  const failures: string[] = []
+
+  if (acknowledgement.remaining_count > COMMENT_REACTION_REPAIR_MAX_BACKLOG) {
+    failures.push(
+      `remaining_count ${acknowledgement.remaining_count} exceeds ${COMMENT_REACTION_REPAIR_MAX_BACKLOG}`
+    )
+  }
+  if (oldestAgeMs !== null && oldestAgeMs > COMMENT_REACTION_REPAIR_MAX_AGE_MS) {
+    failures.push(
+      `oldest item age ${oldestAgeMs}ms exceeds ${COMMENT_REACTION_REPAIR_MAX_AGE_MS}ms`
+    )
+  }
+
+  return failures.length > 0
+    ? {
+        message: `comment reaction repair backlog unhealthy: ${failures.join('; ')}`,
+        oldestAgeMs,
+      }
+    : null
+}
+
+/**
+ * Drain durable comment reaction counter repairs in separate transactions.
+ *
+ * Keeping p_limit at one ensures that every awaited RPC commits and releases
+ * its comment-row lock before the next repair obligation is attempted.
+ */
+export async function repairCommentReactionCountsInline(
+  signal?: AbortSignal
+): Promise<InlineJobResult> {
+  const start = Date.now()
+  const name = 'repair-comment-reaction-counts'
+
+  try {
+    const supabase = getSupabaseAdmin()
+    let rpcCalls = 0
+    let selectedCount = 0
+    let processedCount = 0
+    let repairedCount = 0
+    let discardedCount = 0
+    let contendedCount = 0
+    let lastAcknowledgement: CommentReactionRepairAcknowledgement | null = null
+    let stopReason: CommentReactionRepairStopReason = 'call-limit'
+
+    while (rpcCalls < COMMENT_REACTION_REPAIR_MAX_CALLS) {
+      throwIfCommentReactionRepairAborted(signal)
+      if (rpcCalls > 0 && Date.now() - start >= COMMENT_REACTION_REPAIR_TIME_BUDGET_MS) {
+        stopReason = 'time-budget'
+        break
+      }
+
+      const { data, error } = await executeCommentReactionRepairRpc(supabase, signal)
+      rpcCalls += 1
+      throwIfCommentReactionRepairAborted(signal)
+      if (error) {
+        throw new Error(
+          `repair_comment_reaction_counts_atomic failed: ${error.message || 'database error'}`
+        )
+      }
+
+      const acknowledgement = parseCommentReactionRepairAcknowledgement(data)
+      lastAcknowledgement = acknowledgement
+      selectedCount += acknowledgement.selected_count
+      processedCount += acknowledgement.processed_count
+      repairedCount += acknowledgement.repaired_count
+      discardedCount += acknowledgement.discarded_count
+      contendedCount += acknowledgement.contended_count
+
+      if (acknowledgement.contended_count > 0 && acknowledgement.processed_count === 0) {
+        stopReason = 'contention'
+        break
+      }
+      if (acknowledgement.selected_count === 0 || !acknowledgement.has_more) {
+        stopReason = 'no-due-work'
+        break
+      }
+      if (Date.now() - start >= COMMENT_REACTION_REPAIR_TIME_BUDGET_MS) {
+        stopReason = 'time-budget'
+        break
+      }
+    }
+
+    if (lastAcknowledgement === null) {
+      throw new Error('comment reaction count repair stopped without an acknowledgement')
+    }
+
+    const observedAt = Date.now()
+    const backlogFailure = commentReactionRepairBacklogError(lastAcknowledgement, observedAt)
+    const detail = {
+      rpcCalls,
+      selectedCount,
+      processedCount,
+      repairedCount,
+      discardedCount,
+      contendedCount,
+      hasMore: lastAcknowledgement.has_more,
+      remainingCount: lastAcknowledgement.remaining_count,
+      oldestEnqueuedAt: lastAcknowledgement.oldest_enqueued_at,
+      oldestAgeMs:
+        lastAcknowledgement.oldest_enqueued_at === null
+          ? null
+          : Math.max(0, observedAt - Date.parse(lastAcknowledgement.oldest_enqueued_at)),
+      stopReason,
+    }
+
+    if (backlogFailure) {
+      return {
+        name,
+        status: 'error',
+        durationMs: observedAt - start,
+        detail: { ...detail, backlogExceeded: true },
+        error: backlogFailure.message,
+      }
+    }
+
+    return {
+      name,
+      status: 'success',
+      durationMs: observedAt - start,
+      detail,
+    }
+  } catch (err) {
+    return {
+      name,
+      status: 'error',
+      durationMs: Date.now() - start,
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
 }
 
 /**

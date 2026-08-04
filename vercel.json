@@ -40,6 +40,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/repair-comment-reaction-counts",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/warm-cache",
       "schedule": "4,34 * * * *"
     },
