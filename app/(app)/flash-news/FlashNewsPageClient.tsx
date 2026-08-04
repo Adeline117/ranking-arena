@@ -12,6 +12,12 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import EmptyState from '@/app/components/ui/EmptyState'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { apiFetch } from '@/lib/utils/api-fetch'
+import {
+  readBatchTranslationResponse,
+  TRANSLATION_REQUEST_TIMEOUT_MS,
+  type BatchTranslationItem,
+  type TranslationTargetLanguage,
+} from '@/lib/translations/translation-client-contract'
 import CategoryFilter from './components/CategoryFilter'
 import NewsCard from './components/NewsCard'
 import NewsTimelineSkeleton from './components/NewsTimelineSkeleton'
@@ -55,6 +61,71 @@ interface FlashNewsResponse {
     hasNext: boolean
     hasPrev: boolean
   }
+}
+
+type FlashNewsTranslationScope = {
+  viewerKey: string
+  sessionGeneration: number
+  userId: string | null
+  accessToken: string
+  targetLang: TranslationTargetLanguage
+  generation: number
+}
+
+type ActiveFlashNewsTranslation = {
+  key: string
+  sequence: number
+  scope: FlashNewsTranslationScope
+  controller: AbortController
+  promise: Promise<void>
+}
+
+type CachedFlashNewsTranslation = {
+  source: string
+  targetLang: TranslationTargetLanguage
+  translatedText: string
+}
+
+type FlashNewsTranslationOwner = Omit<FlashNewsTranslationScope, 'generation'>
+
+type FlashNewsTranslationDescriptor = {
+  id: string
+  source: string
+}
+
+function pretranslatedContent(
+  item: FlashNews,
+  targetLang: TranslationTargetLanguage
+): string | undefined {
+  switch (targetLang) {
+    case 'zh':
+      return item.content_zh
+    case 'en':
+      return item.content_en
+    case 'ja':
+      return item.content_ja
+    case 'ko':
+      return item.content_ko
+  }
+}
+
+function translationSource(item: FlashNews, targetLang: TranslationTargetLanguage): string | null {
+  if (pretranslatedContent(item, targetLang)) return null
+  return typeof item.content === 'string' && item.content.trim() ? item.content : null
+}
+
+function sameTranslationScope(
+  left: FlashNewsTranslationScope,
+  right: FlashNewsTranslationScope
+): boolean {
+  return (
+    left.viewerKey === right.viewerKey &&
+    left.sessionGeneration === right.sessionGeneration &&
+    left.userId === right.userId &&
+    left.accessToken === right.accessToken &&
+    left.targetLang === right.targetLang &&
+    left.generation === right.generation
+  )
 }
 
 const CATEGORIES = [
@@ -109,7 +180,11 @@ const CATEGORY_COLORS_MAPPED: Record<string, string> = {
 export default function FlashNewsPageClient() {
   const { language, t } = useLanguage()
   const { showToast } = useToast()
-  const { isLoggedIn, accessToken } = useAuthSession()
+  const auth = useAuthSession()
+  const { isLoggedIn, accessToken } = auth
+  const viewerKey = auth.viewerKey ?? (auth.userId ? `user:${auth.userId}` : 'anon')
+  const sessionGeneration = auth.sessionGeneration ?? 0
+  const userId = auth.userId ?? null
 
   const [news, setNews] = useState<FlashNews[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,6 +220,174 @@ export default function FlashNewsPageClient() {
   // Translation cache for content: { [newsId]: translatedContent }
   const [translatedContent, setTranslatedContent] = useState<Record<string, string>>({})
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set())
+  const translatedContentRef = useRef(translatedContent)
+  translatedContentRef.current = translatedContent
+  const translatingIdsRef = useRef(translatingIds)
+  translatingIdsRef.current = translatingIds
+  const translationCacheRef = useRef(new Map<string, CachedFlashNewsTranslation>())
+  const translationOwnerRef = useRef<FlashNewsTranslationOwner>({
+    viewerKey,
+    sessionGeneration,
+    userId,
+    accessToken: accessToken ?? '',
+    targetLang: language,
+  })
+  const translationMountedRef = useRef(false)
+  const translationGenerationRef = useRef(0)
+  const translationSequenceRef = useRef(0)
+  const activeTranslationRef = useRef<ActiveFlashNewsTranslation | null>(null)
+  const translationAuthRef = useRef({
+    viewerKey,
+    sessionGeneration,
+    userId,
+    accessToken,
+    isLoggedIn,
+    language,
+  })
+  translationAuthRef.current = {
+    viewerKey,
+    sessionGeneration,
+    userId,
+    accessToken,
+    isLoggedIn,
+    language,
+  }
+  const previousTranslationScopeRef = useRef(translationAuthRef.current)
+  const currentNewsTranslationSourcesRef = useRef(new Map<string, string>())
+
+  const currentSources = new Map<string, string>()
+  const ambiguousSourceIds = new Set<string>()
+  for (const item of news) {
+    const source = translationSource(item, language)
+    if (!source) continue
+    const previous = currentSources.get(item.id)
+    if (previous !== undefined && previous !== source) ambiguousSourceIds.add(item.id)
+    else currentSources.set(item.id, source)
+  }
+  for (const id of ambiguousSourceIds) currentSources.delete(id)
+  currentNewsTranslationSourcesRef.current = currentSources
+
+  // Render-time fail-empty: effects clear storage after commit, so also gate
+  // every visible translation by its exact viewer/token/language owner and the
+  // current source text. This prevents even one paint of a previous scope or
+  // previous content revision.
+  const owner = translationOwnerRef.current
+  const translationOwnerIsCurrent =
+    isLoggedIn &&
+    Boolean(accessToken) &&
+    owner.viewerKey === viewerKey &&
+    owner.sessionGeneration === sessionGeneration &&
+    owner.userId === userId &&
+    owner.accessToken === accessToken &&
+    owner.targetLang === language
+  const visibleTranslatedContent: Record<string, string> = {}
+  if (translationOwnerIsCurrent) {
+    for (const [id, source] of currentSources) {
+      const cached = translationCacheRef.current.get(id)
+      if (
+        cached?.source === source &&
+        cached.targetLang === language &&
+        translatedContent[id] === cached.translatedText
+      ) {
+        visibleTranslatedContent[id] = cached.translatedText
+      }
+    }
+  }
+
+  const abortActiveTranslation = useCallback(() => {
+    const active = activeTranslationRef.current
+    if (active && !active.controller.signal.aborted) {
+      active.controller.abort(
+        new DOMException('Flash news translation scope changed', 'AbortError')
+      )
+    }
+    activeTranslationRef.current = null
+  }, [])
+
+  const cancelActiveTranslation = useCallback(() => {
+    const hadActive = activeTranslationRef.current !== null || translatingIdsRef.current.size > 0
+    abortActiveTranslation()
+    translationSequenceRef.current += 1
+    if (hadActive) {
+      const empty = new Set<string>()
+      translatingIdsRef.current = empty
+      setTranslatingIds(empty)
+    }
+  }, [abortActiveTranslation])
+
+  const captureTranslationScope = useCallback(
+    (token: string, targetLang: TranslationTargetLanguage): FlashNewsTranslationScope => ({
+      viewerKey: translationAuthRef.current.viewerKey,
+      sessionGeneration: translationAuthRef.current.sessionGeneration,
+      userId: translationAuthRef.current.userId,
+      accessToken: token,
+      targetLang,
+      generation: translationGenerationRef.current,
+    }),
+    []
+  )
+
+  const translationScopeIsCurrent = useCallback((scope: FlashNewsTranslationScope): boolean => {
+    const current = translationAuthRef.current
+    return (
+      translationMountedRef.current &&
+      current.isLoggedIn &&
+      current.viewerKey === scope.viewerKey &&
+      current.sessionGeneration === scope.sessionGeneration &&
+      current.userId === scope.userId &&
+      current.accessToken === scope.accessToken &&
+      current.language === scope.targetLang &&
+      translationGenerationRef.current === scope.generation
+    )
+  }, [])
+
+  useEffect(() => {
+    translationMountedRef.current = true
+    return () => {
+      translationMountedRef.current = false
+      translationGenerationRef.current += 1
+      abortActiveTranslation()
+    }
+  }, [abortActiveTranslation])
+
+  useEffect(() => {
+    const previous = previousTranslationScopeRef.current
+    const current = translationAuthRef.current
+    if (
+      previous.viewerKey === current.viewerKey &&
+      previous.sessionGeneration === current.sessionGeneration &&
+      previous.userId === current.userId &&
+      previous.accessToken === current.accessToken &&
+      previous.isLoggedIn === current.isLoggedIn &&
+      previous.language === current.language
+    ) {
+      return
+    }
+
+    previousTranslationScopeRef.current = { ...current }
+    translationGenerationRef.current += 1
+    abortActiveTranslation()
+    translationCacheRef.current.clear()
+    translationOwnerRef.current = {
+      viewerKey: current.viewerKey,
+      sessionGeneration: current.sessionGeneration,
+      userId: current.userId,
+      accessToken: current.accessToken ?? '',
+      targetLang: current.language,
+    }
+    translatedContentRef.current = {}
+    translatingIdsRef.current = new Set()
+    setTranslatedContent({})
+    setTranslatingIds(new Set())
+  }, [
+    abortActiveTranslation,
+    accessToken,
+    isLoggedIn,
+    language,
+    sessionGeneration,
+    userId,
+    viewerKey,
+  ])
 
   const fetchNews = useCallback(
     async (page = 1, category = 'all', append = false): Promise<boolean> => {
@@ -347,81 +590,193 @@ export default function FlashNewsPageClient() {
   const translateNewsContent = useCallback(
     async (items: FlashNews[]) => {
       // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
-      if (!isLoggedIn || !accessToken) return
-      const targetLang = language as 'zh' | 'en' | 'ja' | 'ko'
-      const needsTranslation = items
-        .filter((item) => {
-          if (!item.content) return false
-          if (translatedContent[item.id]) return false
-          if (translatingIds.has(item.id)) return false
-          // If we have a pre-translated version for this language, no need
-          if (targetLang === 'zh' && item.content_zh) return false
-          if (targetLang === 'en' && item.content_en) return false
-          if (targetLang === 'ja' && item.content_ja) return false
-          if (targetLang === 'ko' && item.content_ko) return false
-          return true
-        })
-        .slice(0, 5) // batch max 5
-
-      if (needsTranslation.length === 0) return
-
-      const newTranslatingIds = new Set(translatingIds)
-      needsTranslation.forEach((item) => newTranslatingIds.add(item.id))
-      setTranslatingIds(newTranslatingIds)
-
-      try {
-        const batchItems = needsTranslation.map((item) => ({
-          id: item.id,
-          text: (item.content || '').slice(0, 500),
-          contentType: 'flash_news' as const,
-          contentId: item.id,
-        }))
-
-        const response = await fetch('/api/translate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ items: batchItems, targetLang }),
-        })
-
-        const data = await response.json()
-        if (response.ok && data.success && data.data?.results) {
-          const results = data.data.results as Record<string, { translatedText: string }>
-          setTranslatedContent((prev) => {
-            const updated = { ...prev }
-            for (const [id, result] of Object.entries(results)) {
-              updated[id] = result.translatedText
-            }
-            return updated
-          })
-        }
-      } catch {
-        // Translation is best-effort; original text remains visible
-      } finally {
-        setTranslatingIds((prev) => {
-          const next = new Set(prev)
-          needsTranslation.forEach((item) => next.delete(item.id))
-          return next
-        })
+      const token = accessToken
+      const targetLang: TranslationTargetLanguage = language
+      if (!isLoggedIn || !token) {
+        cancelActiveTranslation()
+        return
       }
+
+      const descriptors: FlashNewsTranslationDescriptor[] = []
+      const staleIds = new Set<string>()
+      const seenSources = new Map<string, string>()
+      const ambiguousIds = new Set<string>()
+      for (const item of items) {
+        const source = translationSource(item, targetLang)
+        const priorSource = seenSources.get(item.id)
+        if (source && priorSource !== undefined && priorSource !== source) {
+          ambiguousIds.add(item.id)
+          continue
+        }
+        if (source) seenSources.set(item.id, source)
+
+        const cached = translationCacheRef.current.get(item.id)
+        const cacheMatches =
+          source !== null && cached?.source === source && cached.targetLang === targetLang
+        if (!cacheMatches) {
+          translationCacheRef.current.delete(item.id)
+          staleIds.add(item.id)
+        }
+        if (source && !cacheMatches && !descriptors.some((entry) => entry.id === item.id)) {
+          descriptors.push({ id: item.id, source })
+        }
+      }
+
+      if (ambiguousIds.size > 0) {
+        for (const id of ambiguousIds) {
+          translationCacheRef.current.delete(id)
+          staleIds.add(id)
+        }
+      }
+      const unambiguousDescriptors = descriptors
+        .filter((descriptor) => !ambiguousIds.has(descriptor.id))
+        .slice(0, 5)
+
+      if (staleIds.size > 0) {
+        const current = translatedContentRef.current
+        let next = current
+        for (const id of staleIds) {
+          if (!Object.prototype.hasOwnProperty.call(next, id)) continue
+          if (next === current) next = { ...current }
+          delete next[id]
+        }
+        if (next !== current) {
+          translatedContentRef.current = next
+          setTranslatedContent(next)
+        }
+      }
+
+      if (unambiguousDescriptors.length === 0) {
+        cancelActiveTranslation()
+        return
+      }
+
+      const scope = captureTranslationScope(token, targetLang)
+      const requestKey = JSON.stringify({
+        targetLang,
+        items: unambiguousDescriptors.map(({ id, source }) => [id, source]),
+      })
+      const existing = activeTranslationRef.current
+      if (existing && existing.key === requestKey && sameTranslationScope(existing.scope, scope)) {
+        return existing.promise
+      }
+      if (existing && !existing.controller.signal.aborted) {
+        existing.controller.abort(
+          new DOMException('Flash news translation superseded', 'AbortError')
+        )
+      }
+
+      const controller = new AbortController()
+      const sequence = ++translationSequenceRef.current
+      const requestedIds = new Set(unambiguousDescriptors.map(({ id }) => id))
+      translatingIdsRef.current = requestedIds
+      setTranslatingIds(requestedIds)
+
+      const promise = (async () => {
+        try {
+          const outgoingItems = unambiguousDescriptors.map(({ id, source }) => ({
+            id,
+            text: source,
+            contentType: 'flash_news' as const,
+            contentId: id,
+          }))
+          const payload = await apiFetch<unknown>('/api/translate', {
+            method: 'POST',
+            cache: 'no-store',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+              ...getCsrfHeaders(),
+            },
+            body: JSON.stringify({ items: outgoingItems, targetLang }),
+            signal: controller.signal,
+            timeoutMs: TRANSLATION_REQUEST_TIMEOUT_MS,
+          })
+
+          // The response does not echo contentType. Project the legacy
+          // flash_news request into the shared parser's response-only shape;
+          // outbound cache namespacing above remains flash_news.
+          const parserItems: BatchTranslationItem[] = unambiguousDescriptors.map(
+            ({ id, source }) => ({
+              id,
+              text: source,
+              contentType: 'post_content',
+              contentId: id,
+              targetLang,
+            })
+          )
+          const receipt = readBatchTranslationResponse(payload, parserItems)
+          if (!receipt) throw new Error('Flash news translation returned an invalid batch')
+
+          const active = activeTranslationRef.current
+          if (
+            !active ||
+            active.sequence !== sequence ||
+            !translationScopeIsCurrent(scope) ||
+            unambiguousDescriptors.some(
+              ({ id, source }) => currentNewsTranslationSourcesRef.current.get(id) !== source
+            )
+          ) {
+            return
+          }
+
+          const current = translatedContentRef.current
+          let next = current
+          for (const descriptor of unambiguousDescriptors) {
+            const result = receipt.results[descriptor.id]
+            if (result.translatedText.trim() === descriptor.source.trim()) {
+              translationCacheRef.current.delete(descriptor.id)
+              continue
+            }
+            translationCacheRef.current.set(descriptor.id, {
+              source: descriptor.source,
+              targetLang,
+              translatedText: result.translatedText,
+            })
+            if (next === current) next = { ...current }
+            next[descriptor.id] = result.translatedText
+          }
+          if (next !== current) {
+            translationOwnerRef.current = {
+              viewerKey: scope.viewerKey,
+              sessionGeneration: scope.sessionGeneration,
+              userId: scope.userId,
+              accessToken: scope.accessToken,
+              targetLang: scope.targetLang,
+            }
+            translatedContentRef.current = next
+            setTranslatedContent(next)
+          }
+        } catch {
+          // Translation is best-effort; invalid/error responses never replace original text.
+        } finally {
+          const active = activeTranslationRef.current
+          if (active?.sequence === sequence && translationScopeIsCurrent(scope)) {
+            activeTranslationRef.current = null
+            const empty = new Set<string>()
+            translatingIdsRef.current = empty
+            setTranslatingIds(empty)
+          }
+        }
+      })()
+      activeTranslationRef.current = { key: requestKey, sequence, scope, controller, promise }
+      return promise
     },
-    [language, translatedContent, translatingIds, isLoggedIn, accessToken]
+    [
+      accessToken,
+      cancelActiveTranslation,
+      captureTranslationScope,
+      isLoggedIn,
+      language,
+      translationScopeIsCurrent,
+    ]
   )
 
-  // Trigger translation when news or language changes
+  // Trigger translation when news or its authenticated language scope changes.
   useEffect(() => {
-    if (news.length > 0) {
-      translateNewsContent(news)
-    }
-  }, [news, language, isLoggedIn]) // eslint-disable-line react-hooks/exhaustive-deps -- translateNewsContent changes on every render; only trigger on news/language/auth change
-
-  // Clear translation cache on language change
-  useEffect(() => {
-    setTranslatedContent({})
-  }, [language])
+    void translateNewsContent(news)
+  }, [news, translateNewsContent])
 
   const getNewsTitle = (item: FlashNews) => {
     // Read the current UI language's pre-translated title; fall back to the
@@ -440,13 +795,16 @@ export default function FlashNewsPageClient() {
     if (language === 'ko' && item.content_ko) return item.content_ko
     if (language === 'en' && item.content_en) return item.content_en
     // Then use API-translated content
-    if (translatedContent[item.id]) return translatedContent[item.id]
+    if (visibleTranslatedContent[item.id]) return visibleTranslatedContent[item.id]
     // Fallback to original
     return item.content
   }
 
   const formatPublishedTime = (timestamp: string) => {
-    return formatTimeAgo(timestamp, language === 'zh' ? 'zh' : 'en')
+    const timeLanguage = ({ zh: 'zh' } as Partial<Record<TranslationTargetLanguage, 'zh'>>)[
+      language
+    ]
+    return formatTimeAgo(timestamp, timeLanguage ?? 'en')
   }
 
   const handleCategoryChange = (category: string) => {
@@ -540,7 +898,7 @@ export default function FlashNewsPageClient() {
       importanceConfig={IMPORTANCE_CONFIG}
       getNewsTitle={getNewsTitle}
       getNewsContent={getNewsContent}
-      translatedContent={translatedContent}
+      translatedContent={visibleTranslatedContent}
       formatPublishedTime={formatPublishedTime}
     />
   )
@@ -648,9 +1006,11 @@ export default function FlashNewsPageClient() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('search')}
             aria-label={t('search')}
+            aria-busy={loading}
             style={{
               flex: '1 1 200px',
               minWidth: 0,
+              minHeight: 44,
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.lg,
               background: tokens.glass.bg.light,
@@ -664,9 +1024,12 @@ export default function FlashNewsPageClient() {
             className="filter-chip"
             data-active={breakingOnly ? 'true' : undefined}
             aria-pressed={breakingOnly}
+            aria-busy={loading}
+            disabled={loading}
             onClick={() => setBreakingOnly((v) => !v)}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              minHeight: 44,
               borderRadius: tokens.radius.lg,
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: breakingOnly
@@ -675,7 +1038,8 @@ export default function FlashNewsPageClient() {
               background: breakingOnly ? 'var(--color-accent-error)' : tokens.glass.bg.light,
               color: breakingOnly ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
               border: breakingOnly ? 'none' : tokens.glass.border.light,
-              cursor: 'pointer',
+              cursor: loading ? 'wait' : 'pointer',
+              opacity: loading ? 0.7 : 1,
               transition: `all ${tokens.transition.base}`,
               display: 'inline-flex',
               alignItems: 'center',
@@ -689,7 +1053,11 @@ export default function FlashNewsPageClient() {
         </Box>
 
         {/* News Timeline */}
-        <div style={{ transition: 'opacity 0.3s ease', opacity: loading ? 0.5 : 1 }}>
+        <div
+          aria-busy={loading || loadingMore || translatingIds.size > 0}
+          data-testid="flash-news-timeline"
+          style={{ transition: 'opacity 0.3s ease', opacity: loading ? 0.5 : 1 }}
+        >
           {loading && news.length === 0 ? (
             <NewsTimelineSkeleton />
           ) : loadError && news.length === 0 ? (
@@ -698,6 +1066,7 @@ export default function FlashNewsPageClient() {
               description={t('loadFailedRetryShort')}
               retry={() => void fetchNews(1, selectedCategory)}
               variant="compact"
+              retryButtonSize="md"
             />
           ) : news.length === 0 ? (
             <EmptyState
@@ -740,6 +1109,7 @@ export default function FlashNewsPageClient() {
                       pointerEvents: 'auto',
                       display: 'inline-flex',
                       alignItems: 'center',
+                      minHeight: 44,
                       gap: tokens.spacing[1],
                       padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                       borderRadius: tokens.radius.full,
@@ -837,6 +1207,7 @@ export default function FlashNewsPageClient() {
                   {loadingMore && (
                     <Box
                       role="status"
+                      aria-live="polite"
                       style={{
                         display: 'flex',
                         justifyContent: 'center',
@@ -871,6 +1242,7 @@ export default function FlashNewsPageClient() {
                   description={t('loadFailedRetryShort')}
                   retry={retryLoadMore}
                   variant="compact"
+                  retryButtonSize="md"
                 />
               )}
               {!hasMore && news.length > 0 && (
