@@ -39,9 +39,9 @@ import {
   BITGET_POSITION_HISTORY_URL,
   bitgetPositionHistoryTerminalVerifier,
 } from './history-terminal'
+import { BITGET_COPIER_HISTORY_URL, bitgetCopierSnapshotVerifier } from './copier-snapshot'
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
-const TRACE_BASE = 'https://www.bitget.com/v1/trigger/trace'
 /** UTA portfolio-trader profile family (board rows with type=2; keyed by
  *  portfolioId from traders.meta — traderUid is rejected). Profile page:
  *  /zh-CN/copy-trading/futures-trader/{portfolioId} (verified 2026-06-11). */
@@ -143,6 +143,16 @@ const bitgetAdapter: SourceAdapter = {
       kind === 'position_history' &&
       endpoint(src, 'positionHistory', BITGET_POSITION_HISTORY_URL) === BITGET_POSITION_HISTORY_URL
       ? bitgetPositionHistoryTerminalVerifier
+      : null
+  },
+
+  verifyCopierSnapshot(src) {
+    return src.slug === 'bitget_futures' &&
+      src.adapter_slug === 'bitget' &&
+      src.product_type === 'futures' &&
+      src.currency === 'USDT' &&
+      endpoint(src, 'copiers', BITGET_COPIER_HISTORY_URL) === BITGET_COPIER_HISTORY_URL
+      ? bitgetCopierSnapshotVerifier
       : null
   },
 
@@ -313,7 +323,7 @@ const bitgetAdapter: SourceAdapter = {
     const url =
       kind === 'position_history'
         ? endpoint(src, 'positionHistory', BITGET_POSITION_HISTORY_URL)
-        : endpoint(src, 'copiers', `${TRACE_BASE}/trader/followerList`)
+        : endpoint(src, 'copiers', BITGET_COPIER_HISTORY_URL)
     const pageSize = kind === 'copiers' ? 10 : 20
     // First-sight backfill depth cap (configurable per source); incremental
     // runs stop on cursor overlap long before hitting it.

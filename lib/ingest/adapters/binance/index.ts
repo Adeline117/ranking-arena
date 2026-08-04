@@ -52,10 +52,12 @@ import {
   type HistoryTerminalClaimReason,
 } from '../../history-acquisition'
 import {
+  BINANCE_COPIER_HISTORY_URLS,
   BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
   BINANCE_POSITION_HISTORY_URL,
 } from './history-contract'
 import { binancePositionHistoryTerminalVerifier } from './history-terminal'
+import { binanceCopierSnapshotVerifier } from './copier-snapshot'
 import {
   parseBinanceHistory,
   parseBinanceLeaderboardPage,
@@ -81,7 +83,7 @@ const ENDPOINTS: Record<string, Record<string, string>> = {
     positionHistory: BINANCE_POSITION_HISTORY_URL,
     orders: `${FUT}/lead-portfolio/order-history`,
     transfers: `${FUT}/lead-portfolio/transfer-history`,
-    copiers: `${FUT}/lead-portfolio/copy-traders`,
+    copiers: BINANCE_COPIER_HISTORY_URLS.futures,
   },
   spot: {
     list: BINANCE_LEADERBOARD_LIST_URLS.spot,
@@ -91,7 +93,7 @@ const ENDPOINTS: Record<string, Record<string, string>> = {
     coinPreference: `${SPOT}/lead-portfolio/coin-preference`,
     positions: `${SPOT}/lead-portfolio/get-active-holding-by-page`,
     orders: `${SPOT}/lead-portfolio/get-trade-history-by-page`,
-    copiers: `${SPOT}/lead-portfolio/get-copy-trader-result-by-page`,
+    copiers: BINANCE_COPIER_HISTORY_URLS.spot,
   },
 }
 
@@ -241,6 +243,24 @@ const binanceAdapter: SourceAdapter = {
       kind === 'position_history' &&
       endpoint(src, 'positionHistory') === BINANCE_POSITION_HISTORY_URL
       ? binancePositionHistoryTerminalVerifier
+      : null
+  },
+
+  verifyCopierSnapshot(src) {
+    const board = boardKeyOf(src)
+    const expectedCopierUrl =
+      board === 'futures'
+        ? BINANCE_COPIER_HISTORY_URLS.futures
+        : board === 'spot'
+          ? BINANCE_COPIER_HISTORY_URLS.spot
+          : null
+    return src.adapter_slug === 'binance' &&
+      src.currency === 'USDT' &&
+      ((src.slug === 'binance_futures' && src.product_type === 'futures') ||
+        (src.slug === 'binance_spot' && src.product_type === 'spot')) &&
+      expectedCopierUrl !== null &&
+      endpoint(src, 'copiers') === expectedCopierUrl
+      ? binanceCopierSnapshotVerifier
       : null
   },
 

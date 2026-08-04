@@ -101,6 +101,12 @@ function historyVerifier(src: SourceRow) {
   return verifier
 }
 
+function copierVerifier(src: SourceRow) {
+  const verifier = binanceAdapter.verifyCopierSnapshot?.(src)
+  if (!verifier) throw new Error('expected the reviewed Binance copier verifier')
+  return verifier
+}
+
 describe('Binance evidence-preserving leaderboard capture', () => {
   it.each([
     ['leaderboard-p1.json', 'futures', 9_806],
@@ -813,6 +819,101 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     expect(acquisition.artifact.termination).toMatchObject({
       evidence_state: 'upstream_error',
       scan_terminal_state: 'partial',
+    })
+  })
+
+  describe('copier snapshot authority', () => {
+    async function captureCopiers(src: SourceRow, response: unknown) {
+      const verifier = copierVerifier(src)
+      const { session: fetchSession } = session(async () => ({ status: 200, json: response }))
+      return captureHistoryAcquisition({
+        source: src,
+        traderId: 11,
+        exchangeTraderId: 'portfolio-1',
+        kind: 'copiers',
+        cursor: null,
+        attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+        stream: binanceAdapter.getHistory(fetchSession, src, 'portfolio-1', 'copiers', null),
+        terminalVerifier: { contract: verifier.contract, verify: verifier.verifyTerminal },
+      })
+    }
+
+    it('selects only the reviewed board endpoint', () => {
+      expect(copierVerifier(source())).toMatchObject({
+        contract: 'arena.ingest.history-terminal-verifier.binance.copiers@1',
+      })
+      expect(
+        binanceAdapter.verifyCopierSnapshot?.(
+          source({ endpoints: { copiers: 'https://proxy.example.test/copiers' } })
+        )
+      ).toBeNull()
+    })
+
+    it.each(['copy-traders-p1.json', 'empty'])(
+      'proves terminal and parser conservation for %s',
+      async (fixtureName) => {
+        const src = source()
+        const response =
+          fixtureName === 'empty'
+            ? { code: '000000', success: true, data: { total: 0, list: [] } }
+            : (() => {
+                const payload = fixture(fixtureName)
+                const data = payload.data as { list: unknown[]; total: number }
+                data.total = data.list.length
+                return payload
+              })()
+        const acquisition = await captureCopiers(src, response)
+        expect(acquisition.error).toBeNull()
+        expect(acquisition.artifact.termination).toMatchObject({
+          evidence_state: 'verified',
+          scan_terminal_state: 'exhausted',
+          blocker_reasons: [],
+        })
+
+        const rows = acquisition.pages.flatMap((page) =>
+          binanceAdapter.parseHistory(page.payload, 'copiers', {
+            sourceSlug: src.slug,
+            currency: src.currency,
+            tfLabelMap: src.tf_label_map,
+            scrapedAt: page.fetchedAt,
+            meta: src.meta,
+          })
+        )
+        const copierRows = rows.filter((row) => row.kind === 'copiers')
+        expect(
+          copierVerifier(src).verifyConservation({
+            exchangeTraderId: 'portfolio-1',
+            pages: acquisition.pages,
+            rows: copierRows,
+          })
+        ).toEqual({ verified: true, envelopeRowCount: copierRows.length })
+      }
+    )
+
+    it('rejects a parser-empty schema drift instead of publishing a false empty snapshot', async () => {
+      const acquisition = await captureCopiers(source(), {
+        code: '000000',
+        success: true,
+        data: { total: 0, items: [] },
+      })
+
+      expect(acquisition.artifact.termination.evidence_state).toBe('upstream_error')
+      expect(acquisition.error).toEqual(expect.any(Error))
+    })
+
+    it('rejects duplicate copier identities even when their values differ', async () => {
+      const rows = (
+        fixture('copy-traders-p1.json').data as { list: Array<Record<string, unknown>> }
+      ).list.slice(0, 2)
+      rows[1] = { ...rows[1], copyPortfolioId: rows[0].copyPortfolioId }
+      const acquisition = await captureCopiers(source(), {
+        code: '000000',
+        success: true,
+        data: { total: rows.length, list: rows },
+      })
+
+      expect(acquisition.error).toBeNull()
+      expect(acquisition.artifact.termination.evidence_state).toBe('rejected')
     })
   })
 })

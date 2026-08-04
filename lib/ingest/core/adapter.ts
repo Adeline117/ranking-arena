@@ -18,6 +18,7 @@ import type {
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
+  ParsedCopierRow,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
   ParsedPosition,
@@ -33,7 +34,10 @@ import type { FetchSession } from '../fetch/types'
 import type { AnyLeaderboardCapture } from '../fetch/capture'
 import type { AttemptBoundLeaderboardAcquisitionContract } from '../acquisition-attempts'
 import type { ProfileQualityReject } from './profile-quality'
-import type { SelectedHistoryTerminalVerifier } from '../history-acquisition'
+import type {
+  HistoryTerminalVerifier,
+  SelectedHistoryTerminalVerifier,
+} from '../history-acquisition'
 
 /** Lets expensive adapters defer deep enrichment off interactive/series paths. */
 export type ProfileFetchIntent = 'scheduled_full' | 'series_only' | 'interactive_deferred'
@@ -44,6 +48,27 @@ export interface ProfileFetchOptions {
 
 export interface LeaderboardValidationOptions {
   purpose: 'publication' | 'evidence_only'
+}
+
+export interface CopierSnapshotVerificationInput {
+  exchangeTraderId: string
+  pages: readonly Readonly<RawPage>[]
+  rows: readonly Readonly<ParsedCopierRow>[]
+}
+
+export type CopierSnapshotConservationVerification =
+  | Readonly<{ verified: false }>
+  | Readonly<{ verified: true; envelopeRowCount: number }>
+
+/**
+ * One reviewed copier verifier owns both terminal-claim interpretation and
+ * envelope/parser conservation. This prevents a source from becoming
+ * publication-eligible through two independently selected contracts.
+ */
+export interface SelectedCopierSnapshotVerifier {
+  contract: string
+  verifyTerminal: HistoryTerminalVerifier
+  verifyConservation(input: CopierSnapshotVerificationInput): CopierSnapshotConservationVerification
 }
 
 export interface SourceAdapter {
@@ -135,6 +160,12 @@ export interface SourceAdapter {
     src: SourceRow,
     kind: HistoryKind
   ): SelectedHistoryTerminalVerifier | null
+
+  /**
+   * Reviewed copier snapshot authority. Absence is fail-closed: Tier-C may
+   * retain RAW evidence but cannot publish private rows or a readiness marker.
+   */
+  verifyCopierSnapshot?(src: SourceRow): SelectedCopierSnapshotVerifier | null
 
   // ── Pure parsers ──
   parseLeaderboard(raw: unknown, ctx: ParseCtx): ParsedLeaderboardPage

@@ -353,3 +353,105 @@ describe('Bitget history termination', () => {
     })
   })
 })
+
+describe('Bitget copier snapshot authority', () => {
+  function verifier() {
+    const selected = bitgetAdapter.verifyCopierSnapshot?.(src)
+    if (!selected) throw new Error('expected the reviewed Bitget copier verifier')
+    return selected
+  }
+
+  async function captureCopiers(response: unknown) {
+    const selected = verifier()
+    return captureHistoryAcquisition({
+      source: src,
+      traderId: 44,
+      exchangeTraderId: TRADER_ID,
+      kind: 'copiers',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: bitgetAdapter.getHistory(session(response), src, TRADER_ID, 'copiers', null),
+      terminalVerifier: { contract: selected.contract, verify: selected.verifyTerminal },
+    })
+  }
+
+  it('selects only the reviewed production endpoint', () => {
+    expect(verifier()).toMatchObject({
+      contract: 'arena.ingest.history-terminal-verifier.bitget.copiers@1',
+    })
+    expect(
+      bitgetAdapter.verifyCopierSnapshot?.({
+        ...src,
+        meta: { ...src.meta, endpoints: { copiers: 'https://proxy.example.test/copiers' } },
+      })
+    ).toBeNull()
+  })
+
+  it.each([2, 0])('proves terminal and parser conservation for %i rows', async (rowCount) => {
+    const response = {
+      code: '00000',
+      success: true,
+      data: {
+        nextFlag: false,
+        rows: Array.from({ length: rowCount }, (_, index) => ({
+          userName: `BGUSER-${index}`,
+          totalProfit: String(index),
+          totalMargin: String(index + 1),
+        })),
+      },
+    }
+    const acquisition = await captureCopiers(response)
+    expect(acquisition.error).toBeNull()
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'verified',
+      scan_terminal_state: 'exhausted',
+      blocker_reasons: [],
+    })
+
+    const rows = acquisition.pages.flatMap((page) =>
+      bitgetAdapter.parseHistory(page.payload, 'copiers', {
+        sourceSlug: src.slug,
+        currency: src.currency,
+        tfLabelMap: src.tf_label_map,
+        scrapedAt: page.fetchedAt,
+        meta: src.meta,
+      })
+    )
+    const copierRows = rows.filter((row) => row.kind === 'copiers')
+    expect(
+      verifier().verifyConservation({
+        exchangeTraderId: TRADER_ID,
+        pages: acquisition.pages,
+        rows: copierRows,
+      })
+    ).toEqual({ verified: true, envelopeRowCount: rowCount })
+  })
+
+  it('rejects a parser-empty schema drift instead of publishing a false empty snapshot', async () => {
+    const acquisition = await captureCopiers({
+      code: '00000',
+      success: true,
+      data: { nextFlag: false, items: [] },
+    })
+
+    expect(acquisition.artifact.termination.evidence_state).toBe('upstream_error')
+    expect(acquisition.error).toEqual(expect.any(Error))
+  })
+
+  it('rejects duplicate copier identities even when their values differ', async () => {
+    const acquisition = await captureCopiers({
+      code: '00000',
+      success: true,
+      data: {
+        nextFlag: false,
+        rows: [
+          { userName: 'same-copier', totalProfit: '1', totalMargin: '10' },
+          { userName: 'same-copier', totalProfit: '2', totalMargin: '20' },
+        ],
+      },
+    })
+
+    expect(acquisition.error).toBeNull()
+    expect(acquisition.artifact.termination.evidence_state).toBe('rejected')
+  })
+})
