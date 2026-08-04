@@ -152,6 +152,16 @@ function verifiedEvidence(rawArtifact: unknown) {
   return evidence
 }
 
+function acquisitionAnchor(rawArtifact: HistoryAcquisitionArtifact) {
+  return {
+    sourceRunId: strictCanonicalSha256(rawArtifact),
+    sourceId: rawArtifact.source.id,
+    sourceSlug: rawArtifact.source.slug,
+    traderId: rawArtifact.trader.id,
+    exchangeTraderId: rawArtifact.trader.exchange_trader_id,
+  }
+}
+
 function factSetSha(
   facts: Array<{ source_fact_id: string; canonical_fact_sha256: string }>
 ): string {
@@ -294,6 +304,7 @@ describe('position-history framework-owned source fact ledger', () => {
       revalidatePositionHistorySourceFactLedger({
         artifact: rawArtifact,
         ledger: evidence.ledger,
+        expectedAcquisition: acquisitionAnchor(rawArtifact),
       })
     ).toEqual({ verified: true, ledgerSha256: evidence.ledgerSha256 })
   })
@@ -311,7 +322,7 @@ describe('position-history framework-owned source fact ledger', () => {
     })
   })
 
-  it('preserves exact source scalars when JS numbers collapse high-precision decimals', () => {
+  it('preserves captured numeric-string spelling when JS numbers would collapse decimals', () => {
     const left = '9007199254740992.000000000000000001'
     const right = '9007199254740992.000000000000000002'
     expect(Number(left)).toBe(Number(right))
@@ -325,6 +336,27 @@ describe('position-history framework-owned source fact ledger', () => {
       state: 'unavailable',
       reason: 'source_fact_cross_segment_conflict',
     })
+  })
+
+  it('records decoded JSON numbers without claiming their original wire-token spelling', () => {
+    const left = JSON.parse('{"value":9007199254740992.000000000000000001}') as {
+      value: number
+    }
+    const right = JSON.parse('{"value":9007199254740992.000000000000000002}') as {
+      value: number
+    }
+    expect(left.value).toBe(right.value)
+    const evidence = verifiedEvidence(
+      artifact({
+        closing: [[row('same', 0, { closingPnl: left.value })]],
+        opening: [[row('same', 0, { closingPnl: right.value })]],
+        cursor: null,
+      })
+    )
+
+    expect(evidence.ledger.source_facts[0].fact.sourceNumericScalars.realizedPnl).toBe(
+      String(left.value)
+    )
   })
 
   it('keeps absent economic fields null without inventing price, cost, or PnL', () => {
@@ -363,7 +395,11 @@ describe('position-history framework-owned source fact ledger', () => {
 
     expect(parsePositionHistorySourceFactLedger(tampered)).toBeDefined()
     expect(
-      revalidatePositionHistorySourceFactLedger({ artifact: rawArtifact, ledger: tampered })
+      revalidatePositionHistorySourceFactLedger({
+        artifact: rawArtifact,
+        ledger: tampered,
+        expectedAcquisition: acquisitionAnchor(rawArtifact),
+      })
     ).toEqual({ verified: false, reason: 'source_fact_ledger_mismatch' })
   })
 
@@ -382,7 +418,11 @@ describe('position-history framework-owned source fact ledger', () => {
 
     expect(parsePositionHistorySourceFactLedger(omitted)).toBeDefined()
     expect(
-      revalidatePositionHistorySourceFactLedger({ artifact: rawArtifact, ledger: omitted })
+      revalidatePositionHistorySourceFactLedger({
+        artifact: rawArtifact,
+        ledger: omitted,
+        expectedAcquisition: acquisitionAnchor(rawArtifact),
+      })
     ).toEqual({ verified: false, reason: 'source_fact_ledger_mismatch' })
   })
 
@@ -414,12 +454,14 @@ describe('position-history framework-owned source fact ledger', () => {
       revalidatePositionHistorySourceFactLedger({
         artifact: pagedArtifact,
         ledger: pageOmitted,
+        expectedAcquisition: acquisitionAnchor(pagedArtifact),
       })
     ).toEqual({ verified: false, reason: 'source_fact_ledger_mismatch' })
     expect(
       revalidatePositionHistorySourceFactLedger({
         artifact: dualArtifact,
         ledger: segmentOmitted,
+        expectedAcquisition: acquisitionAnchor(dualArtifact),
       })
     ).toEqual({ verified: false, reason: 'source_fact_ledger_mismatch' })
   })
@@ -434,16 +476,29 @@ describe('position-history framework-owned source fact ledger', () => {
     ).closingPnl = '999'
     const reboundDigest = jsonClone(staleDigest)
     reboundDigest.pages[0].payload_sha256 = strictCanonicalSha256(reboundDigest.pages[0].payload)
+    const reboundEvidence = verifiedEvidence(reboundDigest)
 
     expect(
-      revalidatePositionHistorySourceFactLedger({ artifact: staleDigest, ledger: evidence.ledger })
+      revalidatePositionHistorySourceFactLedger({
+        artifact: staleDigest,
+        ledger: evidence.ledger,
+        expectedAcquisition: acquisitionAnchor(rawArtifact),
+      })
     ).toEqual({ verified: false, reason: 'verified_position_history_artifact_required' })
     expect(
       revalidatePositionHistorySourceFactLedger({
         artifact: reboundDigest,
         ledger: evidence.ledger,
+        expectedAcquisition: acquisitionAnchor(rawArtifact),
       })
     ).toEqual({ verified: false, reason: 'source_fact_ledger_mismatch' })
+    expect(
+      revalidatePositionHistorySourceFactLedger({
+        artifact: reboundDigest,
+        ledger: reboundEvidence.ledger,
+        expectedAcquisition: acquisitionAnchor(rawArtifact),
+      })
+    ).toEqual({ verified: false, reason: 'acquisition_anchor_mismatch' })
   })
 
   it('rejects contract drift and control characters during serialized replay', () => {
@@ -457,7 +512,11 @@ describe('position-history framework-owned source fact ledger', () => {
 
     expect(parsePositionHistorySourceFactLedger(contractDrift)).toBeDefined()
     expect(
-      revalidatePositionHistorySourceFactLedger({ artifact: rawArtifact, ledger: contractDrift })
+      revalidatePositionHistorySourceFactLedger({
+        artifact: rawArtifact,
+        ledger: contractDrift,
+        expectedAcquisition: acquisitionAnchor(rawArtifact),
+      })
     ).toEqual({ verified: false, reason: 'source_fact_ledger_mismatch' })
     expect(() => parsePositionHistorySourceFactLedger(controlCharacter)).toThrow()
   })

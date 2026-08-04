@@ -92,7 +92,7 @@ export const canonicalPositionHistorySourceFactSchema = z
     entryPrice: nullableFiniteNumberSchema,
     exitPrice: nullableFiniteNumberSchema,
     realizedPnl: nullableFiniteNumberSchema,
-    /** Exact source scalars prevent distinct high-precision decimals collapsing to one JS number. */
+    /** String inputs preserve their captured spelling; decoded JSON numbers cannot recover wire text. */
     sourceNumericScalars: canonicalSourceNumericScalarsSchema,
   })
   .strict()
@@ -461,6 +461,18 @@ export type PositionHistorySourceFactEvidence =
 export type PositionHistorySourceFactLedgerVerification =
   | Readonly<{ verified: true; ledgerSha256: string }>
   | Readonly<{ verified: false; reason: string }>
+
+const acquisitionAnchorSchema = z
+  .object({
+    sourceRunId: sha256Schema,
+    sourceId: safePositiveIntegerSchema,
+    sourceSlug: sourceSlugSchema,
+    traderId: safePositiveIntegerSchema,
+    exchangeTraderId: canonicalIdentitySchema,
+  })
+  .strict()
+
+export type PositionHistoryAcquisitionAnchor = z.infer<typeof acquisitionAnchorSchema>
 
 type Dict = Record<string, unknown>
 
@@ -896,16 +908,34 @@ export function parsePositionHistorySourceFactLedger(
   return canonicalClone(positionHistorySourceFactLedgerSchema.parse(raw))
 }
 
-/** Rebuild from immutable RAW and compare canonical bytes; never trust ledger counts alone. */
+/**
+ * Rebuild from immutable RAW and compare canonical bytes; never trust ledger
+ * counts alone. `expectedAcquisition` must come from the immutable RAW receipt,
+ * not from the artifact/ledger pair being checked.
+ */
 export function revalidatePositionHistorySourceFactLedger(input: {
   artifact: unknown
   ledger: unknown
+  expectedAcquisition: PositionHistoryAcquisitionAnchor
 }): PositionHistorySourceFactLedgerVerification {
+  const expectedAcquisition = acquisitionAnchorSchema.safeParse(input.expectedAcquisition)
+  if (!expectedAcquisition.success) {
+    return Object.freeze({ verified: false, reason: 'acquisition_anchor_invalid' })
+  }
   let supplied: PositionHistorySourceFactLedger
   try {
     supplied = parsePositionHistorySourceFactLedger(input.ledger)
   } catch {
     return Object.freeze({ verified: false, reason: 'source_fact_ledger_invalid' })
+  }
+  if (
+    supplied.acquisition_source_run_id !== expectedAcquisition.data.sourceRunId ||
+    supplied.source_id !== expectedAcquisition.data.sourceId ||
+    supplied.source_slug !== expectedAcquisition.data.sourceSlug ||
+    supplied.trader_id !== expectedAcquisition.data.traderId ||
+    supplied.exchange_trader_id !== expectedAcquisition.data.exchangeTraderId
+  ) {
+    return Object.freeze({ verified: false, reason: 'acquisition_anchor_mismatch' })
   }
   const rebuilt = buildPositionHistorySourceFactEvidence({
     artifact: input.artifact,
