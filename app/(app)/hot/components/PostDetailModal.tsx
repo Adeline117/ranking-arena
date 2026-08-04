@@ -218,6 +218,7 @@ export function PostDetailModal({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
+                minHeight: tokens.touchTarget.min,
               }}
             >
               {translating ? (
@@ -268,6 +269,8 @@ export function PostDetailModal({
               cursor: 'pointer',
               fontSize: 13,
               fontWeight: 600,
+              minWidth: tokens.touchTarget.min,
+              minHeight: tokens.touchTarget.min,
             }}
           >
             <ThumbsUpIcon size={14} /> {post.likes}
@@ -293,6 +296,8 @@ export function PostDetailModal({
               cursor: 'pointer',
               fontSize: 13,
               fontWeight: 600,
+              minWidth: tokens.touchTarget.min,
+              minHeight: tokens.touchTarget.min,
             }}
           >
             <ThumbsDownIcon size={14} /> {(post.dislikes ?? 0) > 0 ? post.dislikes : ''}
@@ -360,6 +365,7 @@ export function PostDetailModal({
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
+                  minHeight: tokens.touchTarget.min,
                 }}
               >
                 {submittingComment ? t('sending') : t('postComment')}
@@ -442,6 +448,7 @@ export function PostDetailModal({
                     opacity: loadingMoreComments ? 0.6 : 1,
                     transition: `all ${tokens.transition.base}`,
                     width: '100%',
+                    minHeight: tokens.touchTarget.min,
                     marginTop: 4,
                   }}
                   onMouseEnter={(e) => {

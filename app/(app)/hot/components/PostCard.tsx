@@ -232,7 +232,8 @@ export function PostCard({
             fontSize: 12,
             fontWeight: 600,
             marginBottom: tokens.spacing[2],
-            padding: 0,
+            padding: `0 ${tokens.spacing[2]}`,
+            minHeight: tokens.touchTarget.min,
           }}
         >
           {isExpanded ? t('showLess') : t('showMore')}

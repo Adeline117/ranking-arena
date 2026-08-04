@@ -63,6 +63,17 @@ function page(comments: Comment[], commentCount: number) {
   }
 }
 
+function emptyPostsPage() {
+  return {
+    success: true,
+    data: { posts: [] },
+    meta: {
+      pagination: { limit: 30, offset: 0, has_more: false },
+      timestamp: '2026-08-03T12:00:00.000Z',
+    },
+  }
+}
+
 const post: Post = {
   id: 'post-1',
   group: 'General',
@@ -121,7 +132,7 @@ describe('useHotPageData comment mutation reconciliation', () => {
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ data: { posts: [] } }),
+        json: () => Promise.resolve(emptyPostsPage()),
       })
     })
   })
@@ -256,7 +267,7 @@ describe('useHotPageData comment mutation reconciliation', () => {
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ data: { posts: [] } }),
+        json: () => Promise.resolve(emptyPostsPage()),
       })
     })
     const translatedPost = { ...post, body: '中文内容' }

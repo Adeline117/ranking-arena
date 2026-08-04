@@ -54,8 +54,11 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+const POST_ID = '44444444-4444-4444-8444-444444444444'
+
 const rawPost = {
-  id: 'post-1',
+  id: POST_ID,
+  group_id: null,
   group_name: 'General',
   title: 'Post',
   author_handle: 'user',
@@ -70,7 +73,7 @@ const rawPost = {
 }
 
 const initialPost: Post = {
-  id: 'post-1',
+  id: POST_ID,
   group: 'General',
   title: 'Post',
   author: 'user',
@@ -85,6 +88,17 @@ const initialPost: Post = {
   views: 0,
   created_at: '2026-07-15T20:00:00.000Z',
   user_reaction: null,
+}
+
+function postsPage(posts: unknown[]) {
+  return {
+    success: true,
+    data: { posts },
+    meta: {
+      pagination: { limit: 30, offset: 0, has_more: false },
+      timestamp: '2026-08-03T12:00:00.000Z',
+    },
+  }
 }
 
 function reactionEnvelope(overrides: Record<string, unknown> = {}) {
@@ -127,7 +141,7 @@ describe('useHotPageData reaction acknowledgements', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ data: { posts: [rawPost] } }),
+      json: () => Promise.resolve(postsPage([rawPost])),
     })
   })
 
@@ -138,10 +152,10 @@ describe('useHotPageData reaction acknowledgements', () => {
     await waitFor(() => expect(result.current.loadingPosts).toBe(false))
 
     act(() => result.current.handleOpenPost(result.current.hotPosts[0]))
-    await waitFor(() => expect(result.current.openPost?.id).toBe('post-1'))
+    await waitFor(() => expect(result.current.openPost?.id).toBe(POST_ID))
     let mutation!: Promise<void>
     act(() => {
-      mutation = result.current.toggleReaction('post-1', 'up')
+      mutation = result.current.toggleReaction(POST_ID, 'up')
     })
     await act(async () => {
       request.resolve(reactionEnvelope({ action: 'changed', like_count: 8, dislike_count: 3 }))
@@ -173,8 +187,8 @@ describe('useHotPageData reaction acknowledgements', () => {
     let first!: Promise<void>
     let duplicate!: Promise<void>
     act(() => {
-      first = result.current.toggleReaction('post-1', 'up')
-      duplicate = result.current.toggleReaction('post-1', 'up')
+      first = result.current.toggleReaction(POST_ID, 'up')
+      duplicate = result.current.toggleReaction(POST_ID, 'up')
     })
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
 
@@ -199,7 +213,7 @@ describe('useHotPageData reaction acknowledgements', () => {
     const { result } = renderHook(() => useHotPageData({ initialPosts: [initialPost] }))
     await waitFor(() => expect(result.current.loadingPosts).toBe(false))
 
-    await act(async () => result.current.toggleReaction('post-1', 'up'))
+    await act(async () => result.current.toggleReaction(POST_ID, 'up'))
     expect(result.current.hotPosts[0]).toMatchObject({
       likes: 5,
       like_count: 5,
@@ -209,7 +223,7 @@ describe('useHotPageData reaction acknowledgements', () => {
     })
     expect(mockShowToast).toHaveBeenCalledWith('actionFailedRetry', 'error')
 
-    await act(async () => result.current.toggleReaction('post-1', 'up'))
+    await act(async () => result.current.toggleReaction(POST_ID, 'up'))
     expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
     expect(result.current.hotPosts[0]).toMatchObject({
       likes: 6,

@@ -15,4 +15,14 @@ describe('HotContent post error contract', () => {
     expect(content).toContain('<PullToRefreshWrapper onRefresh={refreshPosts}>')
     expect(content).not.toContain('window.location.reload()')
   })
+
+  it('wires group failures to an explicit retry instead of a false empty state', () => {
+    expect(content).toContain('error={groupsError !== null}')
+    expect(content).toContain('onRetry={() => void refreshGroups()}')
+  })
+
+  it('keeps primary hot tabs and retries at the shared touch-target size', () => {
+    expect(content).toContain('minHeight: tokens.touchTarget.min')
+    expect(content).not.toContain('minHeight: 32')
+  })
 })

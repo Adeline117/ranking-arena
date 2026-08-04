@@ -29,6 +29,12 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
+import { apiFetch } from '@/lib/utils/api-fetch'
+import {
+  HOT_DISCOVERY_REQUEST_TIMEOUT_MS,
+  readHotGroupsPage,
+  readHotPostsPage,
+} from '@/lib/hot/hot-discovery-client-contract'
 import type { Post, Comment } from './types'
 import { useCommentDraftPersistence } from '@/app/components/post/hooks/useCommentDraftPersistence'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
@@ -116,6 +122,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     { id: string; name: string; name_en?: string | null; member_count: number }[]
   >([])
   const [loadingGroups, setLoadingGroups] = useState(false)
+  const [groupsError, setGroupsError] = useState<Error | null>(null)
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
 
   const latestPostTime = useRef<string>('')
 
@@ -237,75 +246,71 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       if (accessTokenRef.current) {
         headers['Authorization'] = `Bearer ${accessTokenRef.current}`
       }
-      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=30`, {
-        headers,
-        signal: controller.signal,
-      })
+      const payload = await apiFetch<unknown>(
+        `/api/posts?sort_by=hot_score&sort_order=desc&limit=30`,
+        {
+          headers,
+          signal: controller.signal,
+          cache: 'no-store',
+          timeoutMs: HOT_DISCOVERY_REQUEST_TIMEOUT_MS,
+        }
+      )
       if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
-      if (!res.ok) {
-        throw new Error(`Hot posts request failed (${res.status})`)
-      }
-      const json = (await res.json()) as {
-        posts?: unknown
-        data?: { posts?: unknown }
-      }
-      if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
-      const data = json.posts ?? json.data?.posts
-      if (!Array.isArray(data)) {
-        throw new Error('Hot posts response did not contain a posts array')
-      }
+      const data = readHotPostsPage(payload)
+      if (!data) throw new Error('Hot posts returned an invalid page')
 
       if (data.length > 0) {
-        const postsData: Post[] = data.map((post: Record<string, unknown>) => {
-          const createdAt = new Date(post.created_at as string)
+        const postsData: Post[] = data.map((post) => {
+          const createdAt = new Date(post.created_at)
           const diffMs = Date.now() - createdAt.getTime()
-          const timeStr = formatTimeAgo(post.created_at as string, language)
+          const timeStr = formatTimeAgo(post.created_at, language)
           // Default ("General") category has no real group row. Feed the
           // UI-localized default into BOTH slots so localizedLabel() renders a
           // localized badge for ja/ko instead of the English "General"
           // (localizedLabel prefers the en slot for any non-zh language, and
           // there is no ja/ko group data — but the default IS localizable via t()).
-          const rawGroupName = post.group_name as string | undefined
+          const rawGroupName = post.group_name ?? undefined
           const groupName = rawGroupName || t('generalDiscussion')
           const groupNameEn = rawGroupName
-            ? (post.group_name_en as string) || t('generalDiscussionEn')
+            ? post.group_name_en || t('generalDiscussionEn')
             : t('generalDiscussion')
 
           const hotScore =
-            (post.hot_score as number) ||
+            post.hot_score ||
             (() => {
               const hours = diffMs / 3600000
               return (
-                ((post.like_count as number) || 0) * 3 +
-                ((post.comment_count as number) || 0) * 5 +
-                ((post.view_count as number) || 0) * 0.1 -
+                post.like_count * 3 +
+                post.comment_count * 5 +
+                post.view_count * 0.1 -
                 Math.log(hours + 2) * 2
               )
             })()
-          const likeCount = (post.like_count as number) || 0
-          const dislikeCount = (post.dislike_count as number) || 0
+          const likeCount = post.like_count
+          const dislikeCount = post.dislike_count
 
           return {
-            id: post.id as string,
+            id: post.id,
             group: groupName,
             group_en: groupNameEn,
-            group_id: (post.group_id as string) || undefined,
+            group_id: post.group_id || undefined,
             // Keep parity with the server mapper (page.tsx): empty/placeholder
             // titles stay '' in data; render points decide the fallback.
-            title: normalizePostTitle(post.title as string),
-            author: (post.author_handle as string) || 'user',
-            author_handle: post.author_handle as string,
+            title: normalizePostTitle(post.title),
+            author: post.author_handle,
+            author_handle: post.author_handle,
+            author_avatar_url: post.author_avatar_url,
             time: timeStr,
-            body: (post.content as string) || '',
-            comments: (post.comment_count as number) || 0,
+            body: post.content,
+            comments: post.comment_count,
             likes: likeCount,
             like_count: likeCount,
             dislikes: dislikeCount,
             dislike_count: dislikeCount,
             hotScore,
-            views: (post.view_count as number) || 0,
-            created_at: post.created_at as string,
-            user_reaction: (post.user_reaction as 'up' | 'down' | null) || null,
+            views: post.view_count,
+            created_at: post.created_at,
+            user_reaction: post.user_reaction,
           }
         })
         setPosts(postsData)
@@ -342,39 +347,57 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     }
   }, [loadPosts])
 
-  // Load groups when groups tab is active
-  useEffect(() => {
-    if (activeHotTab !== 'groups') return
-    const loadGroups = async () => {
-      setLoadingGroups(true)
-      try {
-        const res = await fetch('/api/groups?sort_by=activity&limit=30')
-        const json = await res.json()
-        const data = json.data?.groups || json.groups || json.data || []
-        setGroups(
-          data.map((g: Record<string, unknown>) => ({
-            id: (g.id as string) || '',
-            name: (g.name as string) || '',
-            name_en: (g.name_en as string | null) || null,
-            member_count: (g.member_count as number) || 0,
-          }))
-        )
-      } catch (error) {
-        // Ignore navigation-interrupted fetches (route change aborts the in-flight
-        // request → AbortError or "TypeError: Failed to fetch"). These are not real
-        // errors and were spamming the console during normal navigation.
-        const msg = error instanceof Error ? error.message : ''
-        const interrupted =
-          (error instanceof DOMException && error.name === 'AbortError') ||
-          /Failed to fetch|aborted/i.test(msg)
-        if (!interrupted) logger.error('Groups load error:', error)
-        setGroups([])
-      } finally {
+  const groupsAbortRef = useRef<AbortController | null>(null)
+  const loadGroups = useCallback(async () => {
+    const capturedScope = activeScopeRef.current
+    groupsAbortRef.current?.abort()
+    const controller = new AbortController()
+    groupsAbortRef.current = controller
+
+    if (groupsRef.current.length === 0) setLoadingGroups(true)
+    setGroupsError(null)
+    try {
+      const payload = await apiFetch<unknown>('/api/groups?sort_by=activity&limit=30', {
+        signal: controller.signal,
+        cache: 'no-store',
+        timeoutMs: HOT_DISCOVERY_REQUEST_TIMEOUT_MS,
+      })
+      if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
+      const data = readHotGroupsPage(payload)
+      if (!data) throw new Error('Hot groups returned an invalid page')
+      setGroups(
+        data.map((group) => ({
+          id: group.id,
+          name: group.name,
+          name_en: group.name_en,
+          member_count: group.member_count,
+        }))
+      )
+    } catch (error) {
+      if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
+      logger.error('Groups load error:', error)
+      setGroupsError(error instanceof Error ? error : new Error('Failed to load hot groups'))
+    } finally {
+      if (
+        groupsAbortRef.current === controller &&
+        !controller.signal.aborted &&
+        scopeIsCurrent(capturedScope)
+      ) {
         setLoadingGroups(false)
       }
     }
-    loadGroups()
-  }, [activeHotTab])
+  }, [scopeIsCurrent])
+
+  // Load groups only for the visible tab, and rebind the page after a viewer
+  // scope change so a late response can never cross accounts.
+  useEffect(() => {
+    if (activeHotTab !== 'groups') return
+    void loadGroups()
+    return () => {
+      groupsAbortRef.current?.abort()
+      groupsAbortRef.current = null
+    }
+  }, [activeHotTab, loadGroups, scopeKey])
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
@@ -1103,6 +1126,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     // Groups
     groups,
     loadingGroups,
+    groupsError,
+    refreshGroups: loadGroups,
 
     // Post detail modal
     openPost,

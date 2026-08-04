@@ -54,6 +54,8 @@ export function HotGroupsList({
               border: 'none',
               textDecoration: 'underline',
               fontSize: 14,
+              minWidth: tokens.touchTarget.min,
+              minHeight: tokens.touchTarget.min,
             }}
           >
             {t('retry')}
@@ -79,6 +81,7 @@ export function HotGroupsList({
           href={`/groups/${group.id}`}
           style={{
             display: 'block',
+            minHeight: tokens.touchTarget.min,
             padding: '12px 16px',
             borderRadius: tokens.radius.lg,
             background: 'var(--color-bg-secondary)',

@@ -46,6 +46,8 @@ export default function HotContent({ initialPosts }: HotContentProps) {
     setActiveHotTab,
     groups,
     loadingGroups,
+    groupsError,
+    refreshGroups,
     openPost,
     comments,
     loadingComments,
@@ -166,7 +168,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                       onClick={() => setActiveHotTab(tab.value)}
                       style={{
                         padding: '7px 16px',
-                        minHeight: 32,
+                        minHeight: tokens.touchTarget.min,
                         borderRadius: tokens.radius.lg,
                         border: activeHotTab === tab.value ? 'none' : tokens.glass.border.light,
                         background:
@@ -240,6 +242,8 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                               font: 'inherit',
                               fontWeight: Number(tokens.typography.fontWeight.bold),
                               cursor: 'pointer',
+                              minWidth: tokens.touchTarget.min,
+                              minHeight: tokens.touchTarget.min,
                             }}
                           >
                             {t('retry')}
@@ -316,6 +320,8 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                       <HotGroupsList
                         groups={groups}
                         loading={loadingGroups}
+                        error={groupsError !== null}
+                        onRetry={() => void refreshGroups()}
                         localizedName={localizedName}
                         t={t}
                       />
