@@ -258,13 +258,13 @@ describe('GET /api/traders source freshness', () => {
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(freshnessQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
   })
 
@@ -349,12 +349,12 @@ describe('GET /api/traders source freshness', () => {
     }
     expect(rankingQueries[1].gt).toHaveBeenCalledWith('rank', 2)
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v6:leaderboard:v3:/),
+      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v3:/),
       expect.any(Function),
       {
         ttl: 300,
         lockTtl: 10,
-        tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         skipMemory: true,
         writeFenceKey: 'public-rankings:write-fence:v1',
       }
@@ -396,14 +396,14 @@ describe('GET /api/traders source freshness', () => {
       warmDefaultPublicTradersCache({ from: mockFrom } as never, '90D', 50)
     ).resolves.toBe(1)
     expect(mockCacheSet).toHaveBeenCalledWith(
-      'public-rank-policy-v6:leaderboard:v3:90D:all:all:arena_score:desc:start:50',
+      'public-rank-policy-v7:leaderboard:v3:90D:all:all:arena_score:desc:start:50',
       expect.objectContaining({
         traders: [expect.objectContaining({ id: 'rank-one', rank: 1 })],
         totalCount: 1,
       }),
       {
         ttl: 300,
-        tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         skipMemory: true,
         writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
       }
@@ -441,10 +441,10 @@ describe('GET /api/traders source freshness', () => {
     const body = await response.json()
 
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v6:leaderboard:v3:/),
+      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v3:/),
       expect.any(Function),
       expect.objectContaining({
-        tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         skipMemory: true,
       })
     )

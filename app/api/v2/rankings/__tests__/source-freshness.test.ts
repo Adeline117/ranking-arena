@@ -135,7 +135,7 @@ describe('GET /api/v2/rankings source freshness', () => {
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(rankingQuery?.order.mock.calls.slice(0, 2)).toEqual([
@@ -145,7 +145,7 @@ describe('GET /api/v2/rankings source freshness', () => {
     expect(freshnessQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
   })
 
@@ -175,7 +175,7 @@ describe('GET /api/v2/rankings source freshness', () => {
     const body = await response.json()
 
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v6:v2-rankings:v3:/),
+      expect.stringMatching(/^public-rank-policy-v7:v2-rankings:v3:/),
       expect.any(Function),
       expect.any(Object)
     )
