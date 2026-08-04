@@ -12,6 +12,7 @@ RAW_FIELDS_MIGRATION="$ROOT_DIR/supabase/migrations/20260630195608_records_page_
 BITGET_COPIER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729014000_bitget_bot_copier_aggregate_authority.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260803090000_record_provenance_clocks.sql"
 QUARANTINE_MIGRATION="$ROOT_DIR/supabase/migrations/20260804042000_fail_closed_position_history_records_page.sql"
+COPIER_CONTAINMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260804052000_fail_closed_unbound_copier_aggregates.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -29,7 +30,8 @@ for migration in \
   "$RAW_FIELDS_MIGRATION" \
   "$BITGET_COPIER_MIGRATION" \
   "$MIGRATION" \
-  "$QUARANTINE_MIGRATION"; do
+  "$QUARANTINE_MIGRATION" \
+  "$COPIER_CONTAINMENT_MIGRATION"; do
   if [[ ! -f "$migration" ]]; then
     echo "Required migration not found: $migration" >&2
     exit 1
@@ -1001,5 +1003,187 @@ QUARANTINE_OUTPUT_AFTER_REPLAY="$(rpc_output_fingerprint)"
 assert_equal "position-history records-page quarantine replay drifted" "$QUARANTINE_METADATA_BEFORE_REPLAY" "$QUARANTINE_METADATA_AFTER_REPLAY"
 assert_equal "position-history records-page output replay drifted" "$QUARANTINE_OUTPUT_BEFORE_REPLAY" "$QUARANTINE_OUTPUT_AFTER_REPLAY"
 
+echo "[record-provenance] install copier containment regression fixtures"
+psql_cmd -q <<'SQL'
+INSERT INTO arena.sources (
+  id, slug, exchange_id, product_type, trader_kind_scope, adapter_slug,
+  status, serving_mode, currency, timeframes_native, timeframes_derived,
+  page_size, pagination_kind, copier_table_depth, meta
+) VALUES (
+  22, 'lifetime_copier', 2, 'futures', 'human', 'other',
+  'active', 'serving', 'USDT', ARRAY[90], ARRAY[]::integer[],
+  10, 'numeric', 'top10', '{"inception_tf":true}'::jsonb
+);
+
+INSERT INTO arena.traders (
+  id, source_id, exchange_trader_id, trader_kind
+) VALUES
+  (202, 21, 'row-only-copier', 'human'),
+  (203, 21, 'conflicting-count-copier', 'human'),
+  (204, 21, 'trusted-current-copier', 'human'),
+  (205, 22, 'trusted-lifetime-copier', 'human');
+
+-- Gate-shaped rows use each follower's creation time. max(ts) therefore picks
+-- only the last follower; it is not a capture boundary.
+INSERT INTO arena.copier_records (
+  trader_id, ts, copier_label, copier_pnl, currency, dedupe_hash, raw
+) VALUES
+  (202, '2026-07-01 10:00:00+00', 'gate-1', 11, 'USDT', 'gate-1', '{}'),
+  (202, '2026-07-02 10:00:00+00', 'gate-2', 22, 'USDT', 'gate-2', '{}'),
+  (202, '2026-07-03 10:00:00+00', 'gate-3', 53.24, 'USDT', 'gate-3', '{}');
+
+INSERT INTO arena.trader_stats (
+  trader_id, timeframe, as_of, copier_pnl, copier_count, extras
+) VALUES
+  (
+    203, 7, '2026-08-03 13:00:00+00', -10.42, 3,
+    pg_catalog.jsonb_build_object(
+      '_arena_profile_publication_epoch_ms',
+      EXTRACT(EPOCH FROM '2026-08-03 13:00:00+00'::timestamptz) * 1000
+    )
+  ),
+  (
+    203, 90, '2026-08-03 13:00:00+00', -905.56, 4,
+    pg_catalog.jsonb_build_object(
+      '_arena_profile_publication_epoch_ms',
+      EXTRACT(EPOCH FROM '2026-08-03 13:00:00+00'::timestamptz) * 1000
+    )
+  ),
+  (
+    204, 90, '2026-08-03 13:05:00+00', 700, 7,
+    pg_catalog.jsonb_build_object(
+      '_arena_profile_publication_epoch_ms',
+      EXTRACT(EPOCH FROM '2026-08-03 13:05:00+00'::timestamptz) * 1000
+    )
+  ),
+  (
+    205, 0, '2026-08-03 13:10:00+00', 123.45, 9,
+    pg_catalog.jsonb_build_object(
+      '_arena_profile_publication_epoch_ms',
+      EXTRACT(EPOCH FROM '2026-08-03 13:10:00+00'::timestamptz) * 1000
+    )
+  );
+
+DO $vulnerable_row_batch_precondition$
+DECLARE
+  v_payload jsonb := public.arena_copier_aggregate(
+    'bitget_futures',
+    'row-only-copier'
+  );
+BEGIN
+  IF (v_payload->>'copierCount')::integer IS DISTINCT FROM 1
+     OR (v_payload->>'totalCopierPnl')::numeric IS DISTINCT FROM 53.24 THEN
+    RAISE EXCEPTION 'Gate-shaped max(ts) exploit fixture did not reproduce: %', v_payload;
+  END IF;
+END
+$vulnerable_row_batch_precondition$;
+SQL
+
+echo "[record-provenance] apply unbound copier aggregate containment"
+psql_cmd -q -f "$COPIER_CONTAINMENT_MIGRATION"
+
+psql_cmd -q <<'SQL'
+DO $copier_containment_contract$
+DECLARE
+  v_payload jsonb;
+BEGIN
+  IF public.arena_copier_aggregate(
+       'bitget_futures', 'row-only-copier'
+     ) IS NOT NULL THEN
+    RAISE EXCEPTION 'row-derived Gate-shaped aggregate remained public';
+  END IF;
+
+  IF public.arena_copier_aggregate(
+       'bitget_futures', 'conflicting-count-copier'
+     ) IS NOT NULL THEN
+    RAISE EXCEPTION 'same-clock timeframe conflict remained public';
+  END IF;
+
+  IF public.arena_copier_aggregate(
+       'bitget_futures', 'human-copier'
+     ) IS NOT NULL THEN
+    RAISE EXCEPTION 'unmarked profile aggregate remained public';
+  END IF;
+
+  v_payload := public.arena_copier_aggregate(
+    'bitget_futures', 'trusted-current-copier'
+  );
+  IF (v_payload->>'copierCount')::integer IS DISTINCT FROM 7 THEN
+    RAISE EXCEPTION 'trusted current copier count was not preserved: %', v_payload;
+  END IF;
+  IF v_payload->'totalCopierPnl' IS DISTINCT FROM 'null'::jsonb THEN
+    RAISE EXCEPTION 'window PnL escaped without an inception contract: %', v_payload;
+  END IF;
+
+  v_payload := public.arena_copier_aggregate(
+    'lifetime_copier', 'trusted-lifetime-copier'
+  );
+  IF (v_payload->>'copierCount')::integer IS DISTINCT FROM 9
+     OR (v_payload->>'totalCopierPnl')::numeric IS DISTINCT FROM 123.45 THEN
+    RAISE EXCEPTION 'trusted lifetime copier totals were not preserved: %', v_payload;
+  END IF;
+
+  v_payload := public.arena_copier_aggregate(
+    'bitget_bots_futures', 'bot-trusted'
+  );
+  IF (v_payload->>'copierCount')::integer IS DISTINCT FROM 123
+     OR (v_payload->>'totalCopierPnl')::numeric IS DISTINCT FROM 456 THEN
+    RAISE EXCEPTION 'trusted Bitget Bot lifetime totals regressed: %', v_payload;
+  END IF;
+  IF v_payload->'pnlDistribution' IS DISTINCT FROM '[]'::jsonb THEN
+    RAISE EXCEPTION 'copier histogram was not quarantined: %', v_payload;
+  END IF;
+  IF v_payload->'asOf' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->'sourceAsOf' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->'observedAt' IS DISTINCT FROM 'null'::jsonb
+     OR v_payload->'publishedAt' IS DISTINCT FROM 'null'::jsonb THEN
+    RAISE EXCEPTION 'unbound copier provenance became fabricated: %', v_payload;
+  END IF;
+
+  IF public.arena_copier_aggregate(
+       'bitget_bots_spot', 'bot-top10'
+     ) IS NOT NULL THEN
+    RAISE EXCEPTION 'untrusted Bot Top-10 rows remained public';
+  END IF;
+
+  UPDATE arena.sources
+  SET serving_mode = 'shadow'
+  WHERE slug = 'lifetime_copier';
+  IF public.arena_copier_aggregate(
+       'lifetime_copier', 'trusted-lifetime-copier'
+     ) IS NOT NULL THEN
+    RAISE EXCEPTION 'shadow copier source remained public';
+  END IF;
+  UPDATE arena.sources
+  SET serving_mode = 'serving'
+  WHERE slug = 'lifetime_copier';
+
+  IF pg_catalog.has_function_privilege(
+       'hostile_role',
+       'public.arena_copier_aggregate(text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_table_privilege(
+       'anon', 'arena.copier_records', 'SELECT'
+     )
+     OR pg_catalog.has_table_privilege(
+       'authenticated', 'arena.copier_records', 'SELECT'
+     ) THEN
+    RAISE EXCEPTION 'copier privacy/execute boundary regressed';
+  END IF;
+END
+$copier_containment_contract$;
+SQL
+
+CONTAINMENT_METADATA_BEFORE_REPLAY="$(function_metadata_fingerprint 'public.arena_copier_aggregate(text,text)')"
+CONTAINMENT_OUTPUT_BEFORE_REPLAY="$(psql_cmd -Atqc "SELECT pg_catalog.jsonb_build_object('bot',public.arena_copier_aggregate('bitget_bots_futures','bot-trusted'),'current',public.arena_copier_aggregate('bitget_futures','trusted-current-copier'),'lifetime',public.arena_copier_aggregate('lifetime_copier','trusted-lifetime-copier'))::text")"
+psql_cmd -q -f "$COPIER_CONTAINMENT_MIGRATION"
+CONTAINMENT_METADATA_AFTER_REPLAY="$(function_metadata_fingerprint 'public.arena_copier_aggregate(text,text)')"
+CONTAINMENT_OUTPUT_AFTER_REPLAY="$(psql_cmd -Atqc "SELECT pg_catalog.jsonb_build_object('bot',public.arena_copier_aggregate('bitget_bots_futures','bot-trusted'),'current',public.arena_copier_aggregate('bitget_futures','trusted-current-copier'),'lifetime',public.arena_copier_aggregate('lifetime_copier','trusted-lifetime-copier'))::text")"
+
+assert_equal "copier aggregate containment replay drifted" "$CONTAINMENT_METADATA_BEFORE_REPLAY" "$CONTAINMENT_METADATA_AFTER_REPLAY"
+assert_equal "copier aggregate containment output replay drifted" "$CONTAINMENT_OUTPUT_BEFORE_REPLAY" "$CONTAINMENT_OUTPUT_AFTER_REPLAY"
+
+echo "unbound copier aggregate containment PostgreSQL 17 proof passed"
 echo "position-history records-page PostgreSQL 17 proof passed"
 echo "record provenance clocks PostgreSQL 17 proof passed"
