@@ -25,7 +25,7 @@ import ProGate from '@/app/components/ui/ProGate'
 import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
-import type { UnifiedSearchResult } from '@/app/api/search/route'
+import type { UnifiedSearchResult } from '@/lib/search/contracts'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import {
   buildCompareApiUrl,

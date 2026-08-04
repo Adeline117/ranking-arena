@@ -280,6 +280,12 @@ jobs:
       - name: API auth coverage check (route 级默认拒绝)
         run: npm run qa:api-auth
 
+      # Prevent deployable layers from growing new reverse dependencies. The
+      # checked-in baseline is an explicit, reviewable debt ledger and may only
+      # shrink as legacy imports are extracted.
+      - name: Architecture boundary ratchet
+        run: npm run qa:architecture
+
       # Supabase 类型旁路棘轮：`as SupabaseClient`(裸)/`as any`-on-.from/.rpc 剥掉
       # <Database> 泛型→列漂移能编译过(2026-07 漂移类的根源)。计数只许降不许升。
       # 纯本地 fs 扫描 <1s，无外部依赖。
