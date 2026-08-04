@@ -29,7 +29,7 @@ import {
   IncompleteProfileWindowError,
 } from '@/lib/ingest/core/profile-coverage'
 import type { ProfileQualityReject } from '@/lib/ingest/core/profile-quality'
-import type { ParseCtx, ParsedHistoryRow } from '@/lib/ingest/core/types'
+import type { Currency, ParseCtx, ParsedHistoryRow, ParsedPosition } from '@/lib/ingest/core/types'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
@@ -215,35 +215,74 @@ export async function processTierC(
   }
 }
 
+function positionRowsForRender(
+  parsed: ParsedPosition[],
+  currency: Currency
+): Record<string, unknown>[] {
+  return parsed.map((row) => ({
+    symbol: row.symbol,
+    side: row.side,
+    leverage: row.leverage,
+    size: row.size,
+    entry_price: row.entryPrice,
+    mark_price: row.markPrice,
+    unrealized_pnl: row.unrealizedPnl,
+    currency,
+  }))
+}
+
 function historyRowsForRender(
   parsed: ParsedHistoryRow[],
-  kind: import('@/lib/ingest/core/types').HistoryKind
+  kind: import('@/lib/ingest/core/types').HistoryKind,
+  currency: Currency
 ): Record<string, unknown>[] {
-  // PII strip for the render path (spec §6) — aggregates only for copiers.
+  if (parsed.some((row) => row.kind !== kind)) {
+    throw new Error(`[tier-c] history row kind does not match ${kind}`)
+  }
+
+  // Copier records remain private aggregation inputs. Even after stripping a
+  // label, one row still reveals an individual's PnL/investment/duration.
+  if (kind === 'copiers') return []
+
+  // Emit an explicit snake_case allowlist aligned with arena_records_page.
+  // Parser internals, RAW payloads, natural identities, and claim evidence
+  // stay in the worker/private persistence path.
   return parsed.map((row) => {
-    if (row.kind !== kind) throw new Error(`[tier-c] history row kind does not match ${kind}`)
-    if (row.kind === 'copiers') {
-      const { copierLabel: _pii, raw: _raw, ...rest } = row
-      return rest
-    }
     if (row.kind === 'position_history') {
-      // Claim-substrate provenance stays inside the worker: it feeds the
-      // terminal verifier, names upstream response paths, and is never
-      // projected by arena_records_page. Emitting it here would let the
-      // Tier-C preview advertise a wider row contract than the DB path.
-      const {
-        raw: _raw,
-        sourceFactId: _factId,
-        sourceLifecycleMarker: _lifecycle,
-        sourceReturn: _return,
-        fieldSources: _fieldSources,
-        limitations: _limitations,
-        ...rest
-      } = row
-      return rest
+      return {
+        symbol: row.symbol,
+        side: row.side,
+        leverage: row.leverage,
+        size: row.size,
+        entry_price: row.entryPrice,
+        exit_price: row.exitPrice,
+        realized_pnl: row.realizedPnl,
+        opened_at: row.openedAt,
+        closed_at: row.closedAt,
+        currency,
+      }
     }
-    const { raw: _raw, ...rest } = row
-    return rest
+    if (row.kind === 'orders') {
+      return {
+        ts: row.ts,
+        kind: row.orderKind,
+        symbol: row.symbol,
+        side: row.side,
+        price: row.price,
+        qty: row.qty,
+        currency,
+      }
+    }
+    if (row.kind === 'transfers') {
+      return {
+        ts: row.ts,
+        direction: row.direction,
+        asset: row.asset,
+        amount: row.amount,
+        currency,
+      }
+    }
+    throw new Error('[tier-c] copier row reached the public render mapper')
   })
 }
 
@@ -253,9 +292,9 @@ function historyRowsForRender(
  * render-before-persist contract: Redis result key {rows, nextCursor, asOf,
  * completeness?} first, then arena.* persistence + profile_cache.
  *
- * Copier PII rule (spec §6): copierLabel never leaves the worker — the
- * Redis rows are stripped before publish; full rows (with label, for
- * dedupe) only reach arena.copier_records which has no public access.
+ * Copier PII rule (spec §6): no individual copier row leaves the worker.
+ * Full rows (including label, PnL, investment, duration, and dedupe identity)
+ * only reach arena.copier_records, which has no public access.
  */
 async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Promise<unknown> {
   const { sourceSlug, exchangeTraderId, timeframe, surface } = job.data
@@ -325,7 +364,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         throw new Error('[tier-c] positions capture returned no evidence page')
       }
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
-      rows = positions.map((p) => ({ ...p, currency: src.currency }))
+      rows = positionRowsForRender(positions, src.currency)
 
       const configuredDelayHours = src.meta.positions_delay_hours
       if (
@@ -391,7 +430,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
           const parsed = acquisition.pages.flatMap((page) =>
             adapter.parseHistory(page.payload, kind, ctx)
           )
-          rows = historyRowsForRender(parsed, kind)
+          rows = historyRowsForRender(parsed, kind, src.currency)
           await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
           return receipt
         }
@@ -460,7 +499,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         if (fetchError !== null) throw fetchError
 
         const parsed = pages.flatMap((page) => adapter.parseHistory(page.payload, kind, ctx))
-        rows = historyRowsForRender(parsed, kind)
+        rows = historyRowsForRender(parsed, kind, src.currency)
 
         await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
 
