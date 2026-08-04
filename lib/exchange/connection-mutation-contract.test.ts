@@ -1,4 +1,5 @@
 import {
+  readExchangeConnectAcknowledgement,
   readExchangeConnectionsAcknowledgement,
   readExchangeDisconnectAcknowledgement,
   readExchangeMutationError,
@@ -6,6 +7,26 @@ import {
 } from './connection-mutation-contract'
 
 describe('exchange connection mutation contract', () => {
+  it('accepts only the exact viewer/exchange-bound connect acknowledgement', () => {
+    const receipt = {
+      success: true,
+      data: { viewerId: 'viewer-a', exchange: 'binance' },
+    }
+
+    expect(readExchangeConnectAcknowledgement(receipt, 'viewer-a', 'binance')).toBe(true)
+    expect(readExchangeConnectAcknowledgement(receipt, 'viewer-b', 'binance')).toBe(false)
+    expect(
+      readExchangeConnectAcknowledgement(
+        { ...receipt, data: { ...receipt.data, message: 'done' } },
+        'viewer-a',
+        'binance'
+      )
+    ).toBe(false)
+    expect(
+      readExchangeConnectAcknowledgement({ ...receipt, meta: {} }, 'viewer-a', 'binance')
+    ).toBe(false)
+  })
+
   it('accepts only the exact exchange-bound disconnect acknowledgement', () => {
     expect(
       readExchangeDisconnectAcknowledgement({ success: true, exchange: 'binance' }, 'binance')

@@ -16,6 +16,7 @@ import {
   isExchangeViewerCurrent,
   type ExchangeViewerSnapshot,
 } from '@/lib/exchange/viewer-scope'
+import { readExchangeConnectAcknowledgement } from '@/lib/exchange/connection-mutation-contract'
 import { EXCHANGE_CONFIGS, type ExchangeId } from './exchange-configs'
 
 type SecretField = 'apiKey' | 'apiSecret' | 'passphrase'
@@ -30,12 +31,7 @@ type SubmitOperation = {
 }
 
 type ConnectExchangeResponse = {
-  success?: unknown
   error?: unknown
-  data?: {
-    viewerId?: unknown
-    exchange?: unknown
-  }
 }
 
 function capturePageViewer(auth: AuthSessionReturn): ExchangeViewerSnapshot | null {
@@ -277,11 +273,7 @@ export function ApiKeyAuthContent() {
         return
       }
 
-      if (
-        response.data?.success !== true ||
-        response.data.data?.viewerId !== viewer.userId ||
-        response.data.data.exchange !== exchange
-      ) {
+      if (!readExchangeConnectAcknowledgement(response.data, viewer.userId, exchange)) {
         setError(t('bindServerErrorRetry'))
         return
       }

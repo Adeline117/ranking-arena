@@ -306,6 +306,10 @@ describe('exchange API-key authorization viewer ownership', () => {
   it.each([
     ['wrong viewer', { viewerId: 'user-b', exchange: 'binance' }],
     ['wrong exchange', { viewerId: 'user-a', exchange: 'bitget' }],
+    [
+      'extra field',
+      { viewerId: 'user-a', exchange: 'binance', message: 'unverified success' } as never,
+    ],
   ])('fails closed for an otherwise successful %s ACK', async (_label, ack) => {
     mockAuthedFetch.mockResolvedValue({
       ok: true,

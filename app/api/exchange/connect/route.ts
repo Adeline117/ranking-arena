@@ -7,9 +7,9 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, forbidden, serverError } from '@/lib/api/response'
-import { SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
 import { exchangeApiConnectionSaveResultSchema } from '@/lib/exchange/api-key-lifecycle'
 import { encrypt } from '@/lib/exchange/encryption'
+import { API_KEY_CONNECTION_PLATFORMS } from '@/lib/exchange/read-only-platforms'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { validateExchangeReadOnlyAccess } from '@/lib/validators/api-key-validator'
@@ -17,18 +17,18 @@ import { validateExchangeReadOnlyAccess } from '@/lib/validators/api-key-validat
 const logger = createLogger('exchange-connect')
 
 // Zod schema for POST /api/exchange/connect
-const ConnectExchangeSchema = z.object({
-  exchange: z.string().refine((val) => SUPPORTED_EXCHANGES.includes(val as Exchange), {
-    message: `exchange must be one of: ${SUPPORTED_EXCHANGES.join(', ')}`,
-  }),
-  apiKey: z.string().min(10, 'API Key must be at least 10 characters'),
-  apiSecret: z.string().min(10, 'API Secret must be at least 10 characters'),
-  passphrase: z.string().optional().nullable(),
-})
+const ConnectExchangeSchema = z
+  .object({
+    exchange: z.enum(API_KEY_CONNECTION_PLATFORMS),
+    apiKey: z.string().min(10, 'API Key must be at least 10 characters').max(512),
+    apiSecret: z.string().min(10, 'API Secret must be at least 10 characters').max(512),
+    passphrase: z.string().min(1).max(512).optional().nullable(),
+  })
+  .strict()
 
 export const POST = withAuth(
   async ({ user, request }) => {
-    let body: Record<string, unknown>
+    let body: unknown
     try {
       body = await request.json()
     } catch {
@@ -134,7 +134,6 @@ export const POST = withAuth(
       data: {
         viewerId: parsedSave.data.user_id,
         exchange: parsedSave.data.exchange,
-        message: `Successfully connected to ${exchange}. Syncing data...`,
       },
     })
   },

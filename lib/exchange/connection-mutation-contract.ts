@@ -24,6 +24,22 @@ export function readExchangeDisconnectAcknowledgement(
   )
 }
 
+export function readExchangeConnectAcknowledgement(
+  value: unknown,
+  expectedUserId: string,
+  expectedExchange: string
+): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ['data', 'success']) &&
+    value.success === true &&
+    isRecord(value.data) &&
+    hasExactKeys(value.data, ['exchange', 'viewerId']) &&
+    value.data.viewerId === expectedUserId &&
+    value.data.exchange === expectedExchange
+  )
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }

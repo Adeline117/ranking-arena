@@ -92,8 +92,8 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 
 const mockValidateReadOnlyAccess = jest.fn()
-jest.mock('@/lib/exchange', () => ({
-  SUPPORTED_EXCHANGES: ['binance', 'bybit', 'bitget'] as const,
+jest.mock('@/lib/exchange/read-only-platforms', () => ({
+  API_KEY_CONNECTION_PLATFORMS: ['binance', 'bybit', 'bitget'] as const,
 }))
 
 jest.mock('@/lib/validators/api-key-validator', () => ({
@@ -226,6 +226,39 @@ describe('POST /api/exchange/connect', () => {
     expect(body.success).not.toBe(true)
   })
 
+  it.each([
+    null,
+    {
+      exchange: 'binance',
+      apiKey: 'test-key-12345',
+      apiSecret: 'test-secret-12345',
+      extra: true,
+    },
+    {
+      exchange: 'binance',
+      apiKey: 'x'.repeat(513),
+      apiSecret: 'test-secret-12345',
+    },
+    {
+      exchange: 'bitget',
+      apiKey: 'test-key-12345',
+      apiSecret: 'test-secret-12345',
+      passphrase: 'x'.repeat(513),
+    },
+  ])('rejects a malformed or oversized body before credential validation: %p', async (body) => {
+    const req = new NextRequest('http://localhost/api/exchange/connect', {
+      method: 'POST',
+      body,
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    expect(mockValidateReadOnlyAccess).not.toHaveBeenCalled()
+    expect(mockEncrypt).not.toHaveBeenCalled()
+    expect(mockSupabaseRpc).not.toHaveBeenCalled()
+  })
+
   // --- Credential Validation ---
 
   it('returns 400 when credentials are invalid', async () => {
@@ -281,10 +314,10 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
-    expect(body.data).toEqual(
-      expect.objectContaining({ viewerId: mockUser.id, exchange: 'binance' })
-    )
+    expect(body).toEqual({
+      success: true,
+      data: { viewerId: mockUser.id, exchange: 'binance' },
+    })
     expect(mockSupabaseRpc).toHaveBeenCalledWith(
       'upsert_exchange_api_connection_for_active_profile_atomic',
       {
