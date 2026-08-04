@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 # Per-SHA group, no cancel: 7 个并发会话高频直推 main，per-ref cancel-in-progress
 # 会让每个 run 都被下一次 push 取消——CI 在忙碌时段永远跑不完（2026-07-02 差距
 # 审计发现"CI 全红"的一半根因是 cancelled 而非 failure）。快速作业必须每个
@@ -25,27 +28,31 @@ jobs:
     name: Types generation contract (offline, no secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       - run: npm run gen:types:contract
 
-  # 真实生产 diff 只允许在已合入 main 的可信代码上运行。secret 在各 step
-  # 显式最小化注入；attestor 缺 DB/URL/key 任一项都会 fail-closed。
+  # SECURITY SUSPENDED (V1 NO-GO): repository-level production secrets are not
+  # a trust boundary against same-repository workflow edits. Restore only after
+  # these values are environment-only behind a required reviewer and protected
+  # main, then update Deploy Gate's required-job contract in the same change.
   types-live-drift:
     name: Types live drift check (push main only)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       - name: Regenerate from attested production and diff
         env:
@@ -95,7 +102,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Check migration versions
         run: |
@@ -252,11 +261,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: pre-checks
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       # The repository ruleset already requires this job. Keep the offline
       # contract here as well as in its named job so PRs cannot merge while an
@@ -336,11 +346,12 @@ jobs:
           --health-timeout 2s
           --health-retries 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
 
       - name: Run tests with coverage
@@ -349,16 +360,16 @@ jobs:
         run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v6
-        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: coverage-report
           path: coverage/
           retention-days: 7
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
-        if: always()
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false
@@ -373,11 +384,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint-typecheck
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       - name: Build application
         env:
@@ -414,7 +426,8 @@ jobs:
         run: |
           find .next -name '*:*' -delete 2>/dev/null || true
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: nextjs-build
           path: .next
@@ -442,11 +455,12 @@ jobs:
       group: ci-e2e-${{ github.ref }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
 
       # Desktop smoke only → chromium is enough. Nightly installs webkit for the
@@ -462,7 +476,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: https://www.arenafi.org
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: playwright-report
@@ -472,7 +486,7 @@ jobs:
           retention-days: 7
 
       - name: Upload screenshots on failure
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: failure()
         with:
           name: playwright-screenshots
@@ -487,18 +501,21 @@ jobs:
     name: Data Consistency Check
     runs-on: ubuntu-latest
     needs: unit-tests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # SECURITY SUSPENDED (V1 NO-GO): restore only with reviewer-gated,
+    # environment-only production read/hook/alert credentials.
+    if: ${{ false }}
     env:
       NEXT_PUBLIC_SITE_URL: https://www.arenafi.org
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
 
       - name: E2E data consistency verification

@@ -1024,7 +1024,12 @@ test_durable_recovery_guard_blocks_new_deploy_before_inspection() {
   local tmp event_log output status events
   tmp="$(mktemp -d)"
   DEPLOY_LOCK_DIR="$tmp/deploy-lock"
+  DEPLOY_INCIDENT_HOLD="$tmp/incident-hold"
   DEPLOY_RECOVERY_GUARD="$tmp/recovery-required"
+  RECOVERY_GO_FILE="$tmp/recover-from-stopped.go"
+  RECOVERY_GO_CONSUMED="$DEPLOY_LOCK_DIR/recover-from-stopped.go"
+  RECOVER_FROM_STOPPED=0
+  SHA="$TEST_SHA"
   DEPLOY_LOCK_TOKEN='guard-fixture-owner'
   DEPLOY_LOCK_STALE_SECONDS=900
   DEPLOY_LOCK_HELD=0
@@ -1084,6 +1089,559 @@ test_durable_recovery_guard_blocks_new_deploy_before_inspection() {
   echo 'ok - durable recovery guard blocks a new deploy before inspection or mutation'
 }
 
+test_incident_hold_blocks_new_deploy_before_lock_or_inspection() {
+  local tmp output status
+  tmp="$(mktemp -d)"
+  DEPLOY_LOCK_DIR="$tmp/deploy-lock"
+  DEPLOY_INCIDENT_HOLD="$tmp/incident-hold"
+  DEPLOY_RECOVERY_GUARD="$tmp/recovery-required"
+  RECOVERY_GO_FILE="$tmp/recover-from-stopped.go"
+  RECOVERY_GO_CONSUMED="$DEPLOY_LOCK_DIR/recover-from-stopped.go"
+  RECOVER_FROM_STOPPED=0
+  SHA="$TEST_SHA"
+  DEPLOY_LOCK_TOKEN='hold-fixture-owner'
+  DEPLOY_LOCK_STALE_SECONDS=900
+  DEPLOY_LOCK_HELD=0
+  ssh_sg() {
+    (
+      unset -f node
+      bash -c "$1"
+    )
+  }
+  eval "$(awk '/^acquire_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+  printf '%s\n' 'incident-no-go' > "$DEPLOY_INCIDENT_HOLD"
+
+  set +e
+  output="$(acquire_deploy_lock 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'an existing SG incident hold must refuse lock acquisition'
+  assert_contains "$output" 'BLOCKED: SG incident hold is armed' \
+    'executable lock acquisition must identify the SG incident hold'
+  [ ! -e "$DEPLOY_LOCK_DIR" ] || fail 'incident hold must precede deploy-lock mutation'
+  unset -f ssh_sg acquire_deploy_lock
+  rm -rf "$tmp"
+  echo 'ok - SG incident hold blocks deploy before lock or inspection'
+}
+
+test_stopped_recovery_requires_one_time_confirmation() {
+  local tmp output status
+  local DEPLOY_LOCK_DIR DEPLOY_INCIDENT_HOLD DEPLOY_RECOVERY_GUARD
+  local RECOVERY_GO_FILE RECOVERY_GO_CONSUMED RECOVER_FROM_STOPPED
+  local DEPLOY_LOCK_TOKEN DEPLOY_LOCK_STALE_SECONDS DEPLOY_LOCK_HELD
+  local DEPLOY_LOCK_RENEW_PID SHA
+  tmp="$(mktemp -d)"
+  DEPLOY_LOCK_DIR="$tmp/deploy-lock"
+  DEPLOY_INCIDENT_HOLD="$tmp/incident-hold"
+  DEPLOY_RECOVERY_GUARD="$tmp/recovery-required"
+  RECOVERY_GO_FILE="$tmp/recover-from-stopped.go"
+  RECOVERY_GO_CONSUMED="$DEPLOY_LOCK_DIR/recover-from-stopped.go"
+  RECOVER_FROM_STOPPED=1
+  DEPLOY_LOCK_TOKEN='stopped-missing-go-owner'
+  DEPLOY_LOCK_STALE_SECONDS=900
+  DEPLOY_LOCK_HELD=0
+  DEPLOY_LOCK_RENEW_PID=''
+  SHA="$TEST_SHA"
+  printf '%s\n' incident > "$DEPLOY_INCIDENT_HOLD"
+  printf '%s\n' compatibility > "$DEPLOY_RECOVERY_GUARD"
+  ssh_sg() {
+    (
+      unset -f node
+      bash -c "$1"
+    )
+  }
+  eval "$(awk '/^acquire_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+
+  set +e
+  output="$(acquire_deploy_lock 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'SG stopped recovery without one-time confirmation must fail'
+  assert_contains "$output" 'requires a fresh owner-only mode-0600 confirmation' \
+    'missing SG stopped-recovery confirmation must be explicit'
+  [ ! -e "$DEPLOY_LOCK_DIR" ] || fail 'missing confirmation must precede deploy-lock mutation'
+  [ -e "$DEPLOY_INCIDENT_HOLD" ] || fail 'missing confirmation must retain the primary hold'
+  [ -e "$DEPLOY_RECOVERY_GUARD" ] || fail 'missing confirmation must retain the compatibility guard'
+
+  unset -f ssh_sg acquire_deploy_lock
+  rm -rf "$tmp"
+  echo 'ok - SG stopped recovery requires an unlogged one-time host confirmation'
+}
+
+test_stopped_recovery_failed_go_consumption_cleans_lock() {
+  local tmp output status expires nonce
+  local DEPLOY_LOCK_DIR DEPLOY_INCIDENT_HOLD DEPLOY_RECOVERY_GUARD
+  local RECOVERY_GO_FILE RECOVERY_GO_CONSUMED RECOVER_FROM_STOPPED
+  local DEPLOY_LOCK_TOKEN DEPLOY_LOCK_STALE_SECONDS DEPLOY_LOCK_HELD
+  local DEPLOY_LOCK_RENEW_PID SHA
+  tmp="$(mktemp -d)"
+  DEPLOY_LOCK_DIR="$tmp/deploy-lock"
+  DEPLOY_INCIDENT_HOLD="$tmp/incident-hold"
+  DEPLOY_RECOVERY_GUARD="$tmp/recovery-required"
+  RECOVERY_GO_FILE="$tmp/recover-from-stopped.go"
+  RECOVERY_GO_CONSUMED="$DEPLOY_LOCK_DIR/recover-from-stopped.go"
+  RECOVER_FROM_STOPPED=1
+  DEPLOY_LOCK_TOKEN='stopped-failed-consume-owner'
+  DEPLOY_LOCK_STALE_SECONDS=900
+  DEPLOY_LOCK_HELD=0
+  DEPLOY_LOCK_RENEW_PID=''
+  SHA="$TEST_SHA"
+  printf '%s\n' incident > "$DEPLOY_INCIDENT_HOLD"
+  printf '%s\n' compatibility > "$DEPLOY_RECOVERY_GUARD"
+  expires=$(( $(command date +%s) + 600 ))
+  nonce="$(printf 'a%.0s' {1..64})"
+  printf '%s\n' \
+    'arena.ingest-recover-from-stopped@1' \
+    "target_sha=$SHA" \
+    "expires_epoch=$expires" \
+    "nonce=$nonce" \
+    > "$RECOVERY_GO_FILE"
+  chmod 600 "$RECOVERY_GO_FILE"
+
+  ssh_sg() {
+    (
+      unset -f node date
+      stat() {
+        case "${2:-}" in
+          %a) command stat -f %Lp "$3" ;;
+          %u) command stat -f %u "$3" ;;
+          %Y) command stat -f %m "$3" ;;
+          *) command stat "$@" ;;
+        esac
+      }
+      mv() {
+        command mv "$@"
+        if [ "${!#}" = "$RECOVERY_GO_CONSUMED" ]; then
+          chmod 644 "$RECOVERY_GO_CONSUMED"
+        fi
+      }
+      export RECOVERY_GO_CONSUMED
+      export -f stat mv
+      bash -c "$1"
+    )
+  }
+  eval "$(awk '/^acquire_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+
+  set +e
+  output="$(acquire_deploy_lock 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'post-move GO validation failure must fail lock acquisition'
+  [ ! -e "$DEPLOY_LOCK_DIR" ] || fail 'failed GO consumption must token-clean the new deploy lock'
+  [ ! -e "$RECOVERY_GO_FILE" ] || fail 'a moved one-time GO must not be replayable after acquisition failure'
+  [ ! -e "$RECOVERY_GO_CONSUMED" ] || fail 'failed consumed GO must be destroyed with the lock'
+  [ -e "$DEPLOY_INCIDENT_HOLD" ] && [ -e "$DEPLOY_RECOVERY_GUARD" ] || \
+    fail 'failed GO consumption must leave both host holds armed'
+  [ -z "$output" ] || [[ "$output" != *"$nonce"* ]] || fail 'GO nonce must never appear in output'
+
+  unset -f ssh_sg acquire_deploy_lock
+  rm -rf "$tmp"
+  echo 'ok - failed SG GO consumption is one-time and leaves no orphan deploy lock'
+}
+
+test_stopped_recovery_baseline_rechecks_residual_owner() {
+  local tmp output status
+  local REMOTE_DIR PM2_APP DEPLOY_LOCK_DIR DEPLOY_LOCK_TOKEN
+  local DEPLOY_INCIDENT_HOLD DEPLOY_RECOVERY_GUARD
+  local RECOVERY_OLD_SHA RECOVERY_OLD_RELEASE RECOVERY_ENV_SHA256
+  tmp="$(mktemp -d)"
+  REMOTE_DIR="$tmp/arena-ingest"
+  PM2_APP='arena-ingest-worker-sg'
+  DEPLOY_LOCK_DIR="$tmp/deploy-lock"
+  DEPLOY_LOCK_TOKEN='stopped-baseline-owner'
+  DEPLOY_INCIDENT_HOLD="$tmp/incident-hold"
+  DEPLOY_RECOVERY_GUARD="$tmp/recovery-required"
+  RECOVERY_OLD_SHA=''
+  RECOVERY_OLD_RELEASE=''
+  RECOVERY_ENV_SHA256=''
+  BASELINE_OLD_SHA='1111111111111111111111111111111111111111'
+  BASELINE_OLD_RELEASE='2222222222222222222222222222222222222222222222222222222222222222'
+  BASELINE_ENV_SHA='3333333333333333333333333333333333333333333333333333333333333333'
+  BASELINE_JLIST_COUNT_FILE="$tmp/jlist-count"
+  BASELINE_SAVE_COUNT_FILE="$tmp/save-count"
+  BASELINE_INJECT_RESIDUAL=0
+  BASELINE_PM2_FAIL=0
+  BASELINE_REDIS_MODE=stale
+  PM2_HOME="$tmp/pm2"
+  export BASELINE_OLD_SHA BASELINE_OLD_RELEASE BASELINE_ENV_SHA
+  export BASELINE_JLIST_COUNT_FILE BASELINE_SAVE_COUNT_FILE
+  export BASELINE_INJECT_RESIDUAL BASELINE_PM2_FAIL BASELINE_REDIS_MODE PM2_HOME
+  mkdir -p "$REMOTE_DIR/worker" "$REMOTE_DIR/node_modules/dotenv" \
+    "$REMOTE_DIR/node_modules/ioredis" "$DEPLOY_LOCK_DIR" "$PM2_HOME"
+  printf '%s\n' \
+    'exports.config = () => ({ parsed: {} })' \
+    > "$REMOTE_DIR/node_modules/dotenv/index.js"
+  printf '%s\n' \
+    'class Redis {' \
+    '  on() {}' \
+    '  hgetall() {' \
+    '    return Promise.resolve({ future: JSON.stringify({ regions: ["vps_sg"], ts: Date.now() + 6000 }) })' \
+    '  }' \
+    '  disconnect() {}' \
+    '}' \
+    'module.exports = Redis' \
+    > "$REMOTE_DIR/node_modules/ioredis/index.js"
+  printf '%s\n' "$DEPLOY_LOCK_TOKEN" > "$DEPLOY_LOCK_DIR/owner"
+  : > "$DEPLOY_LOCK_DIR/heartbeat"
+  printf '%s\n' incident > "$DEPLOY_INCIDENT_HOLD"
+  printf '%s\n' compatibility > "$DEPLOY_RECOVERY_GUARD"
+  printf '%s\n' REDIS_URL=redis://fixture > "$REMOTE_DIR/worker/.env"
+  chmod 600 "$REMOTE_DIR/worker/.env"
+  printf '%s\n' "$BASELINE_OLD_SHA" > "$REMOTE_DIR/DEPLOYED_SHA"
+  printf '%s\n' "$BASELINE_OLD_RELEASE" > "$REMOTE_DIR/WORKER_RELEASE_ID"
+  printf '[{"name":"%s","status":"stopped","pm_cwd":"%s"}]\n' \
+    "$PM2_APP" "$REMOTE_DIR" > "$PM2_HOME/dump.pm2"
+  cp "$PM2_HOME/dump.pm2" "$PM2_HOME/dump.pm2.bak"
+  printf '%s\n' 0 > "$BASELINE_JLIST_COUNT_FILE"
+  printf '%s\n' 0 > "$BASELINE_SAVE_COUNT_FILE"
+
+  ssh_sg() {
+    (
+      unset -f node
+      export PM2_APP REMOTE_DIR
+      node() {
+        if [[ "$*" == *'require("dotenv")'* && "$BASELINE_REDIS_MODE" != future ]]; then
+          return 0
+        fi
+        command node "$@"
+      }
+      pm2() {
+        local count
+        case "${1:-}" in
+          jlist)
+            count="$(<"$BASELINE_JLIST_COUNT_FILE")"
+            count=$((count + 1))
+            printf '%s\n' "$count" > "$BASELINE_JLIST_COUNT_FILE"
+            if [ "$BASELINE_INJECT_RESIDUAL" = 1 ] && [ "$count" -ge 2 ]; then
+              printf '[{"name":"%s","pid":9191,"pm2_env":{"status":"online","pm_cwd":"%s"}}]\n' \
+                "$PM2_APP" "$REMOTE_DIR"
+            else
+              printf '[{"name":"%s","pid":0,"pm2_env":{"status":"stopped","pm_cwd":"%s"}}]\n' \
+                "$PM2_APP" "$REMOTE_DIR"
+            fi
+            [ "$BASELINE_PM2_FAIL" = 0 ]
+            ;;
+          save)
+            [ "${2:-}" = --force ] || return 64
+            count="$(<"$BASELINE_SAVE_COUNT_FILE")"
+            printf '%s\n' "$((count + 1))" > "$BASELINE_SAVE_COUNT_FILE"
+            ;;
+          *) return 64 ;;
+        esac
+      }
+      ps() { printf '%s\n' '777 harmless-process'; }
+      docker() {
+        [ "${1:-}" = ps ] || return 64
+        return 0
+      }
+      stat() {
+        if [ "${2:-}" = %a ]; then printf '%s\n' 600
+        else command stat "$@"
+        fi
+      }
+      sha256sum() { printf '%s  %s\n' "$BASELINE_ENV_SHA" "${1:-fixture}"; }
+      export -f node pm2 ps docker stat sha256sum
+      bash -c "$1"
+    )
+  }
+  assert_stopped_recovery_prep_authority() { return 0; }
+  eval "$(awk '/^prove_stopped_sg_baseline\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+
+  prove_stopped_sg_baseline || {
+    rm -rf "$tmp"
+    fail 'a stable stopped SG PM2/dump/process/Docker/Redis baseline must pass'
+  }
+  [ "$RECOVERY_OLD_SHA" = "$BASELINE_OLD_SHA" ] || fail 'baseline must bind old SHA'
+  [ "$RECOVERY_OLD_RELEASE" = "$BASELINE_OLD_RELEASE" ] || fail 'baseline must bind old release'
+  [ "$RECOVERY_ENV_SHA256" = "$BASELINE_ENV_SHA" ] || fail 'baseline must bind old environment digest'
+  [ "$(<"$BASELINE_SAVE_COUNT_FILE")" -eq 2 ] || fail 'baseline must force-save both PM2 dump generations'
+
+  RECOVERY_OLD_SHA=''; RECOVERY_OLD_RELEASE=''; RECOVERY_ENV_SHA256=''
+  BASELINE_INJECT_RESIDUAL=1
+  export BASELINE_INJECT_RESIDUAL
+  printf '%s\n' 0 > "$BASELINE_JLIST_COUNT_FILE"
+  printf '%s\n' 0 > "$BASELINE_SAVE_COUNT_FILE"
+  set +e
+  output="$(prove_stopped_sg_baseline 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'an owner injected after the first baseline snapshot must be rejected'
+  assert_contains "$output" 'lacks exact zero-owner' 'residual-owner rejection must be explicit'
+
+  RECOVERY_OLD_SHA=''; RECOVERY_OLD_RELEASE=''; RECOVERY_ENV_SHA256=''
+  BASELINE_INJECT_RESIDUAL=0
+  BASELINE_PM2_FAIL=1
+  export BASELINE_INJECT_RESIDUAL BASELINE_PM2_FAIL
+  printf '%s\n' 0 > "$BASELINE_JLIST_COUNT_FILE"
+  set +e
+  prove_stopped_sg_baseline >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'a failing pm2 jlist producer must fail the stopped proof closed'
+
+  BASELINE_PM2_FAIL=0
+  BASELINE_REDIS_MODE=future
+  export BASELINE_PM2_FAIL BASELINE_REDIS_MODE
+  printf '%s\n' 0 > "$BASELINE_JLIST_COUNT_FILE"
+  set +e
+  output="$(prove_stopped_sg_baseline 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'a future vps_sg Redis heartbeat must block stopped recovery'
+  assert_contains "$output" 'lacks exact zero-owner' 'future Redis ownership must fail explicitly'
+
+  BASELINE_REDIS_MODE=stale
+  export BASELINE_REDIS_MODE
+  printf '[{"name":"legacy-ingest","status":"stopped","pm_cwd":"%s","script":"worker/src/ingest-worker.ts"}]\n' \
+    "$REMOTE_DIR" > "$PM2_HOME/dump.pm2.bak"
+  printf '%s\n' 0 > "$BASELINE_JLIST_COUNT_FILE"
+  set +e
+  prove_stopped_sg_baseline >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'a legacy ingest alias in dump.pm2.bak must block stopped recovery'
+  cp "$PM2_HOME/dump.pm2" "$PM2_HOME/dump.pm2.bak"
+
+  mv "$REMOTE_DIR" "$tmp/arena-ingest-real"
+  ln -s "$tmp/arena-ingest-real" "$REMOTE_DIR"
+  set +e
+  prove_stopped_sg_baseline >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'a symlinked SG live directory must fail the stopped baseline'
+
+  unset -f ssh_sg assert_stopped_recovery_prep_authority prove_stopped_sg_baseline
+  unset BASELINE_OLD_SHA BASELINE_OLD_RELEASE BASELINE_ENV_SHA
+  unset BASELINE_JLIST_COUNT_FILE BASELINE_SAVE_COUNT_FILE
+  unset BASELINE_INJECT_RESIDUAL BASELINE_PM2_FAIL BASELINE_REDIS_MODE PM2_HOME
+  rm -rf "$tmp"
+  echo 'ok - SG stopped baseline rechecks ownership and fails closed on PM2 snapshot errors'
+}
+
+test_stopped_recovery_failure_stays_stopped_and_rearms_holds() {
+  local tmp output status now
+  local REMOTE_DIR PM2_APP DEPLOY_LOCK_DIR DEPLOY_LOCK_TOKEN
+  local DEPLOY_INCIDENT_HOLD DEPLOY_RECOVERY_GUARD RECOVERY_GO_CONSUMED
+  local DEPLOY_LOCK_MAX_HEARTBEAT_AGE_SECONDS DEPLOY_LOCK_STALE_SECONDS
+  local DEPLOY_LOCK_RENEW_PID CUTOVER_STARTED BACKUP_DIR FAILED_DIR
+  local RECOVERY_OLD_SHA RECOVERY_OLD_RELEASE RECOVERY_ENV_SHA256
+  local STOPPED_RECOVERY_QUARANTINED SHA
+  tmp="$(mktemp -d)"
+  REMOTE_DIR="$tmp/arena-ingest"
+  PM2_APP='arena-ingest-worker-sg'
+  DEPLOY_LOCK_DIR="$tmp/deploy-lock"
+  DEPLOY_LOCK_TOKEN='stopped-quarantine-owner'
+  DEPLOY_INCIDENT_HOLD="$tmp/incident-hold"
+  DEPLOY_RECOVERY_GUARD="$tmp/recovery-required"
+  RECOVERY_GO_CONSUMED="$DEPLOY_LOCK_DIR/recover-from-stopped.go"
+  DEPLOY_LOCK_MAX_HEARTBEAT_AGE_SECONDS=120
+  DEPLOY_LOCK_STALE_SECONDS=900
+  DEPLOY_LOCK_RENEW_PID=999999
+  CUTOVER_STARTED=0
+  BACKUP_DIR="$tmp/backup"
+  FAILED_DIR="$tmp/failed"
+  RECOVERY_OLD_SHA='4444444444444444444444444444444444444444'
+  RECOVERY_OLD_RELEASE='5555555555555555555555555555555555555555555555555555555555555555'
+  RECOVERY_ENV_SHA256='6666666666666666666666666666666666666666666666666666666666666666'
+  STOPPED_RECOVERY_QUARANTINED=0
+  SHA="$TEST_SHA"
+  QUARANTINE_EVENT_LOG="$tmp/events"
+  QUARANTINE_SAVE_COUNT_FILE="$tmp/save-count"
+  QUARANTINE_RESIDUAL=0
+  QUARANTINE_HEARTBEAT_SECONDS=$(( $(command date +%s) - 300 ))
+  PM2_HOME="$tmp/pm2"
+  export QUARANTINE_EVENT_LOG QUARANTINE_SAVE_COUNT_FILE
+  export QUARANTINE_RESIDUAL QUARANTINE_HEARTBEAT_SECONDS PM2_HOME
+  mkdir -p "$REMOTE_DIR/worker" "$DEPLOY_LOCK_DIR" "$PM2_HOME"
+  printf '%s\n' "$DEPLOY_LOCK_TOKEN" > "$DEPLOY_LOCK_DIR/owner"
+  : > "$DEPLOY_LOCK_DIR/heartbeat"
+  printf '%s\n' compatibility > "$DEPLOY_RECOVERY_GUARD"
+  printf '%s\n' consumed > "$RECOVERY_GO_CONSUMED"
+  printf '%s\n' "$RECOVERY_OLD_SHA" > "$REMOTE_DIR/DEPLOYED_SHA"
+  printf '%s\n' "$RECOVERY_OLD_RELEASE" > "$REMOTE_DIR/WORKER_RELEASE_ID"
+  printf '%s\n' REDIS_URL=redis://fixture > "$REMOTE_DIR/worker/.env"
+  printf '%s\n' '[]' > "$PM2_HOME/dump.pm2"
+  printf '%s\n' '[]' > "$PM2_HOME/dump.pm2.bak"
+  : > "$QUARANTINE_EVENT_LOG"
+  printf '%s\n' 0 > "$QUARANTINE_SAVE_COUNT_FILE"
+
+  ssh_sg() {
+    (
+      unset -f node date
+      export PM2_APP REMOTE_DIR RECOVERY_ENV_SHA256
+      node() { command node "$@"; }
+      pm2() {
+        local count
+        printf 'pm2 %s\n' "$*" >> "$QUARANTINE_EVENT_LOG"
+        case "${1:-}" in
+          stop|delete) return 0 ;;
+          save)
+            [ "${2:-}" = --force ] || return 64
+            count="$(<"$QUARANTINE_SAVE_COUNT_FILE")"
+            printf '%s\n' "$((count + 1))" > "$QUARANTINE_SAVE_COUNT_FILE"
+            printf '%s\n' '[]' > "$PM2_HOME/dump.pm2"
+            printf '%s\n' '[]' > "$PM2_HOME/dump.pm2.bak"
+            ;;
+          jlist)
+            if [ "$QUARANTINE_RESIDUAL" = 1 ]; then
+              printf '[{"name":"%s","pid":8181,"pm2_env":{"status":"online","pm_cwd":"%s"}}]\n' \
+                "$PM2_APP" "$REMOTE_DIR"
+            else
+              printf '%s\n' '[]'
+            fi
+            ;;
+          start|restart) return 70 ;;
+          *) return 64 ;;
+        esac
+      }
+      ps() { printf '%s\n' '778 harmless-process'; }
+      docker() {
+        [ "${1:-}" = ps ] || return 64
+        return 0
+      }
+      stat() {
+        case "${2:-}" in
+          %Y) printf '%s\n' "$QUARANTINE_HEARTBEAT_SECONDS" ;;
+          %a) printf '%s\n' 600 ;;
+          *) command stat "$@" ;;
+        esac
+      }
+      sha256sum() { printf '%s  %s\n' "$RECOVERY_ENV_SHA256" "${1:-fixture}"; }
+      export -f node pm2 ps docker stat sha256sum
+      bash -c "$1"
+    )
+  }
+  eval "$(awk '/^assert_cleanup_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+  eval "$(awk '/^arm_sg_incident_holds\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+  eval "$(awk '/^quarantine_stopped_sg_recovery\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+
+  quarantine_stopped_sg_recovery >/dev/null 2>&1 || {
+    rm -rf "$tmp"
+    fail 'stopped recovery cleanup must survive a dead renewer with a fresh pre-takeover owner token'
+  }
+  [ "$STOPPED_RECOVERY_QUARANTINED" = 1 ] || fail 'successful quarantine must set its stopped marker'
+  [ -e "$DEPLOY_INCIDENT_HOLD" ] && [ -e "$DEPLOY_RECOVERY_GUARD" ] || \
+    fail 'failed recovery must leave both SG holds armed'
+  [ ! -e "$RECOVERY_GO_CONSUMED" ] || fail 'failed recovery must destroy the consumed GO'
+  [ "$(<"$QUARANTINE_SAVE_COUNT_FILE")" -eq 2 ] || fail 'quarantine must force-save both PM2 generations'
+  output="$(<"$QUARANTINE_EVENT_LOG")"
+  assert_contains "$output" 'pm2 stop arena-ingest-worker-sg' 'quarantine must stop the candidate'
+  assert_contains "$output" 'pm2 delete arena-ingest-worker-sg' 'quarantine must delete the candidate'
+  [[ "$output" != *'pm2 start'* && "$output" != *'pm2 restart'* ]] || \
+    fail 'stopped recovery quarantine must never start an old owner'
+
+  rm -f "$DEPLOY_INCIDENT_HOLD" "$DEPLOY_RECOVERY_GUARD"
+  ln -s "$tmp/missing-compatibility-target" "$DEPLOY_RECOVERY_GUARD"
+  printf '%s\n' consumed > "$RECOVERY_GO_CONSUMED"
+  : > "$QUARANTINE_EVENT_LOG"
+  printf '%s\n' 0 > "$QUARANTINE_SAVE_COUNT_FILE"
+  STOPPED_RECOVERY_QUARANTINED=0
+  quarantine_stopped_sg_recovery >/dev/null 2>&1 || {
+    rm -rf "$tmp"
+    fail 'quarantine must recreate both holds even when the compatibility guard disappeared'
+  }
+  [ -e "$DEPLOY_INCIDENT_HOLD" ] && [ -e "$DEPLOY_RECOVERY_GUARD" ] || \
+    fail 'missing holds must be re-created after candidate stop'
+  [ ! -L "$DEPLOY_RECOVERY_GUARD" ] && [ -f "$DEPLOY_RECOVERY_GUARD" ] || \
+    fail 'a broken compatibility symlink must be replaced by a regular hold file'
+  [ "$(command stat -f %Lp "$DEPLOY_RECOVERY_GUARD")" = 600 ] || \
+    fail 'recreated compatibility hold must be mode 0600'
+
+  rm -f "$DEPLOY_INCIDENT_HOLD"
+  printf '%s\n' consumed > "$RECOVERY_GO_CONSUMED"
+  QUARANTINE_RESIDUAL=1
+  export QUARANTINE_RESIDUAL
+  set +e
+  output="$(quarantine_stopped_sg_recovery 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'live PM2 residue must make quarantine explicitly incomplete'
+  assert_contains "$output" 'quarantine is incomplete' 'live-residue failure must not claim stopped success'
+  [ -e "$DEPLOY_INCIDENT_HOLD" ] && [ -e "$DEPLOY_RECOVERY_GUARD" ] || \
+    fail 'incomplete live-owner cleanup must still rearm both holds'
+
+  QUARANTINE_RESIDUAL=0
+  export QUARANTINE_RESIDUAL
+  printf '%s\n' '7777777777777777777777777777777777777777' > "$REMOTE_DIR/DEPLOYED_SHA"
+  rm -f "$DEPLOY_INCIDENT_HOLD"
+  printf '%s\n' consumed > "$RECOVERY_GO_CONSUMED"
+  set +e
+  quarantine_stopped_sg_recovery >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] || fail 'a restored directory with the wrong bound SHA must be incomplete'
+  [ -e "$DEPLOY_INCIDENT_HOLD" ] && [ -e "$DEPLOY_RECOVERY_GUARD" ] || \
+    fail 'wrong rollback digest must still rearm both holds'
+
+  unset -f ssh_sg assert_cleanup_deploy_lock arm_sg_incident_holds quarantine_stopped_sg_recovery
+  unset QUARANTINE_EVENT_LOG QUARANTINE_SAVE_COUNT_FILE
+  unset QUARANTINE_RESIDUAL QUARANTINE_HEARTBEAT_SECONDS PM2_HOME
+  rm -rf "$tmp"
+  echo 'ok - failed SG stopped recovery remains stopped, digest-bound, and double-held'
+}
+
+test_stopped_recovery_success_commits_only_exact_candidate() {
+  local deploy release_body quarantine_body authorize_body
+  local session_line initial_proof_line authorize_line start_line commit_line success_line
+  local session_branch_line rollback_branch_line
+  deploy="$(<"$DEPLOY_SCRIPT")"
+  release_body="$(awk '/^release_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+  quarantine_body="$(awk '/^quarantine_stopped_sg_recovery\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+  authorize_body="$(awk '/^authorize_stopped_sg_cutover\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+
+  assert_contains "$deploy" '--recover-from-stopped' \
+    'SG stopped recovery must remain an explicit opt-in mode'
+  assert_contains "$deploy" 'RECOVERY_GO_FILE="$REMOTE_DIR.recover-from-stopped.go"' \
+    'SG recovery GO must use one fixed host-owned path'
+  assert_contains "$deploy" 'arena.ingest-recover-from-stopped@1' \
+    'SG recovery GO must require its exact version marker'
+  assert_contains "$deploy" "grep -Eq '^nonce=[0-9a-f]{64}" \
+    'SG recovery GO must require a 256-bit lowercase-hex nonce'
+  assert_contains "$deploy" 'test \"\$expires\" -le \"\$((now + 900))\"' \
+    'SG recovery GO must expire within 900 seconds'
+  assert_contains "$authorize_body" \
+    "sha256sum '\$STAGING_DIR/worker/.env'" \
+    'candidate environment must match the stopped baseline before hold removal'
+  [[ "${authorize_body%%rm -f*}" == *"test ! -L '\$STAGING_DIR'"* ]] || \
+    fail 'candidate directory and environment identity must be proven before primary-hold removal'
+
+  session_line="$(grep -n '^  STOPPED_RECOVERY_SESSION=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  initial_proof_line="$(awk -v start="$session_line" 'NR > start && /^  prove_stopped_sg_baseline \|\| exit 1$/ { print NR; exit }' "$DEPLOY_SCRIPT")"
+  authorize_line="$(grep -n '^  authorize_stopped_sg_cutover || exit 1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  start_line="$(grep -n '^start_exact_pm2$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
+  commit_line="$(grep -n '^commit_exact_pm2 "\$CANDIDATE_PM2_PID"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  success_line="$(grep -n '^DEPLOY_SUCCEEDED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  [ "$session_line" -lt "$initial_proof_line" ] && \
+    [ "$initial_proof_line" -lt "$authorize_line" ] && \
+    [ "$authorize_line" -lt "$start_line" ] && \
+    [ "$start_line" -lt "$commit_line" ] && \
+    [ "$commit_line" -lt "$success_line" ] || \
+    fail 'stopped recovery must prove baseline, authorize cutover, start, prove, commit, then succeed'
+  [ "$(grep -c '^start_exact_pm2$' "$DEPLOY_SCRIPT")" -eq 1 ] || \
+    fail 'the forward deployment path must contain one exact candidate start'
+  assert_contains "$deploy" 'wait_for_candidate_log_evidence' \
+    'candidate start must be followed by exact stamped log evidence'
+  assert_contains "$deploy" 'verify_sg_roster --candidate' \
+    'candidate start must be followed by fresh Redis identity evidence'
+  assert_contains "$deploy" 'commit_exact_pm2 "$CANDIDATE_PM2_PID"' \
+    'success must commit only the exact proven candidate PID'
+  assert_contains "$deploy" "rm -f '\$RECOVERY_GO_CONSUMED'" \
+    'success must destroy its consumed one-time GO'
+
+  session_branch_line="$(grep -n 'STOPPED_RECOVERY_SESSION.*sg_incident_hold_is_armed' <<<"$release_body" | cut -d: -f1)"
+  rollback_branch_line="$(grep -n 'RECOVERY_REQUIRED.*1' <<<"$release_body" | cut -d: -f1)"
+  [ "$session_branch_line" -lt "$rollback_branch_line" ] || \
+    fail 'stopped-session quarantine must take precedence over old-release rollback'
+  [ "$(grep -c 'STOPPED_RECOVERY_SESSION=' "$DEPLOY_SCRIPT")" -eq 2 ] || \
+    fail 'a stopped recovery session must never be cleared back into rollback mode'
+  [[ "$quarantine_body" != *'start_exact_pm2'* && \
+     "$quarantine_body" != *'recover_previous_release'* && \
+     "$quarantine_body" != *'pm2 start'* && "$quarantine_body" != *'pm2 restart'* ]] || \
+    fail 'stopped recovery failure handling must have no old-owner start path'
+
+  echo 'ok - clean SG stopped recovery can commit only one exact proven candidate'
+}
+
 test_concurrent_deploy_refuses_before_backup() {
   git() {
     if [ "${1:-}" = archive ]; then emit_test_archive
@@ -1132,7 +1690,7 @@ test_deploy_lease_is_fenced_and_recoverable() {
   deploy="$(<"$DEPLOY_SCRIPT")"
   assert_body="$(awk '/^assert_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
   acquire_body="$(awk '/^acquire_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-  stop_body="$(sed -n '/^RECOVERY_REQUIRED=1$/,/^assert_deploy_lock$/p' "$DEPLOY_SCRIPT")"
+  stop_body="$(sed -n '/^  arm_recovery_guard$/,/^fi$/p' "$DEPLOY_SCRIPT")"
   assert_contains "$deploy" 'DEPLOY_LOCK_STALE_SECONDS=900' \
     'deploy lease must have a bounded crash-recovery window'
   assert_contains "$deploy" 'DEPLOY_LOCK_MAX_HEARTBEAT_AGE_SECONDS=120' \
@@ -1157,9 +1715,9 @@ test_deploy_lease_is_fenced_and_recoverable() {
   [[ "${deploy%%RUNNING_INGEST_CONTAINERS=*}" == *'acquire_deploy_lock'* ]] || \
     fail 'deploy lease must be acquired before remote Docker inspection'
 
-  arm_line="$(grep -n '^arm_recovery_guard$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  recovery_line="$(grep -n '^RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  stop_line="$(awk '/^RECOVERY_REQUIRED=1$/ { armed=1 } armed && /pm2 stop.*PM2_APP/ { print NR; exit }' "$DEPLOY_SCRIPT")"
+  arm_line="$(grep -n '^  arm_recovery_guard$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  recovery_line="$(grep -n '^  RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
+  stop_line="$(awk '/^  arm_recovery_guard$/ { armed=1 } armed && /pm2 stop.*PM2_APP/ { print NR; exit }' "$DEPLOY_SCRIPT")"
   [ "$arm_line" -lt "$recovery_line" ] && [ "$recovery_line" -lt "$stop_line" ] || \
     fail 'durable recovery guard must arm before recovery state and PM2 stop'
 
@@ -1265,7 +1823,7 @@ test_rollback_capture_policy_is_preflighted() {
   assert_contains "$deploy" "--exclude '.env'" \
     'source sync must preserve the box-local environment that rollback will reload'
   preflight_line="$(grep -n 'worker/preflight-sg-runtime.ts' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  stop_line="$(grep -n '^RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  stop_line="$(grep -n '^  RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
   [ "$preflight_line" -lt "$stop_line" ] || \
     fail 'capture-enabled rollback environment must be proven before the old worker stops'
   env_load_line="$(grep -n "^const workerEnvironment = config({ path: resolve(__dirname, '..', '.env') })$" "$SG_ENTRYPOINT" | cut -d: -f1)"
@@ -1566,15 +2124,16 @@ test_pm2_restart_counter_predicates_execute_against_jlist() {
   PM2_JLIST_FILE="$tmp/jlist.json"
   PM2_ACTION_LOG="$tmp/pm2-actions"
   PM2_FLIP_AFTER_SAVE=0
+  PM2_JLIST_EXIT=0
   PM2_RESTARTED_JSON="[{\"name\":\"$PM2_APP\",\"pid\":4242,\"pm2_env\":{\"status\":\"online\",\"pm_cwd\":\"$REMOTE_DIR\",\"restart_time\":1}}]"
-  export PM2_JLIST_FILE PM2_ACTION_LOG PM2_FLIP_AFTER_SAVE PM2_RESTARTED_JSON
+  export PM2_JLIST_FILE PM2_ACTION_LOG PM2_FLIP_AFTER_SAVE PM2_JLIST_EXIT PM2_RESTARTED_JSON
   mkdir -p "$REMOTE_DIR" "$DEPLOY_LOCK_DIR"
   printf '%s\n' "$DEPLOY_LOCK_TOKEN" > "$DEPLOY_LOCK_DIR/owner"
   : > "$PM2_ACTION_LOG"
 
   pm2() {
     case "${1:-}" in
-      jlist) command cat "$PM2_JLIST_FILE" ;;
+      jlist) command cat "$PM2_JLIST_FILE"; return "$PM2_JLIST_EXIT" ;;
       delete|start)
         printf '%s\n' "$*" >> "$PM2_ACTION_LOG"
         ;;
@@ -1636,10 +2195,26 @@ test_pm2_restart_counter_predicates_execute_against_jlist() {
   [ "$(grep -c '^save$' <<<"$actions" || true)" -eq 1 ] || \
     fail 'post-save restart fixture must execute exactly one pm2 save before rejection'
 
+  printf '[{"name":"%s","pid":4242,"pm2_env":{"status":"online","pm_cwd":"%s","restart_time":0}}]\n' \
+    "$PM2_APP" "$REMOTE_DIR" > "$PM2_JLIST_FILE"
+  PM2_FLIP_AFTER_SAVE=0
+  PM2_JLIST_EXIT=55
+  export PM2_FLIP_AFTER_SAVE PM2_JLIST_EXIT
+  : > "$PM2_ACTION_LOG"
+  if exact_pm2_pid >/dev/null; then fail 'PID capture must reject a failed PM2 snapshot producer'; fi
+  if assert_exact_pm2_process 4242; then fail 'exact-process proof must reject a failed PM2 snapshot producer'; fi
+  if prove_exact_pm2_stability 4242; then fail 'stability proof must reject a failed PM2 snapshot producer'; fi
+  if start_exact_pm2; then fail 'post-start proof must reject a failed PM2 snapshot producer'; fi
+  : > "$PM2_ACTION_LOG"
+  if commit_exact_pm2 4242; then fail 'commit must reject a failed PM2 snapshot producer'; fi
+  actions="$(<"$PM2_ACTION_LOG")"
+  [[ "$actions" != *save* ]] || fail 'failed PM2 snapshot producer must be rejected before pm2 save'
+
   unset -f pm2 sleep ssh_sg exact_pm2_pid assert_exact_pm2_process
   unset -f prove_exact_pm2_stability start_exact_pm2 commit_exact_pm2
   rm -rf "$tmp"
-  echo 'ok - real PM2 JSON predicates reject restart_time=1 before and after save'
+  unset PM2_JLIST_EXIT
+  echo 'ok - real PM2 predicates reject restart_time=1 and failed snapshot producers'
 }
 
 test_pm2_save_follows_stable_redis_proof() {
@@ -1730,6 +2305,12 @@ test_running_container_refuses_pm2_deploy
 test_docker_inspection_failure_aborts_deploy
 test_docker_ownership_probe_executes_one_fail_closed_snapshot
 test_durable_recovery_guard_blocks_new_deploy_before_inspection
+test_incident_hold_blocks_new_deploy_before_lock_or_inspection
+test_stopped_recovery_requires_one_time_confirmation
+test_stopped_recovery_failed_go_consumption_cleans_lock
+test_stopped_recovery_baseline_rechecks_residual_owner
+test_stopped_recovery_failure_stays_stopped_and_rearms_holds
+test_stopped_recovery_success_commits_only_exact_candidate
 test_concurrent_deploy_refuses_before_backup
 test_deploy_lease_is_fenced_and_recoverable
 test_container_bypass_is_disabled

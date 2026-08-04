@@ -7,8 +7,8 @@
  * 文件或只有列表大小/时间的对象都不能把哨兵变成 false-green。
  */
 import { HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
-import { resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { config } from 'dotenv'
 
 import {
@@ -21,6 +21,8 @@ import {
 config({ path: fileURLToPath(new URL('../../.env.local', import.meta.url)), quiet: true })
 
 export const MAX_BACKUP_AGE_HOURS = 26
+export const R2_REQUEST_TIMEOUT_MS = 20_000
+export const TELEGRAM_REQUEST_TIMEOUT_MS = 10_000
 const BACKUP_PREFIX = 'db-backups/'
 const HOURS_TO_MS = 60 * 60 * 1000
 
@@ -47,6 +49,10 @@ function sentinelFailure(message, alertText) {
   error.exitCode = 2
   error.alertText = alertText
   return error
+}
+
+function r2RequestOptions() {
+  return { abortSignal: AbortSignal.timeout(R2_REQUEST_TIMEOUT_MS) }
 }
 
 /**
@@ -118,7 +124,8 @@ export async function selectNewestCompleteBackup(s3, bucket) {
         Bucket: bucket,
         Prefix: BACKUP_PREFIX,
         ContinuationToken: continuationToken,
-      })
+      }),
+      r2RequestOptions()
     )
 
     for (const object of page.Contents ?? []) {
@@ -174,7 +181,10 @@ export async function checkBackupFreshness({
     )
   }
 
-  const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: candidate.Key }))
+  const head = await s3.send(
+    new HeadObjectCommand({ Bucket: bucket, Key: candidate.Key }),
+    r2RequestOptions()
+  )
   let selected
   try {
     selected = assertFreshBackupHead(candidate.Key, head)
@@ -220,7 +230,8 @@ export async function sendTelegramAlert(
   const response = await fetchImpl(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+    body: JSON.stringify({ chat_id: chatId, text }),
+    signal: AbortSignal.timeout(TELEGRAM_REQUEST_TIMEOUT_MS),
   })
   const status = Number(response?.status)
   const succeeded =
@@ -229,6 +240,16 @@ export async function sendTelegramAlert(
     throw new Error(
       `Telegram alert webhook returned non-2xx HTTP ${Number.isInteger(status) ? status : 'unknown'}`
     )
+  }
+
+  let payload
+  try {
+    payload = await response.json()
+  } catch {
+    throw new Error('Telegram alert webhook returned invalid JSON')
+  }
+  if (payload?.ok !== true) {
+    throw new Error('Telegram alert response did not confirm delivery')
   }
   return true
 }
@@ -291,7 +312,7 @@ export async function runBackupFreshnessCli({
 }
 
 const isDirectRun =
-  process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 if (isDirectRun) {
   runBackupFreshnessCli().then((exitCode) => {
     process.exitCode = exitCode

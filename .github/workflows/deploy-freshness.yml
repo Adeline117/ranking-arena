@@ -12,7 +12,6 @@ name: Deploy Freshness Sentinel
 on:
   schedule:
     - cron: '25,55 * * * *' # every 30 min, offset from other sentinels
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,18 +26,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
       STALE_MINUTES: '45' # oldest undeployed commit older than this ⇒ stuck
       HEALTH_URL: 'https://www.arenafi.org/api/health'
       ISSUE_TITLE: '🛑 Production deploy is stale'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # full history so we can measure how far prod is behind
+          persist-credentials: false
 
       - name: Check production deploy freshness
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: |
           set -uo pipefail
 

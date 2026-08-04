@@ -3,10 +3,11 @@ name: Vercel Release Control
 # Vercel's Git integration and Deploy Gate must never both write the production
 # domains. Keep Git deployments staged; Deploy Gate is the sole promoter after
 # CI, exact-SHA smoke, and rollback-anchor capture.
+# SECURITY SUSPENDED (V1 NO-GO): restore only after VERCEL_* credentials are
+# environment-only in a production-control environment with a required reviewer
+# and protected-main policy. Manual arbitrary-ref dispatch must not return.
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_call: {}
 
 concurrency:
   group: vercel-release-control-main
@@ -17,6 +18,7 @@ permissions:
 
 jobs:
   enforce-single-production-writer:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
