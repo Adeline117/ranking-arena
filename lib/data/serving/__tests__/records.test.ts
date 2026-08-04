@@ -223,6 +223,66 @@ describe('copier PII rule (spec §6)', () => {
       expect(aggregate?.pnlDistribution).toEqual([])
     }
   )
+
+  it.each(['full', 'top10', 'top3_preview'] as const)(
+    'rejects a syntactically valid but evidence-free %s aggregate shell',
+    async (depth) => {
+      const aggregate = await getCopierAggregate(
+        rpcClient({
+          copierCount: null,
+          copierCountMax: null,
+          totalCopierPnl: null,
+          currency: 'USDT',
+          depth,
+          pnlDistribution: [],
+          copierLabel: 'must-not-turn-the-shell-into-evidence',
+          raw: { email: 'private@example.invalid' },
+        }),
+        'bitget_futures',
+        'abc'
+      )
+
+      expect(aggregate).toBeNull()
+    }
+  )
+
+  it('treats measured zero as aggregate evidence and preserves explicit source N/A', async () => {
+    const measuredZero = await getCopierAggregate(
+      rpcClient({
+        copierCount: 0,
+        copierCountMax: 0,
+        totalCopierPnl: 0,
+        currency: 'USDT',
+        depth: 'full',
+        pnlDistribution: [],
+      }),
+      'bitget_futures',
+      'zero'
+    )
+    const notApplicable = await getCopierAggregate(
+      rpcClient({
+        copierCount: null,
+        copierCountMax: null,
+        totalCopierPnl: null,
+        depth: 'none',
+        pnlDistribution: [],
+      }),
+      'source_without_copiers',
+      'n/a'
+    )
+
+    expect(measuredZero).toMatchObject({
+      copierCount: 0,
+      copierCountMax: 0,
+      totalCopierPnl: { value: 0, currency: 'USDT' },
+      depth: 'full',
+    })
+    expect(notApplicable).toMatchObject({
+      copierCount: null,
+      totalCopierPnl: null,
+      depth: 'none',
+    })
+  })
 })
 
 describe('getRecordsPage', () => {
