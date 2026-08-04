@@ -6,6 +6,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729230000_token_ranking_generation_barrier.sql"
+RETIREMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260804043000_retire_legacy_token_rankings.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -200,8 +201,13 @@ RETURNS TABLE(
   trader_count bigint,
   total_pnl numeric
 )
-LANGUAGE sql
-AS 'SELECT NULL::text, NULL::bigint, NULL::bigint, NULL::numeric WHERE false';
+LANGUAGE sql STABLE SET search_path TO 'public'
+AS $function$
+  SELECT token, trade_count, trader_count, total_pnl
+  FROM public.mv_popular_tokens_90d
+  ORDER BY trade_count DESC
+  LIMIT greatest(1, least(max_tokens, 60));
+$function$;
 
 CREATE FUNCTION public.refresh_popular_tokens_mv()
 RETURNS void
@@ -658,5 +664,635 @@ psql_db -q -f "$MIGRATION"
 REPLAY_GENERATION="$(psql_db -Atqc "
   SELECT generation_seq FROM arena.token_ranking_publication_head;")"
 assert_equal "idempotent migration replay preserves head" "3" "$REPLAY_GENERATION"
+
+# Install delegated ACLs and owner-executing wrappers before the retirement.
+# The migration must collapse unknown grants and make the original callable
+# OIDs fail even when an already-created SECURITY DEFINER wrapper invokes them
+# with postgres authority.
+psql_db -q <<'SQL'
+CREATE ROLE token_rank_delegate NOLOGIN;
+CREATE ROLE token_rank_consumer NOLOGIN;
+GRANT token_rank_delegate TO token_rank_consumer;
+
+GRANT EXECUTE ON FUNCTION
+  arena.token_trader_ranking_page_payload_v1(text,integer,integer,integer,date),
+  public.get_token_trader_rankings(text,integer,integer,integer),
+  public.get_popular_tokens(integer,integer),
+  public.get_token_ranking_publication_head(),
+  public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint),
+  public.get_popular_tokens_v2(integer,integer,bigint),
+  public.refresh_popular_tokens_mv()
+TO token_rank_delegate WITH GRANT OPTION;
+
+SET ROLE token_rank_delegate;
+GRANT EXECUTE ON FUNCTION
+  public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint),
+  public.get_popular_tokens_v2(integer,integer,bigint)
+TO token_rank_consumer;
+RESET ROLE;
+
+GRANT SELECT ON TABLE
+  public.mv_token_trader_daily_90d,
+  public.mv_popular_tokens_90d
+TO token_rank_delegate WITH GRANT OPTION;
+GRANT SELECT (token) ON TABLE public.mv_popular_tokens_90d
+TO token_rank_consumer;
+
+CREATE FUNCTION public.legacy_token_v2_wrapper()
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT public.get_token_trader_rankings_v2('BTC', 90, 1, 0, 3);
+$function$;
+
+CREATE FUNCTION public.legacy_token_payload_wrapper()
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT arena.token_trader_ranking_page_payload_v1(
+    'BTC',
+    90,
+    1,
+    0,
+    pg_catalog.timezone('UTC', pg_catalog.transaction_timestamp())::date
+  );
+$function$;
+
+CREATE FUNCTION public.legacy_token_refresh_wrapper()
+RETURNS void
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT public.refresh_popular_tokens_mv();
+$function$;
+
+CREATE FUNCTION public.token_ranking_cache_payload_probe()
+RETURNS text
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RAISE EXCEPTION 'retired cache payload was read'
+    USING ERRCODE = '55000';
+END
+$function$;
+
+GRANT EXECUTE ON FUNCTION
+  public.legacy_token_v2_wrapper(),
+  public.legacy_token_payload_wrapper(),
+  public.legacy_token_refresh_wrapper(),
+  public.token_ranking_cache_payload_probe()
+TO service_role;
+
+CREATE TABLE public.token_retirement_identity_snapshot (
+  object_name text PRIMARY KEY,
+  object_oid oid NOT NULL
+);
+
+INSERT INTO public.token_retirement_identity_snapshot(object_name, object_oid)
+VALUES
+  (
+    'arena.token_trader_ranking_page_payload_v1',
+    'arena.token_trader_ranking_page_payload_v1(text,integer,integer,integer,date)'::pg_catalog.regprocedure
+  ),
+  (
+    'public.get_token_trader_rankings',
+    'public.get_token_trader_rankings(text,integer,integer,integer)'::pg_catalog.regprocedure
+  ),
+  (
+    'public.get_popular_tokens',
+    'public.get_popular_tokens(integer,integer)'::pg_catalog.regprocedure
+  ),
+  (
+    'public.get_token_ranking_publication_head',
+    'public.get_token_ranking_publication_head()'::pg_catalog.regprocedure
+  ),
+  (
+    'public.get_token_trader_rankings_v2',
+    'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)'::pg_catalog.regprocedure
+  ),
+  (
+    'public.get_popular_tokens_v2',
+    'public.get_popular_tokens_v2(integer,integer,bigint)'::pg_catalog.regprocedure
+  ),
+  (
+    'public.refresh_popular_tokens_mv',
+    'public.refresh_popular_tokens_mv()'::pg_catalog.regprocedure
+  ),
+  (
+    'public.mv_token_trader_daily_90d',
+    'public.mv_token_trader_daily_90d'::pg_catalog.regclass
+  ),
+  (
+    'public.mv_popular_tokens_90d',
+    'public.mv_popular_tokens_90d'::pg_catalog.regclass
+  );
+SQL
+
+WRAPPER_BEFORE="$(psql_db -Atqc "
+  SELECT
+    (public.legacy_token_v2_wrapper()->>'generation') || '|' ||
+    (public.legacy_token_payload_wrapper()->>'total');")"
+assert_equal "legacy wrappers reach the predecessor publication" "3|6" "$WRAPPER_BEFORE"
+
+MV_CONTENT_BEFORE="$(psql_db -Atqc "
+  SELECT pg_catalog.encode(
+    pg_catalog.sha256(
+      pg_catalog.convert_to(
+        (
+          SELECT pg_catalog.string_agg(
+            pg_catalog.concat_ws(
+              ':',
+              trade_date,
+              token,
+              source,
+              source_trader_id,
+              token_pnl,
+              trade_count
+            ),
+            ',' ORDER BY trade_date, token, source, source_trader_id
+          )
+          FROM public.mv_token_trader_daily_90d
+        ) || '|' || (
+          SELECT pg_catalog.string_agg(
+            pg_catalog.concat_ws(':', token, trade_count, trader_count, total_pnl),
+            ',' ORDER BY token
+          )
+          FROM public.mv_popular_tokens_90d
+        ),
+        'UTF8'
+      )
+    ),
+    'hex'
+  );")"
+
+# Retirement must never cut through an already-running two-MV refresh. The
+# predecessor refresh owns the singleton head row for its full transaction;
+# the retirement's NOWAIT acquisition must roll back without changing bodies,
+# ACLs, cron, or the still-published head. Retry only after the writer exits.
+(
+  psql_db -q <<'SQL'
+SET arena.token_refresh_pause = '2';
+SELECT public.refresh_popular_tokens_mv();
+SQL
+) >"$REFRESH_LOG" 2>&1 &
+RETIREMENT_REFRESH_PID=$!
+RETIREMENT_PAUSE_READY=0
+for _attempt in {1..50}; do
+  if [[ "$(psql_db -Atqc "SELECT pg_catalog.pg_try_advisory_lock(23002300);")" == 'f' ]]; then
+    RETIREMENT_PAUSE_READY=1
+    break
+  fi
+  sleep 0.1
+done
+if ((RETIREMENT_PAUSE_READY != 1)); then
+  echo "retirement refresh never reached its transaction barrier" >&2
+  exit 1
+fi
+
+set +e
+INFLIGHT_RETIREMENT_OUTPUT="$(psql_db -q -f "$RETIREMENT_MIGRATION" 2>&1)"
+INFLIGHT_RETIREMENT_STATUS=$?
+set -e
+if ((INFLIGHT_RETIREMENT_STATUS == 0)); then
+  echo "retirement unexpectedly cut through an in-flight refresh" >&2
+  exit 1
+fi
+[[ "$INFLIGHT_RETIREMENT_OUTPUT" == *"could not obtain lock on row"* ]] || {
+  echo "unexpected in-flight retirement error: $INFLIGHT_RETIREMENT_OUTPUT" >&2
+  exit 1
+}
+
+INFLIGHT_ROLLBACK="$(psql_db -Atqc "
+  SELECT
+    (SELECT generation_seq FROM public.get_token_ranking_publication_head()) || '|' ||
+    (SELECT active FROM cron.job WHERE jobname = 'refresh-mv-popular-tokens') || '|' ||
+    pg_catalog.has_function_privilege(
+      'service_role',
+      'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)',
+      'EXECUTE'
+    ) || '|' ||
+    (
+      SELECT pg_catalog.encode(
+        pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')),
+        'hex'
+      )
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid =
+        'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)'::pg_catalog.regprocedure
+    );")"
+assert_equal \
+  "in-flight refresh makes retirement fail without a partial cutover" \
+  "3|true|true|51cb3103a603ae285e620cf59818a363c7d175c77eae28495a9d69aa15cd0f06" \
+  "$INFLIGHT_ROLLBACK"
+
+wait "$RETIREMENT_REFRESH_PID"
+AFTER_RETIREMENT_DRAIN="$(psql_db -Atqc "
+  SELECT generation_seq FROM arena.token_ranking_publication_head;")"
+assert_equal "drained predecessor refresh publishes before retirement retry" "4" "$AFTER_RETIREMENT_DRAIN"
+
+psql_db -q -f "$RETIREMENT_MIGRATION"
+
+RETIRED_HEAD="$(psql_db -Atqc "
+  SET ROLE service_role;
+  SELECT generation_seq || '|' ||
+    (published_at IS NULL) || '|' ||
+    (published_at_epoch_ms IS NULL) || '|' ||
+    (window_through_date IS NULL) || '|' ||
+    (source_as_of IS NULL) || '|' ||
+    (source_through_date IS NULL) || '|' ||
+    daily_row_count || '|' || popular_row_count
+  FROM public.get_token_ranking_publication_head();
+  RESET ROLE;")"
+assert_equal \
+  "rolling cache publication reads retired head before any payload" \
+  "0|true|true|true|true|true|0|0" \
+  "$RETIRED_HEAD"
+
+CACHE_BARRIER="$(psql_db -Atqc "
+  SET ROLE service_role;
+  WITH publication AS MATERIALIZED (
+    SELECT generation_seq
+    FROM public.get_token_ranking_publication_head()
+  )
+  SELECT CASE
+    WHEN publication.generation_seq = 0
+      THEN 'head-zero-before-cache'
+    ELSE public.token_ranking_cache_payload_probe()
+  END
+  FROM publication;
+  RESET ROLE;")"
+assert_equal \
+  "generation zero blocks the cache payload branch" \
+  "head-zero-before-cache" \
+  "$CACHE_BARRIER"
+
+psql_db -q <<'SQL'
+DO $proof$
+DECLARE
+  v_message text;
+BEGIN
+  BEGIN
+    PERFORM arena.token_trader_ranking_page_payload_v1(
+      'BTC', 90, 1, 0, CURRENT_DATE
+    );
+    RAISE EXCEPTION 'retired private token payload helper executed';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+      IF v_message IS DISTINCT FROM
+           'legacy token rankings are retired; authority snapshot required' THEN
+        RAISE EXCEPTION 'unexpected private helper retirement error: %', v_message;
+      END IF;
+  END;
+
+  BEGIN
+    PERFORM public.get_token_trader_rankings('BTC', 90, 1, 0);
+    RAISE EXCEPTION 'retired v1 token rankings executed';
+  EXCEPTION WHEN SQLSTATE '55000' THEN NULL;
+  END;
+
+  BEGIN
+    PERFORM public.get_popular_tokens(90, 1);
+    RAISE EXCEPTION 'retired v1 popular tokens executed';
+  EXCEPTION WHEN SQLSTATE '55000' THEN NULL;
+  END;
+
+  BEGIN
+    PERFORM public.get_token_trader_rankings_v2('BTC', 90, 1, 0, 0);
+    RAISE EXCEPTION 'retired v2 token rankings executed';
+  EXCEPTION WHEN SQLSTATE '55000' THEN NULL;
+  END;
+
+  BEGIN
+    PERFORM public.get_popular_tokens_v2(90, 1, 0);
+    RAISE EXCEPTION 'retired v2 popular tokens executed';
+  EXCEPTION WHEN SQLSTATE '55000' THEN NULL;
+  END;
+
+  BEGIN
+    PERFORM public.refresh_popular_tokens_mv();
+    RAISE EXCEPTION 'retired token refresh executed';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+      IF v_message IS DISTINCT FROM
+           'legacy token ranking refresh is retired; authority snapshot publisher required' THEN
+        RAISE EXCEPTION 'unexpected refresh retirement error: %', v_message;
+      END IF;
+  END;
+END
+$proof$;
+SQL
+
+for wrapper in \
+  legacy_token_v2_wrapper \
+  legacy_token_payload_wrapper \
+  legacy_token_refresh_wrapper; do
+  set +e
+  WRAPPER_OUTPUT="$(psql_db -q -c "SET ROLE service_role; SELECT public.${wrapper}();" 2>&1)"
+  WRAPPER_STATUS=$?
+  set -e
+  if ((WRAPPER_STATUS == 0)); then
+    echo "retired owner wrapper unexpectedly succeeded: $wrapper" >&2
+    exit 1
+  fi
+  [[ "$WRAPPER_OUTPUT" == *"authority snapshot"* ]] || {
+    echo "unexpected retired wrapper error for $wrapper: $WRAPPER_OUTPUT" >&2
+    exit 1
+  }
+done
+
+RUNTIME_ACL="$(psql_db -Atqc "
+  SELECT
+    pg_catalog.has_function_privilege(
+      'service_role',
+      'public.get_token_ranking_publication_head()',
+      'EXECUTE'
+    ) || '|' ||
+    pg_catalog.has_function_privilege(
+      'service_role',
+      'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)',
+      'EXECUTE'
+    ) || '|' ||
+    pg_catalog.has_function_privilege(
+      'token_rank_delegate',
+      'public.get_popular_tokens_v2(integer,integer,bigint)',
+      'EXECUTE'
+    ) || '|' ||
+    pg_catalog.has_function_privilege(
+      'token_rank_consumer',
+      'arena.token_trader_ranking_page_payload_v1(text,integer,integer,integer,date)',
+      'EXECUTE'
+    ) || '|' ||
+    pg_catalog.has_table_privilege(
+      'service_role', 'public.mv_token_trader_daily_90d', 'SELECT'
+    ) || '|' ||
+    pg_catalog.has_table_privilege(
+      'token_rank_delegate', 'public.mv_popular_tokens_90d', 'SELECT'
+    ) || '|' ||
+    pg_catalog.has_column_privilege(
+      'token_rank_consumer', 'public.mv_popular_tokens_90d', 'token', 'SELECT'
+    );")"
+assert_equal \
+  "retirement keeps only service head EXECUTE and closes delegated functions/MVs" \
+  "true|false|false|false|false|false|false" \
+  "$RUNTIME_ACL"
+
+RUNTIME_MATRIX="$(psql_db -Atqc "
+  WITH runtime_roles(role_oid) AS (
+    VALUES
+      ('service_role'::pg_catalog.regrole),
+      ('anon'::pg_catalog.regrole),
+      ('authenticated'::pg_catalog.regrole),
+      ('token_rank_delegate'::pg_catalog.regrole),
+      ('token_rank_consumer'::pg_catalog.regrole)
+  ), closed_functions(function_oid) AS (
+    VALUES
+      ('arena.token_trader_ranking_page_payload_v1(text,integer,integer,integer,date)'::pg_catalog.regprocedure),
+      ('public.get_token_trader_rankings(text,integer,integer,integer)'::pg_catalog.regprocedure),
+      ('public.get_popular_tokens(integer,integer)'::pg_catalog.regprocedure),
+      ('public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)'::pg_catalog.regprocedure),
+      ('public.get_popular_tokens_v2(integer,integer,bigint)'::pg_catalog.regprocedure),
+      ('public.refresh_popular_tokens_mv()'::pg_catalog.regprocedure)
+  ), closed_relations(relation_oid) AS (
+    VALUES
+      ('public.mv_token_trader_daily_90d'::pg_catalog.regclass),
+      ('public.mv_popular_tokens_90d'::pg_catalog.regclass)
+  )
+  SELECT
+    (
+      SELECT pg_catalog.count(*)
+      FROM runtime_roles
+      CROSS JOIN closed_functions
+      WHERE pg_catalog.has_function_privilege(
+        runtime_roles.role_oid,
+        closed_functions.function_oid,
+        'EXECUTE'
+      )
+    ) || '|' ||
+    (
+      SELECT pg_catalog.count(*)
+      FROM runtime_roles
+      CROSS JOIN closed_relations
+      WHERE pg_catalog.has_table_privilege(
+        runtime_roles.role_oid,
+        closed_relations.relation_oid,
+        'SELECT'
+      )
+    ) || '|' ||
+    (
+      SELECT pg_catalog.count(*)
+      FROM runtime_roles
+      WHERE pg_catalog.has_function_privilege(
+        runtime_roles.role_oid,
+        'public.get_token_ranking_publication_head()'::pg_catalog.regprocedure,
+        'EXECUTE'
+      )
+    ) || '|' ||
+    pg_catalog.has_function_privilege(
+      'service_role',
+      'public.get_token_ranking_publication_head()',
+      'EXECUTE'
+    );")"
+assert_equal \
+  "all five runtime/delegated roles are closed across every retired object" \
+  "0|0|1|true" \
+  "$RUNTIME_MATRIX"
+
+set +e
+MV_RUNTIME_OUTPUT="$(psql_db -q -c "SET ROLE service_role; SELECT pg_catalog.count(*) FROM public.mv_token_trader_daily_90d;" 2>&1)"
+MV_RUNTIME_STATUS=$?
+set -e
+if ((MV_RUNTIME_STATUS == 0)); then
+  echo "service_role unexpectedly read the retired token MV" >&2
+  exit 1
+fi
+[[ "$MV_RUNTIME_OUTPUT" == *"permission denied for materialized view"* ]] || {
+  echo "unexpected retired token MV error: $MV_RUNTIME_OUTPUT" >&2
+  exit 1
+}
+
+IDENTITY_AFTER="$(psql_db -Atqc "
+  SELECT pg_catalog.count(*)
+  FROM public.token_retirement_identity_snapshot AS snapshot
+  WHERE snapshot.object_oid = CASE snapshot.object_name
+    WHEN 'arena.token_trader_ranking_page_payload_v1'
+      THEN 'arena.token_trader_ranking_page_payload_v1(text,integer,integer,integer,date)'::pg_catalog.regprocedure::oid
+    WHEN 'public.get_token_trader_rankings'
+      THEN 'public.get_token_trader_rankings(text,integer,integer,integer)'::pg_catalog.regprocedure::oid
+    WHEN 'public.get_popular_tokens'
+      THEN 'public.get_popular_tokens(integer,integer)'::pg_catalog.regprocedure::oid
+    WHEN 'public.get_token_ranking_publication_head'
+      THEN 'public.get_token_ranking_publication_head()'::pg_catalog.regprocedure::oid
+    WHEN 'public.get_token_trader_rankings_v2'
+      THEN 'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)'::pg_catalog.regprocedure::oid
+    WHEN 'public.get_popular_tokens_v2'
+      THEN 'public.get_popular_tokens_v2(integer,integer,bigint)'::pg_catalog.regprocedure::oid
+    WHEN 'public.refresh_popular_tokens_mv'
+      THEN 'public.refresh_popular_tokens_mv()'::pg_catalog.regprocedure::oid
+    WHEN 'public.mv_token_trader_daily_90d'
+      THEN 'public.mv_token_trader_daily_90d'::pg_catalog.regclass::oid
+    WHEN 'public.mv_popular_tokens_90d'
+      THEN 'public.mv_popular_tokens_90d'::pg_catalog.regclass::oid
+  END;")"
+assert_equal "retirement preserves all seven function and two MV OIDs" "9" "$IDENTITY_AFTER"
+
+MV_CONTENT_AFTER="$(psql_db -Atqc "
+  SELECT pg_catalog.encode(
+    pg_catalog.sha256(
+      pg_catalog.convert_to(
+        (
+          SELECT pg_catalog.string_agg(
+            pg_catalog.concat_ws(
+              ':',
+              trade_date,
+              token,
+              source,
+              source_trader_id,
+              token_pnl,
+              trade_count
+            ),
+            ',' ORDER BY trade_date, token, source, source_trader_id
+          )
+          FROM public.mv_token_trader_daily_90d
+        ) || '|' || (
+          SELECT pg_catalog.string_agg(
+            pg_catalog.concat_ws(':', token, trade_count, trader_count, total_pnl),
+            ',' ORDER BY token
+          )
+          FROM public.mv_popular_tokens_90d
+        ),
+        'UTF8'
+      )
+    ),
+    'hex'
+  );")"
+assert_equal "retirement does not rewrite legacy MV contents" "$MV_CONTENT_BEFORE" "$MV_CONTENT_AFTER"
+
+CRON_RETIRED="$(psql_db -Atqc "
+  SELECT schedule || '|' || command || '|' || database || '|' || username || '|' || active
+  FROM cron.job
+  WHERE jobname = 'refresh-mv-popular-tokens';")"
+assert_equal \
+  "retirement disables the exact cron without changing its identity" \
+  "*/30 * * * *|SET statement_timeout = '25min'; SELECT public.refresh_popular_tokens_mv();|postgres|postgres|false" \
+  "$CRON_RETIRED"
+
+RETIREMENT_STATE_ONE="$(psql_db -Atqc "
+  SELECT pg_catalog.jsonb_build_object(
+    'functions', (
+      SELECT pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_array(
+          function_row.oid,
+          pg_catalog.encode(
+            pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')),
+            'hex'
+          ),
+          function_row.proacl::text
+        ) ORDER BY function_row.oid
+      )
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid IN (
+        'arena.token_trader_ranking_page_payload_v1(text,integer,integer,integer,date)'::pg_catalog.regprocedure,
+        'public.get_token_trader_rankings(text,integer,integer,integer)'::pg_catalog.regprocedure,
+        'public.get_popular_tokens(integer,integer)'::pg_catalog.regprocedure,
+        'public.get_token_ranking_publication_head()'::pg_catalog.regprocedure,
+        'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)'::pg_catalog.regprocedure,
+        'public.get_popular_tokens_v2(integer,integer,bigint)'::pg_catalog.regprocedure,
+        'public.refresh_popular_tokens_mv()'::pg_catalog.regprocedure
+      )
+    ),
+    'relations', (
+      SELECT pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_array(
+          relation_row.oid,
+          relation_row.relacl::text,
+          pg_catalog.pg_get_viewdef(relation_row.oid, false)
+        ) ORDER BY relation_row.oid
+      )
+      FROM pg_catalog.pg_class AS relation_row
+      WHERE relation_row.oid IN (
+        'public.mv_token_trader_daily_90d'::pg_catalog.regclass,
+        'public.mv_popular_tokens_90d'::pg_catalog.regclass
+      )
+    ),
+    'head', (
+      SELECT pg_catalog.to_jsonb(publication)
+      FROM arena.token_ranking_publication_head AS publication
+    ),
+    'cron', (
+      SELECT pg_catalog.to_jsonb(job)
+      FROM cron.job AS job
+      WHERE job.jobname = 'refresh-mv-popular-tokens'
+    )
+  )::text;")"
+
+psql_db -q -f "$RETIREMENT_MIGRATION"
+
+RETIREMENT_STATE_TWO="$(psql_db -Atqc "
+  SELECT pg_catalog.jsonb_build_object(
+    'functions', (
+      SELECT pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_array(
+          function_row.oid,
+          pg_catalog.encode(
+            pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')),
+            'hex'
+          ),
+          function_row.proacl::text
+        ) ORDER BY function_row.oid
+      )
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid IN (
+        'arena.token_trader_ranking_page_payload_v1(text,integer,integer,integer,date)'::pg_catalog.regprocedure,
+        'public.get_token_trader_rankings(text,integer,integer,integer)'::pg_catalog.regprocedure,
+        'public.get_popular_tokens(integer,integer)'::pg_catalog.regprocedure,
+        'public.get_token_ranking_publication_head()'::pg_catalog.regprocedure,
+        'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)'::pg_catalog.regprocedure,
+        'public.get_popular_tokens_v2(integer,integer,bigint)'::pg_catalog.regprocedure,
+        'public.refresh_popular_tokens_mv()'::pg_catalog.regprocedure
+      )
+    ),
+    'relations', (
+      SELECT pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_array(
+          relation_row.oid,
+          relation_row.relacl::text,
+          pg_catalog.pg_get_viewdef(relation_row.oid, false)
+        ) ORDER BY relation_row.oid
+      )
+      FROM pg_catalog.pg_class AS relation_row
+      WHERE relation_row.oid IN (
+        'public.mv_token_trader_daily_90d'::pg_catalog.regclass,
+        'public.mv_popular_tokens_90d'::pg_catalog.regclass
+      )
+    ),
+    'head', (
+      SELECT pg_catalog.to_jsonb(publication)
+      FROM arena.token_ranking_publication_head AS publication
+    ),
+    'cron', (
+      SELECT pg_catalog.to_jsonb(job)
+      FROM cron.job AS job
+      WHERE job.jobname = 'refresh-mv-popular-tokens'
+    )
+  )::text;")"
+assert_equal \
+  "legacy token ranking retirement replay is byte-stable" \
+  "$RETIREMENT_STATE_ONE" \
+  "$RETIREMENT_STATE_TWO"
+
+echo "legacy token ranking retirement PostgreSQL 17 proof passed"
 
 echo "token ranking generation barrier PostgreSQL 17 proof passed"
