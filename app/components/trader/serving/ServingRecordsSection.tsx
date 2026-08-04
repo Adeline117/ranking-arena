@@ -13,7 +13,7 @@
  * hook only fires when the tab is opened).
  */
 
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -202,6 +202,8 @@ export default function ServingRecordsSection({
       )
     : []
   const selectionScope = JSON.stringify([source, exchangeTraderId, kinds])
+  const tabsId = useId()
+  const tabRefs = useRef<Map<RecordKind, HTMLButtonElement>>(new Map())
   const [activeSelection, setActiveSelection] = useState<{
     scope: string
     kind: RecordKind
@@ -221,6 +223,9 @@ export default function ServingRecordsSection({
     <Box style={{ marginTop: tokens.spacing[6] }}>
       <style>{`@keyframes servingPulse { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
       <Box
+        role="tablist"
+        aria-label={t('recordsTabs')}
+        aria-orientation="horizontal"
         style={{
           display: 'flex',
           gap: tokens.spacing[1],
@@ -232,11 +237,35 @@ export default function ServingRecordsSection({
         {kinds.map((kind) => (
           <button
             key={kind}
+            ref={(element) => {
+              if (element) tabRefs.current.set(kind, element)
+              else tabRefs.current.delete(kind)
+            }}
             type="button"
+            id={`${tabsId}-tab-${kind}`}
+            role="tab"
             onClick={() => setActiveSelection({ scope: selectionScope, kind })}
-            aria-pressed={effectiveKind === kind}
+            onKeyDown={(event) => {
+              const currentIndex = kinds.indexOf(kind)
+              let nextIndex: number | null = null
+              if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % kinds.length
+              else if (event.key === 'ArrowLeft') {
+                nextIndex = (currentIndex - 1 + kinds.length) % kinds.length
+              } else if (event.key === 'Home') nextIndex = 0
+              else if (event.key === 'End') nextIndex = kinds.length - 1
+              if (nextIndex === null) return
+
+              event.preventDefault()
+              const nextKind = kinds[nextIndex]
+              setActiveSelection({ scope: selectionScope, kind: nextKind })
+              tabRefs.current.get(nextKind)?.focus()
+            }}
+            aria-selected={effectiveKind === kind}
+            aria-controls={`${tabsId}-panel-${kind}`}
+            tabIndex={effectiveKind === kind ? 0 : -1}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              minHeight: tokens.touchTarget.min,
               border: 'none',
               background: 'transparent',
               borderBottom:
@@ -246,7 +275,10 @@ export default function ServingRecordsSection({
               color:
                 effectiveKind === kind ? tokens.colors.text.primary : tokens.colors.text.secondary,
               fontSize: tokens.typography.fontSize.sm,
-              fontWeight: effectiveKind === kind ? 600 : 400,
+              fontWeight:
+                effectiveKind === kind
+                  ? tokens.typography.fontWeight.semibold
+                  : tokens.typography.fontWeight.normal,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
@@ -256,22 +288,29 @@ export default function ServingRecordsSection({
         ))}
       </Box>
 
-      {effectiveKind === 'copiers' ? (
-        <CopiersPanel
-          key={`${source}:${exchangeTraderId}:copiers`}
-          source={source}
-          exchangeTraderId={exchangeTraderId}
-          exchangeName={exchangeName}
-        />
-      ) : effectiveKind ? (
-        <RecordKindPanel
+      {effectiveKind ? (
+        <Box
           key={`${source}:${exchangeTraderId}:${effectiveKind}`}
-          source={source}
-          exchangeTraderId={exchangeTraderId}
-          kind={effectiveKind}
-          tf={tf}
-          exchangeName={exchangeName}
-        />
+          id={`${tabsId}-panel-${effectiveKind}`}
+          role="tabpanel"
+          aria-labelledby={`${tabsId}-tab-${effectiveKind}`}
+        >
+          {effectiveKind === 'copiers' ? (
+            <CopiersPanel
+              source={source}
+              exchangeTraderId={exchangeTraderId}
+              exchangeName={exchangeName}
+            />
+          ) : (
+            <RecordKindPanel
+              source={source}
+              exchangeTraderId={exchangeTraderId}
+              kind={effectiveKind}
+              tf={tf}
+              exchangeName={exchangeName}
+            />
+          )}
+        </Box>
       ) : (
         <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
           {t('recordsEmpty')}

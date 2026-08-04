@@ -6212,6 +6212,7 @@ const en = {
   metricTradedTokens: 'Tokens Traded',
   metricTotalTxns: 'Transactions',
   tabPositions: 'Positions',
+  recordsTabs: 'Trading record tabs',
   tabPositionHistory: 'Position History',
   tabOrders: 'Orders',
   tabTransfers: 'Transfers',

@@ -6090,6 +6090,7 @@ const ko = {
   metricTradedTokens: '거래 토큰 수',
   metricTotalTxns: '거래 횟수',
   tabPositions: '포지션',
+  recordsTabs: '거래 기록 탭',
   tabPositionHistory: '포지션 내역',
   tabOrders: '주문 기록',
   tabTransfers: '이체 내역',

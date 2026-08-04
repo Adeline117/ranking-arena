@@ -155,13 +155,13 @@ describe('ServingRecordsSection selection scope', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: 'tabPositionHistory' })).toHaveAttribute(
-      'aria-pressed',
+    expect(screen.getByRole('tab', { name: 'tabPositionHistory' })).toHaveAttribute(
+      'aria-selected',
       'true'
     )
-    fireEvent.click(screen.getByRole('button', { name: 'tabPositions' }))
-    expect(screen.getByRole('button', { name: 'tabPositions' })).toHaveAttribute(
-      'aria-pressed',
+    fireEvent.click(screen.getByRole('tab', { name: 'tabPositions' }))
+    expect(screen.getByRole('tab', { name: 'tabPositions' })).toHaveAttribute(
+      'aria-selected',
       'true'
     )
 
@@ -173,8 +173,8 @@ describe('ServingRecordsSection selection scope', () => {
         tf={90}
       />
     )
-    expect(screen.getByRole('button', { name: 'tabPositionHistory' })).toHaveAttribute(
-      'aria-pressed',
+    expect(screen.getByRole('tab', { name: 'tabPositionHistory' })).toHaveAttribute(
+      'aria-selected',
       'true'
     )
     expect(useTraderRecords).toHaveBeenLastCalledWith({
@@ -185,7 +185,7 @@ describe('ServingRecordsSection selection scope', () => {
       enabled: true,
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'tabPositions' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'tabPositions' }))
     view.rerender(
       <ServingRecordsSection
         source="hyperliquid_perp"
@@ -195,11 +195,8 @@ describe('ServingRecordsSection selection scope', () => {
       />
     )
 
-    expect(screen.queryByRole('button', { name: 'tabPositions' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'tabOrders' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
+    expect(screen.queryByRole('tab', { name: 'tabPositions' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'tabOrders' })).toHaveAttribute('aria-selected', 'true')
     expect(useTraderRecords).toHaveBeenLastCalledWith({
       source: 'hyperliquid_perp',
       exchangeTraderId: 'trader-b',
@@ -207,6 +204,48 @@ describe('ServingRecordsSection selection scope', () => {
       tf: 90,
       enabled: true,
     })
+  })
+
+  it('exposes one linked tab panel and supports roving keyboard navigation', () => {
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['positions', 'position_history', 'orders', 'transfers'])}
+        tf={90}
+      />
+    )
+
+    expect(screen.getByRole('tablist', { name: 'recordsTabs' })).toHaveAttribute(
+      'aria-orientation',
+      'horizontal'
+    )
+    const history = screen.getByRole('tab', { name: 'tabPositionHistory' })
+    expect(history).toHaveAttribute('aria-selected', 'true')
+    expect(history).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('tab', { name: 'tabPositions' })).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('tabpanel', { name: 'tabPositionHistory' }).id).toBe(
+      history.getAttribute('aria-controls')
+    )
+
+    fireEvent.keyDown(history, { key: 'ArrowRight' })
+    const orders = screen.getByRole('tab', { name: 'tabOrders' })
+    expect(orders).toHaveAttribute('aria-selected', 'true')
+    expect(orders).toHaveAttribute('tabindex', '0')
+    expect(orders).toHaveFocus()
+    expect(screen.getByRole('tabpanel', { name: 'tabOrders' })).toBeInTheDocument()
+
+    fireEvent.keyDown(orders, { key: 'End' })
+    const transfers = screen.getByRole('tab', { name: 'tabTransfers' })
+    expect(transfers).toHaveFocus()
+    expect(transfers).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(transfers, { key: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: 'tabPositions' })).toHaveFocus()
+    expect(screen.getByRole('tab', { name: 'tabPositions' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
   })
 
   it.each([
