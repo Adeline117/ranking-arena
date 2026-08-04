@@ -6,6 +6,13 @@ const mockShowToast = jest.fn()
 const mockUseAuthSession = jest.fn()
 const mockT = (key: string) => key
 let mockLanguage: 'zh' | 'en' | 'ja' | 'ko' = 'en'
+const USER_A = '11111111-1111-4111-8111-111111111111'
+const USER_B = '22222222-2222-4222-8222-222222222222'
+const accessTokenFor = (subject: string, revision: string) =>
+  `header.${Buffer.from(JSON.stringify({ sub: subject })).toString('base64url')}.signature-${revision}`
+const TOKEN_A = accessTokenFor(USER_A, 'a')
+const TOKEN_A_REFRESHED = accessTokenFor(USER_A, 'refreshed')
+const TOKEN_B = accessTokenFor(USER_B, 'b')
 
 jest.mock('@/app/components/ui/Toast', () => ({
   useToast: () => ({ showToast: mockShowToast }),
@@ -117,13 +124,31 @@ function parsedBody(options?: RequestInit) {
   }
 }
 
-function authenticatedSession(token = 'token-a') {
+function translatedEnvelope(
+  body: ReturnType<typeof parsedBody>,
+  prefix = 'translated'
+): ReturnType<typeof batchEnvelope> {
+  return batchEnvelope(
+    Object.fromEntries(
+      body.items.map((item) => [item.id, { translatedText: `${prefix}-${item.id}`, cached: false }])
+    )
+  )
+}
+
+function itemTranslationState(id: string): HTMLElement {
+  const element = screen.getByTestId(`news-${id}`).parentElement
+  if (!element) throw new Error(`Missing translation state container for ${id}`)
+  return element
+}
+
+function authenticatedSession(token = TOKEN_A, userId = USER_A, sessionGeneration = 4) {
   return {
+    authChecked: true,
     isLoggedIn: true,
     accessToken: token,
-    userId: '11111111-1111-4111-8111-111111111111',
-    viewerKey: 'user:11111111-1111-4111-8111-111111111111',
-    sessionGeneration: 4,
+    userId,
+    viewerKey: `user:${userId}`,
+    sessionGeneration,
   }
 }
 
@@ -223,6 +248,33 @@ describe('FlashNewsPageClient translation truth', () => {
   })
 
   it.each([
+    ['JWT subject differs from the user', { accessToken: TOKEN_B }],
+    ['viewer key differs from the user', { viewerKey: `user:${USER_B}` }],
+    ['authentication is not checked', { authChecked: false }],
+    ['session generation is negative', { sessionGeneration: -1 }],
+    ['session generation is not a safe integer', { sessionGeneration: 1.5 }],
+  ])('does not use a bearer token when %s', async (_label, override) => {
+    const item = newsItem('news-1', '身份范围不完整时保留原文')
+    mockUseAuthSession.mockReturnValue({ ...authenticatedSession(), ...override })
+    const fetchMock = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/flash-news')) return Promise.resolve(response(newsPage([item])))
+      if (url === '/api/translate') throw new Error('Invalid viewer scope must not translate')
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    globalThis.fetch = fetchMock as never
+
+    render(<FlashNewsPageClient />)
+
+    expect(await screen.findByText(item.content)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'false')
+    )
+    expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/translate')).toBe(false)
+    expect(itemTranslationState(item.id)).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it.each([
     ['partial result', (item: NewsFixture) => batchEnvelope({}, 1)],
     [
       'original echo',
@@ -246,6 +298,121 @@ describe('FlashNewsPageClient translation truth', () => {
       expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'false')
     )
     expect(screen.getByTestId(`news-${item.id}`)).toHaveAttribute('data-translated', 'false')
+  })
+
+  it('translates the complete list in bounded batches and publishes all batches atomically', async () => {
+    const items = Array.from({ length: 21 }, (_, index) =>
+      newsItem(`news-${index}`, `complete-source-${index}-${'x'.repeat(80)}`)
+    )
+    const requests: Array<{
+      body: ReturnType<typeof parsedBody>
+      pending: ReturnType<typeof deferred<Response>>
+    }> = []
+    const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/flash-news')) return Promise.resolve(response(newsPage(items)))
+      if (url === '/api/translate') {
+        const request = { body: parsedBody(options), pending: deferred<Response>() }
+        requests.push(request)
+        return request.pending.promise
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    globalThis.fetch = fetchMock as never
+
+    render(<FlashNewsPageClient />)
+
+    await waitFor(() => expect(requests).toHaveLength(2))
+    expect(requests.map(({ body }) => body.items.length)).toEqual([20, 1])
+    const outgoingItems = requests.flatMap(({ body }) => body.items)
+    expect(outgoingItems).toHaveLength(21)
+    expect(outgoingItems).toEqual(
+      items.map((item) => ({
+        id: item.id,
+        text: item.content,
+        contentType: 'flash_news',
+        contentId: item.id,
+      }))
+    )
+    expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'true')
+    expect(itemTranslationState(items[0].id)).toHaveAttribute('aria-busy', 'true')
+    expect(itemTranslationState(items[20].id)).toHaveAttribute('aria-busy', 'true')
+
+    await act(async () => {
+      requests[0].pending.resolve(response(translatedEnvelope(requests[0].body)))
+      await requests[0].pending.promise
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('translated-news-0')).not.toBeInTheDocument()
+    expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'true')
+    expect(itemTranslationState(items[0].id)).toHaveAttribute('aria-busy', 'true')
+
+    requests[1].pending.resolve(response(translatedEnvelope(requests[1].body)))
+    expect(await screen.findByText('translated-news-0')).toBeInTheDocument()
+    expect(await screen.findByText('translated-news-20')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'false')
+    )
+    expect(itemTranslationState(items[0].id)).toHaveAttribute('aria-busy', 'false')
+    expect(itemTranslationState(items[20].id)).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('aborts pending sibling batches and publishes nothing when any batch fails', async () => {
+    const items = Array.from({ length: 41 }, (_, index) =>
+      newsItem(`news-${index}`, `failure-source-${index}`)
+    )
+    const requests: Array<{
+      body: ReturnType<typeof parsedBody>
+      pending: ReturnType<typeof deferred<Response>>
+      signal: AbortSignal
+    }> = []
+    const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/flash-news')) return Promise.resolve(response(newsPage(items)))
+      if (url === '/api/translate') {
+        const request = {
+          body: parsedBody(options),
+          pending: deferred<Response>(),
+          signal: options?.signal as AbortSignal,
+        }
+        requests.push(request)
+        return request.pending.promise
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    globalThis.fetch = fetchMock as never
+
+    render(<FlashNewsPageClient />)
+
+    await waitFor(() => expect(requests).toHaveLength(3))
+    expect(requests.map(({ body }) => body.items.length)).toEqual([20, 20, 1])
+    expect(itemTranslationState(items[40].id)).toHaveAttribute('aria-busy', 'true')
+
+    await act(async () => {
+      requests[0].pending.resolve(response(translatedEnvelope(requests[0].body, 'first-batch')))
+      await requests[0].pending.promise
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('first-batch-news-0')).not.toBeInTheDocument()
+    expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'true')
+
+    requests[1].pending.resolve(response(batchEnvelope({}, requests[1].body.items.length)))
+    await waitFor(() => expect(requests[2].signal.aborted).toBe(true))
+    await waitFor(() =>
+      expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'false')
+    )
+    expect(screen.queryByText('first-batch-news-0')).not.toBeInTheDocument()
+    expect(screen.getByText(items[0].content)).toBeInTheDocument()
+    expect(screen.getByText(items[40].content)).toBeInTheDocument()
+    expect(itemTranslationState(items[0].id)).toHaveAttribute('aria-busy', 'false')
+    expect(itemTranslationState(items[40].id)).toHaveAttribute('aria-busy', 'false')
+
+    requests[2].pending.resolve(response(translatedEnvelope(requests[2].body, 'late-sibling')))
+    await act(async () => {
+      await requests[2].pending.promise
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('late-sibling-news-40')).not.toBeInTheDocument()
   })
 
   it('physically releases translation busy when fetch ignores AbortSignal', async () => {
@@ -293,14 +460,14 @@ describe('FlashNewsPageClient translation truth', () => {
     })
     globalThis.fetch = fetchMock as never
     const { rerender } = render(<FlashNewsPageClient />)
-    await waitFor(() => expect(requests.has('Bearer token-a')).toBe(true))
+    await waitFor(() => expect(requests.has(`Bearer ${TOKEN_A}`)).toBe(true))
 
-    mockUseAuthSession.mockReturnValue(authenticatedSession('token-b'))
+    mockUseAuthSession.mockReturnValue(authenticatedSession(TOKEN_A_REFRESHED))
     rerender(<FlashNewsPageClient />)
-    await waitFor(() => expect(requests.has('Bearer token-b')).toBe(true))
+    await waitFor(() => expect(requests.has(`Bearer ${TOKEN_A_REFRESHED}`)).toBe(true))
 
     requests
-      .get('Bearer token-a')
+      .get(`Bearer ${TOKEN_A}`)
       ?.resolve(
         response(batchEnvelope({ [item.id]: { translatedText: 'stale-token', cached: false } }))
       )
@@ -309,14 +476,14 @@ describe('FlashNewsPageClient translation truth', () => {
     expect(screen.getByText(item.content)).toBeInTheDocument()
 
     requests
-      .get('Bearer token-b')
+      .get(`Bearer ${TOKEN_A_REFRESHED}`)
       ?.resolve(
         response(batchEnvelope({ [item.id]: { translatedText: 'fresh-token', cached: false } }))
       )
     expect(await screen.findByText('fresh-token')).toBeInTheDocument()
   })
 
-  it('rejects a late batch after viewer session and target language both change', async () => {
+  it('rejects a late batch after the viewer session changes', async () => {
     mockLanguage = 'ja'
     const item = newsItem('news-1', 'Cross-scope source')
     const requests = new Map<string, ReturnType<typeof deferred<Response>>>()
@@ -334,20 +501,14 @@ describe('FlashNewsPageClient translation truth', () => {
     })
     globalThis.fetch = fetchMock as never
     const { rerender } = render(<FlashNewsPageClient />)
-    await waitFor(() => expect(requests.has('Bearer token-a:ja')).toBe(true))
+    await waitFor(() => expect(requests.has(`Bearer ${TOKEN_A}:ja`)).toBe(true))
 
-    mockLanguage = 'ko'
-    mockUseAuthSession.mockReturnValue({
-      ...authenticatedSession('token-b'),
-      userId: '22222222-2222-4222-8222-222222222222',
-      viewerKey: 'user:22222222-2222-4222-8222-222222222222',
-      sessionGeneration: 5,
-    })
+    mockUseAuthSession.mockReturnValue(authenticatedSession(TOKEN_B, USER_B, 5))
     rerender(<FlashNewsPageClient />)
-    await waitFor(() => expect(requests.has('Bearer token-b:ko')).toBe(true))
+    await waitFor(() => expect(requests.has(`Bearer ${TOKEN_B}:ja`)).toBe(true))
 
     requests
-      .get('Bearer token-a:ja')
+      .get(`Bearer ${TOKEN_A}:ja`)
       ?.resolve(
         response(batchEnvelope({ [item.id]: { translatedText: 'stale-japanese', cached: false } }))
       )
@@ -356,11 +517,50 @@ describe('FlashNewsPageClient translation truth', () => {
     expect(screen.getByText(item.content)).toBeInTheDocument()
 
     requests
-      .get('Bearer token-b:ko')
+      .get(`Bearer ${TOKEN_B}:ja`)
       ?.resolve(
-        response(batchEnvelope({ [item.id]: { translatedText: 'fresh-korean', cached: false } }))
+        response(batchEnvelope({ [item.id]: { translatedText: 'fresh-viewer', cached: false } }))
       )
-    expect(await screen.findByText('fresh-korean')).toBeInTheDocument()
+    expect(await screen.findByText('fresh-viewer')).toBeInTheDocument()
+  })
+
+  it('rejects a late batch after only the target language changes', async () => {
+    mockLanguage = 'ja'
+    const item = newsItem('news-1', 'Language-scope source')
+    const requests = new Map<string, ReturnType<typeof deferred<Response>>>()
+    const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/flash-news')) return Promise.resolve(response(newsPage([item])))
+      if (url === '/api/translate') {
+        const pending = deferred<Response>()
+        requests.set(parsedBody(options).targetLang, pending)
+        return pending.promise
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    globalThis.fetch = fetchMock as never
+    const { rerender } = render(<FlashNewsPageClient />)
+    await waitFor(() => expect(requests.has('ja')).toBe(true))
+
+    mockLanguage = 'ko'
+    rerender(<FlashNewsPageClient />)
+    await waitFor(() => expect(requests.has('ko')).toBe(true))
+
+    requests
+      .get('ja')
+      ?.resolve(
+        response(batchEnvelope({ [item.id]: { translatedText: 'stale-language', cached: false } }))
+      )
+    await act(async () => Promise.resolve())
+    expect(screen.queryByText('stale-language')).not.toBeInTheDocument()
+    expect(screen.getByText(item.content)).toBeInTheDocument()
+
+    requests
+      .get('ko')
+      ?.resolve(
+        response(batchEnvelope({ [item.id]: { translatedText: 'fresh-language', cached: false } }))
+      )
+    expect(await screen.findByText('fresh-language')).toBeInTheDocument()
   })
 
   it('rejects old source content and keeps last-good only for the active item source', async () => {
@@ -406,23 +606,26 @@ describe('FlashNewsPageClient translation truth', () => {
     expect(await screen.findByText('fresh-source')).toBeInTheDocument()
   })
 
-  it('single-flights the same first-five batch while a later page appends behind it', async () => {
-    const firstPage = Array.from({ length: 5 }, (_, index) =>
+  it('single-flights an in-flight source key when pagination creates an equivalent news array', async () => {
+    const firstPage = Array.from({ length: 6 }, (_, index) =>
       newsItem(`news-${index}`, `source-${index}`)
     )
-    const extra = newsItem('news-extra', 'extra-source')
     const translation = deferred<Response>()
     let translationCalls = 0
-    const fetchMock = jest.fn((input: RequestInfo | URL) => {
+    let translationBody: ReturnType<typeof parsedBody> | undefined
+    let translationSignal: AbortSignal | undefined
+    const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
       const url = String(input)
       if (url.startsWith('/api/flash-news')) {
         const page = new URL(url, 'https://arena.local').searchParams.get('page')
         return Promise.resolve(
-          response(page === '2' ? newsPage([extra], 2, false) : newsPage(firstPage, 1, true))
+          response(page === '2' ? newsPage([firstPage[0]], 2, false) : newsPage(firstPage, 1, true))
         )
       }
       if (url === '/api/translate') {
         translationCalls += 1
+        translationBody = parsedBody(options)
+        translationSignal = options?.signal as AbortSignal
         return translation.promise
       }
       throw new Error(`Unexpected request: ${url}`)
@@ -438,22 +641,18 @@ describe('FlashNewsPageClient translation truth', () => {
         {} as IntersectionObserver
       )
     })
-    expect(await screen.findByText(extra.content)).toBeInTheDocument()
-    expect(translationCalls).toBe(1)
-
-    translation.resolve(
-      response(
-        batchEnvelope(
-          Object.fromEntries(
-            firstPage.map((item) => [
-              item.id,
-              { translatedText: `translated-${item.id}`, cached: false },
-            ])
-          )
-        )
-      )
+    expect(await screen.findByText('flashNewsTotal')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'true')
     )
+    expect(translationCalls).toBe(1)
+    expect(translationSignal?.aborted).toBe(false)
+    expect(translationBody?.items).toHaveLength(6)
+
+    if (!translationBody) throw new Error('Missing translation request')
+    translation.resolve(response(translatedEnvelope(translationBody)))
     expect(await screen.findByText('translated-news-0')).toBeInTheDocument()
+    expect(await screen.findByText('translated-news-5')).toBeInTheDocument()
     expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'false')
   })
 })

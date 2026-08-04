@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { jwtSubject } from '@/lib/auth/token-subject'
 import EmptyState from '@/app/components/ui/EmptyState'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { apiFetch } from '@/lib/utils/api-fetch'
@@ -92,6 +93,8 @@ type FlashNewsTranslationDescriptor = {
   id: string
   source: string
 }
+
+const FLASH_NEWS_TRANSLATION_BATCH_SIZE = 20
 
 function pretranslatedContent(
   item: FlashNews,
@@ -181,10 +184,23 @@ export default function FlashNewsPageClient() {
   const { language, t } = useLanguage()
   const { showToast } = useToast()
   const auth = useAuthSession()
-  const { isLoggedIn, accessToken } = auth
+  const { authChecked, isLoggedIn, accessToken } = auth
   const viewerKey = auth.viewerKey ?? (auth.userId ? `user:${auth.userId}` : 'anon')
   const sessionGeneration = auth.sessionGeneration ?? 0
   const userId = auth.userId ?? null
+  const normalizedUserId = typeof userId === 'string' ? userId.trim().toLowerCase() : ''
+  const translationAccessToken =
+    authChecked &&
+    isLoggedIn &&
+    normalizedUserId.length > 0 &&
+    viewerKey === `user:${userId}` &&
+    Number.isSafeInteger(auth.sessionGeneration) &&
+    auth.sessionGeneration >= 0 &&
+    typeof accessToken === 'string' &&
+    accessToken.trim().length > 0 &&
+    jwtSubject(accessToken)?.trim().toLowerCase() === normalizedUserId
+      ? accessToken
+      : null
 
   const [news, setNews] = useState<FlashNews[]>([])
   const [loading, setLoading] = useState(true)
@@ -229,7 +245,7 @@ export default function FlashNewsPageClient() {
     viewerKey,
     sessionGeneration,
     userId,
-    accessToken: accessToken ?? '',
+    accessToken: translationAccessToken ?? '',
     targetLang: language,
   })
   const translationMountedRef = useRef(false)
@@ -240,7 +256,7 @@ export default function FlashNewsPageClient() {
     viewerKey,
     sessionGeneration,
     userId,
-    accessToken,
+    accessToken: translationAccessToken,
     isLoggedIn,
     language,
   })
@@ -248,7 +264,7 @@ export default function FlashNewsPageClient() {
     viewerKey,
     sessionGeneration,
     userId,
-    accessToken,
+    accessToken: translationAccessToken,
     isLoggedIn,
     language,
   }
@@ -274,11 +290,11 @@ export default function FlashNewsPageClient() {
   const owner = translationOwnerRef.current
   const translationOwnerIsCurrent =
     isLoggedIn &&
-    Boolean(accessToken) &&
+    Boolean(translationAccessToken) &&
     owner.viewerKey === viewerKey &&
     owner.sessionGeneration === sessionGeneration &&
     owner.userId === userId &&
-    owner.accessToken === accessToken &&
+    owner.accessToken === translationAccessToken &&
     owner.targetLang === language
   const visibleTranslatedContent: Record<string, string> = {}
   if (translationOwnerIsCurrent) {
@@ -381,10 +397,10 @@ export default function FlashNewsPageClient() {
     setTranslatingIds(new Set())
   }, [
     abortActiveTranslation,
-    accessToken,
     isLoggedIn,
     language,
     sessionGeneration,
+    translationAccessToken,
     userId,
     viewerKey,
   ])
@@ -590,7 +606,7 @@ export default function FlashNewsPageClient() {
   const translateNewsContent = useCallback(
     async (items: FlashNews[]) => {
       // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
-      const token = accessToken
+      const token = translationAccessToken
       const targetLang: TranslationTargetLanguage = language
       if (!isLoggedIn || !token) {
         cancelActiveTranslation()
@@ -628,9 +644,9 @@ export default function FlashNewsPageClient() {
           staleIds.add(id)
         }
       }
-      const unambiguousDescriptors = descriptors
-        .filter((descriptor) => !ambiguousIds.has(descriptor.id))
-        .slice(0, 5)
+      const unambiguousDescriptors = descriptors.filter(
+        (descriptor) => !ambiguousIds.has(descriptor.id)
+      )
 
       if (staleIds.size > 0) {
         const current = translatedContentRef.current
@@ -674,40 +690,54 @@ export default function FlashNewsPageClient() {
 
       const promise = (async () => {
         try {
-          const outgoingItems = unambiguousDescriptors.map(({ id, source }) => ({
-            id,
-            text: source,
-            contentType: 'flash_news' as const,
-            contentId: id,
-          }))
-          const payload = await apiFetch<unknown>('/api/translate', {
-            method: 'POST',
-            cache: 'no-store',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-              ...getCsrfHeaders(),
-            },
-            body: JSON.stringify({ items: outgoingItems, targetLang }),
-            signal: controller.signal,
-            timeoutMs: TRANSLATION_REQUEST_TIMEOUT_MS,
-          })
+          const batches: FlashNewsTranslationDescriptor[][] = []
+          for (
+            let offset = 0;
+            offset < unambiguousDescriptors.length;
+            offset += FLASH_NEWS_TRANSLATION_BATCH_SIZE
+          ) {
+            batches.push(
+              unambiguousDescriptors.slice(offset, offset + FLASH_NEWS_TRANSLATION_BATCH_SIZE)
+            )
+          }
 
-          // The response does not echo contentType. Project the legacy
-          // flash_news request into the shared parser's response-only shape;
-          // outbound cache namespacing above remains flash_news.
-          const parserItems: BatchTranslationItem[] = unambiguousDescriptors.map(
-            ({ id, source }) => ({
-              id,
-              text: source,
-              contentType: 'post_content',
-              contentId: id,
-              targetLang,
+          const receipts = await Promise.all(
+            batches.map(async (batch) => {
+              const outgoingItems = batch.map(({ id, source }) => ({
+                id,
+                text: source,
+                contentType: 'flash_news' as const,
+                contentId: id,
+              }))
+              const payload = await apiFetch<unknown>('/api/translate', {
+                method: 'POST',
+                cache: 'no-store',
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                  ...getCsrfHeaders(),
+                },
+                body: JSON.stringify({ items: outgoingItems, targetLang }),
+                signal: controller.signal,
+                timeoutMs: TRANSLATION_REQUEST_TIMEOUT_MS,
+              })
+
+              // The response does not echo contentType. Project the legacy
+              // flash_news request into the shared parser's response-only shape;
+              // outbound cache namespacing above remains flash_news.
+              const parserItems: BatchTranslationItem[] = batch.map(({ id, source }) => ({
+                id,
+                text: source,
+                contentType: 'post_content',
+                contentId: id,
+                targetLang,
+              }))
+              const receipt = readBatchTranslationResponse(payload, parserItems)
+              if (!receipt) throw new Error('Flash news translation returned an invalid batch')
+              return receipt
             })
           )
-          const receipt = readBatchTranslationResponse(payload, parserItems)
-          if (!receipt) throw new Error('Flash news translation returned an invalid batch')
 
           const active = activeTranslationRef.current
           if (
@@ -721,21 +751,33 @@ export default function FlashNewsPageClient() {
             return
           }
 
+          const staged = new Map<string, CachedFlashNewsTranslation>()
+          batches.forEach((batch, batchIndex) => {
+            const receipt = receipts[batchIndex]
+            for (const descriptor of batch) {
+              const result = receipt?.results[descriptor.id]
+              if (!result || result.translatedText.trim() === descriptor.source.trim()) {
+                throw new Error('Flash news translation did not translate every requested item')
+              }
+              staged.set(descriptor.id, {
+                source: descriptor.source,
+                targetLang,
+                translatedText: result.translatedText,
+              })
+            }
+          })
+          if (staged.size !== unambiguousDescriptors.length) {
+            throw new Error('Flash news translation lost a requested item')
+          }
+
           const current = translatedContentRef.current
           let next = current
           for (const descriptor of unambiguousDescriptors) {
-            const result = receipt.results[descriptor.id]
-            if (result.translatedText.trim() === descriptor.source.trim()) {
-              translationCacheRef.current.delete(descriptor.id)
-              continue
-            }
-            translationCacheRef.current.set(descriptor.id, {
-              source: descriptor.source,
-              targetLang,
-              translatedText: result.translatedText,
-            })
+            const translated = staged.get(descriptor.id)
+            if (!translated) throw new Error('Flash news translation staging failed')
+            translationCacheRef.current.set(descriptor.id, translated)
             if (next === current) next = { ...current }
-            next[descriptor.id] = result.translatedText
+            next[descriptor.id] = translated.translatedText
           }
           if (next !== current) {
             translationOwnerRef.current = {
@@ -749,6 +791,9 @@ export default function FlashNewsPageClient() {
             setTranslatedContent(next)
           }
         } catch {
+          if (!controller.signal.aborted) {
+            controller.abort(new DOMException('Flash news translation batch failed', 'AbortError'))
+          }
           // Translation is best-effort; invalid/error responses never replace original text.
         } finally {
           const active = activeTranslationRef.current
@@ -764,11 +809,11 @@ export default function FlashNewsPageClient() {
       return promise
     },
     [
-      accessToken,
       cancelActiveTranslation,
       captureTranslationScope,
       isLoggedIn,
       language,
+      translationAccessToken,
       translationScopeIsCurrent,
     ]
   )
@@ -890,17 +935,18 @@ export default function FlashNewsPageClient() {
 
   // Shared NewsCard renderer (long prop list, reused for pinned + timeline).
   const renderCard = (item: FlashNews) => (
-    <NewsCard
-      key={item.id}
-      item={item}
-      categoryDisplayMap={CATEGORY_DISPLAY_MAP}
-      categoryColors={CATEGORY_COLORS_MAPPED}
-      importanceConfig={IMPORTANCE_CONFIG}
-      getNewsTitle={getNewsTitle}
-      getNewsContent={getNewsContent}
-      translatedContent={visibleTranslatedContent}
-      formatPublishedTime={formatPublishedTime}
-    />
+    <div key={item.id} aria-busy={translatingIds.has(item.id)}>
+      <NewsCard
+        item={item}
+        categoryDisplayMap={CATEGORY_DISPLAY_MAP}
+        categoryColors={CATEGORY_COLORS_MAPPED}
+        importanceConfig={IMPORTANCE_CONFIG}
+        getNewsTitle={getNewsTitle}
+        getNewsContent={getNewsContent}
+        translatedContent={visibleTranslatedContent}
+        formatPublishedTime={formatPublishedTime}
+      />
+    </div>
   )
 
   const DaySeparator = ({ label }: { label: string }) => (
