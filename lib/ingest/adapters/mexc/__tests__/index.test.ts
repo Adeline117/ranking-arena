@@ -111,8 +111,15 @@ describe('MEXC copier pagination', () => {
     expect(requests).toHaveBeenCalledTimes(2)
   })
 
-  it('stops on a genuinely short RAW candidate page', async () => {
-    const { fetchSession, requests } = session([payload(9, 3), payload(1, 3)])
+  it('continues a short RAW candidate page when totalPage reports more pages', async () => {
+    const { fetchSession, requests } = session([payload(9, 2), payload(1, 2)])
+
+    expect(await copiers(fetchSession)).toHaveLength(2)
+    expect(requests).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops when totalPage reaches the current page even if the page is full', async () => {
+    const { fetchSession, requests } = session([payload(10, 1), payload(1, 2)])
 
     expect(await copiers(fetchSession)).toHaveLength(1)
     expect(requests).toHaveBeenCalledTimes(1)
