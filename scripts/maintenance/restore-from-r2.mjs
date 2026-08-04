@@ -14,8 +14,10 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
+import { link, unlink } from 'node:fs/promises'
 import { isIP } from 'node:net'
 import { resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
@@ -29,6 +31,7 @@ import {
   assertBackupArtifact,
   assertCompleteBackupObject,
   COMPLETE_BACKUP_MIN_BYTES,
+  MINIMUM_APPLICATION_BACKUP_RELATIONS,
   arenaCompletionTokenFromMetadata,
   preparePostgresConnection,
 } from './backup-restore-contract.mjs'
@@ -46,11 +49,11 @@ const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n
 const DEFAULT_PSQL_PATH = '/opt/homebrew/opt/postgresql@17/bin/psql'
 const DEFAULT_GUNZIP_PATH = '/usr/bin/gunzip'
 
-function postgresChildEnv(password) {
-  const childEnv = cleanPostgresConnectionEnv(
-    process.env,
-    password === undefined ? {} : { PGPASSWORD: password }
-  )
+function postgresChildEnv(connectionUrl, password) {
+  const childEnv = cleanPostgresConnectionEnv(process.env, {
+    ...(connectionUrl === undefined ? {} : { PGDATABASE: connectionUrl }),
+    ...(password === undefined ? {} : { PGPASSWORD: password }),
+  })
   for (const secretName of [
     'DATABASE_URL',
     'RESTORE_TARGET_URL',
@@ -317,11 +320,22 @@ export async function downloadBackupObject({ s3, bucket, selected, localPath, mi
     )
   }
 
-  await pipeline(response.Body, createWriteStream(localPath, { flags: 'wx' }))
+  // A consumer must never observe a half-downloaded restore artifact. Write a
+  // private sibling, hard-link it into place without overwrite, then remove the
+  // temporary name. Every failure path removes the private partial.
+  const partialPath = `${localPath}.partial-${randomBytes(16).toString('hex')}`
+  try {
+    await pipeline(response.Body, createWriteStream(partialPath, { flags: 'wx', mode: 0o600 }))
+    await link(partialPath, localPath)
+  } finally {
+    await unlink(partialPath).catch((error) => {
+      if (error.code !== 'ENOENT') throw error
+    })
+  }
 }
 
-/** Apply a plain-SQL gzip and preserve both gunzip and psql exit status. */
-export function runRestorePipeline({
+/** Apply a plain-SQL gzip without a shell and preserve both child exit statuses. */
+export async function runRestorePipeline({
   localGz,
   gunzipPath,
   psqlPath,
@@ -329,27 +343,74 @@ export function runRestorePipeline({
   password,
   timeoutMs = 2 * 60 * 60_000,
 }) {
-  const postgresEnv = postgresChildEnv(password)
-
-  execFileSync(
-    '/bin/bash',
-    [
-      '-o',
-      'pipefail',
-      '-c',
-      '"$2" -c "$1" | "$3" -X --no-password -v ON_ERROR_STOP=1 --single-transaction --quiet "$4"',
-      'arena-restore-pipeline',
-      localGz,
-      gunzipPath,
-      psqlPath,
-      connectionUrl,
-    ],
+  const archiveEnv = postgresChildEnv(undefined, undefined)
+  const postgresEnv = postgresChildEnv(connectionUrl, password)
+  const gunzip = spawn(gunzipPath, ['-c', '--', localGz], {
+    env: archiveEnv,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  const psql = spawn(
+    psqlPath,
+    ['-X', '--no-password', '-v', 'ON_ERROR_STOP=1', '--single-transaction', '--quiet'],
     {
       env: postgresEnv,
-      stdio: ['ignore', 'inherit', 'inherit'],
-      timeout: timeoutMs,
+      stdio: ['pipe', 'inherit', 'pipe'],
     }
   )
+  const gunzipOutcome = childOutcome(gunzip, 'gunzip', timeoutMs)
+  const psqlOutcome = childOutcome(psql, 'psql', timeoutMs)
+  let streamError = null
+  try {
+    await pipeline(gunzip.stdout, psql.stdin)
+  } catch (error) {
+    streamError = error
+    if (gunzip.exitCode === null && gunzip.signalCode === null) gunzip.kill('SIGKILL')
+    if (psql.exitCode === null && psql.signalCode === null) psql.kill('SIGKILL')
+  }
+
+  const [{ error: gunzipError }, { error: psqlError }] = await Promise.all([
+    gunzipOutcome,
+    psqlOutcome,
+  ])
+  if (gunzipError) throw gunzipError
+  if (psqlError) throw psqlError
+  if (streamError) throw streamError
+}
+
+function childOutcome(child, label, timeoutMs) {
+  let stderr = ''
+  child.stderr?.on('data', (chunk) => {
+    if (stderr.length < 16_384) stderr += chunk.toString('utf8').slice(0, 16_384 - stderr.length)
+  })
+
+  return new Promise((resolveOutcome) => {
+    let settled = false
+    const finish = (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolveOutcome({ error })
+    }
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      const error = new Error(`${label} timed out after ${timeoutMs}ms`)
+      error.code = 'ETIMEDOUT'
+      finish(error)
+    }, timeoutMs)
+    timer.unref?.()
+
+    child.once('error', finish)
+    child.once('close', (code, signal) => {
+      if (code === 0 && signal === null) return finish(null)
+      const detail = stderr.trim() ? `: ${stderr.trim()}` : ''
+      const error = new Error(
+        `${label} failed with ${signal ? `signal ${signal}` : `status ${String(code)}`}${detail}`
+      )
+      error.status = code
+      error.signal = signal
+      finish(error)
+    })
+  })
 }
 
 const CRITICAL_COUNT_SQL = CRITICAL_RESTORE_TABLES.map(
@@ -362,7 +423,7 @@ export function queryCriticalTableCounts({
   password,
   timeoutMs = 5 * 60_000,
 }) {
-  const postgresEnv = postgresChildEnv(password)
+  const postgresEnv = postgresChildEnv(connectionUrl, password)
   return execFileSync(
     psqlPath,
     [
@@ -376,7 +437,6 @@ export function queryCriticalTableCounts({
       '\t',
       '-c',
       CRITICAL_COUNT_SQL,
-      connectionUrl,
     ],
     {
       encoding: 'utf8',
@@ -435,7 +495,10 @@ export async function restoreSelectedBackup({
   await download(localPath)
 
   const completionToken = arenaCompletionTokenFromMetadata(selected.Metadata)
-  const downloadedSize = await assertBackupArtifact(localPath, minimumBytes, { completionToken })
+  const downloadedSize = await assertBackupArtifact(localPath, minimumBytes, {
+    completionToken,
+    requiredRelations: MINIMUM_APPLICATION_BACKUP_RELATIONS,
+  })
   if (downloadedSize !== selected.Size) {
     throw new Error(
       `downloaded backup size does not match selected object: ${downloadedSize} != ${selected.Size}`

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -34,8 +34,12 @@ import {
 
 const LEGACY_TOKEN = 'L'.repeat(63)
 const ARENA_TOKEN = 'c'.repeat(64)
+const MINIMUM_SCOPE_SQL =
+  'CREATE TABLE arena.traders (id bigint);\n' +
+  'CREATE TABLE arena.trader_stats (id bigint);\n' +
+  'CREATE TABLE public.leaderboard_ranks (id bigint);\n'
 
-function pgDumpFixture({ token = LEGACY_TOKEN, body = 'SELECT 1;\n', arenaToken } = {}) {
+function pgDumpFixture({ token = LEGACY_TOKEN, body = MINIMUM_SCOPE_SQL, arenaToken } = {}) {
   return (
     `--\n-- PostgreSQL database dump\n--\n\n\\restrict ${token}\n\n` +
     body +
@@ -424,6 +428,40 @@ test('downloads the exact selected bytes before local integrity validation', asy
       minimumBytes: 1,
     })
     assert.deepEqual(await readFile(localPath), artifact)
+    assert.equal((await stat(localPath)).mode & 0o777, 0o600)
+    assert.deepEqual(await readdir(directory), ['backup.sql.gz'])
+  })
+})
+
+test('removes private partial downloads when the R2 body stream fails', async () => {
+  await withTempDir(async (directory) => {
+    const localPath = join(directory, 'backup.sql.gz')
+    const selected = completeSchemasObject({ Size: 10 })
+    const body = Readable.from(
+      (async function* () {
+        yield Buffer.from('partial')
+        throw new Error('fixture stream failed')
+      })()
+    )
+
+    await assert.rejects(
+      downloadBackupObject({
+        s3: {
+          send: async () => ({
+            Body: body,
+            ContentLength: selected.Size,
+            ETag: selected.ETag,
+            Metadata: selected.Metadata,
+          }),
+        },
+        bucket: 'arena-backups',
+        selected,
+        localPath,
+        minimumBytes: 1,
+      }),
+      /fixture stream failed/
+    )
+    assert.deepEqual(await readdir(directory), [])
   })
 })
 
@@ -573,7 +611,7 @@ test('rejects a locally truncated object even when the remaining gzip is valid',
   })
 })
 
-test('pipefail exposes gunzip failure even when psql exits successfully', async () => {
+test('gunzip failure is preserved even when psql exits successfully', async () => {
   await withTempDir(async (directory) => {
     const gunzip = join(directory, 'gunzip')
     const psql = join(directory, 'psql')
@@ -590,16 +628,15 @@ test('pipefail exposes gunzip failure even when psql exits successfully', async 
         BASH_ENV_MARKER: bashEnvMarker,
       },
       async () => {
-        assert.throws(
-          () =>
-            runRestorePipeline({
-              localGz: join(directory, 'unused.sql.gz'),
-              gunzipPath: gunzip,
-              psqlPath: psql,
-              connectionUrl: 'postgresql://restore@db.example.com/app',
-              password: undefined,
-              timeoutMs: 5_000,
-            }),
+        await assert.rejects(
+          runRestorePipeline({
+            localGz: join(directory, 'unused.sql.gz'),
+            gunzipPath: gunzip,
+            psqlPath: psql,
+            connectionUrl: 'postgresql://restore@db.example.com/app',
+            password: undefined,
+            timeoutMs: 5_000,
+          }),
           (error) => error?.status === 42
         )
       }
@@ -615,16 +652,15 @@ test('psql failure makes the restore pipeline fail', async () => {
     await writeExecutable(gunzip, "#!/bin/sh\nprintf 'SELECT 1;\\n'\n")
     await writeExecutable(psql, '#!/bin/sh\ncat >/dev/null\nexit 37\n')
 
-    assert.throws(
-      () =>
-        runRestorePipeline({
-          localGz: join(directory, 'unused.sql.gz'),
-          gunzipPath: gunzip,
-          psqlPath: psql,
-          connectionUrl: 'postgresql://restore@db.example.com/app',
-          password: undefined,
-          timeoutMs: 5_000,
-        }),
+    await assert.rejects(
+      runRestorePipeline({
+        localGz: join(directory, 'unused.sql.gz'),
+        gunzipPath: gunzip,
+        psqlPath: psql,
+        connectionUrl: 'postgresql://restore@db.example.com/app',
+        password: undefined,
+        timeoutMs: 5_000,
+      }),
       (error) => error?.status === 37
     )
   })
@@ -660,7 +696,7 @@ test('keeps authority and query passwords out of psql argv and logs', async () =
       const prepared = preparePostgresConnection(target, 'RESTORE_TARGET_URL')
       const identity = normalizePostgresIdentity(target, 'RESTORE_TARGET_URL')
 
-      runRestorePipeline({
+      await runRestorePipeline({
         localGz: join(directory, 'unused.sql.gz'),
         gunzipPath: gunzip,
         psqlPath: psql,
@@ -676,7 +712,6 @@ test('keeps authority and query passwords out of psql argv and logs', async () =
         'ON_ERROR_STOP=1',
         '--single-transaction',
         '--quiet',
-        'postgresql://restore@DB.EXAMPLE.COM.:5432/app?sslmode=require',
       ])
       assert.doesNotMatch(
         argv.join('\n'),
@@ -734,7 +769,7 @@ test('removes every ambient PG variable and parent credential from restore psql 
         RESTORE_EMIT_COUNTS: '0',
       },
       async () => {
-        runRestorePipeline({
+        await runRestorePipeline({
           localGz: join(directory, 'unused.sql.gz'),
           gunzipPath: gunzip,
           psqlPath: psql,
@@ -744,9 +779,12 @@ test('removes every ambient PG variable and parent credential from restore psql 
         })
 
         const pipelineEnv = await readFile(pipelineEnvLog, 'utf8')
+        assert.match(pipelineEnv, /^PGDATABASE=postgresql:\/\/restore@db\.example\.com\/app$/m)
         assert.match(pipelineEnv, /^PGPASSWORD=parsed-target-password$/m)
         for (const name of POSTGRES_CONNECTION_ENV_NAMES) {
-          if (name !== 'PGPASSWORD') assert.doesNotMatch(pipelineEnv, new RegExp(`^${name}=`, 'm'))
+          if (name !== 'PGDATABASE' && name !== 'PGPASSWORD') {
+            assert.doesNotMatch(pipelineEnv, new RegExp(`^${name}=`, 'm'))
+          }
         }
         assert.doesNotMatch(
           pipelineEnv,
@@ -763,7 +801,8 @@ test('removes every ambient PG variable and parent credential from restore psql 
         })
         assert.equal(parseCriticalTableCounts(output)['arena.traders'], 5n)
         const queryEnv = await readFile(queryEnvLog, 'utf8')
-        assert.doesNotMatch(queryEnv, /^PG[A-Z0-9_]*=/m)
+        assert.match(queryEnv, /^PGDATABASE=postgresql:\/\/restore@db\.example\.com\/app$/m)
+        assert.doesNotMatch(queryEnv, /^PG(?!DATABASE=)[A-Z0-9_]*=/m)
         assert.doesNotMatch(queryEnv, /parent-secret|target-secret|parent-r2/)
       }
     )
@@ -1040,7 +1079,8 @@ test('verification query uses sanitized argv, PGPASSWORD, and strict psql flags'
       assert.equal(argv[1], '--no-password')
       assert.equal(argv[2], '-v')
       assert.equal(argv[3], 'ON_ERROR_STOP=1')
-      assert.equal(argv.at(-1), 'postgresql://restore@db.example.com/app?sslmode=require')
+      assert.equal(argv.at(-1).includes('public.leaderboard_ranks'), true)
+      assert.doesNotMatch(argv.join('\n'), /postgresql:\/\//)
       assert.match(argv.join('\n'), /arena\.traders/)
       assert.doesNotMatch(argv.join('\n'), /secret|password=/)
       assert.equal(await readFile(passwordLog, 'utf8'), 'query-secret')
@@ -1107,8 +1147,10 @@ test('the executable is fail-closed and its real behavior contract runs in CI', 
   const ci = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
 
   assert.match(source, /HeadObjectCommand/)
-  assert.match(source, /'pipefail'/)
-  assert.match(source, /assertBackupArtifact\(localPath, minimumBytes, \{ completionToken \}\)/)
+  assert.match(source, /spawn\(gunzipPath/)
+  assert.match(source, /PGDATABASE: connectionUrl/)
+  assert.doesNotMatch(source, /\/bin\/bash|pipefail/)
+  assert.match(source, /requiredRelations: MINIMUM_APPLICATION_BACKUP_RELATIONS/)
   assert.match(source, /parseCriticalTableCounts\(await verify\(\)\)/)
   assert.doesNotMatch(source, /execSync\(/)
   assert.doesNotMatch(source, /`[^`]*\$\{TARGET\}/)
