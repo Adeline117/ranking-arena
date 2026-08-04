@@ -27,7 +27,12 @@ function mockResponse(status: number, body: unknown) {
 jest.mock('@/lib/api', () => ({
   getSupabaseAdmin: () => mockSupabase,
   requireAuth: jest.fn().mockResolvedValue({ id: 'user-1', email: 'user@example.com' }),
-  success: (data: unknown) => mockResponse(200, { success: true, data }),
+  success: (data: unknown) =>
+    mockResponse(200, {
+      success: true,
+      data,
+      meta: { timestamp: '2026-08-03T12:00:00.000Z' },
+    }),
   handleError: (error: unknown) => {
     const typed = error as { message?: string; statusCode?: number }
     return mockResponse(typed.statusCode ?? 500, {
@@ -236,6 +241,19 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
     const response = await POST(request(walletClaim(checksumEvm, checksumEvm)))
 
     expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        claimId: 'claim-1',
+        traderId: canonicalEvm,
+        source: 'hyperliquid',
+        viewerId: 'user-1',
+        method: 'signature',
+        status: 'reviewing',
+        autoApproved: false,
+      },
+      meta: { timestamp: '2026-08-03T12:00:00.000Z' },
+    })
     expect(mockIsTraderClaimed).toHaveBeenCalledWith(mockSupabase, canonicalEvm, 'hyperliquid')
     expect(mockVerifyWalletOwnership).toHaveBeenCalledWith(
       mockSupabase,

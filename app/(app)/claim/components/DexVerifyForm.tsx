@@ -18,6 +18,7 @@ import {
   type SettingsViewerSnapshot,
 } from '@/app/(app)/settings/hooks/settings-viewer-scope'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
+import { readTraderClaimSubmitAcknowledgement } from '@/lib/auth/trader-claim-submit-contract'
 
 declare global {
   interface Window {
@@ -57,27 +58,6 @@ function responseMessage(value: unknown, fallback: string): string {
     return value.error.message.trim()
   }
   return fallback
-}
-
-function isClaimAcknowledgement(
-  value: unknown,
-  expected: {
-    source: string
-    traderId: string
-    userId: string
-  }
-): boolean {
-  if (!isRecord(value) || value.success !== true || !isRecord(value.data)) return false
-  const claim = value.data.claim
-  return (
-    isRecord(claim) &&
-    claim.user_id === expected.userId &&
-    claim.trader_id === expected.traderId &&
-    claim.source === expected.source.toLowerCase() &&
-    claim.status === 'reviewing' &&
-    claim.verification_method === 'signature' &&
-    value.data.auto_approved === false
-  )
 }
 
 function canonicalTraderId(trader: SearchResult): string {
@@ -268,10 +248,12 @@ function ViewerScopedDexVerifyForm({
       }
       if (
         !claimResult.ok ||
-        !isClaimAcknowledgement(claimResult.data, {
+        claimResult.status !== 200 ||
+        !readTraderClaimSubmitAcknowledgement(claimResult.data, {
           source: trader.source,
           traderId: claimTraderId,
-          userId: operation.viewer.userId,
+          viewerId: operation.viewer.userId,
+          method: 'signature',
         })
       ) {
         showToast(responseMessage(claimResult.data, t('claimFailed')), 'error')

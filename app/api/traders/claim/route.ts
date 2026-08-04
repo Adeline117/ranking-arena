@@ -286,11 +286,16 @@ export async function POST(request: NextRequest) {
     // Owner alert (Telegram) — the review queue ping.
     notifyTraderClaim(user.email ?? null, trader_id, source)
 
+    // Return a minimal, identity-bound receipt. Never echo signature material or
+    // other verification_data back to the browser after it has been consumed.
     return success({
-      claim,
-      message:
-        'Verification passed! Your claim is under review — you will be notified once approved.',
-      auto_approved: false,
+      claimId: claim.id,
+      traderId: claim.trader_id,
+      source: claim.source,
+      viewerId: claim.user_id,
+      method: claim.verification_method,
+      status: claim.status,
+      autoApproved: false as const,
     })
   } catch (error: unknown) {
     return handleError(error, 'trader claim POST')

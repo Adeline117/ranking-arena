@@ -143,6 +143,23 @@ function ownershipAcknowledgement(
   }
 }
 
+function claimAcknowledgement(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    data: {
+      claimId: 'claim-1',
+      traderId: 'account/42',
+      source: 'binance',
+      viewerId: VIEWER_A,
+      method: 'api_key',
+      status: 'reviewing',
+      autoApproved: false,
+      ...overrides,
+    },
+    meta: { timestamp: '2026-08-03T12:00:00.000Z' },
+  }
+}
+
 type MockFetchResult = ReturnType<typeof response>
 
 function deferred<T>() {
@@ -215,21 +232,7 @@ describe('CexVerifyForm login intent', () => {
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 3)
     mockAuthedFetch
       .mockResolvedValueOnce(response(ownershipAcknowledgement()))
-      .mockResolvedValueOnce(
-        response({
-          success: true,
-          data: {
-            claim: {
-              user_id: VIEWER_A,
-              trader_id: 'account/42',
-              source: 'binance',
-              status: 'reviewing',
-              verification_method: 'api_key',
-            },
-            auto_approved: false,
-          },
-        })
-      )
+      .mockResolvedValueOnce(response(claimAcknowledgement()))
     const onSuccess = jest.fn()
     renderForm(onSuccess)
     fillCredentials()
@@ -312,6 +315,40 @@ describe('CexVerifyForm login intent', () => {
     expect(mockShowToast).not.toHaveBeenCalledWith('claimSubmitted', 'success')
   })
 
+  it('ignores an old claim response after the selected trader changes', async () => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 5)
+    const claim = deferred<MockFetchResult>()
+    mockAuthedFetch
+      .mockResolvedValueOnce(response(ownershipAcknowledgement()))
+      .mockReturnValueOnce(claim.promise)
+    const onSuccess = jest.fn()
+    const view = renderForm(onSuccess)
+    fillCredentials()
+
+    fireEvent.click(screen.getByRole('button', { name: 'claimVerifyAndClaim' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+
+    view.rerender(
+      <CexVerifyForm
+        trader={{
+          handle: 'Another Trader',
+          source: 'binance',
+          source_trader_id: 'account/99',
+        }}
+        onSuccess={onSuccess}
+      />
+    )
+
+    await act(async () => {
+      claim.resolve(response(claimAcknowledgement()))
+      await claim.promise
+    })
+
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalledWith('claimSubmitted', 'success')
+  })
+
   it('rejects a verification acknowledgement for another viewer', async () => {
     mockAuth = signedIn(VIEWER_A, 'access-token-a', 6)
     mockAuthedFetch.mockResolvedValueOnce(
@@ -363,6 +400,29 @@ describe('CexVerifyForm login intent', () => {
 
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('claimApiKeyMismatch', 'error'))
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a non-200 claim response', claimAcknowledgement(), 201],
+    ['a claim for another viewer', claimAcknowledgement({ viewerId: VIEWER_B }), 200],
+    ['a claim for another trader', claimAcknowledgement({ traderId: 'account/99' }), 200],
+    ['a claim with another method', claimAcknowledgement({ method: 'signature' }), 200],
+    ['a widened claim envelope', { ...claimAcknowledgement(), privileged: true }, 200],
+  ])('rejects %s', async (_label, acknowledgement, status) => {
+    mockAuth = signedIn(VIEWER_A, 'access-token-a', 8)
+    mockAuthedFetch
+      .mockResolvedValueOnce(response(ownershipAcknowledgement()))
+      .mockResolvedValueOnce(response(acknowledgement, status))
+    const onSuccess = jest.fn()
+    renderForm(onSuccess)
+    fillCredentials()
+
+    fireEvent.click(screen.getByRole('button', { name: 'claimVerifyAndClaim' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('claimFailed', 'error'))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
     expect(onSuccess).not.toHaveBeenCalled()
     expect(mockTrackEvent).not.toHaveBeenCalled()
   })

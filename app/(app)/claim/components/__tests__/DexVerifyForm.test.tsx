@@ -110,6 +110,23 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function claimAcknowledgement(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    data: {
+      claimId: 'claim-1',
+      traderId: checksumWallet.toLowerCase(),
+      source: 'hyperliquid',
+      viewerId: VIEWER_A,
+      method: 'signature',
+      status: 'reviewing',
+      autoApproved: false,
+      ...overrides,
+    },
+    meta: { timestamp: '2026-08-03T12:00:00.000Z' },
+  }
+}
+
 describe('DexVerifyForm proof submission', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -127,21 +144,7 @@ describe('DexVerifyForm proof submission', () => {
   })
 
   it('submits a signed proof exactly once through the atomic claim endpoint', async () => {
-    mockAuthedFetch.mockResolvedValueOnce(
-      response({
-        success: true,
-        data: {
-          claim: {
-            user_id: VIEWER_A,
-            trader_id: checksumWallet.toLowerCase(),
-            source: 'hyperliquid',
-            status: 'reviewing',
-            verification_method: 'signature',
-          },
-          auto_approved: false,
-        },
-      })
-    )
+    mockAuthedFetch.mockResolvedValueOnce(response(claimAcknowledgement()))
     const onSuccess = jest.fn()
 
     render(
@@ -201,21 +204,7 @@ describe('DexVerifyForm proof submission', () => {
       configurable: true,
       value: { request },
     })
-    mockAuthedFetch.mockResolvedValueOnce(
-      response({
-        success: true,
-        data: {
-          claim: {
-            user_id: VIEWER_A,
-            trader_id: checksumWallet.toLowerCase(),
-            source: 'hyperliquid',
-            status: 'reviewing',
-            verification_method: 'signature',
-          },
-          auto_approved: false,
-        },
-      })
-    )
+    mockAuthedFetch.mockResolvedValueOnce(response(claimAcknowledgement()))
     const onSuccess = jest.fn()
 
     render(
@@ -332,5 +321,83 @@ describe('DexVerifyForm proof submission', () => {
     expect(onSuccess).not.toHaveBeenCalled()
     expect(mockTrackEvent).not.toHaveBeenCalled()
     expect(mockShowToast).not.toHaveBeenCalledWith('claimSubmitted', 'success')
+  })
+
+  it('ignores an old claim response after the selected wallet changes', async () => {
+    const claim = deferred<ReturnType<typeof response>>()
+    mockAuthedFetch.mockReturnValueOnce(claim.promise)
+    const onSuccess = jest.fn()
+    const view = render(
+      <DexVerifyForm
+        trader={{
+          handle: 'Wallet Trader',
+          source: 'hyperliquid',
+          source_trader_id: checksumWallet.toLowerCase(),
+        }}
+        onSuccess={onSuccess}
+      />
+    )
+
+    const timeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementationOnce(() => 0 as never)
+    fireEvent.click(screen.getByRole('button', { name: 'claimWalletSignMessage' }))
+    timeoutSpy.mockRestore()
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+
+    view.rerender(
+      <DexVerifyForm
+        trader={{
+          handle: 'Another Wallet',
+          source: 'hyperliquid',
+          source_trader_id: '0x1111111111111111111111111111111111111111',
+        }}
+        onSuccess={onSuccess}
+      />
+    )
+
+    await act(async () => {
+      claim.resolve(response(claimAcknowledgement()))
+      await claim.promise
+    })
+
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalledWith('claimSubmitted', 'success')
+  })
+
+  it.each([
+    ['a non-200 claim response', claimAcknowledgement(), 202],
+    ['a claim for another viewer', claimAcknowledgement({ viewerId: VIEWER_B }), 200],
+    ['a claim for another wallet', claimAcknowledgement({ traderId: '0xother' }), 200],
+    ['a claim for another source', claimAcknowledgement({ source: 'drift' }), 200],
+    ['a claim with another method', claimAcknowledgement({ method: 'api_key' }), 200],
+    [
+      'a widened claim payload',
+      {
+        ...claimAcknowledgement(),
+        data: { ...claimAcknowledgement().data, autoActivated: true },
+      },
+      200,
+    ],
+  ])('rejects %s', async (_label, acknowledgement, status) => {
+    mockAuthedFetch.mockResolvedValueOnce(response(acknowledgement, status))
+    const onSuccess = jest.fn()
+    render(
+      <DexVerifyForm
+        trader={{
+          handle: 'Wallet Trader',
+          source: 'hyperliquid',
+          source_trader_id: checksumWallet.toLowerCase(),
+        }}
+        onSuccess={onSuccess}
+      />
+    )
+
+    const timeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementationOnce(() => 0 as never)
+    fireEvent.click(screen.getByRole('button', { name: 'claimWalletSignMessage' }))
+    timeoutSpy.mockRestore()
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('claimFailed', 'error'))
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
   })
 })
