@@ -46,6 +46,10 @@ function artifactError(detail: string): Error {
   return new Error(`[ingest] copier snapshot artifact failed: ${detail}`)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function canonicalInstant(value: unknown, label: string): string {
   if (typeof value !== 'string') throw artifactError(`${label} must be an ISO timestamp`)
   const epochMs = Date.parse(value)
@@ -65,6 +69,12 @@ function assertCoordinate(value: unknown, label: string): asserts value is numbe
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
     throw artifactError(`${label} must be a positive safe integer`)
   }
+}
+
+function isCopierSnapshotSourceDepth(
+  value: SourceRow['copier_table_depth']
+): value is CopierSnapshotSourceDepth {
+  return value === 'full' || value === 'top10' || value === 'top3_preview'
 }
 
 function normalizePage(page: RawPage, ordinal: number): RawPage {
@@ -98,17 +108,24 @@ function normalizePage(page: RawPage, ordinal: number): RawPage {
 export function buildCopierSnapshotArtifact(
   input: BuildCopierSnapshotArtifactInput
 ): CopierSnapshotArtifact {
+  const sourceDepth = input.src.copier_table_depth
   assertCoordinate(input.src.id, 'source id')
   assertCoordinate(input.traderId, 'trader id')
   if (
     input.src.status !== 'active' ||
     input.src.serving_mode !== 'serving' ||
-    input.src.copier_table_depth === 'none'
+    !isCopierSnapshotSourceDepth(sourceDepth)
   ) {
     throw artifactError('source must be active serving with a copier surface')
   }
   if (!/^[a-z0-9][a-z0-9_]{0,127}$/.test(input.src.slug)) {
     throw artifactError('source slug is invalid')
+  }
+  if (!['USDT', 'USDx', 'USDC', 'USD'].includes(input.src.currency)) {
+    throw artifactError('source currency is invalid')
+  }
+  if (!['local', 'vps_sg', 'vps_jp'].includes(input.src.fetch_region)) {
+    throw artifactError('source fetch region is invalid')
   }
   if (
     typeof input.exchangeTraderId !== 'string' ||
@@ -149,7 +166,7 @@ export function buildCopierSnapshotArtifact(
       id: input.src.id,
       slug: input.src.slug,
       currency: input.src.currency,
-      copier_table_depth: input.src.copier_table_depth,
+      copier_table_depth: sourceDepth,
       fetch_region: input.src.fetch_region,
     },
     trader: {
@@ -179,4 +196,41 @@ export function buildCopierSnapshotArtifact(
 
 export function copierSnapshotSourceRunId(artifact: CopierSnapshotArtifact): string {
   return strictCanonicalSha256(artifact)
+}
+
+/** Rebuild and byte-compare an untrusted value before any RAW side effect. */
+export function revalidateCopierSnapshotArtifact(value: unknown): CopierSnapshotArtifact {
+  if (!isRecord(value) || value.contract !== COPIER_SNAPSHOT_ARTIFACT_CONTRACT) {
+    throw artifactError('artifact contract is invalid')
+  }
+  if (!isRecord(value.source) || !isRecord(value.trader) || !Array.isArray(value.pages)) {
+    throw artifactError('artifact coordinates or pages are malformed')
+  }
+
+  const rebuilt = buildCopierSnapshotArtifact({
+    src: {
+      id: value.source.id,
+      slug: value.source.slug,
+      currency: value.source.currency,
+      copier_table_depth: value.source.copier_table_depth,
+      fetch_region: value.source.fetch_region,
+      status: 'active',
+      serving_mode: 'serving',
+    } as SourceRow,
+    traderId: value.trader.id as number,
+    exchangeTraderId: value.trader.exchange_trader_id as string,
+    lane: value.lane as CopierSnapshotLane,
+    requestTimeframe: value.request_timeframe as Timeframe | null,
+    pages: value.pages as RawPage[],
+    callerLimited: value.caller_limited as boolean,
+  })
+
+  let exact = false
+  try {
+    exact = strictCanonicalJson(value) === strictCanonicalJson(rebuilt)
+  } catch {
+    exact = false
+  }
+  if (!exact) throw artifactError('artifact is not the exact canonical contract')
+  return rebuilt
 }

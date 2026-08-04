@@ -3,6 +3,7 @@ import {
   buildCopierSnapshotArtifact,
   copierSnapshotSourceRunId,
   COPIER_SNAPSHOT_ARTIFACT_CONTRACT,
+  revalidateCopierSnapshotArtifact,
 } from '../copier-snapshot-artifact'
 import { strictCanonicalJson } from '../strict-canonical-json'
 
@@ -102,6 +103,17 @@ describe('copier snapshot acquisition artifact', () => {
       caller_limited: false,
       source_reported_row_count: null,
     })
+  })
+
+  it('revalidates only the exact canonical shape', () => {
+    const artifact = build()
+    expect(revalidateCopierSnapshotArtifact(artifact)).toEqual(artifact)
+    expect(() => revalidateCopierSnapshotArtifact({ ...artifact, rank_eligible: true })).toThrow(
+      'artifact is not the exact canonical contract'
+    )
+    expect(() =>
+      revalidateCopierSnapshotArtifact({ ...artifact, contract: 'arena.fake@1' })
+    ).toThrow('artifact contract is invalid')
   })
 
   it.each([
