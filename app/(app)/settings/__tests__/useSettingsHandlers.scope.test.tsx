@@ -387,6 +387,7 @@ describe('useSettingsHandlers viewer ownership', () => {
       ])
     })
 
+    expect(showConfirm).toHaveBeenCalledTimes(1)
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(hook.result.current.passkeys).toHaveLength(1)
     expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
@@ -398,6 +399,7 @@ describe('useSettingsHandlers viewer ownership', () => {
       await hook.result.current.handleRemovePasskey(credentialId)
     })
 
+    expect(showConfirm).toHaveBeenCalledTimes(2)
     expect(hook.result.current.passkeys).toEqual([])
     expect(showToast).toHaveBeenCalledWith('passkeyRemoved', 'success')
   })

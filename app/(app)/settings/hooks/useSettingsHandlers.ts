@@ -1514,11 +1514,11 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   const handleRemovePasskey = async (id: string) => {
     const scope = captureViewer()
     if (submittingRef.current || passkeyBusy || !scope || !stateBelongsToViewer(scope)) return
-    const confirmed = await showConfirm(t('passkeyRemoveTitle'), t('passkeyRemoveConfirm'))
-    if (!confirmed || !viewerIsCurrent(scope) || submittingRef.current || passkeyBusy) return
     submittingRef.current = true
     setPasskeyBusy(true)
     try {
+      const confirmed = await showConfirm(t('passkeyRemoveTitle'), t('passkeyRemoveConfirm'))
+      if (!confirmed || !viewerIsCurrent(scope)) return
       const token = await getFreshToken(scope)
       if (!viewerIsCurrent(scope)) return
       if (!token) {
