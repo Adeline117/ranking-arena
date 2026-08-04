@@ -9,7 +9,6 @@
  *   node scripts/diagnose.mjs --status
  *   node scripts/diagnose.mjs --freshness
  *   node scripts/diagnose.mjs --platforms
- *   node scripts/diagnose.mjs --tables
  *   node scripts/diagnose.mjs --enrichment
  */
 
@@ -24,7 +23,6 @@ const tasks = {
   status: [resolve(__dirname, 'check_status.mjs'), '--status'],
   freshness: [resolve(__dirname, 'check_status.mjs'), '--freshness'],
   platforms: [resolve(__dirname, 'check_status.mjs'), '--platforms'],
-  tables: [resolve(__dirname, 'check_tables.mjs')],
   enrichment: [resolve(__dirname, 'check_enrichment.mjs')],
 }
 
