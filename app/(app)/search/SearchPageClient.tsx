@@ -12,7 +12,10 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import ErrorState from '@/app/components/ui/ErrorState'
 import EmptyState from '@/app/components/ui/EmptyState'
 import Avatar from '@/app/components/ui/Avatar'
-import type { UnifiedSearchResponse } from '@/app/api/search/route'
+import {
+  fetchUnifiedSearch,
+  type UnifiedSearchResponse,
+} from '@/lib/search/unified-search-client-contract'
 import { features } from '@/lib/features'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { useDebounce } from '@/lib/hooks/useDebounce'
@@ -34,17 +37,6 @@ const saveSearchHistory = (query: string) => {
 }
 const clearSearchHistory = () => {
   clearHistory()
-}
-
-// ============================================
-// SWR fetcher for search API
-// ============================================
-
-const searchFetcher = async (url: string): Promise<UnifiedSearchResponse> => {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
-  return json.data || json
 }
 
 // Mapped search results used by the UI
@@ -142,11 +134,14 @@ function SearchContent() {
     refetch: retrySearch,
   } = useQuery<UnifiedSearchResponse>({
     queryKey: ['search', debouncedQuery, debouncedPlatform],
-    queryFn: () => searchFetcher(searchKey!),
+    queryFn: ({ signal }) => fetchUnifiedSearch(searchKey!, debouncedQuery, signal),
     enabled: !!searchKey,
     refetchOnWindowFocus: false,
     staleTime: STALE_STANDARD,
-    placeholderData: (prev) => prev,
+    // A previous query is not evidence for the newly typed query. React Query
+    // still preserves data for a failed refetch of the same key, which we show
+    // beside a compact retry state below.
+    retry: false,
   })
 
   // Map raw API data to UI-friendly shape
@@ -231,7 +226,8 @@ function SearchContent() {
   } = mapped
 
   const loading = swrLoading && !!debouncedQuery
-  const searchError = !!searchFetchError && !!debouncedQuery
+  const hasLastGoodSearchData = !!searchFetchError && !!debouncedQuery && !!rawSearchData?.results
+  const searchError = !!searchFetchError && !!debouncedQuery && !hasLastGoodSearchData
 
   // Show toast on search error
   useEffect(() => {
@@ -774,6 +770,16 @@ function SearchContent() {
               &quot;{query}&quot;
             </span>
           </div>
+        )}
+
+        {hasLastGoodSearchData && (
+          <ErrorState
+            title={t('searchErrorTitle')}
+            description={t('searchTryAgainLater')}
+            retry={() => void retrySearch()}
+            variant="compact"
+            retryButtonSize="md"
+          />
         )}
 
         {/* Tab filters */}
