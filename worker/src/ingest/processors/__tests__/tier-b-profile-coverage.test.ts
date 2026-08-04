@@ -388,7 +388,7 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockGetHistory).not.toHaveBeenCalled()
   })
 
-  it('atomically binds verified position-history RAW, rows, and cursor', async () => {
+  it('keeps terminal-verified position history RAW-only until parser evidence is receipt-bound', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
     mockGetHistory.mockImplementation(() => positionHistoryStream())
@@ -414,12 +414,12 @@ describe('Tier-B profile coverage accounting', () => {
 
     await expect(processTierB(job)).resolves.toMatchObject({
       tradersCrawled: 1,
-      historyRowsWritten: 1,
-      errors: 0,
+      historyRowsWritten: 0,
+      errors: 1,
     })
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
-    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
     expect(mockWritePositionHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
       sourceRunId: expect.stringMatching(/^[0-9a-f]{64}$/),
       artifact: {
@@ -435,27 +435,19 @@ describe('Tier-B profile coverage accounting', () => {
         },
       },
     })
-    expect(mockNextHistoryCursor).toHaveBeenCalledWith([positionRow], null)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
+      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
+    )
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockGetPositionHistoryPublicationCheckpoint).toHaveBeenCalledWith(34, 42)
     expect(mockGetHistoryCursor).not.toHaveBeenCalled()
-    const rawTransaction = mockPersistPositionHistoryRawPointer.mock.calls[0][0]
-    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).toHaveBeenCalledWith(
-      rawTransaction,
-      {
-        rawObjectId: 2_081_897,
-        previousPublicationId: null,
-        effectiveCursorAfter: '2026-07-15T11:00:00.000Z',
-        rows: [positionRow],
-      }
-    )
-    expect(mockPersistPositionHistoryRawPointer.mock.invocationCallOrder[0]).toBeLessThan(
-      mockPublishTierBVerifiedPositionHistoryInTransaction.mock.invocationCallOrder[0]
-    )
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
     expect(mockIngestClientRelease).toHaveBeenCalledWith(false)
   })
 
-  it('retains the receipt cursor when a verified overlap has no newer position', async () => {
+  it('does not advance an overlap cursor without receipt-bound parser evidence', async () => {
     const cursor = '2026-07-15T11:00:00.000Z'
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
@@ -501,24 +493,16 @@ describe('Tier-B profile coverage accounting', () => {
 
     await expect(processTierB(job)).resolves.toMatchObject({
       tradersCrawled: 1,
-      historyRowsWritten: 1,
-      errors: 0,
+      historyRowsWritten: 0,
+      errors: 1,
     })
 
     expect(mockGetHistoryCursor).not.toHaveBeenCalled()
-    expect(mockNextHistoryCursor).toHaveBeenCalledWith([positionRow], cursor)
-    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ query: expect.any(Function) }),
-      {
-        rawObjectId: 2_081_897,
-        previousPublicationId: 91,
-        effectiveCursorAfter: cursor,
-        rows: [positionRow],
-      }
-    )
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
   })
 
-  it('publishes a genesis receipt for a verified empty position history', async () => {
+  it('does not infer parser-complete from a terminal-verified empty payload', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
     mockGetHistory.mockImplementation(() => emptyPositionHistoryStream())
@@ -555,19 +539,11 @@ describe('Tier-B profile coverage accounting', () => {
     await expect(processTierB(job)).resolves.toMatchObject({
       tradersCrawled: 1,
       historyRowsWritten: 0,
-      errors: 0,
+      errors: 1,
     })
 
-    expect(mockNextHistoryCursor).toHaveBeenCalledWith([], null)
-    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ query: expect.any(Function) }),
-      {
-        rawObjectId: 2_081_897,
-        previousPublicationId: null,
-        effectiveCursorAfter: null,
-        rows: [],
-      }
-    )
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
   })
 
   it('keeps non-position histories on the legacy compatibility cursor path', async () => {
@@ -693,13 +669,10 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
   })
 
-  it('falls back to an audit-only RAW pointer when parsing fails after Storage upload', async () => {
+  it('fails closed before invoking a page parser after Storage upload', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
     mockGetHistory.mockImplementation(() => positionHistoryStream())
-    mockParseHistory.mockImplementation(() => {
-      throw new Error('position parser rejected the page')
-    })
     mockGetAdapter.mockReturnValue({
       capabilities: {
         profile: true,
@@ -729,55 +702,10 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
       mockWritePositionHistoryRawArtifact.mock.calls[0][0]
     )
-    expect(mockParseHistory).toHaveBeenCalledTimes(1)
+    expect(mockParseHistory).not.toHaveBeenCalled()
     expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
-  })
-
-  it('rolls back typed publication but reconciles the RAW audit pointer on database failure', async () => {
-    mockProfileTimeframes.mockReturnValue([30])
-    mockParseProfile.mockReturnValue(profile(30, true))
-    mockGetHistory.mockImplementation(() => positionHistoryStream())
-    mockParseHistory.mockReturnValue([positionRow])
-    mockPublishTierBVerifiedPositionHistoryInTransaction.mockRejectedValue(
-      new Error('history insert failed')
-    )
-    mockGetAdapter.mockReturnValue({
-      capabilities: {
-        profile: true,
-        positionHistory: true,
-        orders: false,
-        transfers: false,
-        copiers: false,
-      },
-      getProfile: mockGetProfile,
-      getHistory: mockGetHistory,
-      parseProfile: mockParseProfile,
-      parseHistory: mockParseHistory,
-      validateProfile: mockValidateProfile,
-      historyTerminalVerifier: () => ({
-        contract: 'arena.ingest.history-terminal-verifier.test.position_history@1',
-        verify: () => ({ verified: true, scanTerminalState: 'exhausted' }),
-      }),
-    })
-
-    await expect(processTierB(job)).resolves.toMatchObject({
-      tradersCrawled: 1,
-      historyRowsWritten: 0,
-      errors: 1,
-    })
-
-    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
-    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).toHaveBeenCalledTimes(1)
-    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual([
-      'BEGIN',
-      'ROLLBACK',
-      'BEGIN',
-      'COMMIT',
-    ])
-    expect(mockIngestClientRelease).toHaveBeenNthCalledWith(1, false)
-    expect(mockIngestClientRelease).toHaveBeenNthCalledWith(2, false)
   })
 
   it('audits a bundle-wide quality reject before any validation or publication', async () => {

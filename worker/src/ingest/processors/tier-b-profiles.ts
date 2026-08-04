@@ -59,6 +59,14 @@ import { runHistoryTransaction } from '../history-transaction'
 /** Compatibility marker recording a terminal deep-profile attempt. */
 const PROFILED_CURSOR_KIND = 'tierb_profiled'
 
+/**
+ * No source may publish a terminal-verified capture until a versioned RAW
+ * candidate ledger and exact parser projection are bound to the receipt.
+ * An empty allow-list is intentional: acquisition termination alone does not
+ * prove that a page parser observed every upstream fact.
+ */
+const POSITION_HISTORY_PARSER_ACCOUNTED_SOURCES = new Set<string>()
+
 function rawObjectReceiptId(receipt: unknown): number {
   if (
     receipt === null ||
@@ -168,6 +176,11 @@ async function persistPositionHistory(
       return runHistoryTransaction(persistRawPointer)
     }
 
+    if (!POSITION_HISTORY_PARSER_ACCOUNTED_SOURCES.has(src.slug)) {
+      throw new Error(
+        `[tier-b] ${src.slug} terminal-verified position history has no receipt-bound parser accounting evidence`
+      )
+    }
     const rows: ParsedHistoryRow[] = acquisition.pages.flatMap((page) =>
       adapter.parseHistory(page.payload, 'position_history', ctx)
     )
