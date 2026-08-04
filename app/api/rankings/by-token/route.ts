@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { RateLimitPresets, checkRateLimit } from '@/lib/utils/rate-limit'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
+import { TOKEN_RANKING_NOT_PUBLISHED_CODE } from '@/lib/rankings/token-ranking-api-contract'
 import {
   TOKEN_RANKING_MAX_GENERATION,
   TOKEN_RANKING_MAX_OFFSET,
@@ -137,7 +138,7 @@ function errorResponse(error: unknown): NextResponse {
       return jsonResponse(
         {
           error: 'Token rankings are withheld while verified authority snapshots are rebuilt',
-          code: 'TOKEN_RANKING_NOT_PUBLISHED',
+          code: TOKEN_RANKING_NOT_PUBLISHED_CODE,
         },
         503,
         { 'Retry-After': String(UNPUBLISHED_RETRY_AFTER_SECONDS) }
