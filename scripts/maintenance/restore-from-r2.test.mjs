@@ -961,6 +961,19 @@ test('the CLI fails before R2 access when no production identity baseline is ava
   }
 })
 
+test('the CLI refuses legacy plain artifact apply even for an isolated verified target', async () => {
+  await assert.rejects(
+    runRestoreCli({
+      argv: [],
+      env: {
+        DATABASE_URL: 'postgresql://production@db.production.example.com/app',
+        RESTORE_TARGET_URL: 'postgresql://restore@isolated.example.com/scratch',
+      },
+    }),
+    /AUTOMATED RESTORE DISABLED.*target-model=unproven.*managed auth/
+  )
+})
+
 test('verification accepts exactly one positive finite count for every critical table', () => {
   assert.deepEqual(parseCriticalTableCounts(criticalCounts()), {
     'arena.traders': 125n,
@@ -1099,5 +1112,7 @@ test('the executable is fail-closed and its real behavior contract runs in CI', 
   assert.match(source, /parseCriticalTableCounts\(await verify\(\)\)/)
   assert.doesNotMatch(source, /execSync\(/)
   assert.doesNotMatch(source, /`[^`]*\$\{TARGET\}/)
+  assert.match(source, /AUTOMATED RESTORE DISABLED/)
+  assert.doesNotMatch(source, /\[restore\] DONE/)
   assert.match(ci, /node --test scripts\/maintenance\/restore-from-r2\.test\.mjs/)
 })
