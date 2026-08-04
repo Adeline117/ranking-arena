@@ -52,7 +52,28 @@ jest.mock('@/lib/logger', () => ({ logger: { error: jest.fn() } }))
 jest.mock('@/lib/supabase/client', () => ({
   supabase: { from: (...args: unknown[]) => mockSupabaseFrom(...args) },
 }))
-jest.mock('../components/MemberList', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/MemberList', () => ({
+  __esModule: true,
+  default: (props: {
+    members: Array<{ user_id: string; role: string }>
+    onSetRole(userId: string, role: 'admin' | 'member'): void
+    onKick(userId: string, handle: string): void
+  }) => {
+    const targetId = '22222222-2222-4222-8222-222222222222'
+    const target = props.members.find((member) => member.user_id === targetId)
+    return (
+      <div>
+        <button data-testid="member-set-role" onClick={() => props.onSetRole(targetId, 'admin')}>
+          set role
+        </button>
+        <button data-testid="member-kick" onClick={() => props.onKick(targetId, 'target')}>
+          kick
+        </button>
+        <span data-testid="member-state">{target ? target.role : 'removed'}</span>
+      </div>
+    )
+  },
+}))
 jest.mock('../components/ContentManagement', () => ({
   __esModule: true,
   default: (props: {
@@ -274,11 +295,24 @@ function installSupabaseMock({ groupError = null }: { groupError?: unknown } = {
                   muted_until: null,
                   mute_reason: null,
                 },
+                {
+                  user_id: ACTOR_B,
+                  role: 'member',
+                  joined_at: group.created_at,
+                  muted_until: null,
+                  mute_reason: null,
+                },
               ],
               error: null,
             }
           : table === 'user_profiles'
-            ? { data: [{ id: ACTOR_A, handle: 'owner', avatar_url: null }], error: null }
+            ? {
+                data: [
+                  { id: ACTOR_A, handle: 'owner', avatar_url: null },
+                  { id: ACTOR_B, handle: 'target', avatar_url: null },
+                ],
+                error: null,
+              }
             : table === 'posts'
               ? {
                   data: [
@@ -323,6 +357,11 @@ async function openContent() {
   await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
   fireEvent.click(screen.getByRole('button', { name: 'contentManagement' }))
   await screen.findByTestId('content-pin-post')
+}
+
+async function openMembers() {
+  await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
+  await screen.findByTestId('member-set-role')
 }
 
 describe('group profile edit submit operation', () => {
@@ -512,6 +551,45 @@ describe('group profile edit submit operation', () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
     expect(screen.getByTestId('content-comment-state')).toHaveTextContent('active')
     expect(showToast).toHaveBeenCalledWith('deleteFailed', 'error')
+  })
+
+  it('single-flights a role change and applies only its bound acknowledgement', async () => {
+    const response = deferred<{
+      ok: boolean
+      json(): Promise<{ success: true; role: 'admin' }>
+    }>()
+    mockFetch.mockReturnValue(response.promise)
+    render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await openMembers()
+
+    fireEvent.click(screen.getByTestId('member-set-role'))
+    fireEvent.click(screen.getByTestId('member-set-role'))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+
+    await act(async () =>
+      response.resolve({ ok: true, json: async () => ({ success: true, role: 'admin' }) })
+    )
+    await waitFor(() => expect(screen.getByTestId('member-state')).toHaveTextContent('admin'))
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('roleUpdatedSuccessfully', 'success')
+  })
+
+  it('single-flights a member kick before its danger confirmation', async () => {
+    const confirmation = deferred<boolean>()
+    mockShowDangerConfirm.mockReturnValue(confirmation.promise)
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
+    render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await openMembers()
+
+    fireEvent.click(screen.getByTestId('member-kick'))
+    fireEvent.click(screen.getByTestId('member-kick'))
+    expect(mockShowDangerConfirm).toHaveBeenCalledTimes(1)
+
+    await act(async () => confirmation.resolve(true))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByTestId('member-state')).toHaveTextContent('removed'))
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('kicked', 'success')
   })
 
   it('cannot let a G1 mutation response toast or clear G2 mutation ownership', async () => {

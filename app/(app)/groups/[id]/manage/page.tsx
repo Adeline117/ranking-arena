@@ -32,7 +32,11 @@ import {
   type GroupApplicationOperation,
 } from '@/lib/groups/application-operation'
 import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
-import { readGroupCommentDeleteAcknowledgement } from '@/lib/groups/group-manage-mutation-contract'
+import {
+  readGroupCommentDeleteAcknowledgement,
+  readGroupMemberKickAcknowledgement,
+  readGroupMemberRoleAcknowledgement,
+} from '@/lib/groups/group-manage-mutation-contract'
 import {
   readPostDeleteAcknowledgement,
   readPostDeleteError,
@@ -408,6 +412,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const notificationOperationsRef = useRef(new GroupNotificationOperationLedger())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
   const destructiveRequestLockRef = useRef<Set<string>>(new Set())
+  const memberMutationLockRef = useRef<Set<string>>(new Set())
   const profileEditSubmitOperationIdRef = useRef<Record<string, string>>({})
   const profileEditContextRef = useRef({
     accessToken,
@@ -923,6 +928,9 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     const requestGroupId = requestScope.groupId
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
     if (!requestToken || !requestGroupId || !isOwner || !requestIsCurrent()) return
+    const requestLockKey = `${manageStateOwnerKey}\u0000set-role\u0000${targetUserId.toLowerCase()}`
+    if (memberMutationLockRef.current.has(requestLockKey)) return
+    memberMutationLockRef.current.add(requestLockKey)
     try {
       const res = await fetch(`/api/groups/${requestGroupId}/members/${targetUserId}/role`, {
         method: 'POST',
@@ -933,22 +941,24 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         },
         body: JSON.stringify({ role: newRole }),
       })
+      const data: unknown = await res.json().catch(() => null)
       if (!requestIsCurrent()) return
-      if (res.ok) {
+      const acknowledgedRole = res.ok ? readGroupMemberRoleAcknowledgement(data, newRole) : null
+      if (acknowledgedRole) {
         setMembers((prev) =>
-          prev.map((m) => (m.user_id === targetUserId ? { ...m, role: newRole } : m))
+          prev.map((m) => (m.user_id === targetUserId ? { ...m, role: acknowledgedRole } : m))
         )
         showToast(t('roleUpdatedSuccessfully'), 'success')
       } else {
-        const data = await res.json()
-        if (!requestIsCurrent()) return
-        showToast(data.error || t('operationFailed'), 'error')
+        showToast(readPostDeleteError(data) || t('operationFailed'), 'error')
       }
     } catch (err) {
       if (requestIsCurrent()) {
         logger.error('Set role error:', err)
         showToast(t('networkErrorRetry'), 'error')
       }
+    } finally {
+      memberMutationLockRef.current.delete(requestLockKey)
     }
   }
 
@@ -1284,29 +1294,31 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     const requestGroupId = requestScope.groupId
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
     if (!requestToken || !requestGroupId || !canManage || !requestIsCurrent()) return
-    const confirmed = await showDangerConfirm(
-      t('kickMember'),
-      t('confirmKickMember').replace('{handle}', handle)
-    )
-    if (!confirmed || !requestIsCurrent()) return
+    const requestLockKey = `${manageStateOwnerKey}\u0000kick\u0000${targetUserId.toLowerCase()}`
+    if (memberMutationLockRef.current.has(requestLockKey)) return
+    memberMutationLockRef.current.add(requestLockKey)
     try {
+      const confirmed = await showDangerConfirm(
+        t('kickMember'),
+        t('confirmKickMember').replace('{handle}', handle)
+      )
+      if (!confirmed || !requestIsCurrent()) return
       const res = await fetch(`/api/groups/${requestGroupId}/members/${targetUserId}/kick`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      const data: unknown = await res.json().catch(() => null)
       if (!requestIsCurrent()) return
-      if (res.ok) {
+      if (res.ok && readGroupMemberKickAcknowledgement(data)) {
         setMembers((prev) => prev.filter((m) => m.user_id !== targetUserId))
         showToast(t('kicked'), 'success')
       } else {
-        const data = res.headers.get('content-type')?.includes('application/json')
-          ? await res.json()
-          : null
-        if (!requestIsCurrent()) return
-        showToast(data?.error || t('operationFailed'), 'error')
+        showToast(readPostDeleteError(data) || t('operationFailed'), 'error')
       }
     } catch {
       if (requestIsCurrent()) showToast(t('networkError'), 'error')
+    } finally {
+      memberMutationLockRef.current.delete(requestLockKey)
     }
   }
 
