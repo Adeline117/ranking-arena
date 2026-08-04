@@ -17,6 +17,51 @@ function rpcClient(data: unknown, error: unknown = null): SupabaseClient {
   return { rpc: jest.fn().mockResolvedValue({ data, error }) } as unknown as SupabaseClient
 }
 
+const EMPTY_ORDER_ROW = {
+  ts: null,
+  kind: null,
+  symbol: null,
+  side: null,
+  price: null,
+  qty: null,
+  notional: null,
+  realized_pnl: null,
+  currency: null,
+}
+
+const EMPTY_POSITION_ROW = {
+  symbol: null,
+  side: null,
+  margin_mode: null,
+  leverage: null,
+  size: null,
+  entry_price: null,
+  mark_price: null,
+  notional: null,
+  margin: null,
+  unrealized_pnl: null,
+  roe: null,
+  currency: null,
+  as_of: null,
+}
+
+const EMPTY_POSITION_HISTORY_ROW = {
+  symbol: null,
+  side: null,
+  margin_mode: null,
+  leverage: null,
+  size: null,
+  entry_price: null,
+  exit_price: null,
+  max_open_interest: null,
+  realized_pnl: null,
+  roi: null,
+  closing_value: null,
+  opened_at: null,
+  closed_at: null,
+  currency: null,
+}
+
 describe('copier PII rule (spec §6)', () => {
   it('the records RPC SQL hard-blocks the copiers kind and never selects copier_label', () => {
     const sql = readFileSync(
@@ -31,16 +76,21 @@ describe('copier PII rule (spec §6)', () => {
     expect(codeLines).toEqual([])
   })
 
-  it('sanitizeRecordRow strips identifier-ish keys (defense in depth)', () => {
+  it('sanitizeRecordRow allowlists order fields and strips identifier-ish keys', () => {
     const row = JSON.parse(
-      '{"symbol":"BTCUSDT","realized_pnl":12,"copier_label":"ku****j@***.com",' +
+      '{"ts":"2026-08-03T12:00:00.000Z","symbol":"BTCUSDT","realized_pnl":12,"copier_label":"ku****j@***.com",' +
         '"copierLabel":"x","email":"a@b.c","user_id":"123",' +
         '"raw":{"email":"nested@secret.invalid"},"__proto__":{"polluted":true},' +
         '"prototype":{"polluted":true},"constructor":{"polluted":true}}'
     ) as Record<string, unknown>
-    const sanitized = sanitizeRecordRow(row)
+    const sanitized = sanitizeRecordRow('orders', row)
 
-    expect(sanitized).toEqual({ symbol: 'BTCUSDT', realized_pnl: 12 })
+    expect(sanitized).toEqual({
+      ...EMPTY_ORDER_ROW,
+      ts: '2026-08-03T12:00:00.000Z',
+      symbol: 'BTCUSDT',
+      realized_pnl: 12,
+    })
     expect(Object.getPrototypeOf(sanitized)).toBe(Object.prototype)
     expect(({} as { polluted?: boolean }).polluted).toBeUndefined()
   })
@@ -58,7 +108,25 @@ describe('copier PII rule (spec §6)', () => {
         '"limitations":["source_return_missing"]}'
     ) as Record<string, unknown>
 
-    expect(sanitizeRecordRow(row)).toEqual({ symbol: 'BTCUSDT', realized_pnl: 12 })
+    expect(sanitizeRecordRow('position_history', row)).toEqual({
+      ...EMPTY_POSITION_HISTORY_ROW,
+      symbol: 'BTCUSDT',
+      realized_pnl: 12,
+    })
+  })
+
+  it('rejects missing record identity and never mistakes the parser discriminator for order type', () => {
+    expect(sanitizeRecordRow('positions', { side: 'long' })).toBeNull()
+    expect(sanitizeRecordRow('orders', { ts: '2026-08', kind: 'limit' })).toBeNull()
+    expect(
+      sanitizeRecordRow('orders', {
+        ts: '2026-08-03T12:00:00Z',
+        kind: 'orders',
+      })
+    ).toEqual({
+      ...EMPTY_ORDER_ROW,
+      ts: '2026-08-03T12:00:00.000Z',
+    })
   })
 
   it('filters malformed copier distribution entries and non-finite aggregate values', async () => {
@@ -176,7 +244,18 @@ describe('getRecordsPage', () => {
   it('preserves warm order rows but marks their unbound history unknown', async () => {
     const page = await getRecordsPage(
       rpcClient({
-        rows: [{ order_id: 'order-1' }],
+        rows: [
+          {
+            ts: '2026-06-10T11:00:00Z',
+            kind: 'limit',
+            symbol: 'BTCUSDT',
+            side: 'buy',
+            price: 100,
+            qty: 2,
+            currency: 'USDT',
+            order_id: 'must-not-escape',
+          },
+        ],
         nextCursor: 'orders-next',
         asOf: '2026-06-10T12:00:00Z',
       }),
@@ -185,7 +264,18 @@ describe('getRecordsPage', () => {
       'orders',
       null
     )
-    expect(page!.rows).toEqual([{ order_id: 'order-1' }])
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-06-10T11:00:00.000Z',
+        kind: 'limit',
+        symbol: 'BTCUSDT',
+        side: 'buy',
+        price: 100,
+        qty: 2,
+        currency: 'USDT',
+      },
+    ])
     expect(page!.nextCursor).toBe('orders-next')
     expect(page!.completeness).toEqual({
       state: 'unknown',
@@ -258,8 +348,13 @@ describe('getRecordsPage', () => {
           'not-a-row',
           42,
           new Date('2026-06-10T12:00:00Z'),
-          { symbol: 'BTCUSDT', raw: { email: 'secret@example.com' } },
-          nullPrototype,
+          { ts: 'not-a-time', symbol: 'INVALID' },
+          {
+            ts: '2026-06-10T12:00:00Z',
+            symbol: 'BTCUSDT',
+            raw: { email: 'secret@example.com' },
+          },
+          Object.assign(nullPrototype, { ts: '2026-06-10T11:00:00Z' }),
         ],
       }),
       'bitget_futures',
@@ -268,7 +363,18 @@ describe('getRecordsPage', () => {
       null
     )
 
-    expect(page?.rows).toEqual([{ symbol: 'BTCUSDT' }, { symbol: 'ETHUSDT' }])
+    expect(page?.rows).toEqual([
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-06-10T12:00:00.000Z',
+        symbol: 'BTCUSDT',
+      },
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-06-10T11:00:00.000Z',
+        symbol: 'ETHUSDT',
+      },
+    ])
   })
 })
 
@@ -289,7 +395,12 @@ describe('recordsPageFromTierC', () => {
       },
     })
     expect(page!.cacheState).toBe('cold-fetched')
-    expect(page!.rows).toEqual([{ symbol: 'BTCUSDT' }])
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_POSITION_HISTORY_ROW,
+        symbol: 'BTCUSDT',
+      },
+    ])
     expect(page!.nextCursor).toBeNull()
     expect(page!.provenance).toEqual({
       source: 'bitget_futures',
@@ -364,11 +475,33 @@ describe('recordsPageFromTierC', () => {
 
   it('keeps current positions pageable without attaching history completeness', () => {
     const page = recordsPageFromTierC('bitget_futures', 'positions', {
-      rows: [],
+      rows: [
+        {
+          symbol: 'BTCUSDT',
+          side: 'long',
+          entryPrice: 100,
+          markPrice: 110,
+          unrealizedPnl: 10,
+          currency: 'USDT',
+          raw: { account: 'private' },
+          debug: true,
+        },
+      ],
       nextCursor: 'positions-next',
       completeness: { state: 'partial', reason: 'interactive_preview' },
     })
 
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_POSITION_ROW,
+        symbol: 'BTCUSDT',
+        side: 'long',
+        entry_price: 100,
+        mark_price: 110,
+        unrealized_pnl: 10,
+        currency: 'USDT',
+      },
+    ])
     expect(page!.nextCursor).toBe('positions-next')
     expect(page!.completeness).toBeUndefined()
   })
@@ -384,10 +517,25 @@ describe('recordsPageFromTierC', () => {
         null,
         ['not', 'a', 'row'],
         true,
-        { symbol: 'BTCUSDT', raw: { user_id: 'private' }, constructor: 'blocked' },
+        {
+          ts: '2026-08-03T12:00:00Z',
+          kind: 'orders',
+          orderKind: 'limit',
+          symbol: 'BTCUSDT',
+          raw: { user_id: 'private' },
+          constructor: 'blocked',
+          debug: 'must-not-escape',
+        },
       ],
     })
 
-    expect(page?.rows).toEqual([{ symbol: 'BTCUSDT' }])
+    expect(page?.rows).toEqual([
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-08-03T12:00:00.000Z',
+        kind: 'limit',
+        symbol: 'BTCUSDT',
+      },
+    ])
   })
 })

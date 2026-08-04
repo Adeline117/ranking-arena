@@ -82,51 +82,125 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 
-/** Copier-PII guard (spec §6): these keys never leave the API layer. */
-const BANNED_ROW_KEYS: ReadonlySet<string> = new Set([
-  'copier_label',
-  'copierLabel',
-  'copier_name',
-  'copierName',
-  'email',
-  'user_id',
-  'userId',
-  // RAW is an internal evidence substrate, not a serving field. Keeping it
-  // out also prevents nested upstream identifiers from bypassing this guard.
-  'raw',
-  // Claim-substrate provenance is parser-internal: it names upstream response
-  // paths (e.g. `data[].subPosId`) and drives verification, never rendering.
-  // arena_records_page projects an explicit column list and never emits these,
-  // so leaving them on the Tier-C preview path would make the two serving
-  // tiers disagree on the row contract.
-  'sourceFactId',
-  'source_fact_id',
-  'sourceLifecycleMarker',
-  'source_lifecycle_marker',
-  'sourceReturn',
-  'source_return',
-  'fieldSources',
-  'field_sources',
-  'limitations',
-  // Never assign these untrusted keys onto a normal object.
-  '__proto__',
-  'prototype',
-  'constructor',
-])
-
-export function sanitizeRecordRow(row: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(row)) {
-    if (!BANNED_ROW_KEYS.has(key)) out[key] = value
+function ownValue(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key]
   }
-  return out
+  return null
 }
 
-function sanitizeRecordRows(value: unknown): Record<string, unknown>[] {
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value.trim() === value ? value : null
+}
+
+function currencyOrNull(value: unknown): ServingCurrency | null {
+  return typeof value === 'string' && CURRENCIES.has(value) ? (value as ServingCurrency) : null
+}
+
+function recordTimestampOrNull(value: unknown): string | null {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.trim() !== value ||
+    !/T.*(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(value)
+  ) {
+    return null
+  }
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null
+}
+
+/**
+ * Exact public row decoder for both RPC and Redis boundaries. This is an
+ * allowlist, not a blacklist: unknown fields, RAW, natural identities, claim
+ * evidence, and copier attributes cannot escape when an upstream contract
+ * grows or drifts. Camel-case aliases only bridge short-lived Tier-C caches
+ * from workers deployed before the canonical snake-case writer.
+ */
+export function sanitizeRecordRow(
+  kind: Exclude<RecordKind, 'copiers'>,
+  row: Record<string, unknown>
+): Record<string, unknown> | null {
+  if (kind === 'positions') {
+    const symbol = stringOrNull(ownValue(row, 'symbol'))
+    if (symbol === null) return null
+    return {
+      symbol,
+      side: stringOrNull(ownValue(row, 'side')),
+      margin_mode: stringOrNull(ownValue(row, 'margin_mode', 'marginMode')),
+      leverage: finiteNumberOrNull(ownValue(row, 'leverage')),
+      size: finiteNumberOrNull(ownValue(row, 'size')),
+      entry_price: finiteNumberOrNull(ownValue(row, 'entry_price', 'entryPrice')),
+      mark_price: finiteNumberOrNull(ownValue(row, 'mark_price', 'markPrice')),
+      notional: finiteNumberOrNull(ownValue(row, 'notional')),
+      margin: finiteNumberOrNull(ownValue(row, 'margin')),
+      unrealized_pnl: finiteNumberOrNull(ownValue(row, 'unrealized_pnl', 'unrealizedPnl')),
+      roe: finiteNumberOrNull(ownValue(row, 'roe')),
+      currency: currencyOrNull(ownValue(row, 'currency')),
+      as_of: recordTimestampOrNull(ownValue(row, 'as_of', 'asOf')),
+    }
+  }
+
+  if (kind === 'position_history') {
+    const symbol = stringOrNull(ownValue(row, 'symbol'))
+    if (symbol === null) return null
+    return {
+      symbol,
+      side: stringOrNull(ownValue(row, 'side')),
+      margin_mode: stringOrNull(ownValue(row, 'margin_mode', 'marginMode')),
+      leverage: finiteNumberOrNull(ownValue(row, 'leverage')),
+      size: finiteNumberOrNull(ownValue(row, 'size')),
+      entry_price: finiteNumberOrNull(ownValue(row, 'entry_price', 'entryPrice')),
+      exit_price: finiteNumberOrNull(ownValue(row, 'exit_price', 'exitPrice')),
+      max_open_interest: finiteNumberOrNull(ownValue(row, 'max_open_interest', 'maxOpenInterest')),
+      realized_pnl: finiteNumberOrNull(ownValue(row, 'realized_pnl', 'realizedPnl')),
+      roi: finiteNumberOrNull(ownValue(row, 'roi')),
+      closing_value: finiteNumberOrNull(ownValue(row, 'closing_value', 'closingValue')),
+      opened_at: recordTimestampOrNull(ownValue(row, 'opened_at', 'openedAt')),
+      closed_at: recordTimestampOrNull(ownValue(row, 'closed_at', 'closedAt')),
+      currency: currencyOrNull(ownValue(row, 'currency')),
+    }
+  }
+
+  if (kind === 'orders') {
+    const timestamp = recordTimestampOrNull(ownValue(row, 'ts'))
+    if (timestamp === null) return null
+    const orderKind = stringOrNull(ownValue(row, 'order_kind', 'orderKind', 'kind'))
+    return {
+      ts: timestamp,
+      kind: orderKind === 'orders' ? null : orderKind,
+      symbol: stringOrNull(ownValue(row, 'symbol')),
+      side: stringOrNull(ownValue(row, 'side')),
+      price: finiteNumberOrNull(ownValue(row, 'price')),
+      qty: finiteNumberOrNull(ownValue(row, 'qty')),
+      notional: finiteNumberOrNull(ownValue(row, 'notional')),
+      realized_pnl: finiteNumberOrNull(ownValue(row, 'realized_pnl', 'realizedPnl')),
+      currency: currencyOrNull(ownValue(row, 'currency')),
+    }
+  }
+
+  const timestamp = recordTimestampOrNull(ownValue(row, 'ts'))
+  if (timestamp === null) return null
+  const direction = ownValue(row, 'direction')
+  return {
+    ts: timestamp,
+    direction: direction === 'in' || direction === 'out' ? direction : null,
+    asset: stringOrNull(ownValue(row, 'asset')),
+    amount: finiteNumberOrNull(ownValue(row, 'amount')),
+    currency: currencyOrNull(ownValue(row, 'currency')),
+  }
+}
+
+function sanitizeRecordRows(
+  kind: Exclude<RecordKind, 'copiers'>,
+  value: unknown
+): Record<string, unknown>[] {
   if (!Array.isArray(value)) return []
   const rows: Record<string, unknown>[] = []
   for (const candidate of value) {
-    if (isPlainRecord(candidate)) rows.push(sanitizeRecordRow(candidate))
+    if (!isPlainRecord(candidate)) continue
+    const row = sanitizeRecordRow(kind, candidate)
+    if (row !== null) rows.push(row)
   }
   return rows
 }
@@ -240,7 +314,7 @@ export async function getRecordsPage(
   const mayServeRows = kind !== 'position_history'
   const isHistory = isAppendOnlyHistory(kind)
   return {
-    rows: mayServeRows ? sanitizeRecordRows(d.rows) : [],
+    rows: mayServeRows ? sanitizeRecordRows(kind, d.rows) : [],
     nextCursor: mayServeRows && typeof d.nextCursor === 'string' ? d.nextCursor : null,
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
@@ -296,7 +370,7 @@ export function recordsPageFromTierC(
   payload: unknown
 ): RecordsPage | null {
   if (!isPlainRecord(payload) || !Array.isArray(payload.rows)) return null
-  const rows = sanitizeRecordRows(payload.rows)
+  const rows = sanitizeRecordRows(kind, payload.rows)
   const parsedCompleteness = parseHistoryCompleteness(payload.completeness)
   const isHistory = isAppendOnlyHistory(kind)
   const previewCompleteness: HistoryCompleteness | undefined = isHistory
