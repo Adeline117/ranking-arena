@@ -109,7 +109,14 @@ function cacheEntry(id: string, scoreCohortId = CURRENT_COHORT_ID) {
     publicationIdentity: JSON.stringify(publication),
     publication,
     cachedAt: '2026-07-29T09:02:00.000Z',
-    value: { traders: [tokenTrader(id)], token: 'BTC', period: '90D', total: 1 },
+    value: {
+      traders: [tokenTrader(id)],
+      token: 'BTC',
+      period: '90D',
+      limit: 25,
+      offset: 0,
+      total: 1,
+    },
   }
 }
 
@@ -253,6 +260,7 @@ describe('GET /api/rankings/by-token publication cache', () => {
     expect(body.traders).toEqual([
       expect.objectContaining({ source_trader_id: 'current-cache-row' }),
     ])
+    expect(body).toMatchObject({ token: 'BTC', period: '90D', limit: 25, offset: 0, total: 1 })
     expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(1)
     expect(mockReadSealedTokenTraderRankings).not.toHaveBeenCalled()
     expect(mockTieredDel).not.toHaveBeenCalled()
@@ -273,5 +281,22 @@ describe('GET /api/rankings/by-token publication cache', () => {
     expect(mockTieredGetOrSet).toHaveBeenCalledTimes(2)
     expect(mockReadSealedTokenTraderRankings).toHaveBeenCalledTimes(1)
     expect(mockReadSealedRankingAuthorityGeneration).toHaveBeenCalledTimes(2)
+  })
+
+  it('evicts a cached page whose pagination receipt does not match the request', async () => {
+    const wrongPage = cacheEntry('wrong-page-row')
+    wrongPage.value.offset = 50
+    wrongPage.value.total = 51
+    mockTieredGetOrSet
+      .mockResolvedValueOnce(wrongPage)
+      .mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) => fetcher())
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(body).toMatchObject({ token: 'BTC', period: '90D', limit: 25, offset: 0 })
+    expect(JSON.stringify(body)).not.toContain('wrong-page-row')
+    expect(mockTieredDel).toHaveBeenCalledWith('rankings:by-token:v5:BTC:90D:25:0')
+    expect(mockReadSealedTokenTraderRankings).toHaveBeenCalledTimes(1)
   })
 })

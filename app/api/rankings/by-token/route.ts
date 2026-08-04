@@ -20,15 +20,17 @@ import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 import {
   getTokenTraderRankingCacheKey,
   readSealedTokenTraderRankings,
-  type TokenTraderRanking,
 } from '@/lib/rankings/token-traders'
-import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import { readSealedRankingAuthorityGeneration } from '@/lib/rankings/read-sealed-ranking-generation'
 import {
   createSealedRankingCacheEntry,
   parseSealedRankingCacheEntry,
 } from '@/lib/rankings/sealed-ranking-cache'
 import { withTimeout } from '@/lib/utils/timeout'
+import {
+  parseTokenRankingPageReceipt,
+  type TokenRankingPageReceipt,
+} from '@/lib/rankings/token-ranking-page-contract'
 
 export const runtime = 'nodejs'
 
@@ -76,12 +78,7 @@ function isPopularTokenList(value: unknown): value is PopularToken[] {
   })
 }
 
-interface TokenRankingResponse {
-  traders: TokenTraderRanking[]
-  token: string
-  period: '7D' | '30D' | '90D'
-  total: number
-}
+type TokenRankingResponse = TokenRankingPageReceipt
 
 function isTokenRankingResponse(
   value: unknown,
@@ -91,41 +88,9 @@ function isTokenRankingResponse(
   offset: number,
   proofSources: readonly string[]
 ): value is TokenRankingResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const traders = Reflect.get(value, 'traders')
-  const total = Reflect.get(value, 'total')
-  if (
-    Reflect.get(value, 'token') !== token ||
-    Reflect.get(value, 'period') !== period ||
-    !Array.isArray(traders) ||
-    traders.length > limit ||
-    !Number.isSafeInteger(total) ||
-    Number(total) < 0 ||
-    (traders.length > 0 && Number(total) < offset + traders.length)
-  ) {
-    return false
-  }
-
-  const allowedSources = new Set(proofSources)
-  const seen = new Set<string>()
-  return traders.every((trader) => {
-    if (!trader || typeof trader !== 'object' || Array.isArray(trader)) return false
-    const source = Reflect.get(trader, 'source')
-    const traderId = Reflect.get(trader, 'source_trader_id')
-    if (
-      typeof source !== 'string' ||
-      !allowedSources.has(source) ||
-      !isPublicRankingSourceAllowed(source) ||
-      typeof traderId !== 'string' ||
-      traderId.length === 0
-    ) {
-      return false
-    }
-    const identity = `${source}\u0000${traderId}`
-    if (seen.has(identity)) return false
-    seen.add(identity)
-    return true
-  })
+  return (
+    parseTokenRankingPageReceipt(value, { token, period, limit, offset }, proofSources) !== null
+  )
 }
 
 // ── Popular Tokens Handler ──────────────────────────────────────────────────
@@ -291,7 +256,7 @@ export async function GET(request: NextRequest) {
       const sealedRead = await readSealedTokenTraderRankings(supabase, token, period, limit, offset)
       return createSealedRankingCacheEntry({
         ...sealedRead,
-        value: { ...sealedRead.value, token, period },
+        value: { ...sealedRead.value, token, period, limit, offset },
       })
     }
     const readAuthorizedCache = async () => {

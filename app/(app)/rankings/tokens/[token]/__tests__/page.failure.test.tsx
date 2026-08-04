@@ -91,6 +91,7 @@ describe('token ranking detail SSR state', () => {
       initialTotal: 0,
       initialStatus: 'success',
     })
+    expect(element.key).toBe('BTC')
   })
 
   it('marks an SSR timeout as failure instead of an empty page', async () => {

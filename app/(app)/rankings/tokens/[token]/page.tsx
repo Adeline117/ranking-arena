@@ -167,6 +167,7 @@ export default async function TokenDetailPage({
 
   return (
     <TokenRankingClient
+      key={token}
       token={token}
       initialPeriod={period}
       initialTraders={initial.traders}

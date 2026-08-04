@@ -24,22 +24,14 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import { Skeleton } from '@/app/components/ui/Skeleton'
 import ErrorState from '@/app/components/ui/ErrorState'
+import {
+  parseTokenRankingPageReceipt,
+  type TokenRankingPeriod,
+} from '@/lib/rankings/token-ranking-page-contract'
+import type { TokenTraderRanking } from '@/lib/rankings/token-traders'
 
-export type Period = '7D' | '30D' | '90D'
-
-export interface TokenTrader {
-  source: string
-  source_trader_id: string
-  handle: string | null
-  avatar_url: string | null
-  arena_score: number | null
-  roi: number | null
-  total_pnl: number
-  token_pnl: number
-  token_trade_count: number
-  token_win_rate: number | null
-  token_avg_pnl_pct: number | null
-}
+export type Period = TokenRankingPeriod
+export type TokenTrader = TokenTraderRanking
 
 const PAGE_SIZE = 50
 const CLIENT_REQUEST_TIMEOUT_MS = 15_000
@@ -180,7 +172,7 @@ function PeriodSelector({
           style={{
             padding: '8px 14px',
             minWidth: 56,
-            minHeight: 40,
+            minHeight: 44,
             borderRadius: tokens.radius.md,
             border: 'none',
             fontSize: 13,
@@ -302,6 +294,7 @@ export default function TokenRankingClient({
     status: initialStatus === 'success' && urlPage === 0 ? 'idle' : 'loading',
   }))
   const abortRef = useRef<AbortController | null>(null)
+  const navigationSeedRef = useRef(`${initialPeriod}:${urlPage}`)
 
   const tokenColor = TOKEN_COLORS[token] || tokens.colors.accent.primary
   const currentKey = rankingPageKey(token, period, page)
@@ -336,36 +329,45 @@ export default function TokenRankingClient({
       const controller = new AbortController()
       abortRef.current = controller
       const key = rankingPageKey(token, p, pageIndex)
+      const offset = pageIndex * PAGE_SIZE
       let timedOut = false
-      const timeout = setTimeout(() => {
-        timedOut = true
-        controller.abort()
-      }, CLIENT_REQUEST_TIMEOUT_MS)
+      let timeout: ReturnType<typeof setTimeout> | undefined
 
       setRequestState({ key, status: 'loading' })
       try {
-        const res = await fetch(
-          `/api/rankings/by-token?token=${encodeURIComponent(token)}&period=${p}&limit=${PAGE_SIZE}&offset=${pageIndex * PAGE_SIZE}`,
-          { signal: controller.signal }
-        )
-        if (!res.ok) throw new Error(`Token rankings request failed: ${res.status}`)
-        const data: unknown = await res.json()
-        if (
-          typeof data !== 'object' ||
-          data === null ||
-          (data as { token?: unknown }).token !== token ||
-          (data as { period?: unknown }).period !== p ||
-          !Array.isArray((data as { traders?: unknown }).traders) ||
-          typeof (data as { total?: unknown }).total !== 'number'
-        ) {
-          throw new Error('Token rankings response did not match the requested page')
-        }
+        const request = (async () => {
+          const res = await fetch(
+            `/api/rankings/by-token?token=${encodeURIComponent(token)}&period=${p}&limit=${PAGE_SIZE}&offset=${offset}`,
+            { signal: controller.signal }
+          )
+          if (!res.ok) throw new Error(`Token rankings request failed: ${res.status}`)
+          const parsed = parseTokenRankingPageReceipt(await res.json(), {
+            token,
+            period: p,
+            limit: PAGE_SIZE,
+            offset,
+          })
+          if (!parsed) {
+            throw new Error('Token rankings response did not match the requested page')
+          }
+          return parsed
+        })()
+        const data = await Promise.race([
+          request,
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => {
+              timedOut = true
+              controller.abort()
+              reject(new Error('Token rankings request timed out'))
+            }, CLIENT_REQUEST_TIMEOUT_MS)
+          }),
+        ])
         if (abortRef.current !== controller || controller.signal.aborted) return
 
         const nextPages = new Map(pagesRef.current)
         nextPages.set(key, {
-          traders: (data as { traders: TokenTrader[] }).traders,
-          total: (data as { total: number }).total,
+          traders: data.traders,
+          total: data.total,
         })
         pagesRef.current = nextPages
         setPages(nextPages)
@@ -376,11 +378,24 @@ export default function TokenRankingClient({
         if (err instanceof Error && err.name === 'AbortError' && !timedOut) return
         setRequestState({ key, status: 'error' })
       } finally {
-        clearTimeout(timeout)
+        if (timeout) clearTimeout(timeout)
+        if (abortRef.current === controller) abortRef.current = null
       }
     },
     [token]
   )
+
+  // Local controls update immediately, while browser back/forward and external
+  // URL edits arrive as a new server seed. Reconcile only when that seed
+  // changes so an optimistic period click is not reset to the previous value
+  // while router.replace is still in flight.
+  useEffect(() => {
+    const navigationSeed = `${initialPeriod}:${urlPage}`
+    if (navigationSeedRef.current === navigationSeed) return
+    navigationSeedRef.current = navigationSeed
+    setPeriod(initialPeriod)
+    setPageRaw(urlPage)
+  }, [initialPeriod, urlPage])
 
   useEffect(() => {
     const key = rankingPageKey(token, period, page)
@@ -393,7 +408,13 @@ export default function TokenRankingClient({
     void fetchData(period, page)
   }, [period, page, fetchData, token])
 
-  useEffect(() => () => abortRef.current?.abort(), [])
+  useEffect(
+    () => () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+    },
+    []
+  )
 
   const handlePeriodChange = useCallback(
     (newPeriod: Period) => {
@@ -489,13 +510,15 @@ export default function TokenRankingClient({
               {t('tokenRankingHeader').replace('{token}', token)}
             </Text>
             <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-              {currentError && !currentData
-                ? t('failedToLoadRankings')
-                : total > 0
-                  ? t('tokenRankingCount')
-                      .replace('{count}', total.toLocaleString('en-US'))
-                      .replace('{token}', token)
-                  : t('tokenRankingNoData').replace('{token}', token)}
+              {loading && !currentData
+                ? t('loading')
+                : currentError && !currentData
+                  ? t('failedToLoadRankings')
+                  : total > 0
+                    ? t('tokenRankingCount')
+                        .replace('{count}', total.toLocaleString('en-US'))
+                        .replace('{token}', token)
+                    : t('tokenRankingNoData').replace('{token}', token)}
             </Text>
           </Box>
         </Box>
@@ -512,6 +535,7 @@ export default function TokenRankingClient({
           description={t('tryAgain')}
           retry={() => void fetchData(period, page)}
           variant={currentData ? 'compact' : 'default'}
+          retryButtonSize="md"
         />
       )}
 
