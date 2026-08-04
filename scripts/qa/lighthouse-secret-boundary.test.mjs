@@ -101,6 +101,10 @@ test('every Lighthouse third-party action is pinned to an immutable commit', () 
 
 test('Lighthouse audits real pages repeatedly and fails on HTTP or score regressions', () => {
   const lighthouse = lighthouseConfig.ci
+  const buildStep = parsed.jobs.lighthouse.steps.find((candidate) => candidate.name === 'Build')
+  assert.ok(buildStep)
+  assert.equal(buildStep.env.NODE_ENV, 'production')
+  assert.equal(buildStep.env.NODE_OPTIONS, '--max-old-space-size=4096')
   assert.deepEqual(lighthouse.collect.url, [
     'http://127.0.0.1:3000/',
     'http://127.0.0.1:3000/methodology',
