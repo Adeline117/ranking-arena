@@ -15,6 +15,7 @@ function aggregate(overrides: Partial<CopierAggregate> = {}): CopierAggregate {
     totalCopierPnl: null,
     pnlDistribution: [],
     depth: 'full',
+    receiptBound: true,
     provenance: {
       source: 'gmx',
       sourceAsOf: null,
@@ -56,7 +57,7 @@ describe('CopierAggregatePanel history completeness', () => {
         aggregate={aggregate({
           completeness: {
             state: 'complete',
-            reason: 'verified_terminal_history',
+            reason: 'verified_copier_snapshot',
             evidenceState: 'verified',
             scanTerminalState: 'exhausted',
             blockerReasons: [],

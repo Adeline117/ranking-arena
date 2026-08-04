@@ -15,6 +15,7 @@ function aggregate(source: string, copierCount: number): CopierAggregate {
     totalCopierPnl: null,
     pnlDistribution: [],
     depth: 'full',
+    receiptBound: true,
     provenance: {
       source,
       sourceAsOf: null,
@@ -81,6 +82,31 @@ describe('useCopierAggregate subject identity', () => {
       state: 'unknown',
       reason: 'history_evidence_not_bound',
     })
+
+    view.unmount()
+    queryClient.clear()
+  })
+
+  it('quarantines an unbound cached aggregate and uses the receipt cache generation', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    ;(fetcher as jest.Mock).mockResolvedValue(
+      response({ ...aggregate('gmx', 99), receiptBound: false })
+    )
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useCopierAggregate({ source: 'gmx', exchangeTraderId: 'trader-a', enabled: true }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+    expect(view.result.current.aggregate).toBeNull()
+    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('records_contract=csr1'))
 
     view.unmount()
     queryClient.clear()

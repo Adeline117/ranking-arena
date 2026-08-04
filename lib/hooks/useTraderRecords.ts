@@ -25,6 +25,7 @@ import {
 import type { ApiSuccessResponse } from '@/lib/types/index'
 
 const POSITION_HISTORY_RECORDS_CONTRACT = 'vph3' as const
+const COPIER_SNAPSHOT_RECORDS_CONTRACT = 'csr1' as const
 
 export interface UseTraderRecordsOptions {
   source: string
@@ -48,6 +49,10 @@ function recordsUrl(
   // be replayed into the new cursor-reset protocol.
   if (kind === 'position_history') {
     params.set('records_contract', POSITION_HISTORY_RECORDS_CONTRACT)
+  } else if (kind === 'copiers') {
+    // Cut a new browser/CDN generation at the snapshot-receipt authority
+    // boundary so a previously cacheable unbound aggregate cannot replay.
+    params.set('records_contract', COPIER_SNAPSHOT_RECORDS_CONTRACT)
   }
   if (cursor) params.set('cursor', cursor)
   return `/api/traders/${encodeURIComponent(exchangeTraderId)}/records?${params.toString()}`
@@ -227,7 +232,7 @@ export function useCopierAggregate(opts: {
 }) {
   const { source, exchangeTraderId, enabled = false } = opts
   const query = useQuery<CopierAggregate | { cacheState: 'pending' }>({
-    queryKey: ['trader-copiers', source, exchangeTraderId],
+    queryKey: ['trader-copiers', COPIER_SNAPSHOT_RECORDS_CONTRACT, source, exchangeTraderId],
     queryFn: async () => {
       const res = await fetcher<ApiSuccessResponse<CopierAggregate | { cacheState: 'pending' }>>(
         recordsUrl(exchangeTraderId, source, 'copiers', 90)
@@ -240,8 +245,15 @@ export function useCopierAggregate(opts: {
   })
 
   const data = query.data
+  const isAggregate = Boolean(data && 'copierCount' in data)
+  const isServeableAggregate = Boolean(
+    isAggregate &&
+    data &&
+    'copierCount' in data &&
+    (data.receiptBound === true || data.depth === 'none')
+  )
   const aggregate: CopierAggregate | null =
-    data && 'copierCount' in data
+    isServeableAggregate && data && 'copierCount' in data
       ? {
           ...data,
           // Old cached responses predate the completeness field. They must
@@ -252,7 +264,7 @@ export function useCopierAggregate(opts: {
 
   return {
     aggregate,
-    isPendingUpstream: Boolean(data && !('copierCount' in data)),
+    isPendingUpstream: Boolean(data && (!isAggregate || !isServeableAggregate)),
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

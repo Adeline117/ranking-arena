@@ -222,6 +222,42 @@ function unknownHistoryCompleteness(): HistoryCompleteness {
   return { state: 'unknown', reason: 'history_evidence_not_bound' }
 }
 
+function canonicalUtcMillisecondTimestamp(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return null
+  }
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value ? value : null
+}
+
+function verifiedCopierCompleteness(payload: Record<string, unknown>): HistoryCompleteness | null {
+  const receiptId = nonNegativeSafeIntegerOrNull(payload.receiptId)
+  if (
+    payload.receiptBound !== true ||
+    receiptId === null ||
+    receiptId === 0 ||
+    typeof payload.sourceRunId !== 'string' ||
+    !SOURCE_RUN_SHA256.test(payload.sourceRunId) ||
+    payload.sourceRunId === '0'.repeat(64) ||
+    payload.evidenceState !== 'verified' ||
+    payload.scanTerminalState !== 'exhausted' ||
+    !Array.isArray(payload.blockerReasons) ||
+    payload.blockerReasons.length !== 0 ||
+    canonicalUtcMillisecondTimestamp(payload.observedAt) === null ||
+    canonicalUtcMillisecondTimestamp(payload.publishedAt) === null
+  ) {
+    return null
+  }
+
+  return {
+    state: 'complete',
+    reason: 'verified_copier_snapshot',
+    evidenceState: 'verified',
+    scanTerminalState: 'exhausted',
+    blockerReasons: [],
+  }
+}
+
 const VERIFIED_COMPLETENESS_KEYS = [
   'blockerReasons',
   'contract',
@@ -417,6 +453,13 @@ export async function getCopierAggregate(
   const depth =
     d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
   const explicitlyNotApplicable = d.depth === 'none'
+  const receiptCompleteness = verifiedCopierCompleteness(d)
+  const receiptBound = receiptCompleteness !== null
+
+  // A response that claims receipt authority but cannot reproduce the exact
+  // immutable binding is malformed, not a legacy fallback. Never downgrade it
+  // into apparently usable unbound data.
+  if (d.receiptBound === true && !receiptBound) return null
 
   const aggregate: CopierAggregate = {
     copierCount: nonNegativeSafeIntegerOrNull(d.copierCount),
@@ -426,10 +469,9 @@ export async function getCopierAggregate(
     // validated unit they are not safe to interpret either.
     pnlDistribution: currency === null ? [] : distribution,
     depth,
+    receiptBound,
     provenance: recordProvenance(source, d),
-    // `depth=full` describes the upstream product surface, not proof that the
-    // aggregate is bound to a terminal collection receipt.
-    completeness: unknownHistoryCompleteness(),
+    completeness: receiptCompleteness ?? unknownHistoryCompleteness(),
   }
 
   // Some RPC branches return a syntactically valid all-null object when no

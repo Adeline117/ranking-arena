@@ -125,8 +125,15 @@ function copierAggregate(overrides: Partial<CopierAggregate> = {}): CopierAggreg
     totalCopierPnl: null,
     pnlDistribution: [],
     depth: 'full',
+    receiptBound: true,
     provenance: provenance('2026-08-03T12:00:00.000Z'),
-    completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    completeness: {
+      state: 'complete',
+      reason: 'verified_copier_snapshot',
+      evidenceState: 'verified',
+      scanTerminalState: 'exhausted',
+      blockerReasons: [],
+    },
     ...overrides,
   }
 }
@@ -435,15 +442,22 @@ describe('records route history trust boundary', () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 
-  it('serves copier aggregates with explicit unknown completeness', async () => {
+  it('serves only a receipt-bound copier aggregate', async () => {
     const aggregate = {
       copierCount: 2,
       copierCountMax: null,
       totalCopierPnl: null,
       pnlDistribution: [],
       depth: 'full',
+      receiptBound: true,
       provenance: provenance('2026-08-03T11:00:00.000Z'),
-      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+      completeness: {
+        state: 'complete',
+        reason: 'verified_copier_snapshot',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
+      },
     }
     mockGetCopierAggregate.mockResolvedValue(aggregate)
 
@@ -520,6 +534,41 @@ describe('records route copier cold start', () => {
     expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
     expect(body.data).toEqual({ cacheState: 'pending' })
     expect(response.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it('never exposes an unbound legacy aggregate before or after refresh', async () => {
+    const unbound = copierAggregate({
+      copierCount: 99,
+      receiptBound: false,
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    })
+    mockGetCopierAggregate.mockResolvedValue(unbound)
+
+    const response = await callRoute('copiers')
+    const body = await response.json()
+
+    expect(mockRequestTierC).toHaveBeenCalledTimes(1)
+    expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
+    expect(body.data).toEqual({ cacheState: 'pending' })
+    expect(JSON.stringify(body)).not.toContain('99')
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it('preserves an explicit source-level copier N/A without enqueueing collection', async () => {
+    const notApplicable = copierAggregate({
+      copierCount: null,
+      depth: 'none',
+      receiptBound: false,
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    })
+    mockGetCopierAggregate.mockResolvedValue(notApplicable)
+
+    const response = await callRoute('copiers')
+    const body = await response.json()
+
+    expect(body.data).toEqual(notApplicable)
+    expect(mockRequestTierC).not.toHaveBeenCalled()
+    expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
   })
 
   it('serves a committed aggregate found by the mandatory post-timeout re-read', async () => {

@@ -115,6 +115,7 @@ export type HistoryCompletenessState = 'complete' | 'partial' | 'unknown'
 
 export type HistoryCompletenessReason =
   | 'verified_terminal_history'
+  | 'verified_copier_snapshot'
   | 'interactive_preview'
   | 'history_evidence_not_bound'
 
@@ -161,6 +162,8 @@ export interface CopierAggregate {
   totalCopierPnl: Money | null
   pnlDistribution: Array<{ bucket: string; count: number }>
   depth: 'full' | 'top10' | 'top3_preview' | 'none'
+  /** True only when every public aggregate value is projected from one immutable snapshot receipt. */
+  receiptBound: boolean
   provenance: RecordProvenance
   /** Collection/history evidence, distinct from the source's advertised depth. */
   completeness?: HistoryCompleteness

@@ -149,6 +149,7 @@ describe('copier PII rule (spec §6)', () => {
         totalCopierPnl: Number.POSITIVE_INFINITY,
         currency: 'USDT',
         depth: 'full',
+        receiptBound: false,
         pnlDistribution: [
           null,
           [],
@@ -167,6 +168,7 @@ describe('copier PII rule (spec §6)', () => {
       copierCountMax: null,
       totalCopierPnl: null,
       pnlDistribution: [{ bucket: 'valid', count: 2 }],
+      receiptBound: false,
       completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
   })
@@ -180,8 +182,14 @@ describe('copier PII rule (spec §6)', () => {
         currency: 'USDT',
         depth: 'full',
         sourceAsOf: '2026-06-10T11:00:00Z',
-        observedAt: '2026-06-10T12:00:00Z',
-        publishedAt: '2026-06-10T12:01:00Z',
+        observedAt: '2026-06-10T12:00:00.000Z',
+        publishedAt: '2026-06-10T12:01:00.000Z',
+        receiptBound: true,
+        receiptId: 77,
+        sourceRunId: 'a'.repeat(64),
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
         pnlDistribution: [
           { bucket: '0~1000', count: 20 },
           { bucket: '>10000', count: 1 },
@@ -199,16 +207,46 @@ describe('copier PII rule (spec §6)', () => {
         { bucket: '>10000', count: 1 },
       ],
       depth: 'full',
+      receiptBound: true,
       provenance: {
         source: 'bitget_futures',
         sourceAsOf: '2026-06-10T11:00:00Z',
-        observedAt: '2026-06-10T12:00:00Z',
-        publishedAt: '2026-06-10T12:01:00Z',
+        observedAt: '2026-06-10T12:00:00.000Z',
+        publishedAt: '2026-06-10T12:01:00.000Z',
       },
-      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+      completeness: {
+        state: 'complete',
+        reason: 'verified_copier_snapshot',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
+      },
     })
     // The serialized aggregate must contain no copier identifiers anywhere.
     expect(JSON.stringify(aggregate)).not.toMatch(/copier_label|copierLabel|email/)
+  })
+
+  it('rejects a malformed claimed copier receipt instead of downgrading it to legacy data', async () => {
+    const aggregate = await getCopierAggregate(
+      rpcClient({
+        copierCount: 1,
+        currency: 'USDT',
+        depth: 'full',
+        receiptBound: true,
+        receiptId: 0,
+        sourceRunId: 'a'.repeat(64),
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
+        observedAt: '2026-06-10T12:00:00.000Z',
+        publishedAt: '2026-06-10T12:01:00.000Z',
+        pnlDistribution: [],
+      }),
+      'bitget_futures',
+      'abc'
+    )
+
+    expect(aggregate).toBeNull()
   })
 
   it.each([undefined, 'BTC', 'usdt'])(

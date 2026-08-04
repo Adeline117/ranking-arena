@@ -93,7 +93,10 @@ export async function GET(
           resolved.source,
           resolved.exchangeTraderId
         )
-        if (aggregate) {
+        // An explicit depth=none is a source-level N/A declaration. Every
+        // actual aggregate must be bound to one immutable snapshot receipt;
+        // legacy/profile-only values are a cold-start signal, never public data.
+        if (aggregate && (aggregate.receiptBound || aggregate.depth === 'none')) {
           return withCache(apiSuccess(aggregate), { maxAge: 300, staleWhileRevalidate: 600 })
         }
 
@@ -114,7 +117,10 @@ export async function GET(
           resolved.source,
           resolved.exchangeTraderId
         )
-        if (refreshedAggregate) {
+        if (
+          refreshedAggregate &&
+          (refreshedAggregate.receiptBound || refreshedAggregate.depth === 'none')
+        ) {
           return withCache(apiSuccess(refreshedAggregate), {
             maxAge: 300,
             staleWhileRevalidate: 600,
