@@ -198,6 +198,14 @@ export function copierSnapshotSourceRunId(artifact: CopierSnapshotArtifact): str
   return strictCanonicalSha256(artifact)
 }
 
+export function copierSnapshotStoragePath(artifact: CopierSnapshotArtifact): string {
+  const sourceRunId = copierSnapshotSourceRunId(artifact)
+  return (
+    `${artifact.source.slug}/copier_snapshot/${artifact.lane}/` +
+    `${Date.parse(artifact.observed_at)}_${sourceRunId}.json.gz`
+  )
+}
+
 /** Rebuild and byte-compare an untrusted value before any RAW side effect. */
 export function revalidateCopierSnapshotArtifact(value: unknown): CopierSnapshotArtifact {
   if (!isRecord(value) || value.contract !== COPIER_SNAPSHOT_ARTIFACT_CONTRACT) {
