@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { renderContentParts, renderContentWithLinks } from '../content'
+import { linkifyTagsAndMentions, renderContentParts, renderContentWithLinks } from '../content'
 
 describe('markdown image DOM safety', () => {
   afterEach(() => {
@@ -42,5 +42,27 @@ describe('markdown image DOM safety', () => {
 
     expect(openSpy).toHaveBeenCalledWith(url, '_blank', 'noopener,noreferrer')
     expect(popup.opener).toBeNull()
+  })
+})
+
+describe('hashtag DOM canonicalization', () => {
+  it('links a 30-character tag but never links a truncated prefix of a longer token', () => {
+    const validTag = 'x'.repeat(30)
+    const overlongTag = 'y'.repeat(31)
+    const { container } = render(
+      <div>{linkifyTagsAndMentions(`#${validTag} #${overlongTag}`)}</div>
+    )
+
+    const links = Array.from(container.querySelectorAll('a'))
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href', `/hashtag/${validTag}`)
+    expect(container).toHaveTextContent(`#${overlongTag}`)
+  })
+
+  it('keeps a token plain when lowercase expansion leaves the canonical alphabet', () => {
+    const { container } = render(<div>{linkifyTagsAndMentions('#İ')}</div>)
+
+    expect(container.querySelector('a')).toBeNull()
+    expect(container).toHaveTextContent('#İ')
   })
 })

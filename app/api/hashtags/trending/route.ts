@@ -1,44 +1,63 @@
 /**
  * GET /api/hashtags/trending
- * Return top 20 hashtags by post_count.
- * Cached for 15 minutes.
+ * Return the top 20 hashtags by current anonymous-readable post count.
  */
 
 export const runtime = 'nodejs'
 export const maxDuration = 10
+export const dynamic = 'force-dynamic'
 
-import { NextRequest } from 'next/server'
-import { getSupabaseAdmin, success, handleError, checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { NextRequest, NextResponse } from 'next/server'
+import {
+  getSupabaseAdmin,
+  getAuthUser,
+  success,
+  handleError,
+  checkRateLimit,
+  RateLimitPresets,
+  unauthorized,
+} from '@/lib/api'
 import { getTrendingHashtags } from '@/lib/data/hashtags'
-import { getServerCache, setServerCache } from '@/lib/utils/server-cache'
 
-const CACHE_KEY = 'hashtags:trending'
+const POSTGRES_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function protectTrendingResponse<T extends NextResponse>(response: T): T {
+  response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+  response.headers.set('CDN-Cache-Control', 'no-store')
+  response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
+  const varyFields = (response.headers.get('Vary') ?? '')
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean)
+  if (!varyFields.some((field) => field.toLowerCase() === 'authorization')) {
+    varyFields.push('Authorization')
+  }
+  response.headers.set('Vary', varyFields.join(', '))
+  return response
+}
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return protectTrendingResponse(rateLimitResponse)
 
   try {
-    // Non-personalized global data — safe to edge-cache. Mirrors the 15 min
-    // server-cache TTL so shared CDN/browser caching absorbs repeat traffic.
-    const edgeCacheHeader = {
-      'Cache-Control': 'public, s-maxage=900, stale-while-revalidate=1800',
-    }
-
-    // Check cache first (15 min)
-    const cached = getServerCache<Awaited<ReturnType<typeof getTrendingHashtags>>>(CACHE_KEY)
-    if (cached) {
-      return success({ hashtags: cached }, 200, edgeCacheHeader)
+    // Trending is intentionally an anonymous audience, but a supplied invalid
+    // bearer must not be silently treated as if no credential was sent.
+    const authorization = request.headers.get('authorization')
+    const authenticatedUser = authorization === null ? null : await getAuthUser(request)
+    if (
+      authorization !== null &&
+      (!authenticatedUser || !POSTGRES_UUID_RE.test(authenticatedUser.id))
+    ) {
+      const response = unauthorized('Invalid or expired authentication credentials')
+      response.headers.set('WWW-Authenticate', 'Bearer')
+      return protectTrendingResponse(response)
     }
 
     const supabase = getSupabaseAdmin()
     const hashtags = await getTrendingHashtags(supabase, 20)
-
-    // Cache for 15 minutes
-    setServerCache(CACHE_KEY, hashtags, 900)
-
-    return success({ hashtags }, 200, edgeCacheHeader)
+    return protectTrendingResponse(success({ hashtags }))
   } catch (error: unknown) {
-    return handleError(error, 'hashtags trending GET')
+    return protectTrendingResponse(handleError(error, 'hashtags trending GET'))
   }
 }

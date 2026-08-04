@@ -354,10 +354,17 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
  * Render #hashtags as clickable links within text.
  * Returns an array of ReactNodes with hashtag links.
  */
+function canonicalHashtagForHref(tag: string): string | null {
+  const normalized = tag.toLowerCase()
+  return normalized && Array.from(normalized).length <= 30 && /^[\p{L}\p{N}_]+$/u.test(normalized)
+    ? normalized
+    : null
+}
+
 function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
   // Unicode-aware(与 lib/data/hashtags.ts 提取 regex 同步):\w 是 ASCII-only,
   // 会让 #比特币 等 CJK 标签不被 linkify(2026-07-03 修复)。
-  const hashtagRegex = /#([\p{L}\p{N}_]{1,30})/gu
+  const hashtagRegex = /#([\p{L}\p{N}_]{1,30})(?![\p{L}\p{N}_])/gu
   if (!hashtagRegex.test(text)) {
     return renderTextWithStickers(text, keyPrefix)
   }
@@ -373,22 +380,27 @@ function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
       )
     }
     const tag = match[1]
-    nodes.push(
-      createElement(
-        'a',
-        {
-          key: `${keyPrefix}-ht${match.index}`,
-          href: `/hashtag/${tag.toLowerCase()}`,
-          onClick: (e: React.MouseEvent) => e.stopPropagation(),
-          style: {
-            color: ARENA_PURPLE,
-            textDecoration: 'none',
-            fontWeight: 600,
+    const canonicalTag = canonicalHashtagForHref(tag)
+    if (canonicalTag === null) {
+      nodes.push(...renderTextWithStickers(match[0], `${keyPrefix}-ht-invalid${match.index}`))
+    } else {
+      nodes.push(
+        createElement(
+          'a',
+          {
+            key: `${keyPrefix}-ht${match.index}`,
+            href: `/hashtag/${canonicalTag}`,
+            onClick: (e: React.MouseEvent) => e.stopPropagation(),
+            style: {
+              color: ARENA_PURPLE,
+              textDecoration: 'none',
+              fontWeight: 600,
+            },
           },
-        },
-        `#${tag}`
+          `#${tag}`
+        )
       )
-    )
+    }
     lastIdx = match.index + match[0].length
   }
   if (lastIdx < text.length) {
@@ -409,7 +421,7 @@ function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
  */
 export function linkifyTagsAndMentions(text: string, keyPrefix = 'lm'): ReactNode[] {
   if (!text) return []
-  const combined = /#([\p{L}\p{N}_]{1,30})|@(\w+)/gu
+  const combined = /#([\p{L}\p{N}_]{1,30})(?![\p{L}\p{N}_])|@(\w+)/gu
   const nodes: ReactNode[] = []
   let lastIdx = 0
   let match: RegExpExecArray | null
@@ -421,18 +433,23 @@ export function linkifyTagsAndMentions(text: string, keyPrefix = 'lm'): ReactNod
     const tag = match[1]
     const mention = match[2]
     if (tag) {
-      nodes.push(
-        createElement(
-          'a',
-          {
-            key: `${keyPrefix}-ht${match.index}`,
-            href: `/hashtag/${tag.toLowerCase()}`,
-            onClick: (e: React.MouseEvent) => e.stopPropagation(),
-            style: { color: ARENA_PURPLE, textDecoration: 'none', fontWeight: 600 },
-          },
-          `#${tag}`
+      const canonicalTag = canonicalHashtagForHref(tag)
+      if (canonicalTag === null) {
+        nodes.push(match[0])
+      } else {
+        nodes.push(
+          createElement(
+            'a',
+            {
+              key: `${keyPrefix}-ht${match.index}`,
+              href: `/hashtag/${canonicalTag}`,
+              onClick: (e: React.MouseEvent) => e.stopPropagation(),
+              style: { color: ARENA_PURPLE, textDecoration: 'none', fontWeight: 600 },
+            },
+            `#${tag}`
+          )
         )
-      )
+      }
     } else if (mention) {
       nodes.push(
         createElement(

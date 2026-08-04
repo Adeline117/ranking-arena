@@ -132,32 +132,88 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       auth.sessionGeneration,
       feedRefreshTrigger,
     ],
-    queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (accessTokenRef.current) {
-        headers['Authorization'] = `Bearer ${accessTokenRef.current}`
-      }
+    queryFn: async ({ pageParam = 0, signal }: { pageParam: number; signal: AbortSignal }) => {
       // Hashtag-scoped feed: paginate the hashtag endpoint so infinite scroll only
       // ever appends posts carrying this tag (never falls back to the global feed).
-      let url: string
       if (props.tag) {
+        const capturedScope = {
+          viewerKey: auth.viewerKey,
+          userId: auth.userId,
+          sessionGeneration: auth.sessionGeneration,
+          accessToken,
+        }
         const hashParams = new URLSearchParams()
         hashParams.set('limit', String(pageSize))
         hashParams.set('offset', String(pageParam))
         hashParams.set('sort_by', sortType === 'likes' ? 'hot_score' : 'created_at')
-        url = `/api/hashtags/${encodeURIComponent(props.tag)}?${hashParams.toString()}`
-      } else {
-        const params = buildPostQueryParams({
-          pageSize,
-          offset: pageParam,
-          sortBy: props.sortBy,
-          sortType,
-          authorHandle: props.authorHandle,
-          groupId: props.groupId,
-          groupIds: props.groupIds,
+        const url = `/api/hashtags/${encodeURIComponent(props.tag)}?${hashParams.toString()}`
+        const result = await authedFetch<{
+          data?: {
+            posts?: Post[]
+            pagination?: { has_more?: boolean }
+          }
+          meta?: { pagination?: { has_more?: boolean } }
+          error?: string | { message?: string }
+        }>(url, 'GET', capturedScope.accessToken, undefined, 15_000, {
+          expectedUserId: capturedScope.userId,
+          expectedSessionGeneration: capturedScope.sessionGeneration,
+          signal,
         })
-        url = `/api/posts?${params.toString()}`
+
+        if (signal.aborted) {
+          throw signal.reason instanceof Error
+            ? signal.reason
+            : new DOMException('The operation was aborted', 'AbortError')
+        }
+        const currentScope = authScopeRef.current
+        if (
+          result.stale ||
+          currentScope.viewerKey !== capturedScope.viewerKey ||
+          currentScope.userId !== capturedScope.userId ||
+          currentScope.sessionGeneration !== capturedScope.sessionGeneration
+        ) {
+          throw new DOMException(
+            'Authentication identity changed during hashtag load',
+            'AbortError'
+          )
+        }
+
+        const data = result.data ?? {}
+        if (!result.ok) {
+          throw new Error(
+            typeof data.error === 'string'
+              ? data.error
+              : data.error?.message || 'Failed to load posts'
+          )
+        }
+        const loadedPosts = data.data?.posts ?? []
+        const hasMore =
+          data.meta?.pagination?.has_more ??
+          data.data?.pagination?.has_more ??
+          loadedPosts.length >= pageSize
+        return {
+          posts: loadedPosts,
+          hasMore,
+          offset: pageParam + loadedPosts.length,
+        }
       }
+
+      // Preserve the existing global/group/author feed transport. This branch is
+      // intentionally unchanged while hashtag reads use the viewer-scoped helper.
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (accessTokenRef.current) {
+        headers['Authorization'] = `Bearer ${accessTokenRef.current}`
+      }
+      const params = buildPostQueryParams({
+        pageSize,
+        offset: pageParam,
+        sortBy: props.sortBy,
+        sortType,
+        authorHandle: props.authorHandle,
+        groupId: props.groupId,
+        groupIds: props.groupIds,
+      })
+      const url = `/api/posts?${params.toString()}`
       const response = await fetch(url, { headers })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
@@ -440,7 +496,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     if (hasMore && !loadingMore && !loading) await fetchNextPage()
   }, [hasMore, loadingMore, loading, fetchNextPage])
 
-  // useInfiniteQuery handles abort/cleanup internally
+  // The hashtag query forwards React Query cancellation into authedFetch; the
+  // legacy non-hashtag transport intentionally retains its existing behavior.
 
   const handleRefresh = useCallback(async () => {
     setNewPostCount(0)
