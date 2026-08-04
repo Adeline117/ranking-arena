@@ -32,7 +32,6 @@ import {
 } from '@/lib/ingest/history-acquisition'
 import {
   EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
-  EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   historyRawJobType,
   POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
@@ -62,8 +61,6 @@ interface PointerRow {
   content_hash: string
   quarantined: boolean
   meta: unknown
-  source_run_id: string | null
-  trust_artifact_role: string | null
 }
 
 const attemptStartedAt = '2026-08-03T10:00:00.000Z'
@@ -180,12 +177,7 @@ function databaseHarness(initialRows: PointerRow[] = []) {
     if (sql.includes('pg_advisory_xact_lock')) return { rows: [] }
     if (sql.startsWith('SELECT id, source_id')) {
       return {
-        rows: pointers.filter(
-          (pointer) =>
-            pointer.storage_path === params[0] ||
-            (pointer.source_run_id === params[1] &&
-              pointer.trust_artifact_role === EVENT_HISTORY_RAW_ARTIFACT_ROLE)
-        ),
+        rows: pointers.filter((pointer) => pointer.storage_path === params[0]),
       }
     }
     if (sql.startsWith('INSERT INTO arena.raw_objects')) {
@@ -203,8 +195,6 @@ function databaseHarness(initialRows: PointerRow[] = []) {
           content_hash: params[6] as string,
           quarantined: false,
           meta: JSON.parse(params[7] as string),
-          source_run_id: params[8] as string,
-          trust_artifact_role: params[9] as string,
         })
       }
       return { rows: [] }
@@ -266,10 +256,11 @@ describe('writePositionHistoryRawArtifact', () => {
       timeframe: null,
       fetched_at: fetchedAt,
       content_hash: input.sourceRunId,
-      source_run_id: input.sourceRunId,
-      trust_artifact_role: EVENT_HISTORY_RAW_ARTIFACT_ROLE,
       quarantined: false,
     })
+    const pointerSql = database.query.mock.calls.map(([sql]) => String(sql)).join('\n')
+    expect(pointerSql).not.toContain('source_run_id')
+    expect(pointerSql).not.toContain('trust_artifact_role')
     const meta = database.pointers[0].meta as Record<string, unknown>
     const reconciliation = prepareHistoryRawArtifactReconciliationExpectation(input)
     expect(reconciliation).toMatchObject({
@@ -689,8 +680,6 @@ describe('writePositionHistoryRawArtifact', () => {
       expect(database.pointers).toHaveLength(1)
       expect(database.pointers[0]).toMatchObject({
         job_type: historyRawJobType(kind),
-        source_run_id: input.sourceRunId,
-        trust_artifact_role: EVENT_HISTORY_RAW_ARTIFACT_ROLE,
       })
       expect(database.pointers[0].meta).toMatchObject({
         surface: kind,

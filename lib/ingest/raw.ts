@@ -68,6 +68,8 @@ export const EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
   'arena.event-history-publication-evidence@1' as const
 export const POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT =
   'arena.position-history-audit-evidence@1' as const
+const PREVIOUS_POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
+  'arena.position-history-publication-evidence@1' as const
 
 export type PositionHistoryAuditReason = ReviewedPositionHistoryRejectionCode
 
@@ -1078,8 +1080,6 @@ interface PositionHistoryTrustPointerRow {
   content_hash: string
   quarantined: boolean
   meta: unknown
-  source_run_id: string | null
-  trust_artifact_role: string | null
 }
 
 function positionHistoryArtifactError(detail: string): Error {
@@ -1345,23 +1345,17 @@ export function prepareHistoryRawArtifactReconciliationExpectation(
 
 async function loadPositionHistoryTrustPointers(
   transaction: IngestQueryExecutor,
-  artifact: PreparedPositionHistoryRawArtifact,
-  sourceRunId: string
+  artifact: PreparedPositionHistoryRawArtifact
 ): Promise<PositionHistoryTrustPointerRow[]> {
   const { rows } = await transaction.query<PositionHistoryTrustPointerRow>(
     `SELECT id, source_id, job_type, trader_id, timeframe,
             fetched_at::text AS fetched_at, storage_path,
-            bytes, content_hash, quarantined, meta,
-            source_run_id, trust_artifact_role
+            bytes, content_hash, quarantined, meta
        FROM arena.raw_objects
       WHERE storage_path = $1
-         OR (
-           source_run_id = $2
-           AND trust_artifact_role = 'event_history'
-         )
       ORDER BY id
       FOR UPDATE`,
-    [artifact.storagePath, sourceRunId]
+    [artifact.storagePath]
   )
   return rows
 }
@@ -1401,8 +1395,6 @@ function validatePositionHistoryTrustPointer(
     row.bytes !== artifact.durableCompressedBytes ||
     row.content_hash !== input.sourceRunId ||
     row.quarantined !== false ||
-    row.source_run_id !== input.sourceRunId ||
-    row.trust_artifact_role !== EVENT_HISTORY_RAW_ARTIFACT_ROLE ||
     !metaMatches
   ) {
     throw positionHistoryArtifactError(`database pointer ${row.id} does not match the artifact`)
@@ -1422,8 +1414,8 @@ async function insertPositionHistoryTrustPointer(
   await transaction.query(
     `INSERT INTO arena.raw_objects
        (source_id, job_type, trader_id, timeframe, fetched_at, storage_path,
-        bytes, content_hash, meta, source_run_id, trust_artifact_role)
-     VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10)
+        bytes, content_hash, meta)
+     VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8)
      ON CONFLICT (storage_path) DO NOTHING`,
     [
       input.sourceId,
@@ -1434,8 +1426,6 @@ async function insertPositionHistoryTrustPointer(
       artifact.durableCompressedBytes,
       artifact.contentHash,
       JSON.stringify(positionHistoryArtifactMeta(artifact)),
-      input.sourceRunId,
-      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
     ]
   )
 }
@@ -1450,10 +1440,10 @@ async function persistPositionHistoryTrustPointer(
     [`arena.history-raw-artifact:${input.artifact.history_kind}:${input.sourceRunId}`]
   )
 
-  let rows = await loadPositionHistoryTrustPointers(transaction, artifact, input.sourceRunId)
+  let rows = await loadPositionHistoryTrustPointers(transaction, artifact)
   if (rows.length === 0) {
     await insertPositionHistoryTrustPointer(transaction, input, artifact)
-    rows = await loadPositionHistoryTrustPointers(transaction, artifact, input.sourceRunId)
+    rows = await loadPositionHistoryTrustPointers(transaction, artifact)
   }
   return validatePositionHistoryTrustPointer(rows, input, artifact)
 }
@@ -1780,9 +1770,8 @@ export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
             -- evidence-retention authority must retire it explicitly.
             AND (
               job_type IS DISTINCT FROM $2
-              OR trust_artifact_role IS DISTINCT FROM $3
               OR NOT COALESCE(
-                meta->>'history_evidence_contract' = ANY($4::text[]),
+                meta->>'history_evidence_contract' = ANY($3::text[]),
                 FALSE
               )
             )
@@ -1803,8 +1792,13 @@ export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
       [
         retentionDays,
         POSITION_HISTORY_RAW_JOB_TYPE,
-        EVENT_HISTORY_RAW_ARTIFACT_ROLE,
-        [POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT, POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT],
+        [
+          ...new Set([
+            POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+            PREVIOUS_POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+            POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
+          ]),
+        ],
       ]
     )
 

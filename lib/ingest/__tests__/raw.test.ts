@@ -25,7 +25,6 @@ jest.mock('@/lib/ingest/db', () => ({
 }))
 
 import {
-  EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   type IngestTransactionRunner,
   POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
@@ -496,6 +495,14 @@ describe('readRawObject integrity verification', () => {
 })
 
 describe('cleanupRawObjects fail-closed garbage collection', () => {
+  const retainedPositionHistoryEvidenceContracts = [
+    ...new Set([
+      POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      'arena.position-history-publication-evidence@1',
+      POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
+    ]),
+  ]
+
   function useRawGcQueryPlan({
     acquired = true,
     pending = [],
@@ -571,8 +578,7 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([
       30,
       POSITION_HISTORY_RAW_JOB_TYPE,
-      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
-      [POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT, POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT],
+      retainedPositionHistoryEvidenceContracts,
     ])
     expect(mockClientQuery.mock.invocationCallOrder[retireIndex]).toBeLessThan(
       mockRemove.mock.invocationCallOrder[0]
@@ -589,13 +595,12 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     const retireIndex = rawGcQueryIndex('WITH candidates AS MATERIALIZED')
     const retireSql = String(mockClientQuery.mock.calls[retireIndex][0])
     expect(retireSql).toContain('job_type IS DISTINCT FROM $2')
-    expect(retireSql).toContain('trust_artifact_role IS DISTINCT FROM $3')
-    expect(retireSql).toContain("meta->>'history_evidence_contract' = ANY($4::text[])")
+    expect(retireSql).not.toContain('trust_artifact_role')
+    expect(retireSql).toContain("meta->>'history_evidence_contract' = ANY($3::text[])")
     expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([
       30,
       POSITION_HISTORY_RAW_JOB_TYPE,
-      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
-      [POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT, POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT],
+      retainedPositionHistoryEvidenceContracts,
     ])
     expect(mockRemove).not.toHaveBeenCalled()
   })
