@@ -1,5 +1,11 @@
 import type { Job } from 'bullmq'
 import type { ParsedHistoryRow, ParsedProfile, SourceRow } from '@/lib/ingest/core/types'
+import {
+  BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
+  BINANCE_POSITION_HISTORY_URL,
+} from '@/lib/ingest/adapters/binance/history-contract'
+import { binancePositionHistoryTerminalVerifier } from '@/lib/ingest/adapters/binance/history-terminal'
+import { POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT } from '@/lib/ingest/position-history-acquisition-v2'
 import type { TierJobData } from '../../queues'
 
 const mockGetSourceBySlug = jest.fn()
@@ -103,6 +109,8 @@ const src = {
   fetch_region: 'local',
 } as SourceRow & { cadence_tier_b_seconds: number }
 
+const exchangeTraderId = '0x0000000000000000000000000000000000000001'
+
 function profile(timeframe: 7 | 30, complete: boolean): ParsedProfile {
   return {
     nickname: null,
@@ -202,6 +210,61 @@ async function* emptyPositionHistoryStream() {
   }
 }
 
+function binancePositionRow(realizedPnl: string): Record<string, unknown> {
+  const opened = Date.parse('2026-07-15T10:00:00.000Z')
+  return {
+    id: 'position-1',
+    symbol: 'BTCUSDT',
+    side: 'Long',
+    status: 'All Closed',
+    opened,
+    closed: opened + 3_600_000,
+    roi: '0.1',
+    leverage: '2',
+    closedVolume: '1',
+    avgCost: '100',
+    avgClosePrice: '110',
+    closingPnl: realizedPnl,
+  }
+}
+
+async function* binancePositionHistoryStream(
+  options: { empty?: boolean; openingPnl?: string } = {}
+) {
+  const closingRows = options.empty ? [] : [binancePositionRow('10')]
+  const openingRows = options.empty ? [] : [binancePositionRow(options.openingPnl ?? '10')]
+  const payload = (sort: 'CLOSING' | 'OPENING', rows: Record<string, unknown>[]) => ({
+    contract: BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
+    portfolioId: exchangeTraderId,
+    sort,
+    request: { pageNumber: 1, pageSize: 50, portfolioId: exchangeTraderId, sort },
+    response: {
+      code: '000000',
+      success: true,
+      data: { list: rows, total: rows.length },
+    },
+  })
+  yield {
+    pageIndex: 1,
+    payload: payload('CLOSING', closingRows),
+    url: BINANCE_POSITION_HISTORY_URL,
+    fetchedAt: new Date(Date.now() + 1_000).toISOString(),
+  }
+  yield {
+    pageIndex: 1,
+    payload: payload('OPENING', openingRows),
+    url: BINANCE_POSITION_HISTORY_URL,
+    fetchedAt: new Date(Date.now() + 2_000).toISOString(),
+  }
+  return {
+    contract: 'arena.ingest.history-terminal-claim@1' as const,
+    observations: [
+      { segment_id: 'closing', reason: 'reported_end' as const, page_ordinal: 1 },
+      { segment_id: 'opening', reason: 'reported_end' as const, page_ordinal: 2 },
+    ],
+  }
+}
+
 async function* orderHistoryStream() {
   yield {
     pageIndex: 1,
@@ -212,6 +275,38 @@ async function* orderHistoryStream() {
 }
 
 const job = { data: { sourceSlug: 'gtrade' } } as Job<TierJobData>
+const binanceJob = { data: { sourceSlug: 'binance_futures' } } as Job<TierJobData>
+
+function configureBinancePositionHistory(
+  options: { empty?: boolean; openingPnl?: string } = {}
+): SourceRow & { cadence_tier_b_seconds: number } {
+  const binanceSource = {
+    ...src,
+    slug: 'binance_futures',
+    adapter_slug: 'binance_futures',
+    currency: 'USDT',
+  }
+  mockGetSourceBySlug.mockResolvedValue(binanceSource)
+  mockProfileTimeframes.mockReturnValue([30])
+  mockParseProfile.mockReturnValue(profile(30, true))
+  mockGetHistory.mockImplementation(() => binancePositionHistoryStream(options))
+  mockGetAdapter.mockReturnValue({
+    capabilities: {
+      profile: true,
+      positionHistory: true,
+      orders: false,
+      transfers: false,
+      copiers: false,
+    },
+    getProfile: mockGetProfile,
+    getHistory: mockGetHistory,
+    parseProfile: mockParseProfile,
+    parseHistory: mockParseHistory,
+    validateProfile: mockValidateProfile,
+    historyTerminalVerifier: () => binancePositionHistoryTerminalVerifier,
+  })
+  return binanceSource
+}
 
 describe('Tier-B profile coverage accounting', () => {
   beforeEach(() => {
@@ -289,7 +384,7 @@ describe('Tier-B profile coverage accounting', () => {
       traders: [
         {
           id: 42,
-          exchange_trader_id: '0x0000000000000000000000000000000000000001',
+          exchange_trader_id: exchangeTraderId,
           meta: null,
           headline_rois: {},
         },
@@ -419,7 +514,7 @@ describe('Tier-B profile coverage accounting', () => {
     })
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
-    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockWritePositionHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
       sourceRunId: expect.stringMatching(/^[0-9a-f]{64}$/),
       artifact: {
@@ -435,9 +530,6 @@ describe('Tier-B profile coverage accounting', () => {
         },
       },
     })
-    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
-      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
-    )
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockGetPositionHistoryPublicationCheckpoint).toHaveBeenCalledWith(34, 42)
     expect(mockGetHistoryCursor).not.toHaveBeenCalled()
@@ -445,6 +537,153 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
     expect(mockIngestClientRelease).toHaveBeenCalledWith(false)
+  })
+
+  it('persists verified Binance history only as the outer @2 acquisition proof', async () => {
+    configureBinancePositionHistory()
+
+    await expect(processTierB(binanceJob)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 0,
+    })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    const rawInput = mockWritePositionHistoryRawArtifact.mock.calls[0][0]
+    expect(rawInput).toMatchObject({
+      sourceRunId: expect.stringMatching(/^[0-9a-f]{64}$/),
+      artifact: {
+        contract: POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT,
+        acquisition: {
+          source: { id: 34, slug: 'binance_futures' },
+          trader: { id: 42, exchange_trader_id: exchangeTraderId },
+          termination: { evidence_state: 'verified', scan_terminal_state: 'exhausted' },
+        },
+        candidate_ledger: {
+          observed_candidate_count: 2,
+          unique_source_fact_count: 1,
+        },
+      },
+    })
+    expect(rawInput.sourceRunId).not.toBe(rawInput.artifact.acquisition_source_run_id)
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+  })
+
+  it('persists a verifier-proven empty Binance genesis as @2 without inferring rows', async () => {
+    configureBinancePositionHistory({ empty: true })
+
+    await expect(processTierB(binanceJob)).resolves.toMatchObject({
+      historyRowsWritten: 0,
+      errors: 0,
+    })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: {
+        contract: POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT,
+        candidate_ledger: {
+          observed_candidate_count: 0,
+          unique_source_fact_count: 0,
+          source_facts: [],
+        },
+      },
+    })
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
+  })
+
+  it('persists @1 and fails closed when Binance cross-segment economics conflict', async () => {
+    configureBinancePositionHistory({ openingPnl: '999' })
+
+    await expect(processTierB(binanceJob)).resolves.toMatchObject({
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: {
+        contract: 'arena.ingest.history-acquisition-artifact@1',
+        termination: { evidence_state: 'verified' },
+      },
+    })
+    expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
+  })
+
+  it('replays the exact outer @2 identity after an ambiguous COMMIT response', async () => {
+    configureBinancePositionHistory()
+    let commitAttempts = 0
+    mockIngestClientQuery.mockImplementation(async (sql: unknown) => {
+      if (sql === 'COMMIT' && commitAttempts++ === 0) {
+        throw new Error('connection lost after COMMIT')
+      }
+      return { rows: [], rowCount: 0 }
+    })
+
+    await expect(processTierB(binanceJob)).resolves.toMatchObject({ errors: 0 })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
+      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
+    )
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual([
+      'BEGIN',
+      'COMMIT',
+      'BEGIN',
+      'COMMIT',
+    ])
+    expect(mockIngestClientRelease.mock.calls.map(([destroy]) => destroy)).toEqual([true, false])
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
+  })
+
+  it('replays the exact outer @2 identity after a known pointer rollback', async () => {
+    configureBinancePositionHistory()
+    mockPersistPositionHistoryRawPointer
+      .mockRejectedValueOnce(new Error('pointer insert rejected'))
+      .mockResolvedValueOnce({
+        id: 2_081_897,
+        storagePath: 'test/history/event.json.gz',
+        contentHash: 'b'.repeat(64),
+      })
+
+    await expect(processTierB(binanceJob)).resolves.toMatchObject({ errors: 0 })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
+      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
+    )
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual([
+      'BEGIN',
+      'ROLLBACK',
+      'BEGIN',
+      'COMMIT',
+    ])
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
+  })
+
+  it('bounds RAW pointer reconciliation to one replay and surfaces aggregate failure', async () => {
+    configureBinancePositionHistory()
+    mockPersistPositionHistoryRawPointer.mockRejectedValue(
+      new Error('pointer database unavailable')
+    )
+
+    await expect(processTierB(binanceJob)).resolves.toMatchObject({ errors: 1 })
+
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
+    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
+      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
+    )
+    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual([
+      'BEGIN',
+      'ROLLBACK',
+      'BEGIN',
+      'ROLLBACK',
+    ])
+    expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
   })
 
   it('does not advance an overlap cursor without receipt-bound parser evidence', async () => {
@@ -698,10 +937,7 @@ describe('Tier-B profile coverage accounting', () => {
       errors: 1,
     })
 
-    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(2)
-    expect(mockWritePositionHistoryRawArtifact.mock.calls[1][0]).toEqual(
-      mockWritePositionHistoryRawArtifact.mock.calls[0][0]
-    )
+    expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockParseHistory).not.toHaveBeenCalled()
     expect(mockPublishTierBVerifiedPositionHistoryInTransaction).not.toHaveBeenCalled()
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
