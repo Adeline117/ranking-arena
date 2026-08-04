@@ -27,6 +27,11 @@ const BOOKMARK_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const BOOKMARK_POST_ID = '22222222-2222-4222-8222-222222222222'
 const BOOKMARK_GROUP_ID = '33333333-3333-4333-8333-333333333333'
 const BOOKMARK_FOLDER_ID = '44444444-4444-4444-8444-444444444444'
+const REACTION_ACTOR_ID = '55555555-5555-4555-8555-555555555555'
+const REACTION_OTHER_ACTOR_ID = '66666666-6666-4666-8666-666666666666'
+const REACTION_POST_ID = '77777777-7777-4777-8777-777777777777'
+const REACTION_GROUP_ID = '88888888-8888-4888-8888-888888888888'
+const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
 
 type Props = {
   userId: string | null
@@ -94,6 +99,23 @@ function bookmarkStatusReceipt(requestId: string, bookmarked = true) {
     operation: 'status',
     post_ids: [BOOKMARK_POST_ID],
     bookmarks: { [BOOKMARK_POST_ID]: bookmarked },
+  }
+}
+
+function reactionReceipt(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    data: {
+      actor_id: REACTION_ACTOR_ID,
+      post_id: REACTION_POST_ID,
+      requested_reaction: 'up',
+      action: 'added',
+      reaction: 'up',
+      like_count: 6,
+      dislike_count: 2,
+      ...overrides,
+    },
+    meta: { timestamp: REACTION_TIMESTAMP },
   }
 }
 
@@ -458,62 +480,81 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     const userA = {
       ...baseProps,
       accessToken: 'token-a',
-      userId: 'user-a',
-      viewerKey: 'user:user-a',
+      userId: REACTION_ACTOR_ID,
+      viewerKey: `user:${REACTION_ACTOR_ID}`,
       isMember: true,
     }
     const requestA = deferred<unknown>()
     mockAuthedFetch.mockReturnValueOnce(requestA.promise)
-    const { result, rerender } = renderGroupHook(userA)
+    const { result, rerender } = renderGroupHook(userA, undefined, jest.fn(), REACTION_GROUP_ID)
 
     let mutation!: Promise<void>
     act(() => {
-      mutation = result.current.handleLike('post-1')
+      mutation = result.current.handleLike(REACTION_POST_ID)
     })
     await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
     expect(mockAuthedFetch).toHaveBeenCalledWith(
-      '/api/posts/post-1/like',
+      `/api/posts/${REACTION_POST_ID}/like`,
       'POST',
       'token-a',
       { reaction_type: 'up' },
       15_000,
-      { expectedUserId: 'user-a', expectedSessionGeneration: 1 }
+      { expectedUserId: REACTION_ACTOR_ID, expectedSessionGeneration: 1 }
     )
 
     rerender({
       ...userA,
       accessToken: 'token-b',
-      userId: 'user-b',
-      viewerKey: 'user:user-b',
+      userId: REACTION_OTHER_ACTOR_ID,
+      viewerKey: `user:${REACTION_OTHER_ACTOR_ID}`,
       sessionGeneration: 2,
     })
     expect(result.current.likeLoading).toEqual({})
+    act(() => {
+      result.current.setPosts([
+        {
+          id: REACTION_POST_ID,
+          group_id: REACTION_GROUP_ID,
+          title: 'B post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          like_count: 50,
+          dislike_count: 4,
+          user_liked: false,
+          user_reaction: 'down',
+        },
+      ])
+    })
 
     await act(async () => {
-      requestA.resolve({ ok: true, status: 200, data: { success: true } })
+      requestA.resolve({ ok: true, status: 200, data: reactionReceipt() })
       await mutation
     })
 
     expect(result.current.likeLoading).toEqual({})
-    expect(result.current.posts).toEqual([])
+    expect(result.current.posts[0]).toMatchObject({
+      title: 'B post',
+      like_count: 50,
+      dislike_count: 4,
+      user_reaction: 'down',
+    })
   })
 
   it('locks same-frame likes and adopts only the server reaction ACK', async () => {
     const props = {
       ...baseProps,
       accessToken: 'token-a',
-      userId: 'user-a',
-      viewerKey: 'user:user-a',
+      userId: REACTION_ACTOR_ID,
+      viewerKey: `user:${REACTION_ACTOR_ID}`,
       isMember: true,
     }
     const request = deferred<unknown>()
     mockAuthedFetch.mockReturnValue(request.promise)
-    const { result } = renderGroupHook(props)
+    const { result } = renderGroupHook(props, undefined, jest.fn(), REACTION_GROUP_ID)
     act(() => {
       result.current.setPosts([
         {
-          id: 'post-1',
-          group_id: 'group-1',
+          id: REACTION_POST_ID,
+          group_id: REACTION_GROUP_ID,
           title: 'Post',
           created_at: '2026-07-15T00:00:00.000Z',
           like_count: 5,
@@ -527,37 +568,29 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     let first!: Promise<void>
     let duplicate!: Promise<void>
     act(() => {
-      first = result.current.handleLike('post-1')
-      duplicate = result.current.handleLike('post-1')
+      first = result.current.handleLike(REACTION_POST_ID)
+      duplicate = result.current.handleLike(REACTION_POST_ID)
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
-    expect(result.current.likeLoading['post-1']).toBe(true)
+    expect(result.current.likeLoading[REACTION_POST_ID]).toBe(true)
 
     await act(async () => {
       request.resolve({
         ok: true,
         status: 200,
-        data: {
-          success: true,
-          data: {
-            action: 'added',
-            reaction: 'up',
-            like_count: null,
-            dislike_count: 3,
-          },
-        },
+        data: reactionReceipt({ dislike_count: 3 }),
       })
       await Promise.all([first, duplicate])
     })
 
     expect(result.current.posts[0]).toMatchObject({
-      like_count: 5,
+      like_count: 6,
       dislike_count: 3,
       user_liked: true,
       user_reaction: 'up',
     })
-    expect(result.current.likeLoading['post-1']).toBe(false)
+    expect(result.current.likeLoading[REACTION_POST_ID]).toBe(false)
   })
 
   it('single-flights group bookmarks and adopts only the exact bound receipt', async () => {
@@ -926,8 +959,8 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     const props = {
       ...baseProps,
       accessToken: 'token-a',
-      userId: 'user-a',
-      viewerKey: 'user:user-a',
+      userId: REACTION_ACTOR_ID,
+      viewerKey: `user:${REACTION_ACTOR_ID}`,
       isMember: true,
     }
     const showToast = jest.fn()
@@ -935,30 +968,19 @@ describe('useGroupPosts comment audience and viewer scope', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        data: {
-          success: true,
-          data: { reaction: 'up', like_count: 99, dislike_count: 0 },
-        },
+        data: reactionReceipt({ actor_id: REACTION_OTHER_ACTOR_ID, like_count: 99 }),
       })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        data: {
-          success: true,
-          data: {
-            action: 'added',
-            reaction: 'up',
-            like_count: 6,
-            dislike_count: 1,
-          },
-        },
+        data: reactionReceipt({ dislike_count: 1 }),
       })
-    const { result } = renderGroupHook(props, undefined, showToast)
+    const { result } = renderGroupHook(props, undefined, showToast, REACTION_GROUP_ID)
     act(() => {
       result.current.setPosts([
         {
-          id: 'post-1',
-          group_id: 'group-1',
+          id: REACTION_POST_ID,
+          group_id: REACTION_GROUP_ID,
           title: 'Post',
           created_at: '2026-07-15T00:00:00.000Z',
           like_count: 5,
@@ -969,7 +991,7 @@ describe('useGroupPosts comment audience and viewer scope', () => {
       ])
     })
 
-    await act(async () => result.current.handleLike('post-1'))
+    await act(async () => result.current.handleLike(REACTION_POST_ID))
     expect(result.current.posts[0]).toMatchObject({
       like_count: 5,
       dislike_count: 1,
@@ -978,7 +1000,7 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     })
     expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
 
-    await act(async () => result.current.handleLike('post-1'))
+    await act(async () => result.current.handleLike(REACTION_POST_ID))
     expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
     expect(result.current.posts[0]).toMatchObject({
       like_count: 6,

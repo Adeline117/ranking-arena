@@ -5,6 +5,11 @@
 
 const mockFetchPostCommentsPage = jest.fn()
 const mockAuthedFetch = jest.fn()
+const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
+const REACTION_OTHER_ACTOR_ID = '22222222-2222-4222-8222-222222222222'
+const REACTION_POST_ID = '33333333-3333-4333-8333-333333333333'
+const REACTION_OTHER_POST_ID = '44444444-4444-4444-8444-444444444444'
+const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
 
 jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
@@ -60,6 +65,32 @@ function deferred<T>() {
     resolve = done
   })
   return { promise, resolve }
+}
+
+function reactionReceipt(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    data: {
+      actor_id: REACTION_ACTOR_ID,
+      post_id: REACTION_POST_ID,
+      requested_reaction: 'up',
+      action: 'added',
+      reaction: 'up',
+      like_count: 6,
+      dislike_count: 1,
+      ...overrides,
+    },
+    meta: { timestamp: REACTION_TIMESTAMP },
+  }
+}
+
+function activateReactionActor() {
+  const scope = synchronizeViewerScope(true, REACTION_ACTOR_ID)
+  return {
+    viewerKey: scope.viewerKey,
+    sessionGeneration: scope.sessionGeneration,
+    userId: scope.userId,
+  }
 }
 
 beforeEach(() => {
@@ -163,14 +194,14 @@ describe('viewer-scoped cache ownership', () => {
 
   it('inherits the live viewer when the store module is imported after authentication', () => {
     jest.isolateModules(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      /* eslint-disable @typescript-eslint/no-require-imports */
       const isolatedViewerScope =
         require('@/lib/auth/viewer-scope') as typeof import('@/lib/auth/viewer-scope')
       isolatedViewerScope.__resetViewerScopeForTests()
       const liveScope = isolatedViewerScope.synchronizeViewerScope(true, 'late-user')
 
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const isolatedPostStore = require('../postStore') as typeof import('../postStore')
+      /* eslint-enable @typescript-eslint/no-require-imports */
 
       expect(isolatedPostStore.usePostStore.getState()).toMatchObject({
         viewerKey: liveScope.viewerKey,
@@ -560,75 +591,142 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
     expect(usePostStore.getState().posts['p1'].comment_count).toBe(3)
   })
 
-  it('reaction 成功 → 用 server 确认的计数更新(非乐观)', async () => {
-    usePostStore.getState().setPost(post('p1', { like_count: 5 }))
+  it('reaction 成功 → 仅采用 actor/post/reaction 绑定的 server 绝对值', async () => {
+    const scope = activateReactionActor()
+    usePostStore.getState().setPost(post(REACTION_POST_ID, { like_count: 5 }))
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      data: {
-        success: true,
-        data: { action: 'added', like_count: 6, dislike_count: 0, reaction: 'up' },
-      },
+      data: reactionReceipt(),
     })
-    const r = await togglePostReaction('p1', 'up', 'tok')
-    expect(r.success).toBe(true)
-    expect(usePostStore.getState().posts['p1'].like_count).toBe(6)
-  })
-
-  it('reaction ACK 的 null 计数保留 store 中的已知绝对值', async () => {
-    usePostStore
-      .getState()
-      .setPost(post('p1', { like_count: 5, dislike_count: 2, user_reaction: null }))
-    mockAuthedFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        success: true,
-        data: {
-          action: 'added',
-          like_count: null,
-          dislike_count: null,
-          reaction: 'up',
-        },
-      },
-    })
-
-    const result = await togglePostReaction('p1', 'up', 'tok')
+    const result = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
 
     expect(result).toEqual({ success: true })
-    expect(usePostStore.getState().posts['p1']).toMatchObject({
-      like_count: 5,
-      dislike_count: 2,
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 6,
+      dislike_count: 1,
       user_reaction: 'up',
     })
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      `/api/posts/${REACTION_POST_ID}/like`,
+      'POST',
+      'tok',
+      { reaction_type: 'up' },
+      15_000,
+      { expectedUserId: REACTION_ACTOR_ID, expectedSessionGeneration: scope.sessionGeneration }
+    )
   })
 
-  it('reaction 畸形 ACK 不写入 store', async () => {
+  it('rejects the legacy nullable-count ACK instead of publishing partial truth', async () => {
+    const scope = activateReactionActor()
     usePostStore
       .getState()
-      .setPost(post('p1', { like_count: 5, dislike_count: 2, user_reaction: null }))
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 2, user_reaction: null }))
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      data: {
-        success: true,
-        data: { action: 'removed', like_count: 99, dislike_count: 0, reaction: 'up' },
-      },
+      data: reactionReceipt({ like_count: null, dislike_count: null }),
     })
 
-    const result = await togglePostReaction('p1', 'up', 'tok')
+    const result = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
 
     expect(result).toEqual({ success: false, error: '操作失败' })
-    expect(usePostStore.getState().posts['p1']).toMatchObject({
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
       like_count: 5,
       dislike_count: 2,
       user_reaction: null,
     })
   })
 
+  it.each([
+    ['another actor', { actor_id: REACTION_OTHER_ACTOR_ID }],
+    ['another post', { post_id: REACTION_OTHER_POST_ID }],
+    ['another requested reaction', { requested_reaction: 'down' }],
+  ])('reaction ACK bound to %s does not write the store', async (_name, overrides) => {
+    const scope = activateReactionActor()
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 2, user_reaction: null }))
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(overrides),
+    })
+
+    const result = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+
+    expect(result).toEqual({ success: false, error: '操作失败' })
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_reaction: null,
+    })
+  })
+
+  it('single-flights same-frame reaction requests', async () => {
+    const scope = activateReactionActor()
+    usePostStore.getState().setPost(post(REACTION_POST_ID, { like_count: 5 }))
+    const response = deferred<unknown>()
+    mockAuthedFetch.mockReturnValue(response.promise)
+
+    const first = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+    const duplicate = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+
+    await expect(duplicate).resolves.toEqual({
+      success: false,
+      error: 'REACTION_IN_FLIGHT',
+    })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+
+    response.resolve({ ok: true, status: 200, data: reactionReceipt() })
+    await expect(first).resolves.toEqual({ success: true })
+    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBe('up')
+  })
+
+  it('drops a late exact ACK after viewer scope changes', async () => {
+    const scopeA = activateReactionActor()
+    usePostStore.getState().setPost(post(REACTION_POST_ID, { like_count: 5 }))
+    const response = deferred<unknown>()
+    mockAuthedFetch.mockReturnValue(response.promise)
+    const mutation = togglePostReaction(REACTION_POST_ID, 'up', 'tok-a', scopeA)
+
+    synchronizeViewerScope(true, REACTION_OTHER_ACTOR_ID)
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 50, dislike_count: 4, user_reaction: 'down' }))
+    response.resolve({ ok: true, status: 200, data: reactionReceipt() })
+
+    await expect(mutation).resolves.toEqual({ success: false, error: 'STALE_AUTH_SCOPE' })
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 50,
+      dislike_count: 4,
+      user_reaction: 'down',
+    })
+  })
+
+  it('deadline/network failure publishes no ACK and releases the lock for retry', async () => {
+    const scope = activateReactionActor()
+    usePostStore.getState().setPost(post(REACTION_POST_ID, { like_count: 5, user_reaction: null }))
+    mockAuthedFetch
+      .mockResolvedValueOnce({ ok: false, status: 0, data: null })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: reactionReceipt() })
+
+    await expect(togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)).resolves.toEqual({
+      success: false,
+      error: '操作失败',
+    })
+    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBeNull()
+
+    await expect(togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)).resolves.toEqual({
+      success: true,
+    })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('reaction 网络抛错 → success:false,不外抛', async () => {
+    const scope = activateReactionActor()
     mockAuthedFetch.mockRejectedValue(new Error('offline'))
-    const r = await togglePostReaction('p1', 'up', 'tok')
+    const r = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
     expect(r.success).toBe(false)
   })
 })

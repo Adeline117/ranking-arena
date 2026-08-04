@@ -18,9 +18,13 @@ import {
   isCreatedCommentAcknowledgement,
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
-import { parsePostReactionAcknowledgement } from '@/lib/api/post-reactions-client'
 import { logger } from '@/lib/logger'
 import { getViewerScope, subscribeViewerScope } from '@/lib/auth/viewer-scope'
+import {
+  POST_REACTION_REQUEST_TIMEOUT_MS,
+  readPostReactionAcknowledgement,
+  type PostReaction,
+} from '@/lib/posts/post-reaction-client-contract'
 
 export type PostData = {
   id: string
@@ -133,6 +137,7 @@ function evictOldest<T>(record: Record<string, T>, maxSize: number): Record<stri
 }
 
 const initialViewerScope = getViewerScope()
+const postReactionMutationLocks = new Set<string>()
 
 export const usePostStore = create<PostStoreState & PostStoreActions>((set) => ({
   viewerKey: initialViewerScope.viewerKey,
@@ -322,6 +327,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
 // cache. Components may still call setViewerScope while hydrating, but cache
 // safety never depends on waiting for a passive effect.
 subscribeViewerScope((scope) => {
+  postReactionMutationLocks.clear()
   usePostStore.getState().setViewerScope(scope.viewerKey, scope.sessionGeneration)
 })
 
@@ -692,21 +698,26 @@ export async function submitPostComment(
  */
 export async function togglePostReaction(
   postId: string,
-  reactionType: 'up' | 'down',
+  reactionType: PostReaction,
   accessToken: string,
   scope?: PostStoreViewerScope
 ): Promise<{ success: boolean; error?: string }> {
   const capturedScope = captureStoreScope(scope)
-  if (!storeScopeIsCurrent(capturedScope)) {
+  if (!capturedScope.userId || !storeScopeIsCurrent(capturedScope)) {
     return { success: false, error: 'STALE_AUTH_SCOPE' }
   }
+  const lockKey = `reaction\u0000${requestKey(capturedScope, postId)}`
+  if (postReactionMutationLocks.has(lockKey)) {
+    return { success: false, error: 'REACTION_IN_FLIGHT' }
+  }
+  postReactionMutationLocks.add(lockKey)
   try {
     const response = await authedFetch<Record<string, unknown>>(
       `/api/posts/${postId}/like`,
       'POST',
       accessToken,
       { reaction_type: reactionType },
-      15_000,
+      POST_REACTION_REQUEST_TIMEOUT_MS,
       {
         expectedUserId: capturedScope.userId,
         expectedSessionGeneration: capturedScope.sessionGeneration,
@@ -717,17 +728,22 @@ export async function togglePostReaction(
       return { success: false, error: 'STALE_AUTH_SCOPE' }
     }
     const json = response.data
-    const acknowledgement = response.ok
-      ? parsePostReactionAcknowledgement(json, reactionType)
-      : null
+    const acknowledgement =
+      response.ok && response.status === 200
+        ? readPostReactionAcknowledgement(json, {
+            actorId: capturedScope.userId,
+            postId,
+            requestedReaction: reactionType,
+          })
+        : null
 
     if (acknowledgement) {
       const store = usePostStore.getState()
       const existing = store.posts[postId]
       if (existing) {
         store.updatePostReaction(postId, {
-          like_count: acknowledgement.like_count ?? existing.like_count,
-          dislike_count: acknowledgement.dislike_count ?? existing.dislike_count,
+          like_count: acknowledgement.likeCount,
+          dislike_count: acknowledgement.dislikeCount,
           reaction: acknowledgement.reaction,
         })
       }
@@ -741,5 +757,7 @@ export async function togglePostReaction(
   } catch (err) {
     logger.error('[postStore] togglePostReaction failed:', err)
     return { success: false, error: '操作失败' }
+  } finally {
+    postReactionMutationLocks.delete(lockKey)
   }
 }

@@ -10,10 +10,6 @@ import {
   isCreatedCommentAcknowledgement,
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
-import {
-  parsePostReactionAcknowledgement,
-  type PostReaction,
-} from '@/lib/api/post-reactions-client'
 import { logger } from '@/lib/logger'
 import { shouldLoadExpandedGroupComments } from '@/lib/comments/group-comment-read'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
@@ -27,6 +23,10 @@ import {
   readPostDeleteAcknowledgement,
   readPostDeleteError,
 } from '@/lib/posts/post-delete-contract'
+import {
+  readPostReactionAcknowledgement,
+  type PostReaction,
+} from '@/lib/posts/post-reaction-client-contract'
 import {
   POST_BOOKMARK_OPERATION,
   createPostBookmarkRequestId,
@@ -852,6 +852,7 @@ export function useGroupPosts({
         return
       }
       const context = captureMutationContext()
+      if (!context.scope.userId || !mutationContextIsCurrent(context)) return
       const lockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
       if (likeRequestLockRef.current.has(lockKey)) return
       likeRequestLockRef.current.add(lockKey)
@@ -864,9 +865,14 @@ export function useGroupPosts({
         )
         if (!mutationContextIsCurrent(context)) return
 
-        const acknowledgement = result.ok
-          ? parsePostReactionAcknowledgement(result.data, 'up')
-          : null
+        const acknowledgement =
+          result.ok && result.status === 200
+            ? readPostReactionAcknowledgement(result.data, {
+                actorId: context.scope.userId,
+                postId,
+                requestedReaction: 'up',
+              })
+            : null
         if (!acknowledgement) {
           showToast(result.error || t('operationFailed'), 'error')
           return
@@ -879,8 +885,8 @@ export function useGroupPosts({
                   ...post,
                   user_liked: acknowledgement.reaction === 'up',
                   user_reaction: acknowledgement.reaction,
-                  like_count: acknowledgement.like_count ?? post.like_count,
-                  dislike_count: acknowledgement.dislike_count ?? post.dislike_count,
+                  like_count: acknowledgement.likeCount,
+                  dislike_count: acknowledgement.dislikeCount,
                 }
               : post
           )
