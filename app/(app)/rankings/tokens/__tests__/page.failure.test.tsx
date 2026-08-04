@@ -7,17 +7,22 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => mockGetSupabaseAdmin(),
 }))
 
-jest.mock('@/lib/rankings/token-ranking-snapshot', () => ({
-  getPopularTokenRankingSnapshot: (...args: unknown[]) =>
-    mockGetPopularTokenRankingSnapshot(...args),
-}))
+jest.mock('@/lib/rankings/token-ranking-snapshot', () => {
+  const actual = jest.requireActual('@/lib/rankings/token-ranking-snapshot')
+  return {
+    ...actual,
+    getPopularTokenRankingSnapshot: (...args: unknown[]) =>
+      mockGetPopularTokenRankingSnapshot(...args),
+  }
+})
 
 jest.mock('../TokensIndexClient', () => ({
   __esModule: true,
   default: () => null,
 }))
 
-import TokensPage, { loadPopularTokensSSR } from '../page'
+import TokensPage, { loadPopularTokensSSR, metadata } from '../page'
+import { TokenRankingReadError } from '@/lib/rankings/token-ranking-snapshot'
 
 const supabase = { rpc: jest.fn() }
 const snapshot = {
@@ -38,13 +43,18 @@ const snapshot = {
 
 type TokensPageProps = {
   initialSnapshot: unknown
-  initialStatus: 'success' | 'error'
+  initialStatus: 'success' | 'unpublished' | 'error'
 }
 
 describe('token rankings index SSR publication state', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockGetSupabaseAdmin.mockReturnValue(supabase)
+  })
+
+  it('keeps the verification route out of search indexes without best-trader claims', () => {
+    expect(metadata.robots).toEqual({ index: false, follow: true })
+    expect(JSON.stringify(metadata)).not.toMatch(/\bbest\b|\bdiscover\b/i)
   })
 
   it('uses the generation-coordinated v2 snapshot service and passes its full publication', async () => {
@@ -73,6 +83,18 @@ describe('token rankings index SSR publication state', () => {
     expect(element.props).toMatchObject({
       initialSnapshot: null,
       initialStatus: 'error',
+    })
+  })
+
+  it('preserves the intentional unpublished state without issuing a fake empty snapshot', async () => {
+    mockGetPopularTokenRankingSnapshot.mockRejectedValue(
+      new TokenRankingReadError('not_published', 'authority snapshot required')
+    )
+
+    const element = (await TokensPage()) as ReactElement<TokensPageProps>
+    expect(element.props).toMatchObject({
+      initialSnapshot: null,
+      initialStatus: 'unpublished',
     })
   })
 

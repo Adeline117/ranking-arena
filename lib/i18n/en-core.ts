@@ -226,6 +226,16 @@ const enCore = {
   rankingNoDataDesc: 'Ranking data is being collected. Please check back later.',
   ssrLoadingRanking: 'Loading ranking data...',
   ssrDataRefreshHint: 'Data refreshes automatically. Try refreshing in a moment.',
+  // Token ranking publication states are server-rendered before the full route
+  // dictionary loads. Keep them synchronous to prevent raw-key first paint.
+  tokenRankingsTitle: 'Token Rankings',
+  tokenRankingsSubtitle: 'Discover the best traders for every token. Who trades BTC best?',
+  tokenRankingUnpublishedTitle: 'Token rankings are being verified',
+  tokenRankingUnpublishedDescription:
+    'Arena is building and verifying the authoritative ranking snapshot. No token ranking is published until it passes; this does not mean there is no trading data.',
+  tokenRankingEmptyCohortTitle: 'No traders meet the evidence standard',
+  tokenRankingEmptyCohortDescription:
+    'The eligible cohort is empty. Any trader with incomplete history, an untrusted price, unknown cost basis, or incomplete FX conversion is marked partial/unknown and excluded from rankings.',
 
   // ── Trader Profile ──────────────────────────────────────────────────
   performance: 'Performance',

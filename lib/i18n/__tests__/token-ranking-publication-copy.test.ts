@@ -1,7 +1,9 @@
 import en from '../en'
+import enCore from '../en-core'
 import ja from '../ja'
 import ko from '../ko'
 import zh from '../zh'
+import zhCore from '../zh-core'
 
 const keys = [
   'tokenRankingUnpublishedTitle',
@@ -9,6 +11,8 @@ const keys = [
   'tokenRankingEmptyCohortTitle',
   'tokenRankingEmptyCohortDescription',
 ] as const
+
+const firstPaintKeys = ['tokenRankingsTitle', 'tokenRankingsSubtitle', ...keys] as const
 
 describe('token ranking publication copy', () => {
   const dictionaries = { en, zh, ja, ko }
@@ -19,6 +23,13 @@ describe('token ranking publication copy', () => {
       for (const key of keys) expect(copy[key].trim()).not.toBe('')
     }
   )
+
+  it('keeps English and Chinese first-paint publication copy in the synchronous core', () => {
+    for (const key of firstPaintKeys) {
+      expect(enCore[key]).toBe(en[key])
+      expect(zhCore[key]).toBe(zh[key])
+    }
+  })
 
   it.each([
     ['en', en, ['snapshot', 'verifying', 'does not mean there is no trading data']],

@@ -84,22 +84,66 @@ describe('TokensIndexClient publication boundary', () => {
     expect(screen.queryByText(PUBLISHED_AT)).not.toBeInTheDocument()
   })
 
-  it('keeps missing featured-token metrics unknown instead of fabricating zeroes', async () => {
+  it('renders an honest empty eligible cohort instead of featured-token placeholders', async () => {
     global.fetch = jest.fn()
     const { container } = render(
       <TokensIndexClient initialSnapshot={makeSnapshot('8', [])} initialStatus="success" />
     )
 
-    await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled())
-
     expect(global.fetch).not.toHaveBeenCalled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    const btc = container.querySelector('[data-token="BTC"]')
-    expect(btc).toHaveAttribute('data-metrics-known', 'false')
-    expect(btc).not.toHaveAttribute('data-trader-count')
-    expect(btc).not.toHaveAttribute('data-trade-count')
-    expect(btc).not.toHaveAttribute('data-total-pnl')
-    expect(btc).toHaveAccessibleName('BTC — unknown')
+    expect(screen.getByText('tokenRankingEmptyCohortTitle')).toBeInTheDocument()
+    expect(screen.getByText('tokenRankingEmptyCohortDescription')).toBeInTheDocument()
+    expect(screen.queryByText('tokenRankingsSubtitle')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-token]')).not.toBeInTheDocument()
+  })
+
+  it('keeps missing featured-token metrics unknown within a non-empty publication', async () => {
+    const { container } = render(<TokensIndexClient initialSnapshot={makeSnapshot()} />)
+
+    await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled())
+
+    const eth = container.querySelector('[data-token="ETH"]')
+    expect(eth).toHaveAttribute('data-metrics-known', 'false')
+    expect(eth).not.toHaveAttribute('data-trader-count')
+    expect(eth).not.toHaveAttribute('data-trade-count')
+    expect(eth).not.toHaveAttribute('data-total-pnl')
+    expect(eth).toHaveAccessibleName('ETH — unknown')
+  })
+
+  it('renders unpublished as a non-retryable verification state and clears all cards', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      fetchResponse(
+        {
+          error: 'Token rankings are withheld while verified authority snapshots are rebuilt',
+          code: 'TOKEN_RANKING_NOT_PUBLISHED',
+        },
+        false,
+        503
+      )
+    )
+
+    const { container } = render(<TokensIndexClient initialSnapshot={null} initialStatus="error" />)
+
+    expect(await screen.findByText('tokenRankingUnpublishedTitle')).toBeInTheDocument()
+    expect(screen.getByText('tokenRankingUnpublishedDescription')).toBeInTheDocument()
+    expect(screen.queryByText('tokenRankingsSubtitle')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'retry' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-token]')).not.toBeInTheDocument()
+  })
+
+  it('does not refetch a server-confirmed unpublished state', async () => {
+    global.fetch = jest.fn()
+
+    render(<TokensIndexClient initialSnapshot={null} initialStatus="unpublished" />)
+
+    expect(screen.getByText('tokenRankingUnpublishedTitle')).toBeInTheDocument()
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'retry' })).not.toBeInTheDocument()
   })
 
   it('strictly parses a complete API snapshot and rejects malformed contracts', () => {
