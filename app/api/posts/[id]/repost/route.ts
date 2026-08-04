@@ -98,34 +98,24 @@ const postRepostHandler = withAuth(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
     const bodyKeys = Object.keys(body)
-    const hasStrictRequestMarker =
-      Object.hasOwn(body, 'operation') || Object.hasOwn(body, 'request_id')
-    let strictRequest: StrictRepostRequest | null = null
-    if (hasStrictRequestMarker) {
-      if (
-        bodyKeys.length !== 3 ||
-        !bodyKeys.includes('operation') ||
-        !bodyKeys.includes('request_id') ||
-        !bodyKeys.includes('comment') ||
-        bodyKeys.some((key) => key !== 'operation' && key !== 'request_id' && key !== 'comment') ||
-        body.operation !== POST_REPOST_OPERATION ||
-        typeof body.request_id !== 'string' ||
-        !REQUEST_ID_RE.test(body.request_id) ||
-        typeof body.comment !== 'string'
-      ) {
-        return NextResponse.json({ error: 'Invalid repost request' }, { status: 400 })
-      }
-      strictRequest = {
-        operation: POST_REPOST_OPERATION,
-        requestId: body.request_id,
-      }
-    } else if (bodyKeys.length > 1 || (bodyKeys.length === 1 && bodyKeys[0] !== 'comment')) {
+    if (
+      bodyKeys.length !== 3 ||
+      !bodyKeys.includes('operation') ||
+      !bodyKeys.includes('request_id') ||
+      !bodyKeys.includes('comment') ||
+      bodyKeys.some((key) => key !== 'operation' && key !== 'request_id' && key !== 'comment') ||
+      body.operation !== POST_REPOST_OPERATION ||
+      typeof body.request_id !== 'string' ||
+      !REQUEST_ID_RE.test(body.request_id) ||
+      typeof body.comment !== 'string'
+    ) {
       return NextResponse.json({ error: 'Invalid repost request' }, { status: 400 })
     }
-    if (!strictRequest && body.comment != null && typeof body.comment !== 'string') {
-      return NextResponse.json({ error: 'Comment must be a string' }, { status: 400 })
+    const strictRequest: StrictRepostRequest = {
+      operation: POST_REPOST_OPERATION,
+      requestId: body.request_id,
     }
-    const rawComment = (body.comment as string | undefined)?.trim() || ''
+    const rawComment = body.comment.trim()
     if (rawComment.length > MAX_REPOST_COMMENT_LENGTH) {
       return NextResponse.json(
         { error: `Comment must be at most ${MAX_REPOST_COMMENT_LENGTH} characters` },
@@ -139,7 +129,7 @@ const postRepostHandler = withAuth(
     })
 
     const actorId = canonicalUuid(user.id)
-    if (strictRequest && !actorId) {
+    if (!actorId) {
       return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
@@ -217,28 +207,16 @@ const postRepostHandler = withAuth(
         logger.error('Existing repost could not be reconciled to canonical state')
         return NextResponse.json({ error: 'Failed to reconcile repost status' }, { status: 500 })
       }
-      if (strictRequest && actorId) {
-        return NextResponse.json(
-          strictReceipt({
-            actorId,
-            sourcePostId,
-            rootPostId,
-            requestId: strictRequest.requestId,
-            action: 'already_exists',
-            repostPostId,
-            repostCount,
-          }),
-          { status: 409 }
-        )
-      }
       return NextResponse.json(
-        {
-          error: 'Already reposted',
-          code: 'already_reposted',
-          post_id: repostPostId,
-          root_post_id: rootPostId,
-          repost_count: repostCount,
-        },
+        strictReceipt({
+          actorId,
+          sourcePostId,
+          rootPostId,
+          requestId: strictRequest.requestId,
+          action: 'already_exists',
+          repostPostId,
+          repostCount,
+        }),
         { status: 409 }
       )
     }
@@ -295,28 +273,16 @@ const postRepostHandler = withAuth(
           logger.error('Concurrent repost could not be reconciled to canonical state')
           return NextResponse.json({ error: 'Failed to reconcile repost status' }, { status: 500 })
         }
-        if (strictRequest && actorId) {
-          return NextResponse.json(
-            strictReceipt({
-              actorId,
-              sourcePostId,
-              rootPostId,
-              requestId: strictRequest.requestId,
-              action: 'already_exists',
-              repostPostId,
-              repostCount,
-            }),
-            { status: 409 }
-          )
-        }
         return NextResponse.json(
-          {
-            error: 'Already reposted',
-            code: 'already_reposted',
-            post_id: repostPostId,
-            root_post_id: rootPostId,
-            repost_count: repostCount,
-          },
+          strictReceipt({
+            actorId,
+            sourcePostId,
+            rootPostId,
+            requestId: strictRequest.requestId,
+            action: 'already_exists',
+            repostPostId,
+            repostCount,
+          }),
           { status: 409 }
         )
       }
@@ -358,28 +324,18 @@ const postRepostHandler = withAuth(
       )
     }
 
-    if (strictRequest && actorId) {
-      return NextResponse.json(
-        strictReceipt({
-          actorId,
-          sourcePostId,
-          rootPostId,
-          requestId: strictRequest.requestId,
-          action: 'created',
-          repostPostId,
-          repostCount,
-        }),
-        { status: 201 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      post_id: repostPostId,
-      root_post_id: rootPostId,
-      repost_count: repostCount,
-      message: 'Repost successful',
-    })
+    return NextResponse.json(
+      strictReceipt({
+        actorId,
+        sourcePostId,
+        rootPostId,
+        requestId: strictRequest.requestId,
+        action: 'created',
+        repostPostId,
+        repostCount,
+      }),
+      { status: 201 }
+    )
   },
   { name: 'posts/repost', rateLimit: 'write' }
 )

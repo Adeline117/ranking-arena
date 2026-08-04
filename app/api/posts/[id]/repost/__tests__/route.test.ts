@@ -298,23 +298,9 @@ describe('POST /api/posts/[id]/repost', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('keeps the legacy group caller compatible without granting it a strict receipt', async () => {
-    queueSuccessfulQueries()
-
-    const response = await POST(request({ comment: '' }, false))
-    const body = await response.json()
-
-    expect(response.status).toBe(200)
-    expect(body).toEqual({
-      success: true,
-      post_id: NEW_REPOST_ID,
-      root_post_id: ROOT_POST_ID,
-      repost_count: 4,
-      message: 'Repost successful',
-    })
-  })
-
   it.each([
+    [{}],
+    [{ comment: '' }],
     [{ operation: 'create', request_id: 'bad', comment: '' }],
     [{ operation: 'remove', request_id: REQUEST_ID, comment: '' }],
     [{ operation: 'create', request_id: REQUEST_ID, comment: '', extra: true }],
