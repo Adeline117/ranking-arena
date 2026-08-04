@@ -19,6 +19,7 @@ import {
   encodeCopierSnapshotProjectionTuple,
   revalidateCopierSnapshotProjectionTuple,
 } from '../copier-snapshot-projection'
+import { strictCanonicalSha256 } from '../strict-canonical-json'
 
 interface EncodingVector {
   name: string
@@ -179,48 +180,30 @@ describe('copier snapshot projection byte contract', () => {
       expect(tokens.join('')).toBe(vector.tuple_hex)
       expect(tupleBytes.toString('hex')).toBe(vector.tuple_hex)
       expect(copierSnapshotProjectionSha256(tuple)).toBe(vector.projection_sha256)
-
-      const rebuilt = buildCopierSnapshotProjection({
-        sourceCandidateSha256: tuple.source_candidate_sha256,
-        row: {
-          kind: 'copiers',
-          copierLabel: tuple.copier_label,
-          copierPnl: tuple.copier_pnl === null ? null : Number(tuple.copier_pnl),
-          copierInvested: tuple.copier_invested === null ? null : Number(tuple.copier_invested),
-          copyDurationDays:
-            tuple.copy_duration_days === null ? null : Number(tuple.copy_duration_days),
-          dedupeHash: tuple.dedupe_hash,
-        },
-      })
-      expect(rebuilt).toEqual({
-        tuple,
-        tupleBytesHex: vector.tuple_hex,
-        projectionSha256: vector.projection_sha256,
-      })
-      expect(Object.isFrozen(rebuilt)).toBe(true)
     }
   )
 
-  it('binds the same parsed values to the exact source candidate SHA', () => {
+  it('derives the source candidate SHA from exact row.raw bytes', () => {
+    const firstRaw = { id: 'candidate-a', pnl: 1.25 }
+    const secondRaw = { id: 'candidate-b', pnl: 1.25 }
     const row = {
       kind: 'copiers' as const,
+      ts: '2026-08-04T00:00:00.000Z',
       copierLabel: 'private-a',
       copierPnl: 1.25,
       copierInvested: 100,
       copyDurationDays: 3,
       dedupeHash: 'row-a',
+      raw: firstRaw,
     }
-    const first = buildCopierSnapshotProjection({
-      sourceCandidateSha256: '11'.repeat(32),
-      row,
-    })
-    const second = buildCopierSnapshotProjection({
-      sourceCandidateSha256: '12'.repeat(32),
-      row,
-    })
+    const first = buildCopierSnapshotProjection(row)
+    const second = buildCopierSnapshotProjection({ ...row, raw: secondRaw })
 
+    expect(first.tuple.source_candidate_sha256).toBe(strictCanonicalSha256(firstRaw))
+    expect(second.tuple.source_candidate_sha256).toBe(strictCanonicalSha256(secondRaw))
     expect(first.projectionSha256).not.toBe(second.projectionSha256)
     expect(first.tupleBytesHex).not.toBe(second.tupleBytesHex)
+    expect(Object.isFrozen(first)).toBe(true)
   })
 
   it('keeps source_event_at null and rejects shape or contract drift', () => {
@@ -239,6 +222,50 @@ describe('copier snapshot projection byte contract', () => {
     const missing = tupleWith({})
     delete missing.copier_pnl
     expect(() => revalidateCopierSnapshotProjectionTuple(missing)).toThrow('exact contract fields')
+  })
+
+  it('snapshots data properties and rejects accessors or hidden shape drift before hashing', () => {
+    const accessor = tupleWith({})
+    Object.defineProperty(accessor, 'copier_pnl', {
+      enumerable: true,
+      get: () => '1',
+    })
+    expect(() => encodeCopierSnapshotProjectionTuple(accessor)).toThrow('object accessors')
+
+    const nonenumerable = tupleWith({})
+    Object.defineProperty(nonenumerable, 'hidden', { enumerable: false, value: true })
+    expect(() => copierSnapshotProjectionSha256(nonenumerable)).toThrow(
+      'non-enumerable object properties'
+    )
+
+    const symbolKey = tupleWith({})
+    Object.defineProperty(symbolKey, Symbol('hidden'), { enumerable: true, value: true })
+    expect(() => revalidateCopierSnapshotProjectionTuple(symbolKey)).toThrow('symbol keys')
+  })
+
+  it('rejects mutable row accessors and caller-supplied source identity fields', () => {
+    const row = {
+      kind: 'copiers' as const,
+      ts: '2026-08-04T00:00:00.000Z',
+      copierLabel: null,
+      copierPnl: 1,
+      copierInvested: 1,
+      copyDurationDays: 1,
+      dedupeHash: 'row',
+      raw: { id: 'candidate' },
+    }
+    const accessor = { ...row }
+    Object.defineProperty(accessor, 'raw', {
+      enumerable: true,
+      get: () => ({ id: 'candidate' }),
+    })
+    expect(() => buildCopierSnapshotProjection(accessor)).toThrow('object accessors')
+    expect(() =>
+      buildCopierSnapshotProjection({
+        ...row,
+        sourceCandidateSha256: '11'.repeat(32),
+      } as never)
+    ).toThrow('exact contract fields')
   })
 
   it.each(golden.invalid_vectors.number_inputs)(
@@ -271,24 +298,23 @@ describe('copier snapshot projection byte contract', () => {
   it('rejects negative invested capital and invalid numeric row values', () => {
     const row = {
       kind: 'copiers' as const,
+      ts: '2026-08-04T00:00:00.000Z',
       copierLabel: null,
       copierPnl: 1,
       copierInvested: 1,
       copyDurationDays: 1,
       dedupeHash: 'row',
+      raw: { id: 'candidate' },
     }
     const build = (overrides: Partial<typeof row>) =>
-      buildCopierSnapshotProjection({
-        sourceCandidateSha256: '11'.repeat(32),
-        row: { ...row, ...overrides },
-      })
+      buildCopierSnapshotProjection({ ...row, ...overrides })
 
     expect(() => build({ copierInvested: -1 })).toThrow('copier_invested must be nonnegative')
-    expect(() => build({ copierPnl: -0 })).toThrow('must not be negative zero')
-    expect(() => build({ copierPnl: Number.NaN })).toThrow('must be finite')
-    expect(() => build({ copierPnl: Number.POSITIVE_INFINITY })).toThrow('must be finite')
+    expect(() => build({ copierPnl: -0 })).toThrow('negative zero')
+    expect(() => build({ copierPnl: Number.NaN })).toThrow('non-finite numbers')
+    expect(() => build({ copierPnl: Number.POSITIVE_INFINITY })).toThrow('non-finite numbers')
     expect(() => build({ copierPnl: Number.MAX_SAFE_INTEGER + 1 })).toThrow('safe precision')
-    expect(() => build({ copyDurationDays: -0 })).toThrow('PostgreSQL integer')
+    expect(() => build({ copyDurationDays: -0 })).toThrow('negative zero')
     expect(() => build({ copyDurationDays: -1 })).toThrow('PostgreSQL integer')
     expect(() => build({ copyDurationDays: 1.5 })).toThrow('PostgreSQL integer')
     expect(() => build({ copyDurationDays: COPIER_SNAPSHOT_MAX_DURATION_DAYS + 1 })).toThrow(
@@ -410,5 +436,26 @@ describe('copier snapshot projection multiset digests', () => {
         } as never,
       ])
     ).toThrow('exact contract fields')
+
+    const accessorPair = {
+      source_candidate_sha256: '11'.repeat(32),
+      projection_sha256: '22'.repeat(32),
+    }
+    Object.defineProperty(accessorPair, 'projection_sha256', {
+      enumerable: true,
+      get: () => '22'.repeat(32),
+    })
+    expect(() => encodeCopierSnapshotCandidateProjectionMultiset([accessorPair])).toThrow(
+      'object accessors'
+    )
+
+    const accessorCandidates = ['11'.repeat(32)]
+    Object.defineProperty(accessorCandidates, '0', {
+      enumerable: true,
+      get: () => '11'.repeat(32),
+    })
+    expect(() => encodeCopierSnapshotCandidateMultiset(accessorCandidates)).toThrow(
+      'array accessors'
+    )
   })
 })
