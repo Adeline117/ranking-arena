@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   getTokenTraderRankingSnapshot,
   TOKEN_RANKING_MAX_GENERATION,
+  TokenRankingReadError,
   type TokenRankingPeriod,
   type TokenTraderRankingSnapshot,
 } from '@/lib/rankings/token-ranking-snapshot'
@@ -11,7 +12,6 @@ import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 import TokenRankingClient from './TokenRankingClient'
 import { BASE_URL } from '@/lib/constants/urls'
 
-const CURRENT_YEAR = new Date().getFullYear()
 const PAGE_SIZE = 50
 const MAX_PAGE_INDEX = 40_000
 const SSR_TIMEOUT_MS = 4_000
@@ -131,20 +131,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { token: rawToken } = await params
   const token = rawToken.toUpperCase()
-  const title = `Best ${token} Traders ${CURRENT_YEAR} — Who Trades ${token} Best?`
+  const title = `${token} Token Ranking Verification`
   const ogTitle = `${title} | Arena`
-  const description = `Top traders for ${token} ranked by PnL across current public source boards. Rankings use the latest available published position-history aggregates.`
+  const description = `${token} trader rankings publish only after history, price, cost-basis, and FX evidence pass authority-snapshot verification.`
 
   return {
     title,
     description,
     alternates: { canonical: `${BASE_URL}/rankings/tokens/${token}` },
     keywords: [
-      `best ${token} traders`,
-      `top ${token} traders ${CURRENT_YEAR}`,
+      `${token} trader rankings`,
       `${token} trading leaderboard`,
-      `${token} PnL ranking`,
-      'crypto trader ranking',
+      'verified crypto trader ranking',
       'Arena',
     ],
     openGraph: {
@@ -158,7 +156,7 @@ export async function generateMetadata({
           url: `${BASE_URL}/og-image.png`,
           width: 1200,
           height: 630,
-          alt: `Arena ${token} Rankings`,
+          alt: `Arena ${token} ranking verification`,
         },
       ],
     },
@@ -169,7 +167,7 @@ export async function generateMetadata({
       images: [`${BASE_URL}/og-image.png`],
       creator: '@arenafi',
     },
-    robots: { index: true, follow: true },
+    robots: { index: false, follow: true },
   }
 }
 
@@ -189,13 +187,16 @@ export default async function TokenDetailPage({
   if (rawToken !== token || !query.canonical) redirect(canonicalPath)
 
   let initial: TokenTraderRankingSnapshot | null = null
+  let initialStatus: 'success' | 'unpublished' | 'error' = 'success'
   try {
     initial = await withSsrTimeout((signal) =>
       loadTokenTradersSSR(token, query.period, query.page, query.generation, signal)
     )
-  } catch {
-    // The client receives an explicit failed seed and performs one fresh,
-    // generation-aware request. Never convert an outage into a valid empty page.
+  } catch (error) {
+    initialStatus =
+      error instanceof TokenRankingReadError && error.kind === 'not_published'
+        ? 'unpublished'
+        : 'error'
   }
 
   if (initial) {
@@ -208,11 +209,13 @@ export default async function TokenDetailPage({
 
   return (
     <TokenRankingClient
+      key={`${token}:${initial?.generation ?? initialStatus}`}
       token={token}
       initialPeriod={query.period}
       initialPage={query.page}
       requestedGeneration={query.generation ?? null}
       initialSnapshot={initial}
+      initialStatus={initialStatus}
     />
   )
 }

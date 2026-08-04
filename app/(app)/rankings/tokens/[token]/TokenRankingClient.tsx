@@ -25,6 +25,7 @@ import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import { Skeleton } from '@/app/components/ui/Skeleton'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
+import { isTokenRankingNotPublishedResponse } from '@/lib/rankings/token-ranking-api-contract'
 
 export type Period = '7D' | '30D' | '90D'
 
@@ -120,6 +121,8 @@ type RequestState = {
   key: string
   status: 'loading' | 'idle' | 'error'
 }
+
+export type TokenRankingInitialStatus = 'success' | 'unpublished' | 'error'
 
 function rankingPageKey(
   token: string,
@@ -581,12 +584,14 @@ export default function TokenRankingClient({
   initialPage,
   requestedGeneration,
   initialSnapshot,
+  initialStatus,
 }: {
   token: string
   initialPeriod: Period
   initialPage: number
   requestedGeneration: string | null
   initialSnapshot: TokenRankingSnapshotSeed | null
+  initialStatus: TokenRankingInitialStatus
 }) {
   const { t } = useLanguage()
   const router = useRouter()
@@ -594,7 +599,7 @@ export default function TokenRankingClient({
   const searchParams = useSearchParams()
 
   const initialData = useMemo(() => {
-    if (!initialSnapshot) return null
+    if (initialStatus !== 'success' || !initialSnapshot) return null
     try {
       return normalizeTokenRankingPageResponse(initialSnapshot, {
         token,
@@ -605,7 +610,7 @@ export default function TokenRankingClient({
     } catch {
       return null
     }
-  }, [initialPage, initialPeriod, initialSnapshot, requestedGeneration, token])
+  }, [initialPage, initialPeriod, initialSnapshot, initialStatus, requestedGeneration, token])
 
   const rawUrlPeriod = searchParams.get('period')?.toUpperCase()
   const urlPeriod: Period =
@@ -615,7 +620,8 @@ export default function TokenRankingClient({
   const urlPage = parsedUrlPage <= MAX_PAGE_INDEX ? parsedUrlPage : MAX_PAGE_INDEX
   const urlGeneration = generationOrNull(searchParams.get('generation'))
 
-  const initialGeneration = initialData?.generation ?? requestedGeneration
+  const initialGeneration =
+    initialStatus === 'unpublished' ? null : (initialData?.generation ?? requestedGeneration)
   const initialProfilePublicationId = initialData?.profilePublicationId ?? null
   const [period, setPeriod] = useState<Period>(initialPeriod)
   const [page, setPageRaw] = useState(initialPage)
@@ -629,6 +635,9 @@ export default function TokenRankingClient({
   )
   const [sortKey, setSortKey] = useState<SortKey>('token_pnl')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [publicationStatus, setPublicationStatus] = useState<'available' | 'unpublished'>(() =>
+    initialStatus === 'unpublished' ? 'unpublished' : 'available'
+  )
   const [pages, setPages] = useState<Map<string, RankingPageData>>(() => {
     const initialPages = new Map<string, RankingPageData>()
     if (initialData) {
@@ -660,7 +669,7 @@ export default function TokenRankingClient({
       initialPeriod,
       initialPage
     ),
-    status: initialData ? 'idle' : 'loading',
+    status: initialData || initialStatus === 'unpublished' ? 'idle' : 'loading',
   }))
   const abortRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef(0)
@@ -684,6 +693,22 @@ export default function TokenRankingClient({
     abortRef.current = null
   }, [])
 
+  const commitUnpublished = useCallback(
+    (nextPeriod: Period, nextPage: number) => {
+      const emptyPages = new Map<string, RankingPageData>()
+      pagesRef.current = emptyPages
+      setPages(emptyPages)
+      publicationProfilesRef.current.clear()
+      commitPublication(null)
+      setPublicationStatus('unpublished')
+      setRequestState({
+        key: rankingPageKey(token, null, null, nextPeriod, nextPage),
+        status: 'idle',
+      })
+    },
+    [commitPublication, token]
+  )
+
   const navigate = useCallback(
     (mode: 'push' | 'replace', nextPeriod: Period, nextPage: number, generation: string | null) => {
       const params = new URLSearchParams()
@@ -696,10 +721,19 @@ export default function TokenRankingClient({
     [pathname, router]
   )
 
+  // A server-confirmed unpublished state is terminal for this mounted route.
+  // Clear every cached generation before any URL-sync or fetch effect can run.
+  useEffect(() => {
+    if (initialStatus !== 'unpublished') return
+    cancelCurrentRequest()
+    commitUnpublished(initialPeriod, initialPage)
+  }, [cancelCurrentRequest, commitUnpublished, initialPage, initialPeriod, initialStatus])
+
   // URL changes are authoritative for back/forward. Profile publication is
   // recovered from the generation map so a cached historical page can paint
   // without being confused with the current generation's optional enrichment.
   useEffect(() => {
+    if (publicationStatus === 'unpublished') return
     const desiredGeneration =
       urlGeneration ?? initialData?.generation ?? requestedGeneration ?? null
     const current = publicationRef.current
@@ -728,6 +762,7 @@ export default function TokenRankingClient({
     initialData?.generation,
     page,
     period,
+    publicationStatus,
     requestedGeneration,
     urlGeneration,
     urlPage,
@@ -736,6 +771,7 @@ export default function TokenRankingClient({
 
   useEffect(() => {
     if (
+      publicationStatus !== 'unpublished' &&
       initialData &&
       !urlGeneration &&
       generationCanonicalizedRef.current !== initialData.generation
@@ -743,13 +779,13 @@ export default function TokenRankingClient({
       generationCanonicalizedRef.current = initialData.generation
       navigate('replace', initialPeriod, initialPage, initialData.generation)
     }
-  }, [initialData, initialPage, initialPeriod, navigate, urlGeneration])
+  }, [initialData, initialPage, initialPeriod, navigate, publicationStatus, urlGeneration])
 
   // App Router can preserve this client instance while delivering a new SSR
   // snapshot for back/forward navigation. Seed that page into the publication-
   // keyed cache instead of issuing a duplicate client request.
   useEffect(() => {
-    if (!initialData) return
+    if (publicationStatus === 'unpublished' || !initialData) return
     const key = rankingPageKey(
       token,
       initialData.generation,
@@ -780,6 +816,7 @@ export default function TokenRankingClient({
     initialData,
     initialPage,
     initialPeriod,
+    publicationStatus,
     token,
     urlGeneration,
     urlPage,
@@ -798,7 +835,8 @@ export default function TokenRankingClient({
   const currentRequest = requestState.key === currentKey ? requestState : null
   const currentError = currentRequest?.status === 'error'
   const loading =
-    currentRequest?.status === 'loading' || (!currentData && currentRequest?.status !== 'error')
+    publicationStatus !== 'unpublished' &&
+    (currentRequest?.status === 'loading' || (!currentData && currentRequest?.status !== 'error'))
   const showSkeleton = loading && !currentData
   const traders = currentData?.traders ?? EMPTY_TRADERS
   const total = currentData?.total ?? 0
@@ -816,6 +854,7 @@ export default function TokenRankingClient({
 
   const fetchData = useCallback(
     async (p: Period, pageIndex: number) => {
+      if (publicationStatus === 'unpublished') return
       cancelCurrentRequest()
       const controller = new AbortController()
       abortRef.current = controller
@@ -854,6 +893,12 @@ export default function TokenRankingClient({
           requestIdRef.current === requestId &&
           !controller.signal.aborted
         if (!requestIsCurrent()) return
+
+        if (isTokenRankingNotPublishedResponse(res.status, data)) {
+          abortRef.current = null
+          commitUnpublished(p, pageIndex)
+          return
+        }
 
         if (res.status === 409) {
           const currentGeneration =
@@ -950,10 +995,11 @@ export default function TokenRankingClient({
         clearTimeout(timeout)
       }
     },
-    [cancelCurrentRequest, commitPublication, navigate, token]
+    [cancelCurrentRequest, commitPublication, commitUnpublished, navigate, publicationStatus, token]
   )
 
   useEffect(() => {
+    if (publicationStatus === 'unpublished') return
     const desiredGeneration =
       urlGeneration ?? initialData?.generation ?? requestedGeneration ?? null
     // URL synchronization and SSR seeding run before this effect. If either
@@ -987,6 +1033,7 @@ export default function TokenRankingClient({
     initialData?.generation,
     page,
     period,
+    publicationStatus,
     requestedGeneration,
     token,
     urlGeneration,
@@ -1047,6 +1094,40 @@ export default function TokenRankingClient({
     background: 'var(--row-bg)',
   }
 
+  const breadcrumbItems = [
+    { label: t('tokenRankingsTitle'), href: '/rankings/tokens' },
+    { label: token },
+  ]
+
+  if (publicationStatus === 'unpublished') {
+    return (
+      <Box>
+        <Breadcrumb items={breadcrumbItems} />
+        <Box role="status" aria-live="polite">
+          <EmptyState
+            title={t('tokenRankingUnpublishedTitle')}
+            description={t('tokenRankingUnpublishedDescription')}
+            variant="card"
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  const headerTitle =
+    currentData && total > 0
+      ? t('tokenRankingHeader').replace('{token}', token)
+      : `${token} · ${t('tokenRankingsTitle')}`
+  const headerSubtitle = currentError
+    ? t('failedToLoadRankings')
+    : showSkeleton
+      ? t('loading')
+      : total > 0
+        ? t('tokenRankingCount')
+            .replace('{count}', total.toLocaleString('en-US'))
+            .replace('{token}', token)
+        : null
+
   return (
     <Box>
       <style>{`
@@ -1055,9 +1136,7 @@ export default function TokenRankingClient({
       `}</style>
 
       {/* Breadcrumb: Home / Token Rankings / {TOKEN} */}
-      <Breadcrumb
-        items={[{ label: t('tokenRankingsTitle'), href: '/rankings/tokens' }, { label: token }]}
-      />
+      <Breadcrumb items={breadcrumbItems} />
 
       {/* Header */}
       <Box style={{ marginBottom: 24, marginTop: 4 }}>
@@ -1081,17 +1160,13 @@ export default function TokenRankingClient({
           </Box>
           <Box>
             <Text as="h1" size="2xl" weight="bold" style={{ color: tokens.colors.text.primary }}>
-              {t('tokenRankingHeader').replace('{token}', token)}
+              {headerTitle}
             </Text>
-            <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-              {currentError && !currentData
-                ? t('failedToLoadRankings')
-                : total > 0
-                  ? t('tokenRankingCount')
-                      .replace('{count}', total.toLocaleString('en-US'))
-                      .replace('{token}', token)
-                  : t('tokenRankingNoData').replace('{token}', token)}
-            </Text>
+            {headerSubtitle && (
+              <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
+                {headerSubtitle}
+              </Text>
+            )}
           </Box>
         </Box>
       </Box>
@@ -1552,40 +1627,42 @@ export default function TokenRankingClient({
 
       {/* Empty State */}
       {!loading && !currentError && currentData && displayed.length === 0 && (
-        <EmptyState
-          icon={
-            <svg
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-            </svg>
-          }
-          title={t('tokenRankingNoData').replace('{token}', token)}
-          description={t('tokenRankingNoDataDesc')}
-          action={
-            <Link
-              href="/rankings/tokens"
-              style={{
-                display: 'inline-block',
-                padding: '8px 20px',
-                borderRadius: tokens.radius.md,
-                background: 'var(--color-accent-primary)',
-                color: 'var(--color-bg-primary)',
-                textDecoration: 'none',
-                fontSize: tokens.typography.fontSize.base,
-                fontWeight: tokens.typography.fontWeight.semibold,
-              }}
-            >
-              {t('tokenRankingBrowseAll')}
-            </Link>
-          }
-        />
+        <Box role="status">
+          <EmptyState
+            icon={
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+              </svg>
+            }
+            title={t('tokenRankingEmptyCohortTitle')}
+            description={t('tokenRankingEmptyCohortDescription')}
+            action={
+              <Link
+                href="/rankings/tokens"
+                style={{
+                  display: 'inline-block',
+                  padding: '8px 20px',
+                  borderRadius: tokens.radius.md,
+                  background: 'var(--color-accent-primary)',
+                  color: 'var(--color-bg-primary)',
+                  textDecoration: 'none',
+                  fontSize: tokens.typography.fontSize.base,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                }}
+              >
+                {t('tokenRankingBrowseAll')}
+              </Link>
+            }
+          />
+        </Box>
       )}
     </Box>
   )
