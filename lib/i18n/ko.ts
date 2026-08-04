@@ -5275,6 +5275,12 @@ const ko = {
   tokenRankingNoData: '{token}의 거래 데이터를 찾을 수 없습니다',
   tokenRankingNoDataDesc:
     '이 토큰의 거래 데이터가 아직 제공되지 않을 수 있습니다. 다른 토큰을 시도하거나 나중에 다시 확인하세요.',
+  tokenRankingUnpublishedTitle: '토큰 랭킹을 검증하고 있습니다',
+  tokenRankingUnpublishedDescription:
+    'Arena가 신뢰 가능한 기준 랭킹 스냅샷을 구축하고 검증하고 있습니다. 검증을 통과하기 전에는 토큰 랭킹을 게시하지 않습니다. 거래 데이터가 없다는 뜻은 아닙니다.',
+  tokenRankingEmptyCohortTitle: '증거 기준을 충족하는 트레이더가 없습니다',
+  tokenRankingEmptyCohortDescription:
+    '현재 적격 트레이더 집합은 비어 있습니다. 거래 내역이 불완전하거나, 가격을 신뢰할 수 없거나, 취득 원가를 알 수 없거나, FX 환산이 불완전하면 “일부/알 수 없음”으로 표시하고 랭킹에서 제외합니다.',
   tokenRankingBrowseAll: '모든 토큰 보기',
   tokenRankingTotalPnl: '총 손익',
   tokenRankingTrades: '거래 수',
