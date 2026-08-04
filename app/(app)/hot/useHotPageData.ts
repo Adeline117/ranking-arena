@@ -19,9 +19,10 @@ import {
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
 import {
-  parsePostReactionAcknowledgement,
+  POST_REACTION_REQUEST_TIMEOUT_MS,
+  readPostReactionAcknowledgement,
   type PostReactionAcknowledgement,
-} from '@/lib/api/post-reactions-client'
+} from '@/lib/posts/post-reaction-client-contract'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { localizedLabel } from '@/lib/utils/format'
 import { normalizePostTitle } from '@/lib/utils/post-display'
@@ -47,15 +48,12 @@ function applyReactionAcknowledgement(
   post: Post,
   acknowledgement: PostReactionAcknowledgement
 ): Post {
-  const likeCount = acknowledgement.like_count ?? post.like_count ?? post.likes
-  const dislikeCount = acknowledgement.dislike_count ?? post.dislike_count ?? post.dislikes ?? 0
-
   return {
     ...post,
-    likes: likeCount,
-    like_count: likeCount,
-    dislikes: dislikeCount,
-    dislike_count: dislikeCount,
+    likes: acknowledgement.likeCount,
+    like_count: acknowledgement.likeCount,
+    dislikes: acknowledgement.dislikeCount,
+    dislike_count: acknowledgement.dislikeCount,
     user_reaction: acknowledgement.reaction,
   }
 }
@@ -1050,6 +1048,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       }
 
       const capturedScope = activeScopeRef.current
+      if (!capturedScope.userId) return
       const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
       if (reactionRequestLocksRef.current.has(lockKey)) return
       reactionRequestLocksRef.current.add(lockKey)
@@ -1059,7 +1058,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           'POST',
           accessToken,
           { reaction_type: reactionType },
-          15_000,
+          POST_REACTION_REQUEST_TIMEOUT_MS,
           {
             expectedUserId: capturedScope.userId,
             expectedSessionGeneration: capturedScope.sessionGeneration,
@@ -1067,9 +1066,14 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         )
         if (!scopeIsCurrent(capturedScope) || response.stale) return
         const json = response.data
-        const acknowledgement = response.ok
-          ? parsePostReactionAcknowledgement(json, reactionType)
-          : null
+        const acknowledgement =
+          response.ok && response.status === 200
+            ? readPostReactionAcknowledgement(json, {
+                actorId: capturedScope.userId,
+                postId,
+                requestedReaction: reactionType,
+              })
+            : null
         if (acknowledgement) {
           setPosts((prev) =>
             prev.map((post) =>

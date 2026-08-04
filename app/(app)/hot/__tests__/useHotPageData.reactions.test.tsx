@@ -55,6 +55,7 @@ function deferred<T>() {
 }
 
 const POST_ID = '44444444-4444-4444-8444-444444444444'
+const ACTOR_ID = '55555555-5555-4555-8555-555555555555'
 
 const rawPost = {
   id: POST_ID,
@@ -109,11 +110,15 @@ function reactionEnvelope(overrides: Record<string, unknown> = {}) {
       success: true,
       data: {
         action: 'added',
+        actor_id: ACTOR_ID,
+        post_id: POST_ID,
+        requested_reaction: 'up',
         reaction: 'up',
         like_count: 6,
         dislike_count: 2,
         ...overrides,
       },
+      meta: { timestamp: '2026-08-03T12:00:01.000Z' },
     },
   }
 }
@@ -126,8 +131,8 @@ describe('useHotPageData reaction acknowledgements', () => {
       accessToken: 'token-1',
       authChecked: true,
       email: null,
-      userId: 'user-1',
-      viewerKey: 'user:user-1',
+      userId: ACTOR_ID,
+      viewerKey: `user:${ACTOR_ID}`,
       sessionGeneration: 1,
     })
     mockFetchPostCommentsPage.mockResolvedValue({
@@ -178,7 +183,7 @@ describe('useHotPageData reaction acknowledgements', () => {
     })
   })
 
-  it('locks same-frame requests and preserves known counts when the ACK counts are null', async () => {
+  it('locks same-frame requests and adopts one exact count receipt', async () => {
     const request = deferred<unknown>()
     mockAuthedFetch.mockReturnValue(request.promise)
     const { result } = renderHook(() => useHotPageData({ initialPosts: [initialPost] }))
@@ -193,22 +198,24 @@ describe('useHotPageData reaction acknowledgements', () => {
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      request.resolve(reactionEnvelope({ like_count: null, dislike_count: null }))
+      request.resolve(reactionEnvelope({ like_count: 7, dislike_count: 2 }))
       await Promise.all([first, duplicate])
     })
 
     expect(result.current.hotPosts[0]).toMatchObject({
-      likes: 5,
-      like_count: 5,
+      likes: 7,
+      like_count: 7,
       dislikes: 2,
       dislike_count: 2,
       user_reaction: 'up',
     })
   })
 
-  it('does not mutate from a malformed ACK and releases the lock for retry', async () => {
+  it('does not mutate from a wrong-actor ACK and releases the lock for retry', async () => {
     mockAuthedFetch
-      .mockResolvedValueOnce(reactionEnvelope({ action: undefined, like_count: 99 }))
+      .mockResolvedValueOnce(
+        reactionEnvelope({ actor_id: '66666666-6666-4666-8666-666666666666', like_count: 99 })
+      )
       .mockResolvedValueOnce(reactionEnvelope())
     const { result } = renderHook(() => useHotPageData({ initialPosts: [initialPost] }))
     await waitFor(() => expect(result.current.loadingPosts).toBe(false))
