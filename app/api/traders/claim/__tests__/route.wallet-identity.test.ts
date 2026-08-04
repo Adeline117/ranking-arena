@@ -179,6 +179,29 @@ describe('GET /api/traders/claim identity scope', () => {
     expect(mockGetUserClaimForTrader).not.toHaveBeenCalled()
     expect(mockSupabase.from).not.toHaveBeenCalled()
   })
+
+  it('fails closed when linked-account loading fails', async () => {
+    mockLinkedOrder.mockResolvedValue({ data: null, error: { code: 'XX001' } })
+
+    const response = await GET(
+      getRequest('http://localhost/api/traders/claim?trader_id=trader-a&source=binance')
+    )
+
+    expect(response.status).toBe(500)
+  })
+
+  it('fails closed when the linked projection contains another owner', async () => {
+    mockLinkedOrder.mockResolvedValue({
+      data: [{ user_id: 'user-2', trader_id: 'trader-a', source: 'binance' }],
+      error: null,
+    })
+
+    const response = await GET(
+      getRequest('http://localhost/api/traders/claim?trader_id=trader-a&source=binance')
+    )
+
+    expect(response.status).toBe(500)
+  })
 })
 
 describe('POST /api/traders/claim wallet identity boundary', () => {

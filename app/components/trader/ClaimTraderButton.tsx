@@ -57,6 +57,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const keys = Object.keys(value).sort()
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index])
+}
+
+function isIsoTimestamp(value: unknown): boolean {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+}
+
 function readClaimStatus(
   value: unknown,
   expected: {
@@ -69,9 +78,38 @@ function readClaimStatus(
   hasVerifiedAccounts: boolean
   thisTraderLinked: boolean
 } | null {
-  if (!isRecord(value) || value.success !== true || !isRecord(value.data)) return null
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['data', 'meta', 'success']) ||
+    value.success !== true ||
+    !isRecord(value.meta) ||
+    !hasExactKeys(value.meta, ['timestamp']) ||
+    !isIsoTimestamp(value.meta.timestamp) ||
+    !isRecord(value.data) ||
+    !hasExactKeys(value.data, [
+      'claim',
+      'is_verified',
+      'linked_count',
+      'linked_traders',
+      'verified_trader',
+    ])
+  ) {
+    return null
+  }
   const data = value.data
-  if (!Array.isArray(data.linked_traders) || typeof data.is_verified !== 'boolean') return null
+  if (
+    !Array.isArray(data.linked_traders) ||
+    typeof data.is_verified !== 'boolean' ||
+    !Number.isSafeInteger(data.linked_count) ||
+    data.linked_count !== data.linked_traders.length ||
+    !(
+      data.verified_trader === null ||
+      (isRecord(data.verified_trader) && data.verified_trader.user_id === expected.userId)
+    ) ||
+    data.is_verified !== (data.verified_trader !== null)
+  ) {
+    return null
+  }
   const normalizedSource = expected.source.toLowerCase()
   const matchesCurrentTrader = (candidate: Record<string, unknown>): boolean =>
     candidate.source === normalizedSource &&
@@ -100,7 +138,9 @@ function readClaimStatus(
       claim.user_id !== expected.userId ||
       typeof claim.trader_id !== 'string' ||
       typeof claim.source !== 'string' ||
-      typeof claim.status !== 'string')
+      !['pending', 'reviewing', 'verified', 'rejected', 'expired', 'revoked'].includes(
+        String(claim.status)
+      ))
   ) {
     return null
   }

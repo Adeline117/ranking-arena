@@ -111,7 +111,11 @@ export async function GET(request: NextRequest) {
         .order('display_order', { ascending: true }),
     ])
 
+    if (linkedResult.error) throw linkedResult.error
     const linkedTraders = linkedResult.data || []
+    if (linkedTraders.some((linked) => linked.user_id !== user.id)) {
+      throw new Error('Claim status returned a mismatched linked account')
+    }
 
     return success({
       claim,

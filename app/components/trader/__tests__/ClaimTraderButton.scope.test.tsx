@@ -119,7 +119,10 @@ function claimStatusResponse(
           ...trader,
           user_id: userId,
         })),
+        linked_count: data.linked_traders?.length ?? 0,
+        verified_trader: data.is_verified ? { user_id: userId } : null,
       },
+      meta: { timestamp: '2026-01-01T00:00:00.000Z' },
     },
     ok: true,
     status: 200,
@@ -185,6 +188,20 @@ describe('ClaimTraderButton claim identity scope', () => {
     renderClaimButton('trader-a', 'BINANCE')
 
     expect(await screen.findByRole('button', { name: 'claimSubmitted' })).toBeDisabled()
+  })
+
+  it('ignores an internally inconsistent linked-account count', async () => {
+    const response = claimStatusResponse(VIEWER_A, {
+      claim: { trader_id: 'trader-a', source: 'binance', status: 'reviewing' },
+      linked_traders: [],
+    })
+    response.data.data.linked_count = 1
+    mockAuthedFetch.mockResolvedValue(response)
+
+    renderClaimButton('trader-a', 'binance')
+
+    expect(await screen.findByRole('button', { name: 'claimTrader' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'claimSubmitted' })).not.toBeInTheDocument()
   })
 
   it('matches EVM case-insensitively but preserves Solana Base58 identity case', async () => {
