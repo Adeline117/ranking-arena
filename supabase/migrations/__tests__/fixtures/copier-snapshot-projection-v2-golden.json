@@ -1,9 +1,9 @@
 {
-  "contract": "arena.ingest.copier-projection-v2-golden@1",
+  "contract": "arena.ingest.copier-projection-v2-golden@2",
   "projection_tuple_contract": "arena.ingest.copier-projection-tuple@1",
-  "length_prefixed_utf8_contract": "arena.ingest.length-prefixed-utf8.uint32be@1",
-  "candidate_multiset_contract": "arena.ingest.copier-candidate-sha256-multiset.fixed-bytes@1",
-  "candidate_projection_multiset_contract": "arena.ingest.copier-candidate-projection-sha256-multiset.fixed-bytes@1",
+  "length_prefixed_utf8_contract": "arena.ingest.length-prefixed-utf8.nonnegative-int32be@1",
+  "source_candidate_fixed_multiset_contract": "arena.ingest.copier-source-candidate-sha256-multiset.domain-count-fixed-bytes@1",
+  "candidate_projection_fixed_multiset_contract": "arena.ingest.copier-candidate-projection-sha256-multiset.domain-count-fixed-bytes@1",
   "hash_algorithm": "sha256",
   "encoding_spec": {
     "null_token_hex": "00",
@@ -12,6 +12,15 @@
     "length_byte_order": "big_endian",
     "length_scope": "utf8_value_bytes",
     "postgres_length_primitive": "pg_catalog.int4send(pg_catalog.octet_length(value))"
+  },
+  "multiset_encoding_spec": {
+    "domain_token_contract": "arena.ingest.length-prefixed-utf8.nonnegative-int32be@1",
+    "count_bytes": 8,
+    "count_byte_order": "big_endian",
+    "count_range": "nonnegative_postgresql_bigint",
+    "postgres_count_primitive": "pg_catalog.int8send(count)",
+    "member_sort": "decoded_bytea_ascending",
+    "duplicates": "preserve_occurrences"
   },
   "tuple_field_order": [
     "contract",
@@ -176,8 +185,8 @@
     {
       "name": "empty",
       "members": [],
-      "concatenated_hex": "",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "encoded_hex": "010000004f6172656e612e696e676573742e636f706965722d736f757263652d63616e6469646174652d7368613235362d6d756c74697365742e646f6d61696e2d636f756e742d66697865642d627974657340310000000000000000",
+      "sha256": "c1cab3cd2922fcbf8d32377d3494fbf0d9e6f3a304b6de818864547be8f03178"
     },
     {
       "name": "sorts_raw_bytes",
@@ -186,8 +195,8 @@
         "1111111111111111111111111111111111111111111111111111111111111111",
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       ],
-      "concatenated_hex": "1111111111111111111111111111111111111111111111111111111111111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-      "sha256": "6f31b6ea2bafdd10443a15eaa2be441f1a4fa2379980fc898cde8c6bf6fac144"
+      "encoded_hex": "010000004f6172656e612e696e676573742e636f706965722d736f757263652d63616e6469646174652d7368613235362d6d756c74697365742e646f6d61696e2d636f756e742d66697865642d6279746573403100000000000000031111111111111111111111111111111111111111111111111111111111111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "sha256": "42bffdfcb3a7bc6945d9b934190c2873f8e183af4b17cd11b96fab3338a3d7b6"
     },
     {
       "name": "preserves_duplicates",
@@ -197,16 +206,16 @@
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "2222222222222222222222222222222222222222222222222222222222222222"
       ],
-      "concatenated_hex": "11111111111111111111111111111111111111111111111111111111111111112222222222222222222222222222222222222222222222222222222222222222aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "sha256": "e13855bb1a93d0d94b33454f74b293f04041a9dd05b3f5e17bbfcd5d01bd96fa"
+      "encoded_hex": "010000004f6172656e612e696e676573742e636f706965722d736f757263652d63616e6469646174652d7368613235362d6d756c74697365742e646f6d61696e2d636f756e742d66697865642d62797465734031000000000000000411111111111111111111111111111111111111111111111111111111111111112222222222222222222222222222222222222222222222222222222222222222aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256": "3f4763b8be952c8737a6f74c71b4078af4bd7114af36bccfc9de4bcb546384de"
     }
   ],
   "pair_multisets": [
     {
       "name": "empty",
       "members": [],
-      "concatenated_hex": "",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "encoded_hex": "01000000536172656e612e696e676573742e636f706965722d63616e6469646174652d70726f6a656374696f6e2d7368613235362d6d756c74697365742e646f6d61696e2d636f756e742d66697865642d627974657340310000000000000000",
+      "sha256": "40cf993e6398d59019e7d81e2c23006ccace71a9b64151e7f33ba66baf79d855"
     },
     {
       "name": "sorts_and_preserves_duplicates",
@@ -228,8 +237,8 @@
           "projection_sha256": "7236fe111020c3a28ae31423ed37e3259fee1a3040046a4e85fe980f93ef4030"
         }
       ],
-      "concatenated_hex": "11111111111111111111111111111111111111111111111111111111111111112875fec1f4f7951fe21af0c3171c8347273ab4d29fcb0be15f96a967b8928d7222222222222222222222222222222222222222222222222222222222222222227236fe111020c3a28ae31423ed37e3259fee1a3040046a4e85fe980f93ef4030aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaf854f58da0ce6eca5c13402c65ce8a5847e1b11cc05f4c8b03a3ce0cc5430e8caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaf854f58da0ce6eca5c13402c65ce8a5847e1b11cc05f4c8b03a3ce0cc5430e8c",
-      "sha256": "474624d78c4627b0986aa6c0ab2119ff4855ee1a6b697e3c5905adf0e7f5efc4"
+      "encoded_hex": "01000000536172656e612e696e676573742e636f706965722d63616e6469646174652d70726f6a656374696f6e2d7368613235362d6d756c74697365742e646f6d61696e2d636f756e742d66697865642d62797465734031000000000000000411111111111111111111111111111111111111111111111111111111111111112875fec1f4f7951fe21af0c3171c8347273ab4d29fcb0be15f96a967b8928d7222222222222222222222222222222222222222222222222222222222222222227236fe111020c3a28ae31423ed37e3259fee1a3040046a4e85fe980f93ef4030aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaf854f58da0ce6eca5c13402c65ce8a5847e1b11cc05f4c8b03a3ce0cc5430e8caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaf854f58da0ce6eca5c13402c65ce8a5847e1b11cc05f4c8b03a3ce0cc5430e8c",
+      "sha256": "b21c9a18f0d85eda4498593cc9be61c9602359aafa59716f90d7966dfefa7d23"
     }
   ],
   "invalid_vectors": {

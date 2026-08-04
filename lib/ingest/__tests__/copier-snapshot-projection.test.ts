@@ -2,21 +2,21 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import {
-  COPIER_SNAPSHOT_CANDIDATE_MULTISET_CONTRACT,
-  COPIER_SNAPSHOT_CANDIDATE_PROJECTION_MULTISET_CONTRACT,
+  COPIER_SNAPSHOT_CANDIDATE_PROJECTION_FIXED_MULTISET_CONTRACT,
   COPIER_SNAPSHOT_LENGTH_PREFIXED_UTF8_CONTRACT,
   COPIER_SNAPSHOT_MAX_DURATION_DAYS,
   COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT,
   COPIER_SNAPSHOT_PROJECTION_TUPLE_FIELDS,
+  COPIER_SNAPSHOT_SOURCE_CANDIDATE_FIXED_MULTISET_CONTRACT,
   buildCopierSnapshotProjection,
   canonicalCopierSnapshotDecimal,
-  copierSnapshotCandidateMultisetSha256,
-  copierSnapshotCandidateProjectionMultisetSha256,
+  copierSnapshotCandidateProjectionFixedMultisetSha256,
+  copierSnapshotSourceCandidateFixedMultisetSha256,
   copierSnapshotProjectionSha256,
-  encodeCopierSnapshotCandidateMultiset,
-  encodeCopierSnapshotCandidateProjectionMultiset,
+  encodeCopierSnapshotCandidateProjectionFixedMultiset,
   encodeCopierSnapshotNullableUtf8,
   encodeCopierSnapshotProjectionTuple,
+  encodeCopierSnapshotSourceCandidateFixedMultiset,
   revalidateCopierSnapshotProjectionTuple,
 } from '../copier-snapshot-projection'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
@@ -44,7 +44,7 @@ interface ProjectionVector {
 interface CandidateMultisetVector {
   name: string
   members: string[]
-  concatenated_hex: string
+  encoded_hex: string
   sha256: string
 }
 
@@ -54,7 +54,7 @@ interface PairMultisetVector {
     source_candidate_sha256: string
     projection_sha256: string
   }>
-  concatenated_hex: string
+  encoded_hex: string
   sha256: string
 }
 
@@ -62,8 +62,8 @@ interface GoldenFixture {
   contract: string
   projection_tuple_contract: string
   length_prefixed_utf8_contract: string
-  candidate_multiset_contract: string
-  candidate_projection_multiset_contract: string
+  source_candidate_fixed_multiset_contract: string
+  candidate_projection_fixed_multiset_contract: string
   hash_algorithm: string
   encoding_spec: {
     null_token_hex: string
@@ -72,6 +72,15 @@ interface GoldenFixture {
     length_byte_order: string
     length_scope: string
     postgres_length_primitive: string
+  }
+  multiset_encoding_spec: {
+    domain_token_contract: string
+    count_bytes: number
+    count_byte_order: string
+    count_range: string
+    postgres_count_primitive: string
+    member_sort: string
+    duplicates: string
   }
   tuple_field_order: string[]
   encoding_vectors: EncodingVector[]
@@ -124,12 +133,13 @@ function tupleWith(overrides: Record<string, unknown>): Record<string, unknown> 
 describe('copier snapshot projection byte contract', () => {
   it('pins contracts, SQL primitives, and fixed tuple field order', () => {
     expect(golden).toMatchObject({
-      contract: 'arena.ingest.copier-projection-v2-golden@1',
+      contract: 'arena.ingest.copier-projection-v2-golden@2',
       projection_tuple_contract: COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT,
       length_prefixed_utf8_contract: COPIER_SNAPSHOT_LENGTH_PREFIXED_UTF8_CONTRACT,
-      candidate_multiset_contract: COPIER_SNAPSHOT_CANDIDATE_MULTISET_CONTRACT,
-      candidate_projection_multiset_contract:
-        COPIER_SNAPSHOT_CANDIDATE_PROJECTION_MULTISET_CONTRACT,
+      source_candidate_fixed_multiset_contract:
+        COPIER_SNAPSHOT_SOURCE_CANDIDATE_FIXED_MULTISET_CONTRACT,
+      candidate_projection_fixed_multiset_contract:
+        COPIER_SNAPSHOT_CANDIDATE_PROJECTION_FIXED_MULTISET_CONTRACT,
       hash_algorithm: 'sha256',
       encoding_spec: {
         null_token_hex: '00',
@@ -138,6 +148,15 @@ describe('copier snapshot projection byte contract', () => {
         length_byte_order: 'big_endian',
         length_scope: 'utf8_value_bytes',
         postgres_length_primitive: 'pg_catalog.int4send(pg_catalog.octet_length(value))',
+      },
+      multiset_encoding_spec: {
+        domain_token_contract: COPIER_SNAPSHOT_LENGTH_PREFIXED_UTF8_CONTRACT,
+        count_bytes: 8,
+        count_byte_order: 'big_endian',
+        count_range: 'nonnegative_postgresql_bigint',
+        postgres_count_primitive: 'pg_catalog.int8send(count)',
+        member_sort: 'decoded_bytea_ascending',
+        duplicates: 'preserve_occurrences',
       },
     })
     expect(golden.tuple_field_order).toEqual(COPIER_SNAPSHOT_PROJECTION_TUPLE_FIELDS)
@@ -381,23 +400,39 @@ describe('copier snapshot projection byte contract', () => {
 })
 
 describe('copier snapshot projection multiset digests', () => {
+  it('domain-separates even true-empty candidate and candidate-projection multisets', () => {
+    const candidates = encodeCopierSnapshotSourceCandidateFixedMultiset([])
+    const pairs = encodeCopierSnapshotCandidateProjectionFixedMultiset([])
+
+    expect(candidates.byteLength).toBeGreaterThan(8)
+    expect(pairs.byteLength).toBeGreaterThan(8)
+    expect(candidates.equals(pairs)).toBe(false)
+    expect(copierSnapshotSourceCandidateFixedMultisetSha256([])).not.toBe(
+      copierSnapshotCandidateProjectionFixedMultisetSha256([])
+    )
+  })
+
   it.each(golden.candidate_multisets)(
     'recomputes candidate multiset $name with fixed decoded bytes',
-    ({ members, concatenated_hex: concatenatedHex, sha256 }) => {
-      expect(encodeCopierSnapshotCandidateMultiset(members).toString('hex')).toBe(concatenatedHex)
-      expect(copierSnapshotCandidateMultisetSha256(members)).toBe(sha256)
-      expect(copierSnapshotCandidateMultisetSha256([...members].reverse())).toBe(sha256)
+    ({ members, encoded_hex: encodedHex, sha256 }) => {
+      expect(encodeCopierSnapshotSourceCandidateFixedMultiset(members).toString('hex')).toBe(
+        encodedHex
+      )
+      expect(copierSnapshotSourceCandidateFixedMultisetSha256(members)).toBe(sha256)
+      expect(copierSnapshotSourceCandidateFixedMultisetSha256([...members].reverse())).toBe(sha256)
     }
   )
 
   it.each(golden.pair_multisets)(
     'recomputes candidate-to-projection multiset $name with fixed pair bytes',
-    ({ members, concatenated_hex: concatenatedHex, sha256 }) => {
-      expect(encodeCopierSnapshotCandidateProjectionMultiset(members).toString('hex')).toBe(
-        concatenatedHex
+    ({ members, encoded_hex: encodedHex, sha256 }) => {
+      expect(encodeCopierSnapshotCandidateProjectionFixedMultiset(members).toString('hex')).toBe(
+        encodedHex
       )
-      expect(copierSnapshotCandidateProjectionMultisetSha256(members)).toBe(sha256)
-      expect(copierSnapshotCandidateProjectionMultisetSha256([...members].reverse())).toBe(sha256)
+      expect(copierSnapshotCandidateProjectionFixedMultisetSha256(members)).toBe(sha256)
+      expect(copierSnapshotCandidateProjectionFixedMultisetSha256([...members].reverse())).toBe(
+        sha256
+      )
     }
   )
 
@@ -405,15 +440,15 @@ describe('copier snapshot projection multiset digests', () => {
     const candidate = 'ab'.repeat(32)
     const projection = 'cd'.repeat(32)
 
-    expect(copierSnapshotCandidateMultisetSha256([candidate])).not.toBe(
-      copierSnapshotCandidateMultisetSha256([candidate, candidate])
+    expect(copierSnapshotSourceCandidateFixedMultisetSha256([candidate])).not.toBe(
+      copierSnapshotSourceCandidateFixedMultisetSha256([candidate, candidate])
     )
     expect(
-      copierSnapshotCandidateProjectionMultisetSha256([
+      copierSnapshotCandidateProjectionFixedMultisetSha256([
         { source_candidate_sha256: candidate, projection_sha256: projection },
       ])
     ).not.toBe(
-      copierSnapshotCandidateProjectionMultisetSha256([
+      copierSnapshotCandidateProjectionFixedMultisetSha256([
         { source_candidate_sha256: candidate, projection_sha256: projection },
         { source_candidate_sha256: candidate, projection_sha256: projection },
       ])
@@ -421,14 +456,16 @@ describe('copier snapshot projection multiset digests', () => {
   })
 
   it('rejects malformed digest members and pair shape drift', () => {
-    expect(() => encodeCopierSnapshotCandidateMultiset(['ABC'])).toThrow('lowercase SHA-256')
+    expect(() => encodeCopierSnapshotSourceCandidateFixedMultiset(['ABC'])).toThrow(
+      'lowercase SHA-256'
+    )
     expect(() =>
-      encodeCopierSnapshotCandidateProjectionMultiset([
+      encodeCopierSnapshotCandidateProjectionFixedMultiset([
         { source_candidate_sha256: '11'.repeat(32), projection_sha256: 'nope' },
       ])
     ).toThrow('lowercase SHA-256')
     expect(() =>
-      encodeCopierSnapshotCandidateProjectionMultiset([
+      encodeCopierSnapshotCandidateProjectionFixedMultiset([
         {
           source_candidate_sha256: '11'.repeat(32),
           projection_sha256: '22'.repeat(32),
@@ -445,7 +482,7 @@ describe('copier snapshot projection multiset digests', () => {
       enumerable: true,
       get: () => '22'.repeat(32),
     })
-    expect(() => encodeCopierSnapshotCandidateProjectionMultiset([accessorPair])).toThrow(
+    expect(() => encodeCopierSnapshotCandidateProjectionFixedMultiset([accessorPair])).toThrow(
       'object accessors'
     )
 
@@ -454,7 +491,7 @@ describe('copier snapshot projection multiset digests', () => {
       enumerable: true,
       get: () => '11'.repeat(32),
     })
-    expect(() => encodeCopierSnapshotCandidateMultiset(accessorCandidates)).toThrow(
+    expect(() => encodeCopierSnapshotSourceCandidateFixedMultiset(accessorCandidates)).toThrow(
       'array accessors'
     )
   })
