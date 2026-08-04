@@ -34,9 +34,10 @@ import {
   TRANSLATION_MAX_BATCH_ITEMS,
   TRANSLATION_MAX_PROVIDER_RESPONSE_BYTES,
   TRANSLATION_MAX_REQUEST_BYTES,
+  TRANSLATION_SERVER_REQUEST_TIMEOUT_MS,
   splitTranslationText,
 } from '@/lib/translations/translation-server-contract'
-import { GET, POST } from '../route'
+import { GET, POST, maxDuration } from '../route'
 
 const originalFetch = globalThis.fetch
 const originalOpenAiKey = process.env.OPENAI_API_KEY
@@ -152,6 +153,9 @@ async function waitForCalls(mock: jest.Mock, expected: number): Promise<void> {
 }
 
 describe('/api/translate server truth boundary', () => {
+  it('reserves platform runtime beyond the application-owned deadline', () => {
+    expect(maxDuration * 1000).toBeGreaterThan(TRANSLATION_SERVER_REQUEST_TIMEOUT_MS)
+  })
   beforeEach(() => {
     jest.clearAllMocks()
     mockRequireAuth.mockResolvedValue({ id: 'user-1' })

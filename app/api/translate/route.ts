@@ -33,6 +33,7 @@ import {
 import { createLogger } from '@/lib/utils/logger'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 const logger = createLogger('translate')
 
