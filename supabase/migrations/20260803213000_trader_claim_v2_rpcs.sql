@@ -18,6 +18,7 @@ DECLARE
   v_active_index_columns text[];
   v_active_index_predicate text;
   v_active_index_access_method name;
+  v_unexpected_overloads text[];
 BEGIN
   IF pg_catalog.to_regclass('public.trader_claims') IS NULL THEN
     RAISE EXCEPTION 'public.trader_claims must exist before V2 claim RPCs';
@@ -101,6 +102,65 @@ BEGIN
     RAISE EXCEPTION
       'active trader-claim identity index has the wrong exact shape';
   END IF;
+
+  WITH expected(proname, signature) AS (
+    VALUES
+      (
+        'submit_trader_claim'::name,
+        'public.submit_trader_claim(uuid,text,text,text,jsonb)'::text
+      ),
+      (
+        'submit_trader_claim_v2'::name,
+        'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::text
+      ),
+      (
+        'reject_trader_claim_v2'::name,
+        'public.reject_trader_claim_v2(uuid,uuid,text)'::text
+      ),
+      (
+        'cancel_trader_claim_v2'::name,
+        'public.cancel_trader_claim_v2(uuid,uuid)'::text
+      ),
+      (
+        'activate_trader_claim'::name,
+        'public.activate_trader_claim(uuid,uuid)'::text
+      ),
+      (
+        'arena_set_trader_claimed'::name,
+        'public.arena_set_trader_claimed(text,text,uuid,boolean)'::text
+      ),
+      (
+        'guard_trader_claim_activation_expiry'::name,
+        'public.guard_trader_claim_activation_expiry()'::text
+      )
+  )
+  SELECT pg_catalog.array_agg(
+    pg_catalog.format(
+      '%I(%s)',
+      procedure_row.proname,
+      pg_catalog.pg_get_function_identity_arguments(procedure_row.oid)
+    )
+    ORDER BY procedure_row.proname, procedure_row.oid
+  )
+  INTO v_unexpected_overloads
+  FROM pg_catalog.pg_proc AS procedure_row
+  JOIN pg_catalog.pg_namespace AS namespace_row
+    ON namespace_row.oid = procedure_row.pronamespace
+  WHERE namespace_row.nspname = 'public'
+    AND procedure_row.proname IN (SELECT expected.proname FROM expected)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM expected
+      WHERE expected.proname = procedure_row.proname
+        AND procedure_row.oid IS NOT DISTINCT FROM
+              pg_catalog.to_regprocedure(expected.signature)
+    );
+
+  IF v_unexpected_overloads IS NOT NULL THEN
+    RAISE EXCEPTION
+      'unexpected trader-claim function overloads must be retired first: %',
+      v_unexpected_overloads;
+  END IF;
 END
 $preflight$;
 
@@ -121,6 +181,107 @@ ALTER TABLE public.trader_claims
 CREATE UNIQUE INDEX IF NOT EXISTS trader_claims_v2_challenge_id_uidx
   ON public.trader_claims ((verification_data->>'challenge_id'))
   WHERE submission_version = 2;
+
+-- Phase A keeps the immutable V1 deployment alive briefly. Rebuild its only
+-- callable legacy function from the reviewed July definition before restoring
+-- service_role access; transferring an unknown historical body to the trusted
+-- owner would otherwise launder function drift into a definer capability.
+CREATE OR REPLACE FUNCTION public.submit_trader_claim(
+  p_user_id uuid,
+  p_trader_id text,
+  p_source text,
+  p_verification_method text,
+  p_verification_data jsonb
+)
+RETURNS public.trader_claims
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_now timestamptz := pg_catalog.statement_timestamp();
+  v_trader_id text := pg_catalog.btrim(p_trader_id);
+  v_source text := pg_catalog.lower(pg_catalog.btrim(p_source));
+  v_verification_data jsonb := COALESCE(p_verification_data, '{}'::jsonb);
+  v_claim public.trader_claims%ROWTYPE;
+BEGIN
+  IF p_user_id IS NULL
+     OR v_trader_id IS NULL
+     OR v_trader_id = ''
+     OR pg_catalog.length(v_trader_id) > 512
+     OR v_source IS NULL
+     OR v_source = ''
+     OR pg_catalog.length(v_source) > 100 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'valid claim user, trader id, and source are required';
+  END IF;
+
+  IF p_verification_method IS NULL
+     OR p_verification_method NOT IN ('api_key', 'signature') THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'unsupported trader claim verification method';
+  END IF;
+
+  IF p_verification_method = 'signature' THEN
+    IF v_source IN ('jupiter_perps', 'drift') THEN
+      -- Solana Base58 public keys are case-sensitive and must remain exact.
+      NULL;
+    ELSIF v_source IN ('hyperliquid', 'gmx', 'gains', 'aevo', 'dydx') THEN
+      -- EVM identity keys use one database representation regardless of
+      -- checksum case. This is the final write-boundary canonicalization.
+      v_trader_id := pg_catalog.lower(v_trader_id);
+    ELSE
+      RAISE EXCEPTION USING
+        ERRCODE = '22023',
+        MESSAGE = 'unsupported wallet trader claim source';
+    END IF;
+  END IF;
+
+  IF pg_catalog.jsonb_typeof(v_verification_data) <> 'object' THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'trader claim verification data must be an object';
+  END IF;
+
+  -- Lock a stale active attempt before retiring it. Do not take the activation
+  -- advisory lock first: activate_trader_claim locks this row before taking
+  -- that namespace, and reversing the order here would introduce a deadlock.
+  -- The partial unique index serializes identities that have no stale row.
+  UPDATE public.trader_claims AS claim
+  SET status = 'expired',
+      updated_at = v_now
+  WHERE claim.trader_id = v_trader_id
+    AND claim.source = v_source
+    AND claim.status IN ('pending', 'reviewing')
+    AND claim.created_at
+          < v_now - pg_catalog.make_interval(days => 30);
+
+  INSERT INTO public.trader_claims (
+    user_id,
+    trader_id,
+    source,
+    verification_method,
+    verification_data,
+    status,
+    created_at,
+    updated_at
+  ) VALUES (
+    p_user_id,
+    v_trader_id,
+    v_source,
+    p_verification_method,
+    v_verification_data,
+    'reviewing',
+    v_now,
+    v_now
+  )
+  RETURNING * INTO STRICT v_claim;
+
+  RETURN v_claim;
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.submit_trader_claim_v2(
   p_user_id uuid,
@@ -493,6 +654,28 @@ BEGIN
 END;
 $function$;
 
+-- Function replacement preserves historical ownership. Phase A deliberately
+-- leaves one legacy writer callable, so every reviewed capability (including
+-- the closed approval helpers) must return to the trusted relation owner before
+-- ACL convergence skips the owner entry.
+ALTER FUNCTION public.submit_trader_claim(
+  uuid, text, text, text, jsonb
+) OWNER TO CURRENT_USER;
+ALTER FUNCTION public.submit_trader_claim_v2(
+  uuid, text, text, text, timestamptz, timestamptz, text, text
+) OWNER TO CURRENT_USER;
+ALTER FUNCTION public.reject_trader_claim_v2(uuid, uuid, text)
+  OWNER TO CURRENT_USER;
+ALTER FUNCTION public.cancel_trader_claim_v2(uuid, uuid)
+  OWNER TO CURRENT_USER;
+ALTER FUNCTION public.activate_trader_claim(uuid, uuid)
+  OWNER TO CURRENT_USER;
+ALTER FUNCTION public.arena_set_trader_claimed(
+  text, text, uuid, boolean
+) OWNER TO CURRENT_USER;
+ALTER FUNCTION public.guard_trader_claim_activation_expiry()
+  OWNER TO CURRENT_USER;
+
 REVOKE ALL ON FUNCTION public.submit_trader_claim_v2(
   uuid, text, text, text, timestamptz, timestamptz, text, text
 ) FROM PUBLIC, anon, authenticated, service_role;
@@ -511,6 +694,72 @@ REVOKE ALL ON FUNCTION public.arena_set_trader_claimed(
   text, text, uuid, boolean
 ) FROM PUBLIC, anon, authenticated, service_role;
 
+DO $converge_phase_a_function_acl$
+DECLARE
+  v_function record;
+  v_grantee oid;
+  v_role_sql text;
+BEGIN
+  FOR v_function IN
+    SELECT
+      procedure_row.oid,
+      procedure_row.proowner,
+      pg_catalog.format(
+        '%I.%I(%s)',
+        namespace_row.nspname,
+        procedure_row.proname,
+        pg_catalog.pg_get_function_identity_arguments(procedure_row.oid)
+      ) AS qualified_signature
+    FROM pg_catalog.pg_proc AS procedure_row
+    JOIN pg_catalog.pg_namespace AS namespace_row
+      ON namespace_row.oid = procedure_row.pronamespace
+    WHERE procedure_row.oid IN (
+      'public.submit_trader_claim(uuid,text,text,text,jsonb)'::regprocedure,
+      'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::regprocedure,
+      'public.reject_trader_claim_v2(uuid,uuid,text)'::regprocedure,
+      'public.cancel_trader_claim_v2(uuid,uuid)'::regprocedure,
+      'public.activate_trader_claim(uuid,uuid)'::regprocedure,
+      'public.arena_set_trader_claimed(text,text,uuid,boolean)'::regprocedure,
+      'public.guard_trader_claim_activation_expiry()'::regprocedure
+    )
+    ORDER BY procedure_row.oid
+  LOOP
+    FOR v_grantee IN
+      SELECT DISTINCT acl_entry.grantee
+      FROM pg_catalog.pg_proc AS acl_procedure
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        COALESCE(
+          acl_procedure.proacl,
+          pg_catalog.acldefault('f', acl_procedure.proowner)
+        )
+      ) AS acl_entry
+      WHERE acl_procedure.oid = v_function.oid
+        AND acl_entry.grantee <> v_function.proowner
+    LOOP
+      v_role_sql := CASE
+        WHEN v_grantee = 0::oid THEN 'PUBLIC'
+        ELSE pg_catalog.format(
+          '%I',
+          (SELECT role_row.rolname FROM pg_catalog.pg_roles AS role_row
+           WHERE role_row.oid = v_grantee)
+        )
+      END;
+
+      EXECUTE pg_catalog.format(
+        'REVOKE ALL PRIVILEGES ON FUNCTION %s FROM %s',
+        v_function.qualified_signature,
+        v_role_sql
+      );
+    END LOOP;
+  END LOOP;
+END
+$converge_phase_a_function_acl$;
+
+-- Preserve the immutable app during Phase A, but converge its exact legacy
+-- submit signature to service_role only. Approval remains deliberately closed.
+GRANT EXECUTE ON FUNCTION public.submit_trader_claim(
+  uuid, text, text, text, jsonb
+) TO service_role;
 GRANT EXECUTE ON FUNCTION public.submit_trader_claim_v2(
   uuid, text, text, text, timestamptz, timestamptz, text, text
 ) TO service_role;
@@ -641,6 +890,86 @@ BEGIN
       'active trader-claim identity index drifted during Phase A';
   END IF;
 
+  -- Direct ACL inventory is insufficient when a browser role inherits the
+  -- service role. Phase A intentionally keeps this one legacy writer alive,
+  -- so verify the effective boundary before checking the new V2 functions.
+  IF NOT pg_catalog.has_function_privilege(
+       'service_role',
+       'public.submit_trader_claim(uuid,text,text,text,jsonb)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'anon',
+       'public.submit_trader_claim(uuid,text,text,text,jsonb)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'authenticated',
+       'public.submit_trader_claim(uuid,text,text,text,jsonb)',
+       'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION
+      'Phase-A legacy submit effective capability boundary is incorrect';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid IN (
+      'public.submit_trader_claim(uuid,text,text,text,jsonb)'::regprocedure,
+      'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::regprocedure,
+      'public.reject_trader_claim_v2(uuid,uuid,text)'::regprocedure,
+      'public.cancel_trader_claim_v2(uuid,uuid)'::regprocedure,
+      'public.activate_trader_claim(uuid,uuid)'::regprocedure,
+      'public.arena_set_trader_claimed(text,text,uuid,boolean)'::regprocedure,
+      'public.guard_trader_claim_activation_expiry()'::regprocedure
+    )
+      AND procedure_row.proowner IS DISTINCT FROM (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = 'public.trader_claims'::regclass
+      )
+  ) THEN
+    RAISE EXCEPTION 'Phase-A trader-claim function ownership is not exact';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid =
+          'public.submit_trader_claim(uuid,text,text,text,jsonb)'::regprocedure
+      AND procedure_row.prokind = 'f'
+      AND procedure_row.prolang = (
+        SELECT language_row.oid
+        FROM pg_catalog.pg_language AS language_row
+        WHERE language_row.lanname = 'plpgsql'
+      )
+      AND procedure_row.prorettype = 'public.trader_claims'::regtype
+      AND NOT procedure_row.proretset
+      AND procedure_row.prosecdef
+      AND NOT procedure_row.proleakproof
+      AND procedure_row.provolatile = 'v'
+      AND procedure_row.pronargdefaults = 0
+      AND procedure_row.proargmodes IS NULL
+      AND procedure_row.proallargtypes IS NULL
+      AND procedure_row.proargnames = ARRAY[
+        'p_user_id',
+        'p_trader_id',
+        'p_source',
+        'p_verification_method',
+        'p_verification_data'
+      ]::text[]
+      AND procedure_row.proconfig =
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
+      AND pg_catalog.encode(
+            extensions.digest(procedure_row.prosrc, 'sha256'),
+            'hex'
+          ) = '15690f785d4524bdaa06f3a8b731d54b2eab39eaa1a79c432a67b5f5dc57aba4'
+  ) THEN
+    RAISE EXCEPTION
+      'Phase-A legacy submit definition is not the reviewed canonical body';
+  END IF;
+
   FOREACH v_signature IN ARRAY ARRAY[
     'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::regprocedure,
     'public.reject_trader_claim_v2(uuid,uuid,text)'::regprocedure,
@@ -693,8 +1022,91 @@ BEGIN
          AND trigger_row.tgenabled <> 'D'
          -- ROW + BEFORE + INSERT + DELETE + UPDATE.
          AND trigger_row.tgtype = 31
-     ) THEN
+  ) THEN
     RAISE EXCEPTION 'Phase-A V2 claim or activation capability boundary is incorrect';
+  END IF;
+
+  IF EXISTS (
+    WITH expected(proname, signature, service_callable) AS (
+      VALUES
+        (
+          'submit_trader_claim'::name,
+          'public.submit_trader_claim(uuid,text,text,text,jsonb)'::text,
+          true
+        ),
+        (
+          'submit_trader_claim_v2'::name,
+          'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::text,
+          true
+        ),
+        (
+          'reject_trader_claim_v2'::name,
+          'public.reject_trader_claim_v2(uuid,uuid,text)'::text,
+          true
+        ),
+        (
+          'cancel_trader_claim_v2'::name,
+          'public.cancel_trader_claim_v2(uuid,uuid)'::text,
+          true
+        ),
+        (
+          'activate_trader_claim'::name,
+          'public.activate_trader_claim(uuid,uuid)'::text,
+          false
+        ),
+        (
+          'arena_set_trader_claimed'::name,
+          'public.arena_set_trader_claimed(text,text,uuid,boolean)'::text,
+          false
+        ),
+        (
+          'guard_trader_claim_activation_expiry'::name,
+          'public.guard_trader_claim_activation_expiry()'::text,
+          false
+        )
+    )
+    SELECT 1
+    FROM expected
+    WHERE pg_catalog.to_regprocedure(expected.signature) IS NULL
+
+    UNION ALL
+
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    JOIN pg_catalog.pg_namespace AS namespace_row
+      ON namespace_row.oid = procedure_row.pronamespace
+    WHERE namespace_row.nspname = 'public'
+      AND procedure_row.proname IN (SELECT expected.proname FROM expected)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM expected
+        WHERE expected.proname = procedure_row.proname
+          AND procedure_row.oid IS NOT DISTINCT FROM
+                pg_catalog.to_regprocedure(expected.signature)
+      )
+
+    UNION ALL
+
+    SELECT 1
+    FROM expected
+    JOIN pg_catalog.pg_proc AS procedure_row
+      ON procedure_row.oid = pg_catalog.to_regprocedure(expected.signature)
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(
+        procedure_row.proacl,
+        pg_catalog.acldefault('f', procedure_row.proowner)
+      )
+    ) AS acl_entry
+    WHERE acl_entry.grantee <> procedure_row.proowner
+      AND NOT (
+        expected.service_callable
+        AND acl_entry.grantee = pg_catalog.to_regrole('service_role')
+        AND acl_entry.privilege_type = 'EXECUTE'
+        AND NOT acl_entry.is_grantable
+      )
+  ) THEN
+    RAISE EXCEPTION
+      'Phase-A trader-claim overload or direct function ACL inventory is not exact';
   END IF;
 END
 $postflight$;

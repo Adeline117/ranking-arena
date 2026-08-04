@@ -57,6 +57,20 @@ describe('two-phase trader-claim V2 cutover', () => {
     expect(phaseA).toContain('index_row.indexprs IS NULL')
     expect(phaseA).toContain("ARRAY['trader_id', 'source']::text[]")
     expect(phaseA).toContain("v_active_index_access_method IS DISTINCT FROM 'btree'::name")
+    expect(phaseA).toContain('DO $converge_phase_a_function_acl$')
+    expect(phaseA.match(/OWNER TO CURRENT_USER/g)).toHaveLength(7)
+    expect(phaseA).toContain('Phase-A trader-claim function ownership is not exact')
+    expect(phaseA).toContain('CREATE OR REPLACE FUNCTION public.submit_trader_claim(\n')
+    expect(phaseA).toContain('15690f785d4524bdaa06f3a8b731d54b2eab39eaa1a79c432a67b5f5dc57aba4')
+    expect(phaseA).toContain('Phase-A legacy submit definition is not the reviewed canonical body')
+    expect(phaseA).toContain('unexpected trader-claim function overloads')
+    expect(phaseA).toContain(
+      'Phase-A trader-claim overload or direct function ACL inventory is not exact'
+    )
+    expect(phaseA).toContain('Phase-A legacy submit effective capability boundary is incorrect')
+    expect(phaseA).toMatch(
+      /has_function_privilege\(\s*'anon',\s*'public\.submit_trader_claim\(uuid,text,text,text,jsonb\)'/m
+    )
   })
 
   it('guards direct verified inserts, transitions, and idempotent legacy activation replay', () => {
@@ -93,6 +107,24 @@ describe('two-phase trader-claim V2 cutover', () => {
       /LOCK TABLE public\.trader_claims, public\.verified_traders,\s*public\.user_linked_traders, public\.user_profiles,\s*public\.user_exchange_connections, public\.trader_authorizations,\s*arena\.traders\s*IN ACCESS EXCLUSIVE MODE/
     )
     expect(quarantine).toBeGreaterThan(lifecycleLock)
+    expect(
+      phaseB.indexOf('DROP TRIGGER IF EXISTS trader_claim_activation_expiry_guard')
+    ).toBeLessThan(quarantine)
+    expect(
+      phaseB.indexOf('DROP TRIGGER IF EXISTS trader_authorization_v1_contract_guard')
+    ).toBeLessThan(quarantine)
+    expect(phaseB.indexOf('DROP TRIGGER IF EXISTS trigger_trader_claims_updated_at')).toBeLessThan(
+      quarantine
+    )
+    expect(
+      phaseB.indexOf('DROP TRIGGER IF EXISTS trigger_update_trader_authorizations_updated_at')
+    ).toBeLessThan(quarantine)
+    expect(
+      phaseB.indexOf('DROP TRIGGER IF EXISTS trigger_user_exchange_connections_updated_at')
+    ).toBeLessThan(quarantine)
+    expect(phaseB).toContain('DO $pre_dml_trigger_inventory$')
+    expect(phaseB).toContain('unexpected claim-cutoff triggers must be retired before sweep DML')
+    expect(phaseB).toContain("relation.relkind IS DISTINCT FROM 'r'")
     expect(revoke).toBeGreaterThan(quarantine)
     expect(phaseB).toContain("claim.status IN ('pending', 'reviewing')")
     expect(phaseB).toContain('claim.submission_version IS DISTINCT FROM 2')
@@ -108,6 +140,22 @@ describe('two-phase trader-claim V2 cutover', () => {
     )
     expect(phaseB).toContain('legacy submit_trader_claim remains executable')
     expect(phaseB).toContain('DO $revoke_column_privileges$')
+    expect(phaseB).toContain('DO $revoke_identity_non_owner_table_acl$')
+    expect(phaseB).toContain('DO $converge_phase_b_function_acl$')
+    expect(phaseB.match(/OWNER TO CURRENT_USER/g)).toHaveLength(20)
+    expect(phaseB).toContain('Phase-B trader-claim function ownership is not exact')
+    expect(phaseB).toContain('Phase-B timestamp trigger boundary is not exact')
+    expect(phaseB).toContain('Phase-B direct trigger inventory is not exact')
+    expect(phaseB).not.toContain("trigger_row.tgenabled <> 'D'")
+    expect(phaseB).toContain('CREATE OR REPLACE FUNCTION public.submit_trader_claim_v2(\n')
+    expect(phaseB).toContain('CREATE OR REPLACE FUNCTION public.reject_trader_claim_v2(\n')
+    expect(phaseB).toContain('CREATE OR REPLACE FUNCTION public.cancel_trader_claim_v2(\n')
+    expect(phaseB).toContain('Phase-B inherited service capability definitions are not canonical')
+    expect(phaseB).toContain('unexpected trader-claim cutoff overloads')
+    expect(phaseB).toContain('identity relation direct ACL inventory is not exact')
+    expect(phaseB).toContain(
+      'Phase-B trader-claim overload or direct function ACL inventory is not exact'
+    )
     expect(phaseB).toMatch(
       /GRANT SELECT ON TABLE public\.trader_claims\s+TO authenticated, service_role/
     )
@@ -202,9 +250,29 @@ describe('two-phase trader-claim V2 cutover', () => {
     ]) {
       expect(phaseB).toContain(`'${identityColumn}'`)
     }
-    expect(phaseB).toContain('browser role retains profile trader-identity UPDATE')
+    expect(phaseB).toContain('browser role retains unsafe profile column UPDATE')
     expect(phaseB).toContain('linked-trader table or column ACL boundary drifted')
     expect(phaseB).toContain('CREATE TRIGGER user_profile_trader_identity_v1_guard')
+    expect(phaseB).toMatch(
+      /REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER\s+ON TABLE public\.user_profiles/
+    )
+    expect(phaseB).toContain(
+      'REVOKE ALL PRIVILEGES ON TABLE public.user_profiles FROM service_role'
+    )
+    expect(phaseB).toMatch(
+      /REVOKE SELECT \(%1\$s\) ON TABLE public\.user_profiles FROM service_role/
+    )
+    expect(phaseB).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE\s+ON TABLE public\.user_profiles TO service_role/
+    )
+    expect(phaseB).toMatch(/BEFORE INSERT OR UPDATE OR DELETE ON public\.user_profiles/)
+    expect(phaseB).toContain("IF TG_OP = 'INSERT' THEN")
+    expect(phaseB).toContain("ELSIF TG_OP = 'DELETE' THEN")
+    expect(phaseB).toContain('NEW.is_verified_trader IS NOT TRUE')
+    expect(phaseB).toContain('COALESCE(OLD.linked_trader_count, 0) = 0')
+    expect(phaseB).toContain('profile mutation direct ACL inventory is not exact')
+    expect(phaseB).toContain("v_privilege || ' WITH GRANT OPTION'")
+    expect(phaseB).toContain("'SELECT WITH GRANT OPTION'")
     expect(phaseB).toContain('trader identity profile fields are RPC-owned')
     expect(phaseB).toContain('profile or Arena claimed identity DML guard is incorrect')
   })

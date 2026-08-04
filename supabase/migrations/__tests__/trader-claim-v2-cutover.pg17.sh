@@ -116,6 +116,8 @@ psql_cmd -q <<'SQL'
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN NOBYPASSRLS;
+CREATE ROLE hostile_claim_admin NOLOGIN BYPASSRLS;
+CREATE ROLE inherited_profile_writer NOLOGIN NOBYPASSRLS;
 
 CREATE SCHEMA auth;
 CREATE SCHEMA extensions;
@@ -132,6 +134,8 @@ AS $$
 $$;
 GRANT USAGE ON SCHEMA auth, public, extensions, arena
   TO anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public
+  TO hostile_claim_admin, inherited_profile_writer;
 GRANT EXECUTE ON FUNCTION auth.uid()
   TO anon, authenticated, service_role;
 
@@ -143,10 +147,11 @@ INSERT INTO auth.users(id) VALUES
 
 CREATE TABLE public.user_profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id),
-  is_verified_trader boolean NOT NULL DEFAULT false,
+  is_verified_trader boolean DEFAULT false,
   verified_trader_id text,
   verified_trader_source text,
-  linked_trader_count integer NOT NULL DEFAULT 0,
+  linked_trader_count integer DEFAULT 0,
+  handle text,
   updated_at timestamptz DEFAULT pg_catalog.now()
 );
 INSERT INTO public.user_profiles(id) SELECT id FROM auth.users;
@@ -249,6 +254,40 @@ CREATE TABLE public.trader_authorizations (
   created_at timestamptz DEFAULT pg_catalog.now(),
   updated_at timestamptz DEFAULT pg_catalog.now()
 );
+
+-- Historical migrations install one shared timestamp trigger function for
+-- claims/connections and a dedicated authorization timestamp function.
+CREATE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = pg_catalog.now();
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trigger_trader_claims_updated_at
+  BEFORE UPDATE ON public.trader_claims
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_user_exchange_connections_updated_at
+  BEFORE UPDATE ON public.user_exchange_connections
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE FUNCTION public.update_trader_authorizations_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = pg_catalog.now();
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trigger_update_trader_authorizations_updated_at
+  BEFORE UPDATE ON public.trader_authorizations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_trader_authorizations_updated_at();
 
 CREATE TABLE arena.sources (
   id smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -529,7 +568,112 @@ if ! grep -q 'Phase-A migration role must own trader_claims' \
   exit 1
 fi
 
+psql_cmd -q -c \
+  "CREATE FUNCTION public.submit_trader_claim_v2(text) RETURNS text LANGUAGE sql AS 'SELECT \$1'"
+if psql_cmd -q -f "$PHASE_A" >"$TMP_ROOT/phase-a-overload.log" 2>&1; then
+  echo 'Phase A accepted an unknown claim overload' >&2
+  exit 1
+fi
+if ! grep -q 'unexpected trader-claim function overloads' \
+  "$TMP_ROOT/phase-a-overload.log"; then
+  cat "$TMP_ROOT/phase-a-overload.log" >&2
+  exit 1
+fi
+psql_cmd -q -c 'DROP FUNCTION public.submit_trader_claim_v2(text)'
+
+# A direct ACL scan cannot see role inheritance. Phase A must refuse to leave
+# its compatibility writer effectively executable by a browser role.
+psql_cmd -q -c 'GRANT service_role TO anon'
+if psql_cmd -q -f "$PHASE_A" >"$TMP_ROOT/phase-a-inherited-submit.log" 2>&1; then
+  echo 'Phase A accepted inherited browser access to legacy submit' >&2
+  exit 1
+fi
+if ! grep -q 'Phase-A legacy submit effective capability boundary is incorrect' \
+  "$TMP_ROOT/phase-a-inherited-submit.log"; then
+  cat "$TMP_ROOT/phase-a-inherited-submit.log" >&2
+  exit 1
+fi
+psql_cmd -q -c 'REVOKE service_role FROM anon'
+
 psql_cmd -q -f "$PHASE_A"
+
+# CREATE OR REPLACE must not preserve a substituted canonical-function owner on
+# byte replay. Include callable, closed legacy, and trigger-only capabilities.
+psql_cmd -q <<'SQL'
+GRANT CREATE ON SCHEMA public TO hostile_claim_admin;
+ALTER FUNCTION public.submit_trader_claim(uuid,text,text,text,jsonb)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.submit_trader_claim_v2(
+  uuid,text,text,text,timestamptz,timestamptz,text,text
+) OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.reject_trader_claim_v2(uuid,uuid,text)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.cancel_trader_claim_v2(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.activate_trader_claim(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.arena_set_trader_claimed(text,text,uuid,boolean)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.guard_trader_claim_activation_expiry()
+  OWNER TO hostile_claim_admin;
+SET ROLE hostile_claim_admin;
+CREATE OR REPLACE FUNCTION public.submit_trader_claim(
+  p_user_id uuid,
+  p_trader_id text,
+  p_source text,
+  p_verification_method text,
+  p_verification_data jsonb
+)
+RETURNS public.trader_claims
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  RAISE EXCEPTION 'hostile legacy submit body executed';
+END;
+$hostile$;
+RESET ROLE;
+REVOKE CREATE ON SCHEMA public FROM hostile_claim_admin;
+SQL
+
+psql_cmd -q -f "$PHASE_A"
+
+psql_cmd -q <<'SQL'
+DO $phase_a_owner_replay_proof$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid IN (
+      'public.submit_trader_claim(uuid,text,text,text,jsonb)'::regprocedure,
+      'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::regprocedure,
+      'public.reject_trader_claim_v2(uuid,uuid,text)'::regprocedure,
+      'public.cancel_trader_claim_v2(uuid,uuid)'::regprocedure,
+      'public.activate_trader_claim(uuid,uuid)'::regprocedure,
+      'public.arena_set_trader_claimed(text,text,uuid,boolean)'::regprocedure,
+      'public.guard_trader_claim_activation_expiry()'::regprocedure
+    )
+      AND procedure_row.proowner IS DISTINCT FROM (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = 'public.trader_claims'::regclass
+      )
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid =
+          'public.submit_trader_claim(uuid,text,text,text,jsonb)'::regprocedure
+      AND pg_catalog.encode(
+            extensions.digest(procedure_row.prosrc, 'sha256'),
+            'hex'
+          ) = '15690f785d4524bdaa06f3a8b731d54b2eab39eaa1a79c432a67b5f5dc57aba4'
+  ) THEN
+    RAISE EXCEPTION 'custom Phase-A function owner or body survived replay';
+  END IF;
+END
+$phase_a_owner_replay_proof$;
+SQL
 
 PHASE_A_COLUMN="$(
   psql_cmd -Atqc "
@@ -787,6 +931,76 @@ expect_failure pre_phase_b_unlink_v2 "
   );
 "
 
+psql_cmd -q <<'SQL'
+CREATE FUNCTION public.unlink_linked_trader_v2(text)
+RETURNS text LANGUAGE sql AS 'SELECT $1';
+SQL
+if psql_cmd -q -f "$PHASE_B" >"$TMP_ROOT/phase-b-overload.log" 2>&1; then
+  echo 'Phase B accepted an unknown claim overload' >&2
+  exit 1
+fi
+if ! grep -q 'unexpected trader-claim cutoff overloads' \
+  "$TMP_ROOT/phase-b-overload.log"; then
+  cat "$TMP_ROOT/phase-b-overload.log" >&2
+  exit 1
+fi
+psql_cmd -q -c 'DROP FUNCTION public.unlink_linked_trader_v2(text)'
+
+psql_cmd -q <<'SQL'
+CREATE TRIGGER unexpected_claim_cutover_trigger
+  BEFORE UPDATE ON public.trader_claims
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+SQL
+if psql_cmd -q -f "$PHASE_B" >"$TMP_ROOT/phase-b-trigger.log" 2>&1; then
+  echo 'Phase B accepted an unknown pre-sweep trigger' >&2
+  exit 1
+fi
+if ! grep -q 'unexpected claim-cutoff triggers must be retired before sweep DML' \
+  "$TMP_ROOT/phase-b-trigger.log"; then
+  cat "$TMP_ROOT/phase-b-trigger.log" >&2
+  exit 1
+fi
+psql_cmd -q -c \
+  'DROP TRIGGER unexpected_claim_cutover_trigger ON public.trader_claims'
+
+psql_cmd -q <<'SQL'
+GRANT ALL PRIVILEGES ON TABLE
+  public.user_linked_traders,
+  public.trader_claims,
+  public.verified_traders
+  TO hostile_claim_admin;
+GRANT UPDATE (is_primary) ON TABLE public.user_linked_traders
+  TO hostile_claim_admin;
+GRANT INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON TABLE public.user_profiles TO hostile_claim_admin;
+GRANT INSERT (
+  id, is_verified_trader, verified_trader_id, verified_trader_source,
+  linked_trader_count
+), UPDATE (
+  is_verified_trader, verified_trader_id, verified_trader_source,
+  linked_trader_count
+), REFERENCES (id)
+  ON TABLE public.user_profiles TO hostile_claim_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON TABLE public.user_profiles TO service_role WITH GRANT OPTION;
+GRANT SELECT (id), INSERT (
+  id, is_verified_trader, verified_trader_id, verified_trader_source,
+  linked_trader_count
+), UPDATE (
+  is_verified_trader, verified_trader_id, verified_trader_source,
+  linked_trader_count
+), REFERENCES (id)
+  ON TABLE public.user_profiles TO service_role WITH GRANT OPTION;
+GRANT service_role TO inherited_profile_writer;
+GRANT EXECUTE ON FUNCTION
+  public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text),
+  public.reject_trader_claim_v2(uuid,uuid,text),
+  public.cancel_trader_claim_v2(uuid,uuid),
+  public.activate_trader_claim(uuid,uuid)
+  TO hostile_claim_admin;
+SQL
+
 if psql_cmd -q -c 'SET ROLE service_role' -f "$PHASE_B" \
   >"$TMP_ROOT/phase-b-owner-mismatch.log" 2>&1; then
   echo 'Phase B accepted a migration executor that does not own identity tables' >&2
@@ -799,6 +1013,153 @@ if ! grep -q 'Phase-B migration role must own trader_claims' \
 fi
 
 psql_cmd -q -f "$PHASE_B"
+
+psql_cmd -q <<'SQL'
+DO $custom_acl_proof$
+BEGIN
+  IF pg_catalog.has_table_privilege(
+       'hostile_claim_admin', 'public.trader_claims', 'SELECT'
+     ) OR pg_catalog.has_table_privilege(
+       'hostile_claim_admin', 'public.verified_traders', 'UPDATE'
+     ) OR pg_catalog.has_column_privilege(
+       'hostile_claim_admin', 'public.user_linked_traders', 'is_primary', 'UPDATE'
+     ) OR pg_catalog.has_column_privilege(
+       'hostile_claim_admin', 'public.user_profiles', 'verified_trader_id', 'UPDATE'
+     ) OR pg_catalog.has_table_privilege(
+       'hostile_claim_admin', 'public.user_profiles', 'INSERT'
+     ) OR pg_catalog.has_table_privilege(
+       'hostile_claim_admin', 'public.user_profiles', 'DELETE'
+     ) OR pg_catalog.has_table_privilege(
+       'hostile_claim_admin', 'public.user_profiles', 'TRUNCATE'
+     ) OR pg_catalog.has_any_column_privilege(
+       'hostile_claim_admin', 'public.user_profiles', 'INSERT'
+     ) OR pg_catalog.has_any_column_privilege(
+       'hostile_claim_admin', 'public.user_profiles', 'REFERENCES'
+     ) OR NOT pg_catalog.has_table_privilege(
+       'service_role', 'public.user_profiles', 'SELECT'
+     ) OR NOT pg_catalog.has_table_privilege(
+       'service_role', 'public.user_profiles', 'INSERT'
+     ) OR NOT pg_catalog.has_table_privilege(
+       'service_role', 'public.user_profiles', 'UPDATE'
+     ) OR NOT pg_catalog.has_table_privilege(
+       'service_role', 'public.user_profiles', 'DELETE'
+     ) OR pg_catalog.has_table_privilege(
+       'service_role', 'public.user_profiles', 'SELECT WITH GRANT OPTION'
+     ) OR pg_catalog.has_table_privilege(
+       'service_role', 'public.user_profiles', 'UPDATE WITH GRANT OPTION'
+     ) OR pg_catalog.has_table_privilege(
+       'service_role', 'public.user_profiles', 'DELETE WITH GRANT OPTION'
+     ) OR pg_catalog.has_any_column_privilege(
+       'service_role', 'public.user_profiles', 'SELECT WITH GRANT OPTION'
+     ) OR pg_catalog.has_any_column_privilege(
+       'service_role', 'public.user_profiles', 'UPDATE WITH GRANT OPTION'
+     ) OR EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_attribute AS attribute
+       CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+       WHERE attribute.attrelid = 'public.user_profiles'::regclass
+         AND attribute.attnum > 0
+         AND NOT attribute.attisdropped
+         AND acl_entry.grantee = pg_catalog.to_regrole('service_role')
+         AND acl_entry.privilege_type = 'SELECT'
+     ) OR pg_catalog.has_function_privilege(
+       'hostile_claim_admin',
+       'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)',
+       'EXECUTE'
+     ) OR pg_catalog.has_function_privilege(
+       'hostile_claim_admin',
+       'public.activate_trader_claim(uuid,uuid)',
+       'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'custom claim ACL survived Phase B';
+  END IF;
+END
+$custom_acl_proof$;
+SQL
+
+psql_cmd -q <<'SQL'
+SET ROLE authenticated;
+UPDATE public.user_profiles SET handle = 'retained-safe-edit';
+RESET ROLE;
+
+DO $safe_profile_update_proof$
+BEGIN
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM public.user_profiles
+    WHERE handle = 'retained-safe-edit'
+  ) <> 3 THEN
+    RAISE EXCEPTION 'authenticated safe profile UPDATE did not survive Phase B';
+  END IF;
+END
+$safe_profile_update_proof$;
+SQL
+
+psql_cmd -q -c \
+  "INSERT INTO auth.users(id) VALUES ('99999999-9999-4999-8999-999999999999')"
+
+expect_failure hostile_bypassrls_profile_insert "
+  SET ROLE hostile_claim_admin;
+  INSERT INTO public.user_profiles(
+    id, is_verified_trader, verified_trader_id, verified_trader_source,
+    linked_trader_count
+  ) VALUES (
+    '99999999-9999-4999-8999-999999999999', true,
+    'forged-bypassrls-owner', 'hyperliquid', 1
+  );
+"
+expect_failure inherited_service_profile_forged_insert "
+  SET ROLE inherited_profile_writer;
+  INSERT INTO public.user_profiles(
+    id, is_verified_trader, verified_trader_id, verified_trader_source,
+    linked_trader_count
+  ) VALUES (
+    '99999999-9999-4999-8999-999999999999', true,
+    'forged-inherited-owner', 'hyperliquid', 1
+  );
+"
+if ! grep -q 'trader identity profile fields are RPC-owned' \
+  "$TMP_ROOT/inherited_service_profile_forged_insert.log"; then
+  cat "$TMP_ROOT/inherited_service_profile_forged_insert.log" >&2
+  exit 1
+fi
+
+NEUTRAL_PROFILE_INSERT="$(
+  psql_cmd -Atqc "
+    SET ROLE inherited_profile_writer;
+    INSERT INTO public.user_profiles(id, is_verified_trader, linked_trader_count)
+    VALUES ('99999999-9999-4999-8999-999999999999', NULL, NULL)
+    RETURNING id;
+  "
+)"
+if [[ "$NEUTRAL_PROFILE_INSERT" != '99999999-9999-4999-8999-999999999999' ]]; then
+  echo "inherited neutral profile insert failed: $NEUTRAL_PROFILE_INSERT" >&2
+  exit 1
+fi
+
+expect_failure inherited_service_authoritative_profile_delete "
+  SET ROLE inherited_profile_writer;
+  DELETE FROM public.user_profiles
+  WHERE id = '22222222-2222-2222-2222-222222222222';
+"
+if ! grep -q 'trader identity profile fields are RPC-owned' \
+  "$TMP_ROOT/inherited_service_authoritative_profile_delete.log"; then
+  cat "$TMP_ROOT/inherited_service_authoritative_profile_delete.log" >&2
+  exit 1
+fi
+
+NEUTRAL_PROFILE_DELETE="$(
+  psql_cmd -Atqc "
+    SET ROLE inherited_profile_writer;
+    DELETE FROM public.user_profiles
+    WHERE id = '99999999-9999-4999-8999-999999999999'
+    RETURNING id;
+  "
+)"
+if [[ "$NEUTRAL_PROFILE_DELETE" != '99999999-9999-4999-8999-999999999999' ]]; then
+  echo "inherited neutral profile delete failed: $NEUTRAL_PROFILE_DELETE" >&2
+  exit 1
+fi
 
 CUTOFF_STATE="$(
   psql_cmd -Atqc "
@@ -1912,6 +2273,266 @@ fi
 
 # Replay must converge after the old RPC is already revoked and policies/ACLs
 # have reached their final form.
+psql_cmd -q <<'SQL'
+CREATE TABLE public.claim_cutover_guard_sentinel (label text NOT NULL);
+GRANT INSERT ON TABLE public.claim_cutover_guard_sentinel
+  TO hostile_claim_admin;
+INSERT INTO public.trader_claims (
+  id, user_id, trader_id, source, verification_method, verification_data,
+  submission_version, status
+) VALUES (
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  '11111111-1111-1111-1111-111111111111',
+  'claim-guard-replay', 'binance', 'api_key', '{}'::jsonb, 1, 'reviewing'
+);
+ALTER TABLE public.trader_authorizations
+  DISABLE TRIGGER trader_authorization_v1_contract_guard;
+INSERT INTO public.trader_authorizations (
+  id, user_id, platform, trader_id, encrypted_api_key,
+  encrypted_api_secret, permissions, status, last_sync_status
+) VALUES (
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1',
+  '22222222-2222-2222-2222-222222222222',
+  'mexc', 'authorization-guard-replay', 'guard-replay-key',
+  'guard-replay-secret', '["read"]'::jsonb, 'active', 'pending'
+);
+ALTER TABLE public.trader_authorizations
+  ENABLE TRIGGER trader_authorization_v1_contract_guard;
+
+GRANT CREATE ON SCHEMA public TO hostile_claim_admin;
+ALTER FUNCTION public.submit_trader_claim(uuid,text,text,text,jsonb)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.submit_trader_claim_v2(
+  uuid,text,text,text,timestamptz,timestamptz,text,text
+) OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.reject_trader_claim_v2(uuid,uuid,text)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.cancel_trader_claim_v2(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.activate_trader_claim(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.activate_trader_claim_v2(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.set_primary_linked_trader(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.set_primary_linked_trader_v2(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.unlink_linked_trader(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.unlink_linked_trader_v2(uuid,uuid)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.arena_set_trader_claimed(text,text,uuid,boolean)
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.update_linked_trader_metadata_v1(
+  uuid,uuid,boolean,text,boolean,integer
+) OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.guard_trader_claim_activation_expiry()
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.guard_trader_authorization_v1_contract()
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.serialize_exchange_connection_v1_mutation()
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.guard_exchange_connection_authorization_v1_contract()
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.guard_user_profile_trader_identity_v1()
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.guard_arena_trader_claimed_meta_v1()
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.update_updated_at_column()
+  OWNER TO hostile_claim_admin;
+ALTER FUNCTION public.update_trader_authorizations_updated_at()
+  OWNER TO hostile_claim_admin;
+SET ROLE hostile_claim_admin;
+CREATE OR REPLACE FUNCTION public.submit_trader_claim_v2(
+  p_user_id uuid,
+  p_trader_id text,
+  p_source text,
+  p_challenge_id text,
+  p_challenge_issued_at timestamptz,
+  p_verified_at timestamptz,
+  p_message_digest text,
+  p_signature_digest text
+)
+RETURNS public.trader_claims
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  RAISE EXCEPTION 'hostile V2 submit body executed';
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.reject_trader_claim_v2(
+  p_claim_id uuid,
+  p_reviewer_id uuid,
+  p_reject_reason text
+)
+RETURNS public.trader_claims
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  RAISE EXCEPTION 'hostile V2 reject body executed';
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.cancel_trader_claim_v2(
+  p_claim_id uuid,
+  p_user_id uuid
+)
+RETURNS public.trader_claims
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  RAISE EXCEPTION 'hostile V2 cancel body executed';
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.guard_trader_claim_activation_expiry()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.claim_cutover_guard_sentinel(label)
+  VALUES ('claim');
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.guard_trader_authorization_v1_contract()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.claim_cutover_guard_sentinel(label)
+  VALUES ('authorization');
+  RETURN NEW;
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.claim_cutover_guard_sentinel(label)
+  VALUES ('shared timestamp');
+  RETURN NEW;
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.update_trader_authorizations_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.claim_cutover_guard_sentinel(label)
+  VALUES ('authorization timestamp');
+  RETURN NEW;
+END;
+$hostile$;
+RESET ROLE;
+REVOKE CREATE ON SCHEMA public FROM hostile_claim_admin;
+GRANT EXECUTE ON FUNCTION public.update_updated_at_column(),
+  public.update_trader_authorizations_updated_at()
+  TO inherited_profile_writer;
+SQL
+
 psql_cmd -q -f "$PHASE_B"
+
+psql_cmd -q <<'SQL'
+DO $phase_b_owner_replay_proof$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid IN (
+      'public.submit_trader_claim(uuid,text,text,text,jsonb)'::regprocedure,
+      'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::regprocedure,
+      'public.reject_trader_claim_v2(uuid,uuid,text)'::regprocedure,
+      'public.cancel_trader_claim_v2(uuid,uuid)'::regprocedure,
+      'public.activate_trader_claim(uuid,uuid)'::regprocedure,
+      'public.activate_trader_claim_v2(uuid,uuid)'::regprocedure,
+      'public.set_primary_linked_trader(uuid,uuid)'::regprocedure,
+      'public.set_primary_linked_trader_v2(uuid,uuid)'::regprocedure,
+      'public.unlink_linked_trader(uuid,uuid)'::regprocedure,
+      'public.unlink_linked_trader_v2(uuid,uuid)'::regprocedure,
+      'public.arena_set_trader_claimed(text,text,uuid,boolean)'::regprocedure,
+      'public.update_linked_trader_metadata_v1(uuid,uuid,boolean,text,boolean,integer)'::regprocedure,
+      'public.guard_trader_claim_activation_expiry()'::regprocedure,
+      'public.guard_trader_authorization_v1_contract()'::regprocedure,
+      'public.serialize_exchange_connection_v1_mutation()'::regprocedure,
+      'public.guard_exchange_connection_authorization_v1_contract()'::regprocedure,
+      'public.guard_user_profile_trader_identity_v1()'::regprocedure,
+      'public.guard_arena_trader_claimed_meta_v1()'::regprocedure,
+      'public.update_updated_at_column()'::regprocedure,
+      'public.update_trader_authorizations_updated_at()'::regprocedure
+    )
+      AND procedure_row.proowner IS DISTINCT FROM (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = 'public.trader_claims'::regclass
+      )
+  ) OR EXISTS (
+    WITH expected(signature, source_sha256) AS (
+      VALUES
+        (
+          'public.submit_trader_claim_v2(uuid,text,text,text,timestamptz,timestamptz,text,text)'::text,
+          '2316424a0fdd0fb0ea26d7a1b31dd8686353c30f5dbfb6d311ca24f5d57c19c4'::text
+        ),
+        (
+          'public.reject_trader_claim_v2(uuid,uuid,text)'::text,
+          '0dfc5f8a70957120c39a260a6124b19cceeabf4895a94cbc760e44624b5e6dbf'::text
+        ),
+        (
+          'public.cancel_trader_claim_v2(uuid,uuid)'::text,
+          '6b1928167cf273cd7a873c109c2ee5446c36c9a53c304b6c99fd0d9e6bc28f69'::text
+        )
+    )
+    SELECT 1
+    FROM expected
+    JOIN pg_catalog.pg_proc AS procedure_row
+      ON procedure_row.oid = pg_catalog.to_regprocedure(expected.signature)
+    WHERE pg_catalog.encode(
+            extensions.digest(procedure_row.prosrc, 'sha256'),
+            'hex'
+          ) IS DISTINCT FROM expected.source_sha256
+  ) THEN
+    RAISE EXCEPTION 'custom Phase-B function owner or body survived replay';
+  END IF;
+
+  IF EXISTS (
+       SELECT 1 FROM public.claim_cutover_guard_sentinel
+     ) OR NOT EXISTS (
+       SELECT 1
+       FROM public.trader_claims
+       WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+         AND status = 'expired'
+     ) OR NOT EXISTS (
+       SELECT 1
+       FROM public.trader_authorizations
+       WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1'
+         AND status = 'revoked'
+     ) THEN
+    RAISE EXCEPTION
+      'hostile cutoff guard executed before replay quarantine convergence';
+  END IF;
+END
+$phase_b_owner_replay_proof$;
+DELETE FROM public.trader_authorizations
+WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1';
+DELETE FROM public.trader_claims
+WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+DROP TABLE public.claim_cutover_guard_sentinel;
+SQL
 
 echo 'Trader claim V2 two-phase cutoff PostgreSQL 17 proof passed'
