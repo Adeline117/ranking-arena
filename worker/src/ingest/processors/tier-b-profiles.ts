@@ -10,19 +10,19 @@ import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getLatestPassedNativeCohort, type NativeCohortTrader } from '@/lib/ingest/native-cohort'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
-import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
 import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import {
   findIncompleteProfileWindow,
   IncompleteProfileWindowError,
 } from '@/lib/ingest/core/profile-coverage'
-import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/ingest/core/types'
+import type { HistoryKind, ParseCtx, SourceRow } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
-import { writeRawObject } from '@/lib/ingest/raw'
+import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
+import { writeHistoryRawArtifact, writeRawObject } from '@/lib/ingest/raw'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
-import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
+import { publishProfile } from '@/lib/ingest/serving/publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
@@ -30,6 +30,7 @@ import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
 } from '../consumed-region-context'
+import { runHistoryTransaction } from '../history-transaction'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
@@ -96,61 +97,40 @@ function historyKinds(adapter: SourceAdapter, src: SourceRow): HistoryKind[] {
 }
 
 /**
- * Incremental history pass for ONE trader within the same session (spec
- * §2.3 Histories): newest pages until cursor overlap, idempotent upsert by
- * dedupe_hash, cursor advanced to the newest row seen.
+ * Capture every supported history surface as immutable evidence. Legacy
+ * history cursors are intentionally ignored: they may have been advanced by
+ * the former fail-open publisher and therefore cannot anchor new proof.
+ *
+ * Typed publication remains disabled here until the database authority can
+ * bind exact RAW, verified termination, parsed facts, membership, and the new
+ * evidence cursor in one owner-only transaction. A verified capture is still
+ * durable and replayable; every other evidence state is explicitly RAW-only.
  */
 async function crawlTraderHistories(
   session: FetchSession,
   adapter: SourceAdapter,
   src: SourceRow,
-  trader: NativeCohortTrader,
-  ctx: ParseCtx
+  trader: NativeCohortTrader
 ): Promise<number> {
-  let written = 0
   for (const kind of historyKinds(adapter, src)) {
-    const cursor = await getHistoryCursor(trader.id, kind)
-    const rawPages: unknown[] = []
-    let fetchError: unknown = null
-
-    try {
-      for await (const page of adapter.getHistory(
-        session,
-        src,
-        trader.exchange_trader_id,
-        kind,
-        cursor,
-        trader.meta
-      )) {
-        rawPages.push(page)
-      }
-    } catch (error) {
-      fetchError = error
-    }
-
-    if (rawPages.length > 0 || fetchError !== null) {
-      await writeRawObject({
-        sourceId: src.id,
-        sourceSlug: src.slug,
-        jobType: `history:${kind}`,
-        traderId: trader.id,
-        timeframe: null,
-        payload: rawPages,
-        meta: { fetch_failed: fetchError !== null },
-      })
-    }
-    if (fetchError !== null) throw fetchError
-    if (rawPages.length === 0) continue
-
-    // RAW is durable before an incomplete or changed payload can be rejected.
-    const rows: ParsedHistoryRow[] = rawPages.flatMap((rawPage) => {
-      const page = rawPage as import('@/lib/ingest/core/types').RawPage
-      return adapter.parseHistory(page.payload, kind, ctx)
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: trader.id,
+      exchangeTraderId: trader.exchange_trader_id,
+      kind,
+      cursor: null,
+      attemptStartedAt: new Date().toISOString(),
+      stream: adapter.getHistory(session, src, trader.exchange_trader_id, kind, null, trader.meta),
+      terminalVerifier: adapter.historyTerminalVerifier?.(src, kind) ?? undefined,
     })
+    await writeHistoryRawArtifact(
+      { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId },
+      runHistoryTransaction
+    )
 
-    written += await publishHistoryRows(src, trader.id, kind, rows, nextHistoryCursor(rows, cursor))
+    if (acquisition.error !== null) throw acquisition.error
   }
-  return written
+  return 0
 }
 
 export async function processTierB(
@@ -384,23 +364,10 @@ export async function processTierB(
 
       if (allTimeframesSuccessful) {
         result.tradersCrawled += 1
-        // Histories ride the same session right after the profile (spec
-        // §2.3): incremental, cursor-overlap stop, idempotent upserts.
+        // Histories ride the same session right after the profile, but remain
+        // evidence-only until the verified publication authority is installed.
         try {
-          const ctx: ParseCtx = {
-            sourceSlug: src.slug,
-            currency: src.currency,
-            tfLabelMap: src.tf_label_map,
-            scrapedAt: new Date().toISOString(),
-            meta: src.meta,
-          }
-          result.historyRowsWritten += await crawlTraderHistories(
-            session,
-            adapter,
-            src,
-            trader,
-            ctx
-          )
+          result.historyRowsWritten += await crawlTraderHistories(session, adapter, src, trader)
         } catch (err) {
           result.errors += 1
           console.warn(
