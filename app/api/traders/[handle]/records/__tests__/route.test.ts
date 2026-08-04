@@ -114,7 +114,7 @@ describe('records route provenance and completeness', () => {
     mockRecordsPageFromTierC.mockReturnValue(null)
   })
 
-  it('returns warm history without invoking Tier-C or changing trust metadata', async () => {
+  it('never serves unknown warm history and falls back to the bounded Tier-C preview', async () => {
     const page: RecordsPage = {
       rows: [{ symbol: 'BTCUSDT' }],
       nextCursor: null,
@@ -123,15 +123,23 @@ describe('records route provenance and completeness', () => {
       completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     }
     mockGetRecordsPage.mockResolvedValue(page)
+    const workerPayload = { rows: [{ symbol: 'ETHUSDT' }] }
+    const fetched: RecordsPage = {
+      rows: [{ symbol: 'ETHUSDT' }],
+      nextCursor: null,
+      provenance: provenance('2026-08-03T12:00:00.000Z'),
+      cacheState: 'cold-fetched',
+      completeness: { state: 'partial', reason: 'interactive_preview' },
+    }
+    mockRequestTierC.mockResolvedValue(workerPayload)
+    mockRecordsPageFromTierC.mockReturnValue(fetched)
 
     const response = await callRoute()
     const body = await response.json()
 
-    expect(body.data).toEqual(page)
-    expect(response.headers.get('Cache-Control')).toBe(
-      'public, max-age=30, s-maxage=30, stale-while-revalidate=120'
-    )
-    expect(mockRequestTierC).not.toHaveBeenCalled()
+    expect(body.data).toEqual(fetched)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(mockRequestTierC).toHaveBeenCalled()
   })
 
   it('returns the Tier-C preview with no-store and exact routing coordinates', async () => {
@@ -182,6 +190,28 @@ describe('records route provenance and completeness', () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 
+  it('does not echo legacy warm history when the Tier-C preview is unavailable', async () => {
+    const legacyWarm: RecordsPage = {
+      rows: [{ symbol: 'BTCUSDT', realized_pnl: 99 }],
+      nextCursor: 'legacy-next',
+      provenance: provenance('2026-08-03T11:00:00.000Z'),
+      cacheState: 'warm',
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    }
+    mockGetRecordsPage.mockResolvedValue(legacyWarm)
+
+    const response = await callRoute()
+    const body = await response.json()
+
+    expect(body.data).toEqual({
+      ...legacyWarm,
+      rows: [],
+      nextCursor: null,
+      cacheState: 'pending',
+    })
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+  })
+
   it('never fills a fully cold pending page with the request time', async () => {
     const response = await callRoute()
     const body = await response.json()
@@ -192,5 +222,23 @@ describe('records route provenance and completeness', () => {
       completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
     expect(body.data.provenance).not.toHaveProperty('asOf')
+  })
+
+  it('does not replay the first Tier-C preview for a stale history cursor', async () => {
+    const page: RecordsPage = {
+      rows: [],
+      nextCursor: null,
+      provenance: provenance('2026-08-03T11:00:00.000Z'),
+      cacheState: 'warm',
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    }
+    mockGetRecordsPage.mockResolvedValue(page)
+
+    const response = await callRoute('legacy-history-cursor')
+    const body = await response.json()
+
+    expect(body.data).toEqual({ ...page, cacheState: 'pending' })
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(mockRequestTierC).not.toHaveBeenCalled()
   })
 })

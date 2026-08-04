@@ -129,7 +129,7 @@ describe('copier PII rule (spec §6)', () => {
 })
 
 describe('getRecordsPage', () => {
-  it('maps RPC jsonb to RecordsPage and sanitizes rows', async () => {
+  it('fails closed over legacy warm position history until a receipt-bound projection exists', async () => {
     const page = await getRecordsPage(
       rpcClient({
         rows: [
@@ -153,11 +153,8 @@ describe('getRecordsPage', () => {
       null
     )
     expect(page).not.toBeNull()
-    expect(page!.rows).toEqual([
-      { symbol: 'BTCUSDT', realized_pnl: 10 },
-      { symbol: 'ETHUSDT', realized_pnl: -3 },
-    ])
-    expect(page!.nextCursor).toBe('2026-06-01 00:00:00+00|abc')
+    expect(page!.rows).toEqual([])
+    expect(page!.nextCursor).toBeNull()
     expect(page!.cacheState).toBe('warm')
     // Legacy `asOf` was often the RPC's now(); it is intentionally ignored.
     expect(page!.provenance).toEqual({
@@ -174,14 +171,20 @@ describe('getRecordsPage', () => {
     })
   })
 
-  it('does not attach history completeness to non-history record kinds', async () => {
+  it('preserves rows and pagination without attaching history completeness to non-history kinds', async () => {
     const page = await getRecordsPage(
-      rpcClient({ rows: [], nextCursor: null, asOf: '2026-06-10T12:00:00Z' }),
+      rpcClient({
+        rows: [{ order_id: 'order-1' }],
+        nextCursor: 'orders-next',
+        asOf: '2026-06-10T12:00:00Z',
+      }),
       'bitget_futures',
       'abc',
       'orders',
       null
     )
+    expect(page!.rows).toEqual([{ order_id: 'order-1' }])
+    expect(page!.nextCursor).toBe('orders-next')
     expect(page!.completeness).toBeUndefined()
   })
 

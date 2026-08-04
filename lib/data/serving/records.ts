@@ -228,9 +228,15 @@ export async function getRecordsPage(
   logRpcError('arena_records_page', error)
   if (error || !isPlainRecord(data)) return null
   const d = data
+  // `arena_records_page` still projects legacy typed position-history rows.
+  // Those rows are not bound to the parser-conservation receipt contract, so
+  // neither their contents nor their pagination boundary can be served as warm
+  // truth. Keep the observation clocks for cold-cache routing, but fail closed
+  // until the RPC is replaced by a receipt-bound projection.
+  const mayServeRows = kind !== 'position_history'
   return {
-    rows: sanitizeRecordRows(d.rows),
-    nextCursor: typeof d.nextCursor === 'string' ? d.nextCursor : null,
+    rows: mayServeRows ? sanitizeRecordRows(d.rows) : [],
+    nextCursor: mayServeRows && typeof d.nextCursor === 'string' ? d.nextCursor : null,
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
     ...(kind === 'position_history' ? { completeness: unknownHistoryCompleteness() } : {}),
