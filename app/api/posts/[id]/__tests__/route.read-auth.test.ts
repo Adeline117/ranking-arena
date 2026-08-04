@@ -2,6 +2,8 @@
 
 const mockGetAuthUser = jest.fn()
 const mockGetPostById = jest.fn()
+const mockGetUserPostReaction = jest.fn()
+const mockGetUserPostVote = jest.fn()
 const mockUpdateCount = jest.fn()
 const mockSupabase = {}
 
@@ -11,8 +13,8 @@ jest.mock('@/lib/supabase/server', () => ({
 }))
 jest.mock('@/lib/data/posts', () => ({
   getPostById: (...args: unknown[]) => mockGetPostById(...args),
-  getUserPostReaction: jest.fn(),
-  getUserPostVote: jest.fn(),
+  getUserPostReaction: (...args: unknown[]) => mockGetUserPostReaction(...args),
+  getUserPostVote: (...args: unknown[]) => mockGetUserPostVote(...args),
   deletePost: jest.fn(),
 }))
 jest.mock('@/lib/services/counters', () => ({
@@ -32,6 +34,8 @@ describe('GET /api/posts/[id] optional viewer boundary', () => {
     jest.clearAllMocks()
     mockGetAuthUser.mockResolvedValue(null)
     mockGetPostById.mockResolvedValue({ id: POST_ID, title: 'Post' })
+    mockGetUserPostReaction.mockResolvedValue(null)
+    mockGetUserPostVote.mockResolvedValue(null)
   })
 
   it('rejects an invalid bearer before reading or incrementing the post', async () => {
@@ -56,5 +60,22 @@ describe('GET /api/posts/[id] optional viewer boundary', () => {
     expect(mockGetAuthUser).not.toHaveBeenCalled()
     expect(mockGetPostById).toHaveBeenCalledWith(mockSupabase, POST_ID, undefined)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('fails closed when authenticated interaction truth cannot be read', async () => {
+    mockGetAuthUser.mockResolvedValue({ id: 'user-a' })
+    mockGetUserPostReaction.mockRejectedValue(new Error('reaction read failed'))
+
+    const response = await GET(
+      new NextRequest(`https://arena.test/api/posts/${POST_ID}`, {
+        headers: { authorization: 'Bearer valid-token' },
+      }),
+      context
+    )
+
+    expect(response.status).toBe(500)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vary')).toContain('Authorization')
   })
 })

@@ -491,6 +491,22 @@ describe('GET /api/feed/personalized', () => {
     )
   })
 
+  it('fails closed instead of publishing empty interaction state after a read failure', async () => {
+    const id = postId(1)
+    mockGetAuthUser.mockResolvedValue({ id: USER_A })
+    mockGetOrSet.mockResolvedValue([id])
+    queueTableResult('posts', { data: [currentPost(id)], error: null })
+    queueTableResult('user_profiles', { data: [currentProfile()], error: null })
+    mockGetUserPostReactions.mockRejectedValue(new Error('interaction read failed'))
+
+    const res = await GET(viewerRequest())
+
+    expect(res.status).toBe(500)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(res.headers.get('Vary')).toContain('Authorization')
+  })
+
   it('falls back to ID-only hot candidates when the personalized RPC is unavailable', async () => {
     const id = postId(1)
     mockGetAuthUser.mockResolvedValue({ id: USER_A })

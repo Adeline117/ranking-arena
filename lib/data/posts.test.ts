@@ -47,6 +47,17 @@ const createMockSupabase = () => ({
   rpc: jest.fn().mockResolvedValue({ data: true, error: null }),
 })
 
+function resolveEqQuery(
+  mockSupabase: ReturnType<typeof createMockSupabase>,
+  data: unknown,
+  error: Error | null = null
+) {
+  mockSupabase.eq.mockReturnValueOnce({
+    ...mockSupabase,
+    then: (resolve: MockResolve<unknown>) => resolve({ data, error }),
+  })
+}
+
 describe('getPosts', () => {
   test('should return posts with author avatars', async () => {
     const mockSupabase = createMockSupabase()
@@ -322,6 +333,31 @@ describe('getUserPostReaction', () => {
     )
     expect(result).toBe('up')
   })
+
+  test('should surface a reaction database failure instead of publishing null', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: new Error('reaction read failed'),
+    })
+
+    await expect(
+      getUserPostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).rejects.toThrow('reaction read failed')
+  })
+
+  test.each([
+    ['invalid enum', { reaction_type: 'sideways' }],
+    ['extra field', { reaction_type: 'up', user_id: 'user1' }],
+    ['missing data acknowledgement', undefined],
+  ])('should fail closed for %s', async (_label, data) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({ data, error: null })
+
+    await expect(
+      getUserPostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).rejects.toThrow('invalid data')
+  })
 })
 
 describe('togglePostReaction', () => {
@@ -473,6 +509,31 @@ describe('getUserPostVote', () => {
     )
     expect(result).toBe('bull')
   })
+
+  test('should surface a vote database failure instead of publishing null', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: new Error('vote read failed'),
+    })
+
+    await expect(
+      getUserPostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).rejects.toThrow('vote read failed')
+  })
+
+  test.each([
+    ['invalid enum', { choice: 'maybe' }],
+    ['extra field', { choice: 'bull', user_id: 'user1' }],
+    ['missing data acknowledgement', undefined],
+  ])('should fail closed for %s', async (_label, data) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({ data, error: null })
+
+    await expect(
+      getUserPostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).rejects.toThrow('invalid data')
+  })
 })
 
 describe('togglePostVote', () => {
@@ -586,6 +647,45 @@ describe('getUserPostReactions', () => {
     expect(result.get('post1')).toBe('up')
     expect(result.get('post2')).toBe('down')
   })
+
+  test('skips the database for an empty post set', async () => {
+    const mockSupabase = createMockSupabase()
+
+    await expect(
+      getUserPostReactions(mockSupabase as unknown as SupabaseClient, [], 'user1')
+    ).resolves.toEqual(new Map())
+    expect(mockSupabase.from).not.toHaveBeenCalled()
+  })
+
+  test('surfaces a batch reaction database failure', async () => {
+    const mockSupabase = createMockSupabase()
+    resolveEqQuery(mockSupabase, null, new Error('batch reaction read failed'))
+
+    await expect(
+      getUserPostReactions(mockSupabase as unknown as SupabaseClient, ['post1'], 'user1')
+    ).rejects.toThrow('batch reaction read failed')
+  })
+
+  test.each([
+    ['null data', null],
+    ['invalid enum', [{ post_id: 'post1', reaction_type: 'sideways' }]],
+    ['unrequested row', [{ post_id: 'post2', reaction_type: 'up' }]],
+    [
+      'duplicate row',
+      [
+        { post_id: 'post1', reaction_type: 'up' },
+        { post_id: 'post1', reaction_type: 'up' },
+      ],
+    ],
+    ['extra field', [{ post_id: 'post1', reaction_type: 'up', user_id: 'user1' }]],
+  ])('fails closed for %s', async (_label, data) => {
+    const mockSupabase = createMockSupabase()
+    resolveEqQuery(mockSupabase, data)
+
+    await expect(
+      getUserPostReactions(mockSupabase as unknown as SupabaseClient, ['post1'], 'user1')
+    ).rejects.toThrow('invalid data')
+  })
 })
 
 describe('getUserPostVotes', () => {
@@ -611,5 +711,35 @@ describe('getUserPostVotes', () => {
     )
     expect(result.get('post1')).toBe('bull')
     expect(result.get('post2')).toBe('bear')
+  })
+
+  test('surfaces a batch vote database failure', async () => {
+    const mockSupabase = createMockSupabase()
+    resolveEqQuery(mockSupabase, null, new Error('batch vote read failed'))
+
+    await expect(
+      getUserPostVotes(mockSupabase as unknown as SupabaseClient, ['post1'], 'user1')
+    ).rejects.toThrow('batch vote read failed')
+  })
+
+  test.each([
+    ['null data', null],
+    ['invalid enum', [{ post_id: 'post1', choice: 'maybe' }]],
+    ['unrequested row', [{ post_id: 'post2', choice: 'bull' }]],
+    [
+      'duplicate row',
+      [
+        { post_id: 'post1', choice: 'bull' },
+        { post_id: 'post1', choice: 'bull' },
+      ],
+    ],
+    ['extra field', [{ post_id: 'post1', choice: 'bull', user_id: 'user1' }]],
+  ])('fails closed for %s', async (_label, data) => {
+    const mockSupabase = createMockSupabase()
+    resolveEqQuery(mockSupabase, data)
+
+    await expect(
+      getUserPostVotes(mockSupabase as unknown as SupabaseClient, ['post1'], 'user1')
+    ).rejects.toThrow('invalid data')
   })
 })

@@ -685,6 +685,57 @@ export async function deletePost(
 // migration defines it). If post-view counting is reintroduced, add an
 // atomic RPC migration first (see CLAUDE.md counter rules).
 
+export class PostInteractionReadError extends Error {
+  constructor() {
+    super('Post interaction read returned invalid data')
+    this.name = 'PostInteractionReadError'
+  }
+}
+
+function isExactInteractionRow(
+  value: unknown,
+  expectedKeys: readonly string[]
+): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const actualKeys = Object.keys(value).sort()
+  const keys = [...expectedKeys].sort()
+  return actualKeys.length === keys.length && actualKeys.every((key, index) => key === keys[index])
+}
+
+function readInteractionValue<T extends string>(
+  value: unknown,
+  key: string,
+  allowed: readonly T[]
+): T {
+  if (!isExactInteractionRow(value, [key]) || !allowed.includes(value[key] as T)) {
+    throw new PostInteractionReadError()
+  }
+  return value[key] as T
+}
+
+function readInteractionMap<T extends string>(
+  value: unknown,
+  requestedPostIds: ReadonlySet<string>,
+  key: string,
+  allowed: readonly T[]
+): Map<string, T> {
+  if (!Array.isArray(value)) throw new PostInteractionReadError()
+  const result = new Map<string, T>()
+  for (const row of value) {
+    if (
+      !isExactInteractionRow(row, ['post_id', key]) ||
+      typeof row.post_id !== 'string' ||
+      !requestedPostIds.has(row.post_id) ||
+      result.has(row.post_id) ||
+      !allowed.includes(row[key] as T)
+    ) {
+      throw new PostInteractionReadError()
+    }
+    result.set(row.post_id, row[key] as T)
+  }
+  return result
+}
+
 /**
  * 获取用户对帖子的点赞状态
  */
@@ -700,8 +751,9 @@ export async function getUserPostReaction(
     .eq('user_id', userId)
     .maybeSingle()
 
-  if (error || !data) return null
-  return data.reaction_type as 'up' | 'down'
+  if (error) throw error
+  if (data === null) return null
+  return readInteractionValue(data, 'reaction_type', ['up', 'down'] as const)
 }
 
 /**
@@ -792,8 +844,9 @@ export async function getUserPostVote(
     .eq('user_id', userId)
     .maybeSingle()
 
-  if (error || !data) return null
-  return data.choice as 'bull' | 'bear' | 'wait'
+  if (error) throw error
+  if (data === null) return null
+  return readInteractionValue(data, 'choice', ['bull', 'bear', 'wait'] as const)
 }
 
 /**
@@ -872,19 +925,16 @@ export async function getUserPostReactions(
   postIds: string[],
   userId: string
 ): Promise<Map<string, 'up' | 'down'>> {
+  const requestedPostIds = new Set(postIds)
+  if (requestedPostIds.size === 0) return new Map()
   const { data, error } = await supabase
     .from('post_likes')
     .select('post_id, reaction_type')
-    .in('post_id', postIds)
+    .in('post_id', [...requestedPostIds])
     .eq('user_id', userId)
 
-  const map = new Map<string, 'up' | 'down'>()
-  if (!error && data) {
-    data.forEach((d: { post_id: string; reaction_type: string }) => {
-      map.set(d.post_id, d.reaction_type as 'up' | 'down')
-    })
-  }
-  return map
+  if (error) throw error
+  return readInteractionMap(data, requestedPostIds, 'reaction_type', ['up', 'down'] as const)
 }
 
 /**
@@ -895,17 +945,14 @@ export async function getUserPostVotes(
   postIds: string[],
   userId: string
 ): Promise<Map<string, 'bull' | 'bear' | 'wait'>> {
+  const requestedPostIds = new Set(postIds)
+  if (requestedPostIds.size === 0) return new Map()
   const { data, error } = await supabase
     .from('post_votes')
     .select('post_id, choice')
-    .in('post_id', postIds)
+    .in('post_id', [...requestedPostIds])
     .eq('user_id', userId)
 
-  const map = new Map<string, 'bull' | 'bear' | 'wait'>()
-  if (!error && data) {
-    data.forEach((d: { post_id: string; choice: string }) => {
-      map.set(d.post_id, d.choice as 'bull' | 'bear' | 'wait')
-    })
-  }
-  return map
+  if (error) throw error
+  return readInteractionMap(data, requestedPostIds, 'choice', ['bull', 'bear', 'wait'] as const)
 }
