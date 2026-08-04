@@ -29,9 +29,11 @@ import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import {
   getHistoryCursor,
+  getPositionHistoryPublicationCheckpoint,
   publishHistoryRows,
-  publishHistoryRowsInTransaction,
   publishProfile,
+  publishTierBVerifiedPositionHistoryInTransaction,
+  type PositionHistoryPublicationCheckpoint,
 } from '@/lib/ingest/serving/publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
@@ -56,6 +58,20 @@ import { runHistoryTransaction } from '../history-transaction'
  */
 /** Compatibility marker recording a terminal deep-profile attempt. */
 const PROFILED_CURSOR_KIND = 'tierb_profiled'
+
+function rawObjectReceiptId(receipt: unknown): number {
+  if (
+    receipt === null ||
+    typeof receipt !== 'object' ||
+    !('id' in receipt) ||
+    typeof receipt.id !== 'number' ||
+    !Number.isSafeInteger(receipt.id) ||
+    receipt.id <= 0
+  ) {
+    throw new Error('[tier-b] RAW pointer transaction returned an invalid receipt')
+  }
+  return receipt.id
+}
 
 async function markProfileAttempted(traderId: number): Promise<void> {
   await getIngestPool().query(
@@ -112,8 +128,9 @@ async function persistPositionHistory(
   src: SourceRow,
   trader: NativeCohortTrader,
   ctx: ParseCtx,
-  cursor: string | null
+  checkpoint: PositionHistoryPublicationCheckpoint
 ): Promise<number> {
+  const cursor = checkpoint.cursor
   const acquisition = await captureHistoryAcquisition({
     source: src,
     traderId: trader.id,
@@ -154,19 +171,20 @@ async function persistPositionHistory(
     const rows: ParsedHistoryRow[] = acquisition.pages.flatMap((page) =>
       adapter.parseHistory(page.payload, 'position_history', ctx)
     )
-    const nextCursor = nextHistoryCursor(rows, cursor)
+    // A verified overlap with no newer events retains the authoritative head;
+    // null means genesis remained empty, never "forget the receipt cursor".
+    const nextCursor = nextHistoryCursor(rows, cursor) ?? cursor
 
     return runHistoryTransaction(async (transaction) => {
-      const receipt = await persistRawPointer(transaction)
-      written = await publishHistoryRowsInTransaction(
-        transaction,
-        src,
-        trader.id,
-        'position_history',
+      const rawReceipt = await persistRawPointer(transaction)
+      const publication = await publishTierBVerifiedPositionHistoryInTransaction(transaction, {
+        rawObjectId: rawObjectReceiptId(rawReceipt),
+        previousPublicationId: checkpoint.publicationId,
+        effectiveCursorAfter: nextCursor,
         rows,
-        nextCursor
-      )
-      return receipt
+      })
+      written = publication.rowsWritten
+      return rawReceipt
     })
   }
 
@@ -208,11 +226,12 @@ async function crawlTraderHistories(
 ): Promise<number> {
   let written = 0
   for (const kind of historyKinds(adapter, src)) {
-    const cursor = await getHistoryCursor(trader.id, kind)
     if (kind === 'position_history') {
-      written += await persistPositionHistory(session, adapter, src, trader, ctx, cursor)
+      const checkpoint = await getPositionHistoryPublicationCheckpoint(src.id, trader.id)
+      written += await persistPositionHistory(session, adapter, src, trader, ctx, checkpoint)
       continue
     }
+    const cursor = await getHistoryCursor(trader.id, kind)
     const rawPages: unknown[] = []
     let fetchError: unknown = null
 
