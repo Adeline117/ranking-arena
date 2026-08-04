@@ -279,8 +279,47 @@ test('requires HEAD metadata to prove arena+public completeness before download'
     assertRestorableObject(
       arenaSchemasObject({
         Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+        Metadata: {
+          'backup-date': '2026-08-04T07:08:09.123Z',
+          'backup-type': 'schemas:arena+public',
+          tables: 'arena,public',
+          'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
+          'completion-token': ARENA_TOKEN,
+        },
       })
     )
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+        })
+      ),
+    /filename and backup-date metadata do not match/
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        completeSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+          Metadata: {
+            'backup-date': '2026-08-04T07:08:09.123Z',
+            'backup-type': 'schemas:arena+public',
+            tables: 'arena,public',
+          },
+        })
+      ),
+    /missing completion metadata/
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/07/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+        })
+      ),
+    /key path does not match/
   )
   assert.throws(
     () =>
