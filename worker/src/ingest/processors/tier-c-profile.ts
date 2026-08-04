@@ -345,7 +345,10 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
       await publishPositions(src, traderId, positions, sourceAsOf ?? observedAt)
     } else {
       const kind = surface as import('@/lib/ingest/core/types').HistoryKind
-      const cursor = await getHistoryCursor(traderId, kind)
+      // Receipt-bound position history is an immutable RAW acquisition only.
+      // Never consult the legacy serving cursor for that surface; compatibility
+      // history kinds retain their existing cursor/publisher path below.
+      const cursor = kind === 'position_history' ? null : await getHistoryCursor(traderId, kind)
       if (kind === 'position_history') {
         const acquisition = await captureHistoryAcquisition({
           source: src,

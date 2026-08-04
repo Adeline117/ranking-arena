@@ -130,41 +130,41 @@ describe('copier PII rule (spec §6)', () => {
 
 describe('getRecordsPage', () => {
   it('fails closed over legacy warm position history until a receipt-bound projection exists', async () => {
+    const client = rpcClient({
+      rows: [{ symbol: 'BTCUSDT', realized_pnl: 10, copier_label: 'leak-me' }],
+      nextCursor: '2026-06-01 00:00:00+00|abc',
+      sourceAsOf: '2026-06-10T11:00:00Z',
+      observedAt: '2026-06-10T12:00:00Z',
+      publishedAt: '2026-06-10T12:01:00Z',
+      completeness: {
+        state: 'complete',
+        reason: 'verified_terminal_history',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
+      },
+    })
     const page = await getRecordsPage(
-      rpcClient({
-        rows: [
-          { symbol: 'BTCUSDT', realized_pnl: 10, copier_label: 'leak-me' },
-          { symbol: 'ETHUSDT', realized_pnl: -3 },
-        ],
-        nextCursor: '2026-06-01 00:00:00+00|abc',
-        asOf: '2026-06-10T12:00:00Z',
-        currency: 'USDT',
-        completeness: {
-          state: 'complete',
-          reason: 'verified_terminal_history',
-          evidenceState: 'verified',
-          scanTerminalState: 'exhausted',
-          blockerReasons: [],
-        },
-      }),
+      client,
       'bitget_futures',
       'abc',
       'position_history',
-      null
+      'stale-or-malformed-legacy-cursor'
     )
+    expect(client.rpc).not.toHaveBeenCalled()
     expect(page).not.toBeNull()
     expect(page!.rows).toEqual([])
     expect(page!.nextCursor).toBeNull()
     expect(page!.cacheState).toBe('warm')
-    // Legacy `asOf` was often the RPC's now(); it is intentionally ignored.
+    // No clock from the legacy projection is fetched or trusted.
     expect(page!.provenance).toEqual({
       source: 'bitget_futures',
       sourceAsOf: null,
       observedAt: null,
       publishedAt: null,
     })
-    // The current RPC does not join the served rows to RAW terminal evidence;
-    // a self-asserted completeness field must therefore fail closed.
+    // The current RPC does not join served rows to RAW terminal evidence, so
+    // even a self-asserted complete result is never fetched.
     expect(page!.completeness).toEqual({
       state: 'unknown',
       reason: 'history_evidence_not_bound',

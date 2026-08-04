@@ -540,6 +540,8 @@ describe('Tier-C incomplete profile window gate', () => {
       },
     })
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    expect(mockGetHistoryCursor).not.toHaveBeenCalled()
+    expect(mockGetHistory.mock.calls[0]?.[4]).toBeNull()
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(renderPayload.rows).toEqual([
@@ -588,6 +590,8 @@ describe('Tier-C incomplete profile window gate', () => {
         },
       },
     })
+    expect(mockGetHistoryCursor).not.toHaveBeenCalled()
+    expect(mockGetHistory.mock.calls[0]?.[4]).toBeNull()
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
@@ -660,6 +664,8 @@ describe('Tier-C incomplete profile window gate', () => {
       rows: 1,
     })
 
+    expect(mockGetHistoryCursor).toHaveBeenCalledWith(42, 'orders')
+    expect(mockGetHistory.mock.calls[0]?.[4]).toBe('2026-07-01T00:00:00.000Z')
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
     expect(mockWritePositionHistoryRawArtifact).not.toHaveBeenCalled()
     expect(mockPublishHistoryRows).toHaveBeenCalledWith(
