@@ -116,6 +116,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   const memberMutationInFlightRef = useRef<Set<string>>(new Set())
   const loadChannelRequestGenerationRef = useRef(0)
   const loadChannelAbortRef = useRef<AbortController | null>(null)
+  const loadOlderInFlightRef = useRef<Set<string>>(new Set())
   const messagesRef = useRef(messages)
   const userIdRef = useRef(userId)
   const channelIdRef = useRef(channelId)
@@ -207,6 +208,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     loadChannelAbortRef.current?.abort()
     setSending(false)
     memberMutationInFlightRef.current.clear()
+    loadOlderInFlightRef.current.clear()
     setPendingMemberMutations({})
   }, [channelId, sessionGeneration, setPendingMemberMutations, setSending, userId, viewerKey])
 
@@ -714,25 +716,59 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   }
 
   const loadOlder = async () => {
-    if (!hasMore || loadingMore || !channelId || !accessToken) return
-    const oldest = messages.find((m) => !m._tempId)
+    if (!hasMore || !userId || !channelId || !accessToken) return
+    const oldest = messagesRef.current.find((message) => !message._tempId)
     if (!oldest) return
+    const operation = {
+      actorId: userId,
+      channelId,
+      accessToken,
+      viewerKey,
+      sessionGeneration,
+      before: oldest.created_at,
+    }
+    const requestKey = `${operation.viewerKey}\u0000${operation.sessionGeneration}\u0000${operation.channelId}\u0000${operation.before}`
+    if (loadOlderInFlightRef.current.has(requestKey)) return
+    loadOlderInFlightRef.current.add(requestKey)
+    const isCurrent = () =>
+      mountedRef.current &&
+      userIdRef.current === operation.actorId &&
+      channelIdRef.current === operation.channelId &&
+      viewerKeyRef.current === operation.viewerKey &&
+      sessionGenerationRef.current === operation.sessionGeneration
     setLoadingMore(true)
     try {
-      const res = await globalThis.fetch(`/api/channels/${channelId}?before=${oldest.created_at}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      const data = await res.json()
-      if (data.messages?.length) {
-        setMessages((prev) => [...data.messages, ...prev])
-        setHasMore(data.has_more)
-      } else {
-        setHasMore(false)
+      const res = await globalThis.fetch(
+        `/api/channels/${operation.channelId}?before=${encodeURIComponent(operation.before)}`,
+        { headers: { Authorization: `Bearer ${operation.accessToken}` } }
+      )
+      const data: unknown = await res.json().catch(() => null)
+      if (!isCurrent()) return
+      const snapshot = res.ok
+        ? readChannelPageSnapshot(data, {
+            actorId: operation.actorId,
+            channelId: operation.channelId,
+          })
+        : null
+      if (
+        !snapshot ||
+        snapshot.messages.some(
+          (message) => Date.parse(message.created_at) >= Date.parse(operation.before)
+        )
+      ) {
+        showToast(t('loadFailed2'), 'error')
+        return
       }
+      setMessages((current) => {
+        const existingIds = new Set(current.map((message) => message.id))
+        return [...snapshot.messages.filter((message) => !existingIds.has(message.id)), ...current]
+      })
+      setHasMore(snapshot.hasMore)
     } catch {
-      /* Pagination load failed — keep existing messages visible */
+      if (isCurrent()) showToast(t('loadFailed2'), 'error')
     } finally {
-      setLoadingMore(false)
+      loadOlderInFlightRef.current.delete(requestKey)
+      if (isCurrent()) setLoadingMore(false)
     }
   }
 

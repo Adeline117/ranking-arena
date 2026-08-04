@@ -98,4 +98,16 @@ describe('channel page client snapshot', () => {
     expect(page).toContain('readChannelPageSnapshot(data, {')
     expect(page).toContain('loadChannelAbortRef.current?.abort()')
   })
+
+  it('single-flights pagination inside the exact viewer/channel/cursor scope', () => {
+    const page = readFileSync(join(__dirname, '../page.tsx'), 'utf8')
+
+    expect(page).toContain('loadOlderInFlightRef.current.has(requestKey)')
+    expect(page).toContain('before=${encodeURIComponent(operation.before)}')
+    expect(page).toContain('Date.parse(message.created_at) >= Date.parse(operation.before)')
+    expect(page).toContain('snapshot.messages.filter((message) => !existingIds.has(message.id))')
+    expect(page).toMatch(
+      /const data: unknown = await res\.json\(\)\.catch\(\(\) => null\)[\s\S]{0,100}if \(!isCurrent\(\)\) return/
+    )
+  })
 })
