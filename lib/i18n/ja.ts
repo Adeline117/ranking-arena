@@ -5001,6 +5001,11 @@ const ja = {
   writeFirstPostButton: '最初の投稿を書く',
 
   // Token Rankings
+  tokenRankingsContainmentLabel: '検証のため一時停止中',
+  tokenRankingsContainmentTitle: 'トークンランキングは一時的に非公開です',
+  tokenRankingsContainmentDescription:
+    'ランキングの正式スナップショットを再構築し、独立した検証を行っています。検証が完了するまで、トークンランキングは公開されません。',
+  tokenRankingsContainmentBack: 'トレーダーランキングに戻る',
   tokenRankingsTitle: 'トークンランキング',
   tokenRankingsSubtitle:
     '各トークンのベストトレーダーを発見。誰がBTCを最もうまくトレードしているか？',

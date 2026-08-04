@@ -5402,6 +5402,11 @@ const en = {
   snapshotViewLive: 'View Current Leaderboard',
 
   // Token Rankings
+  tokenRankingsContainmentLabel: 'Verification hold',
+  tokenRankingsContainmentTitle: 'Token rankings are temporarily withheld',
+  tokenRankingsContainmentDescription:
+    'We are rebuilding and independently verifying the ranking authority snapshots. No token ranking is published until that verification is complete.',
+  tokenRankingsContainmentBack: 'Return to trader rankings',
   tokenRankingsTitle: 'Token Rankings',
   tokenRankingsSubtitle: 'Discover the best traders for every token. Who trades BTC best?',
   tokenRankingsSearchPlaceholder: 'Search tokens (BTC, ETH, SOL...)',

@@ -1,74 +1,67 @@
-import type { ReactElement } from 'react'
+import { render, screen } from '@testing-library/react'
 
-const mockRpc = jest.fn()
+const mockGetSupabaseAdmin = jest.fn()
+const mockTieredGetOrSet = jest.fn()
+const mockCheckRateLimit = jest.fn()
 
-jest.mock('next/cache', () => ({
-  unstable_cache: (loader: (...args: unknown[]) => unknown) => loader,
-}))
-
-jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: () => ({
-    rpc: (...args: unknown[]) => mockRpc(...args),
+jest.mock('@/lib/i18n/server', () => ({
+  getServerTranslation: async () => ({
+    lang: 'en',
+    t: (key: string) =>
+      ({
+        tokenRankingsContainmentLabel: 'Verification hold',
+        tokenRankingsContainmentTitle: 'Token rankings are temporarily withheld',
+        tokenRankingsContainmentDescription: 'No token ranking is published.',
+        tokenRankingsContainmentBack: 'Return to trader rankings',
+      })[key] ?? key,
   }),
 }))
 
-jest.mock('../TokensIndexClient', () => ({
-  __esModule: true,
-  default: () => null,
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
 }))
 
-import TokensPage, { loadPopularTokensSSR } from '../page'
+jest.mock('@/lib/cache/redis-layer', () => ({
+  tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
+}))
 
-type TokensPageProps = {
-  initialTokens: unknown[]
-  initialStatus: 'success' | 'error'
-}
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}))
 
-describe('token rankings index SSR state', () => {
+import TokensPage, { metadata } from '../page'
+import TokenRankingContainment from '../TokenRankingContainment'
+
+const originalFetch = global.fetch
+
+describe('token rankings index containment', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    global.fetch = jest.fn()
   })
 
-  it('throws upstream failures out of the cached loader and marks the client seed failed', async () => {
-    mockRpc.mockResolvedValue({
-      data: null,
-      error: { message: 'database unavailable' },
-    })
-
-    await expect(loadPopularTokensSSR()).rejects.toThrow('database unavailable')
-
-    const element = (await TokensPage()) as ReactElement<TokensPageProps>
-    expect(element.props).toMatchObject({
-      initialTokens: [],
-      initialStatus: 'error',
-    })
+  afterAll(() => {
+    global.fetch = originalFetch
   })
 
-  it('keeps a legitimate empty result distinct from failure', async () => {
-    mockRpc.mockResolvedValue({ data: [], error: null })
+  it('is noindex and renders the server-only publication hold', async () => {
+    expect(metadata.robots).toEqual({ index: false, follow: false, nocache: true })
+    expect(TokensPage().type).toBe(TokenRankingContainment)
 
-    const element = (await TokensPage()) as ReactElement<TokensPageProps>
-    expect(element.props).toMatchObject({
-      initialTokens: [],
-      initialStatus: 'success',
-    })
+    render(await TokenRankingContainment())
+
+    expect(screen.getByRole('heading')).toHaveTextContent('Token rankings are temporarily withheld')
+    expect(screen.getByRole('status')).toHaveTextContent('No token ranking is published.')
+    expect(screen.getByText('TOKEN_RANKING_NOT_PUBLISHED')).toBeInTheDocument()
   })
 
-  it('marks an SSR timeout as failure instead of an empty success', async () => {
-    jest.useFakeTimers()
-    try {
-      mockRpc.mockReturnValue(new Promise(() => undefined))
-      const page = TokensPage()
+  it('does not call Supabase, Redis, rate limiting, or fetch', async () => {
+    TokensPage()
+    await TokenRankingContainment()
 
-      await jest.advanceTimersByTimeAsync(4_000)
-
-      const element = (await page) as ReactElement<TokensPageProps>
-      expect(element.props).toMatchObject({
-        initialTokens: [],
-        initialStatus: 'error',
-      })
-    } finally {
-      jest.useRealTimers()
-    }
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })

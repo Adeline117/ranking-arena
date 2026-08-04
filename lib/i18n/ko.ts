@@ -5246,6 +5246,11 @@ const ko = {
   writeFirstPostButton: '첫 번째 게시물 작성하기',
 
   // Token Rankings
+  tokenRankingsContainmentLabel: '검증 일시 중지',
+  tokenRankingsContainmentTitle: '토큰 랭킹을 일시적으로 공개하지 않습니다',
+  tokenRankingsContainmentDescription:
+    '랭킹 권위 스냅샷을 재구축하고 독립적으로 검증하고 있습니다. 검증이 완료될 때까지 어떤 토큰 랭킹도 공개하지 않습니다.',
+  tokenRankingsContainmentBack: '트레이더 랭킹으로 돌아가기',
   tokenRankingsTitle: '토큰 랭킹',
   tokenRankingsSubtitle: '각 토큰의 최고 트레이더를 발견하세요. 누가 BTC를 가장 잘 거래할까요?',
   tokenRankingsSearchPlaceholder: '토큰 검색 (BTC, ETH, SOL...)',
