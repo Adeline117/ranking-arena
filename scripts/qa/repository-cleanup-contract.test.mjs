@@ -84,3 +84,21 @@ test('retired pre-arena tools stay removed', () => {
     assert.doesNotMatch(packageCommands, new RegExp(retiredTool.replaceAll('.', '\\.')))
   }
 })
+
+test('retired duplicate post hooks stay removed', () => {
+  const retiredHooks = [
+    'app/components/post/hooks/usePostFeedData.ts',
+    'app/components/post/hooks/useBookmarkRepost.ts',
+  ]
+
+  assert.deepEqual(
+    retiredHooks.filter((path) => existsSync(join(repoRoot, path))),
+    [],
+    'dead offset-feed and duplicate bookmark hooks must not return beside the supported post flow'
+  )
+
+  const hooksIndex = readFileSync(join(repoRoot, 'app/components/post/hooks/index.ts'), 'utf8')
+  for (const retiredHook of ['usePostFeedData', 'useBookmarkRepost']) {
+    assert.doesNotMatch(hooksIndex, new RegExp(retiredHook))
+  }
+})
