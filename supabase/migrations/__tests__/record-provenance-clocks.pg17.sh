@@ -11,6 +11,7 @@ BASE_RPC_MIGRATION="$ROOT_DIR/supabase/migrations/20260611000309_arena_records_r
 RAW_FIELDS_MIGRATION="$ROOT_DIR/supabase/migrations/20260630195608_records_page_surface_raw_record_fields.sql"
 BITGET_COPIER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729014000_bitget_bot_copier_aggregate_authority.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260803090000_record_provenance_clocks.sql"
+QUARANTINE_MIGRATION="$ROOT_DIR/supabase/migrations/20260804042000_fail_closed_position_history_records_page.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -27,7 +28,8 @@ for migration in \
   "$BASE_RPC_MIGRATION" \
   "$RAW_FIELDS_MIGRATION" \
   "$BITGET_COPIER_MIGRATION" \
-  "$MIGRATION"; do
+  "$MIGRATION" \
+  "$QUARANTINE_MIGRATION"; do
   if [[ ! -f "$migration" ]]; then
     echo "Required migration not found: $migration" >&2
     exit 1
@@ -776,4 +778,228 @@ assert_equal "records callable replay metadata" "$RECORDS_METADATA_BEFORE_REPLAY
 assert_equal "copier callable replay metadata" "$COPIER_METADATA_BEFORE_REPLAY" "$COPIER_METADATA_AFTER_REPLAY"
 assert_equal "RPC output replay fingerprint" "$OUTPUT_FINGERPRINT_BEFORE_REPLAY" "$OUTPUT_FINGERPRINT_AFTER_REPLAY"
 
+echo "[record-provenance] install pre-cutover wrapper and snapshot unaffected surfaces"
+psql_cmd -q <<'SQL'
+CREATE FUNCTION public.legacy_history_records_wrapper(p_cursor text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $wrapper$
+  SELECT public.arena_records_page(
+    'event_records', 'events-trader', 'position_history', NULL, p_cursor, 50
+  );
+$wrapper$;
+ALTER FUNCTION public.legacy_history_records_wrapper(text) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.legacy_history_records_wrapper(text)
+  FROM PUBLIC, anon, authenticated, service_role, hostile_role;
+GRANT EXECUTE ON FUNCTION public.legacy_history_records_wrapper(text) TO anon;
+
+DO $legacy_wrapper_pre_cutover$
+DECLARE
+  v_payload jsonb;
+BEGIN
+  SET LOCAL ROLE anon;
+  v_payload := public.legacy_history_records_wrapper(NULL);
+  RESET ROLE;
+  IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'legacy wrapper did not expose pre-cutover history: %', v_payload;
+  END IF;
+END
+$legacy_wrapper_pre_cutover$;
+SQL
+
+NON_HISTORY_BEFORE_QUARANTINE="$(psql_cmd -Atq <<'SQL'
+SELECT pg_catalog.jsonb_build_object(
+  'positions', public.arena_records_page(
+    'delayed_positions', 'delayed-trader', 'positions', NULL, NULL, 50
+  ),
+  'orders', public.arena_records_page(
+    'event_records', 'events-trader', 'orders', NULL, NULL, 50
+  ),
+  'transfers', public.arena_records_page(
+    'event_records', 'events-trader', 'transfers', NULL, NULL, 50
+  )
+)::text;
+SQL
+)"
+HISTORY_TABLE_BEFORE_QUARANTINE="$(psql_cmd -Atq <<'SQL'
+SELECT pg_catalog.encode(
+  pg_catalog.sha256(
+    pg_catalog.convert_to(
+      COALESCE(
+        pg_catalog.jsonb_agg(pg_catalog.to_jsonb(history_row) ORDER BY history_row.dedupe_hash),
+        '[]'::jsonb
+      )::text,
+      'UTF8'
+    )
+  ),
+  'hex'
+)
+FROM arena.position_history AS history_row;
+SQL
+)"
+RECORDS_OID_BEFORE_QUARANTINE="$(psql_cmd -Atqc "SELECT 'public.arena_records_page(text,text,text,integer,text,integer)'::regprocedure::oid")"
+COPIER_METADATA_BEFORE_QUARANTINE="$(function_metadata_fingerprint 'public.arena_copier_aggregate(text,text)')"
+COPIER_OUTPUT_BEFORE_QUARANTINE="$(psql_cmd -Atqc "SELECT public.arena_copier_aggregate('bitget_bots_futures','bot-trusted')::text")"
+
+echo "[record-provenance] prove rogue overload blocks the quarantine preflight"
+psql_cmd -q <<'SQL'
+CREATE FUNCTION public.arena_records_page(p_source text)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+AS 'SELECT NULL::jsonb';
+SQL
+QUARANTINE_FAILURE_LOG="$TMP_ROOT/quarantine-rogue-overload.log"
+if psql_cmd -v VERBOSITY=verbose -f "$QUARANTINE_MIGRATION" \
+  >"$QUARANTINE_FAILURE_LOG" 2>&1; then
+  echo "[record-provenance] Expected rogue-overload preflight failure" >&2
+  exit 1
+fi
+if ! grep -Fq "arena_records_page overload set drifted" "$QUARANTINE_FAILURE_LOG"; then
+  echo "[record-provenance] Unexpected rogue-overload failure" >&2
+  sed -n '1,160p' "$QUARANTINE_FAILURE_LOG" >&2
+  exit 1
+fi
+psql_cmd -q -c "DROP FUNCTION public.arena_records_page(text)"
+
+echo "[record-provenance] apply position-history records-page quarantine"
+psql_cmd -q -f "$QUARANTINE_MIGRATION"
+
+echo "[record-provenance] prove direct-role, cursor and wrapper fail-closed behavior"
+psql_cmd -q <<'SQL'
+DO $position_history_quarantine_contract$
+DECLARE
+  v_payload jsonb;
+  v_role text;
+BEGIN
+  FOREACH v_role IN ARRAY ARRAY[
+    'anon', 'authenticated', 'service_role', 'postgres'
+  ]::text[] LOOP
+    EXECUTE pg_catalog.format('SET LOCAL ROLE %I', v_role);
+    v_payload := public.arena_records_page(
+      'event_records', 'events-trader', 'position_history', NULL, NULL, 50
+    );
+    EXECUTE 'RESET ROLE';
+
+    IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 0
+       OR v_payload->'nextCursor' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'asOf' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'sourceAsOf' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'observedAt' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->'publishedAt' IS DISTINCT FROM 'null'::jsonb
+       OR v_payload->>'currency' IS DISTINCT FROM 'USDT'
+       OR v_payload->'completeness' IS DISTINCT FROM
+            '{"state":"unknown","reason":"history_evidence_not_bound"}'::jsonb THEN
+      RAISE EXCEPTION
+        'position-history RPC quarantine drifted for role %: %',
+        v_role,
+        v_payload;
+    END IF;
+  END LOOP;
+
+  SET LOCAL ROLE anon;
+  v_payload := public.arena_records_page(
+    'event_records', 'events-trader', 'position_history', NULL,
+    'not-a-timestamp|not-a-hash', 50
+  );
+  RESET ROLE;
+  IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 0
+     OR v_payload->'completeness' IS DISTINCT FROM
+          '{"state":"unknown","reason":"history_evidence_not_bound"}'::jsonb THEN
+    RAISE EXCEPTION 'malformed history cursor escaped quarantine: %', v_payload;
+  END IF;
+
+  IF public.arena_records_page(
+       'event_records', 'missing-trader', 'position_history', NULL, NULL, 50
+     ) IS NOT NULL THEN
+    RAISE EXCEPTION 'unknown trader no longer returns SQL NULL';
+  END IF;
+
+  SET LOCAL ROLE anon;
+  v_payload := public.legacy_history_records_wrapper(NULL);
+  RESET ROLE;
+  IF pg_catalog.jsonb_array_length(v_payload->'rows') IS DISTINCT FROM 0
+     OR v_payload->'completeness' IS DISTINCT FROM
+          '{"state":"unknown","reason":"history_evidence_not_bound"}'::jsonb THEN
+    RAISE EXCEPTION 'legacy wrapper bypassed quarantined callable: %', v_payload;
+  END IF;
+
+  IF pg_catalog.has_function_privilege(
+       'hostile_role',
+       'public.arena_records_page(text,text,text,integer,text,integer)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'public',
+       'public.arena_records_page(text,text,text,integer,text,integer)',
+       'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'quarantined callable escaped the exact runtime ACL';
+  END IF;
+
+  IF pg_catalog.strpos(
+       pg_catalog.pg_get_functiondef(
+         'public.arena_records_page(text,text,text,integer,text,integer)'::regprocedure
+       ),
+       'arena.position_history'
+     ) <> 0 THEN
+    RAISE EXCEPTION 'quarantined callable retained the legacy history relation';
+  END IF;
+END
+$position_history_quarantine_contract$;
+SQL
+
+NON_HISTORY_AFTER_QUARANTINE="$(psql_cmd -Atq <<'SQL'
+SELECT pg_catalog.jsonb_build_object(
+  'positions', public.arena_records_page(
+    'delayed_positions', 'delayed-trader', 'positions', NULL, NULL, 50
+  ),
+  'orders', public.arena_records_page(
+    'event_records', 'events-trader', 'orders', NULL, NULL, 50
+  ),
+  'transfers', public.arena_records_page(
+    'event_records', 'events-trader', 'transfers', NULL, NULL, 50
+  )
+)::text;
+SQL
+)"
+HISTORY_TABLE_AFTER_QUARANTINE="$(psql_cmd -Atq <<'SQL'
+SELECT pg_catalog.encode(
+  pg_catalog.sha256(
+    pg_catalog.convert_to(
+      COALESCE(
+        pg_catalog.jsonb_agg(pg_catalog.to_jsonb(history_row) ORDER BY history_row.dedupe_hash),
+        '[]'::jsonb
+      )::text,
+      'UTF8'
+    )
+  ),
+  'hex'
+)
+FROM arena.position_history AS history_row;
+SQL
+)"
+RECORDS_OID_AFTER_QUARANTINE="$(psql_cmd -Atqc "SELECT 'public.arena_records_page(text,text,text,integer,text,integer)'::regprocedure::oid")"
+COPIER_METADATA_AFTER_QUARANTINE="$(function_metadata_fingerprint 'public.arena_copier_aggregate(text,text)')"
+COPIER_OUTPUT_AFTER_QUARANTINE="$(psql_cmd -Atqc "SELECT public.arena_copier_aggregate('bitget_bots_futures','bot-trusted')::text")"
+
+assert_equal "non-history RPC output changed during quarantine" "$NON_HISTORY_BEFORE_QUARANTINE" "$NON_HISTORY_AFTER_QUARANTINE"
+assert_equal "position-history table changed during quarantine" "$HISTORY_TABLE_BEFORE_QUARANTINE" "$HISTORY_TABLE_AFTER_QUARANTINE"
+assert_equal "records callable OID changed during quarantine" "$RECORDS_OID_BEFORE_QUARANTINE" "$RECORDS_OID_AFTER_QUARANTINE"
+assert_equal "copier callable metadata changed during quarantine" "$COPIER_METADATA_BEFORE_QUARANTINE" "$COPIER_METADATA_AFTER_QUARANTINE"
+assert_equal "copier output changed during quarantine" "$COPIER_OUTPUT_BEFORE_QUARANTINE" "$COPIER_OUTPUT_AFTER_QUARANTINE"
+
+QUARANTINE_METADATA_BEFORE_REPLAY="$(function_metadata_fingerprint 'public.arena_records_page(text,text,text,integer,text,integer)')"
+QUARANTINE_OUTPUT_BEFORE_REPLAY="$(rpc_output_fingerprint)"
+psql_cmd -q -f "$QUARANTINE_MIGRATION"
+QUARANTINE_METADATA_AFTER_REPLAY="$(function_metadata_fingerprint 'public.arena_records_page(text,text,text,integer,text,integer)')"
+QUARANTINE_OUTPUT_AFTER_REPLAY="$(rpc_output_fingerprint)"
+
+assert_equal "position-history records-page quarantine replay drifted" "$QUARANTINE_METADATA_BEFORE_REPLAY" "$QUARANTINE_METADATA_AFTER_REPLAY"
+assert_equal "position-history records-page output replay drifted" "$QUARANTINE_OUTPUT_BEFORE_REPLAY" "$QUARANTINE_OUTPUT_AFTER_REPLAY"
+
+echo "position-history records-page PostgreSQL 17 proof passed"
 echo "record provenance clocks PostgreSQL 17 proof passed"

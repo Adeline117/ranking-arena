@@ -214,6 +214,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:retire-legacy-position-history-pg17
 
+      - name: Prove position-history records-page quarantine
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:records-page-quarantine-pg17
+
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check
   # ─────────────────────────────────────────────
