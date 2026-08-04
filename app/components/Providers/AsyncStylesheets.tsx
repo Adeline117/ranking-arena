@@ -12,8 +12,9 @@ import { useEffect } from 'react'
  * 3. Uses requestIdleCallback to avoid blocking the main thread
  */
 
-// responsive.css is render-blocking in the root layout. Its breakpoint rules
-// define final geometry and must never be deferred behind hydration.
+// responsive.css is a compiled, render-blocking import in the root layout. Its
+// breakpoint rules define final geometry and must never be deferred behind
+// hydration.
 const DEFERRED_STYLESHEETS = ['/styles/animations.css']
 
 function loadStylesheet(href: string): Promise<void> {

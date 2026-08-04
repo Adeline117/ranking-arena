@@ -19,10 +19,15 @@ describe('RootLayout DOM ownership', () => {
   })
 
   it('loads responsive layout rules before first paint', () => {
-    expect(rootLayoutSource).toContain(
-      '<link rel="stylesheet" href="/styles/responsive.css" data-arena-responsive-critical />'
-    )
-    expect(rootLayoutSource.match(/href="\/styles\/responsive\.css"/g)).toHaveLength(1)
+    const globalsImport = rootLayoutSource.indexOf("import './globals.css'")
+    const responsiveImport = rootLayoutSource.indexOf("import '../public/styles/responsive.css'")
+
+    expect(globalsImport).toBeGreaterThan(-1)
+    expect(responsiveImport).toBeGreaterThan(globalsImport)
+    expect(
+      rootLayoutSource.match(/import ['"]\.\.\/public\/styles\/responsive\.css['"]/g)
+    ).toHaveLength(1)
+    expect(rootLayoutSource).not.toMatch(/href=['"]\/styles\/responsive\.css['"]/)
     expect(rootLayoutSource).not.toContain("a.media='print'")
     expect(rootLayoutSource).not.toContain("a.onload=function(){a.media='all'}")
   })

@@ -21,7 +21,7 @@
 
 /*
  * CSS loading policy
- * - responsive.css: Render-blocking because it defines final breakpoint geometry
+ * - responsive.css: Compiled + render-blocking because it defines final breakpoint geometry
  * - animations.css: Loaded async after LCP via layout.tsx
  * - trader-animations.css: Only loaded on /trader/[handle] pages
  */

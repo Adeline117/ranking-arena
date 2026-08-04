@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+// Keep responsive geometry in Next's compiled stylesheet graph. Importing it
+// after globals.css preserves the existing cascade while giving every deploy a
+// content-hashed asset instead of an unversioned public-file link.
+import '../public/styles/responsive.css'
 import { JsonLd } from './components/Providers/JsonLd'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getCriticalCss, getResourceHints } from '@/lib/performance/critical-css'
@@ -195,12 +199,6 @@ export default function RootLayout({
             {...(hint.crossOrigin && { crossOrigin: hint.crossOrigin })}
           />
         ))}
-        {/* Responsive rules define the page's final information architecture,
-            so they must be present before first paint. Loading this file with
-            media="print" previously exposed the unstyled, single-column DOM on
-            slow connections and then reflowed it when onload switched to all. */}
-        {/* eslint-disable-next-line @next/next/no-css-tags */}
-        <link rel="stylesheet" href="/styles/responsive.css" data-arena-responsive-critical />
         <noscript>
           {/* eslint-disable-next-line @next/next/no-css-tags */}
           <link rel="stylesheet" href="/styles/animations.css" />
