@@ -27,11 +27,12 @@ function exactKeys(value: Dict, expected: readonly string[]): boolean {
   return keys.length === expected.length && keys.every((key, index) => key === expected[index])
 }
 
-function canonicalSourceId(value: unknown): string | null {
-  if (typeof value === 'string') {
-    return value.length > 0 && value.trim() === value ? value : null
-  }
-  return Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null
+function canonicalPositionId(value: unknown, openedAt: number | null): string | null {
+  // The reviewed Binance response uses its positive millisecond `opened`
+  // epoch as the numeric position id. Keep terminal verification aligned with
+  // the preparer and SQL authority so it never labels an artifact verified
+  // when the later publication boundary must reject that same identity.
+  return typeof value === 'number' && openedAt !== null && value === openedAt ? String(value) : null
 }
 
 function canonicalSourceText(value: unknown): string | null {
@@ -115,11 +116,11 @@ function validateSegment(
 
     const closeTimes: number[] = []
     for (const row of rows) {
-      const sourceId = canonicalSourceId(row.id)
       const symbol = exactUsdtPerpetualSymbol(row.symbol)
       const side = canonicalSourceText(row.side)
       const openedAt = positionHistorySourceEpochMilliseconds(row.opened)
       const closedAt = positionHistorySourceEpochMilliseconds(row.closed)
+      const sourceId = canonicalPositionId(row.id, openedAt)
       if (
         sourceId === null ||
         row.type !== 'UM' ||

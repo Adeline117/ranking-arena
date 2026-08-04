@@ -758,7 +758,7 @@ describe('shared reviewed position-history evidence contract', () => {
 
       expect(() =>
         buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
-      ).toThrow('id and opened must be equal positive safe-integer JSON numbers')
+      ).toThrow('acquisition does not carry the exact reviewed terminal evidence')
     }
   )
 

@@ -457,7 +457,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
   it('verifies an incremental CLOSING cursor overlap without an OPENING segment', async () => {
     const closeBase = Date.parse('2026-07-20T00:00:00.000Z')
     const rows = Array.from({ length: 50 }, (_, index) => ({
-      id: `position-${index}`,
+      id: closeBase - index - 60_000,
       symbol: 'BTCUSDT',
       side: 'Long',
       status: 'All Closed',
@@ -496,7 +496,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
   it('rejects a future cursor instead of treating the first page as stored overlap', async () => {
     const closeBase = Date.parse('2026-07-20T00:00:00.000Z')
     const rows = Array.from({ length: 50 }, (_, index) => ({
-      id: `position-${index}`,
+      id: closeBase - index - 60_000,
       symbol: 'BTCUSDT',
       side: 'Long',
       status: 'All Closed',
@@ -532,12 +532,12 @@ describe('Binance evidence-preserving leaderboard capture', () => {
 
   it('rejects a dual-sort proof when CLOSING and OPENING identify different facts', async () => {
     const closeTime = Date.parse('2026-07-02T00:00:00.000Z')
-    const row = (id: string) => ({
-      id,
+    const row = (opened: number) => ({
+      id: opened,
       symbol: 'BTCUSDT',
       side: 'Long',
       status: 'All Closed',
-      opened: closeTime - 60_000,
+      opened,
       closed: closeTime,
     })
     const src = source()
@@ -545,7 +545,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       const sort = (request.body as Record<string, unknown>).sort
       return {
         status: 200,
-        json: historyEnvelope([row(sort === 'CLOSING' ? 'closing-id' : 'opening-id')], 1),
+        json: historyEnvelope([row(closeTime - (sort === 'CLOSING' ? 60_000 : 120_000))], 1),
       }
     }).session
 
@@ -572,7 +572,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       'duplicate facts',
       [
         {
-          id: 'duplicate-id',
+          id: Date.parse('2026-07-01T00:00:00.000Z'),
           symbol: 'BTCUSDT',
           side: 'Long',
           status: 'All Closed',
@@ -580,12 +580,38 @@ describe('Binance evidence-preserving leaderboard capture', () => {
           closed: Date.parse('2026-07-02T00:00:00.000Z'),
         },
         {
-          id: 'duplicate-id',
+          id: Date.parse('2026-07-01T00:00:00.000Z'),
           symbol: 'BTCUSDT',
           side: 'Long',
           status: 'All Closed',
           opened: Date.parse('2026-07-01T00:00:00.000Z'),
           closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+      ],
+    ],
+    [
+      'a string source id outside the reviewed response contract',
+      [
+        {
+          id: '1780000000000',
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: 1780000000000,
+          closed: 1780000001000,
+        },
+      ],
+    ],
+    [
+      'a source id different from its opened epoch',
+      [
+        {
+          id: 1780000000001,
+          symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: 1780000000000,
+          closed: 1780000001000,
         },
       ],
     ],
@@ -646,7 +672,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       'non-monotonic sort order',
       [
         {
-          id: 'older-first',
+          id: Date.parse('2026-07-01T00:00:00.000Z'),
           symbol: 'BTCUSDT',
           side: 'Long',
           status: 'All Closed',
@@ -654,7 +680,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
           closed: Date.parse('2026-07-02T00:00:00.000Z'),
         },
         {
-          id: 'newer-second',
+          id: Date.parse('2026-07-02T00:00:00.000Z'),
           symbol: 'BTCUSDT',
           side: 'Long',
           status: 'All Closed',
@@ -667,7 +693,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       'a future lifecycle timestamp',
       [
         {
-          id: 'future-position',
+          id: Date.parse('2098-12-31T00:00:00.000Z'),
           symbol: 'BTCUSDT',
           side: 'Long',
           status: 'All Closed',
@@ -680,7 +706,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       'a radix-prefixed lifecycle timestamp',
       [
         {
-          id: 'radix-position',
+          id: 1,
           symbol: 'BTCUSDT',
           side: 'Long',
           status: 'All Closed',
