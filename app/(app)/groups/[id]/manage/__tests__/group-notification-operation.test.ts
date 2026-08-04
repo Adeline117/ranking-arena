@@ -1,7 +1,11 @@
 import { webcrypto } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { GroupNotificationOperationLedger } from '../group-notification-operation'
+import {
+  GroupNotificationOperationLedger,
+  GroupNotificationRequestSingleFlight,
+  readGroupNotificationAcknowledgement,
+} from '../group-notification-operation'
 
 const OPERATION_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const OPERATION_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
@@ -97,14 +101,75 @@ describe('group notification operation ledger', () => {
 
     expect(page).toContain('await notificationOperationsRef.current.acquire({')
     expect(page).toContain('operation_id: notificationOperation.operationId')
+    expect(page).toContain('readGroupNotificationAcknowledgement(data)')
+    expect(page).toContain('notificationRequestsRef.current.run(')
     expect(page).toMatch(
-      /if \(res\.ok\)[\s\S]*notificationOperationsRef\.current\.complete\(notificationOperation\)/
-    )
-    expect(page).toMatch(
-      /if \(res\.status < 500\) \{[\s\S]*notificationOperationsRef\.current\.complete\(notificationOperation\)/
+      /if \(!res\.ok && res\.status >= 400 && res\.status < 500\) \{[\s\S]*notificationOperationsRef\.current\.complete\(notificationOperation\)/
     )
     expect(page).not.toMatch(
       /catch \([^)]*\) \{[\s\S]{0,300}notificationOperationsRef\.current\.complete/
     )
+  })
+
+  it('accepts only a complete, internally consistent broadcast ACK', () => {
+    expect(
+      readGroupNotificationAcknowledgement({
+        success: true,
+        notified: 3,
+        failed: 0,
+        total: 3,
+        dm_delivered: 2,
+        dm_skipped: 1,
+        replayed: false,
+      })
+    ).toEqual({ notified: 3, dmDelivered: 2, dmSkipped: 1, replayed: false })
+
+    expect(
+      readGroupNotificationAcknowledgement({
+        success: true,
+        notified: 3,
+        failed: 0,
+        total: 3,
+        dm_delivered: 2,
+        dm_skipped: 0,
+        replayed: false,
+      })
+    ).toBeNull()
+    expect(
+      readGroupNotificationAcknowledgement({
+        success: true,
+        notified: 3,
+        failed: 0,
+        total: 3,
+        dm_delivered: 2,
+        dm_skipped: 1,
+        replayed: false,
+        operation_id: OPERATION_A,
+      })
+    ).toBeNull()
+  })
+
+  it('single-flights the physical broadcast request by operation id', async () => {
+    let resolve!: (response: Response) => void
+    const start = jest.fn(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done
+        })
+    )
+    const requests = new GroupNotificationRequestSingleFlight()
+
+    const first = requests.run(OPERATION_A, start)
+    const doubleClick = requests.run(OPERATION_A, start)
+    expect(first.started).toBe(true)
+    expect(doubleClick.started).toBe(false)
+    expect(doubleClick.promise).toBe(first.promise)
+    expect(requests.size).toBe(1)
+
+    await Promise.resolve()
+    expect(start).toHaveBeenCalledTimes(1)
+    resolve({ ok: true } as Response)
+    await expect(first.promise).resolves.toMatchObject({ ok: true })
+    expect(requests.size).toBe(0)
   })
 })

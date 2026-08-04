@@ -16,6 +16,13 @@ export type GroupNotificationOperation = {
   fingerprint: string
 }
 
+export type GroupNotificationAcknowledgement = {
+  notified: number
+  dmDelivered: number
+  dmSkipped: number
+  replayed: boolean
+}
+
 type OperationIdFactory = () => string
 type OperationStorage = Pick<Storage, 'getItem' | 'setItem'>
 
@@ -45,6 +52,72 @@ function isStoredOperation(value: unknown): value is GroupNotificationOperation 
     SHA256_PATTERN.test(record.fingerprint) &&
     Object.keys(record).length === 2
   )
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function isBoundedCount(value: unknown, minimum = 0): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= minimum && (value as number) <= 500
+}
+
+export function readGroupNotificationAcknowledgement(
+  value: unknown
+): GroupNotificationAcknowledgement | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  if (
+    !hasExactKeys(record, [
+      'dm_delivered',
+      'dm_skipped',
+      'failed',
+      'notified',
+      'replayed',
+      'success',
+      'total',
+    ]) ||
+    record.success !== true ||
+    record.failed !== 0 ||
+    !isBoundedCount(record.notified, 1) ||
+    !isBoundedCount(record.total, 1) ||
+    !isBoundedCount(record.dm_delivered) ||
+    !isBoundedCount(record.dm_skipped) ||
+    typeof record.replayed !== 'boolean' ||
+    record.total !== record.notified ||
+    record.dm_delivered + record.dm_skipped !== record.notified
+  ) {
+    return null
+  }
+
+  return {
+    notified: record.notified,
+    dmDelivered: record.dm_delivered,
+    dmSkipped: record.dm_skipped,
+    replayed: record.replayed,
+  }
+}
+
+export class GroupNotificationRequestSingleFlight {
+  private readonly requests = new Map<string, Promise<Response>>()
+
+  run(operationId: string, start: () => Promise<Response>) {
+    const existing = this.requests.get(operationId)
+    if (existing) return { started: false, promise: existing }
+
+    const promise = Promise.resolve()
+      .then(start)
+      .finally(() => {
+        if (this.requests.get(operationId) === promise) this.requests.delete(operationId)
+      })
+    this.requests.set(operationId, promise)
+    return { started: true, promise }
+  }
+
+  get size(): number {
+    return this.requests.size
+  }
 }
 
 function canonicalIntent(intent: GroupNotificationIntent): string {

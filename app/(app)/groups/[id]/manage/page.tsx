@@ -64,7 +64,11 @@ import {
   isGroupManageViewerCurrent,
   type GroupManageOwnerScope,
 } from './manage-viewer-scope'
-import { GroupNotificationOperationLedger } from './group-notification-operation'
+import {
+  GroupNotificationOperationLedger,
+  GroupNotificationRequestSingleFlight,
+  readGroupNotificationAcknowledgement,
+} from './group-notification-operation'
 import {
   GROUP_AUDIT_PAGE_LIMIT,
   loadGroupAuditActivities,
@@ -411,6 +415,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [notifyMessage, setNotifyMessage] = useViewerSlotState(manageStateOwnerKey, '')
   const [notifySending, setNotifySending] = useViewerSlotState(manageStateOwnerKey, false)
   const notificationOperationsRef = useRef(new GroupNotificationOperationLedger())
+  const notificationRequestsRef = useRef(new GroupNotificationRequestSingleFlight())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
   const destructiveRequestLockRef = useRef<Set<string>>(new Set())
   const memberMutationLockRef = useRef<Set<string>>(new Set())
@@ -869,6 +874,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       !requestIsCurrent()
     )
       return
+    let ownsBusyState = true
     setNotifySending(true)
     try {
       const notificationOperation = await notificationOperationsRef.current.acquire({
@@ -877,41 +883,48 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         title: requestTitle,
         message: requestMessage,
       })
-      const res = await fetch(`/api/groups/${requestGroupId}/notify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${requestToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          operation_id: notificationOperation.operationId,
-          title: requestTitle || undefined,
-          message: requestMessage,
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json()
+      if (!requestIsCurrent()) return
+      const request = notificationRequestsRef.current.run(notificationOperation.operationId, () =>
+        fetch(`/api/groups/${requestGroupId}/notify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${requestToken}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({
+            operation_id: notificationOperation.operationId,
+            title: requestTitle || undefined,
+            message: requestMessage,
+          }),
+        })
+      )
+      if (!request.started) {
+        ownsBusyState = false
+        await request.promise.catch(() => undefined)
+        return
+      }
+
+      const res = await request.promise
+      const data: unknown = await res.json().catch(() => null)
+      if (!requestIsCurrent()) return
+      const acknowledgement = res.ok ? readGroupNotificationAcknowledgement(data) : null
+      if (acknowledgement) {
         notificationOperationsRef.current.complete(notificationOperation)
-        if (!requestIsCurrent()) return
         setShowNotifyModal(false)
         setNotifyTitle('')
         setNotifyMessage('')
         showToast(
-          t('notificationSentToMembers').replace('{count}', String(data.notified)),
+          t('notificationSentToMembers').replace('{count}', String(acknowledgement.notified)),
           'success'
         )
       } else {
-        const data = res.headers.get('content-type')?.includes('application/json')
-          ? await res.json()
-          : null
         // A 5xx can be an uncertain response after commit. Retain the same
         // operation id so a retry is a durable replay, not a second broadcast.
-        if (res.status < 500) {
+        if (!res.ok && res.status >= 400 && res.status < 500) {
           notificationOperationsRef.current.complete(notificationOperation)
         }
-        if (!requestIsCurrent()) return
-        showToast(data?.error || t('sendFailed'), 'error')
+        showToast(readPostDeleteError(data) || t('sendFailed'), 'error')
       }
     } catch (err) {
       if (requestIsCurrent()) {
@@ -919,7 +932,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(t('networkErrorRetry'), 'error')
       }
     } finally {
-      if (requestIsCurrent()) setNotifySending(false)
+      if (ownsBusyState && requestIsCurrent()) setNotifySending(false)
     }
   }
 

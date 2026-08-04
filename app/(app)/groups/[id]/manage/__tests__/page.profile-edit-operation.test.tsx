@@ -59,6 +59,7 @@ jest.mock('../components/MemberList', () => ({
     members: Array<{ user_id: string; role: string }>
     onSetRole(userId: string, role: 'admin' | 'member'): void
     onKick(userId: string, handle: string): void
+    onNotifyOpen(): void
   }) => {
     const targetId = '22222222-2222-4222-8222-222222222222'
     const target = props.members.find((member) => member.user_id === targetId)
@@ -69,6 +70,9 @@ jest.mock('../components/MemberList', () => ({
         </button>
         <button data-testid="member-kick" onClick={() => props.onKick(targetId, 'target')}>
           kick
+        </button>
+        <button data-testid="member-notify-open" onClick={props.onNotifyOpen}>
+          notify
         </button>
         <span data-testid="member-state">{target ? target.role : 'removed'}</span>
       </div>
@@ -116,7 +120,30 @@ jest.mock('../components/ContentManagement', () => ({
 }))
 jest.mock('../components/ManageModals', () => ({
   MuteModal: () => null,
-  NotifyModal: () => null,
+  NotifyModal: (props: {
+    notifyMessage: string
+    setNotifyMessage(value: string): void
+    notifySending: boolean
+    onNotify(): void
+  }) => (
+    <div>
+      <input
+        data-testid="notify-message"
+        value={props.notifyMessage}
+        onChange={(event) => props.setNotifyMessage(event.target.value)}
+      />
+      <button
+        data-testid="notify-send"
+        disabled={props.notifySending || !props.notifyMessage.trim()}
+        onClick={() => {
+          props.onNotify()
+          props.onNotify()
+        }}
+      >
+        send
+      </button>
+    </div>
+  ),
 }))
 jest.mock('../components/GroupSettings', () => ({
   __esModule: true,
@@ -630,6 +657,53 @@ describe('group profile edit submit operation', () => {
     await waitFor(() => expect(mockRouterPush).toHaveBeenCalledWith('/groups'))
     expect(showToast).toHaveBeenCalledTimes(1)
     expect(showToast).toHaveBeenCalledWith('groupDissolved', 'success')
+  })
+
+  it('single-flights a broadcast and trusts only a consistent notification ACK', async () => {
+    const response = deferred<{
+      ok: boolean
+      status: number
+      json(): Promise<{
+        success: true
+        notified: number
+        failed: 0
+        total: number
+        dm_delivered: number
+        dm_skipped: number
+        replayed: false
+      }>
+    }>()
+    mockFetch.mockReturnValue(response.promise)
+    render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await openMembers()
+
+    fireEvent.click(screen.getByTestId('member-notify-open'))
+    fireEvent.change(screen.getByTestId('notify-message'), {
+      target: { value: 'Important update' },
+    })
+    fireEvent.click(screen.getByTestId('notify-send'))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    await act(async () =>
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          notified: 2,
+          failed: 0,
+          total: 2,
+          dm_delivered: 1,
+          dm_skipped: 1,
+          replayed: false,
+        }),
+      })
+    )
+
+    await waitFor(() => expect(screen.queryByTestId('notify-send')).not.toBeInTheDocument())
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('notificationSentToMembers', 'success')
   })
 
   it('cannot let a G1 mutation response toast or clear G2 mutation ownership', async () => {
