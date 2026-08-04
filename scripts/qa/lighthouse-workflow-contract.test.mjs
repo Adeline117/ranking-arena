@@ -17,6 +17,7 @@ const nightlyWorkflow = parse(nightlyWorkflowSource)
 const lighthouseConfig = await import(path.join(root, 'lighthouserc.js'))
 
 test('CI validates pull requests targeting stacked branches', () => {
+  assert.deepEqual(mainWorkflow.permissions, { contents: 'read' })
   for (const config of [mainWorkflow, lighthouseWorkflow]) {
     assert.ok(Object.hasOwn(config.on, 'pull_request'))
     assert.equal(config.on.pull_request, null)
@@ -69,6 +70,7 @@ test('CI keeps optional artifacts bounded and off the quality gate', () => {
   const testStep = unitSteps.find((step) => step.name === 'Run tests with coverage')
   const coverageArtifact = unitSteps.find((step) => step.name === 'Upload coverage artifact')
   assert.match(testStep.run, /--coverageReporters=lcovonly/)
+  assert.equal(coverageArtifact.uses, 'actions/upload-artifact@v6')
   assert.equal(coverageArtifact['continue-on-error'], true)
   assert.equal(coverageArtifact.with.path, 'coverage/lcov.info')
   assert.equal(coverageArtifact.with['retention-days'], 3)
@@ -85,11 +87,11 @@ test('Playwright uploads one bounded diagnostic only after a failure', () => {
   for (const job of [mainWorkflow.jobs.e2e, nightlyWorkflow.jobs.e2e]) {
     const artifacts = job.steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     assert.equal(artifacts.length, 1)
+    assert.equal(artifacts[0].uses, 'actions/upload-artifact@v6')
     assert.equal(artifacts[0].if, 'failure()')
     assert.equal(artifacts[0]['continue-on-error'], true)
     assert.equal(artifacts[0].with['retention-days'], 3)
     assert.equal(artifacts[0].with['if-no-files-found'], 'warn')
-    assert.match(artifacts[0].with.path, /playwright-report\//)
-    assert.match(artifacts[0].with.path, /test-results\//)
+    assert.equal(artifacts[0].with.path, 'playwright-report/\ntest-results/\n')
   }
 })
