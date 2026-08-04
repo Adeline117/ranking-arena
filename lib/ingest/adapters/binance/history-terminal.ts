@@ -9,7 +9,7 @@ import {
 } from './history-contract'
 
 export const BINANCE_POSITION_HISTORY_TERMINAL_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.binance.position_history@1' as const
+  'arena.ingest.history-terminal-verifier.binance.position_history@2' as const
 
 const POSITION_PAGE_SIZE = 50
 const EXHAUSTIVE_REASONS: readonly HistoryTerminalClaimReason[] = ['reported_end', 'empty_page']
@@ -35,6 +35,11 @@ function canonicalSourceId(value: unknown): string | null {
 
 function canonicalSourceText(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 && value.trim() === value ? value : null
+}
+
+function exactUsdtPerpetualSymbol(value: unknown): string | null {
+  const symbol = canonicalSourceText(value)
+  return symbol !== null && symbol.length > 'USDT'.length && symbol.endsWith('USDT') ? symbol : null
 }
 
 function positiveEpochMs(value: unknown): number | null {
@@ -127,12 +132,13 @@ function validateSegment(
     const closeTimes: number[] = []
     for (const row of rows) {
       const sourceId = canonicalSourceId(row.id)
-      const symbol = canonicalSourceText(row.symbol)
+      const symbol = exactUsdtPerpetualSymbol(row.symbol)
       const side = canonicalSourceText(row.side)
       const openedAt = positiveEpochMs(row.opened)
       const closedAt = positiveEpochMs(row.closed)
       if (
         sourceId === null ||
+        row.type !== 'UM' ||
         symbol === null ||
         side === null ||
         row.status !== 'All Closed' ||

@@ -81,7 +81,18 @@ function withRows(
 }
 
 function historyEnvelope(rows: unknown[], total: number | null): Record<string, unknown> {
-  return { code: '000000', success: true, data: { list: rows, total } }
+  return {
+    code: '000000',
+    success: true,
+    data: {
+      list: rows.map((row) =>
+        typeof row === 'object' && row !== null && !Array.isArray(row)
+          ? { type: 'UM', ...row }
+          : row
+      ),
+      total,
+    },
+  }
 }
 
 function historyVerifier(src: SourceRow) {
@@ -386,7 +397,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
   it('selects terminal verification only for the reviewed Binance Futures source contract', () => {
     const futures = source()
     expect(binanceAdapter.historyTerminalVerifier?.(futures, 'position_history')).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.binance.position_history@1',
+      contract: 'arena.ingest.history-terminal-verifier.binance.position_history@2',
     })
     expect(binanceAdapter.historyTerminalVerifier?.(futures, 'orders')).toBeNull()
 
@@ -584,6 +595,46 @@ describe('Binance evidence-preserving leaderboard capture', () => {
         {
           id: -1,
           symbol: 'BTCUSDT',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-01T00:00:00.000Z'),
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+      ],
+    ],
+    [
+      'a CM contract type',
+      [
+        {
+          id: Date.parse('2026-07-01T00:00:00.000Z'),
+          symbol: 'BTCUSDT',
+          type: 'CM',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-01T00:00:00.000Z'),
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+      ],
+    ],
+    [
+      'a non-USDT symbol',
+      [
+        {
+          id: Date.parse('2026-07-01T00:00:00.000Z'),
+          symbol: 'BTCUSDC',
+          side: 'Long',
+          status: 'All Closed',
+          opened: Date.parse('2026-07-01T00:00:00.000Z'),
+          closed: Date.parse('2026-07-02T00:00:00.000Z'),
+        },
+      ],
+    ],
+    [
+      'a USDT suffix without a base symbol',
+      [
+        {
+          id: Date.parse('2026-07-01T00:00:00.000Z'),
+          symbol: 'USDT',
           side: 'Long',
           status: 'All Closed',
           opened: Date.parse('2026-07-01T00:00:00.000Z'),

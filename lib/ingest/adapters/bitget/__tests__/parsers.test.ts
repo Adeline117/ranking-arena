@@ -314,38 +314,44 @@ describe('parseBitgetHistory (live-captured fixtures, 2026-06-11)', () => {
     expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
   })
 
-  it('rejects unsafe numeric ids and keeps whitespace numerics unknown instead of inventing zero', () => {
-    const raw = fixture('position-history-p1.json') as {
-      data: { rows: Array<Record<string, unknown>> }
-    }
-    raw.data.rows[0] = {
-      ...raw.data.rows[0],
-      orderNo: Number.MAX_SAFE_INTEGER + 1,
-      openTime: '   ',
-      returnRate: '   ',
-      netProfit: '   ',
-    }
+  it.each([
+    ['negative', -1],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+  ] as const)(
+    'rejects a %s numeric id and keeps whitespace numerics unknown instead of inventing zero',
+    (_label, orderNo) => {
+      const raw = fixture('position-history-p1.json') as {
+        data: { rows: Array<Record<string, unknown>> }
+      }
+      raw.data.rows[0] = {
+        ...raw.data.rows[0],
+        orderNo,
+        openTime: '   ',
+        returnRate: '   ',
+        netProfit: '   ',
+      }
 
-    const rows = parseBitgetHistory(raw, 'position_history', ctx)
-    const first = rows[0]
-    if (first.kind !== 'position_history') throw new Error('wrong kind')
-    expect(first.sourceFactId).toBeNull()
-    expect(first.openedAt).toBeNull()
-    expect(first.sourceReturn).toBeNull()
-    expect(first.realizedPnl).toBeNull()
-    expect(first.fieldSources).not.toHaveProperty('sourceFactId')
-    expect(first.fieldSources).not.toHaveProperty('openedAt')
-    expect(first.fieldSources).not.toHaveProperty('sourceReturn')
-    expect(first.fieldSources).not.toHaveProperty('realizedPnl')
-    expect(first.limitations).toEqual(
-      expect.arrayContaining([
-        'source_fact_id_missing',
-        'source_return_missing',
-        'source_realized_pnl_missing',
-      ])
-    )
-    expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
-  })
+      const rows = parseBitgetHistory(raw, 'position_history', ctx)
+      const first = rows[0]
+      if (first.kind !== 'position_history') throw new Error('wrong kind')
+      expect(first.sourceFactId).toBeNull()
+      expect(first.openedAt).toBeNull()
+      expect(first.sourceReturn).toBeNull()
+      expect(first.realizedPnl).toBeNull()
+      expect(first.fieldSources).not.toHaveProperty('sourceFactId')
+      expect(first.fieldSources).not.toHaveProperty('openedAt')
+      expect(first.fieldSources).not.toHaveProperty('sourceReturn')
+      expect(first.fieldSources).not.toHaveProperty('realizedPnl')
+      expect(first.limitations).toEqual(
+        expect.arrayContaining([
+          'source_fact_id_missing',
+          'source_return_missing',
+          'source_realized_pnl_missing',
+        ])
+      )
+      expect(() => parsedPositionHistoryRowSchema.parse(first)).not.toThrow()
+    }
+  )
 
   it('preserves genuine numeric and numeric-string zero return/PnL evidence', () => {
     const raw = fixture('position-history-p1.json') as {

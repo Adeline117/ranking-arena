@@ -302,6 +302,26 @@ describe('parseOkxHistory', () => {
     }
   })
 
+  it('keeps negative numeric sub-position identities outside the verifier domain', () => {
+    const raw = historyFixture() as {
+      data: Array<Record<string, unknown>>
+      historyTraderIdentity: string
+    }
+    raw.data = [{ ...raw.data[1], subPosId: -1 }]
+
+    const row = parseOkxHistory(raw, 'position_history', ctx)[0]
+    if (row.kind !== 'position_history') throw new Error('wrong kind')
+    expect(row.sourceFactId).toBeNull()
+    expect(row.fieldSources).not.toHaveProperty('sourceFactId')
+    expect(row.limitations).toContain('source_fact_id_missing')
+  })
+
+  it('rejects a negative numeric trader identity when source rows are present', () => {
+    expect(() =>
+      parseOkxHistory({ ...historyFixture(), historyTraderIdentity: -1 }, 'position_history', ctx)
+    ).toThrow('missing trader identity')
+  })
+
   it('binds subPosId dedupe to the trader identity', () => {
     const first = parseOkxHistory(historyFixture(), 'position_history', ctx)[0]
     const second = parseOkxHistory(

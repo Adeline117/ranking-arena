@@ -5,7 +5,7 @@ import type {
 
 export const BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT = 'arena.ingest.bitget-history-page@1' as const
 export const BITGET_POSITION_HISTORY_TERMINAL_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.bitget.position_history@1' as const
+  'arena.ingest.history-terminal-verifier.bitget.position_history@2' as const
 
 export const BITGET_POSITION_HISTORY_URL =
   'https://www.bitget.com/v1/trigger/trace/order/historyList' as const
@@ -26,7 +26,7 @@ function canonicalSourceId(value: unknown): string | null {
   if (typeof value === 'string') {
     return value.length > 0 && value.trim() === value ? value : null
   }
-  return Number.isSafeInteger(value) ? String(value) : null
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null
 }
 
 function positiveEpochMs(value: unknown): number | null {

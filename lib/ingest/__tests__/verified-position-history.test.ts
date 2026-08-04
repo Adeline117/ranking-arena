@@ -215,6 +215,7 @@ async function binanceInput(): Promise<PrepareVerifiedPositionHistoryPublication
   const raw = {
     id: Number(openedMs),
     symbol: 'BTCUSDT',
+    type: 'UM',
     side: 'Long',
     status: 'All Closed',
     opened: Number(openedMs),

@@ -28,6 +28,7 @@ import {
 } from '@/lib/ingest/position-history-publication-values'
 import {
   assertPostgresJsonbTextCompatible,
+  assertReviewedPositionHistoryCurrency,
   buildReviewedPositionHistoryEvidence,
   POSITION_HISTORY_PAGE_MANIFEST_KEYS,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
@@ -130,6 +131,7 @@ async function binanceCapture(
   const raw = {
     id: Number(openedMs),
     symbol: 'BTCUSDT',
+    type: 'UM',
     side: 'Long',
     status: 'All Closed',
     opened: Number(openedMs),
@@ -253,7 +255,13 @@ describe('shared reviewed position-history evidence contract', () => {
     }
   })
 
-  it('keeps the captured Bitget and OKX USDT fixtures publication-eligible', async () => {
+  it('keeps the captured Binance, Bitget, and OKX USDT fixtures publication-eligible', async () => {
+    const binanceFixture = JSON.parse(
+      readFileSync(
+        join(__dirname, '../adapters/binance/__tests__/fixtures/position-history-closing-p1.json'),
+        'utf8'
+      )
+    ) as { data: { list: Array<Record<string, unknown>> } }
     const bitgetFixture = JSON.parse(
       readFileSync(
         join(__dirname, '../adapters/bitget/__tests__/fixtures/position-history-p1.json'),
@@ -264,9 +272,13 @@ describe('shared reviewed position-history evidence contract', () => {
       readFileSync(join(__dirname, '../adapters/okx/__tests__/fixtures/history-page.json'), 'utf8')
     ) as { data: Array<Record<string, unknown>> }
 
+    const binance = await binanceCapture(binanceFixture.data.list[0])
     const bitget = await bitgetCapture([bitgetFixture.data.rows[0]])
     const okx = await okxCapture(okxFixture.data[1])
 
+    expect(
+      buildReviewedPositionHistoryEvidence(binance.artifact, binance.sourceRunId).canonicalRows
+    ).toHaveLength(1)
     expect(
       buildReviewedPositionHistoryEvidence(bitget.artifact, bitget.sourceRunId).canonicalRows
     ).toHaveLength(1)
@@ -281,18 +293,27 @@ describe('shared reviewed position-history evidence contract', () => {
       expectedCurrency: 'USDT',
       pageSize: 50,
       servingReturnScale: 100,
+      verifier: {
+        contract: 'arena.ingest.history-terminal-verifier.binance.position_history@2',
+      },
     })
     expect(REVIEWED_POSITION_HISTORY_CONTRACTS.bitget_futures).toMatchObject({
       adapterSlug: 'bitget',
       expectedCurrency: 'USDT',
       pageSize: 20,
       servingReturnScale: 1,
+      verifier: {
+        contract: 'arena.ingest.history-terminal-verifier.bitget.position_history@2',
+      },
     })
     expect(REVIEWED_POSITION_HISTORY_CONTRACTS.okx_futures).toMatchObject({
       adapterSlug: 'okx',
       expectedCurrency: 'USDT',
       pageSize: 100,
       servingReturnScale: 100,
+      verifier: {
+        contract: 'arena.ingest.history-terminal-verifier.okx.position_history@1',
+      },
     })
     expect(REVIEWED_POSITION_HISTORY_CONTRACTS.binance_futures.fieldPaths.sourceFactId).toEqual([
       [
@@ -338,6 +359,19 @@ describe('shared reviewed position-history evidence contract', () => {
       source_rows: [],
     })
     expect(evidence.canonicalRows).toEqual([])
+  })
+
+  it('fails a complete Bitget capture whose numeric orderNo is negative', async () => {
+    const captured = await bitgetCapture([bitgetRaw({ orderNo: -1 })])
+
+    expect(captured.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
+    })
+    expect(() =>
+      buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
+    ).toThrow('exact reviewed terminal evidence')
   })
 
   it.each([
@@ -797,6 +831,29 @@ describe('shared reviewed position-history evidence contract', () => {
       buildReviewedPositionHistoryEvidence(captured.artifact, captured.sourceRunId)
     ).toThrow('canonical row currency must be exact USDT')
   })
+
+  it.each([
+    ['CM type', { type: 'CM' }],
+    ['USDC symbol', { symbol: 'BTCUSDC' }],
+    ['empty-base symbol', { symbol: 'USDT' }],
+  ] as const)(
+    'rejects Binance %s without RAW USDT publication proof',
+    async (_label, overrides) => {
+      const valid = await binanceCapture()
+      const evidence = buildReviewedPositionHistoryEvidence(valid.artifact, valid.sourceRunId)
+      const row: ParsedPositionHistoryRow = {
+        ...evidence.canonicalRows[0].row,
+        raw: { ...evidence.canonicalRows[0].row.raw, ...overrides },
+      }
+
+      expect(() =>
+        assertReviewedPositionHistoryCurrency(
+          REVIEWED_POSITION_HISTORY_CONTRACTS.binance_futures,
+          row
+        )
+      ).toThrow('must be proved by exact UM and USDT symbol suffix')
+    }
+  )
 
   it('allows a valid surrogate pair while defensively rejecting isolated surrogates', () => {
     expect(() =>

@@ -57,7 +57,7 @@ function sourceIdentity(v: unknown): string | null {
   if (typeof v === 'string') {
     return v.length > 0 && v === v.trim() ? v : null
   }
-  return typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : null
+  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? String(v) : null
 }
 
 function sourceMarker(v: unknown): string | null {

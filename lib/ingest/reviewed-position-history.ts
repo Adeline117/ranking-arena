@@ -277,16 +277,25 @@ export function assertPostgresJsonbTextCompatible(value: unknown, label: string)
   }
 }
 
-function assertReviewedPositionHistoryCurrency(
+export function assertReviewedPositionHistoryCurrency(
   contract: ReviewedPositionHistoryContract,
   row: ParsedPositionHistoryRow
 ): void {
-  const rawCurrency =
-    contract.sourceSlug === 'bitget_futures'
-      ? row.raw.tokenId
-      : contract.sourceSlug === 'okx_futures'
-        ? row.raw.ccy
-        : contract.expectedCurrency
+  if (contract.sourceSlug === 'binance_futures') {
+    const rawSymbol = row.raw.symbol
+    if (
+      row.raw.type !== 'UM' ||
+      typeof rawSymbol !== 'string' ||
+      rawSymbol.length <= contract.expectedCurrency.length ||
+      !rawSymbol.endsWith(contract.expectedCurrency)
+    ) {
+      throw contractError(
+        `${contract.sourceSlug} canonical row currency must be proved by exact UM and ${contract.expectedCurrency} symbol suffix`
+      )
+    }
+    return
+  }
+  const rawCurrency = contract.sourceSlug === 'bitget_futures' ? row.raw.tokenId : row.raw.ccy
   if (rawCurrency !== contract.expectedCurrency) {
     throw contractError(
       `${contract.sourceSlug} canonical row currency must be exact ${contract.expectedCurrency}`
@@ -305,7 +314,9 @@ function reviewedSourceIdentity(value: unknown): string | null {
   if (typeof value === 'string') {
     return value.length > 0 && value === value.trim() ? value : null
   }
-  return typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : null
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? String(value)
+    : null
 }
 
 function reviewedSourceMarker(value: unknown): string | null {

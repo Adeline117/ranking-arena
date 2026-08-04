@@ -346,7 +346,7 @@ interface HistoryWrapper {
 
 /**
  * Futures position-history rows (POST lead-portfolio/position-history,
- * captured 2026-06-11): { id (ms epoch = opened ts), symbol, opened, closed,
+ * captured 2026-06-11): { id (ms epoch = opened ts), symbol, type ('UM'), opened, closed,
  * avgCost, avgClosePrice, closingPnl, maxOpenInterest, closedVolume,
  * isolated ('Cross'|'Isolated'), side ('Long'|'Short'), status ('All
  * Closed'|'Partially Closed'), leverage ('50'), roi }. The endpoint serves

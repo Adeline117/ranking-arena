@@ -75,7 +75,7 @@ function historyVerifier() {
 describe('Bitget history termination', () => {
   it('selects terminal verification only for the reviewed futures endpoint', () => {
     expect(bitgetAdapter.historyTerminalVerifier?.(src, 'position_history')).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.bitget.position_history@1',
+      contract: 'arena.ingest.history-terminal-verifier.bitget.position_history@2',
     })
     expect(bitgetAdapter.historyTerminalVerifier?.(src, 'copiers')).toBeNull()
     expect(
@@ -140,6 +140,38 @@ describe('Bitget history termination', () => {
       evidence_state: 'verified',
       claim_observations: [{ segment_id: 'default', reason: 'reported_end', page_ordinal: 1 }],
       scan_terminal_state: 'exhausted',
+    })
+  })
+
+  it('rejects a complete capture with a negative numeric orderNo identity', async () => {
+    const acquisition = await captureHistoryAcquisition({
+      source: src,
+      traderId: 44,
+      exchangeTraderId: TRADER_ID,
+      kind: 'position_history',
+      cursor: null,
+      attemptStartedAt: new Date(Date.now() - 1_000).toISOString(),
+      stream: bitgetAdapter.getHistory(
+        session({
+          code: '00000',
+          data: {
+            rows: [{ orderNo: -1, closeTime: Date.parse('2026-07-20T00:00:00.000Z') }],
+            nextFlag: false,
+          },
+        }),
+        src,
+        TRADER_ID,
+        'position_history',
+        null
+      ),
+      terminalVerifier: historyVerifier(),
+    })
+
+    expect(acquisition.pages).toHaveLength(1)
+    expect(acquisition.artifact.termination).toMatchObject({
+      evidence_state: 'rejected',
+      scan_terminal_state: 'unknown',
+      blocker_reasons: ['terminal_claim_rejected'],
     })
   })
 
