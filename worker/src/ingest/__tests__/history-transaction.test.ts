@@ -33,6 +33,16 @@ describe('history transaction boundary', () => {
     expect(mockRelease).toHaveBeenCalledWith(false)
   })
 
+  it('destroys the client when BEGIN has an ambiguous failure', async () => {
+    const failure = new Error('connection lost during begin')
+    mockQuery.mockRejectedValueOnce(failure)
+
+    await expect(runHistoryTransaction(async () => 'never reached')).rejects.toBe(failure)
+
+    expect(mockQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN'])
+    expect(mockRelease).toHaveBeenCalledWith(true)
+  })
+
   it('never rolls back or reuses a client after an ambiguous COMMIT failure', async () => {
     const failure = new Error('connection lost during commit')
     mockQuery.mockImplementation(async (sql: string) => {

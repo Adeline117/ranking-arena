@@ -9,10 +9,12 @@ export async function runHistoryTransaction<T>(
   operation: (transaction: IngestQueryExecutor) => Promise<T>
 ): Promise<T> {
   const client = await ingestClientConnect()
+  let beginAttempted = false
   let transactionOpen = false
   let commitAttempted = false
   let destroyClient = false
   try {
+    beginAttempted = true
     await client.query('BEGIN')
     transactionOpen = true
     const result = await operation(client)
@@ -21,7 +23,7 @@ export async function runHistoryTransaction<T>(
     transactionOpen = false
     return result
   } catch (cause) {
-    if (commitAttempted) {
+    if (commitAttempted || (beginAttempted && !transactionOpen)) {
       destroyClient = true
       throw cause
     }
