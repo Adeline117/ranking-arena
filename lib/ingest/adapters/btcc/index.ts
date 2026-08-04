@@ -35,6 +35,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
+import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseBtccHistory,
   parseBtccLeaderboardPage,
@@ -49,6 +50,10 @@ const HEADERS = { accept: 'application/json', 'content-type': 'application/json'
 function endpoint(src: SourceRow, key: string, fallback: string): string {
   const endpoints = (src.meta.endpoints ?? {}) as Record<string, string>
   return endpoints[key] ?? fallback
+}
+
+function nonNegativeSafeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
 async function btccFetcher(session: FetchSession): Promise<JsonFetcher> {
@@ -213,6 +218,7 @@ const btccAdapter: SourceAdapter = {
     // copiers
     const url = endpoint(src, 'copiers', `${BASE}/traderBring/follow/page`)
     const maxPages = Number(src.meta.copier_max_pages) || 30
+    let candidatesSeen = 0
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
       const payload = await replayJson(session, fetcher, {
         url,
@@ -220,10 +226,32 @@ const btccAdapter: SourceAdapter = {
         headers: HEADERS,
         body: { pageNum: pageIndex, pageSize: limit, traderId },
       })
-      const rows = parseBtccHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
+      const candidateCount = extractCopierCandidateRecords({
+        src,
+        exchangeTraderId,
+        pageIndex,
+        payload,
+      }).candidates.length
+      candidatesSeen += candidateCount
+      if (!Number.isSafeInteger(candidatesSeen)) {
+        throw new Error('[btcc] copier candidate count exceeds the safe-integer range')
+      }
+      const reportedTotal = nonNegativeSafeInteger((payload as { total?: unknown })?.total)
+      if (reportedTotal !== null && candidatesSeen > reportedTotal) {
+        throw new Error('[btcc] copier candidates exceed the reported total')
+      }
+
+      const metadataClaimsMore = reportedTotal !== null && candidatesSeen < reportedTotal
+      if (candidateCount === 0) {
+        if (metadataClaimsMore) {
+          throw new Error('[btcc] copier empty page still claims continuation')
+        }
+        return
+      }
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      if (rows.length < limit) return
+      if (metadataClaimsMore) continue
+      if (reportedTotal !== null) return
+      if (candidateCount < limit) return
     }
   },
 
