@@ -517,7 +517,7 @@ describe('position-history framework-owned source fact ledger', () => {
         ledger: contractDrift,
         expectedAcquisition: acquisitionAnchor(rawArtifact),
       })
-    ).toEqual({ verified: false, reason: 'source_fact_ledger_mismatch' })
+    ).toEqual({ verified: false, reason: 'source_fact_contract_unavailable' })
     expect(() => parsePositionHistorySourceFactLedger(controlCharacter)).toThrow()
   })
 })
