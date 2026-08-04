@@ -18,11 +18,15 @@
 
 ## API & Data
 
-| Document                                                 | Description                                    |
-| -------------------------------------------------------- | ---------------------------------------------- |
-| [API_ROUTES.md](./API_ROUTES.md)                         | API endpoint reference (may lag behind code)   |
-| [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)         | Error handling, response format, auth patterns |
-| [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md) | Exchange API field mapping across platforms    |
+| Document                                                                                             | Description                                                      |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [ARENA_REBUILD_SPEC.md](./ARENA_REBUILD_SPEC.md)                                                     | Homepage/trader-detail field superset and screenshot limitations |
+| [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md)                                             | CEX/Wallet field semantics, method, and provenance authority     |
+| [TOKEN_RANKING_DATA_AUTHORITY_PLAN_2026-07-29.md](./TOKEN_RANKING_DATA_AUTHORITY_PLAN_2026-07-29.md) | Token rank eligibility, coverage, and fail-closed plan           |
+| [DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md](./DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md)         | DEX event-ledger execution authority and phase gates             |
+| [DEX_OPEN_SOURCE_EVALUATION_2026-07-29.md](./DEX_OPEN_SOURCE_EVALUATION_2026-07-29.md)               | Ponder/SQD/node evaluation; no production authorization          |
+| [API_ROUTES.md](./API_ROUTES.md)                                                                     | API endpoint reference (may lag behind code)                     |
+| [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)                                                     | Error handling, response format, auth patterns                   |
 
 ## Exchange API Docs
 
@@ -54,6 +58,7 @@
 | [RUNBOOK.md](./RUNBOOK.md)       | Emergency operations manual       |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Deployment checklist and rollback |
 | [STAGING.md](./STAGING.md)       | Staging/preview deployments       |
+| [SLO.md](./SLO.md)               | Freshness budgets and SLOs        |
 
 ## Design & Principles
 

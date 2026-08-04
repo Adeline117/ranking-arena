@@ -2,6 +2,23 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## 当前上线 / 数据权威台账（2026-08-03）
+
+硬规则：历史不完整、价格或 FX 不可信、成本基础未知、来源/主体/RAW 血缘未绑定时，只能显示
+`partial/unknown`，不得进入排名。`main` 代码、离线测试和生产已核验是三种不同状态。
+
+| 范围                        | 代码 / main                                                                                                                  | 离线证据                                           | 生产已核验                           | 当前排名状态                                                      | 下一阻断项 / 权威文档                                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CEX / Wallet 字段与公开身份 | 字段 provenance 合同已存在；resolver 与 capability RPC 已硬过滤实时 `active + serving`（`4349aa350`、`9b0ae7b85`）           | 静态合约 + 隔离 PG17 通过                          | `unknown`                            | 只有既有 eligible/publication 门允许公开；字段存在不等于窗口完整  | Binance/OKX 分页 terminal evidence；OKX Web3 History/Portfolio；[EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md)                                      |
+| 交易记录 / Copier           | Tier-C 私有写先于无泄漏 ready marker；无 receipt 的 copier row totals/distribution 已 quarantine（`0f68ba5bf`、`e8eafd38a`） | route/mapper/UI + PG17 exploit/replay 通过         | `unknown`                            | 未绑定行保持 `unknown` 且不参与排名；只保留精确 profile headline  | 独立 copier snapshot receipt、原子 writer、cohort≥10 且每桶≥5 的隐私门                                                                                        |
+| Token 数据权威              | DA-0 完成，DA-1 进行中；legacy Token publication 已冻结/隔离                                                                 | migration 合约与 PG17 证明存在                     | `unknown`                            | intentional unpublished / verification hold                       | DA-1/DA-2 typed facts + RAW/run/terminal 同事务发布；[TOKEN_RANKING_DATA_AUTHORITY_PLAN_2026-07-29.md](./TOKEN_RANKING_DATA_AUTHORITY_PLAN_2026-07-29.md)     |
+| DEX 链上重建                | census、draft manifests、golden wallets、Solana metadata witness 已落；仍只允许 shadow                                       | fixture/contract 校验；不等于 provider replay      | `unknown`                            | 缺 opening inventory、历史价格、cost basis、replay 时一律排除     | 完成 Phase 0 BSC 双源、SQD spike、checkpoint/replay、空集群恢复；[DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md](./DEX_EVENT_FIRST_INDEXING_PLAN_2026-07-15.md) |
+| 首页 / 交易所页消费         | Hero 与交易所页必须消费合格账户和可见 board；不得把 discovered address 当交易员人数                                          | 现有 UI/API 测试，尚缺最新生产 smoke               | `unknown`                            | 交易所页仍缺逐指标 quality/method filter，不接 DEX canonical rank | 同页 provenance/method disclosure + 数据阈值 smoke；[ARENA_REBUILD_SPEC.md](./ARENA_REBUILD_SPEC.md)                                                          |
+| 发布与 owner gates          | 新 migration 已到 `20260804052000`；代码均小步推送 `main`                                                                    | migration history shape、type/lint、相关 PG17 通过 | `unknown`（未读取生产 exact ledger） | 不得声称已部署或已上线                                            | 按 [RUNBOOK.md](./RUNBOOK.md) 核验 exact ledger/ACL/generation；Stripe Live、Sentry、恢复演练、首个 claim 对账仍需 owner/真实环境证据                         |
+
+详细阶段只在对应权威文档维护；`EXCHANGE_FIELD_COVERAGE.md` 是机器生成快照，禁止手改。旧日期段落保留
+为历史记录，不覆盖本表。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
