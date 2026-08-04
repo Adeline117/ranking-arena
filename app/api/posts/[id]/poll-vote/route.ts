@@ -277,9 +277,10 @@ async function setCustomPollVote(request: NextRequest, context: RouteContext): P
       request_id: requestId,
     } = parsed.data
 
-    const { data, error } = await supabase.rpc('cast_post_poll_vote_atomic', {
+    const { data, error } = await supabase.rpc('cast_post_poll_vote_expected_atomic', {
       p_actor_id: actorId,
       p_post_id: postId,
+      p_expected_poll_id: requestedPollId,
       p_option_indexes: optionIndexes,
     })
 
@@ -294,6 +295,9 @@ async function setCustomPollVote(request: NextRequest, context: RouteContext): P
     }
     if (data.status === 'ended') {
       return NextResponse.json({ error: 'Poll has ended' }, { status: 409 })
+    }
+    if (data.status === 'poll_changed') {
+      return NextResponse.json({ error: 'Poll changed; reload before voting' }, { status: 409 })
     }
     if (data.status === 'invalid') {
       return NextResponse.json({ error: 'Invalid poll options' }, { status: 400 })

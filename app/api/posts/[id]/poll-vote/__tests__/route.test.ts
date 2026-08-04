@@ -218,8 +218,9 @@ describe('/api/posts/[id]/poll-vote exact viewer contract', () => {
     const response = await POST(request('POST', postBody()), context)
 
     expect(response.status).toBe(200)
-    expect(mockRpc).toHaveBeenCalledWith('cast_post_poll_vote_atomic', {
+    expect(mockRpc).toHaveBeenCalledWith('cast_post_poll_vote_expected_atomic', {
       p_actor_id: USER_ID,
+      p_expected_poll_id: POLL_ID,
       p_post_id: POST_ID,
       p_option_indexes: [0],
     })
@@ -275,6 +276,24 @@ describe('/api/posts/[id]/poll-vote exact viewer contract', () => {
     const response = await POST(request('POST', postBody()), context)
 
     expect(response.status).toBe(409)
+  })
+
+  it('maps a pre-mutation expected-poll mismatch to 409', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'poll_changed' }, error: null })
+
+    const response = await POST(request('POST', postBody()), context)
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Poll changed; reload before voting',
+    })
+    expect(mockRpc).toHaveBeenCalledWith('cast_post_poll_vote_expected_atomic', {
+      p_actor_id: USER_ID,
+      p_expected_poll_id: POLL_ID,
+      p_post_id: POST_ID,
+      p_option_indexes: [0],
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('fails closed when the atomic RPC returns malformed counts or extra fields', async () => {

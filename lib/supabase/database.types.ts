@@ -11453,6 +11453,15 @@ export type Database = {
         }
         Returns: Json
       }
+      cast_post_poll_vote_expected_atomic: {
+        Args: {
+          p_actor_id: string
+          p_expected_poll_id: string
+          p_option_indexes: number[]
+          p_post_id: string
+        }
+        Returns: Json
+      }
       check_dm_permission: {
         Args: { p_receiver_id: string; p_sender_id: string }
         Returns: Json
