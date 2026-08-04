@@ -25,6 +25,10 @@ import {
   type HistoryTerminalClaim,
 } from '@/lib/ingest/history-acquisition'
 import {
+  buildPositionHistoryAcquisitionArtifactV2,
+  type PositionHistoryAcquisitionArtifactV2,
+} from '@/lib/ingest/position-history-acquisition-v2'
+import {
   EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   POSITION_HISTORY_RAW_JOB_TYPE,
@@ -32,7 +36,12 @@ import {
   writePositionHistoryRawArtifact,
   type WritePositionHistoryRawArtifactInput,
 } from '@/lib/ingest/raw'
-import { strictCanonicalJson } from '@/lib/ingest/strict-canonical-json'
+import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
+import {
+  BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
+  BINANCE_POSITION_HISTORY_URL,
+} from '@/lib/ingest/adapters/binance/history-contract'
+import { binancePositionHistoryTerminalVerifier } from '@/lib/ingest/adapters/binance/history-terminal'
 
 interface PointerRow {
   id: number
@@ -89,6 +98,88 @@ async function artifactInput(
     },
   })
   return { artifact: captured.artifact, sourceRunId: captured.sourceRunId }
+}
+
+function jsonClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+async function verifiedV2ArtifactInputs(): Promise<{
+  v1: WritePositionHistoryRawArtifactInput
+  v2: WritePositionHistoryRawArtifactInput & {
+    artifact: PositionHistoryAcquisitionArtifactV2
+  }
+}> {
+  const opened = Date.parse('2026-07-02T00:00:00.000Z')
+  const payload = {
+    contract: BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
+    portfolioId: 'portfolio-1',
+    sort: 'CLOSING',
+    request: {
+      pageNumber: 1,
+      pageSize: 50,
+      portfolioId: 'portfolio-1',
+      sort: 'CLOSING',
+    },
+    response: {
+      code: '000000',
+      success: true,
+      data: {
+        total: 1,
+        list: [
+          {
+            id: 'closed-position-1',
+            symbol: 'BTCUSDT',
+            side: 'Long',
+            status: 'All Closed',
+            opened,
+            closed: opened + 60_000,
+            roi: '0.1',
+            leverage: '10',
+            closedVolume: '2',
+            avgCost: '60000',
+            avgClosePrice: '61000',
+            closingPnl: '12.5',
+          },
+        ],
+      },
+    },
+  }
+  const claim: HistoryTerminalClaim = {
+    contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+    observations: [{ segment_id: 'closing', reason: 'reported_end', page_ordinal: 1 }],
+  }
+  async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
+    yield { pageIndex: 1, payload, url: BINANCE_POSITION_HISTORY_URL, fetchedAt }
+    return claim
+  }
+  const capture = await captureHistoryAcquisition({
+    source: { id: 1, slug: 'binance_futures' },
+    traderId: 11,
+    exchangeTraderId: 'portfolio-1',
+    kind: 'position_history',
+    cursor: '2026-07-01T00:00:00.000Z',
+    attemptStartedAt,
+    stream: stream(),
+    terminalVerifier: binancePositionHistoryTerminalVerifier,
+  })
+  const built = buildPositionHistoryAcquisitionArtifactV2({
+    acquisition: capture.artifact,
+    expectedAcquisition: {
+      sourceRunId: capture.sourceRunId,
+      sourceId: 1,
+      sourceSlug: 'binance_futures',
+      traderId: 11,
+      exchangeTraderId: 'portfolio-1',
+    },
+  })
+  if (built.state !== 'verified') {
+    throw new Error(`expected verified v2 acquisition, got ${built.reason}`)
+  }
+  return {
+    v1: { artifact: capture.artifact, sourceRunId: capture.sourceRunId },
+    v2: { artifact: built.artifact, sourceRunId: built.sourceRunId },
+  }
 }
 
 function downloadBody(payload: Buffer) {
@@ -211,6 +302,25 @@ describe('writePositionHistoryRawArtifact', () => {
         hash_scope: 'json_utf8',
       },
     })
+    expect(Object.keys(database.pointers[0].meta as Record<string, unknown>)).toEqual([
+      'surface',
+      'data_contract',
+      'history_evidence_contract',
+      'source_run_id',
+      'source_slug',
+      'exchange_trader_id',
+      'history_kind',
+      'attempt_started_at',
+      'starting_cursor',
+      'capture_config',
+      'observed_at',
+      'page_count',
+      'terminal_evidence_state',
+      'scan_terminal_state',
+      'verifier_contract',
+      'termination',
+      'raw_integrity',
+    ])
     const uploaded = storage.get(receipt.storagePath)
     expect(uploaded).toBeDefined()
     expect(gunzipSync(uploaded!).toString('utf8')).toBe(strictCanonicalJson(input.artifact))
@@ -337,5 +447,169 @@ describe('writePositionHistoryRawArtifact', () => {
         blocker_reasons: ['upstream_error'],
       },
     })
+  })
+
+  it('stores verified @2 evidence under the outer digest with exact acquisition-only metadata', async () => {
+    const { v2 } = await verifiedV2ArtifactInputs()
+    const database = databaseHarness()
+
+    const receipt = await writePositionHistoryRawArtifact(v2, database.runTransaction)
+
+    expect(v2.sourceRunId).not.toBe(v2.artifact.acquisition_source_run_id)
+    expect(receipt).toEqual({
+      id: 41,
+      storagePath:
+        `binance_futures/history_trust/position_history/${v2.sourceRunId}/` +
+        `event_history_${v2.sourceRunId}.json.gz`,
+      contentHash: v2.sourceRunId,
+    })
+    expect(database.pointers[0]).toMatchObject({
+      content_hash: v2.sourceRunId,
+      source_run_id: v2.sourceRunId,
+      trust_artifact_role: EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+      meta: {
+        data_contract: v2.artifact.contract,
+        source_run_id: v2.sourceRunId,
+        acquisition_contract: v2.artifact.acquisition.contract,
+        acquisition_source_run_id: v2.artifact.acquisition_source_run_id,
+        candidate_ledger_contract: v2.artifact.candidate_ledger.contract,
+        candidate_ledger_sha256: v2.artifact.candidate_ledger_sha256,
+        source_fact_contract: v2.artifact.candidate_ledger.source_fact_contract,
+        observed_candidate_count: 1,
+        unique_source_fact_count: 1,
+        fact_set_sha256: v2.artifact.candidate_ledger.fact_set_sha256,
+      },
+    })
+    const meta = database.pointers[0].meta as Record<string, unknown>
+    expect(meta).not.toHaveProperty('history_evidence_contract')
+    expect(meta).not.toHaveProperty('parser_complete')
+    expect(meta).not.toHaveProperty('rank_eligible')
+    expect(Object.keys(meta).sort()).toEqual(
+      [
+        'surface',
+        'data_contract',
+        'source_run_id',
+        'source_slug',
+        'exchange_trader_id',
+        'history_kind',
+        'attempt_started_at',
+        'starting_cursor',
+        'capture_config',
+        'observed_at',
+        'page_count',
+        'terminal_evidence_state',
+        'scan_terminal_state',
+        'verifier_contract',
+        'termination',
+        'acquisition_contract',
+        'acquisition_source_run_id',
+        'candidate_ledger_contract',
+        'candidate_ledger_sha256',
+        'source_fact_contract',
+        'observed_candidate_count',
+        'unique_source_fact_count',
+        'fact_set_sha256',
+        'raw_integrity',
+      ].sort()
+    )
+    expect(gunzipSync(storage.get(receipt.storagePath)!)).toEqual(
+      Buffer.from(strictCanonicalJson(v2.artifact), 'utf8')
+    )
+  })
+
+  it('keeps @1 and @2 pointers for the same acquisition distinct and replayable', async () => {
+    const { v1, v2 } = await verifiedV2ArtifactInputs()
+    const database = databaseHarness()
+
+    const v1Receipt = await writePositionHistoryRawArtifact(v1, database.runTransaction)
+    const v2Receipt = await writePositionHistoryRawArtifact(v2, database.runTransaction)
+    const v2Replay = await writePositionHistoryRawArtifact(v2, database.runTransaction)
+
+    expect(v1.sourceRunId).toBe(v2.artifact.acquisition_source_run_id)
+    expect(v1Receipt.storagePath).not.toBe(v2Receipt.storagePath)
+    expect(v2Replay).toEqual(v2Receipt)
+    expect(database.pointers).toHaveLength(2)
+  })
+
+  it('never accepts the nested @1 digest as the @2 pointer identity', async () => {
+    const { v2 } = await verifiedV2ArtifactInputs()
+    const database = databaseHarness()
+
+    await expect(
+      writePositionHistoryRawArtifact(
+        { ...v2, sourceRunId: v2.artifact.acquisition_source_run_id },
+        database.runTransaction
+      )
+    ).rejects.toThrow('history artifact v2 is invalid: position_history_v2_source_run_mismatch')
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(database.runTransaction).not.toHaveBeenCalled()
+  })
+
+  it('replays @2 semantics before I/O and rejects a fully rehashed terminal forgery', async () => {
+    const { v2 } = await verifiedV2ArtifactInputs()
+    const forged = jsonClone(v2.artifact)
+    ;(forged.acquisition.pages[0].payload as { portfolioId: string }).portfolioId = 'another-trader'
+    forged.acquisition.pages[0].payload_sha256 = strictCanonicalSha256(
+      forged.acquisition.pages[0].payload
+    )
+    forged.acquisition_source_run_id = strictCanonicalSha256(forged.acquisition)
+    forged.candidate_ledger.acquisition_source_run_id = forged.acquisition_source_run_id
+    forged.candidate_ledger_sha256 = strictCanonicalSha256(forged.candidate_ledger)
+    const database = databaseHarness()
+
+    await expect(
+      writePositionHistoryRawArtifact(
+        { artifact: forged, sourceRunId: strictCanonicalSha256(forged) },
+        database.runTransaction
+      )
+    ).rejects.toThrow(
+      'history artifact v2 is invalid: candidate_ledger_revalidation_failed:terminal_evidence_revalidation_failed'
+    )
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(database.runTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects a self-consistent @2 candidate omission before Storage or pointer I/O', async () => {
+    const { v2 } = await verifiedV2ArtifactInputs()
+    const omitted = jsonClone(v2.artifact)
+    omitted.candidate_ledger.segments[0].pages[0].occurrences = []
+    omitted.candidate_ledger.segments[0].pages[0].candidate_count = 0
+    omitted.candidate_ledger.observed_candidate_count = 0
+    omitted.candidate_ledger.source_facts = []
+    omitted.candidate_ledger.unique_source_fact_count = 0
+    omitted.candidate_ledger.fact_set_sha256 = strictCanonicalSha256([])
+    omitted.candidate_ledger_sha256 = strictCanonicalSha256(omitted.candidate_ledger)
+    const database = databaseHarness()
+
+    await expect(
+      writePositionHistoryRawArtifact(
+        { artifact: omitted, sourceRunId: strictCanonicalSha256(omitted) },
+        database.runTransaction
+      )
+    ).rejects.toThrow(
+      'history artifact v2 is invalid: candidate_ledger_revalidation_failed:source_fact_ledger_mismatch'
+    )
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(database.runTransaction).not.toHaveBeenCalled()
+  })
+
+  it('does not grant @2 the legacy @1 metadata replay exception', async () => {
+    const { v2 } = await verifiedV2ArtifactInputs()
+    const database = databaseHarness()
+    await writePositionHistoryRawArtifact(v2, database.runTransaction)
+    const meta = database.pointers[0].meta as Record<string, unknown>
+    delete meta.acquisition_contract
+    delete meta.acquisition_source_run_id
+    delete meta.candidate_ledger_contract
+    delete meta.candidate_ledger_sha256
+    delete meta.source_fact_contract
+    delete meta.observed_candidate_count
+    delete meta.unique_source_fact_count
+    delete meta.fact_set_sha256
+    meta.history_evidence_contract = POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT
+
+    await expect(writePositionHistoryRawArtifact(v2, database.runTransaction)).rejects.toThrow(
+      'database pointer 41 does not match the artifact'
+    )
   })
 })
