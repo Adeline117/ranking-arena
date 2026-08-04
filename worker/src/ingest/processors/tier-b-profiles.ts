@@ -17,19 +17,28 @@ import {
   findIncompleteProfileWindow,
   IncompleteProfileWindowError,
 } from '@/lib/ingest/core/profile-coverage'
-import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/ingest/core/types'
+import type {
+  HistoryKind,
+  ParseCtx,
+  ParsedHistoryRow,
+  RawPage,
+  SourceRow,
+} from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import { buildPositionHistoryAcquisitionArtifactV2 } from '@/lib/ingest/position-history-acquisition-v2'
 import {
+  writeCopierSnapshotRawArtifact,
   writePositionHistoryRawArtifact,
   writeRawObject,
   type IngestTransactionRunner,
 } from '@/lib/ingest/raw'
+import { buildCopierSnapshotArtifact } from '@/lib/ingest/copier-snapshot-artifact'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
+import { publishCopierSnapshotInTransaction } from '@/lib/ingest/serving/copier-snapshot-publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
@@ -43,8 +52,9 @@ import { runHistoryTransaction } from '../history-transaction'
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
  * processed by Tier B since `stalerThan` are returned. The marker is a dedicated
  * arena.ingest_cursors row (kind 'tierb_profiled') written after each trader
- * whose requested profile timeframes reached a terminal state, or whose
- * record-only surfaces all returned an upstream evidence page successfully.
+ * whose requested profile and history surfaces all committed successfully,
+ * or whose requested profile timeframes ended in a durable quality reject.
+ * Operational history failures never advance this whole-trader marker.
  * trader_stats.as_of is NOT usable here because the
  * tier-A board upsert refreshes it every 2-5h, which would make everyone
  * look "fresh" and starve the deep crawl entirely.
@@ -219,7 +229,8 @@ async function persistPositionHistory(
 /**
  * History pass for one trader within the same session. Position history is
  * acquisition-evidence only until a versioned parser projection and receipt
- * exist; compatibility history kinds retain their legacy cursor/upsert path.
+ * exist. Copier tables use an immutable full-snapshot receipt; only orders and
+ * transfers retain their legacy cursor/upsert path.
  */
 async function crawlTraderHistories(
   session: FetchSession,
@@ -241,8 +252,10 @@ async function crawlTraderHistories(
       )
       continue
     }
-    const cursor = await getHistoryCursor(trader.id, kind)
-    const rawPages: unknown[] = []
+    // Copier tables are complete point-in-time snapshots. Reusing an event
+    // cursor here truncates the aggregate and can silently erase followers.
+    const cursor = kind === 'copiers' ? null : await getHistoryCursor(trader.id, kind)
+    const rawPages: RawPage[] = []
     let fetchError: unknown = null
 
     try {
@@ -258,6 +271,53 @@ async function crawlTraderHistories(
       }
     } catch (error) {
       fetchError = error
+    }
+
+    if (kind === 'copiers') {
+      if (fetchError !== null || rawPages.length === 0) {
+        // Failed or evidence-free captures are useful diagnostics, but cannot
+        // satisfy the page-bearing snapshot contract or mark this trader fresh.
+        await writeRawObject({
+          sourceId: src.id,
+          sourceSlug: src.slug,
+          jobType: 'history:copiers',
+          traderId: trader.id,
+          timeframe: null,
+          payload: rawPages,
+          meta: {
+            surface: 'copiers',
+            lane: 'tier_b',
+            fetch_failed: fetchError !== null,
+            capture_rejected: rawPages.length === 0 ? 'no_evidence_page' : null,
+          },
+        })
+        if (fetchError !== null) throw fetchError
+        throw new Error(`[tier-b] ${src.slug} copiers returned no upstream response page`)
+      }
+
+      const artifact = buildCopierSnapshotArtifact({
+        src,
+        traderId: trader.id,
+        exchangeTraderId: trader.exchange_trader_id,
+        lane: 'tier_b',
+        requestTimeframe: null,
+        pages: rawPages,
+        callerLimited: false,
+      })
+      const rawReceipt = await writeCopierSnapshotRawArtifact({ artifact }, runHistoryTransaction)
+      // RAW is durable before parsing. PostgreSQL then commits the immutable
+      // receipt and all private rows atomically; no legacy copier table or
+      // cursor is touched by this authority path.
+      const rows = rawPages.flatMap((page) => adapter.parseHistory(page.payload, kind, ctx))
+      const publication = await runHistoryTransaction((transaction) =>
+        publishCopierSnapshotInTransaction(transaction, {
+          artifact,
+          rawReceipt,
+          rows,
+        })
+      )
+      written += publication.parsedRowCount
+      continue
     }
 
     if (rawPages.length > 0 || fetchError !== null) {
@@ -280,10 +340,9 @@ async function crawlTraderHistories(
     }
 
     // RAW is durable before an incomplete or changed payload can be rejected.
-    const rows: ParsedHistoryRow[] = rawPages.flatMap((rawPage) => {
-      const page = rawPage as import('@/lib/ingest/core/types').RawPage
-      return adapter.parseHistory(page.payload, kind, ctx)
-    })
+    const rows: ParsedHistoryRow[] = rawPages.flatMap((page) =>
+      adapter.parseHistory(page.payload, kind, ctx)
+    )
 
     written += await publishHistoryRows(src, trader.id, kind, rows, nextHistoryCursor(rows, cursor))
   }
@@ -514,7 +573,12 @@ export async function processTierB(
         !traderHadOperationalError &&
         (!supportsProfile || successfulTimeframes === timeframes.length)
 
-      if (supportsProfile && allTimeframesTerminal && !traderHadOperationalError) {
+      if (
+        supportsProfile &&
+        allTimeframesTerminal &&
+        traderHadQualityReject &&
+        !traderHadOperationalError
+      ) {
         // Quality rejects are terminal for this pass: throttle the next attempt
         // so continuation jobs cannot hot-loop on a permanently bad upstream
         // payload. The compatibility cursor kind remains `tierb_profiled`.
@@ -522,14 +586,9 @@ export async function processTierB(
       }
 
       if (allTimeframesSuccessful) {
-        // Preserve profile crawl accounting even when an optional history
-        // surface fails. A record-only source has no successful unit until all
-        // declared histories return evidence and the compatibility marker is
-        // durable, so it is counted only after that sequence completes.
-        if (supportsProfile) result.tradersCrawled += 1
         // Histories ride the same session right after the profile (spec §2.3).
-        // Position history remains RAW evidence only; compatibility kinds keep
-        // their incremental cursor/upsert behavior until separately migrated.
+        // The whole trader is fresh only after every declared surface finishes;
+        // otherwise a failed copier receipt could be hidden for one cadence.
         try {
           const ctx: ParseCtx = {
             sourceSlug: src.slug,
@@ -546,10 +605,8 @@ export async function processTierB(
             ctx,
             !supportsProfile
           )
-          if (!supportsProfile) {
-            await markProfileAttempted(trader.id)
-            result.tradersCrawled += 1
-          }
+          await markProfileAttempted(trader.id)
+          result.tradersCrawled += 1
         } catch (err) {
           result.errors += 1
           console.warn(
