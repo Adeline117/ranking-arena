@@ -1142,6 +1142,8 @@ export interface RankingsResponse {
     market_type: MarketType | 'all'
     window: Window
     total_count: number
+    /** False only when total_count comes from the matching published count generation. */
+    total_count_is_estimate?: boolean
     updated_at: string | null
     staleness_seconds: number | null
     is_stale?: boolean
