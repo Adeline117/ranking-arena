@@ -5,6 +5,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, notFound } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
@@ -15,6 +16,7 @@ import { isTipCheckoutRuntimeEnabled } from '@/lib/security/tip-checkout-cutover
 import { isTrustedStripeCheckoutUrl } from '@/lib/stripe/hosted-url'
 
 const logger = createLogger('tip-checkout')
+const NO_STORE = 'private, no-store'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +35,17 @@ const TIP_METADATA_KEYS = [
   'type',
   'user_id',
 ] as const
+
+const TipCheckoutBodySchema = z
+  .object({
+    post_id: z
+      .string()
+      .regex(UUID_PATTERN, 'Invalid post_id parameter')
+      .transform((value) => value.toLowerCase()),
+    amount_cents: z.number().int().min(100).max(50_000),
+    message: z.string().trim().max(200).optional(),
+  })
+  .strict()
 
 type TipReservation = {
   status: 'reserved' | 'reservation_exists' | 'reservation_expiring' | 'already_bound'
@@ -54,8 +67,21 @@ function rpcRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const canonical = [...expected].sort()
+  return (
+    actual.length === canonical.length && actual.every((key, index) => key === canonical[index])
+  )
+}
+
 function stripeId(value: string | { id: string } | null): string | null {
   return typeof value === 'string' ? value : value?.id || null
+}
+
+function noStore<T extends NextResponse>(response: T): T {
+  response.headers.set('Cache-Control', NO_STORE)
+  return response
 }
 
 function serviceUnavailable(message = 'Unable to prepare tip checkout. Please retry.') {
@@ -64,7 +90,7 @@ function serviceUnavailable(message = 'Unable to prepare tip checkout. Please re
     {
       status: 503,
       headers: {
-        'Cache-Control': 'no-store',
+        'Cache-Control': NO_STORE,
         'Retry-After': '30',
       },
     }
@@ -88,6 +114,12 @@ function parseTipReservation(value: unknown, expectedPostId: string): TipReserva
     return null
   }
 
+  const expectedKeys =
+    status === 'reserved'
+      ? ['checkout_expires_at', 'post_id', 'status', 'tip_id', 'to_user_id']
+      : ['checkout_expires_at', 'checkout_session_id', 'post_id', 'status', 'tip_id', 'to_user_id']
+  if (!hasExactKeys(reservation, expectedKeys)) return null
+
   const tipId = reservation.tip_id
   const postId = reservation.post_id
   const toUserId = reservation.to_user_id
@@ -99,10 +131,12 @@ function parseTipReservation(value: unknown, expectedPostId: string): TipReserva
   if (
     typeof tipId !== 'string' ||
     !UUID_PATTERN.test(tipId) ||
+    tipId !== tipId.toLowerCase() ||
     typeof postId !== 'string' ||
     postId !== expectedPostId ||
     typeof toUserId !== 'string' ||
     !UUID_PATTERN.test(toUserId) ||
+    toUserId !== toUserId.toLowerCase() ||
     typeof checkoutExpiresAt !== 'string' ||
     !Number.isSafeInteger(expiresAtMilliseconds) ||
     expiresAtMilliseconds % 1000 !== 0
@@ -130,6 +164,45 @@ function parseTipReservation(value: unknown, expectedPostId: string): TipReserva
     checkoutExpiresAtSeconds: expiresAtMilliseconds / 1000,
     checkoutSessionId: normalizedSessionId,
   }
+}
+
+function isExactCustomerBindResult(value: unknown): boolean {
+  const result = rpcRecord(value)
+  return (
+    !!result &&
+    hasExactKeys(result, ['status']) &&
+    (result.status === 'bound' || result.status === 'already_bound')
+  )
+}
+
+function isExactTipSessionBindResult(
+  value: unknown,
+  expected: {
+    tipId: string
+    sessionId: string
+    expiresAt: string
+    postId: string
+    toUserId: string
+  }
+): boolean {
+  const result = rpcRecord(value)
+  return (
+    !!result &&
+    hasExactKeys(result, [
+      'checkout_expires_at',
+      'checkout_session_id',
+      'post_id',
+      'status',
+      'tip_id',
+      'to_user_id',
+    ]) &&
+    (result.status === 'bound' || result.status === 'already_bound') &&
+    result.tip_id === expected.tipId &&
+    result.checkout_session_id === expected.sessionId &&
+    result.checkout_expires_at === expected.expiresAt &&
+    result.post_id === expected.postId &&
+    result.to_user_id === expected.toUserId
+  )
 }
 
 async function listCompleteCheckoutLineItems(
@@ -270,27 +343,16 @@ async function expireSessionBestEffort(sessionId: string, context: string): Prom
 
 const authenticatedPost = withAuth(
   async ({ user, supabase, request }) => {
-    let body: Record<string, unknown>
+    let body: unknown
     try {
       body = await request.json()
     } catch {
-      return badRequest('Invalid JSON body')
+      return noStore(badRequest('Invalid JSON body'))
     }
 
-    const { post_id, amount_cents, message } = body as {
-      post_id?: string
-      amount_cents?: number
-      message?: string
-    }
-    if (typeof post_id !== 'string' || !UUID_PATTERN.test(post_id)) {
-      return badRequest('Invalid post_id parameter')
-    }
-    const canonicalPostId = post_id.toLowerCase()
-
-    const amount = Number(amount_cents)
-    if (!Number.isInteger(amount) || amount < 100 || amount > 50000) {
-      return badRequest('Invalid tip amount ($1 - $500)')
-    }
+    const parsedBody = TipCheckoutBodySchema.safeParse(body)
+    if (!parsedBody.success) return noStore(badRequest('Invalid tip checkout input'))
+    const { post_id: canonicalPostId, amount_cents: amount, message } = parsedBody.data
 
     const normalizedMessage =
       typeof message === 'string' && message.trim()
@@ -344,10 +406,7 @@ const authenticatedPost = withAuth(
       }
     )
     const customerBindStatus = rpcRecord(customerBind)?.status
-    if (
-      customerBindError ||
-      (customerBindStatus !== 'bound' && customerBindStatus !== 'already_bound')
-    ) {
+    if (customerBindError || !isExactCustomerBindResult(customerBind)) {
       logger.error('[Tip Checkout] Exact Stripe Customer bind failed', {
         userId: user.id,
         status: customerBindStatus,
@@ -375,10 +434,10 @@ const authenticatedPost = withAuth(
       return serviceUnavailable()
     }
     if (reservationStatus === 'not_found' || reservationStatus === 'recipient_unavailable') {
-      return notFound('Post not found')
+      return noStore(notFound('Post not found'))
     }
     if (reservationStatus === 'self_tip') {
-      return badRequest('Cannot tip your own post')
+      return noStore(badRequest('Cannot tip your own post'))
     }
 
     const reservation = parseTipReservation(reservationData, canonicalPostId)
@@ -491,7 +550,16 @@ const authenticatedPost = withAuth(
         }
       )
       const bindStatus = rpcRecord(bindData)?.status
-      if (bindError || (bindStatus !== 'bound' && bindStatus !== 'already_bound')) {
+      if (
+        bindError ||
+        !isExactTipSessionBindResult(bindData, {
+          tipId: reservation.tipId,
+          sessionId,
+          expiresAt: reservation.checkoutExpiresAt,
+          postId: reservation.postId,
+          toUserId: reservation.toUserId,
+        })
+      ) {
         await expireSessionBestEffort(sessionId, 'tip_checkout_bind_failed')
         logger.error('[Tip Checkout] Session bind failed; URL withheld', {
           userId: user.id,
@@ -505,8 +573,25 @@ const authenticatedPost = withAuth(
     }
 
     return NextResponse.json(
-      { sessionId: verification.session.id, url: verification.session.url },
-      { headers: { 'Cache-Control': 'no-store' } }
+      {
+        success: true as const,
+        data: {
+          checkout: {
+            tip_id: reservation.tipId,
+            session_id: verification.session.id,
+            from_user_id: user.id.toLowerCase(),
+            post_id: reservation.postId,
+            to_user_id: reservation.toUserId,
+            amount_cents: amount,
+            currency: 'usd' as const,
+            status: 'open' as const,
+            url: verification.session.url as string,
+            expires_at: reservation.checkoutExpiresAt,
+          },
+        },
+        meta: { timestamp: new Date().toISOString() },
+      },
+      { status: 200, headers: { 'Cache-Control': NO_STORE } }
     )
   },
   {
@@ -528,7 +613,7 @@ export async function POST(request: NextRequest) {
       {
         status: 503,
         headers: {
-          'Cache-Control': 'no-store',
+          'Cache-Control': NO_STORE,
           'Retry-After': '300',
         },
       }

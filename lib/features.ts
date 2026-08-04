@@ -17,6 +17,8 @@ import { NextResponse } from 'next/server'
 export const features = {
   /** Social features: groups, posts, comments, feed, messaging, user follows */
   social: process.env.NEXT_PUBLIC_FEATURE_SOCIAL !== 'false',
+  /** Creator Tip UI; server checkout authority has a separate stricter gate. */
+  tipCheckout: process.env.NEXT_PUBLIC_FEATURE_TIP_CHECKOUT === 'true',
 }
 
 /**
@@ -117,6 +119,7 @@ interface FeatureFlagConfig {
  */
 const FEATURE_FLAGS: Record<string, FeatureFlagConfig> = {
   social: { enabled: features.social, rolloutPct: 100 },
+  tipCheckout: { enabled: features.tipCheckout, rolloutPct: 100 },
   // Add new flags here:
   // new_ranking_ui: { enabled: true, rolloutPct: 10 },
 }

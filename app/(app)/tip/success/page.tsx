@@ -1,130 +1,226 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useState } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useToast } from '@/app/components/ui/Toast'
-import { supabase } from '@/lib/supabase/client'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import {
+  isValidTipSessionId,
+  readTipVerificationFailure,
+  readVerifiedTipPayment,
+  type VerifiedTipPayment,
+} from '@/lib/stripe/tip-client-contract'
 import { tipPostHref } from './tip-success-links'
 
 const AUTO_REDIRECT_SECONDS = 15
+const PENDING_RETRY_DELAYS_MS = [0, 800, 1_200, 1_800] as const
 
-interface TipDetails {
-  amountCents: number | null
-  handle: string | null
-  postId: string | null
-  postTitle: string | null
+type VerificationStatus = 'verifying' | 'success' | 'error'
+
+type VerificationOperation = {
+  controller: AbortController
+  id: number
+  scopeKey: string
+  sessionId: string
+  viewer: SettingsViewerSnapshot
+}
+
+function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (delayMs === 0) return Promise.resolve()
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
+
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, delayMs)
+    const onAbort = () => {
+      window.clearTimeout(timer)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 function TipSuccessContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { t } = useLanguage()
-  const { showToast } = useToast()
-  const [countdown, setCountdown] = useState(AUTO_REDIRECT_SECONDS)
-  const [dismissed, setDismissed] = useState(false)
-  const [details, setDetails] = useState<TipDetails | null>(null)
-  // True only once a real tip row is confirmed in the DB via session_id.
-  // Gates the "receipt emailed" reassurance so we never claim a receipt was
-  // sent for a tip we can't confirm actually happened.
-  const [verified, setVerified] = useState(false)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+
   const sessionId = searchParams.get('session_id')
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${sessionId ?? ''}`
+  const scopeKeyRef = useRef(scopeKey)
+  scopeKeyRef.current = scopeKey
+  const sessionIdRef = useRef(sessionId)
+  sessionIdRef.current = sessionId
 
-  // A credential = a Stripe session_id OR the forward-compat query params the
-  // real tip flow appends. Bare access (nothing) must NOT fabricate success.
-  const hasCredential = !!(
-    sessionId ||
-    searchParams.get('amount') ||
-    searchParams.get('amount_cents') ||
-    searchParams.get('to') ||
-    searchParams.get('handle') ||
-    searchParams.get('post_id')
-  )
+  const mountedRef = useRef(false)
+  const operationRef = useRef<VerificationOperation | null>(null)
+  const nextOperationIdRef = useRef(0)
+  const stateOwnerScopeRef = useRef(scopeKey)
+  const [statusState, setStatus] = useState<VerificationStatus>('verifying')
+  const [paymentState, setPayment] = useState<VerifiedTipPayment | null>(null)
+  const [countdownState, setCountdown] = useState(AUTO_REDIRECT_SECONDS)
+  const [dismissedState, setDismissed] = useState(false)
+  const [runningState, setRunning] = useState(false)
 
-  // 优先读取 query 参数（前向兼容），否则按 session_id 查询打赏记录
-  useEffect(() => {
-    const qpAmount = searchParams.get('amount') ?? searchParams.get('amount_cents')
-    const qpHandle = searchParams.get('to') ?? searchParams.get('handle')
-    const qpPostId = searchParams.get('post_id')
+  const stateOwned = stateOwnerScopeRef.current === scopeKey
+  const status: VerificationStatus = stateOwned ? statusState : 'verifying'
+  const payment = stateOwned ? paymentState : null
+  const countdown = stateOwned ? countdownState : AUTO_REDIRECT_SECONDS
+  const dismissed = stateOwned ? dismissedState : false
+  const running = stateOwned ? runningState : false
 
-    if (qpAmount || qpHandle || qpPostId) {
-      setDetails({
-        amountCents: qpAmount ? Number(qpAmount) : null,
-        handle: qpHandle ? qpHandle.replace(/^@/, '') : null,
-        postId: qpPostId,
-        postTitle: null,
-      })
+  const operationIsCurrent = useCallback((operation: VerificationOperation): boolean => {
+    return (
+      mountedRef.current &&
+      operationRef.current?.id === operation.id &&
+      scopeKeyRef.current === operation.scopeKey &&
+      sessionIdRef.current === operation.sessionId &&
+      isSettingsViewerCurrent(operation.viewer, authRef.current)
+    )
+  }, [])
+
+  const verifyPayment = useCallback(async () => {
+    if (operationRef.current) return
+    const currentSessionId = sessionIdRef.current
+    const viewer = captureSettingsViewer(authRef.current)
+    const currentScopeKey = scopeKeyRef.current
+    if (!isValidTipSessionId(currentSessionId) || !viewer) {
+      if (authRef.current.authChecked && !authRef.current.loading) setStatus('error')
+      return
     }
 
-    if (!sessionId) return
+    const operation: VerificationOperation = {
+      controller: new AbortController(),
+      id: ++nextOperationIdRef.current,
+      scopeKey: currentScopeKey,
+      sessionId: currentSessionId,
+      viewer,
+    }
+    operationRef.current = operation
+    setStatus('verifying')
+    setPayment(null)
+    setRunning(true)
 
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { data: tip } = await supabase
-          .from('tips')
-          .select('amount_cents, post_id, to_user_id')
-          .eq('stripe_checkout_session_id', sessionId)
-          .maybeSingle()
+    try {
+      for (const delay of PENDING_RETRY_DELAYS_MS) {
+        await waitForRetry(delay, operation.controller.signal)
+        if (!operationIsCurrent(operation)) return
 
-        if (cancelled || !tip) return
-
-        let handle: string | null = null
-        let postTitle: string | null = null
-        if (tip.post_id) {
-          const { data: post } = await supabase
-            .from('posts')
-            .select('author_handle, title')
-            .eq('id', tip.post_id)
-            .maybeSingle()
-          if (post) {
-            handle = post.author_handle
-            postTitle = post.title
+        const result = await authedFetch<unknown>(
+          '/api/tip/verify-session',
+          'POST',
+          operation.viewer.accessToken,
+          { session_id: operation.sessionId },
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: operation.controller.signal,
           }
+        )
+        if (!operationIsCurrent(operation) || result.stale) return
+
+        if (result.ok && result.status === 200) {
+          const verified = readVerifiedTipPayment(result.data, {
+            viewerId: operation.viewer.userId,
+            sessionId: operation.sessionId,
+          })
+          if (!verified) {
+            setStatus('error')
+            return
+          }
+          setPayment(verified)
+          setCountdown(AUTO_REDIRECT_SECONDS)
+          setDismissed(false)
+          setStatus('success')
+          return
         }
 
-        if (cancelled) return
-        setVerified(true)
-        setDetails({
-          amountCents: tip.amount_cents,
-          handle,
-          postId: tip.post_id,
-          postTitle,
-        })
-      } catch {
-        // Intentionally swallowed: tip detail lookup is non-critical enrichment;
-        // the success confirmation renders fine without it.
+        const failure = readTipVerificationFailure(result.data, result.status)
+        if (failure === 'pending' && delay !== PENDING_RETRY_DELAYS_MS.at(-1)) continue
+        setStatus('error')
+        return
       }
-    })()
-
-    return () => {
-      cancelled = true
+      setStatus('error')
+    } catch (error) {
+      if (operationIsCurrent(operation)) {
+        logger.error('[Tip Success] Verification failed', error)
+        setStatus('error')
+      }
+    } finally {
+      if (operationRef.current?.id === operation.id) {
+        operationRef.current = null
+        if (scopeKeyRef.current === operation.scopeKey) setRunning(false)
+      }
     }
-  }, [sessionId, searchParams])
+  }, [operationIsCurrent])
 
-  // 自动跳转（可关闭 / 已延长至 15s）
   useEffect(() => {
-    if (dismissed) return
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current?.controller.abort()
+      operationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    operationRef.current?.controller.abort()
+    operationRef.current = null
+    stateOwnerScopeRef.current = scopeKey
+    setStatus('verifying')
+    setPayment(null)
+    setCountdown(AUTO_REDIRECT_SECONDS)
+    setDismissed(false)
+    setRunning(false)
+
+    const currentAuth = authRef.current
+    if (!currentAuth.authChecked || currentAuth.loading) return
+    if (!isValidTipSessionId(sessionId) || !captureSettingsViewer(currentAuth)) {
+      setStatus('error')
+      return
+    }
+    void verifyPayment()
+  }, [auth.accessToken, auth.authChecked, auth.loading, scopeKey, sessionId, verifyPayment])
+
+  useEffect(() => {
+    if (status !== 'success' || dismissed || !payment) return
     if (countdown <= 0) {
       router.push('/')
       return
     }
-    const timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000)
-    return () => clearTimeout(timer)
-  }, [countdown, dismissed, router])
+    const timer = window.setTimeout(() => setCountdown((value) => value - 1), 1_000)
+    return () => window.clearTimeout(timer)
+  }, [countdown, dismissed, payment, router, status])
 
-  const formattedAmount =
-    details?.amountCents != null ? `$${(details.amountCents / 100).toFixed(2)}` : null
-  const postId = details?.postId ?? null
-  const handle = details?.handle ?? null
-  const postHref = tipPostHref(postId)
+  const handleRetry = useCallback(() => {
+    if (operationRef.current) return
+    void verifyPayment()
+  }, [verifyPayment])
+
+  const postHref = tipPostHref(payment?.postId)
+  const formattedAmount = payment ? `$${(payment.amountCents / 100).toFixed(2)}` : null
 
   const handleShare = useCallback(async () => {
-    const url = typeof window !== 'undefined' ? `${window.location.origin}${postHref ?? ''}` : ''
-    const text = handle ? t('tipShareText').replace('{handle}', handle) : t('tipShareTextGeneric')
-    trackEvent('tip_share', { has_handle: handle ? 1 : 0 })
+    if (status !== 'success' || !payment) return
+    const href = tipPostHref(payment.postId)
+    const url = typeof window !== 'undefined' && href ? `${window.location.origin}${href}` : ''
+    const text = t('tipShareTextGeneric')
+    trackEvent('tip_share', { has_handle: 0 })
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({ title: t('tipSuccess'), text, url })
@@ -132,54 +228,82 @@ function TipSuccessContent() {
       }
       if (typeof navigator !== 'undefined' && navigator.clipboard) {
         await navigator.clipboard.writeText(url ? `${text} ${url}` : text)
-        showToast(t('copied'), 'success')
       }
     } catch {
-      // Intentionally swallowed: user cancelled share sheet or clipboard denied — no action needed.
+      // The user can cancel a share sheet or deny clipboard access.
     }
-  }, [handle, postHref, t, showToast])
+  }, [payment, status, t])
 
-  // Bare access with no credential — show a neutral "no tip found" state
-  // instead of fabricating "Tip Successful! / receipt emailed".
-  if (!hasCredential) {
+  if (status === 'verifying') {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center px-4"
+      <main
+        className="flex min-h-screen items-center justify-center px-4"
         style={{ background: 'var(--color-bg-primary)' }}
       >
-        <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
-            {t('tipNoRecordTitle')}
+        <div className="max-w-md text-center" role="status" aria-live="polite">
+          <div
+            className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-4 border-current border-t-transparent"
+            style={{ color: 'var(--color-accent-primary)' }}
+            aria-hidden="true"
+          />
+          <h1 className="mb-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+            {t('verifying')}
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', marginBottom: 24 }}>
+          <p style={{ color: 'var(--color-text-secondary)' }}>{t('processing')}</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (status === 'error' || !payment || !formattedAmount) {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center px-4"
+        style={{ background: 'var(--color-bg-primary)' }}
+      >
+        <div className="w-full max-w-md text-center" role="alert">
+          <h1 className="mb-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+            {t('verificationFailed')}
+          </h1>
+          <p className="mb-6" style={{ color: 'var(--color-text-secondary)' }}>
             {t('tipNoRecordDesc')}
           </p>
-          <Link
-            href="/"
-            className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
-            style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
-          >
-            {t('backToHome')}
-          </Link>
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              className="min-h-11 w-full rounded-lg px-4 py-3 text-sm font-medium transition-colors disabled:opacity-50"
+              style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
+              onClick={handleRetry}
+              disabled={running || !isValidTipSessionId(sessionId)}
+            >
+              {running ? t('verifying') : t('retry')}
+            </button>
+            <Link
+              href="/"
+              className="flex min-h-11 w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-medium transition-colors"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              {t('backToHome')}
+            </Link>
+          </div>
         </div>
-      </div>
+      </main>
     )
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4"
+    <main
+      className="flex min-h-screen items-center justify-center px-4"
       style={{ background: 'var(--color-bg-primary)' }}
     >
-      <div className="text-center max-w-md">
-        {/* 成功图标 */}
-        <div className="mb-6 flex justify-center">
+      <div className="w-full max-w-md text-center" aria-live="polite">
+        <div className="mb-6 flex justify-center" aria-hidden="true">
           <div
-            className="w-20 h-20 rounded-full flex items-center justify-center"
+            className="flex h-20 w-20 items-center justify-center rounded-full"
             style={{ background: 'var(--color-accent-success-20)' }}
           >
             <svg
-              className="w-10 h-10"
+              className="h-10 w-10"
               style={{ color: 'var(--color-accent-success)' }}
               fill="none"
               viewBox="0 0 24 24"
@@ -195,55 +319,39 @@ function TipSuccessContent() {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+        <h1 className="mb-2 text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
           {t('tipSuccess')}
         </h1>
-
-        {/* 金额 + 收款人确认 */}
-        {formattedAmount ? (
-          <p className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
-            {handle
-              ? t('tipSentAmountTo')
-                  .replace('{amount}', formattedAmount)
-                  .replace('{handle}', handle)
-              : t('tipSentAmount').replace('{amount}', formattedAmount)}
-          </p>
-        ) : null}
-
-        <p style={{ color: 'var(--color-text-secondary)', marginBottom: 24 }}>
+        <p className="mb-2 text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+          {t('tipSentAmount').replace('{amount}', formattedAmount)}
+        </p>
+        <p className="mb-6" style={{ color: 'var(--color-text-secondary)' }}>
           {t('tipSuccessMessage')}
         </p>
 
-        {/* Explicit inline spacing — this page's Tailwind spacing utilities were
-            collapsing, leaving the button overlapping the text. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* 主操作：返回原帖（有 post_id 时），否则返回社区 */}
+        <div className="flex flex-col gap-3">
           <Link
             href={postHref ?? '/groups'}
-            className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
+            className="flex min-h-11 w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-medium transition-colors"
             style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
           >
-            {postId ? t('backToPost') : t('backToFeed')}
+            {postHref ? t('backToPost') : t('backToFeed')}
           </Link>
-
-          {/* 一键分享支持 */}
           <button
             type="button"
             onClick={handleShare}
-            className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
+            className="min-h-11 w-full rounded-lg px-4 py-3 text-sm font-medium transition-colors"
             style={{
               background: 'transparent',
               border: '1px solid var(--color-border-primary)',
               color: 'var(--color-text-primary)',
-              cursor: 'pointer',
             }}
           >
             {t('tipShareCta')}
           </button>
-
           <Link
             href="/"
-            className="block w-full py-2 text-sm font-medium transition-colors"
+            className="flex min-h-11 w-full items-center justify-center px-4 py-3 text-sm font-medium transition-colors"
             style={{ color: 'var(--color-text-secondary)' }}
           >
             {t('backToHome')}
@@ -255,10 +363,10 @@ function TipSuccessContent() {
               <button
                 type="button"
                 onClick={() => setDismissed(true)}
+                className="inline-flex min-h-11 items-center px-2"
                 style={{
                   background: 'none',
                   border: 'none',
-                  padding: 0,
                   color: 'var(--color-accent-primary)',
                   cursor: 'pointer',
                   font: 'inherit',
@@ -269,15 +377,8 @@ function TipSuccessContent() {
             </p>
           ) : null}
         </div>
-
-        {/* 收据安心提示 — 仅在 DB 确认打赏记录后显示,不对无法确认的打赏谎报收据 */}
-        {verified ? (
-          <p className="mt-6 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-            {t('receiptEmailed')}
-          </p>
-        ) : null}
       </div>
-    </div>
+    </main>
   )
 }
 
@@ -285,14 +386,18 @@ export default function TipSuccessPage() {
   return (
     <Suspense
       fallback={
-        <div
-          className="min-h-screen flex items-center justify-center"
+        <main
+          className="flex min-h-screen items-center justify-center"
           style={{ background: 'var(--color-bg-primary)' }}
         >
-          <div className="text-center" style={{ color: 'var(--color-text-secondary)' }}>
+          <div
+            className="text-center"
+            role="status"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
             Loading...
           </div>
-        </div>
+        </main>
       }
     >
       <TipSuccessContent />

@@ -1,11 +1,29 @@
 jest.mock('next/server', () => {
+  class MockHeaders {
+    private readonly values = new Map<string, string>()
+
+    constructor(initial?: Record<string, string>) {
+      for (const [key, value] of Object.entries(initial ?? {})) this.set(key, value)
+    }
+
+    get(key: string) {
+      return this.values.get(key.toLowerCase()) ?? null
+    }
+
+    set(key: string, value: string) {
+      this.values.set(key.toLowerCase(), value)
+    }
+  }
+
   class MockNextResponse {
     _body: unknown
     status: number
+    headers: MockHeaders
 
-    constructor(body?: unknown, init: { status?: number } = {}) {
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status ?? 200
+      this.headers = new MockHeaders(init.headers)
     }
 
     async json() {
@@ -117,7 +135,9 @@ function reservation(
     post_id: POST_ID,
     to_user_id: RECIPIENT_ID,
     checkout_expires_at: EXPIRES_AT,
-    ...(status === 'already_bound' ? { checkout_session_id: 'cs_tip_atomic' } : {}),
+    ...(status === 'reserved'
+      ? {}
+      : { checkout_session_id: status === 'already_bound' ? 'cs_tip_atomic' : null }),
   }
 }
 
@@ -209,7 +229,19 @@ function useRpcStatus(
       return Promise.resolve(options.reserve ?? { data: reservation(), error: null })
     }
     if (name === 'bind_tip_checkout_session_atomic') {
-      return Promise.resolve(options.tipBind ?? { data: { status: 'bound' }, error: null })
+      return Promise.resolve(
+        options.tipBind ?? {
+          data: {
+            status: 'bound',
+            tip_id: TIP_ID,
+            checkout_session_id: 'cs_tip_atomic',
+            checkout_expires_at: EXPIRES_AT,
+            post_id: POST_ID,
+            to_user_id: RECIPIENT_ID,
+          },
+          error: null,
+        }
+      )
     }
     throw new Error(`Unexpected RPC: ${name}`)
   })
@@ -300,6 +332,20 @@ describe('POST /api/tip/checkout', () => {
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['coerced amount', { post_id: POST_ID, amount_cents: '500' }],
+    ['coerced post identity', { post_id: 123, amount_cents: 500 }],
+    ['unknown field', { post_id: POST_ID, amount_cents: 500, recipient_id: RECIPIENT_ID }],
+    ['null message', { post_id: POST_ID, amount_cents: 500, message: null }],
+  ])('rejects %s before Customer, DB, or Stripe work', async (_, body) => {
+    const response = await POST(requestWith(body) as never)
+
+    expect(response.status).toBe(400)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCreateOneTimePaymentSession).not.toHaveBeenCalled()
+  })
+
   it('establishes Customer ownership, reserves, verifies, binds, then returns the exact URL', async () => {
     const response = await POST(
       requestWith({
@@ -312,9 +358,24 @@ describe('POST /api/tip/checkout', () => {
 
     expect(response.status).toBe(200)
     expect(body).toEqual({
-      sessionId: 'cs_tip_atomic',
-      url: 'https://checkout.stripe.com/c/pay/cs_tip_atomic',
+      success: true,
+      data: {
+        checkout: {
+          tip_id: TIP_ID,
+          session_id: 'cs_tip_atomic',
+          from_user_id: USER_ID,
+          post_id: POST_ID,
+          to_user_id: RECIPIENT_ID,
+          amount_cents: 500,
+          currency: 'usd',
+          status: 'open',
+          url: 'https://checkout.stripe.com/c/pay/cs_tip_atomic',
+          expires_at: EXPIRES_AT,
+        },
+      },
+      meta: { timestamp: expect.any(String) },
     })
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
     expect(mockGetOrCreateStripeCustomer).toHaveBeenCalledWith(
       USER_ID,
       'tipper@example.com',
@@ -452,6 +513,27 @@ describe('POST /api/tip/checkout', () => {
     expect(mockExpireSession).toHaveBeenCalledWith('cs_tip_atomic')
   })
 
+  it('expires and withholds the URL when a nominal bind acknowledgement drifts', async () => {
+    useRpcStatus({
+      tipBind: {
+        data: {
+          status: 'bound',
+          tip_id: TIP_ID,
+          checkout_session_id: 'cs_tip_atomic',
+          checkout_expires_at: EXPIRES_AT,
+          post_id: POST_ID,
+          to_user_id: USER_ID,
+        },
+        error: null,
+      },
+    })
+
+    const response = await POST(requestWith({ post_id: POST_ID, amount_cents: 500 }) as never)
+
+    expect(response.status).toBe(503)
+    expect(mockExpireSession).toHaveBeenCalledWith('cs_tip_atomic')
+  })
+
   it.each([
     ['not_found', 404],
     ['recipient_unavailable', 404],
@@ -492,5 +574,16 @@ describe('POST /api/tip/checkout', () => {
     expect(response.status).toBe(503)
     expect(mockRpc).not.toHaveBeenCalledWith('reserve_tip_checkout_atomic', expect.anything())
     expect(mockCreateOneTimePaymentSession).not.toHaveBeenCalled()
+  })
+
+  it('fails before reservation when Customer ownership acknowledgement is expanded', async () => {
+    useRpcStatus({
+      customerBind: { data: { status: 'bound', user_id: USER_ID }, error: null },
+    })
+
+    const response = await POST(requestWith({ post_id: POST_ID, amount_cents: 500 }) as never)
+
+    expect(response.status).toBe(503)
+    expect(mockRpc).not.toHaveBeenCalledWith('reserve_tip_checkout_atomic', expect.anything())
   })
 })
