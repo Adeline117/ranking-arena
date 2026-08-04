@@ -15,7 +15,7 @@
   收藏夹、通知和帖子写入已完成新一轮原子性/完整性审计；每个小修复独立测试、提交，
   分支只在工作树清洁且定向测试通过后走安全推送门禁。
 - **整体 P0 尚未清零，禁止宣布正式上线**：生产数据库本轮出现 Cloudflare 522，
-  当前 187 条 predeploy 迁移尚未在健康生产库做 exact-ledger 证明；CopyTrading v1
+  当前 191 条 predeploy 迁移尚未在健康生产库做 exact-ledger 证明；CopyTrading v1
   cap、凭据轮换和 Stripe live readiness 仍需要 owner 操作。
 - 免费、只读页面即使能降级渲染，也不能用来证明写入、收费或数据 freshness 健康。
 - 当前候选分支为 `codex/api-tier-cancel-identity-20260729`；只有部署平台返回的精确
@@ -38,45 +38,46 @@
 | P0-11 | 通知过滤后分页、mark-read/delete/create 和排名批量通知分步执行，会漏项、重复、串用户或误发 push。      | 原子 filtered page/mutation/create/batch authority；稳定 event identity 去重；500 分片、逐条 ACK 绑定，只对 `CREATED` 发 push。                                                        | ✅ 代码/PG17；⏳迁移与通知/推送 E2E。                                                                                            |
 | P0-12 | leaderboard 直接 writer、零行成功、过期 edge cache 或不完整来源可把错误排名发布给所有用户。            | publication fence、typed batch receipt、sealed rankings/source freshness、零行/部分写 fail-closed、旧 writer 关闭、last-good 保留。                                                    | ✅ 代码/PG17；⏳生产数据链和 release SHA 实证。                                                                                  |
 | P0-13 | API key 创建/列出/撤销若相信残缺响应，会泄露完整 secret、展示错套餐额度或把失败当成功。                | 创建、列表、撤销均验证 exact ACK；列表验证 owner/tier/limit/usage/time 并脱敏；一次性 secret 在后续刷新失败时仍保留给用户。                                                            | ✅ 代码与前端回归；⏳部署后真实 key canary。                                                                                     |
-| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260729187000` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                                               | ✅ 187 predeploy、16 postdeploy、5 concurrent recovery、3 recovery、1 quarantined、1 superseded，共 213 项唯一迁移；⏳生产执行。 |
+| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260803102000` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                                               | ✅ 191 predeploy、16 postdeploy、5 concurrent recovery、3 recovery、1 quarantined、1 superseded，共 217 项唯一迁移；⏳生产执行。 |
 
 P0 的“代码已修”不等于“生产已清零”。P0-01 至 P0-04 的 owner/基础设施动作、
 P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布结论保持 **NO-GO**。
 
 ### P1 — 重要：当前清单
 
-| ID    | 问题                                                                                                   | 当前处置                                                                                                                                                                                                                  |
-| ----- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                                        | 根因是 `responsive.css` 被 `media=print` 延迟；现改为首屏阻塞加载并锁定唯一 stylesheet，hydration 前 1440px 已是三栏。✅                                                                                                  |
-| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                                          | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                                                                                                                                |
-| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                                                  | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy` 与 40px 触控高度。✅                                                                                                                              |
-| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。                             | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                                                                                                                                            |
-| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。                       | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                                                                                                                                  |
-| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。                    | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅                                                                                                                       |
-| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                                   | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。                                                                                                              |
-| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。                              | 🔄 按公开主流程优先继续；排行榜日文 320/375px 工具栏裁切已修并留几何/截图证据，其余页面继续。                                                                                                                             |
-| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                                     | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                                                                                                                                            |
-| P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                             | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。                                                                                 |
-| P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。          | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅                                                                                             |
-| P1-12 | 上传后取消/失败、编辑移除或删帖会遗留 `posts` Storage 对象；直接查引用后删除又会产生并发数据丢失。     | 🔄 已锁定删帖 no-Storage 边界并记录全路径；需 `post_media_uploads` registry + mutation 内 claim + durable outbox/lease 后才能安全清理。                                                                                   |
-| P1-13 | 路由 loading shell 重复预留已存在的导航高度，转场时出现布局 flash。                                    | `e3feea06a` 移除重复 nav spacer，并用 shell 几何合同覆盖 route-group 与 page skeleton。✅                                                                                                                                 |
-| P1-14 | 付款成功页可能将验证中、成功与未确认混为一种界面，或在小屏/键盘下丢失下一步。                          | `9bd89c219` 锁定 exact authority；`a78c1e707` 分离 verifying/success/error、补 retry/焦点/ARIA、320px 几何与 ≥48px 控件。✅                                                                                               |
-| P1-15 | Groups 管理的解散、广播、邀请、批量成员动作和 Load more 可被双击、旧 scope 或不稳定 cursor 破坏。      | `e261d20dc` / `3725000b` / `b637fc1a` / `982d33130` 补不可逆锁、single-flight/exact ACK、按选择顺序串行批处理和稳定去重分页。✅                                                                                           |
-| P1-16 | 点赞/点踩只相信宽松 2xx，旧 viewer、错 post 或迟到响应可能覆盖当前帖子状态；请求悬挂时按钮永久锁死。   | `9f2ea9355` 绑定 actor/post/requested reaction 与 exact RPC/HTTP receipt，补 15 秒硬超时、scope guard、迟到响应隔离和回滚。✅；底层仍是 toggle，超时后的再次点击存在反向风险，需 desired-state/idempotency authority。    |
-| P1-17 | 邀请奖励 UI 可能把资格数当已授权权益、跨标签页重复创建邀请码，或把 pending/revoked 显示成已解锁。      | `d561dc612` 以 qualification + entitlement grant 为服务端真值；`66cfb27a6` 对 409 做 GET 对账、区分全部奖励状态，只有 active 显示 unlocked。✅；生产 cron/migration 仍待验证。                                            |
-| P1-18 | 视觉/按钮巡检的动态样本请求没有稳定 User-Agent，可能被 API 代理拒绝而漏掉真实 trader/post/profile。    | `2069f462c` 让 public sweep sampler 显式标识自己，并以合同测试锁定；样本 API 不健康时仍明确 skip，不使用退休 fixture。✅                                                                                                  |
-| P1-19 | 评论点赞/点踩可接受错 actor/post/comment、额外字段或非 JSON 的宽松 2xx；悬挂与旧 scope 会留下假状态。  | `ec688dd0b` 绑定 exact toggle receipt，补 per-resource lock、15 秒 hard abort、viewer/session/post guard，并在不确定结果时优先 canonical read、否则回滚 last-good。✅；跨客户端仍是非幂等 toggle。                        |
-| P1-20 | Activity Feed 首次加载时列表完全空白，但 freshness 标题误报 `Live`，用户无法区分加载与无数据。         | `5fed64896` 把标题改为 Loading，列表预留 128px 可见 loading status，补 `aria-live` / `aria-busy`；375px 回归截图无重叠。✅                                                                                                |
-| P1-21 | Token 排名索引的 transport/body 可悬挂，失败、真空和旧结果混在一起。                                   | `6ca74b703` 给 fetch 与 JSON 共用 15 秒物理截止，严格校验响应与当前查询 scope，分离 loading/last-good/error/empty，并补可重试与 44px 控件。✅                                                                             |
-| P1-22 | Weekly 排名服务端等待无界，authority 故障时整页可能长期 skeleton。                                     | `0a309e690` 给服务端读取和页面外层都加有界截止，只有完整合法周榜可替换 last-good；部分、错误与真空不再互相伪装。✅                                                                                                        |
-| P1-23 | 全局 Search 接受宽松结果，旧关键词/迟到响应或畸形 2xx 可覆盖当前页面。                                 | `1006d4e66` 绑定规范查询、分页与四类结果，fetch/JSON 同一物理截止；查询 generation 隔离，保留同 scope last-good，并明确 error/retry/empty。✅                                                                             |
-| P1-24 | Exchange leaderboard 的 RPC 或页面请求可悬挂，金额/来源/周期形状不足时仍可能发布。                     | `ee05be684` 加 RPC 3.5 秒与页面 4 秒双层真实截止，严格 timeframe/source/row/money schema，分离 partial/last-good/error/empty，并使用稳定 loading shell。✅                                                                |
-| P1-25 | 共用 HTTP helper 只触发 AbortSignal，transport 或 `response.json()` 忽略 signal 时仍会永久等待。       | `4764a4156` 把物理 deadline 覆盖到 fetch 与 body 消费，并传播调用方取消；迟到工作被观察但不可再落入 UI。✅                                                                                                                |
-| P1-26 | 帖子 Bookmark 批量状态、toggle 回执或 folder scope 不完整时可跨用户写入假收藏状态。                    | `8b6f7529b` 绑定 actor/post/request/operation/action/bookmarked/count/folder；批量状态绑定 viewer、请求顺序和完整映射，不确定结果用 canonical status 对账。✅；底层 toggle 仍应升级为 desired-state/idempotent mutation。 |
-| P1-27 | Token 详情切周期时迟到响应、错误或畸形账户列表会覆盖当前 token，并把失败画成空数据。                   | `1a862e542` 绑定 token/period/limit/offset，fetch/JSON 15 秒物理截止；URL、viewer/query generation、last-good/error/empty 与 44px 控件均独立。✅                                                                          |
-| P1-28 | Hot 发现页把 500/畸形响应当空列表，group 请求悬挂，旧 viewer 请求可覆盖当前内容。                      | `91281603e` 对 posts/groups 使用严格合同和 15 秒物理截止，补 viewer/query 迟到隔离、last-good/error/retry，并把 tabs、retry、modal、show-more 触控目标提升到至少 44px。✅                                                 |
-| P1-29 | Hot、Groups 与共享 store 的帖子 reaction 仍有宽松或重复 parser，跨 actor/post 的回执可能落入错误表面。 | `e37e04911` / `257ed300f` 将所有现存调用方统一到 exact reaction contract，补 scope single-flight 与迟到隔离并删除退休 parser。✅；底层无 operation ID 的 toggle 和跨 surface 全局协调仍未解决。                           |
-| P1-30 | Compare 的订阅、关注、搜索、对比任一请求可无界等待；畸形/缺项响应会伪装为空，跨账户迟到结果会串线。    | `d93a7b99f` 严格绑定 ordered source/account partition 与 following identity/count，所有私有 lane 有物理截止、owner/query generation、last-good/error/401 恢复；交互目标至少 44px。✅                                      |
+| ID    | 问题                                                                                                                       | 当前处置                                                                                                                                                                                                                  |
+| ----- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | 首页慢加载时先单列、后变标准 UI，造成明显 CLS。                                                                            | 根因是 `responsive.css` 被 `media=print` 延迟；现改为首屏阻塞加载并锁定唯一 stylesheet，hydration 前 1440px 已是三栏。✅                                                                                                  |
+| P1-02 | Token rankings 在后端不可用时把 popular tokens 整页打成 500。                                                              | last-good/degraded/503 truth；不再让附属模块拖垮主页面。✅                                                                                                                                                                |
+| P1-03 | 90D/30D/7D 在请求进行中被禁用，旧请求阻塞下一次点击。                                                                      | 周期按钮始终可操作，切换会 abort 旧请求；补 `aria-pressed`、`aria-busy`；满足 WCAG 2.2 的 24px 最低目标，核心移动动作使用 44px 级目标。✅                                                                                 |
+| P1-04 | Inbox/filter 先分页后过滤会出现空洞；通知 panel loading/empty/error 混淆。                                                 | 服务端过滤后原子分页；panel 状态和交互对齐。✅                                                                                                                                                                            |
+| P1-05 | Favorites/Following/Portfolio/Compare/Claim 请求失败时伪装为空或清掉 last-good。                                           | 各域保留 last-good，显式 error/retry；服务端确认前不做不可逆 UI 删除。✅                                                                                                                                                  |
+| P1-06 | Settings 的 passkey、block、session、profile image 操作可能静默失败或乐观显示成功。                                        | list/mutation exact ACK；删除 passkey/unblock/session revoke/profile image 保存均有真错误与回滚。✅                                                                                                                       |
+| P1-07 | build 依赖生产数据库生成动态 sitemap，数据库故障可阻塞整个 release。                                                       | build phase 只保留静态 sitemap；运行时动态 shard 故障返回空 shard。✅ production build 已在 522 条件下成功。                                                                                                              |
+| P1-08 | 其余页面仍需逐页截图复核重叠、safe-area、触控目标、焦点、对比度和错误态。                                                  | 🔄 按公开主流程优先继续；排行榜日文 320/375px 工具栏裁切已修并留几何/截图证据，其余页面继续。                                                                                                                             |
+| P1-09 | 认证写流程缺少完整生产双账号/OTP/passkey/Stripe test fixture E2E。                                                         | 🧪 单元、合同、PG17 已覆盖；⏳健康 staging/production fixture 后补浏览器闭环。                                                                                                                                            |
+| P1-10 | 帖子编辑分步更新正文、语言、提及、标签和计数，可能部分成功或覆盖并发版本。                                                 | 10 参数原子 CAS RPC 同步全部 facet/join/count；保留旧签名滚动兼容，应用全量后再按 `186000 → 187000` 关闭旧签名。✅代码/PG17；⏳生产迁移。                                                                                 |
+| P1-11 | 媒体上传客户端信任 URL-only/跨 owner 回执，编辑鉴权失败会无限骨架，预览控制与正式渲染不一致。                              | 图片/视频回执绑定 owner/path/origin/MIME/size；编辑页失败退出 loading、补 mention picker，预览拒绝危险图片并精确移动/删除。✅                                                                                             |
+| P1-12 | 上传后取消/失败、编辑移除或删帖会遗留 `posts` Storage 对象；直接查引用后删除又会产生并发数据丢失。                         | 🔄 已锁定删帖 no-Storage 边界并记录全路径；需 `post_media_uploads` registry + mutation 内 claim + durable outbox/lease 后才能安全清理。                                                                                   |
+| P1-13 | 路由 loading shell 重复预留已存在的导航高度，转场时出现布局 flash。                                                        | `e3feea06a` 移除重复 nav spacer，并用 shell 几何合同覆盖 route-group 与 page skeleton。✅                                                                                                                                 |
+| P1-14 | 付款成功页可能将验证中、成功与未确认混为一种界面，或在小屏/键盘下丢失下一步。                                              | `9bd89c219` 锁定 exact authority；`a78c1e707` 分离 verifying/success/error、补 retry/焦点/ARIA、320px 几何与 ≥48px 控件。✅                                                                                               |
+| P1-15 | Groups 管理的解散、广播、邀请、批量成员动作和 Load more 可被双击、旧 scope 或不稳定 cursor 破坏。                          | `e261d20dc` / `3725000b` / `b637fc1a` / `982d33130` 补不可逆锁、single-flight/exact ACK、按选择顺序串行批处理和稳定去重分页。✅                                                                                           |
+| P1-16 | 点赞/点踩只相信宽松 2xx，重放 toggle 会反转已提交状态，旧 viewer、慢补水或迟到 ACK 还会覆盖最新点击。                      | 新 desired-state RPC 以绝对 `up/down/null` 收敛；四类客户端统一 exact actor/post/request/desired receipt、同 ID 有界重放、latest-intent queue、scope/hydration revision 和“不确定不反向回滚”。✅代码/PG17；⏳生产迁移。   |
+| P1-17 | 邀请奖励 UI 可能把资格数当已授权权益、跨标签页重复创建邀请码，或把 pending/revoked 显示成已解锁。                          | `d561dc612` 以 qualification + entitlement grant 为服务端真值；`66cfb27a6` 对 409 做 GET 对账、区分全部奖励状态，只有 active 显示 unlocked。✅；生产 cron/migration 仍待验证。                                            |
+| P1-18 | 视觉/按钮巡检的动态样本请求没有稳定 User-Agent，可能被 API 代理拒绝而漏掉真实 trader/post/profile。                        | `2069f462c` 让 public sweep sampler 显式标识自己，并以合同测试锁定；样本 API 不健康时仍明确 skip，不使用退休 fixture。✅                                                                                                  |
+| P1-19 | 评论点赞/点踩可接受错 actor/post/comment、额外字段或非 JSON 的宽松 2xx；悬挂与旧 scope 会留下假状态。                      | `ec688dd0b` 绑定 exact toggle receipt，补 per-resource lock、15 秒 hard abort、viewer/session/post guard，并在不确定结果时优先 canonical read、否则回滚 last-good。✅；跨客户端仍是非幂等 toggle。                        |
+| P1-20 | Activity Feed 首次加载时列表完全空白，但 freshness 标题误报 `Live`，用户无法区分加载与无数据。                             | `5fed64896` 把标题改为 Loading，列表预留 128px 可见 loading status，补 `aria-live` / `aria-busy`；375px 回归截图无重叠。✅                                                                                                |
+| P1-21 | Token 排名索引的 transport/body 可悬挂，失败、真空和旧结果混在一起。                                                       | `6ca74b703` 给 fetch 与 JSON 共用 15 秒物理截止，严格校验响应与当前查询 scope，分离 loading/last-good/error/empty，并补可重试与 44px 控件。✅                                                                             |
+| P1-22 | Weekly 排名服务端等待无界，authority 故障时整页可能长期 skeleton。                                                         | `0a309e690` 给服务端读取和页面外层都加有界截止，只有完整合法周榜可替换 last-good；部分、错误与真空不再互相伪装。✅                                                                                                        |
+| P1-23 | 全局 Search 接受宽松结果，旧关键词/迟到响应或畸形 2xx 可覆盖当前页面。                                                     | `1006d4e66` 绑定规范查询、分页与四类结果，fetch/JSON 同一物理截止；查询 generation 隔离，保留同 scope last-good，并明确 error/retry/empty。✅                                                                             |
+| P1-24 | Exchange leaderboard 的 RPC 或页面请求可悬挂，金额/来源/周期形状不足时仍可能发布。                                         | `ee05be684` 加 RPC 3.5 秒与页面 4 秒双层真实截止，严格 timeframe/source/row/money schema，分离 partial/last-good/error/empty，并使用稳定 loading shell。✅                                                                |
+| P1-25 | 共用 HTTP helper 只触发 AbortSignal，transport 或 `response.json()` 忽略 signal 时仍会永久等待。                           | `4764a4156` 把物理 deadline 覆盖到 fetch 与 body 消费，并传播调用方取消；迟到工作被观察但不可再落入 UI。✅                                                                                                                |
+| P1-26 | 帖子 Bookmark 批量状态、toggle 回执或 folder scope 不完整时可跨用户写入假收藏状态。                                        | `8b6f7529b` 绑定 actor/post/request/operation/action/bookmarked/count/folder；批量状态绑定 viewer、请求顺序和完整映射，不确定结果用 canonical status 对账。✅；底层 toggle 仍应升级为 desired-state/idempotent mutation。 |
+| P1-27 | Token 详情切周期时迟到响应、错误或畸形账户列表会覆盖当前 token，并把失败画成空数据。                                       | `1a862e542` 绑定 token/period/limit/offset，fetch/JSON 15 秒物理截止；URL、viewer/query generation、last-good/error/empty 与 44px 控件均独立。✅                                                                          |
+| P1-28 | Hot 发现页把 500/畸形响应当空列表，group 请求悬挂，旧 viewer 请求可覆盖当前内容。                                          | `91281603e` 对 posts/groups 使用严格合同和 15 秒物理截止，补 viewer/query 迟到隔离、last-good/error/retry，并把 tabs、retry、modal、show-more 触控目标提升到至少 44px。✅                                                 |
+| P1-29 | Hot、Groups 与共享 store 的帖子 reaction 仍有宽松或重复 parser，跨 actor/post 的回执可能落入错误表面。                     | 所有现存调用方现共享 desired-state 合同、绝对乐观状态、同帖串行 lane、同请求号重试和旧读取覆盖门；详情与 Groups 按钮在请求中仍可表达取消/反向意图。✅                                                                     |
+| P1-30 | Compare 的订阅、关注、搜索、对比任一请求可无界等待；畸形/缺项响应会伪装为空，跨账户迟到结果会串线。                        | `d93a7b99f` 严格绑定 ordered source/account partition 与 following identity/count，所有私有 lane 有物理截止、owner/query generation、last-good/error/401 恢复；交互目标至少 44px。✅                                      |
+| P1-31 | 其他账户 hard-delete 的 FK cascade 不进入帖子 reaction 的 post-wide advisory 域，可能在 RPC recount 后让缓存计数暂时偏高。 | 子行删除仍正确，后续任一合法 desired-state（含 no-op）会绝对重算修复；但未有 lock-order-safe 的 cascade reconciliation 前不得宣称全局计数闭环。⏳红色 P1 发布门。                                                         |
 
 ### P2 — 边缘：明确上线后
 
@@ -108,10 +109,11 @@ checked-in serving 证据是 2026-07-16 的 34 个 source boards，不能冒充 
 
 ### 当前验证证据
 
-- `npm run qa:launch-migration-runner`：19/19 通过；当前 migration 集合 213 个
+- `npm run qa:launch-migration-runner`：19/19 通过；当前 migration 集合 217 个
   唯一成员（含 pre/post/recovery/quarantine/superseded）。
-- PostgreSQL 17：帖子媒体 bucket、标签计数完整性、facet-aware 编辑及旧签名关闭的
-  回滚、重放、权限、并发与零停机顺序全部通过；runner 的事务/锁不变量继续通过。
+- PostgreSQL 17：帖子媒体 bucket、标签计数完整性、facet-aware 编辑、子表写入封口及
+  reaction desired-state 的首装、重放、权限、并发与漂移拒绝全部通过；runner 的事务/锁
+  不变量继续通过。
 - production build：在生产数据库 Cloudflare 522 时仍成功，静态页面和 sitemap
   不再被动态数据库 shard 阻塞。
 - 首页 first-paint：响应式几何在绘制前阻塞加载；Playwright 慢 chunk 证明确认
@@ -139,7 +141,7 @@ checked-in serving 证据是 2026-07-16 的 34 个 source boards，不能冒充 
 | P2 maintenance       | 仓库与 QA 清理                            | `23590c072` / `4af1016fb` / `2c198f9f6` 删除退休 scraper、固定路由截图、schema/VPS 一次性入口；`06614c69e` 删除 442 行无调用旧帖子 hooks；`2069f462c` 保留并加固受支持 sweep。                                    | 不是上线解阻器；后续清理仍必须证明无 operator/cron 用途。                                                         |
 
 每个切片均通过自身相关 Jest/Node 合同、ESLint、全量 TypeScript 与 diff-check；其中 post
-reaction 核心为 **4 suites / 102 tests**，comment reaction 为 **4 suites / 110 tests**，Referral 服务端/UI 合并门禁为
+reaction 核心为 **10 suites / 323 tests**，comment reaction 为 **4 suites / 110 tests**，Referral 服务端/UI 合并门禁为
 **4 suites / 46 tests**，当前 repository cleanup 与 public sampler 合同为 **12/12**。
 本地视觉采集另有 10 条核心静态路由 × desktop/mobile = **20/20** 张成功且均 HTTP 200；
 动态 trader 因本地 authority 不健康被明确跳过，不能算通过。这些本地代码/交互证据不替代
@@ -163,8 +165,8 @@ reaction 核心为 **4 suites / 102 tests**，comment reaction 为 **4 suites / 
 
 当前软件分支已经完成的修复不能替代最后三道门：
 
-1. 187 个 predeploy、16 个 postdeploy、5 个 concurrent recovery、3 个
-   transactional recovery、1 个 quarantined、1 个 superseded（共 213 个唯一成员）
+1. 191 个 predeploy、16 个 postdeploy、5 个 concurrent recovery、3 个
+   transactional recovery、1 个 quarantined、1 个 superseded（共 217 个唯一成员）
    必须在生产 exact ledger；当前只完成仓库 runner 证明；
 2. 最终应用必须持久进入 `main`，且生产健康端点返回该 release 的精确 SHA；
 3. 生产浏览器和数据验收必须在同一个 SHA 开始并结束，owner 还须关闭外部
@@ -218,7 +220,7 @@ fail closed，直到 P0-06 的 readiness、writer 撤权和 live canary 全部�
 | Follow 登录恢复   | pending follow 在伪未登录瞬间被消费/丢失。                                                                                                                              | 只在确认 auth restore 后执行。✅                                                                                                                          |
 | Follow 聚合       | 粉丝数、相似交易员、排行榜评分按 raw id 统计，会把不同交易所同 id 合并；fallback 还可能被 1,000 行上限截断。                                                            | 新 source/account RPC；reader 全部用 JSON tuple key；fallback 显式分页且部分页失败整批丢弃。✅代码/类型/生产 RPC                                          |
 | Digest/Activity   | weekly digest、follow activity 和 trader event reference 按 raw id 关联，可能把另一个交易所账户的活动发给用户。                                                         | digest/follow/activity/alert 全部 source-scope；legacy null 只在唯一候选时兼容，否则跳过；同 raw id 双 source 回归已覆盖。✅                              |
-| 迁移 runner       | 只看 version 数量、host 先查再执行，账本可在事务开始前漂移；重跑也可能把同名错误结构当成功。                                                                            | exact name/hash/body/idempotency；事务内重验并 `FOR SHARE` 锁行；missing 才执行；当前 187 predeploy + 16 postdeploy，213 项唯一分类。✅Node + PG17        |
+| 迁移 runner       | 只看 version 数量、host 先查再执行，账本可在事务开始前漂移；重跑也可能把同名错误结构当成功。                                                                            | exact name/hash/body/idempotency；事务内重验并 `FOR SHARE` 锁行；missing 才执行；当前 191 predeploy + 16 postdeploy，217 项唯一分类。✅Node + PG17        |
 | Onboarding        | 完成页跳转早于 follow intents 写完，选择的关注可能丢失。                                                                                                                | 跳转前 drain 全部 intent。✅                                                                                                                              |
 | Search People     | API 有 public people，前端模型丢弃，People tab 假空。                                                                                                                   | 统一结果模型并展示公开用户。✅                                                                                                                            |
 | Search retry      | 搜索失败只能改关键词，没有明确重试。                                                                                                                                    | 增加 retry，保留查询和结果。✅                                                                                                                            |

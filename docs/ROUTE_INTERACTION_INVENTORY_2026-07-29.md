@@ -65,7 +65,9 @@
 5. Delete、Unlink、Revoke、Leave、Unfollow 等破坏性动作需要确认；服务端未确认前不从
    UI 永久消失，失败要恢复原状态。
 6. 所有 icon-only 按钮有可读名称；键盘有 `focus-visible`；切换项使用 `aria-pressed`
-   或 tab 语义；触控目标遵循当前 40px 最低门，核心手机动作优先 44px。
+   或 tab 语义；目标至少满足 [WCAG 2.2 24×24 CSS px](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)，
+   项目核心手机动作采用 [Apple 44×44 pt](https://developer.apple.com/design/human-interface-guidelines/accessibility)
+   级目标。
 7. Cookie banner、移动底栏、FAB、toast 与输入法共享 safe-area，不能互相覆盖。
 8. `source + exchange_trader_id` 是交易账户身份；handle 只用于展示/路由。任何 Follow、
    Watch、Compare、Share、Alert、Claim 都必须保留 source。
