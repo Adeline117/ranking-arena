@@ -94,6 +94,7 @@
     "qa:rank-publication-plan-pg17": "bash supabase/migrations/__tests__/leaderboard-rank-generation-publication-plan.pg17.sh",
     "qa:public-rank-authority-pg17": "bash supabase/migrations/__tests__/rerank-public-eligible-rows-only.pg17.sh && bash supabase/migrations/__tests__/rank-eligible-leaderboard-count-cache.pg17.sh && bash supabase/migrations/__tests__/token-trader-rank-authority.pg17.sh && bash supabase/migrations/__tests__/token-ranking-generation-barrier.pg17.sh",
     "qa:score-alias-pg17": "bash supabase/migrations/__tests__/bitget-bot-rank-authority-quarantine.pg17.sh",
+    "qa:bingx-rank-quarantine-pg17": "bash supabase/migrations/__tests__/bingx-rank-authority-quarantine.pg17.sh",
     "qa:score-v5-pg17": "bash supabase/migrations/__tests__/pure-arena-score-v5-zero-metrics.pg17.sh",
     "qa:score-manifest-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-score-input-manifest.pg17.sh",
     "qa:score-projection-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-metric-trust-projection-v2.pg17.sh",
