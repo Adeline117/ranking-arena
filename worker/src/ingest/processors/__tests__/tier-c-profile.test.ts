@@ -14,12 +14,14 @@ const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
+const mockWriteCopierSnapshotRawArtifact = jest.fn()
 const mockWritePositionHistoryRawArtifact = jest.fn()
 const mockRecordStagingRejects = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockGetHistoryCursor = jest.fn()
 const mockNextHistoryCursor = jest.fn()
 const mockPublishHistoryRows = jest.fn()
+const mockPublishCopierSnapshot = jest.fn()
 const mockDbQuery = jest.fn()
 const mockIngestClientQuery = jest.fn()
 const mockIngestClientRelease = jest.fn()
@@ -41,8 +43,13 @@ jest.mock('@/lib/ingest/fetch/fetcher', () => ({
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
+  writeCopierSnapshotRawArtifact: (...args: unknown[]) =>
+    mockWriteCopierSnapshotRawArtifact(...args),
   writePositionHistoryRawArtifact: (...args: unknown[]) =>
     mockWritePositionHistoryRawArtifact(...args),
+}))
+jest.mock('@/lib/ingest/serving/copier-snapshot-publish', () => ({
+  publishCopierSnapshotInTransaction: (...args: unknown[]) => mockPublishCopierSnapshot(...args),
 }))
 jest.mock('@/lib/ingest/staging/rejects', () => ({
   recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
@@ -72,6 +79,7 @@ const src = {
   tf_label_map: {},
   meta: {},
   fetch_region: 'local',
+  copier_table_depth: 'full',
   serving_mode: 'serving',
   status: 'active',
   profile_cache_ttl_seconds: 3_600,
@@ -352,6 +360,11 @@ describe('Tier-C incomplete profile window gate', () => {
       storagePath: 'test/tier_c/raw.json.gz',
       contentHash: 'a'.repeat(64),
     })
+    mockWriteCopierSnapshotRawArtifact.mockResolvedValue({
+      id: 2_081_898,
+      storagePath: 'gtrade/copier_snapshot/tier_c/test.json.gz',
+      contentHash: 'c'.repeat(64),
+    })
     mockWritePositionHistoryRawArtifact.mockImplementation(
       async (
         _input: unknown,
@@ -371,6 +384,12 @@ describe('Tier-C incomplete profile window gate', () => {
     mockGetHistoryCursor.mockResolvedValue('2026-07-01T00:00:00.000Z')
     mockNextHistoryCursor.mockReturnValue('2026-07-15T11:00:00.000Z')
     mockPublishHistoryRows.mockResolvedValue(1)
+    mockPublishCopierSnapshot.mockResolvedValue({
+      publicationId: 3_001,
+      publishedAt: '2026-07-15T12:00:01.000Z',
+      parsedRowCount: 1,
+      replayed: false,
+    })
     mockIngestClientQuery.mockResolvedValue({ rows: [], rowCount: 0 })
     mockIngestClientRelease.mockReturnValue(undefined)
   })
@@ -792,7 +811,46 @@ describe('Tier-C incomplete profile window gate', () => {
       aggregateReady: true,
     })
 
-    expect(mockPublishHistoryRows).toHaveBeenCalledWith(src, 42, 'copiers', [copierRow], null)
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockWriteCopierSnapshotRawArtifact).toHaveBeenCalledTimes(1)
+    const [rawInput, rawRunner] = mockWriteCopierSnapshotRawArtifact.mock.calls[0]
+    expect(rawInput).toMatchObject({
+      artifact: {
+        contract: 'arena.ingest.copier-snapshot-artifact@1',
+        source: {
+          id: 34,
+          slug: 'gtrade',
+          currency: 'USDC',
+          copier_table_depth: 'full',
+          fetch_region: 'local',
+        },
+        trader: {
+          id: 42,
+          exchange_trader_id: job.data.exchangeTraderId,
+        },
+        lane: 'tier_c',
+        request_timeframe: 30,
+        observed_at: expect.any(String),
+        page_count: 1,
+        scan_terminal_state: 'stream_exhausted_unverified',
+        caller_limited: false,
+        source_reported_row_count: null,
+      },
+    })
+    expect(rawRunner).toEqual(expect.any(Function))
+    expect(mockPublishCopierSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.any(Function) }),
+      {
+        artifact: rawInput.artifact,
+        rawReceipt: {
+          id: 2_081_898,
+          storagePath: 'gtrade/copier_snapshot/tier_c/test.json.gz',
+          contentHash: 'c'.repeat(64),
+        },
+        rows: [copierRow],
+      }
+    )
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     expect(mockGetHistoryCursor).not.toHaveBeenCalled()
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     const readyMarker = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
@@ -801,11 +859,11 @@ describe('Tier-C incomplete profile window gate', () => {
       completed: true,
       aggregateReady: true,
     })
-    expect(mockPublishHistoryRows.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockPublishCopierSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
       mockRedisSet.mock.invocationCallOrder[0]
     )
-    expect(mockWriteRawObject.mock.invocationCallOrder[0]).toBeLessThan(
-      mockPublishHistoryRows.mock.invocationCallOrder[0]
+    expect(mockWriteCopierSnapshotRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishCopierSnapshot.mock.invocationCallOrder[0]
     )
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
@@ -819,17 +877,108 @@ describe('Tier-C incomplete profile window gate', () => {
     mockGetAdapter.mockReturnValue(copiersAdapter())
     mockGetHistory.mockImplementation(() => positionHistoryStream(1))
     mockParseHistory.mockReturnValue([copierRow])
-    mockPublishHistoryRows.mockRejectedValue(new Error('private copier commit failed'))
+    mockPublishCopierSnapshot.mockRejectedValue(new Error('private copier commit failed'))
 
     await expect(processTierC(copiersJob, 'local')).rejects.toThrow('private copier commit failed')
 
-    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
-    expect(mockPublishHistoryRows).toHaveBeenCalledTimes(1)
+    expect(mockWriteCopierSnapshotRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockPublishCopierSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
     ).toBe(false)
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('publishes no copier receipt or marker when canonical RAW persistence fails', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(1))
+    mockWriteCopierSnapshotRawArtifact.mockRejectedValue(new Error('copier RAW persistence failed'))
+
+    await expect(processTierC(copiersJob, 'local')).rejects.toThrow('copier RAW persistence failed')
+
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an upstream-error copier capture diagnostic-only', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(1, { failAfterPage: true }))
+
+    await expect(processTierC(copiersJob, 'local')).rejects.toThrow('history upstream failed')
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: [expect.any(Object)],
+        meta: expect.objectContaining({ surface: 'copiers', fetch_failed: true }),
+      })
+    )
+    expect(mockWriteCopierSnapshotRawArtifact).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+  })
+
+  it('keeps canonical copier RAW durable when parsing rejects the snapshot', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(1))
+    mockParseHistory.mockImplementation(() => {
+      throw new Error('copier parser rejected the page')
+    })
+
+    await expect(processTierC(copiersJob, 'local')).rejects.toThrow(
+      'copier parser rejected the page'
+    )
+
+    expect(mockWriteCopierSnapshotRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+  })
+
+  it('keeps a zero-page copier capture diagnostic-only with no ready marker', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(0))
+
+    await expect(processTierC(copiersJob, 'local')).rejects.toThrow(
+      'copier capture returned no evidence page'
+    )
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'tier_c',
+        traderId: 42,
+        payload: [],
+        meta: expect.objectContaining({
+          surface: 'copiers',
+          fetch_failed: false,
+          capture_rejected: 'no_evidence_page',
+        }),
+      })
+    )
+    expect(mockWriteCopierSnapshotRawArtifact).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockRedisSet).not.toHaveBeenCalled()
+  })
+
+  it('marks a two-page copier preview caller-limited without probing a third page', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    const state = { pulled: 0, closed: false }
+    mockGetHistory.mockImplementation(() => positionHistoryStream(3, { state }))
+    mockParseHistory.mockReturnValue([copierRow])
+
+    await expect(processTierC(copiersJob, 'local')).resolves.toMatchObject({
+      aggregateReady: true,
+    })
+
+    expect(state).toEqual({ pulled: 2, closed: true })
+    expect(mockWriteCopierSnapshotRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: {
+        page_count: 2,
+        caller_limited: true,
+        scan_terminal_state: 'caller_limited',
+      },
+    })
   })
 
   it('keeps position source freshness distinct from the capture clock', async () => {
