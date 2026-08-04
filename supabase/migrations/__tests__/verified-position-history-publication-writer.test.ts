@@ -251,6 +251,9 @@ describe('verified position-history publication writer migration', () => {
     }
     expect(writer).toContain("'compressed_bytes', 'uncompressed_bytes'")
     expect(writer).toContain('verified position-history RAW evidence binding is invalid')
+    expect(writer).not.toContain('arena.ingest.history-acquisition-artifact@2')
+    expect(writer).not.toContain('candidate_ledger_contract')
+    expect(writer).not.toContain('source_fact_contract')
   })
 
   it('accepts only complete terminal evidence with ordered unique bounded claims', () => {
