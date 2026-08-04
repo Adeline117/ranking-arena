@@ -31,6 +31,7 @@ test('retired ad hoc UI screenshot entrypoint stays removed', () => {
     'scripts/qa-screenshot-rankings.mjs',
     'scripts/qa-screenshot.mjs',
     'scripts/screenshot-diagnose.ts',
+    'scripts/mobile-screenshot-test.mjs',
   ]
   const supportedEntrypoint = 'scripts/qa/visual-audit.mjs'
 
