@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens, alpha } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
@@ -11,6 +11,10 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 import { getCsrfHeaders } from '@/lib/api/client'
+import {
+  readGroupChannelCreationAcknowledgement,
+  readGroupMemberSearchResults,
+} from '@/lib/chat/group-channel-client-contract'
 
 type UserResult = {
   id: string
@@ -35,51 +39,127 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const [groupName, setGroupName] = useState('')
   const [description, setDescription] = useState('')
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState(false)
   const [creating, setCreating] = useState(false)
-  const submittingRef = useRef(false)
+  const submittingRef = useRef<number | null>(null)
+  const submissionSequenceRef = useRef(0)
   const creationIntentIdRef = useRef<string | null>(null)
   const creationIntentActorIdRef = useRef<string | null>(null)
+  const creationGenerationRef = useRef(0)
+  const createAbortRef = useRef<AbortController | null>(null)
+  const searchGenerationRef = useRef(0)
+  const searchAbortRef = useRef<AbortController | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const searchQueryRef = useRef('')
+  const viewerRef = useRef({ isOpen, userId: userId?.toLowerCase() ?? null })
+  viewerRef.current = { isOpen, userId: userId?.toLowerCase() ?? null }
 
   const handleClose = useCallback(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = null
+    searchGenerationRef.current += 1
+    creationGenerationRef.current += 1
+    searchAbortRef.current?.abort()
+    createAbortRef.current?.abort()
+    submittingRef.current = null
+    setSearching(false)
+    setCreating(false)
     onClose()
   }, [onClose])
 
-  const debouncedSearch = useCallback((query: string) => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    if (!query.trim()) {
-      setSearchResults([])
-      return
-    }
-    searchTimerRef.current = setTimeout(() => searchUsers(query), 300)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- searchUsers defined after, circular dep
-
   const searchUsers = useCallback(
     async (query: string) => {
-      if (!query.trim() || !accessToken) return
+      const normalizedQuery = query.trim()
+      const actorId = userId?.toLowerCase() ?? null
+      if (!normalizedQuery || normalizedQuery.length > 80 || !accessToken || !actorId || !isOpen) {
+        return
+      }
+
+      searchAbortRef.current?.abort()
+      const controller = new AbortController()
+      searchAbortRef.current = controller
+      const generation = ++searchGenerationRef.current
       setSearching(true)
+      setSearchError(false)
       try {
         const res = await globalThis.fetch(
-          `/api/users/search?q=${encodeURIComponent(query)}&limit=10`,
+          `/api/users/search?q=${encodeURIComponent(normalizedQuery)}&limit=10`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
+            signal: controller.signal,
           }
         )
-        const data = await res.json()
-        setSearchResults(data.users || [])
+        const data: unknown = await res.json().catch(() => null)
+        const users = res.ok ? readGroupMemberSearchResults(data, actorId, 10) : null
+        const currentViewer = viewerRef.current
+        if (
+          controller.signal.aborted ||
+          generation !== searchGenerationRef.current ||
+          !currentViewer.isOpen ||
+          currentViewer.userId !== actorId ||
+          searchQueryRef.current.trim() !== normalizedQuery
+        ) {
+          return
+        }
+        if (!users) throw new Error('Invalid member search response')
+        setSearchResults(users)
       } catch {
-        setSearchResults([])
+        if (!controller.signal.aborted && generation === searchGenerationRef.current) {
+          setSearchError(true)
+        }
       } finally {
-        setSearching(false)
+        if (!controller.signal.aborted && generation === searchGenerationRef.current) {
+          setSearching(false)
+        }
       }
     },
-    [accessToken]
+    [accessToken, isOpen, userId]
   )
+
+  const debouncedSearch = useCallback(
+    (query: string) => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+      searchTimerRef.current = null
+      searchAbortRef.current?.abort()
+      searchGenerationRef.current += 1
+      if (!query.trim()) {
+        setSearching(false)
+        setSearchError(false)
+        setSearchResults([])
+        return
+      }
+      searchTimerRef.current = setTimeout(() => void searchUsers(query), 300)
+    },
+    [searchUsers]
+  )
+
+  useEffect(() => {
+    searchGenerationRef.current += 1
+    creationGenerationRef.current += 1
+    searchAbortRef.current?.abort()
+    createAbortRef.current?.abort()
+    submittingRef.current = null
+    setSearching(false)
+    setCreating(false)
+    setSearchError(false)
+    setSearchResults([])
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = null
+
+    return () => {
+      searchGenerationRef.current += 1
+      creationGenerationRef.current += 1
+      searchAbortRef.current?.abort()
+      createAbortRef.current?.abort()
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [isOpen, userId])
 
   const toggleMember = (user: UserResult) => {
     setSelectedMembers((prev) => {
       if (prev.some((m) => m.id === user.id)) {
         creationIntentIdRef.current = null
+        creationGenerationRef.current += 1
         return prev.filter((m) => m.id !== user.id)
       }
       if (prev.length >= 49) {
@@ -87,6 +167,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
         return prev
       }
       creationIntentIdRef.current = null
+      creationGenerationRef.current += 1
       return [...prev, user]
     })
   }
@@ -94,22 +175,23 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const handleCreate = async () => {
     // Ref-based guard: synchronous, prevents duplicate submissions even when
     // React batches the setState(creating) update across rapid clicks.
-    if (submittingRef.current) return
-    submittingRef.current = true
+    if (submittingRef.current !== null) return
+    const submissionId = ++submissionSequenceRef.current
+    submittingRef.current = submissionId
 
     if (!groupName.trim()) {
       showToast(t('groupNamePlaceholder'), 'warning')
-      submittingRef.current = false
+      submittingRef.current = null
       return
     }
     if (selectedMembers.length < 1) {
       showToast(t('minGroupMembers'), 'warning')
-      submittingRef.current = false
+      submittingRef.current = null
       return
     }
     if (!accessToken || !userId) {
       showToast(t('createGroupFailed'), 'error')
-      submittingRef.current = false
+      submittingRef.current = null
       return
     }
 
@@ -122,6 +204,12 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
       }
       const channelId = creationIntentIdRef.current ?? globalThis.crypto.randomUUID()
       creationIntentIdRef.current = channelId
+      const generation = creationGenerationRef.current
+      const expectedName = groupName.trim()
+      const expectedDescription = description.trim() || null
+      const controller = new AbortController()
+      createAbortRef.current?.abort()
+      createAbortRef.current = controller
       const res = await globalThis.fetch('/api/channels', {
         method: 'POST',
         headers: {
@@ -131,25 +219,48 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
         },
         body: JSON.stringify({
           channelId,
-          name: groupName.trim(),
-          description: description.trim() || undefined,
+          name: expectedName,
+          description: expectedDescription ?? undefined,
           memberIds: selectedMembers.map((m) => m.id),
         }),
+        signal: controller.signal,
       })
-      const data = await res.json()
-      if (res.ok && data.channel?.id === channelId && data.channel?.type === 'group') {
+      const data: unknown = await res.json().catch(() => null)
+      const acknowledgement = res.ok
+        ? readGroupChannelCreationAcknowledgement(data, {
+            actorId: actorScope,
+            channelId,
+            description: expectedDescription,
+            name: expectedName,
+          })
+        : null
+      const currentViewer = viewerRef.current
+      if (
+        controller.signal.aborted ||
+        generation !== creationGenerationRef.current ||
+        !currentViewer.isOpen ||
+        currentViewer.userId !== actorScope ||
+        submittingRef.current !== submissionId
+      ) {
+        return
+      }
+      if (acknowledgement) {
         creationIntentIdRef.current = null
         showToast(t('groupCreated'), 'success')
         handleClose()
-        router.push(`/channels/${data.channel.id}`)
+        router.push(`/channels/${acknowledgement.channelId}`)
       } else {
-        showToast(data.error || 'Failed', 'error')
+        showToast(t('createGroupFailed'), 'error')
       }
     } catch {
-      showToast(t('createGroupFailed'), 'error')
+      if (submittingRef.current === submissionId && viewerRef.current.isOpen) {
+        showToast(t('createGroupFailed'), 'error')
+      }
     } finally {
-      setCreating(false)
-      submittingRef.current = false
+      if (submittingRef.current === submissionId) {
+        setCreating(false)
+        submittingRef.current = null
+      }
     }
   }
 
@@ -176,11 +287,12 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
             {t('createGroupChat')}
           </Text>
           <button
+            type="button"
             aria-label="Close"
             onClick={handleClose}
             style={{
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               borderRadius: '50%',
               border: 'none',
               background: 'transparent',
@@ -212,11 +324,15 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 type="text"
                 value={searchQuery}
                 onChange={(e) => {
+                  searchQueryRef.current = e.target.value
                   setSearchQuery(e.target.value)
+                  setSearchResults([])
+                  setSearchError(false)
                   debouncedSearch(e.target.value)
                 }}
                 placeholder={t('searchUsers')}
                 aria-label={t('searchUsers')}
+                maxLength={80}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
@@ -224,9 +340,10 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary,
                   color: tokens.colors.text.primary,
-                  fontSize: 14,
+                  fontSize: tokens.typography.fontSize.base,
                   outline: 'none',
                   marginBottom: 12,
+                  minHeight: 44,
                 }}
               />
 
@@ -253,10 +370,12 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                       />
                       <Text size="xs">{m.handle || m.id.slice(0, 8)}</Text>
                       <button
+                        type="button"
+                        aria-label={`${t('remove')} ${m.handle || m.id.slice(0, 8)}`}
                         onClick={() => toggleMember(m)}
                         style={{
-                          width: 16,
-                          height: 16,
+                          width: 32,
+                          height: 32,
                           borderRadius: '50%',
                           border: 'none',
                           background: 'transparent',
@@ -289,14 +408,40 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
 
               {/* Results */}
               {searching && (
-                <Text size="sm" color="tertiary">
+                <Text size="sm" color="tertiary" role="status">
                   {t('loading')}
                 </Text>
+              )}
+              {searchError && !searching && (
+                <Box
+                  role="alert"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 44 }}
+                >
+                  <Text size="sm" color="tertiary" style={{ flex: 1 }}>
+                    {t('searchFailed')}
+                  </Text>
+                  <button
+                    type="button"
+                    onClick={() => void searchUsers(searchQueryRef.current)}
+                    style={{
+                      minWidth: 72,
+                      minHeight: 44,
+                      borderRadius: tokens.radius.md,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      background: tokens.colors.bg.tertiary,
+                      color: tokens.colors.text.primary,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('retry')}
+                  </button>
+                </Box>
               )}
               {searchResults.map((u) => {
                 const isSelected = selectedMembers.some((m) => m.id === u.id)
                 return (
                   <button
+                    type="button"
                     key={u.id}
                     onClick={() => toggleMember(u)}
                     style={{
@@ -364,11 +509,13 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                   value={groupName}
                   onChange={(e) => {
                     creationIntentIdRef.current = null
+                    creationGenerationRef.current += 1
                     setGroupName(e.target.value)
                   }}
                   placeholder={t('groupNamePlaceholder')}
                   maxLength={50}
                   aria-label={t('groupName')}
+                  disabled={creating}
                   style={{
                     width: '100%',
                     padding: '10px 14px',
@@ -376,7 +523,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                     border: `1px solid ${tokens.colors.border.primary}`,
                     background: tokens.colors.bg.primary,
                     color: tokens.colors.text.primary,
-                    fontSize: 14,
+                    fontSize: tokens.typography.fontSize.base,
                     outline: 'none',
                   }}
                 />
@@ -392,11 +539,14 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                   value={description}
                   onChange={(e) => {
                     creationIntentIdRef.current = null
+                    creationGenerationRef.current += 1
                     setDescription(e.target.value)
                   }}
                   placeholder="..."
                   maxLength={200}
                   rows={3}
+                  aria-label={t('groupDescription')}
+                  disabled={creating}
                   style={{
                     width: '100%',
                     padding: '10px 14px',
@@ -404,7 +554,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                     border: `1px solid ${tokens.colors.border.primary}`,
                     background: tokens.colors.bg.primary,
                     color: tokens.colors.text.primary,
-                    fontSize: 14,
+                    fontSize: tokens.typography.fontSize.base,
                     outline: 'none',
                     resize: 'none',
                   }}
@@ -428,7 +578,9 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
         >
           {step === 'details' && (
             <button
+              type="button"
               onClick={() => setStep('members')}
+              disabled={creating}
               style={{
                 flex: 1,
                 padding: '10px',
@@ -436,7 +588,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 border: `1px solid ${tokens.colors.border.primary}`,
                 background: 'transparent',
                 color: tokens.colors.text.primary,
-                fontWeight: 600,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: 'pointer',
                 minHeight: 44,
               }}
@@ -445,6 +597,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
             </button>
           )}
           <button
+            type="button"
             onClick={step === 'members' ? () => setStep('details') : handleCreate}
             disabled={
               step === 'members' ? selectedMembers.length < 1 : !groupName.trim() || creating
@@ -456,7 +609,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
               border: 'none',
               background: tokens.gradient.primary,
               color: 'var(--color-on-accent)',
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
               cursor: 'pointer',
               minHeight: 44,
               opacity:

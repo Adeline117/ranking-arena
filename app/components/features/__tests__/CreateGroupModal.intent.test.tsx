@@ -46,6 +46,35 @@ function failedRequest(): Promise<FetchResult> {
   return Promise.reject(new Error('response lost'))
 }
 
+function creationAcknowledgement(
+  channelId: string,
+  actorId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+) {
+  return {
+    channel: {
+      id: channelId,
+      name: 'Stable group',
+      type: 'group',
+      created_by: actorId,
+      avatar_url: null,
+      description: null,
+      conversation_id: null,
+      last_message_at: '2026-08-03T12:00:00.000Z',
+      last_message_preview: null,
+      created_at: '2026-08-03T12:00:00.000Z',
+      updated_at: '2026-08-03T12:00:00.000Z',
+    },
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 function requestBodies() {
   return fetchMock.mock.calls
     .filter(([input]) => input === '/api/channels')
@@ -161,12 +190,10 @@ describe('CreateGroupModal creation intent', () => {
     }))
     fetchMock.mockImplementationOnce(async (_input, init) => ({
       ok: true,
-      json: async () => ({
-        channel: {
-          id: (JSON.parse(String(init?.body)) as { channelId: string }).channelId,
-          type: 'group',
-        },
-      }),
+      json: async () =>
+        creationAcknowledgement(
+          (JSON.parse(String(init?.body)) as { channelId: string }).channelId
+        ),
     }))
     fetchMock.mockImplementationOnce(() => failedRequest())
 
@@ -188,5 +215,103 @@ describe('CreateGroupModal creation intent', () => {
     await submitGroup()
     expect(requestBodies()).toHaveLength(3)
     expect(mockShowToast).toHaveBeenLastCalledWith('createGroupFailed', 'error')
+  })
+
+  it('ignores an older member search after a newer query has rendered', async () => {
+    const oldSearch = deferred<FetchResult>()
+    fetchMock.mockImplementation((input) => {
+      const url = String(input)
+      if (url.includes('q=old')) return oldSearch.promise
+      if (url.includes('q=new')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            users: [
+              {
+                id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                handle: 'new-member',
+                avatar_url: null,
+              },
+            ],
+          }),
+        })
+      }
+      return failedRequest()
+    })
+
+    render(<CreateGroupModal isOpen onClose={jest.fn()} />)
+    const input = screen.getByRole('textbox', { name: 'searchUsers' })
+    fireEvent.change(input, { target: { value: 'old' } })
+    await act(async () => {
+      jest.advanceTimersByTime(300)
+      await Promise.resolve()
+    })
+    fireEvent.change(input, { target: { value: 'new' } })
+    await act(async () => {
+      jest.advanceTimersByTime(300)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(screen.getByRole('button', { name: 'new-member' })).toBeInTheDocument()
+
+    oldSearch.resolve({
+      ok: true,
+      json: async () => ({
+        users: [
+          {
+            id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            handle: 'old-member',
+            avatar_url: null,
+          },
+        ],
+      }),
+    })
+    await act(async () => {
+      await oldSearch.promise
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByRole('button', { name: 'old-member' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'new-member' })).toBeInTheDocument()
+  })
+
+  it('does not navigate when an exact creation response arrives after the modal closes', async () => {
+    const createRequest = deferred<FetchResult>()
+    fetchMock.mockImplementation((input) => {
+      if (input === '/api/channels') return createRequest.promise
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          users: [
+            {
+              id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              handle: 'member',
+              avatar_url: null,
+            },
+          ],
+        }),
+      })
+    })
+
+    const onClose = jest.fn()
+    render(<CreateGroupModal isOpen onClose={onClose} />)
+    await prepareUnchangedGroup()
+    fireEvent.click(screen.getByRole('button', { name: 'createGroup' }))
+    const body = requestBodies()[0]
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    createRequest.resolve({
+      ok: true,
+      json: async () => creationAcknowledgement(body.channelId),
+    })
+    await act(async () => {
+      await createRequest.promise
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalledWith('groupCreated', 'success')
   })
 })
