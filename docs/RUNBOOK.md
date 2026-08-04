@@ -372,21 +372,26 @@ Sources: `lib/utils/arena-score.ts`,
 > 可用空间的 managed scratch 与事故恢复后生成、带当前 completion metadata 的
 > 新备份。
 
-**备份是什么**:`backup-to-r2.mjs` 每日 dump `-n arena -n public`(PLAIN SQL,
-`--no-owner --no-privileges`)→ gzip → multipart upload → 条件 HEAD 验证，写入
+**备份是什么**：`backup-to-r2.mjs` 设计为每日 dump `-n arena -n public`（PLAIN SQL，
+`--no-owner --no-privileges`）→ gzip → multipart upload → 条件 HEAD 验证，写入
 `db-backups/YYYY/MM/arena-backup-<UTC毫秒>-<run-id>-schemas.sql.gz`（schema 产物
-保留 14 天）。这是**应用数据备份**，不含 `auth`/`storage`；用户身份当前只有
+保留 14 天）。current NO-GO 下所有 backup schedule 均保持暂停；“设计为每日”不代表
+任务当前正在运行。这是**应用数据备份**，不含 `auth`/`storage`；用户身份当前只有
 Supabase 托管 PITR，R2 没有已验证的独立恢复副本。
 
 生产器使用独占的 `0700` 临时目录和 `0600`/`O_EXCL`/`O_NOFOLLOW` 文件；完整流
 验证、SHA-256 与 multipart upload 必须绑定同一 sealed artifact。multipart 完成后，
-对 exact immutable key 执行条件 HEAD，并按共享 backup/restore contract 核验
-size、ETag、`application/gzip`、完整模式/completion metadata 以及
-filename/key/`backup-date` identity；任一失败都不得进入 retention prune。新鲜度
-检查的 LIST 只用于选择最新 contract-shaped key，健康只以该 exact HEAD 与契约绑定的
-`backup-date` 为准；最新对象 invalid、stale 或 future 时必须 fail closed，禁止回退旧
-对象报绿。该检查通过只证明 capture artifact 新鲜且契约有效，不代表 managed auth
-recovery 已验收。
+以 upload ETag 对 exact immutable key 执行 `If-Match` 条件 HEAD，并核验 size、ETag、
+`application/gzip`、完整模式/completion metadata、filename/key/`backup-date` identity，
+以及 expected `artifact-size`、`artifact-sha256`、`recovery-scope`、`auth-coverage`、
+`target-model=unproven`、`recovery-certified=false` metadata；任一失败都不得进入
+retention prune。
+
+新鲜度检查的 LIST 只用于选择最新 contract-shaped key，健康只以该 exact HEAD 与契约
+绑定的 `backup-date` 为准；最新对象 invalid、stale 或 future 时必须 fail closed，禁止
+回退旧对象报绿。freshness/restore shared object contract 不重新下载远端 body 计算
+SHA-256；因此该检查通过只证明 capture artifact 新鲜且对象契约有效，不是远端 body
+digest 重算，也不代表 managed auth recovery 已验收。
 
 **列出对象清单**（只读，只验证凭据；清单出现不等于对象可恢复）：
 
@@ -413,9 +418,11 @@ canonical baseline 与 auth sidecar 必须在独立维护波次中实现，并�
 scratch 项目完成 catalog 指纹、身份/应用数据、权限、RLS、登录和
 `npm run qa:schema` 演练后，才能把恢复步骤重新写入本 runbook。
 
-**脚本安全**:`RESTORE_TARGET_URL == DATABASE_URL`(生产)时硬拒绝,除非
-`--force-prod`(几乎永远不该用)。缺少 `DATABASE_URL` 生产身份基准时默认硬拒绝；
-只有已独立证明 scratch 隔离后才可显式传 `--allow-unverified-target`。
+**脚本安全**：`RESTORE_TARGET_URL == DATABASE_URL`（生产）时硬拒绝，除非
+`--force-prod`（几乎永远不该用）。缺少 `DATABASE_URL` 生产身份基准时默认硬拒绝；
+只有已独立证明 scratch 隔离后才可显式传 `--allow-unverified-target`。这些参数只是目标
+身份 guard；当前 CLI 在 guard 后仍无条件返回 `AUTOMATED RESTORE DISABLED`，
+`--force-prod` 与 `--allow-unverified-target` 都不会重新启用 apply。
 
 ## Deployment Rollback
 
@@ -520,7 +527,10 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 
 2026-08-04 02:24Z 的显式 `READ ONLY` production 审计已证明：完整 predeploy manifest 为 `114` 中 `63 exact / 51 missing`；四个 ranking-authority migration 及三个直接前序依赖均 ledger missing + live fail。三个 record/publication 基础 migration 均 ledger/live missing，且 `20260803090000` 要求的 records/copier RPC 哈希与生产现状不匹配。postdeploy `3` 中 `2 exact / 1 missing`；缺项为 `20260729061000_tier_a_execution_claim_enforcement.sql`，live marker 也不存在。五个身份/凭据 ACL 前置中四个 exact + live pass；`20260716093000` 的 name/body/created_by 与 live ACL 正确，但 idempotency key drift，是明确 ledger/live 冲突。五个较晚的 2026-08 migration 也全部 ledger missing + live fail。05:55Z 的第二次显式 `READ ONLY` 复核确认 `20260804041000` 与 `20260804042000` ledger missing、live retirement/quarantine fail；06:30Z 的第三次复核确认 `20260804043000_retire_legacy_token_rankings.sql` ledger/head/head reader/v2 reader 均不存在，旧 refresh 函数仍存在且 body 尚未退役。随后主干新增 `20260804044000_freeze_legacy_position_history_relations.sql`；它晚于上述快照且没有任何 apply 证据，所以按 fail-closed 证据口径计为第 `64` 个 gap，production exact ledger/live catalog 仍须再次只读核验，不能把“无 apply 证据”写成已完成 live postflight。production 也不具备 `040430` 的 generation-barrier 前态；不得直接补四个 ranking 文件、跳过 token-ranking retirement、把六个 record/publication/retirement/freeze 文件批量重放、手改 ledger 或跳过 drift。先冻结完整 ordered baseline，为每个缺项建立依赖/重放安全证据和 ADR-023 单文件记录。transaction pooler 只用于本次取证，不是 migration writer；`5432 + verify-full` session 通道仍须另证。
 
-以下十二个 2026-08 核心 migration 目前只有仓库代码和隔离测试能力，尚未在 staging 或 production 获得完整 apply 证据；这是 inventory，不是 apply 顺序，各项最终 pass 仍须绑定同一个 exact candidate SHA：
+以下十二个 2026-08 核心 migration 与四个 2026-07 ranking-authority migration 合计
+十六个核心 migration。目前它们只有仓库代码和隔离测试能力，尚未在 staging 或
+production 获得完整 apply 证据；这是 inventory，不是 apply 顺序，各项最终 pass 仍须
+绑定同一个 exact candidate SHA：
 
 1. `20260803090000_record_provenance_clocks.sql`
 2. `20260803100000_record_surface_publication_substrate.sql`
@@ -537,7 +547,15 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 
 必须使用以下有序流程：
 
-0. 当前 legacy token-ranking surface 是 **ACTIVE-EXPOSURE**。2026-08-04 00:04 PDT 的公开只读复核中，detail API 仍为 HTTP 200 / `total=82`，popular API 为 HTTP 200 / 50 tokens，两个 API 都带 `Cache-Control: public`，index/detail 页面也仍为 HTTP 200。任何 predeploy/ranking migration 前，custom domain 与全部别名上的 `/api/rankings/by-token` detail/popular 请求必须固定 fail closed，`/rankings/tokens` 与 `/rankings/tokens/*` 不得渲染或请求旧排名；响应必须不可缓存，且日志/测试证明零 Supabase/Redis 调用。优先使用获准、可回滚且覆盖所有别名的 edge deny；若用代码，只能从 production exact SHA 建立 allowlist 极小的独立 hotfix。该负向门禁从第一项 ranking migration 前持续到 `040430` exact proof；未完成即数据库零写入。
+0. 当前 legacy token-ranking surface 是 **ACTIVE-EXPOSURE**；最新公开只读探针、缓存
+   状态与 production deployment 证据统一以
+   [`V1_EXECUTION_STATUS_2026-08-03.md`](./V1_EXECUTION_STATUS_2026-08-03.md) 为准。
+   任何 predeploy/ranking migration 前，custom domain 与全部别名上的
+   `/api/rankings/by-token` detail/popular 请求必须固定 fail closed，
+   `/rankings/tokens` 与 `/rankings/tokens/*` 不得渲染或请求旧排名；响应必须不可缓存，
+   且日志/测试证明零 Supabase/Redis 调用。优先使用获准、可回滚且覆盖所有别名的 edge
+   deny；若用代码，只能从 production exact SHA 建立 allowlist 极小的独立 hotfix。该负向
+   门禁从第一项 ranking migration 前持续到 `040430` exact proof；未完成即数据库零写入。
 1. 冻结全部 `51` 个 predeploy 缺项的 ordered baseline，为每项建立依赖/重放安全证据并裁决 `20260716093000` drift。四个 ranking 文件就是这 `51` 项中的四项，不是“其余 51 项全部完成后的额外批次”；只有 manifest 中位于目标文件之前的每一项 exact、目标确认缺失且 live catalog 与迁移前契约兼容时，才在抵达其位置后按四文件固定顺序逐文件补齐。全部 `51` 项最终 exact 前，predeploy 门禁仍未闭合，也不开始后续 2026-08 数据库变更。
 2. 在任何 2026-08 migration 前，用 production exact ledger 与 live ACL catalog 同时证明五个额外安全前置。`20260716093000` 必须令 `user_linked_traders` 对 browser/PUBLIC 无 DML、authenticated 仅 own SELECT、service role CRUD 且 policy 精确收敛；`20260716112000` 必须令 `user_exchange_connections` 对 browser/PUBLIC 无 table/column 路径、service CRUD 且只有精确 service policy；`20260716178000`/`179100`/`179200` 必须共同保护 profile 写入/读取/钱包权威，尤其 authenticated 不可更新 `is_verified_trader`、`verified_trader_id`、`verified_trader_source`、`linked_trader_count`。仅当只读检查确认某 ledger 缺失、live catalog 仍与迁移前基线兼容时，才按时间顺序通过 ADR-023 获准单文件通道补齐并重复 ACL 证明；ledger/catalog 冲突时停止，不修 ledger、不盲目重放。这五个文件不计入十六个核心产品 migration。
 3. 四个 ranking-authority migration 均 exact 后，经 ADR-023 单文件应用 `20260804043000_retire_legacy_token_rankings.sql`。它必须以 publication-head `FOR UPDATE NOWAIT` 证明没有在途 refresh，并精确匹配 generation-barrier 前态；随后证明 durable/RPC head 为 generation zero + unpublished、exact cron identity 保留但 inactive、七个函数和两个 MV OID/内容保留、除 service-only head getter 外 reader/writer 与所有非 owner MV ACL 均返回精确 fail-closed 状态，且重放 byte-stable。当前 production 缺少 head/generation barrier，不是可执行前态；任何 prerequisite、hash、overload、ACL、在途 refresh 或 ledger/live drift 都停止。
@@ -560,7 +578,14 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 
 ### 排名权威数据库先行门禁（BLOCKED / 已取证）
 
-以下步骤是完整十六迁移门禁的第一阶段，不是生产执行授权。当前 legacy token-ranking surface 是 **ACTIVE-EXPOSURE**：2026-08-04 00:04 PDT 的公开只读探针仍返回 detail HTTP 200 / `total=82`、popular HTTP 200 / 50 tokens，且 API 可公开缓存；index/detail 页面也仍为 200。此前 production 只读数据库审计同时证明四个 ranking-authority migration 均为 ledger missing + live fail，后继 token-ranking retirement 也 ledger/live missing；完整 predeploy manifest 还有 47 个其他缺项，且 `20260716093000` 存在 idempotency ledger drift。结论是 **BLOCKED**；不得把“已确认五个 ranking 文件缺失”误解为可以直接补文件，更不得批量重放或手改 ledger。
+以下步骤是完整十六迁移门禁的第一阶段，不是生产执行授权。当前 legacy token-ranking
+surface 是 **ACTIVE-EXPOSURE**；最新 HTTP/cache 探针统一以
+[`V1_EXECUTION_STATUS_2026-08-03.md`](./V1_EXECUTION_STATUS_2026-08-03.md) 为准。
+此前 production 只读数据库审计同时证明四个 ranking-authority migration 均为 ledger
+missing + live fail，后继 token-ranking retirement 也 ledger/live missing；完整 predeploy
+manifest 还有 47 个其他缺项，且 `20260716093000` 存在 idempotency ledger drift。结论是
+**BLOCKED**；不得把“已确认五个 ranking 文件缺失”误解为可以直接补文件，更不得批量
+重放或手改 ledger。
 
 0. 在任何 ranking DB 写入前，先以获准 edge deny 或独立最小 hotfix 封闭 custom domain 与全部别名上的 token detail/popular API、index/detail 页面、导航和 sitemap 发现入口。API 必须固定 503（或经单独评审固定 410）、无 traders/tokens/total、`Cache-Control: private, no-store, max-age=0, must-revalidate`，页面不得挂载会 fetch 的 client；日志和测试必须证明零 Supabase/Redis 调用。发布后从两个网络点以不同 query 验证无旧 public cache，并绑定 exact deployment SHA。该门禁持续到 `040430` exact；通过前不应用任何 predeploy/ranking migration。
 1. 在应用候选版本前，先冻结并复核完整 `114` 项 predeploy manifest、production ledger 与 live catalog 快照。对全部 `51` 个缺项逐个建立依赖、现有 catalog 兼容性与重放安全证据；对每个确需应用的文件建立 ADR-023 单文件记录。四个 ranking 文件属于这 `51` 项；`20260716093000` 的 name/body/creator 与 live ACL pass、idempotency key drift 必须单独裁决。任一目标文件的全部 manifest 前序或 drift 未闭合时，该文件及其后续所有写入均禁止执行。
@@ -769,8 +794,10 @@ must quarantine every known legacy history read before the database retirement.
    `npm run qa:legacy-portfolio-retirement-pg17`, then verify production ACLs with
    read-only catalog queries, including denial of browser execution and forced
    rollback after a late unlink write. Only after all five identity/credential
-   ACL prerequisites, the missing Tier-A postdeploy, all fifteen production migrations
-   (four ranking-authority files, one token-ranking retirement, five record/publication/retirement files, and five activation/authorization/Portfolio/Claim files), their live
+   ACL prerequisites, the missing Tier-A postdeploy, all sixteen production migrations
+   (four ranking-authority files, one token-ranking retirement, six
+   record/publication/retirement/freeze files, and five
+   activation/authorization/Portfolio/Claim files), their live
    proof, the authorization and Portfolio export/delete lifecycle smokes, and the exact-SHA
    Claim submit/approve/unlink smoke have landed, run `npm run gen:types`
    against that production schema and
