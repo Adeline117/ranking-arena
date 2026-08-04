@@ -781,7 +781,7 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(renderPayload.rows[0]).not.toHaveProperty('raw')
   })
 
-  it('never publishes individual copier rows to Redis or profile cache', async () => {
+  it('commits private copier rows before publishing an exact opaque ready marker', async () => {
     mockGetAdapter.mockReturnValue(copiersAdapter())
     mockGetHistory.mockImplementation(() => positionHistoryStream(1))
     mockParseHistory.mockReturnValue([copierRow])
@@ -789,26 +789,47 @@ describe('Tier-C incomplete profile window gate', () => {
     await expect(processTierC(copiersJob, 'local')).resolves.toMatchObject({
       traderId: 42,
       surface: 'copiers',
-      rows: 0,
+      aggregateReady: true,
     })
 
-    expect(mockPublishHistoryRows).toHaveBeenCalledWith(
-      src,
-      42,
-      'copiers',
-      [copierRow],
-      '2026-07-15T11:00:00.000Z'
+    expect(mockPublishHistoryRows).toHaveBeenCalledWith(src, 42, 'copiers', [copierRow], null)
+    expect(mockGetHistoryCursor).not.toHaveBeenCalled()
+    expect(mockNextHistoryCursor).not.toHaveBeenCalled()
+    const readyMarker = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(readyMarker).toEqual({
+      contract: 'arena.tier-c.copier-ready@1',
+      completed: true,
+      aggregateReady: true,
+    })
+    expect(mockPublishHistoryRows.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRedisSet.mock.invocationCallOrder[0]
     )
-    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
-    expect(renderPayload.rows).toEqual([])
-    const cacheCall = mockDbQuery.mock.calls.find(([sql]) =>
-      String(sql).includes('arena.profile_cache')
+    expect(mockWriteRawObject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishHistoryRows.mock.invocationCallOrder[0]
     )
-    const publicPayloads = `${mockRedisSet.mock.calls[0][1]} ${cacheCall?.[1]?.[4]}`
-    expect(publicPayloads).not.toContain('private-user@example.com')
-    expect(publicPayloads).not.toContain('private-1')
-    expect(publicPayloads).not.toContain('copierPnl')
-    expect(publicPayloads).not.toContain('copierInvested')
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+    expect(JSON.stringify(readyMarker)).not.toMatch(
+      /private-user@example\.com|private-1|copierPnl|copierInvested|rows|raw/i
+    )
+  })
+
+  it('publishes no copier marker or public cache when the private commit fails', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(1))
+    mockParseHistory.mockReturnValue([copierRow])
+    mockPublishHistoryRows.mockRejectedValue(new Error('private copier commit failed'))
+
+    await expect(processTierC(copiersJob, 'local')).rejects.toThrow('private copier commit failed')
+
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockPublishHistoryRows).toHaveBeenCalledTimes(1)
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
   it('keeps position source freshness distinct from the capture clock', async () => {
