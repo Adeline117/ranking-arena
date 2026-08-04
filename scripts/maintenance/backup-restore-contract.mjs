@@ -8,6 +8,8 @@ import { createGunzip } from 'node:zlib'
 // valid-but-empty 20-byte gzip can never become a restore point.
 export const COMPLETE_BACKUP_MIN_BYTES = 1024 * 1024 * 1024
 export const ARENA_BACKUP_COMPLETION_CONTRACT = 'arena.pg-dump-complete.v1'
+export const BACKUP_TARGET_MODEL_UNPROVEN = 'unproven'
+export const BACKUP_RECOVERY_CERTIFIED_FALSE = 'false'
 export const PG_DUMP_RESTRICT_TOKEN_PATTERN = /^[0-9A-Za-z]{1,256}$/
 export const ARENA_BACKUP_COMPLETION_TOKEN_PATTERN = /^[0-9a-f]{64}$/
 export const IMMUTABLE_BACKUP_FILENAME_PATTERN =
@@ -77,6 +79,34 @@ export function arenaCompletionTokenFromMetadata(metadata) {
     throw new Error('backup completion metadata is incomplete or invalid')
   }
   return token
+}
+
+export function unverifiedBackupRecoveryMetadata(mode) {
+  if (mode === 'schemas') {
+    return {
+      'recovery-scope': 'application-data-only',
+      'auth-coverage': 'none',
+      'target-model': BACKUP_TARGET_MODEL_UNPROVEN,
+      'recovery-certified': BACKUP_RECOVERY_CERTIFIED_FALSE,
+    }
+  }
+  if (mode === 'full') {
+    return {
+      'recovery-scope': 'full-database-capture',
+      'auth-coverage': 'captured-unverified',
+      'target-model': BACKUP_TARGET_MODEL_UNPROVEN,
+      'recovery-certified': BACKUP_RECOVERY_CERTIFIED_FALSE,
+    }
+  }
+  throw new Error('backup recovery metadata mode is invalid')
+}
+
+function assertUnverifiedBackupRecoveryMetadata(mode, metadata) {
+  for (const [name, expected] of Object.entries(unverifiedBackupRecoveryMetadata(mode))) {
+    if (metadata[name] !== expected) {
+      throw new Error(`immutable backup recovery metadata is invalid: ${name}`)
+    }
+  }
 }
 
 function normalizeBackupMetadata(metadata) {
@@ -181,6 +211,7 @@ export function assertCompleteBackupObject(object, minimumBytes = COMPLETE_BACKU
     ) {
       throw new Error('immutable backup filename and backup-date metadata do not match')
     }
+    assertUnverifiedBackupRecoveryMetadata(filenameIdentity.mode, normalizedMetadata)
   }
   return object
 }
