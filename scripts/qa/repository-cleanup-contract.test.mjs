@@ -25,6 +25,25 @@ test('retired standalone diagnostics stay removed in favor of supported entrypoi
   }
 })
 
+test('retired ad hoc UI screenshot entrypoint stays removed', () => {
+  const retiredEntrypoint = 'scripts/qa-ui-check.mjs'
+  const supportedEntrypoint = 'scripts/qa/visual-audit.mjs'
+
+  assert.equal(
+    existsSync(join(repoRoot, retiredEntrypoint)),
+    false,
+    'retired fixed-route screenshot script must not return; use the maintained visual audit'
+  )
+  assert.equal(
+    existsSync(join(repoRoot, supportedEntrypoint)),
+    true,
+    'the maintained visual audit entrypoint must remain available'
+  )
+
+  const packageCommands = Object.values(packageJson.scripts).join('\n')
+  assert.doesNotMatch(packageCommands, new RegExp(retiredEntrypoint.replaceAll('.', '\\.')))
+})
+
 test('retired pre-arena tools stay removed', () => {
   const retiredPreArenaTools = [
     'scripts/generate-trader-bios.ts',

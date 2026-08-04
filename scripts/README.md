@@ -80,6 +80,7 @@ Some enrichment/fetch scripts may also require proxy credentials.
 
 - Platform-specific import/enrichment scripts
 - QA contracts and sweep tools under `scripts/qa/`
+- Visual screenshot audits via `scripts/qa/visual-audit.mjs`
 
 ---
 
@@ -91,6 +92,9 @@ for ingest validation, and `npm run qa:serving` for the release acceptance gate.
 Pre-arena write scripts and orphaned import/browser helpers must also stay removed. New import and
 enrichment tooling must use the current `arena.*` source taxonomy, supported ingest runtime, and
 serving contracts.
+
+Retired fixed-route screenshot scripts must not be restored. Use
+`scripts/qa/visual-audit.mjs` so audits cover the maintained route inventory and dynamic samples.
 
 ---
 
