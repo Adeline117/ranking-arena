@@ -11846,6 +11846,16 @@ export type Database = {
         }
         Returns: Json
       }
+      get_hashtag_posts_page: {
+        Args: {
+          p_limit: number
+          p_offset: number
+          p_sort_by: string
+          p_tag: string
+          p_viewer_id: string | null
+        }
+        Returns: Json
+      }
       get_hero_stats: {
         Args: never
         Returns: {
@@ -12110,6 +12120,10 @@ export type Database = {
       get_trader_tracked_since: {
         Args: { p_source: string; p_source_trader_id: string }
         Returns: string
+      }
+      get_trending_hashtags_public: {
+        Args: { p_limit?: number }
+        Returns: Json
       }
       get_translations_batch: {
         Args: {
