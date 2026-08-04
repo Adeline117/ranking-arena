@@ -108,15 +108,30 @@ describe('POST /api/reports', () => {
 
     expect(response.status).toBe(201)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(Object.keys(body).sort()).toEqual(['data', 'meta', 'success'])
+    expect(Object.keys(body.data as Record<string, unknown>)).toEqual(['report'])
+    expect(Object.keys((body.data as { report: Record<string, unknown> }).report).sort()).toEqual([
+      'content_id',
+      'content_type',
+      'created_at',
+      'evidence_refs',
+      'id',
+      'reason',
+      'reporter_id',
+      'status',
+    ])
     expect(body).toMatchObject({
       success: true,
       data: {
         report: {
           id: REPORT_ID,
+          reporter_id: REPORTER_ID,
           content_type: 'post',
+          content_id: CONTENT_ID,
           reason: 'spam',
           status: 'pending',
           created_at: CREATED_AT,
+          evidence_refs: [EVIDENCE_REF],
         },
       },
     })
@@ -129,6 +144,13 @@ describe('POST /api/reports', () => {
       p_images: [EVIDENCE_REF],
     })
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejects extra request fields instead of silently discarding them', async () => {
+    const response = await POST(request({ legacy_target: CONTENT_ID }))
+
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
   it('maps an exact canonical duplicate result to the stable conflict response', async () => {

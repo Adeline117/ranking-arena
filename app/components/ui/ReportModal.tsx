@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
@@ -9,7 +9,13 @@ import { useToast } from './Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
-import { parseReportEvidenceRef } from '@/lib/reports/evidence'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  isReportEvidenceCleanupAcknowledgement,
+  readOwnedReportEvidenceRef,
+  readReportEvidenceUploadAcknowledgement,
+  readReportSubmissionAcknowledgement,
+} from '@/lib/reports/client-contract'
 
 export type ReportContentType = 'post' | 'comment' | 'message' | 'user'
 export type ReportReason =
@@ -25,6 +31,7 @@ interface ReportModalProps {
   onClose: () => void
   contentType: ReportContentType
   contentId: string
+  /** @deprecated Authorization is read from canonical useAuthSession state. */
   accessToken: string
   /** Optional: display name of what's being reported */
   targetName?: string
@@ -50,6 +57,29 @@ const CONTENT_TYPE_KEYS: Record<ReportContentType, string> = {
 interface ReportEvidenceUpload {
   previewUrl: string
   evidenceRef: string
+  ownerId: string
+}
+
+async function cleanupEvidenceRequest(evidenceRef: string, accessToken: string): Promise<void> {
+  try {
+    const response = await fetch('/api/upload', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        ...getCsrfHeaders(),
+      },
+      body: JSON.stringify({ evidence_ref: evidenceRef }),
+    })
+    if (response.status === 404 || response.status === 409) return
+    const payload: unknown = await response.json().catch(() => null)
+    if (!response.ok || !isReportEvidenceCleanupAcknowledgement(payload)) {
+      logger.warn('Report evidence cleanup failed:', { status: response.status })
+    }
+  } catch (error) {
+    // TTL cleanup is authoritative; this request only shortens orphan life.
+    logger.warn('Report evidence cleanup failed:', error)
+  }
 }
 
 export default function ReportModal({
@@ -57,52 +87,106 @@ export default function ReportModal({
   onClose,
   contentType,
   contentId,
-  accessToken,
   targetName,
 }: ReportModalProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const { accessToken, userId } = useAuthSession()
   const [reason, setReason] = useState<ReportReason | null>(null)
   const [description, setDescription] = useState('')
   const [images, setImages] = useState<ReportEvidenceUpload[]>([])
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const closingRef = useRef(false)
+  const imagesRef = useRef<ReportEvidenceUpload[]>([])
+  const generationRef = useRef(0)
+  const operationSequenceRef = useRef(0)
+  const uploadOperationRef = useRef<number | null>(null)
+  const submitOperationRef = useRef<number | null>(null)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+  const submitAbortRef = useRef<AbortController | null>(null)
+  const scopeKeyRef = useRef<string | null>(null)
+  const authRef = useRef({ accessToken, viewerId: userId?.toLowerCase() ?? null })
+  authRef.current = { accessToken, viewerId: userId?.toLowerCase() ?? null }
+  const scopeRef = useRef({
+    isOpen,
+    viewerId: userId?.toLowerCase() ?? null,
+    contentType,
+    contentId: contentId.toLowerCase(),
+  })
+  scopeRef.current = {
+    isOpen,
+    viewerId: userId?.toLowerCase() ?? null,
+    contentType,
+    contentId: contentId.toLowerCase(),
+  }
+  imagesRef.current = images
 
   useEffect(() => {
+    const viewerId = userId?.toLowerCase() ?? null
+    const nextScopeKey = isOpen ? `${viewerId ?? 'anonymous'}:${contentType}:${contentId}` : null
+    const previousScopeKey = scopeKeyRef.current
+    scopeKeyRef.current = nextScopeKey
     if (isOpen) closingRef.current = false
-  }, [isOpen])
+
+    if (previousScopeKey !== null && previousScopeKey !== nextScopeKey) {
+      generationRef.current += 1
+      uploadAbortRef.current?.abort()
+      submitAbortRef.current?.abort()
+      uploadOperationRef.current = null
+      submitOperationRef.current = null
+      setUploading(false)
+      setSubmitting(false)
+      setReason(null)
+      setDescription('')
+      const pendingEvidence = imagesRef.current
+      imagesRef.current = []
+      setImages([])
+      const currentAuth = authRef.current
+      if (currentAuth.accessToken && currentAuth.viewerId === viewerId) {
+        for (const image of pendingEvidence) {
+          if (image.ownerId === viewerId) {
+            void cleanupEvidenceRequest(image.evidenceRef, currentAuth.accessToken)
+          }
+        }
+      }
+    }
+  }, [contentId, contentType, isOpen, userId]) // access-token refresh preserves one viewer scope
+
+  useEffect(
+    () => () => {
+      generationRef.current += 1
+      uploadAbortRef.current?.abort()
+      submitAbortRef.current?.abort()
+    },
+    []
+  )
 
   const cleanupEvidence = useCallback(
     async (evidenceRef: string) => {
-      try {
-        const response = await fetch('/api/upload', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ evidence_ref: evidenceRef }),
-        })
-        if (!response.ok && response.status !== 404) {
-          logger.warn('Report evidence cleanup failed:', { status: response.status })
-        }
-      } catch (error) {
-        // TTL cleanup is authoritative; this request only shortens orphan life.
-        logger.warn('Report evidence cleanup failed:', error)
-      }
+      if (!accessToken) return
+      await cleanupEvidenceRequest(evidenceRef, accessToken)
     },
     [accessToken]
   )
 
   const closeAndCleanup = useCallback(() => {
     closingRef.current = true
-    const pendingEvidence = images
+    generationRef.current += 1
+    uploadAbortRef.current?.abort()
+    submitAbortRef.current?.abort()
+    uploadOperationRef.current = null
+    submitOperationRef.current = null
+    const pendingEvidence = imagesRef.current
+    imagesRef.current = []
     setImages([])
+    setUploading(false)
+    setSubmitting(false)
+    setReason(null)
+    setDescription('')
     void Promise.allSettled(pendingEvidence.map((image) => cleanupEvidence(image.evidenceRef)))
     onClose()
-  }, [cleanupEvidence, images, onClose])
+  }, [cleanupEvidence, onClose])
 
   const MIN_DESC_LENGTH = 15
   const MAX_IMAGES = 4
@@ -112,6 +196,7 @@ export default function ReportModal({
   )
 
   const handleSubmit = async () => {
+    if (submitOperationRef.current !== null) return
     if (!reason) {
       showToast(t('selectReportReason'), 'warning')
       return
@@ -127,6 +212,29 @@ export default function ReportModal({
       return
     }
 
+    const viewerId = userId?.toLowerCase() ?? null
+    if (
+      !accessToken ||
+      !viewerId ||
+      !isOpen ||
+      images.some((image) => image.ownerId !== viewerId)
+    ) {
+      showToast(t('reportFailed'), 'error')
+      return
+    }
+
+    const operationId = ++operationSequenceRef.current
+    submitOperationRef.current = operationId
+    const generation = generationRef.current
+    const operationScope = {
+      viewerId,
+      contentType,
+      contentId: contentId.toLowerCase(),
+    }
+    const evidenceRefs = images.map((image) => image.evidenceRef)
+    const controller = new AbortController()
+    submitAbortRef.current?.abort()
+    submitAbortRef.current = controller
     setSubmitting(true)
     try {
       const res = await fetch('/api/reports', {
@@ -138,33 +246,184 @@ export default function ReportModal({
         },
         body: JSON.stringify({
           content_type: contentType,
-          content_id: contentId,
+          content_id: operationScope.contentId,
           reason,
           description: description.trim() || null,
-          images: images.map((image) => image.evidenceRef),
+          images: evidenceRefs,
         }),
+        signal: controller.signal,
       })
 
-      const data = await res.json()
+      const data: unknown = await res.json().catch(() => null)
+      const acknowledgement =
+        res.status === 201
+          ? readReportSubmissionAcknowledgement(data, {
+              reporterId: operationScope.viewerId,
+              contentType: operationScope.contentType,
+              contentId: operationScope.contentId,
+              reason,
+              evidenceRefs,
+            })
+          : null
+      const currentScope = scopeRef.current
+      if (
+        controller.signal.aborted ||
+        generation !== generationRef.current ||
+        submitOperationRef.current !== operationId ||
+        !currentScope.isOpen ||
+        currentScope.viewerId !== operationScope.viewerId ||
+        currentScope.contentType !== operationScope.contentType ||
+        currentScope.contentId !== operationScope.contentId
+      ) {
+        return
+      }
 
-      if (!res.ok) {
-        showToast(data.error || t('reportFailed'), 'error')
+      if (!acknowledgement) {
+        showToast(t('reportFailed'), 'error')
         return
       }
 
       showToast(t('reportSubmitted'), 'success')
       closingRef.current = true
-      onClose()
-      // Reset form
+      submitOperationRef.current = null
+      imagesRef.current = []
+      setSubmitting(false)
       setReason(null)
       setDescription('')
       setImages([])
+      onClose()
     } catch (error) {
-      logger.error('Report error:', error)
-      showToast(t('networkError'), 'error')
+      if (submitOperationRef.current === operationId && !controller.signal.aborted) {
+        logger.error('Report error:', error)
+        showToast(t('networkError'), 'error')
+      }
     } finally {
-      setSubmitting(false)
+      if (submitOperationRef.current === operationId) {
+        submitOperationRef.current = null
+        setSubmitting(false)
+      }
     }
+  }
+
+  const handleEvidenceUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file || uploadOperationRef.current !== null || submitOperationRef.current !== null) return
+    if (file.size > 2 * 1024 * 1024) {
+      showToast(t('reportEvidenceTooLarge'), 'warning')
+      return
+    }
+
+    const viewerId = userId?.toLowerCase() ?? null
+    if (!accessToken || !viewerId || !isOpen || imagesRef.current.length >= MAX_IMAGES) {
+      showToast(t('uploadFailedRetry'), 'error')
+      return
+    }
+
+    const operationId = ++operationSequenceRef.current
+    uploadOperationRef.current = operationId
+    const generation = generationRef.current
+    const operationScope = {
+      viewerId,
+      contentType,
+      contentId: contentId.toLowerCase(),
+    }
+    const operationToken = accessToken
+    const controller = new AbortController()
+    uploadAbortRef.current?.abort()
+    uploadAbortRef.current = controller
+    setUploading(true)
+    let uploadedEvidenceRef: string | null = null
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('bucket', 'reports')
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${operationToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: formData,
+        signal: controller.signal,
+      })
+      const payload: unknown = await res.json().catch(() => null)
+      uploadedEvidenceRef = readOwnedReportEvidenceRef(payload, operationScope.viewerId)
+      const acknowledgement =
+        res.status === 200
+          ? readReportEvidenceUploadAcknowledgement(
+              payload,
+              operationScope.viewerId,
+              process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+            )
+          : null
+      if (!acknowledgement) throw new Error('Evidence upload returned an invalid response')
+
+      const currentScope = scopeRef.current
+      if (
+        controller.signal.aborted ||
+        generation !== generationRef.current ||
+        uploadOperationRef.current !== operationId ||
+        !currentScope.isOpen ||
+        currentScope.viewerId !== operationScope.viewerId ||
+        currentScope.contentType !== operationScope.contentType ||
+        currentScope.contentId !== operationScope.contentId ||
+        closingRef.current
+      ) {
+        await cleanupEvidenceRequest(acknowledgement.evidenceRef, operationToken)
+        uploadedEvidenceRef = null
+        return
+      }
+
+      if (
+        imagesRef.current.length >= MAX_IMAGES ||
+        imagesRef.current.some((image) => image.evidenceRef === acknowledgement.evidenceRef)
+      ) {
+        await cleanupEvidenceRequest(acknowledgement.evidenceRef, operationToken)
+        uploadedEvidenceRef = null
+        throw new Error('Evidence upload returned a duplicate or excess reference')
+      }
+
+      const nextImages = [
+        ...imagesRef.current,
+        {
+          previewUrl: acknowledgement.previewUrl,
+          evidenceRef: acknowledgement.evidenceRef,
+          ownerId: operationScope.viewerId,
+        },
+      ]
+      imagesRef.current = nextImages
+      setImages(nextImages)
+      uploadedEvidenceRef = null
+    } catch (error) {
+      if (uploadedEvidenceRef) {
+        await cleanupEvidenceRequest(uploadedEvidenceRef, operationToken)
+      }
+      if (
+        uploadOperationRef.current === operationId &&
+        !controller.signal.aborted &&
+        generation === generationRef.current
+      ) {
+        logger.error('Report evidence upload failed:', error)
+        showToast(t('uploadFailedRetry'), 'error')
+      }
+    } finally {
+      if (uploadOperationRef.current === operationId) {
+        uploadOperationRef.current = null
+        setUploading(false)
+      }
+    }
+  }
+
+  const handleRemoveEvidence = (index: number) => {
+    if (submitting) return
+    const removed = imagesRef.current[index]
+    if (!removed) return
+    const nextImages = imagesRef.current.filter((_, imageIndex) => imageIndex !== index)
+    imagesRef.current = nextImages
+    setImages(nextImages)
+    void cleanupEvidence(removed.evidenceRef)
   }
 
   return (
@@ -211,11 +470,12 @@ export default function ReportModal({
             </Text>
           </Box>
           <button
+            type="button"
             onClick={closeAndCleanup}
             aria-label={t('cancel')}
             style={{
-              width: tokens.spacing[8],
-              height: tokens.spacing[8],
+              width: 44,
+              height: 44,
               borderRadius: tokens.radius.full,
               border: 'none',
               background: tokens.colors.bg.secondary,
@@ -275,8 +535,10 @@ export default function ReportModal({
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
               {REASON_OPTIONS.map((option) => (
                 <button
+                  type="button"
                   key={option.value}
                   onClick={() => setReason(option.value)}
+                  disabled={submitting}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -295,6 +557,7 @@ export default function ReportModal({
                     cursor: 'pointer',
                     transition: 'all 0.2s',
                     textAlign: 'left',
+                    minHeight: 44,
                   }}
                 >
                   <Box
@@ -344,6 +607,7 @@ export default function ReportModal({
               aria-label={t('reportDetailsLabel')}
               maxLength={1000}
               rows={4}
+              disabled={submitting}
               style={{
                 width: '100%',
                 padding: tokens.spacing[3],
@@ -420,18 +684,16 @@ export default function ReportModal({
                     style={{ objectFit: 'cover' }}
                   />
                   <button
-                    onClick={() => {
-                      const removed = images[i]
-                      setImages((prev) => prev.filter((_, j) => j !== i))
-                      if (removed) void cleanupEvidence(removed.evidenceRef)
-                    }}
+                    type="button"
+                    onClick={() => handleRemoveEvidence(i)}
+                    disabled={submitting}
                     aria-label={`Remove image ${i + 1}`}
                     style={{
                       position: 'absolute',
                       top: tokens.spacing[0.5],
                       right: tokens.spacing[0.5],
-                      width: 20,
-                      height: 20,
+                      width: 28,
+                      height: 28,
                       borderRadius: '50%',
                       background: 'var(--color-backdrop-medium)',
                       border: 'none',
@@ -448,7 +710,7 @@ export default function ReportModal({
                 </Box>
               ))}
 
-              {images.length < MAX_IMAGES && (
+              {images.length < MAX_IMAGES && !submitting && (
                 <label
                   style={{
                     width: 72,
@@ -488,76 +750,8 @@ export default function ReportModal({
                     type="file"
                     accept="image/*"
                     style={{ display: 'none' }}
-                    disabled={uploading}
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      if (file.size > 2 * 1024 * 1024) {
-                        showToast(t('reportEvidenceTooLarge'), 'warning')
-                        return
-                      }
-                      setUploading(true)
-                      let uploadedEvidenceRef: string | null = null
-                      try {
-                        const formData = new FormData()
-                        formData.append('file', file)
-                        formData.append('bucket', 'reports')
-                        const res = await fetch('/api/upload', {
-                          method: 'POST',
-                          headers: {
-                            Authorization: `Bearer ${accessToken}`,
-                            ...getCsrfHeaders(),
-                          },
-                          body: formData,
-                        })
-
-                        if (!res.ok) throw new Error(`Evidence upload failed (${res.status})`)
-
-                        const payload = (await res.json()) as {
-                          preview_url?: unknown
-                          evidence_ref?: unknown
-                        }
-                        const previewUrl = payload.preview_url
-                        const evidenceRef = payload.evidence_ref
-                        if (
-                          typeof previewUrl !== 'string' ||
-                          typeof evidenceRef !== 'string' ||
-                          !parseReportEvidenceRef(evidenceRef)
-                        ) {
-                          throw new Error('Evidence upload returned an invalid reference')
-                        }
-                        uploadedEvidenceRef = evidenceRef
-
-                        let evidenceUrl: URL
-                        try {
-                          evidenceUrl = new URL(previewUrl)
-                        } catch {
-                          throw new Error('Evidence upload returned an invalid URL')
-                        }
-                        if (evidenceUrl.protocol !== 'https:') {
-                          throw new Error('Evidence upload returned an insecure URL')
-                        }
-
-                        if (closingRef.current) {
-                          void cleanupEvidence(evidenceRef)
-                        } else {
-                          setImages((prev) => [
-                            ...prev,
-                            {
-                              previewUrl,
-                              evidenceRef,
-                            },
-                          ])
-                        }
-                      } catch (error) {
-                        if (uploadedEvidenceRef) void cleanupEvidence(uploadedEvidenceRef)
-                        logger.error('Report evidence upload failed:', error)
-                        showToast(t('uploadFailedRetry'), 'error')
-                      } finally {
-                        setUploading(false)
-                      }
-                      e.target.value = ''
-                    }}
+                    disabled={uploading || submitting || !accessToken || !userId}
+                    onChange={handleEvidenceUpload}
                   />
                 </label>
               )}
@@ -581,6 +775,7 @@ export default function ReportModal({
           {/* Actions */}
           <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
             <button
+              type="button"
               onClick={closeAndCleanup}
               style={{
                 flex: 1,
@@ -593,11 +788,13 @@ export default function ReportModal({
                 fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
+                minHeight: 44,
               }}
             >
               {t('cancel')}
             </button>
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={
                 submitting ||
@@ -629,6 +826,7 @@ export default function ReportModal({
                     : 'pointer',
                 opacity: submitting ? 0.6 : 1,
                 transition: 'all 0.2s',
+                minHeight: 44,
               }}
             >
               {submitting ? `⏳ ${t('reportSubmitting')}` : t('reportSubmit')}

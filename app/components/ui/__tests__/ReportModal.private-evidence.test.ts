@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const source = readFileSync(join(process.cwd(), 'app/components/ui/ReportModal.tsx'), 'utf8')
+const contractSource = readFileSync(join(process.cwd(), 'lib/reports/client-contract.ts'), 'utf8')
 const adminSource = readFileSync(
   join(process.cwd(), 'app/(app)/admin/components/ReportsTab.tsx'),
   'utf8'
@@ -11,10 +12,12 @@ describe('ReportModal private evidence contract', () => {
   it('separates short-lived previews from stable submitted references', () => {
     expect(source).toContain('previewUrl: string')
     expect(source).toContain('evidenceRef: string')
-    expect(source).toContain('images: images.map((image) => image.evidenceRef)')
+    expect(source).toContain('const evidenceRefs = images.map((image) => image.evidenceRef)')
+    expect(source).toContain('images: evidenceRefs')
     expect(source).toContain('src={image.previewUrl}')
-    expect(source).toContain('payload.preview_url')
-    expect(source).toContain('payload.evidence_ref')
+    expect(source).toContain('readReportEvidenceUploadAcknowledgement(')
+    expect(contractSource).toContain('value.preview_url')
+    expect(contractSource).toContain('value.evidence_ref')
   })
 
   it('never creates or submits browser-resident base64 evidence', () => {

@@ -31,17 +31,22 @@ const EvidenceRefSchema = z
   .max(128)
   .refine((value) => parseReportEvidenceRef(value) !== null, 'Invalid evidence reference')
 
-const SubmitReportSchema = z.object({
-  content_type: z.enum(VALID_CONTENT_TYPES),
-  content_id: z.string().uuid('Invalid content ID'),
-  reason: z.enum(VALID_REASONS),
-  description: z.string().trim().min(15).max(1000),
-  images: z
-    .array(EvidenceRefSchema)
-    .min(1)
-    .max(4)
-    .refine((refs) => new Set(refs).size === refs.length, 'Duplicate evidence reference'),
-})
+const SubmitReportSchema = z
+  .object({
+    content_type: z.enum(VALID_CONTENT_TYPES),
+    content_id: z
+      .string()
+      .uuid('Invalid content ID')
+      .transform((value) => value.toLowerCase()),
+    reason: z.enum(VALID_REASONS),
+    description: z.string().trim().min(15).max(1000),
+    images: z
+      .array(EvidenceRefSchema)
+      .min(1)
+      .max(4)
+      .refine((refs) => new Set(refs).size === refs.length, 'Duplicate evidence reference'),
+  })
+  .strict()
 
 const SubmitReportRpcResultSchema = z.discriminatedUnion('created', [
   z
@@ -74,7 +79,7 @@ function noStore<T extends NextResponse>(response: T): T {
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
     try {
-      let body: Record<string, unknown>
+      let body: unknown
       try {
         body = await request.json()
       } catch {
@@ -138,13 +143,15 @@ export const POST = withAuth(
       return noStore(
         apiSuccess(
           {
-            message: 'Report submitted, we will review it shortly',
             report: {
               id: rpcResult.data.report_id,
+              reporter_id: user.id.toLowerCase(),
               content_type: rpcResult.data.content_type,
+              content_id,
               reason: rpcResult.data.reason,
               status: rpcResult.data.status,
               created_at: rpcResult.data.created_at,
+              evidence_refs: images,
             },
           },
           201
