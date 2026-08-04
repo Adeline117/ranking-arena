@@ -307,6 +307,26 @@ describe('GET /api/traders/[handle]', () => {
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
   })
 
+  it('marks every claim-bearing response no-store even when the claim lookup degrades', async () => {
+    mockTieredGetOrSet.mockResolvedValueOnce({
+      pageData: { performance: { roi: 42.5 }, profile: { handle: 'ClaimedTrader' } },
+      resolved: { platform: 'hyperliquid', traderKey: '0xabc' },
+    })
+
+    const request = mockReq(
+      'http://localhost/api/traders/ClaimedTrader?source=hyperliquid&include=claim'
+    )
+    const res = await GET(request as any, {
+      params: Promise.resolve({ handle: 'ClaimedTrader' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+    expect(res.headers.get('Pragma')).toBe('no-cache')
+  })
+
   it('serializes include=aggregate through the subject-bound public DTO', async () => {
     mockTieredGetOrSet.mockResolvedValueOnce({
       pageData: { performance: { roi: 42.5 }, profile: { handle: 'LinkedTrader' } },
@@ -480,18 +500,23 @@ describe('GET /api/traders/[handle]', () => {
     expect(res.status).toBe(500)
   })
 
-  it('marks base lookup errors no-store when include=aggregate was requested', async () => {
-    mockResolveTrader.mockRejectedValueOnce(new Error('DB connection lost'))
+  it.each(['aggregate', 'claim'])(
+    'marks base lookup errors no-store when include=%s was requested',
+    async (include) => {
+      mockResolveTrader.mockRejectedValueOnce(new Error('DB connection lost'))
 
-    const request = mockReq('http://localhost/api/traders/crasher?source=bybit&include=aggregate')
-    const res = await GET(request as any, { params: Promise.resolve({ handle: 'crasher' }) })
+      const request = mockReq(
+        `http://localhost/api/traders/crasher?source=bybit&include=${include}`
+      )
+      const res = await GET(request as any, { params: Promise.resolve({ handle: 'crasher' }) })
 
-    expect(res.status).toBe(500)
-    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
-    expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
-    expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
-    expect(res.headers.get('Pragma')).toBe('no-cache')
-  })
+      expect(res.status).toBe(500)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+      expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+      expect(res.headers.get('Pragma')).toBe('no-cache')
+    }
+  )
 
   it('throws when params promise rejects (unhandled before middleware)', async () => {
     const request = mockReq('http://localhost/api/traders/test')

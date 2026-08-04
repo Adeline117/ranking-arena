@@ -22,7 +22,7 @@
  * Response:
  *   { data:[], meta: { window, category, platform, totalcount, ... } }
  *
- * Caching: s-maxage=60, stale-while-revalidate=300
+ * Caching: publication-fenced 500-row canonical Redis snapshot; CDN no-store.
  */
 
 import type {
@@ -34,8 +34,8 @@ import type {
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { TradingPeriod } from '@/lib/types/unified-trader'
 import { tieredGetOrSet, tieredGet } from '@/lib/cache/redis-layer'
-import { readSharedCacheWriteFence, type SharedCacheWriteFence } from '@/lib/cache'
-import { ApiError } from '@/lib/api/errors'
+import type { SharedCacheWriteFence } from '@/lib/cache'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success as apiSuccess } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
@@ -63,6 +63,13 @@ import {
   PUBLIC_ACTIVE_RANKING_SOURCES,
   parsePublicActiveRankingSource,
 } from '@/lib/constants/exchanges'
+import {
+  PUBLIC_RANKING_CANONICAL_LIMIT,
+  canonicalPublicRankingCacheKeys,
+  createPublicRankingRequestDeadline,
+  getCanonicalPublicRanking,
+  raceWithPublicRankingSignal,
+} from '@/lib/rankings/canonical-public-cache'
 
 const logger = createLogger('rankings-api')
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
@@ -82,7 +89,8 @@ const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, mus
 async function getAvailableSources(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
   seasonId: string,
-  writeFence?: SharedCacheWriteFence | null
+  writeFence?: SharedCacheWriteFence | null,
+  signal?: AbortSignal
 ): Promise<string[]> {
   // Reuse the outer response generation when one exists. Direct/filtered
   // callers still capture their own fence; `undefined` must never silently
@@ -94,11 +102,14 @@ async function getAvailableSources(
   const sources = await tieredGetOrSet<string[]>(
     publicRankingCacheKey(`rankings:available-sources:v2:${seasonId}`),
     async (): Promise<string[]> => {
-      const { data: sourceRows } = await supabase
+      let sourceQuery = supabase
         .from('leaderboard_count_cache')
         .select('source,total_count,updated_at')
         .eq('season_id', seasonId)
         .like('source', '%_gt0')
+      if (signal) sourceQuery = sourceQuery.abortSignal(signal)
+      const { data: sourceRows, error } = await sourceQuery
+      if (error) throw new Error(`Available source query failed: ${error.message}`)
       return filterPublicRankingSources(
         currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])
       )
@@ -125,6 +136,46 @@ const VALID_SORT_BY = [
 
 // Data quality: ROI values above this threshold are considered anomalous
 const ROI_ANOMALY_THRESHOLD = 50000 // 50000% = 500x — only filter extreme data errors, not legitimate high performers
+
+type CanonicalRankingsPayload = Record<string, unknown> & {
+  traders?: unknown[]
+  totalCount?: number
+  totalcount?: number
+  total_count?: number
+}
+
+function canonicalTotal(payload: CanonicalRankingsPayload, visibleRows: number): number {
+  for (const candidate of [payload.totalCount, payload.totalcount, payload.total_count]) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= visibleRows) {
+      return candidate
+    }
+  }
+  return visibleRows
+}
+
+export function sliceCanonicalRankingsPayload(
+  payload: CanonicalRankingsPayload,
+  offset: number,
+  limit: number,
+  staleFallback: boolean
+): CanonicalRankingsPayload {
+  // Sanitize the complete canonical page before slicing. Otherwise a newly
+  // quarantined row could consume a requested slot and hide the next safe row.
+  const safe = sanitizePublicRankingSourcePayload(payload)
+  const canonicalRows = Array.isArray(safe.traders) ? safe.traders : []
+  const traders = canonicalRows.slice(offset, offset + limit)
+  const totalCount = canonicalTotal(safe, canonicalRows.length)
+  return {
+    ...safe,
+    traders,
+    totalCount,
+    totalcount: totalCount,
+    total_count: totalCount,
+    hasMore: offset + traders.length < totalCount,
+    next_cursor: null,
+    ...(staleFallback ? { is_stale: true, stale_reason: 'dependency_unavailable' } : undefined),
+  }
+}
 
 export const GET = withPublic(
   async ({ request }) => {
@@ -160,7 +211,13 @@ export const GET = withPublic(
 
     const limit = parseLimit(searchParams.get('limit'), 100, 500)
     const offset = parseOffset(searchParams.get('offset'))
-    const cursor = searchParams.get('cursor') || undefined // format: "score:id" for keyset pagination
+    const cursor = searchParams.get('cursor') || undefined
+    if (cursor) {
+      // Keyset pagination is not implemented by the backing query. Silently
+      // ignoring this value re-serves offset 0 and can duplicate rows, so fail
+      // explicitly until the API has a real (sort value, identity) cursor.
+      throw ApiError.validation('Cursor pagination is not supported; use offset pagination')
+    }
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined
     const minTrades = searchParams.get('min_trades')
       ? Number(searchParams.get('min_trades'))
@@ -187,101 +244,115 @@ export const GET = withPublic(
       return response
     }
 
-    // Only cache "hot" default queries (no filters, default sort, first page)
-    // Filtered/paginated queries skip cache to avoid key explosion (thousands of permutations)
-    const isDefaultQuery =
+    // A bounded canonical page replaces exact-limit cache keys. Any page fully
+    // covered by the canonical 500 rows can be served by slicing the same
+    // publication-fenced snapshot, including offset pagination.
+    const canonicalEligible =
       sortBy === 'arena_score' &&
       sortDir === 'desc' &&
       !platform &&
-      !minPnl &&
-      !minTrades &&
+      minPnl == null &&
+      minTrades == null &&
       !traderType &&
       !cursor &&
-      offset === 0
-    const cacheKey = isDefaultQuery
-      ? publicRankingCacheKey(`api:rankings:v3:${normalizedWindow}:${category || 'all'}:${limit}`)
-      : null // skip cache for filtered queries
+      offset + limit <= PUBLIC_RANKING_CANONICAL_LIMIT
 
     let result: unknown
+    const deadline = createPublicRankingRequestDeadline(request.signal)
 
     try {
-      if (normalizedWindow === 'composite') {
-        const compositeWriteFence = await readSharedCacheWriteFence(
-          PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY
+      if (canonicalEligible) {
+        const keys = canonicalPublicRankingCacheKeys(
+          `api:rankings:${normalizedWindow}:${category || 'all'}`
         )
-        // Try precomputed composite first (written by /api/cron/precompute-composite)
-        const precomputedKey = category
-          ? `precomputed:composite:${category}`
-          : 'precomputed:composite:all'
-        const { data: precomputed } = await (
-          await import('@/lib/cache/redis-layer')
-        ).tieredGet<{
-          traders: unknown[]
-          totalcount: number
-          total_count: number
-          as_of: string | null
-          is_stale: boolean
-          availableSources: string[]
-          source_freshness?: Array<{
-            source: string
-            updated_at: string | null
-            is_stale: boolean
-            age_seconds: number | null
-          }>
-        }>(publicRankingCacheKey(`${precomputedKey}:v2`), 'hot', {
-          skipMemory: true,
-          writeFence: compositeWriteFence,
-        })
-
-        if (
-          precomputed &&
-          !platform &&
-          !minPnl &&
-          !minTrades &&
-          sortBy === 'arena_score' &&
-          sortDir === 'desc'
-        ) {
-          // Quarantine the complete cached set before slicing so a hidden row
-          // never consumes a page slot or truncates later safe rows.
-          const publicPrecomputed = sanitizePublicRankingSourcePayload(precomputed)
-          const publicTraders = publicPrecomputed.traders
-          const totalCount = publicTraders.length
-          const traders = publicTraders.slice(offset, offset + limit)
-          result = {
-            ...publicPrecomputed,
-            traders,
-            window: 'COMPOSITE',
-            totalCount,
-            totalcount: totalCount,
-            total_count: totalCount,
-            hasMore: offset + traders.length < totalCount,
-            next_cursor: null,
-          }
-        } else {
-          // Fall back to real-time compute for filtered/sorted queries
-          const compositeFetcher = async (writeFence?: SharedCacheWriteFence | null) =>
-            sanitizePublicRankingSourcePayload(
-              await getCompositeRankings(
+        const canonical = await getCanonicalPublicRanking<CanonicalRankingsPayload>({
+          keys,
+          signal: deadline.signal,
+          sanitize: sanitizePublicRankingSourcePayload,
+          tags: [`season:${normalizedWindow.toUpperCase()}`],
+          load: async ({ signal, writeFence }) => {
+            if (normalizedWindow === 'composite') {
+              // Reuse the publication writer's composite when available, but
+              // persist it into the same durable canonical/LKG contract. A
+              // category cannot reuse a subset of the global top-N: that is
+              // not necessarily the category's own top 500.
+              const { data: precomputed } = category
+                ? { data: null }
+                : await raceWithPublicRankingSignal(
+                    tieredGet<CanonicalRankingsPayload>(
+                      publicRankingCacheKey('precomputed:composite:all:v2'),
+                      'hot',
+                      { skipMemory: true, writeFence }
+                    ),
+                    signal
+                  )
+              if (precomputed) {
+                const safe = sanitizePublicRankingSourcePayload(precomputed)
+                const safeRows = Array.isArray(safe.traders) ? safe.traders : []
+                const totalCount = canonicalTotal(safe, safeRows.length)
+                return {
+                  ...safe,
+                  traders: safeRows.slice(0, PUBLIC_RANKING_CANONICAL_LIMIT),
+                  window: 'COMPOSITE',
+                  totalCount,
+                  totalcount: totalCount,
+                  total_count: totalCount,
+                }
+              }
+              return getCompositeRankings(
                 {
                   category: category || undefined,
-                  platform: (platform || undefined) as Platform | undefined,
-                  limit,
-                  offset,
-                  sort_by: sortBy,
-                  sort_dir: sortDir,
-                  min_pnl: minPnl,
-                  min_trades: minTrades,
+                  limit: PUBLIC_RANKING_CANONICAL_LIMIT,
+                  offset: 0,
+                  sort_by: 'arena_score',
+                  sort_dir: 'desc',
                 },
-                writeFence
+                writeFence,
+                signal,
+                true
               )
+            }
+
+            return getRankingsFallback(
+              {
+                window: normalizedWindow,
+                category: category || undefined,
+                limit: PUBLIC_RANKING_CANONICAL_LIMIT,
+                offset: 0,
+                sort_by: 'arena_score',
+                sort_dir: 'desc',
+              },
+              undefined,
+              writeFence,
+              signal,
+              true
             )
-          result = cacheKey
-            ? await tieredGetOrSet(cacheKey, compositeFetcher, 'hot', [PUBLIC_RANKING_REDIS_TAG], {
-                skipMemory: true,
-                writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-              })
-            : await compositeFetcher()
-        }
+          },
+        })
+        result = sliceCanonicalRankingsPayload(
+          canonical.payload,
+          offset,
+          limit,
+          canonical.source === 'lkg'
+        )
+      } else if (normalizedWindow === 'composite') {
+        result = await raceWithPublicRankingSignal(
+          getCompositeRankings(
+            {
+              category: category || undefined,
+              platform: (platform || undefined) as Platform | undefined,
+              limit,
+              offset,
+              sort_by: sortBy,
+              sort_dir: sortDir,
+              min_pnl: minPnl,
+              min_trades: minTrades,
+            },
+            undefined,
+            deadline.signal
+          ),
+          deadline.signal
+        )
       } else {
         const query: RankingsQuery = {
           window: normalizedWindow,
@@ -295,46 +366,22 @@ export const GET = withPublic(
           min_trades: minTrades,
           trader_type: traderType || undefined,
         }
-        const rankingsFetcher = async (writeFence?: SharedCacheWriteFence | null) =>
-          sanitizePublicRankingSourcePayload(await getRankingsFallback(query, cursor, writeFence))
-        result = cacheKey
-          ? await tieredGetOrSet(cacheKey, rankingsFetcher, 'hot', [PUBLIC_RANKING_REDIS_TAG], {
-              skipMemory: true,
-              writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-            })
-          : await rankingsFetcher()
+        result = await raceWithPublicRankingSignal(
+          getRankingsFallback(query, cursor, undefined, deadline.signal),
+          deadline.signal
+        )
       }
     } catch (fetchError) {
-      // DB query failed — try to serve last-known-good cached data instead of returning 500.
-      // Only attempt fallback for default (cacheable) queries; filtered queries have no cache.
-      if (cacheKey) {
-        const fallbackWriteFence = await readSharedCacheWriteFence(
-          PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY
-        )
-        const { data: staleData } = await tieredGet(cacheKey, 'hot', {
-          skipMemory: true,
-          writeFence: fallbackWriteFence,
-        })
-        if (staleData) {
-          logger.warn(
-            `Rankings DB query failed, serving stale cache for ${cacheKey}:`,
-            fetchError instanceof Error ? fetchError.message : String(fetchError)
-          )
-          result =
-            typeof staleData === 'object' && staleData !== null
-              ? {
-                  ...(staleData as Record<string, unknown>),
-                  is_stale: true,
-                  stale_reason: 'db_fallback',
-                }
-              : staleData
-        } else {
-          // No cache either — re-throw to let the error handler respond
-          throw fetchError
-        }
-      } else {
-        throw fetchError
-      }
+      logger.warn(
+        'Ranking dependencies unavailable:',
+        fetchError instanceof Error ? fetchError.message : String(fetchError)
+      )
+      throw new ApiError('Ranking data is temporarily unavailable', {
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        cause: fetchError instanceof Error ? fetchError : undefined,
+      })
+    } finally {
+      deadline.dispose()
     }
 
     result = sanitizePublicRankingSourcePayload(result)
@@ -352,7 +399,9 @@ export const GET = withPublic(
 async function getRankingsFallback(
   rankingsQuery: RankingsQuery,
   _cursor?: string,
-  writeFence?: SharedCacheWriteFence | null
+  writeFence?: SharedCacheWriteFence | null,
+  signal?: AbortSignal,
+  requireCountAuthority = false
 ) {
   const {
     window,
@@ -467,6 +516,7 @@ async function getRankingsFallback(
   // Paginate in 1000-row chunks when safeLimit > 1000 to get complete data.
   const CHUNK_SIZE = 1000
   let rows: Record<string, unknown>[] = []
+  let countRowsForSources: LeaderboardCountCacheRow[] = []
   let totalCount: number | null = null
   let error: { message: string } | null = null
 
@@ -479,30 +529,42 @@ async function getRankingsFallback(
     // incl. arena_score<=0, so it UNDER-counts the served set (90D: 8811 vs the
     // real 9587) → the "N traders" figure was low AND `hasMore` truncated the
     // board ~776 rows early, hiding the lowest-ranked traders from themselves.
-    const [result, countResult] = await Promise.all([
-      buildBaseQuery().range(offset, offset + safeLimit - 1),
-      supabase
-        .from('leaderboard_count_cache')
-        .select('source,total_count,updated_at')
-        .eq('season_id', seasonId)
-        .like('source', '%_gt0'),
-    ])
+    let rankingQuery = buildBaseQuery().range(offset, offset + safeLimit - 1)
+    let countQuery = supabase
+      .from('leaderboard_count_cache')
+      .select('source,total_count,updated_at')
+      .eq('season_id', seasonId)
+      .like('source', '%_gt0')
+    if (signal) {
+      rankingQuery = rankingQuery.abortSignal(signal)
+      countQuery = countQuery.abortSignal(signal)
+    }
+    const [result, countResult] = await Promise.all([rankingQuery, countQuery])
+    if (requireCountAuthority && countResult.error) {
+      throw new Error(`Leaderboard count authority failed: ${countResult.error.message}`)
+    }
     rows = (result.data || []) as Record<string, unknown>[]
     error = result.error
+    countRowsForSources = (countResult.data || []) as LeaderboardCountCacheRow[]
     // A retired source's old key must never claim rows. If the current cache
     // generation is unavailable, fall back to the rows we actually observed.
-    totalCount =
-      publicRankingCountFromCache(
-        (countResult.data || []) as LeaderboardCountCacheRow[],
-        platformFilter
-          ? { source: platformFilter }
-          : platformsInCategory
-            ? { sources: platformsInCategory }
-            : {}
-      ) ?? offset + rows.length
+    const cachedTotal = publicRankingCountFromCache(
+      countRowsForSources,
+      platformFilter
+        ? { source: platformFilter }
+        : platformsInCategory
+          ? { sources: platformsInCategory }
+          : {}
+    )
+    if (requireCountAuthority && cachedTotal === null) {
+      throw new Error('Leaderboard count authority generation is missing')
+    }
+    totalCount = cachedTotal ?? offset + rows.length
   } else {
     // Chunked fetch: first chunk, no count
-    const firstResult = await buildBaseQuery().range(offset, offset + CHUNK_SIZE - 1)
+    let firstQuery = buildBaseQuery().range(offset, offset + CHUNK_SIZE - 1)
+    if (signal) firstQuery = firstQuery.abortSignal(signal)
+    const firstResult = await firstQuery
     if (firstResult.error) {
       error = firstResult.error
     } else {
@@ -516,7 +578,9 @@ async function getRankingsFallback(
         const chunkPromises = Array.from({ length: chunkCount }, (_, i) => {
           const chunkOffset = offset + CHUNK_SIZE * (i + 1)
           const chunkEnd = Math.min(chunkOffset + CHUNK_SIZE - 1, offset + safeLimit - 1)
-          return buildBaseQuery().range(chunkOffset, chunkEnd)
+          let chunkQuery = buildBaseQuery().range(chunkOffset, chunkEnd)
+          if (signal) chunkQuery = chunkQuery.abortSignal(signal)
+          return chunkQuery
         })
         const chunkResults = await Promise.all(chunkPromises)
         for (const cr of chunkResults) {
@@ -558,8 +622,13 @@ async function getRankingsFallback(
   if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
     freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
   }
+  if (signal) freshnessQuery = freshnessQuery.abortSignal(signal)
+  const availableSourcesPromise =
+    countRowsForSources.length > 0
+      ? Promise.resolve(filterPublicRankingSources(currentScoredSources(countRowsForSources)))
+      : getAvailableSources(supabase, seasonIdUpper, writeFence, signal)
   const [availableSources, freshnessResult] = await Promise.all([
-    getAvailableSources(supabase, seasonIdUpper, writeFence),
+    availableSourcesPromise,
     freshnessQuery,
   ])
 
@@ -709,7 +778,9 @@ async function getCompositeRankings(
     min_pnl?: number
     min_trades?: number
   },
-  writeFence?: SharedCacheWriteFence | null
+  writeFence?: SharedCacheWriteFence | null,
+  signal?: AbortSignal,
+  requireCountAuthority = false
 ) {
   // Composite = 90D (which already contains the weighted composite arena_score)
   // Delegate to getRankingsFallback with window='90d' and relabel as COMPOSITE
@@ -734,7 +805,9 @@ async function getCompositeRankings(
       min_trades: params.min_trades,
     },
     undefined,
-    writeFence
+    writeFence,
+    signal,
+    requireCountAuthority
   )
 
   return {

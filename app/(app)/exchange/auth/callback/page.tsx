@@ -35,8 +35,9 @@ function ExchangeAuthCallbackContent() {
       }
 
       try {
-        // /api/exchange/oauth/callback uses getAuthUser (Bearer header only) —
-        // grab the session so we can attach the access token
+        // The V1 endpoint is retired, but attach the current viewer token while
+        // handling an old in-flight provider redirect so the request remains
+        // scoped if OAuth is reintroduced behind a future migration.
         const {
           data: { session },
         } = await supabase.auth.getSession()

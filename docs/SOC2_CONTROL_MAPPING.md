@@ -6,22 +6,22 @@
 
 ## CC — Security（安全，通用准则，所有 SOC 2 必备）
 
-| 控制                     | 状态 | 证据                                                                                        |
-| ------------------------ | ---- | ------------------------------------------------------------------------------------------- |
-| 传输加密(TLS/HSTS)       | ✅   | `next.config.ts` headers: HSTS/CSP/X-Frame-Options/X-Content-Type                           |
-| 静态敏感数据加密         | ✅   | 交易所 API key/secret AES-256-GCM(`lib/exchange/secure-encryption.ts`)                      |
-| 密钥管理                 | ✅   | 无硬编码密钥(grep 全量验证)；zod env 校验 fail-fast(`lib/env.ts`)；密钥在 Vercel/GH secrets |
-| 鉴权                     | ✅   | Supabase Auth + Privy Web3；timing-safe 服务鉴权(`crypto.timingSafeEqual`)                  |
-| 授权(最小权限)           | ✅   | 全表 RLS；`user_profiles` 列级 REVOKE + SECURITY DEFINER RPC 取 PII                         |
-| API 鉴权覆盖             | ✅   | `qa:api-auth` CI 门禁：每 route 有 auth 原语或登记公开白名单(2026-07-02)                    |
-| 限流/防滥用              | ✅   | 236/321 route 限流，区分 fail-close/open(`lib/utils/rate-limit.ts`)                         |
-| 支付完整性               | ✅   | Stripe webhook 签名校验 + 原子幂等(unique 约束 23505)                                       |
-| 漏洞管理                 | ✅   | dependabot 每周 + `npm audit` CI 阻断(high/critical) + SECURITY.md 书面评估                 |
-| 变更管理                 | ✅   | CI 门禁部署(4 门禁作业绿才上线) + conventional commits + commit-msg hook                    |
-| 访问审计日志             | ✅   | admin 操作 `[ADMIN-AUDIT]` 日志 + `/api/admin/audit-logs`                                   |
-| CSRF/CORS                | ✅   | `lib/api/csrf.ts` + `lib/utils/cors.ts`                                                     |
-| 代码 review              | 🟡   | 现单人 + CODEOWNERS 已立；团队化启用 required review(→ RELEASE.md recipe)                   |
-| 分支保护 required checks | 🟡   | ruleset 有 PR/deletion/non-ff；required_status_checks 待启用(→ RELEASE.md)                  |
+| 控制                     | 状态 | 证据                                                                                                                |
+| ------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------- |
+| 传输加密(TLS/HSTS)       | ✅   | `next.config.ts` headers: HSTS/CSP/X-Frame-Options/X-Content-Type                                                   |
+| 静态敏感数据加密         | ✅   | V1 授权凭据 AES-256-GCM（`lib/exchange/authorization-credentials.ts`）；退役 portfolio 凭据仅保留隔离元数据删除通道 |
+| 密钥管理                 | ✅   | 无硬编码密钥(grep 全量验证)；zod env 校验 fail-fast(`lib/env.ts`)；密钥在 Vercel/GH secrets                         |
+| 鉴权                     | ✅   | Supabase Auth + Privy Web3；timing-safe 服务鉴权(`crypto.timingSafeEqual`)                                          |
+| 授权(最小权限)           | ✅   | 全表 RLS；`user_profiles` 列级 REVOKE + SECURITY DEFINER RPC 取 PII                                                 |
+| API 鉴权覆盖             | ✅   | `qa:api-auth` CI 门禁：每 route 有 auth 原语或登记公开白名单(2026-07-02)                                            |
+| 限流/防滥用              | ✅   | 236/321 route 限流，区分 fail-close/open(`lib/utils/rate-limit.ts`)                                                 |
+| 支付完整性               | ✅   | Stripe webhook 签名校验 + 原子幂等(unique 约束 23505)                                                               |
+| 漏洞管理                 | ✅   | dependabot 每周 + `npm audit` CI 阻断(high/critical) + SECURITY.md 书面评估                                         |
+| 变更管理                 | ✅   | CI 门禁部署(4 门禁作业绿才上线) + conventional commits + commit-msg hook                                            |
+| 访问审计日志             | ✅   | admin 操作 `[ADMIN-AUDIT]` 日志 + `/api/admin/audit-logs`                                                           |
+| CSRF/CORS                | ✅   | `lib/api/csrf.ts` + `lib/utils/cors.ts`                                                                             |
+| 代码 review              | 🟡   | 现单人 + CODEOWNERS 已立；团队化启用 required review(→ RELEASE.md recipe)                                           |
+| 分支保护 required checks | 🟡   | ruleset 有 PR/deletion/non-ff；required_status_checks 待启用(→ RELEASE.md)                                          |
 
 ## A — Availability（可用性）
 
@@ -38,11 +38,11 @@
 
 ## C — Confidentiality（保密）
 
-| 控制              | 状态 | 证据                                      |
-| ----------------- | ---- | ----------------------------------------- |
-| 数据分级/最小暴露 | ✅   | RLS 列级 PII 保护；公开只读端点显式白名单 |
-| 凭据保密          | ✅   | 交易所凭据 AES-256-GCM；无硬编码密钥      |
-| 传输保密          | ✅   | 全站 HTTPS(HTTP→HTTPS 升级)               |
+| 控制              | 状态 | 证据                                                                                    |
+| ----------------- | ---- | --------------------------------------------------------------------------------------- |
+| 数据分级/最小暴露 | ✅   | RLS 列级 PII 保护；公开只读端点显式白名单                                               |
+| 凭据保密          | ✅   | V1 授权凭据 AES-256-GCM；legacy portfolio 密文对 browser/service 均不可读；无硬编码密钥 |
+| 传输保密          | ✅   | 全站 HTTPS(HTTP→HTTPS 升级)                                                             |
 
 ## PI — Processing Integrity（处理完整性）
 

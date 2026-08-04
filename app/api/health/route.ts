@@ -1,10 +1,11 @@
 /**
- * 健康检查 API (轻量版)
+ * Public launch health API.
  *
- * GET /api/health - 返回应用健康状态
- * 只检查：数据库连通性 + Redis 连通性
- * 详细信息（平台新鲜度、cron状态等）请用 /api/health/detailed
- * 目标响应时间 <200ms
+ * GET /api/health checks the API transport, database, Redis, complete source
+ * registry freshness/coverage, and complete current 90D publication proof.
+ * Supplementary VPS connectivity is also reported when configured. Core checks
+ * share one bounded request deadline; deeper diagnostics remain available at
+ * /api/health/detailed.
  */
 
 import { NextResponse } from 'next/server'
@@ -12,7 +13,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { logger } from '@/lib/logger'
-import { buildFreshnessReport } from '@/lib/rankings/build-freshness-report'
+import { buildFreshnessAuthoritySnapshot } from '@/lib/rankings/build-freshness-report'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
@@ -224,6 +225,34 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
   status: 'pass' | 'fail'
   latency?: number
   message?: string
+  details?: {
+    checkedAt: string
+    sourceSummary: {
+      total: number
+      fresh: number
+      stale: number
+      critical: number
+      unknown: number
+    }
+    coverage: {
+      expectedSourceBoards: number
+      visibleSourceBoards: number
+    }
+    thresholds: {
+      staleHours: number
+      criticalHours: number
+    }
+    latestSuccessfulPublicationAt: string | null
+    publicationSeason: '90D'
+    sources: Array<{
+      platform: string
+      displayName: string
+      lastUpdate: string | null
+      ageHours: number | null
+      status: 'fresh' | 'stale' | 'critical' | 'unknown'
+      recordCount: number
+    }>
+  }
 }> {
   const t0 = Date.now()
   try {
@@ -232,16 +261,61 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
       CORE_CHECK_TIMEOUT_MS,
       null,
       'checkFreshness',
-      (signal) => buildFreshnessReport(signal)
+      (signal) => buildFreshnessAuthoritySnapshot(signal)
     )
     const latency = Date.now() - t0
     if (!report) {
       return { status: 'fail', latency, message: 'Freshness authority timed out' }
     }
 
-    const { total, fresh, stale, critical, unknown } = report.summary
-    const message = `${fresh}/${total} sources fresh; ${stale} stale; ${critical} critical; ${unknown} unknown`
-    return { status: report.ok ? 'pass' : 'fail', latency, message }
+    const { total, fresh, stale, critical, unknown } = report.report.summary
+    const coverageComplete =
+      report.coverage.expectedSourceBoards > 0 &&
+      report.coverage.visibleSourceBoards === report.coverage.expectedSourceBoards
+    const publicationProven = report.latestSuccessfulPublication !== null
+    const authorityProblems: string[] = []
+
+    if (report.coverage.expectedSourceBoards <= 0) {
+      authorityProblems.push('Source-board coverage authority unavailable')
+    } else if (!coverageComplete) {
+      authorityProblems.push(
+        `${report.coverage.visibleSourceBoards}/${report.coverage.expectedSourceBoards} source boards visible`
+      )
+    }
+    if (!publicationProven) {
+      authorityProblems.push('90D publication proof unavailable')
+    }
+
+    const message = [
+      `${fresh}/${total} sources fresh; ${stale} stale; ${critical} critical; ${unknown} unknown`,
+      ...authorityProblems,
+    ].join('; ')
+    const authorityComplete = report.report.ok && coverageComplete && publicationProven
+
+    return {
+      status: authorityComplete ? 'pass' : 'fail',
+      latency,
+      message,
+      details: {
+        checkedAt: report.report.checked_at,
+        sourceSummary: report.report.summary,
+        coverage: report.coverage,
+        thresholds: {
+          staleHours: report.report.thresholds.stale_hours,
+          criticalHours: report.report.thresholds.critical_hours,
+        },
+        latestSuccessfulPublicationAt: report.latestSuccessfulPublication?.publishedAt ?? null,
+        publicationSeason: '90D',
+        sources: report.report.platforms.map((source) => ({
+          platform: source.platform,
+          displayName: source.displayName,
+          lastUpdate: source.lastUpdate,
+          ageHours: source.ageHours,
+          status: source.status,
+          recordCount: source.recordCount,
+        })),
+      },
+    }
   } catch {
     return {
       status: 'fail',

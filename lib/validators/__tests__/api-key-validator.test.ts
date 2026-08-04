@@ -120,6 +120,22 @@ describe('resolver 结果映射', () => {
     expect(r.error).toContain('must be read-only')
   })
 
+  it('交易所声称只读但没有可审计权限证据 → fail closed', async () => {
+    mockResolve.mockResolvedValue({
+      success: true,
+      uid: 'u9',
+      isReadOnly: true,
+      permissions: [],
+    })
+
+    const r = await validateExchangeApiKey('binance', creds)
+
+    expect(r).toEqual({
+      isValid: false,
+      error: 'Exchange did not return auditable read-only permission evidence.',
+    })
+  })
+
   it('resolver 抛异常 → 捕获，不泄漏，返回通用 error', async () => {
     mockResolve.mockRejectedValue(new Error('network boom'))
     const r = await validateExchangeApiKey('binance', creds)

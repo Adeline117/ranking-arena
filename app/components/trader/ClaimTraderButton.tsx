@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '../base'
 import { useToast } from '../ui/Toast'
-import { useDialog } from '../ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
+import { claimMethodForSource } from '@/lib/constants/trader-claim-platforms'
 import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 import {
   buildTraderClaimLoginHref,
@@ -22,26 +22,6 @@ interface ClaimTraderButtonProps {
   source?: string // 'binance', 'bybit', etc.
 }
 
-/**
- * DEX platforms whose traders are identified by wallet address.
- * These use wallet signature verification instead of API key.
- */
-const DEX_WALLET_PLATFORMS = [
-  'hyperliquid',
-  'gmx',
-  'gains',
-  'aevo',
-  'kwenta',
-  'vertex',
-  'dydx',
-  'jupiter_perps',
-  'drift',
-]
-
-function isDexPlatform(source: string): boolean {
-  return DEX_WALLET_PLATFORMS.some((p) => source.toLowerCase().startsWith(p))
-}
-
 export default function ClaimTraderButton({
   traderId,
   handle,
@@ -50,13 +30,13 @@ export default function ClaimTraderButton({
 }: ClaimTraderButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
-  const { showConfirm } = useDialog()
   const { t } = useLanguage()
   const [claimStatus, setClaimStatus] = useState<string | null>(null)
   const [hasVerifiedAccounts, setHasVerifiedAccounts] = useState(false)
   const [thisTraderLinked, setThisTraderLinked] = useState(false)
   const claimIdentity = { traderId, source, handle }
   const claimReturnPath = buildTraderClaimReturnPath(claimIdentity)
+  const claimMethod = claimMethodForSource(source)
 
   useEffect(() => {
     let alive = true
@@ -147,22 +127,12 @@ export default function ClaimTraderButton({
       return
     }
 
-    // For DEX platforms, redirect to the claim page with wallet flow
-    if (isDexPlatform(source)) {
+    if (claimMethod === 'signature') {
       router.push(claimReturnPath)
       return
     }
 
-    const confirmTitle = hasVerifiedAccounts ? t('confirmLink') : t('confirmClaim')
-    const confirmDesc = hasVerifiedAccounts
-      ? t('confirmLinkDesc').replace('{handle}', handle)
-      : `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
-
-    const confirmed = await showConfirm(confirmTitle, confirmDesc)
-    if (!confirmed) return
-
-    // For CEX platforms, redirect to claim page with API key flow
-    router.push(claimReturnPath)
+    showToast(t('claimSourceUnsupportedBody'), 'warning')
   }
 
   if (thisTraderLinked || claimStatus === 'verified') {
@@ -182,10 +152,21 @@ export default function ClaimTraderButton({
   }
 
   // If user already has verified accounts, show "Link to Profile" instead of "Claim"
-  const buttonLabel = hasVerifiedAccounts ? t('linkToProfile') : t('claimTrader')
+  const buttonLabel =
+    claimMethod === 'unsupported'
+      ? t('claimSourceUnsupportedTitle')
+      : hasVerifiedAccounts
+        ? t('linkToProfile')
+        : t('claimTrader')
 
   return (
-    <Button variant="primary" size="sm" onClick={handleClaim}>
+    <Button
+      variant="primary"
+      size="sm"
+      onClick={handleClaim}
+      disabled={claimMethod === 'unsupported'}
+      title={claimMethod === 'unsupported' ? t('claimSourceUnsupportedBody') : undefined}
+    >
       {buttonLabel}
     </Button>
   )

@@ -2,6 +2,15 @@
 
 Emergency operations manual for the Arena crypto trader ranking platform.
 
+> **Current incident overlay (2026-08-03): NO-GO.**
+> [`V1_EXECUTION_STATUS_2026-08-03.md`](./V1_EXECUTION_STATUS_2026-08-03.md) is
+> the launch authority. Generic deploy-force, gate-disable, rollback, migration,
+> worker, or cron commands in this runbook do not grant production authorization
+> and cannot override that NO-GO. Until the ordered recovery proof is complete
+> and the owner explicitly records GO, do not open Beta, restore write workers or
+> backup cron, or perform an unprotected deployment. Recovery migrations may run
+> only through the ADR-023 channel and the exact sequence below.
+
 ## Table of Contents
 
 - [Pipeline Failure Troubleshooting](#pipeline-failure-troubleshooting)
@@ -12,7 +21,9 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 - [Arena Score Recalculation](#arena-score-recalculation)
 - [Deployment Rollback](#deployment-rollback)
 - [Database Emergency Operations](#database-emergency-operations)
+- [Trader claim V2 two-phase cutover](#trader-claim-v2-two-phase-cutover)
 - [Common Errors and Solutions](#common-errors-and-solutions)
+- [Supabase Outage](#supabase-outage)
 - [Key Infrastructure](#key-infrastructure)
 
 ---
@@ -378,6 +389,9 @@ Vercel CLI 部署 → 内嵌 smoke（5 URL）→ 失败自动 promote 回滚 + T
 E2E 被更新 push 折叠取消不影响门禁；CI 红则扣留部署并 Telegram 告警。
 Preview/PR 分支构建不受影响。
 
+> **Incident restriction:** current NO-GO 期间禁止使用 deploy-force 标记或
+> 关闭 `ignoreCommand`/deploy gate。它们是历史 break-glass 机制，不是绕过事故停止线的授权。
+
 - **紧急逃生口**：commit message 含 `[deploy-force]` → 跳过 CI 门禁立即
   git 直接构建（走老路径，post-deploy-smoke.yml 兜底）。用后必须在此补记原因。
   ⚠️ 匹配的是**完整 commit message 含正文**——不要在普通提交的说明文字里
@@ -405,13 +419,67 @@ FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何�
 
 1. 按 ADR-023 仅通过获准的 Supabase MCP `apply_migration` 生产通道核对远端
    migration ledger，并按顺序逐个应用所有缺失文件。每次只能提交一个完整文件，
-   不得使用本地 `db push` 或脚本中已禁用的 psql 写命令：
+### Vercel Deployment Protection bypass 轮换门禁
+
+Deployment Protection bypass credential 与 deploy-force 标记是两个不同的能力，两者都不能覆盖 current incident NO-GO。本次发布前必须完成：
+
+1. 撤销所有旧 automation/manual deployment-protection bypass credentials。
+2. 仅为获准的受保护自动化重新签发一枚 secret；不向个人终端、issue、日志或报告复制值。
+3. 对每个旧值访问 generated deployment URL，保留其返回保护页/401/其他明确失败的证据。
+4. 证明新值仅在受保护 workflow 内完成获准 smoke。只记录 credential ID/指纹、owner、轮换时间和测试结果，不记录 secret 原文。
+
+旧值仍能访问、新值出现在非受控环境，或无法绑定轮换证据时，发布维持 NO-GO。
+
+### V1 完整九迁移数据库门禁（待执行 / 待证明）
+
+本节与下方“排名权威数据库先行门禁”共同构成一条门禁，不是生产执行记录，也不是九个文件连续批量应用的授权。完整顺序固定为：先证明或补齐 2026-07 的四个 ranking-authority migration，再证明五个额外身份/凭据安全前置 `20260716093000_user_linked_traders_server_write_only.sql`、`20260716112000_exchange_connections_server_only.sql`、`20260716178000_user_profile_write_authority.sql`、`20260716179100_user_profile_read_audience.sql`、`20260716179200_user_profile_wallet_authority.sql`，最后执行 2026-08 的 activation → 受保护部署 exact bridge SHA → authorization → legacy Portfolio retirement → Claim Phase A → 使用同一 SHA 成功 smoke → Claim Phase B。这些安全前置不计入九个核心产品 migration，但任一未证明即维持 NO-GO。
+
+截至 2026-08-03，本次复核没有可用的 production `DATABASE_URL` 或 Supabase MCP 只读通道；`scripts/maintenance/apply-launch-migrations.sh status` 因缺少 `DATABASE_URL` 在连接前停止。因此 2026-07 四个 ranking-authority migration 与五个身份/凭据 ACL 安全前置都只能标记为 **PENDING-PROOF**，不能声称已应用，也不能把“无法读取”解释成“确认缺失”。恢复只读访问后必须先同时核对 exact migration ledger 与对应 live catalog/RPC：两者都精确匹配才记录为已证明并跳过重放；只读证据确认缺失且 catalog 基线兼容时才按既定顺序补齐；ledger/catalog 冲突时立即停止调查。
+
+以下五个 2026-08 migration 目前只有仓库代码和隔离测试能力，尚未在 staging 或 production 应用；各项最终 pass 仍须绑定同一个 exact candidate SHA：
+
+1. `20260803211000_b2c_activation_v2.sql`
+2. `20260803211500_trader_authorizations_server_only.sql`
+3. `20260803212000_legacy_portfolios_v1_retirement.sql`
+4. `20260803213000_trader_claim_v2_rpcs.sql`（Claim Phase A）
+5. `20260803214000_trader_claim_v2_cutover.sql`（Claim Phase B）
+
+必须使用以下有序流程：
+
+1. 先完成下方 2026-07 排名权威门禁的只读 ledger/live-catalog 核验；不能证明时，只有在确认缺失且无 catalog 漂移后，才按四个文件的固定顺序单文件补齐并完成全部无副作用探针。该门禁未闭合时不开始 2026-08 数据库变更。
+2. 在任何 2026-08 migration 前，用 production exact ledger 与 live ACL catalog 同时证明五个额外安全前置。`20260716093000` 必须令 `user_linked_traders` 对 browser/PUBLIC 无 DML、authenticated 仅 own SELECT、service role CRUD 且 policy 精确收敛；`20260716112000` 必须令 `user_exchange_connections` 对 browser/PUBLIC 无 table/column 路径、service CRUD 且只有精确 service policy；`20260716178000`/`179100`/`179200` 必须共同保护 profile 写入/读取/钱包权威，尤其 authenticated 不可更新 `is_verified_trader`、`verified_trader_id`、`verified_trader_source`、`linked_trader_count`。仅当只读检查确认某 ledger 缺失、live catalog 仍与迁移前基线兼容时，才按时间顺序通过 ADR-023 获准单文件通道补齐并重复 ACL 证明；ledger/catalog 冲突时停止，不修 ledger、不盲目重放。这五个文件不计入九个核心产品 migration。
+3. 在受保护 staging 单文件通道应用 activation migration，证明 epoch 行、v2 RPC、`service_role` 只读指标契约和旧事件解析兼容。
+4. 在 authorization、Portfolio retirement 与 Claim Phase A 尚未应用时，通过受保护发布管线部署候选 exact bridge SHA。证明旧 connect、bind、sync 与 OAuth 入口无条件固定 410；两个 auth-first tombstone `/api/exchange/verify-ownership` 和 `/api/traders/claim/verify-wallet` 必须分别为匿名 401、已登录 410，且没有凭据读取、proof consumption 或 direct-table fallback。另证明新的 authorize POST/Claim 写路径因 RPC 缺失而 fail closed，`POST /api/portfolio`、`POST /api/portfolio/sync`、`GET /api/portfolio/positions`、`GET /api/portfolio/snapshots` 固定 410；`aggregate-portfolio-snapshots` 无 cron secret 为 401、有 secret 为 `status=retired`/零写入，且 `vercel.json` 不再调度它。此时 Portfolio export RPC 尚不存在，已认证 `POST /api/settings/export` 必须返回 500 fail closed，不能以省略 `legacy_portfolios` 的部分 manifest 返回 200。保留的 EVM `/api/portfolio/[address]` 与 `/api/portfolio/suggestions` 不属于旧凭据面。记录 exact SHA；到 Phase B 后验证结束不得换包。
+5. 保持该 bridge SHA，再应用 authorization migration。它的 preflight 必须拒绝未满足上述 exchange-connection ACL 的环境；迁移必须隔离 active legacy alias、OAuth 或缺少 attestation 的 connection，并撤销没有同用户、同 exact canonical exchange 与同 verified UID 的 active connection 支撑的 authorization。这些账户必须由用户显式 rebind，不得自动提升旧记录。随后证明两张凭据表对 browser roles/PUBLIC 均无 table/column 路径，bind/revoke 两个原子 RPC 均无 browser/PUBLIC execute 路径且仅 service role 可调用。在 disposable fixture 依次证明公开选择器只有 Binance、Bybit、Bitget；首次绑定同时写入两张投影；同一 canonical exchange 重绑撤销旧 active authorization；两种 revoke selector 都同时停用 connection 并撤销全部匹配 authorization；绑定或撤销任一投影失败时整条 RPC 原子回滚。最后运行只读反连接，结果必须为零：每条 active authorization 都必须有同用户、同 exact canonical exchange、同 verified UID 的 active connection。这个顺序有意不按文件时间排序。
+6. 单独应用 Portfolio retirement。核对三表/cascade FK exact shape；browser/PUBLIC 零 table/column 权限；service 无直接 DML、无密文/positions/snapshots direct SELECT，仅有五个 metadata 列 SELECT；唯一 policy 为 service metadata read；`export_legacy_portfolio_data_v1(uuid)` 与 delete RPC 仅 service 可执行。fixture 必须证明 authenticated RPC deny；HTTP export 固定传认证 user id；迁移后返回 200，`account.legacy_portfolios` 与 manifest 必须完整包含 portfolios/positions/snapshots 三项及 fixture owner rows，字段精确白名单、无 user id/密文且 child 不越出 owner portfolio set；任一组超过 250,000 行必须返回 413，而不是截断或返回部分成功。同时覆盖跨 owner delete false、parent/child cascade、故障回滚、重放，以及迁移不删除 owner 行、不改写密文。随后导出 owner/交易所 metadata 清单；每位 owner 应先下载非密文可移植数据，再在交易所侧 revoke/rotate 旧 key，Arena delete 成功不能替代该证据。
+7. Claim Phase A 前只读证明 migration role exact 拥有 `trader_claims`，再应用 Phase A。核对 typed submit/reject/cancel、guard、ledger/reload，并证明 legacy activation 与 Arena claimed helper 均不可执行。Phase A 没有批准能力，不是“可批准的向后兼容层”。
+8. 使用同一 exact bridge SHA 完成 authorization 和 Hyperliquid/GMX challenge → submit → `reviewing` → reject/cancel smoke；legacy 与 V2 approval 此时都须 fail closed。所有 CEX claim 均 unsupported，CEX API key 不得创建 claim/badge。
+9. Phase B 前只读证明 migration role exact 拥有 migration preflight 列出的全部 relation。只在同一 SHA 成功 smoke 后单独应用 Phase B，证明 legacy submit/direct DML fail closed、canonical `activate_trader_claim_v2` 管理员批准成功并原子更新 badge/link/profile/Arena，且 unlink 仅 service 可执行、任一步失败全部回滚。Phase A/B 不得批量连续应用。
+10. staging 通过后 production 严格重复：activation → exact bridge SHA/retirement smoke → authorization → Portfolio retirement → Claim Phase A → 同一 SHA 成功 smoke → Claim Phase B。每个文件单独提交并核对 exact ledger/live catalog/ACL/RPC/reload；不得用 `db push`、历史批量重放或禁用 writer 替代。
+11. production 未获准时不创建 disposable claim 或 portfolio。Phase B 后 legacy application 不是有效回滚目标。
+12. 只有五个额外 ACL 前置与全部九个 production migration 的 exact proof、authorization、Portfolio 和 Claim 全生命周期 smoke 闭合后，才能从 production 运行 `npm run gen:types`。
+13. 运行 migration history shape、前置与 2026-07 suites，以及 activation、authorization、legacy-portfolio-retirement、claim-cutover 四项 PG17 suite（覆盖 2026-08 五个 migration）。任何证据不完整即 NO-GO。
+14. Phase B 不批量修改历史 verified rows；owner 仍须逐行审计身份投影。另逐行处置 legacy Portfolio key；未 revoke/rotate、未联系或归属不明均为 NO-GO。
+15. 从 exact bridge 停止所有旧公开 first-party writer 起等待至少 48 小时，并只读证明没有 fresh `provenance='first_party'` 排名输入后，才可重算或开放 Beta。
+
+### 排名权威数据库先行门禁（PENDING-PROOF / 待执行）
+
+以下步骤是完整九迁移门禁的第一阶段，不是生产执行记录。截至 2026-08-03，本次复核没有生产数据库只读通道，无法取得 exact ledger/live-catalog 证据。因此四个 ranking-authority migration 均维持 **PENDING-PROOF**；不得据此声称已在生产应用，也不得因无法连接而盲目重放。
+
+1. 在应用候选版本发布前，先通过获准的只读生产通道核对 `supabase_migrations.schema_migrations` 的四个 exact version，并核对本节后续 RPC、publication head、pg_cron 与权限 catalog 探针。ledger 与 live catalog 都精确匹配才可记录为已证明并跳过应用；若只读证据确认版本缺失且现有 catalog 与迁移前置契约兼容，进入下一步；任一“ledger 已有但 catalog 不符”或“catalog 已有但 ledger 缺失”都立即停止，不修 ledger、不重放 migration。
+2. 对只读证据未证明且确认缺失的文件，按 ADR-023 仅通过获准的 Supabase MCP
+   `apply_migration` 生产通道，严格连续应用以下四个文件；每次只提交一个完整文件，
+    不得使用本地 `db push` 或脚本中已禁用的 psql 写命令：
    1. `20260729223000_rerank_public_eligible_rows_only.sql`
    2. `20260729224000_rank_eligible_leaderboard_count_cache.sql`
    3. `20260729225000_token_trader_rank_authority.sql`
    4. `20260729230000_token_ranking_generation_barrier.sql`
    5. `20260804043000_retire_legacy_token_rankings.sql`
    6. `20260804044000_freeze_legacy_position_history_relations.sql`
+3. 第四个迁移提交或已应用状态得到 exact proof 后，等待迁移内的 `NOTIFY pgrst, 'reload schema'` 生效；若需
+   重发 reload，也必须走同一获准生产通道。然后通过生产 PostgREST 执行两个
+   无副作用的非法参数探针（只接受精确 SQLSTATE `22023`），以及旧版 token-rank
+   返回契约探针：
 
    第五个迁移必须把旧 Token 排名固定为未发布；第六个迁移必须把所有 ledger、
    手工 cutover、分区和保留的 `tph_*` 关系收敛为只读取证档案。任一迁移失败、
@@ -420,6 +488,48 @@ FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何�
 2. 等待两个迁移内的 `NOTIFY pgrst, 'reload schema'` 生效。生产 PostgREST 的唯一
    合法 Token head 是固定的 generation zero；它不能带任何伪造的发布时间或来源
    水位：
+    curl -sS -X POST \
+     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/refresh_public_rank_count_cache_for_seasons" \
+     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+     -H 'Content-Type: application/json' \
+     -d '{"p_season_ids":[]}' | jq -e '.code == "22023"'
+
+   curl -sS -X POST \
+     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/get_token_trader_rankings" \
+     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+     -H 'Content-Type: application/json' \
+     -d '{"token_symbol":"BTC","lookback_days":90,"max_traders":1,"row_offset":0}' \
+     | jq -e 'type == "array" and length == 1 and (.[0].token_rank | type) == "number" and .[0].token_rank >= 1 and .[0].total_count >= .[0].token_rank'
+   ```
+
+   前两个探针出现 `PGRST202`、`42883`、权限错误、超时或任何非 `22023` 结果，
+   都表示 schema/RPC 契约尚未就绪，必须停止发布；token 探针为空、缺少
+   `token_rank` 或名次越过 `total_count` 同样必须停止。以上探针都不改变排名数据。
+
+4. 第四个迁移只建立诚实的 bootstrap head：`generation_seq=0` 且
+   `published_at=NULL`，不把迁移或渲染时间伪装成 MV 刷新时间。等待下一次既有
+   `refresh-mv-popular-tokens` pg_cron 受控刷新完成。迁移前必须读取最近至少 10 次该
+   cron 的运行记录，确认均成功且最大耗时低于 25 分钟；还必须确认
+   `cron.use_background_workers=off`，且唯一 active job 的 database/username 分别是当前
+   数据库与 `postgres`。第四个迁移会把 job command 固定为先执行
+   `SET statement_timeout = '25min'`，再执行 refresh `SELECT`；只有 libpq cron 模式才会
+   在后一条语句开始前正确启动计时。任一条件不符时迁移会失败，必须停止发布并完成
+   容量或 pg_cron 模式评估。
+
+   如 owner 批准手动触发，必须通过获准生产通道提交以下完整事务；函数内部设置
+   timeout 无法限制已经开始的顶层 `SELECT`：
+
+   ```sql
+   BEGIN;
+   SET LOCAL statement_timeout = '25min';
+   SELECT public.refresh_popular_tokens_mv();
+   COMMIT;
+   ```
+
+   严禁绕过 generation head 直接刷新任一 MV。刷新完成后执行以下只读 generation、
+   两个 v2 page 与 stale-generation 探针：
 
    ```bash
    TOKEN_HEAD_JSON="$(curl -fsS -X POST \
@@ -568,6 +678,11 @@ FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何�
    绑定非 NULL 来源水位，并证明 history、price、cost basis 与 FX 状态全部可信。
    重新开放不得解冻或读取旧 `public.trader_position_history` 档案；未满足这些条件时，
    “保持未发布”本身就是正确的上线结果。
+5. 只有以上所有探针均通过后，才允许进入 2026-08 activation/authorization/Claim 门禁；后续 application generation-aware 候选版本的发布与生产 smoke 必须遵守上方 activation → exact bridge SHA → authorization → Phase A → 同一 SHA 成功 smoke → Phase B 顺序。
+   第二个迁移会在同一事务中切换 legacy rerank wrapper、重排三个 season 并重建
+   rank-derived count；第三个迁移是 token 榜 `token_rank` 应用契约的数据库先行
+   条件；第四个迁移是跨页 generation read barrier。不得少应用其中任一迁移后发布
+   应用。
 
 ### Vercel instant rollback
 
@@ -641,6 +756,142 @@ VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 
 ---
 
+## Trader claim V2 two-phase cutover
+
+The claim writer cutoff must be deployed in two phases. Phase A revokes legacy
+activation and deliberately leaves both legacy and V2 approval unavailable; it
+does not yet close legacy submit or direct service-role table DML. The security
+gate is not complete until Phase B commits and its checks pass. The application
+bridge must already retire every known HTTP writer before authorization,
+Portfolio retirement, and Phase A; do not describe that bridge as a database-DML
+cutoff before Phase B.
+
+1. After activation passes but before authorization, Portfolio retirement, or Claim Phase A, deploy
+   the exact bridge SHA through the protected pipeline. Prove that
+   `/api/exchange/connect`, `/api/trader/bind-api-key`, `/api/trader/sync`, and OAuth
+   authorize/callback/refresh unconditionally return 410. The auth-first tombstones
+   `/api/exchange/verify-ownership` and `/api/traders/claim/verify-wallet` must return
+   401 anonymously and 410 when authenticated, with no credential read, proof
+   consumption, direct-table fallback, or write. While the new RPCs are still
+   absent, prove that `POST /api/trader/authorize` and the new Claim write routes fail
+   closed and perform no direct-table write. Also prove fixed 410 for legacy
+   Portfolio connect/sync/positions/snapshots, an authenticated no-op snapshot
+   cron, and absence of that cron from `vercel.json`. Because the Portfolio export
+   RPC is not installed yet, authenticated `POST /api/settings/export` must return
+   500 fail closed; a 200 response with `legacy_portfolios` silently omitted is a
+   release failure. Record that SHA with every result.
+2. Keeping that same SHA deployed, apply the authorization migration. Prove its
+   quarantine of active legacy alias, OAuth, and unattested connections and its
+   revocation of authorizations without an exact canonical connection. Affected
+   users must explicitly rebind. The read-only anti-join must return zero active
+   authorizations lacking an active connection for the same user, exact
+   canonical exchange, and verified UID.
+3. Apply `20260803212000_legacy_portfolios_v1_retirement.sql` separately. Prove
+   browser/PUBLIC denial, metadata-only direct service read, ciphertext and
+   child-table denial, and service-only export/delete RPCs. The settings export
+   must pass only the authenticated user id and return HTTP 200 with the complete
+   three-dataset manifest and fixture owner rows, using exact allowlisted
+   portfolio/position/snapshot fields with no owner id, ciphertext, or cross-owner
+   child. Any group above 250,000 rows must return 413 instead of truncation or
+   partial success. Also prove cross-owner delete false, parent/child cascade,
+   rollback, replay, and unchanged retained rows/ciphertext. Record exchange-side
+   revoke/rotate separately; deleting Arena's copy does not revoke the key at the
+   exchange.
+4. Prove the migration role owns `trader_claims`, then apply only
+   `20260803213000_trader_claim_v2_rpcs.sql` (Phase A). Both legacy and V2
+   approval must fail closed during this interval.
+5. With the already deployed same exact SHA, smoke-test successful authorization
+   and a Hyperliquid or GMX challenge, submit, and reject/cancel in the staging
+   project. These are the only V1 wallet-claim sources. Every CEX trader-profile
+   claim must return unsupported; a CEX API key may create only a private account
+   connection and must not create a claim, verified badge, or public first-party
+   publication. Re-run the retired
+   endpoint checks and the active-authorization anti-join; do not deploy a
+   different application SHA between phases.
+6. Only after the same exact-SHA success smoke passes and the migration role is
+   proved to own every Phase-B preflight relation, immediately apply
+   `20260803214000_trader_claim_v2_cutover.sql` (Phase B).
+   It takes an access-exclusive lock, expires legacy pending/reviewing rows,
+   revokes the legacy RPC and direct claim-table DML, installs the service-only
+   canonical V2 activation and the atomic unlink boundary, and then unlocks.
+   Smoke the admin approval path through `activate_trader_claim_v2`; it must
+   atomically create the exact verified/link/profile/Arena projections. Unlink
+   must turn the verified claim
+   into rejected audit history, remove the exact verified/link badge authority,
+   update primary/profile state, and clear Arena's claimed projection in one
+   transaction. It may stop CEX credentials only where source, canonical exchange,
+   and trader UID prove the identity mapping. Retained projection drift must fail
+   closed; ambiguous legacy credential rows are never guessed and remain an
+   owner-audit launch blocker.
+7. Run `npm run qa:trader-claim-v2-pg17` and
+   `npm run qa:legacy-portfolio-retirement-pg17`, then verify production ACLs with
+   read-only catalog queries, including denial of browser execution and forced
+   rollback after a late unlink write. Only after all five identity/credential
+   ACL prerequisites, all nine production migrations (the four ranking-authority
+   files and the five activation/authorization/Portfolio/Claim files), their live
+   proof, the authorization and Portfolio export/delete lifecycle smokes, and the exact-SHA
+   Claim submit/approve/unlink smoke have landed, run `npm run gen:types`
+   against that production schema and
+   commit the genuinely generated type diff.
+
+After the bridge has stopped all legacy public first-party writers, wait at
+least 48 hours (the serving freshness window) and prove with a read-only query
+that no fresh `provenance='first_party'` ranking input remains. Do this before
+recomputing public ranks or inviting Beta users; a non-zero result keeps the
+release at NO-GO and requires owner review rather than inferred ownership.
+
+No incident or maintenance window authorizes authorization/Phase A before the
+exact bridge SHA is deployed and its pre-migration 410/fail-closed/no-direct-write
+smoke passes, or Phase B before that same SHA completes its success smoke. If the
+application cannot be proved, stop before the next migration and keep claim
+unavailable. Phase B makes legacy claim writers fail closed, so the legacy
+application is not a valid claim-path rollback target afterward.
+`lib/supabase/database.types.ts` remains
+production-generated **DO NOT EDIT** throughout the pre-cutover interval;
+schema-ahead access must stay behind local runtime parsing or a narrow cast.
+
+All already-verified claims are intentionally retained when the migrations are
+applied; only a later explicit atomic unlink transitions the selected claim and
+its projections. Each row is an owner-audit launch blocker until its identity,
+source, proof, user ownership, and matching `verified_traders`, user-linkage,
+authorization, and connection projections are reviewed. Record a
+retain/quarantine decision and evidence for
+every row. Any unresolved, unprovable, duplicate, or conflicting badge keeps
+the incident at NO-GO. Use this read-only inventory; do not automatically delete
+or downgrade historical rows:
+
+```sql
+SELECT
+  id,
+  user_id,
+  trader_id,
+  source,
+  submission_version,
+  verification_method,
+  status,
+  created_at,
+  verified_at
+FROM public.trader_claims
+WHERE status = 'verified'
+ORDER BY verified_at NULLS LAST, created_at, id;
+```
+
+The review queue must contain only typed V2 rows after Phase B:
+
+```sql
+SELECT submission_version, verification_method, source, status, count(*)
+FROM public.trader_claims
+WHERE status IN ('pending', 'reviewing')
+GROUP BY submission_version, verification_method, source, status
+ORDER BY submission_version, verification_method, source, status;
+```
+
+Expected: every returned row has `submission_version = 2`, method `signature`,
+and source `hyperliquid` or `gmx`. Any other row is a failed cutoff and blocks
+launch.
+
+---
+
 ## Common Errors and Solutions
 
 | Error                 | Cause                                            | Solution                                                      |
@@ -662,20 +913,22 @@ VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 
 ### What breaks
 
-| Feature               | Impact                                   | Fallback                                                                     |
-| --------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
-| Auth (GoTrue)         | Login/signup fails, JWT refresh fails    | Users with unexpired JWTs can still browse public pages                      |
-| Database (PostgreSQL) | All API routes returning DB data fail    | Redis cache serves stale data for cached endpoints (rankings, trader detail) |
-| Realtime              | Live chat, live leaderboard updates stop | App remains functional, just not live                                        |
-| Storage               | Avatar/image uploads fail                | Existing images served from CDN cache                                        |
+| Feature               | Impact                                   | Fallback                                                                                                              |
+| --------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Auth (GoTrue)         | Login/signup fails, JWT refresh fails    | Users with unexpired JWTs can still browse public pages                                                               |
+| Database (PostgreSQL) | DB-backed reads and writes fail          | Canonical live/LKG may serve only when health proof says the cached generation is valid; otherwise return unavailable |
+| Realtime              | Live chat, live leaderboard updates stop | App remains functional, just not live                                                                                 |
+| Storage               | Avatar/image uploads fail                | Existing images served from CDN cache                                                                                 |
 
 ### Response steps
 
 1. Confirm outage on https://status.supabase.com or Supabase Dashboard > Project Health
 2. If total outage (DB unreachable):
-   - The app auto-degrades: Redis-cached endpoints continue serving stale data
-   - Cron jobs will fail and log errors — this is expected, no manual intervention needed
-   - Monitor `pipeline_logs` for mass failures once DB recovers
+   - Declare or continue incident **NO-GO**. Do not assume the app has degraded safely merely because Redis contains data; verify `/api/health`, canonical generation, freshness, and LKG proof. Unproven cache data must be unavailable, not green.
+   - Watch PM2/release logs for authentication failures, rapid restarts, concentrated 5xx, or repeated queue retries. A restart storm is active load amplification, not an expected no-op.
+   - If a writer, ingest worker, or cron is looping, stop the exact affected process, save PM2 state, record host/process/release ID, and preserve logs. Do not stop unrelated scraper/proxy services.
+   - Keep write workers and backup cron stopped until credentials, ordered migrations, exact release ID, one controlled queue consumption, and heartbeat are all proved. Do not use an automatic restart loop as a recovery test.
+   - After the database recovers, inspect `pipeline_logs` and source freshness before any staged restart; restore one canary first and observe a complete scheduling cycle before the remaining Mac mini and Singapore processes.
 3. If prolonged (>1 hour):
    - Consider enabling read-only mode via feature flag: set `FEATURE_READ_ONLY=true` in Vercel env
    - This disables write operations (posts, comments, follows) while keeping rankings browsable
@@ -690,23 +943,24 @@ VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 
 **Dashboard**: https://console.upstash.com
 
-### Fail-open behavior
+### Mixed fail behavior
 
-Redis is non-critical — all Redis consumers fail-open:
+Redis consumers do **not** share one fail-open contract. Treat each boundary separately:
 
-| Feature                | Without Redis                                                            |
-| ---------------------- | ------------------------------------------------------------------------ |
-| Cron distributed locks | Disabled — concurrent cron execution possible (harmless, idempotent)     |
-| API cache              | Cache miss → direct DB query (higher latency, more Supabase load)        |
-| Rate limiting          | Falls back to in-memory Map (per-instance, less accurate but functional) |
-| Alert rate limiting    | Falls back to in-memory Map                                              |
+| Feature                             | Without Redis                                                                                                                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Canonical public rankings           | Serve only a publication-matched, sanitized LKG when one remains available; otherwise return unavailable/503. Never bypass the canonical contract with a direct DB query. |
+| Wallet Claim challenge/replay nonce | Fail closed with 503 and `Retry-After`; no in-memory nonce fallback and no claim submission while replay coordination is unavailable.                                     |
+| General API rate limiting           | May fall back to an in-memory per-instance limiter, which is less accurate and must not be treated as a distributed guarantee.                                            |
+| Cron/alert locks and deduplication  | Follow the consumer-specific contract; verify the exact job before retrying and never assume duplicate execution is harmless.                                             |
 
 ### Response steps
 
-1. Verify status: Upstash Dashboard > your database > Metrics tab
-2. No immediate action needed — the app auto-degrades
-3. Monitor Supabase connection count (`SELECT count(*) FROM pg_stat_activity`) — without cache, DB load increases
-4. If DB connection count exceeds 80% of pool: consider adding `Cache-Control: stale-while-revalidate` headers to high-traffic API routes temporarily
+1. Verify status: Upstash Dashboard > your database > Metrics tab.
+2. Check `/api/health`, `/api/rankings`, and `/api/traders`. Healthy canonical data must carry a valid publication generation; an LKG must be explicitly marked stale, and absence of a valid LKG must be unavailable rather than a direct DB fallback.
+3. Pause wallet-claim testing and communicate the retryable outage while challenge issuance or replay reservation returns 503. Do not introduce an in-memory nonce workaround.
+4. Inspect the exact cron/alert consumer before replaying it; preserve deduplication evidence and stop any duplicate write loop.
+5. After Redis recovery, prove canonical generation/LKG behavior and one fresh wallet challenge before clearing the incident.
 
 ---
 
@@ -747,5 +1001,5 @@ Redis is non-critical — all Redis consumers fail-open:
 | **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 53 endpoints / 44 Vercel schedules, staggered        |
+| **Cron Schedule**    | 53 endpoints / 43 Vercel schedules, staggered        |
 | **Scraper PM2 name** | `arena-scraper`                                      |

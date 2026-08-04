@@ -5,6 +5,8 @@ const migration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260716112000_exchange_connections_server_only.sql'),
   'utf8'
 )
+const packageJson = readFileSync(join(process.cwd(), 'package.json'), 'utf8')
+const ci = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8')
 
 describe('exchange connections server-only migration', () => {
   it('is transactional, bounded, and documents the application-first cutover', () => {
@@ -84,5 +86,12 @@ describe('exchange connections server-only migration', () => {
     expect(migration).not.toContain(
       'ALTER TABLE public.user_exchange_connections FORCE ROW LEVEL SECURITY'
     )
+  })
+
+  it('wires the isolated PostgreSQL 17 proof into the required CI path', () => {
+    expect(packageJson).toContain('"qa:exchange-connection-acl-pg17"')
+    expect(packageJson).toContain('exchange-connections-server-only.pg17.sh')
+    expect(ci).toContain('run: npm run qa:exchange-connection-acl-pg17')
+    expect(ci).toContain('PG17_BIN: /usr/lib/postgresql/17/bin')
   })
 })

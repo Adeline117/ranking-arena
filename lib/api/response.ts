@@ -22,10 +22,7 @@ export type {
 } from '../types/index'
 
 // 导入供内部使用
-import type {
-  ApiSuccessResponse,
-  ApiErrorResponse,
-} from '../types/index'
+import type { ApiSuccessResponse, ApiErrorResponse } from '../types/index'
 
 // ============================================
 // 成功响应
@@ -34,7 +31,11 @@ import type {
 /**
  * 标准成功响应
  */
-export function success<T>(data: T, status = 200, headers?: Record<string, string>): NextResponse<ApiSuccessResponse<T>> {
+export function success<T>(
+  data: T,
+  status = 200,
+  headers?: Record<string, string>
+): NextResponse<ApiSuccessResponse<T>> {
   return NextResponse.json(
     {
       success: true as const,
@@ -171,9 +172,7 @@ export function badRequest(message = '请求参数错误'): NextResponse<ApiErro
 /**
  * 限流错误响应 (429)
  */
-export function rateLimitError(
-  retryAfter?: number
-): NextResponse<ApiErrorResponse> {
+export function rateLimitError(retryAfter?: number): NextResponse<ApiErrorResponse> {
   const response = error(
     '请求过于频繁，请稍后再试',
     429,
@@ -200,16 +199,11 @@ export function providerRateLimitError(
     ? `${providerName} 服务请求频率超限，请稍后再试`
     : '服务请求频率超限，请稍后再试'
 
-  const response = error(
-    message,
-    429,
-    ErrorCode.PROVIDER_RATE_LIMIT,
-    {
-      retryAfter,
-      provider: providerName,
-      retryable: true,
-    }
-  )
+  const response = error(message, 429, ErrorCode.PROVIDER_RATE_LIMIT, {
+    retryAfter,
+    provider: providerName,
+    retryable: true,
+  })
 
   if (retryAfter) {
     response.headers.set('Retry-After', String(retryAfter))
@@ -222,16 +216,8 @@ export function providerRateLimitError(
  * 提供商错误响应 (502)
  * 用于外部 API 提供商返回的其他错误
  */
-export function providerError(
-  message?: string,
-  retryable = false
-): NextResponse<ApiErrorResponse> {
-  return error(
-    message || '外部服务提供商错误',
-    502,
-    ErrorCode.PROVIDER_ERROR,
-    { retryable }
-  )
+export function providerError(message?: string, retryable = false): NextResponse<ApiErrorResponse> {
+  return error(message || '外部服务提供商错误', 502, ErrorCode.PROVIDER_ERROR, { retryable })
 }
 
 // ============================================
@@ -250,7 +236,10 @@ export function handleError(err: unknown, context?: string): NextResponse<ApiErr
       logger.error(`[${context || 'API'}] ApiError: ${err.message}`, err, { code: err.code })
     } else if (err.statusCode >= 400) {
       // 4xx 错误上报到 Sentry 便于分析（warn 级别）
-      logger.warn(`[${context || 'API'}] ApiError ${err.statusCode}: ${err.message}`, { code: err.code, statusCode: err.statusCode })
+      logger.warn(`[${context || 'API'}] ApiError ${err.statusCode}: ${err.message}`, {
+        code: err.code,
+        statusCode: err.statusCode,
+      })
     }
     return errorFromApiError(err)
   }
@@ -263,18 +252,22 @@ export function handleError(err: unknown, context?: string): NextResponse<ApiErr
     const originalError = err instanceof Error ? err : new Error(String(err))
     logger.error(`[${context || 'API'}] ${apiError.message}`, originalError, {
       code: apiError.code,
-      statusCode: apiError.statusCode
+      statusCode: apiError.statusCode,
     })
   }
 
   // 生产环境隐藏内部错误详情
   const isProduction = process.env.NODE_ENV === 'production'
   if (isProduction && apiError.statusCode >= 500) {
-    return error(
-      '服务器错误，请稍后重试',
-      500,
-      ErrorCode.INTERNAL_ERROR
-    )
+    // A retryable dependency outage is materially different from an internal
+    // defect. Keep the safe public message while preserving 503 so clients,
+    // probes, and Retry-After handling do not misclassify it as a generic 500.
+    if (apiError.statusCode === 503) {
+      return error('服务暂时不可用，请稍后重试', 503, ErrorCode.SERVICE_UNAVAILABLE, {
+        retryable: true,
+      })
+    }
+    return error('服务器错误，请稍后重试', 500, ErrorCode.INTERNAL_ERROR)
   }
 
   return errorFromApiError(apiError)
@@ -296,19 +289,18 @@ export function withCache(
   } = {}
 ): NextResponse {
   const { maxAge = 60, staleWhileRevalidate = 300, isPublic = true } = options
-  
+
   const cacheControl = [
     isPublic ? 'public' : 'private',
     `max-age=${maxAge}`,
     `s-maxage=${maxAge}`,
     `stale-while-revalidate=${staleWhileRevalidate}`,
   ].join(', ')
-  
+
   response.headers.set('Cache-Control', cacheControl)
-  
+
   return response
 }
-
 
 // ============================================
 // Convenience aliases (enterprise standard format)
@@ -318,20 +310,14 @@ export function withCache(
  * Quick success response with optional meta. Alias for `success()` with meta support.
  */
 export function apiSuccess<T>(data: T, meta?: Record<string, unknown>, status = 200): NextResponse {
-  return NextResponse.json(
-    { success: true, data, ...(meta ? { meta } : {}) },
-    { status }
-  )
+  return NextResponse.json({ success: true, data, ...(meta ? { meta } : {}) }, { status })
 }
 
 /**
  * Quick error response with code + message. Alias for `error()` with simpler signature.
  */
 export function apiError(code: string, message: string, status = 400): NextResponse {
-  return NextResponse.json(
-    { success: false, error: { code, message } },
-    { status }
-  )
+  return NextResponse.json({ success: false, error: { code, message } }, { status })
 }
 
 // ============================================

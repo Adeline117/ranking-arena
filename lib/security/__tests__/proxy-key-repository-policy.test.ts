@@ -1,11 +1,13 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 const trackedFiles = execFileSync('git', ['ls-files', '-z'], {
   encoding: 'utf8',
 })
   .split('\0')
-  .filter(Boolean)
+  // `git ls-files` keeps an unstaged deletion in the index until commit. Scan
+  // only files that still exist in the candidate tree.
+  .filter((file) => Boolean(file) && existsSync(file))
 
 const runtimeCredentialFiles = new Set([
   'infra/vps-playwright/ecosystem.config.js',
