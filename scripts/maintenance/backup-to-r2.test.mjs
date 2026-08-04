@@ -673,9 +673,12 @@ test('uploads a valid artifact without deleting remote retention objects', async
       localPath: output,
       minimumBytes: 1,
       completionToken: COMPLETION_TOKEN,
-      upload: async (validatedSize) => {
+      upload: async ({ size: validatedSize, body }) => {
         events.push(`upload:${validatedSize}`)
         assert.equal((await stat(output)).size, validatedSize)
+        for await (const _chunk of body) {
+          // Consume the exact sealed descriptor as an object-store client would.
+        }
       },
     })
 
@@ -705,9 +708,9 @@ test('creates private per-run workspaces and refuses to clobber an existing arti
       completionToken: COMPLETION_TOKEN,
       timeoutMs: 5_000,
     }
-    runPgDumpPipeline(options)
+    await runPgDumpPipeline(options)
     const original = await readFile(workspaces[0].localPath)
-    assert.throws(() => runPgDumpPipeline(options), /EEXIST/)
+    await assert.rejects(runPgDumpPipeline(options), /EEXIST/)
     assert.deepEqual(await readFile(workspaces[0].localPath), original)
   } finally {
     await Promise.all(

@@ -366,9 +366,13 @@ Sources: `lib/utils/arena-score.ts`,
 >
 > **2026-08-03 incident evidence**：07-27、07-28、07-30、07-31、08-01、
 > 08-02、08-03 共 7 个对象都是 20-byte gzip 空对象。07-26 legacy 候选虽通过
-> 完整 gzip/SQL 流检查，但没有 `leaderboard_ranks`/partition COPY 数据，不能通过
+> 完整 gzip/SQL 流检查（5,112,388,073 bytes），但没有
+> `leaderboard_ranks`/partition COPY 数据，不能通过
 > 当前关键表正数门禁，也尚未证明 exact PG17 legacy restrict/unrestrict 尾。保留
-> 该候选作证据，但不得把它称为可恢复点。新的恢复演练应使用至少约 100 GiB
+> 该候选作证据，但不得把它称为可恢复点。它已复制到
+> `incident-hold/2026-08-04/`，copy 与 source 的 ETag 一致；这只证明对象复制身份，
+> 不是恢复认证。Mac mini 的 backup 与 sentinel crontab 已注释暂停。新的恢复演练
+> 应使用至少约 100 GiB
 > 可用空间的 managed scratch 与事故恢复后生成、带当前 completion metadata 的
 > 新备份。
 
@@ -442,6 +446,13 @@ CLI 部署 → 内嵌 smoke（5 URL）→ 失败自动 promote 回滚 + Telegram
 `if: false`；CI 的 production drift/data jobs 同样暂停。线上 16 个 repository
 workflow 也已在 GitHub 控制面全部手工停用，non-completed run 为零；Dependabot
 dynamic workflow 仍 active。
+
+生产 token containment 已由独立审计提交 `5ed4718b6` 提升到 deployment
+`dpl_FYi4pbcTKEhSHASSsyPoG7HBYrUD`；联合 V1 分支必须保留同一 fail-closed 语义，
+不得因后续候选发布重新打开 Token 面。Supabase 仍处于 degraded 状态，因此该部署
+不构成数据库迁移、worker 重启或 backup schedule 恢复授权。GitHub 与 Vercel 的未来
+production Telegram 配置已修复但不在文档记录具体值；环境变量更新不会自动改变
+当前已构建 deployment，后续发布仍需 exact-SHA 验证。
 跳过逻辑内联在 `vercel.json` 的 `ignoreCommand`（不要改成依赖 scripts/ 下的
 文件——.vercelignore 目录级排除无法负向穿透，会 ENOENT 把全部部署打成 ERROR）。
 E2E 被更新 push 折叠取消不影响门禁；CI 红则扣留部署并 Telegram 告警。
