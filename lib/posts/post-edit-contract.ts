@@ -34,6 +34,7 @@ export type PostEditRpcAcknowledgement =
       status: 'updated' | 'unchanged'
       actorId: string
       revisionAdvanced: boolean
+      addedMentions: string[]
       post: PostEditPost
     }
 
@@ -154,19 +155,32 @@ export function readPostEditRpcAcknowledgement(value: unknown): PostEditRpcAckno
 
   if (
     (value.status !== 'updated' && value.status !== 'unchanged') ||
-    !hasExactKeys(value, ['status', 'actor_id', 'revision_advanced', 'post']) ||
+    !hasExactKeys(value, ['status', 'actor_id', 'revision_advanced', 'added_mentions', 'post']) ||
     !isUuid(value.actor_id) ||
-    typeof value.revision_advanced !== 'boolean'
+    typeof value.revision_advanced !== 'boolean' ||
+    !isUniqueStringList(value.added_mentions, {
+      maxItems: 50,
+      pattern: /^[A-Za-z0-9_.\u4E00-\u9FAF\u3041-\u309F\u30A0-\u30FF\uAC00-\uD7A3]{1,30}$/u,
+    })
   ) {
     return null
   }
 
   const post = parsePost(value.post)
-  if (!post) return null
+  const finalMentions = new Set(post?.mentions ?? [])
+  if (
+    !post ||
+    (value.status === 'unchanged' && value.revision_advanced) ||
+    value.added_mentions.some((handle) => !finalMentions.has(handle)) ||
+    ((!value.revision_advanced || value.status === 'unchanged') && value.added_mentions.length > 0)
+  ) {
+    return null
+  }
   return {
     status: value.status,
     actorId: value.actor_id,
     revisionAdvanced: value.revision_advanced,
+    addedMentions: value.added_mentions,
     post,
   }
 }

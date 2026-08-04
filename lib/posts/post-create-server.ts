@@ -12,9 +12,9 @@ import { detectPostLanguage } from '@/lib/data/posts'
 import { extractHashtags } from '@/lib/data/hashtags'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { del as cacheDel } from '@/lib/cache'
-import { deliverNotification } from '@/lib/data/notifications'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { extractMentionHandles } from '@/lib/posts/mentions'
+import { schedulePostMentionNotifications } from '@/lib/posts/post-mention-notifications'
 
 const MAX_DERIVED_TERMS = 50
 const AUTHORITY_UNAVAILABLE_CODES = new Set([
@@ -268,37 +268,16 @@ function sendMentionNotificationsAfterCreate(
   supabase: PostCreateRpcClient,
   acknowledgement: AtomicCreatePostAck
 ): void {
-  if (acknowledgement.post.mentions.length === 0) return
-
-  fireAndForget(
-    (async () => {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, handle')
-        .in('handle', acknowledgement.post.mentions)
-      if (error) throw error
-
-      const rows = (data ?? [])
-        .filter((profile) => profile.id !== acknowledgement.actor_id)
-        .map((profile) => ({
-          user_id: profile.id,
-          type: 'mention' as const,
-          title: `${acknowledgement.post.author_handle} mentioned you in a post`,
-          message: (acknowledgement.post.title || acknowledgement.post.content).slice(0, 100),
-          actor_id: acknowledgement.actor_id,
-          link: `/post/${acknowledgement.post.id}`,
-          reference_id: acknowledgement.post.id,
-          read: false,
-        }))
-      await Promise.all(
-        rows.map((notification) =>
-          deliverNotification(supabase, notification, {
-            deduplicate: true,
-            dedupWindowSeconds: 604800,
-          })
-        )
-      )
-    })(),
+  schedulePostMentionNotifications(
+    supabase,
+    {
+      actorId: acknowledgement.actor_id,
+      actorHandle: acknowledgement.post.author_handle,
+      postId: acknowledgement.post.id,
+      title: acknowledgement.post.title,
+      content: acknowledgement.post.content,
+      mentionHandles: acknowledgement.post.mentions,
+    },
     'Resolve and deliver mention notifications after post create'
   )
 }

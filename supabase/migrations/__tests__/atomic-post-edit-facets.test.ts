@@ -123,6 +123,24 @@ describe('atomic post edit facets migration', () => {
     expect(body).not.toContain('SET post_count = hashtag.post_count +')
   })
 
+  it('acknowledges only canonical mentions added by the locked revision', () => {
+    const body = migration.match(
+      /CREATE OR REPLACE FUNCTION public\.edit_post_atomic\([\s\S]*?\n\$function\$;/
+    )?.[0]
+    expect(body).toBeDefined()
+
+    const postLock = body!.indexOf('SELECT target.*\n  INTO v_post')
+    const delta = body!.indexOf('INTO v_added_mentions')
+    const postUpdate = body!.indexOf('UPDATE public.posts AS target')
+    expect(postLock).toBeGreaterThan(0)
+    expect(delta).toBeGreaterThan(postLock)
+    expect(delta).toBeLessThan(postUpdate)
+    expect(body).toContain('COALESCE(v_post.mentions, ARRAY[]::text[])')
+    expect(body).toContain('pg_catalog.lower(normalize(previous.handle, NFC))')
+    expect(body).toContain("'added_mentions', ARRAY[]::text[]")
+    expect(body).toContain("'added_mentions', v_added_mentions")
+  })
+
   it('advances revisions for rendered facets and carries them in exact acknowledgements', () => {
     for (const field of ['language', 'mentions', 'hashtags']) {
       expect(migration).toContain(`NEW.${field} IS DISTINCT FROM OLD.${field}`)
@@ -137,6 +155,7 @@ describe('atomic post edit facets migration', () => {
       'facet authority replay before closure',
       'predeploy legacy editor compatibility',
       'add replace remove facets before count trigger',
+      'transactional newly-added mention acknowledgement',
       'unchanged content repaired count drift before trigger',
       'lost acknowledgement retry',
       'concurrent facet edit compare-and-swap',

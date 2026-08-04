@@ -27,17 +27,31 @@ describe('post edit acknowledgement contract', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: ['Alice_1'],
         post,
       })
-    ).toEqual({ status: 'updated', actorId: ACTOR, revisionAdvanced: true, post })
+    ).toEqual({
+      status: 'updated',
+      actorId: ACTOR,
+      revisionAdvanced: true,
+      addedMentions: ['Alice_1'],
+      post,
+    })
     expect(
       readPostEditRpcAcknowledgement({
         status: 'unchanged',
         actor_id: ACTOR,
         revision_advanced: false,
+        added_mentions: [],
         post,
       })
-    ).toEqual({ status: 'unchanged', actorId: ACTOR, revisionAdvanced: false, post })
+    ).toEqual({
+      status: 'unchanged',
+      actorId: ACTOR,
+      revisionAdvanced: false,
+      addedMentions: [],
+      post,
+    })
   })
 
   it.each(['invalid', 'account_inactive', 'not_found', 'forbidden', 'conflict'])(
@@ -54,6 +68,7 @@ describe('post edit acknowledgement contract', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post,
         extra: true,
       })
@@ -63,6 +78,7 @@ describe('post edit acknowledgement contract', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, content_version: 1.5 },
       })
     ).toBeNull()
@@ -71,6 +87,7 @@ describe('post edit acknowledgement contract', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, images: ['javascript:alert(1)'] },
       })
     ).toBeNull()
@@ -79,6 +96,7 @@ describe('post edit acknowledgement contract', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, unexpected: true },
       })
     ).toBeNull()
@@ -87,6 +105,7 @@ describe('post edit acknowledgement contract', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, mentions: ['Alice_1', 'alice_1'] },
       })
     ).toBeNull()
@@ -95,9 +114,28 @@ describe('post edit acknowledgement contract', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, hashtags: ['Not-Lower'] },
       })
     ).toBeNull()
+  })
+
+  it.each([
+    ['missing delta', undefined, true, 'updated'],
+    ['duplicate delta', ['Alice_1', 'alice_1'], true, 'updated'],
+    ['delta outside final mentions', ['Mallory'], true, 'updated'],
+    ['delta without a revision advance', ['Alice_1'], false, 'updated'],
+    ['delta on an unchanged retry', ['Alice_1'], false, 'unchanged'],
+    ['revision advance on an unchanged retry', [], true, 'unchanged'],
+  ] as const)('rejects %s', (_label, addedMentions, revisionAdvanced, status) => {
+    const acknowledgement: Record<string, unknown> = {
+      status,
+      actor_id: ACTOR,
+      revision_advanced: revisionAdvanced,
+      post,
+    }
+    if (addedMentions !== undefined) acknowledgement.added_mentions = addedMentions
+    expect(readPostEditRpcAcknowledgement(acknowledgement)).toBeNull()
   })
 
   it('accepts only the exact public envelope for the expected post', () => {

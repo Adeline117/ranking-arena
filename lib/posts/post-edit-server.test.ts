@@ -23,8 +23,19 @@ jest.mock('next/server', () => {
   return { NextResponse: MockNextResponse }
 })
 
+const mockDeliverNotification = jest.fn().mockResolvedValue({ outcome: 'CREATED' })
+jest.mock('@/lib/data/notifications', () => ({
+  deliverNotification: (...args: unknown[]) => mockDeliverNotification(...args),
+}))
+const mockFireAndForget = jest.fn()
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: jest.fn(() => ({ error: jest.fn(), warn: jest.fn(), info: jest.fn() })),
+  fireAndForget: (...args: unknown[]) => mockFireAndForget(...args),
+}))
+
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
+import type { Database } from '@/lib/supabase/database.types'
 import {
   executeAtomicPostEdit,
   handleAtomicPostEditHttp,
@@ -49,10 +60,16 @@ const post = {
   updated_at: '2026-07-30T01:35:00.123456+00:00',
 }
 
-function clientWith(result: unknown): SupabaseClient {
+function clientWith(
+  result: unknown,
+  from: jest.Mock = jest.fn(() => {
+    throw new Error('unexpected profile query')
+  })
+): SupabaseClient<Database> {
   return {
     rpc: jest.fn().mockResolvedValue(result),
-  } as unknown as SupabaseClient
+    from,
+  } as unknown as SupabaseClient<Database>
 }
 
 function request(body: unknown): NextRequest {
@@ -60,6 +77,11 @@ function request(body: unknown): NextRequest {
 }
 
 describe('post edit server authority', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockDeliverNotification.mockResolvedValue({ outcome: 'CREATED' })
+  })
+
   it('strictly prepares sanitized multiline content and canonical images', () => {
     expect(
       preparePostEdit({
@@ -119,7 +141,13 @@ describe('post edit server authority', () => {
 
   it('sends one exact CAS intent and accepts authoritative evidence', async () => {
     const client = clientWith({
-      data: { status: 'updated', actor_id: ACTOR, revision_advanced: true, post },
+      data: {
+        status: 'updated',
+        actor_id: ACTOR,
+        revision_advanced: true,
+        added_mentions: ['Alice_1'],
+        post,
+      },
       error: null,
     })
     await expect(
@@ -132,7 +160,12 @@ describe('post edit server authority', () => {
         mentionHandles: ['Alice_1'],
         hashtagTags: ['markets'],
       })
-    ).resolves.toEqual({ status: 'updated', post })
+    ).resolves.toEqual({
+      status: 'updated',
+      post,
+      revisionAdvanced: true,
+      addedMentions: ['Alice_1'],
+    })
     expect(client.rpc).toHaveBeenCalledWith('edit_post_atomic', {
       p_actor_id: ACTOR,
       p_post_id: POST,
@@ -148,13 +181,23 @@ describe('post edit server authority', () => {
   })
 
   it.each([
-    ['changed actor', { status: 'updated', actor_id: OTHER, revision_advanced: true, post }],
+    [
+      'changed actor',
+      {
+        status: 'updated',
+        actor_id: OTHER,
+        revision_advanced: true,
+        added_mentions: [],
+        post,
+      },
+    ],
     [
       'changed author',
       {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, author_id: OTHER },
       },
     ],
@@ -164,6 +207,7 @@ describe('post edit server authority', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, content_version: 9 },
       },
     ],
@@ -173,6 +217,7 @@ describe('post edit server authority', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, content: 'Other' },
       },
     ],
@@ -182,6 +227,7 @@ describe('post edit server authority', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, language: 'zh' },
       },
     ],
@@ -191,6 +237,7 @@ describe('post edit server authority', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, mentions: ['Mallory'] },
       },
     ],
@@ -200,6 +247,7 @@ describe('post edit server authority', () => {
         status: 'updated',
         actor_id: ACTOR,
         revision_advanced: true,
+        added_mentions: [],
         post: { ...post, hashtags: ['other'] },
       },
     ],
@@ -225,6 +273,7 @@ describe('post edit server authority', () => {
             status: 'updated',
             actor_id: ACTOR,
             revision_advanced: false,
+            added_mentions: [],
             post: repairedPost,
           },
           error: null,
@@ -240,7 +289,12 @@ describe('post edit server authority', () => {
           hashtagTags: ['markets'],
         }
       )
-    ).resolves.toEqual({ status: 'updated', post: repairedPost })
+    ).resolves.toEqual({
+      status: 'updated',
+      post: repairedPost,
+      revisionAdvanced: false,
+      addedMentions: [],
+    })
   })
 
   it('accepts an exact lost-ack retry at the authority-owned newer revision', async () => {
@@ -251,6 +305,7 @@ describe('post edit server authority', () => {
             status: 'unchanged',
             actor_id: ACTOR,
             revision_advanced: false,
+            added_mentions: [],
             post,
           },
           error: null,
@@ -266,7 +321,12 @@ describe('post edit server authority', () => {
           hashtagTags: ['markets'],
         }
       )
-    ).resolves.toEqual({ status: 'unchanged', post })
+    ).resolves.toEqual({
+      status: 'unchanged',
+      post,
+      revisionAdvanced: false,
+      addedMentions: [],
+    })
   })
 
   it('maps stale edits to 409 without claiming success', async () => {
@@ -313,6 +373,7 @@ describe('post edit server authority', () => {
           status: 'updated',
           actor_id: ACTOR,
           revision_advanced: true,
+          added_mentions: [],
           post: postWithoutFacets,
         },
         error: null,
@@ -323,5 +384,118 @@ describe('post edit server authority', () => {
     })
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ success: true, post: postWithoutFacets })
+  })
+
+  it('schedules acknowledged mention delivery only after an actual revision advance', async () => {
+    const mentionedContent = 'First line\nSecond line @Bob @Alice'
+    const mentionedPost = {
+      ...post,
+      content: mentionedContent,
+      mentions: ['Alice', 'Bob'],
+      hashtags: [],
+    }
+    const recipientIn = jest.fn().mockResolvedValue({
+      data: [
+        { id: ACTOR, handle: 'Alice' },
+        { id: OTHER, handle: 'Bob' },
+      ],
+      error: null,
+    })
+    const actorMaybeSingle = jest.fn().mockResolvedValue({
+      data: { handle: 'Alice' },
+      error: null,
+    })
+    const from = jest
+      .fn()
+      .mockReturnValueOnce({ select: jest.fn().mockReturnValue({ in: recipientIn }) })
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({ maybeSingle: actorMaybeSingle }),
+        }),
+      })
+    const response = await handleAtomicPostEditHttp({
+      request: request({
+        title: post.title,
+        content: mentionedContent,
+        expected_version: 7,
+      }),
+      supabase: clientWith(
+        {
+          data: {
+            status: 'updated',
+            actor_id: ACTOR,
+            revision_advanced: true,
+            added_mentions: ['Bob'],
+            post: mentionedPost,
+          },
+          error: null,
+        },
+        from
+      ),
+      actorId: ACTOR,
+      postId: POST,
+      envelope: 'direct',
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockFireAndForget).toHaveBeenCalledTimes(1)
+    expect(mockFireAndForget.mock.calls[0][1]).toBe(
+      'Resolve and deliver mention notifications after post edit'
+    )
+    await mockFireAndForget.mock.calls[0][0]
+    expect(recipientIn).toHaveBeenCalledWith('handle', ['Bob'])
+    expect(mockDeliverNotification).toHaveBeenCalledTimes(1)
+    expect(mockDeliverNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        user_id: OTHER,
+        type: 'mention',
+        title: 'Alice mentioned you in a post',
+        message: post.title,
+        actor_id: ACTOR,
+        link: `/post/${POST}`,
+        reference_id: POST,
+        read: false,
+      },
+      { deduplicate: true, dedupWindowSeconds: 604800 }
+    )
+  })
+
+  it.each([
+    ['join-only repair', 'updated', false, 7],
+    ['unchanged retry', 'unchanged', false, 8],
+    ['retained mention on a real edit', 'updated', true, 8],
+  ] as const)('does not notify mentions after a %s', async (_label, status, advanced, version) => {
+    const mentionedContent = 'First line\nSecond line @Bob'
+    const response = await handleAtomicPostEditHttp({
+      request: request({
+        title: post.title,
+        content: mentionedContent,
+        expected_version: 7,
+      }),
+      supabase: clientWith({
+        data: {
+          status,
+          actor_id: ACTOR,
+          revision_advanced: advanced,
+          added_mentions: [],
+          post: {
+            ...post,
+            content: mentionedContent,
+            mentions: ['Bob'],
+            hashtags: [],
+            content_version: version,
+          },
+        },
+        error: null,
+      }),
+      actorId: ACTOR,
+      postId: POST,
+      envelope: 'direct',
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockFireAndForget).not.toHaveBeenCalled()
+    expect(mockDeliverNotification).not.toHaveBeenCalled()
   })
 })

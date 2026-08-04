@@ -10,6 +10,7 @@ import { readPostEditRpcAcknowledgement, type PostEditPost } from '@/lib/posts/p
 import { detectPostLanguage } from '@/lib/data/posts'
 import { extractHashtags } from '@/lib/data/hashtags'
 import { extractMentionHandles } from '@/lib/posts/mentions'
+import { schedulePostMentionNotifications } from '@/lib/posts/post-mention-notifications'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const TITLE_CONTROL_PATTERN = /[\u0000-\u001f\u007f]/
@@ -68,9 +69,15 @@ export type PreparedPostEdit = {
 }
 
 type PostEditRpcClient = Pick<SupabaseClient<Database>, 'rpc'>
+type PostEditHttpClient = SupabaseClient<Database>
 
 export type PostEditExecutionResult =
-  | { status: 'updated' | 'unchanged'; post: PostEditPost }
+  | {
+      status: 'updated' | 'unchanged'
+      post: PostEditPost
+      revisionAdvanced: boolean
+      addedMentions: string[]
+    }
   | { status: 'invalid' | 'account_inactive' | 'not_found' | 'forbidden' | 'conflict' }
   | { status: 'authority_unavailable' | 'failed' | 'invalid_ack'; error?: unknown }
 
@@ -209,7 +216,12 @@ export async function executeAtomicPostEdit(
     return { status: 'invalid_ack' }
   }
 
-  return { status: acknowledgement.status, post: acknowledgement.post }
+  return {
+    status: acknowledgement.status,
+    post: acknowledgement.post,
+    revisionAdvanced: acknowledgement.revisionAdvanced,
+    addedMentions: acknowledgement.addedMentions,
+  }
 }
 
 function errorResponse(message: string, status: number): NextResponse {
@@ -221,7 +233,7 @@ function errorResponse(message: string, status: number): NextResponse {
 
 export async function handleAtomicPostEditHttp(options: {
   request: NextRequest
-  supabase: PostEditRpcClient
+  supabase: PostEditHttpClient
   actorId: string
   postId: string
   envelope: 'direct' | 'standard'
@@ -277,7 +289,22 @@ export async function handleAtomicPostEditHttp(options: {
     return errorResponse('Post update failed', 500)
   }
 
-  if (result.status === 'updated') deleteServerCacheByPrefix('posts:')
+  if (result.status === 'updated') {
+    deleteServerCacheByPrefix('posts:')
+    if (result.revisionAdvanced && result.addedMentions.length > 0) {
+      schedulePostMentionNotifications(
+        options.supabase,
+        {
+          actorId: options.actorId,
+          postId: result.post.id,
+          title: result.post.title,
+          content: result.post.content,
+          mentionHandles: result.addedMentions,
+        },
+        'Resolve and deliver mention notifications after post edit'
+      )
+    }
+  }
   if (options.envelope === 'standard') {
     const response = success({ post: result.post })
     response.headers.set('Cache-Control', 'private, no-store')

@@ -450,6 +450,7 @@ DECLARE
   v_content text := normalize(COALESCE(p_content, ''), NFC);
   v_requested_mentions text[];
   v_mentions text[] := ARRAY[]::text[];
+  v_added_mentions text[] := ARRAY[]::text[];
   v_hashtags text[];
   v_sorted_hashtags text[];
   v_join_hashtags text[] := ARRAY[]::text[];
@@ -661,6 +662,28 @@ BEGIN
     ORDER BY profile.id, profile.handle
   ) AS resolved;
 
+  -- Derive the notification delta while the canonical post row remains locked.
+  -- Values come from the resolved profile handles in v_mentions; comparison is
+  -- case-insensitive so a request spelling or canonical-handle case change does
+  -- not turn a retained mention into a new mention.
+  SELECT COALESCE(
+    pg_catalog.array_agg(
+      candidate.handle ORDER BY candidate.ordinality
+    ),
+    ARRAY[]::text[]
+  )
+  INTO v_added_mentions
+  FROM pg_catalog.unnest(v_mentions) WITH ORDINALITY
+    AS candidate(handle, ordinality)
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.unnest(
+      COALESCE(v_post.mentions, ARRAY[]::text[])
+    ) AS previous(handle)
+    WHERE pg_catalog.lower(normalize(previous.handle, NFC)) =
+          pg_catalog.lower(normalize(candidate.handle, NFC))
+  );
+
   SELECT COALESCE(
     pg_catalog.array_agg(
       hashtag.tag ORDER BY hashtag.tag COLLATE "C"
@@ -701,6 +724,7 @@ BEGIN
       'status', 'unchanged',
       'actor_id', p_actor_id,
       'revision_advanced', false,
+      'added_mentions', ARRAY[]::text[],
       'post', pg_catalog.jsonb_build_object(
         'id', v_post.id,
         'author_id', v_post.author_id,
@@ -926,6 +950,7 @@ BEGIN
     'status', 'updated',
     'actor_id', p_actor_id,
     'revision_advanced', v_revision_advanced,
+    'added_mentions', v_added_mentions,
     'post', pg_catalog.jsonb_build_object(
       'id', v_updated_post.id,
       'author_id', v_updated_post.author_id,

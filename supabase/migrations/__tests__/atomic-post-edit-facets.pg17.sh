@@ -233,17 +233,20 @@ grep -q '"status": "unchanged"' <<<"$legacy_compatible"
 [[ "$(psql_cmd -At -c "SELECT count(*) FROM pg_catalog.pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'edit_post_atomic'")" == '2' ]]
 echo 'predeploy legacy editor compatibility'
 
-added="$(call_edit "$ACTOR" "$POST" 0 'First facets' 'Hello @Bob @Missing #alpha #oldtag' en "ARRAY['Bob','Missing']::text[]" "ARRAY['alpha','oldtag']::text[]")"
+added="$(call_edit "$ACTOR" "$POST" 0 'First facets' 'Hello @Bob @Missing #alpha #oldtag' en "ARRAY['bob','Missing']::text[]" "ARRAY['alpha','oldtag']::text[]")"
 grep -q '"status": "updated"' <<<"$added"
 grep -q '"language": "en"' <<<"$added"
 grep -q '"mentions": \["Bob"\]' <<<"$added"
+grep -q '"added_mentions": \["Bob"\]' <<<"$added"
 grep -q '"hashtags": \["alpha", "oldtag"\]' <<<"$added"
 [[ "$(psql_cmd -At -F ':' -c "SELECT tag, post_count FROM public.hashtags WHERE tag IN ('alpha','oldtag') ORDER BY tag")" == $'alpha:1\noldtag:1' ]]
+echo 'transactional newly-added mention acknowledgement'
 
 psql_cmd -c "UPDATE public.hashtags SET post_count = 99 WHERE tag = 'alpha'"
 count_repaired="$(call_edit "$ACTOR" "$POST" 1 'First facets' 'Hello @Bob @Missing #alpha #oldtag' en "ARRAY['Bob','Missing']::text[]" "ARRAY['alpha','oldtag']::text[]")"
 grep -q '"status": "updated"' <<<"$count_repaired"
 grep -q '"revision_advanced": false' <<<"$count_repaired"
+grep -q '"added_mentions": \[\]' <<<"$count_repaired"
 grep -q '"content_version": 1' <<<"$count_repaired"
 [[ "$(psql_cmd -At -c "SELECT post_count FROM public.hashtags WHERE tag = 'alpha'")" == '1' ]]
 echo 'unchanged content repaired count drift before trigger'
@@ -251,17 +254,20 @@ echo 'unchanged content repaired count drift before trigger'
 replaced="$(call_edit "$ACTOR" "$POST" 1 '교체' '@bob #beta' ko "ARRAY['bob']::text[]" "ARRAY['beta']::text[]")"
 grep -q '"status": "updated"' <<<"$replaced"
 grep -q '"language": "ko"' <<<"$replaced"
+grep -q '"added_mentions": \[\]' <<<"$replaced"
 [[ "$(psql_cmd -At -F ':' -c "SELECT tag, post_count FROM public.hashtags WHERE tag IN ('alpha','beta','oldtag') ORDER BY tag")" == $'alpha:0\nbeta:1\noldtag:0' ]]
 
 removed="$(call_edit "$ACTOR" "$POST" 2 'No facets' 'Plain body' en "ARRAY[]::text[]" "ARRAY[]::text[]")"
 grep -q '"status": "updated"' <<<"$removed"
 grep -q '"hashtags": \[\]' <<<"$removed"
+grep -q '"added_mentions": \[\]' <<<"$removed"
 [[ "$(psql_cmd -At -c "SELECT count(*) FROM public.post_hashtags WHERE post_id = '$POST'::uuid")" == '0' ]]
 [[ "$(psql_cmd -At -c "SELECT post_count FROM public.hashtags WHERE tag = 'beta'")" == '0' ]]
 echo 'add replace remove facets before count trigger'
 
 unchanged="$(call_edit "$ACTOR" "$POST" 2 'No facets' 'Plain body' en "ARRAY[]::text[]" "ARRAY[]::text[]")"
 grep -q '"status": "unchanged"' <<<"$unchanged"
+grep -q '"added_mentions": \[\]' <<<"$unchanged"
 grep -q '"content_version": 3' <<<"$unchanged"
 echo 'lost acknowledgement retry'
 
