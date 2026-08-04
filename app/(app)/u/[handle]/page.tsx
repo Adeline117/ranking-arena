@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import UserProfileClient from './UserProfileClient'
 import { logger } from '@/lib/logger'
+import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
 import { BASE_URL } from '@/lib/constants/urls'
 // M1 unified profile: claimed/bound traders render the SAME rich serving client
 // as /trader/[handle] (was a legacy-only TraderProfileView — "claim 后页面变穷").
@@ -325,9 +326,9 @@ async function fetchTraderData(traderHandle: string) {
     const json = await res.json()
     // Unwrap API envelope { success, data } to get the raw trader data
     if (json && typeof json === 'object' && 'data' in json && 'success' in json) {
-      return json.data
+      return quarantineLegacyPositionHistory(json.data)
     }
-    return json
+    return quarantineLegacyPositionHistory(json)
   } catch {
     return null
   }

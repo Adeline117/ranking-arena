@@ -5,6 +5,7 @@ import type {
   PortfolioItem,
   TraderFeedItem,
 } from '@/lib/data/trader'
+import type { HistoryCompleteness } from '@/lib/data/serving/types'
 
 export interface ServerProfile {
   id: string
@@ -61,6 +62,7 @@ export type TraderPageData = {
   stats?: TraderStats | null
   portfolio?: PortfolioItem[]
   positionHistory?: PositionHistoryEntry[]
+  historyCompleteness?: HistoryCompleteness
   feed?: TraderFeedItem[]
   similarTraders?: (TraderProfile & { roi_90d?: number; arena_score?: number })[]
   equityCurve?: EquityCurveData
