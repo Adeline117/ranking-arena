@@ -6248,7 +6248,7 @@ const en = {
   colUnrealizedPnl: 'Unrealized PnL',
   colRealizedPnl: 'Realized PnL',
   recentActivityTitle: 'Recent Trades',
-  recentActivityViewAll: 'Full history in Stats → Records',
+  recentActivityViewAll: 'More records in Stats → Records',
   colNotional: 'Notional',
   colMargin: 'Margin',
   colMarginMode: 'Mode',

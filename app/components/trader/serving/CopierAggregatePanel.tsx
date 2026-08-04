@@ -13,7 +13,13 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatMoney } from '@/lib/utils/money'
 import RecordProvenanceFooter from '@/app/components/common/RecordProvenanceFooter'
 import ModuleDegraded from './ModuleDegraded'
+import HistoryCompletenessNotice from './HistoryCompletenessNotice'
 import type { CopierAggregate } from '@/lib/data/serving/types'
+
+const UNBOUND_HISTORY = {
+  state: 'unknown' as const,
+  reason: 'history_evidence_not_bound' as const,
+}
 
 export interface CopierAggregatePanelProps {
   aggregate: CopierAggregate | null
@@ -39,6 +45,7 @@ export default function CopierAggregatePanel({
 
   return (
     <Box>
+      <HistoryCompletenessNotice completeness={aggregate.completeness ?? UNBOUND_HISTORY} />
       <Box
         style={{
           display: 'grid',
@@ -125,7 +132,7 @@ export default function CopierAggregatePanel({
                 style={{
                   height: 10,
                   width: `${Math.max(2, (bucket.count / maxBucket) * 100)}%`,
-                  background: 'var(--color-accent-primary, #6366f1)',
+                  background: tokens.colors.accent.primary,
                   borderRadius: tokens.radius.sm,
                   opacity: 0.8,
                 }}

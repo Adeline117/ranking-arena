@@ -167,6 +167,37 @@ describe('ServingRecordsSection selection scope', () => {
     expect(screen.getByText(completeness.description)).toBeInTheDocument()
   })
 
+  it.each(['orders', 'transfers'] as const)(
+    'fails closed with an unknown-history notice on the %s tab',
+    (kind) => {
+      ;(useTraderRecords as jest.Mock).mockReturnValue({
+        rows: [{ id: `${kind}-1` }],
+        provenance: null,
+        completeness: null,
+        isPendingUpstream: false,
+        isLoading: false,
+        isFetchingNextPage: false,
+        hasNextPage: false,
+        fetchNextPage: jest.fn(),
+        error: null,
+        refetch: jest.fn(),
+      })
+
+      render(
+        <ServingRecordsSection
+          source="gmx"
+          exchangeTraderId="trader-a"
+          capability={capability([kind])}
+          tf={90}
+        />
+      )
+
+      expect(
+        screen.getByRole('status', { name: 'historyCompletenessUnknownTitle' })
+      ).toHaveAttribute('data-history-completeness', 'unknown')
+    }
+  )
+
   it('suppresses the limitation notice for complete history and non-history tabs', () => {
     ;(useTraderRecords as jest.Mock).mockReturnValue({
       rows: [],
