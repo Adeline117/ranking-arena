@@ -1,5 +1,6 @@
 import {
   readGroupCommentDeleteAcknowledgement,
+  readGroupDissolveAcknowledgement,
   readGroupMemberKickAcknowledgement,
   readGroupMemberRoleAcknowledgement,
 } from './group-manage-mutation-contract'
@@ -46,5 +47,32 @@ describe('group manage mutation contract', () => {
       false
     )
     expect(readGroupMemberKickAcknowledgement({ success: 'true' })).toBe(false)
+  })
+
+  it.each(['dissolved', 'already_dissolved'] as const)(
+    'accepts the exact %s group dissolution acknowledgement',
+    (action) => {
+      expect(
+        readGroupDissolveAcknowledgement({
+          success: true,
+          action,
+          dissolved_at: '2026-07-16T12:00:00.000Z',
+        })
+      ).toEqual({ action, dissolvedAt: '2026-07-16T12:00:00.000Z' })
+    }
+  )
+
+  it.each([
+    { success: true, action: 'dissolved' },
+    { success: true, action: 'deleted', dissolved_at: '2026-07-16T12:00:00.000Z' },
+    { success: true, action: 'dissolved', dissolved_at: 'not-a-date' },
+    {
+      success: true,
+      action: 'dissolved',
+      dissolved_at: '2026-07-16T12:00:00.000Z',
+      extra: true,
+    },
+  ])('rejects a malformed dissolution acknowledgement: %p', (value) => {
+    expect(readGroupDissolveAcknowledgement(value)).toBeNull()
   })
 })

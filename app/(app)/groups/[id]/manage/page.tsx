@@ -34,6 +34,7 @@ import {
 import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
 import {
   readGroupCommentDeleteAcknowledgement,
+  readGroupDissolveAcknowledgement,
   readGroupMemberKickAcknowledgement,
   readGroupMemberRoleAcknowledgement,
 } from '@/lib/groups/group-manage-mutation-contract'
@@ -1363,26 +1364,29 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     const requestGroupId = requestScope.groupId
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
     if (!requestToken || !requestGroupId || !isOwner || dissolving || !requestIsCurrent()) return
-    const confirmed = await showDangerConfirm(t('dissolveGroup'), t('dissolveGroupConfirm'))
-    if (!confirmed || !requestIsCurrent()) return
+    const requestLockKey = `${manageStateOwnerKey}\u0000dissolve-group`
+    if (destructiveRequestLockRef.current.has(requestLockKey)) return
+    destructiveRequestLockRef.current.add(requestLockKey)
     setDissolving(true)
     try {
+      const confirmed = await showDangerConfirm(t('dissolveGroup'), t('dissolveGroupConfirm'))
+      if (!confirmed || !requestIsCurrent()) return
       const res = await fetch(`/api/groups/${requestGroupId}/dissolve`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      const data: unknown = await res.json().catch(() => null)
       if (!requestIsCurrent()) return
-      if (res.ok) {
+      if (res.ok && readGroupDissolveAcknowledgement(data)) {
         showToast(t('groupDissolved'), 'success')
         router.push('/groups')
       } else {
-        const data = await res.json().catch(() => ({}))
-        if (!requestIsCurrent()) return
-        showToast(data.error || t('operationFailed'), 'error')
+        showToast(readPostDeleteError(data) || t('operationFailed'), 'error')
       }
     } catch {
       if (requestIsCurrent()) showToast(t('networkError'), 'error')
     } finally {
+      destructiveRequestLockRef.current.delete(requestLockKey)
       if (requestIsCurrent()) setDissolving(false)
     }
   }, [
@@ -1390,6 +1394,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     dissolving,
     isManageScopeCurrent,
     isOwner,
+    manageStateOwnerKey,
     manageOwnerScope,
     router,
     setDissolving,
@@ -1702,16 +1707,19 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
               {t('dissolveGroupDesc')}
             </Text>
             <button
+              type="button"
               onClick={handleDissolve}
               disabled={dissolving}
+              aria-busy={dissolving}
               style={{
-                padding: '8px 20px',
+                minHeight: tokens.touchTarget.min,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.md,
                 border: '1px solid var(--color-accent-error)',
                 background: dissolving ? 'var(--color-accent-error-10)' : 'transparent',
                 color: 'var(--color-accent-error)',
-                fontSize: 13,
-                fontWeight: 600,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: dissolving ? 'not-allowed' : 'pointer',
                 transition: 'background 0.15s',
               }}
@@ -1724,7 +1732,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                 e.currentTarget.style.color = 'var(--color-accent-error)'
               }}
             >
-              {dissolving ? '...' : t('dissolveGroupBtn')}
+              {dissolving ? t('loading') : t('dissolveGroupBtn')}
             </button>
           </Box>
         )}

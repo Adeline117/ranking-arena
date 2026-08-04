@@ -16,13 +16,14 @@ const mockFetch = jest.fn()
 const mockShowDangerConfirm = jest.fn()
 const mockUseAuthSession = jest.fn()
 const mockSupabaseFrom = jest.fn()
+const mockRouterPush = jest.fn()
 const showToast = jest.fn()
 let mockIsPro = true
 let mockGroupPremium = false
 
 jest.mock('next/navigation', () => ({
   redirect: jest.fn(),
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
 }))
 jest.mock('next/link', () => ({
   __esModule: true,
@@ -592,6 +593,45 @@ describe('group profile edit submit operation', () => {
     expect(showToast).toHaveBeenCalledWith('kicked', 'success')
   })
 
+  it('locks irreversible dissolution before confirmation and requires an exact ACK', async () => {
+    const confirmation = deferred<boolean>()
+    const response = deferred<{
+      ok: boolean
+      json(): Promise<{
+        success: true
+        action: 'dissolved'
+        dissolved_at: string
+      }>
+    }>()
+    mockShowDangerConfirm.mockReturnValue(confirmation.promise)
+    mockFetch.mockReturnValue(response.promise)
+    render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
+
+    const dissolveButton = screen.getByRole('button', { name: 'dissolveGroupBtn' })
+    fireEvent.click(dissolveButton)
+    fireEvent.click(dissolveButton)
+    expect(mockShowDangerConfirm).toHaveBeenCalledTimes(1)
+    expect(dissolveButton).toBeDisabled()
+
+    await act(async () => confirmation.resolve(true))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    await act(async () =>
+      response.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          action: 'dissolved',
+          dissolved_at: '2026-07-16T12:00:00.000Z',
+        }),
+      })
+    )
+
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalledWith('/groups'))
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('groupDissolved', 'success')
+  })
+
   it('cannot let a G1 mutation response toast or clear G2 mutation ownership', async () => {
     const responseA = deferred<{
       ok: boolean
@@ -735,7 +775,7 @@ describe('group profile edit submit operation', () => {
     )
     const suffix = source.slice(source.indexOf('  const inputStyle:'))
     expect(createHash('sha256').update(suffix).digest('hex')).toBe(
-      'b8d3f7b5b6c9db6b5c615ddac884e27830e5e912f8292e7dfa2618fca50a5a00'
+      'feb56d6b5565a82c1819367a3803a47e80d3a7df8bb0a4dfd569d73d2c5b1c4d'
     )
 
     const activityRenderStart = source.indexOf('  if (loading)\n')
