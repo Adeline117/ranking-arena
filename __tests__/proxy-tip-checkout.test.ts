@@ -1,3 +1,4 @@
+// Kept beside the root runtime boundary because this test imports proxy.ts itself.
 jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown

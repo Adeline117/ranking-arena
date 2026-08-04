@@ -42,18 +42,21 @@ Rules:
 2. `lib/` does not import from `app/` or `worker/`; dependencies point toward
    domain and platform primitives, never toward deployable entry points.
 3. `worker/` may import `lib/`, but must not import `app/`.
-4. Product/runtime modules do not import operator scripts.
-5. The legacy `connectors/` and `workers/` roots are migration debt. No new
+4. Framework root entry points (`proxy.ts`, `instrumentation.ts`, and Sentry
+   configs) may import lower-level modules; product modules do not import those
+   entry points.
+5. Product/runtime modules do not import operator scripts.
+6. The legacy `connectors/` and `workers/` roots are migration debt. No new
    imports may be added; their remaining consumers must move to `lib/ingest/`
    and `worker/` before those roots are removed.
-6. Applied files under `supabase/migrations/` are immutable. Bootstrap
+7. Applied files under `supabase/migrations/` are immutable. Bootstrap
    consolidation is a separate baseline artifact, not a rewrite of production
    history.
 
 Run `npm run qa:architecture` to enforce these rules. Existing inversions are
 recorded in `scripts/qa/architecture-boundary-baseline.json`; the gate fails on
-both new violations and stale entries, so the baseline can only change through an
-explicit reviewed diff.
+both new violations and stale entries. CI compares the target branch and rejects
+new baseline waivers, so the debt ledger may only shrink.
 
 ## Canonical top-level layout
 
@@ -68,13 +71,15 @@ ios/ android/ appstore/ Native application shells
 infra/                  Declarative host/process infrastructure
 scripts/                CI, diagnostics, maintenance, and operator commands
 e2e/ k6/                End-to-end and load tests
+__tests__/              Framework root-entrypoint contract tests
 docs/                   Current guidance, operational knowledge, and history
 .github/                Ownership, review policy, and CI/CD workflows
 ```
 
 Framework-required root configuration remains at the repository root. Generated
-outputs, screenshots, logs, browser profiles, environment files, and local state
-must stay untracked.
+outputs, screenshots, logs, browser profiles, environment files containing local
+or real values, and local state must stay untracked. Sanitized templates such as
+`.env.example` and `.env.template` remain tracked and must contain no credentials.
 
 ## Internal conventions
 
@@ -83,8 +88,9 @@ must stay untracked.
 - Put validation schemas beside the boundary they protect.
 - Keep API route files thin: authenticate, validate, call a domain module, and
   serialize the response.
-- Keep tests colocated with their owning module. Cross-deployable contract tests
-  live at the lower shared boundary rather than importing an entry point.
+- Keep tests colocated with their owning module. Root-entrypoint contract tests
+  live in `__tests__/`; other cross-deployable contracts live at the lower shared
+  boundary rather than importing an entry point.
 - Stable operator commands are exposed through `package.json`; one-off probes use
   an ignored scratch directory.
 

@@ -236,6 +236,8 @@ jobs:
     needs: pre-checks
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -284,6 +286,8 @@ jobs:
       # checked-in baseline is an explicit, reviewable debt ledger and may only
       # shrink as legacy imports are extracted.
       - name: Architecture boundary ratchet
+        env:
+          ARCHITECTURE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: npm run qa:architecture
 
       # Supabase 类型旁路棘轮：`as SupabaseClient`(裸)/`as any`-on-.from/.rpc 剥掉
