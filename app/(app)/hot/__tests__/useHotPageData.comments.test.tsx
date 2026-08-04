@@ -256,6 +256,19 @@ describe('useHotPageData comment mutation reconciliation', () => {
   })
 
   it('rejects a late A translation after B opens the same post', async () => {
+    const tokenFor = (subject: string) =>
+      `header.${Buffer.from(JSON.stringify({ sub: subject })).toString('base64url')}.signature`
+    const tokenA = tokenFor('user-1')
+    const tokenB = tokenFor('user-b')
+    mockUseAuthSession.mockReturnValue({
+      accessToken: tokenA,
+      authChecked: true,
+      isLoggedIn: true,
+      email: 'user@example.com',
+      userId: 'user-1',
+      viewerKey: 'user:user-1',
+      sessionGeneration: 1,
+    })
     const translations = new Map<string, ReturnType<typeof deferred<unknown>>>()
     mockFetch.mockImplementation((url: string, options?: RequestInit) => {
       if (url === '/api/translate' && options?.method === 'POST') {
@@ -274,11 +287,12 @@ describe('useHotPageData comment mutation reconciliation', () => {
     const { result, rerender } = renderHook(() => useHotPageData())
 
     act(() => result.current.handleOpenPost(translatedPost))
-    await waitFor(() => expect(translations.has('Bearer token-1')).toBe(true))
+    await waitFor(() => expect(translations.has(`Bearer ${tokenA}`)).toBe(true))
 
     mockUseAuthSession.mockReturnValue({
-      accessToken: 'token-b',
+      accessToken: tokenB,
       authChecked: true,
+      isLoggedIn: true,
       email: 'b@example.com',
       userId: 'user-b',
       viewerKey: 'user:user-b',
@@ -288,10 +302,10 @@ describe('useHotPageData comment mutation reconciliation', () => {
     expect(result.current.translatedContent).toBeNull()
 
     act(() => result.current.handleOpenPost(translatedPost))
-    await waitFor(() => expect(translations.has('Bearer token-b')).toBe(true))
+    await waitFor(() => expect(translations.has(`Bearer ${tokenB}`)).toBe(true))
 
     await act(async () => {
-      translations.get('Bearer token-1')?.resolve({
+      translations.get(`Bearer ${tokenA}`)?.resolve({
         ok: true,
         status: 200,
         json: () =>
@@ -310,7 +324,7 @@ describe('useHotPageData comment mutation reconciliation', () => {
     expect(result.current.translatedContent).toBeNull()
 
     await act(async () => {
-      translations.get('Bearer token-b')?.resolve({
+      translations.get(`Bearer ${tokenB}`)?.resolve({
         ok: true,
         status: 200,
         json: () =>

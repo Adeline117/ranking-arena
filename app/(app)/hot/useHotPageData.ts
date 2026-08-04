@@ -24,6 +24,7 @@ import {
   type PostReactionAcknowledgement,
 } from '@/lib/posts/post-reaction-client-contract'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { jwtSubject } from '@/lib/auth/token-subject'
 import { localizedLabel } from '@/lib/utils/format'
 import { normalizePostTitle } from '@/lib/utils/post-display'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -80,22 +81,31 @@ type HotListTranslationDescriptor = {
   laneKey: string
 }
 
+const MAX_HOT_TRANSLATION_BATCH_SIZE = 20
+
 function translationLaneKey(...parts: string[]): string {
   return JSON.stringify(parts)
 }
 
-function needsHotTranslation(
-  sourceIsChinese: boolean,
-  targetLang: TranslationTargetLanguage
-): boolean {
-  switch (targetLang) {
-    case 'en':
-      return sourceIsChinese
-    case 'zh':
-      return !sourceIsChinese
-    default:
-      return true
-  }
+function detectedHotSourceLanguage(text: string): TranslationTargetLanguage | null {
+  if (!text.trim()) return null
+  const hasJapaneseKana = /[\u3040-\u30ff\u31f0-\u31ff]/.test(text)
+  const hasKorean = /[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/.test(text)
+  if (hasJapaneseKana && hasKorean) return null
+  if (hasJapaneseKana) return 'ja'
+  const hasHan = /[\u4e00-\u9fff]/.test(text)
+  if (hasKorean && hasHan) return null
+  if (hasKorean) return 'ko'
+  const hasLatin = /[A-Za-z]/.test(text)
+  if (hasHan && hasLatin) return null
+  if (hasHan) return 'zh'
+  if (hasLatin) return 'en'
+  return null
+}
+
+function needsHotTranslation(source: string, targetLang: TranslationTargetLanguage): boolean {
+  const sourceLang = detectedHotSourceLanguage(source)
+  return sourceLang === null || sourceLang !== targetLang
 }
 
 function sameTranslationScope(left: HotTranslationScope, right: HotTranslationScope): boolean {
@@ -134,10 +144,25 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const viewerKey = auth.viewerKey ?? (currentUserId ? `user:${currentUserId}` : 'anon')
   const sessionGeneration = auth.sessionGeneration ?? 0
   const loggedIn = authChecked && !!accessToken
+  const translationAccessToken =
+    authChecked &&
+    auth.isLoggedIn &&
+    typeof currentUserId === 'string' &&
+    currentUserId.trim().length > 0 &&
+    viewerKey === `user:${currentUserId}` &&
+    Number.isSafeInteger(sessionGeneration) &&
+    sessionGeneration >= 0 &&
+    typeof accessToken === 'string' &&
+    accessToken.trim().length > 0 &&
+    jwtSubject(accessToken)?.toLowerCase() === currentUserId.toLowerCase()
+      ? accessToken
+      : null
   const activeScopeRef = useRef({ viewerKey, sessionGeneration, userId: currentUserId })
   activeScopeRef.current = { viewerKey, sessionGeneration, userId: currentUserId }
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
+  const translationOwnerReadyRef = useRef(translationAccessToken !== null)
+  translationOwnerReadyRef.current = translationAccessToken !== null
   const activeLanguageRef = useRef(language)
   activeLanguageRef.current = language
   const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
@@ -221,7 +246,11 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const translationMountedRef = useRef(false)
   const translationGenerationRef = useRef(0)
   const translationSequenceRef = useRef(0)
-  const previousTranslationScopeRef = useRef({ scopeKey, accessToken, language })
+  const previousTranslationScopeRef = useRef({
+    scopeKey,
+    accessToken: translationAccessToken,
+    language,
+  })
   const contentTranslationCacheRef = useRef(new Map<string, HotCachedTranslation>())
   const listTranslationCacheRef = useRef(new Map<string, HotCachedTranslation>())
   const translatedListPostsRef = useRef(translatedListPosts)
@@ -267,6 +296,10 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     const current = activeScopeRef.current
     return (
       translationMountedRef.current &&
+      translationOwnerReadyRef.current &&
+      current.userId !== null &&
+      current.viewerKey === `user:${current.userId}` &&
+      jwtSubject(scope.accessToken)?.toLowerCase() === current.userId.toLowerCase() &&
       current.viewerKey === scope.viewerKey &&
       current.sessionGeneration === scope.sessionGeneration &&
       current.userId === scope.userId &&
@@ -308,13 +341,17 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     const previous = previousTranslationScopeRef.current
     if (
       previous.scopeKey === scopeKey &&
-      previous.accessToken === accessToken &&
+      previous.accessToken === translationAccessToken &&
       previous.language === language
     ) {
       return
     }
 
-    previousTranslationScopeRef.current = { scopeKey, accessToken, language }
+    previousTranslationScopeRef.current = {
+      scopeKey,
+      accessToken: translationAccessToken,
+      language,
+    }
     translationGenerationRef.current += 1
     abortTranslationRequests()
     contentTranslationCacheRef.current.clear()
@@ -327,7 +364,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     setTranslatingList(false)
   }, [
     abortTranslationRequests,
-    accessToken,
     language,
     scopeKey,
     setShowingOriginal,
@@ -335,6 +371,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     setTranslatedListPosts,
     setTranslating,
     setTranslatingList,
+    translationAccessToken,
   ])
 
   useEffect(() => {
@@ -771,15 +808,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     void loadComments(openPostId)
   }, [authChecked, openPostId, loadComments, scopeKey])
 
-  // Detect Chinese text
-  const isChineseText = useCallback((text: string) => {
-    if (!text) return false
-    const chineseRegex = /[\u4e00-\u9fa5]/g
-    const chineseMatches = text.match(chineseRegex)
-    const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
-    return chineseRatio > 0.1
-  }, [])
-
   const removeStaleListTranslations = useCallback(
     (stale: readonly [string, 'title' | 'body'][]) => {
       if (stale.length === 0) return
@@ -806,8 +834,33 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const translateListPosts = useCallback(
     async (postsToTranslate: Post[], targetLang: TranslationTargetLanguage) => {
       // /api/translate requires auth (Bearer header) — skip for anonymous visitors
-      const token = accessToken
+      const token = translationAccessToken
       if (!token || activeLanguageRef.current !== targetLang) return
+
+      const stopActiveListTranslation = () => {
+        const active = activeListTranslationRef.current
+        if (active) {
+          if (!active.controller.signal.aborted) {
+            active.controller.abort(
+              new DOMException('Hot translation batch replaced', 'AbortError')
+            )
+          }
+          activeListTranslationRef.current = null
+          translationSequenceRef.current += 1
+        }
+        setTranslatingList(false)
+      }
+      const postIds = postsToTranslate.map((post) => post.id)
+      if (
+        postIds.some((postId) => typeof postId !== 'string' || postId.trim().length === 0) ||
+        new Set(postIds).size !== postIds.length
+      ) {
+        listTranslationCacheRef.current.clear()
+        translatedListPostsRef.current = {}
+        setTranslatedListPosts({})
+        stopActiveListTranslation()
+        return
+      }
 
       const descriptors: HotListTranslationDescriptor[] = []
       const stale: Array<[string, 'title' | 'body']> = []
@@ -821,14 +874,15 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         const laneKey = translationLaneKey(postId, part)
         if (seenLanes.has(laneKey)) return
         seenLanes.add(laneKey)
+        const shouldTranslate = needsTranslation && source.trim().length > 0
         const cached = listTranslationCacheRef.current.get(laneKey)
         const cacheMatches =
-          cached?.source === source && cached.targetLang === targetLang && needsTranslation
+          cached?.source === source && cached.targetLang === targetLang && shouldTranslate
         if (!cacheMatches) {
           listTranslationCacheRef.current.delete(laneKey)
           stale.push([postId, part])
         }
-        if (needsTranslation && source && !cacheMatches) {
+        if (shouldTranslate && !cacheMatches) {
           descriptors.push({
             item: {
               id: `item-${descriptors.length}`,
@@ -844,40 +898,22 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         }
       }
 
-      for (const post of postsToTranslate.slice(0, 10)) {
+      for (const post of postsToTranslate) {
         if (!post.id) continue
-        if (post.title) {
-          const titleIsChinese = isChineseText(post.title)
-          const needsTitle =
-            targetLang === 'ja' || targetLang === 'ko'
-              ? true
-              : targetLang === 'en'
-                ? titleIsChinese
-                : !titleIsChinese
-          addPart(post.id, 'title', post.title, needsTitle)
-        }
-        if (post.body) {
-          const source = post.body.slice(0, 500)
-          const bodyIsChinese = isChineseText(source)
-          const needsBody =
-            targetLang === 'ja' || targetLang === 'ko'
-              ? true
-              : targetLang === 'en'
-                ? bodyIsChinese
-                : !bodyIsChinese
-          addPart(post.id, 'body', source, needsBody)
-        }
+        addPart(post.id, 'title', post.title, needsHotTranslation(post.title, targetLang))
+        addPart(post.id, 'body', post.body, needsHotTranslation(post.body, targetLang))
+      }
+      for (const postId of Object.keys(translatedListPostsRef.current)) {
+        if (!seenLanes.has(translationLaneKey(postId, 'title'))) stale.push([postId, 'title'])
+        if (!seenLanes.has(translationLaneKey(postId, 'body'))) stale.push([postId, 'body'])
+      }
+      for (const laneKey of listTranslationCacheRef.current.keys()) {
+        if (!seenLanes.has(laneKey)) listTranslationCacheRef.current.delete(laneKey)
       }
       removeStaleListTranslations(stale)
 
       if (descriptors.length === 0) {
-        const active = activeListTranslationRef.current
-        if (active && !active.controller.signal.aborted) {
-          active.controller.abort(new DOMException('Hot translation batch replaced', 'AbortError'))
-          activeListTranslationRef.current = null
-          translationSequenceRef.current += 1
-          setTranslatingList(false)
-        }
+        stopActiveListTranslation()
         return
       }
 
@@ -901,22 +937,38 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       setTranslatingList(true)
       const promise = (async () => {
         try {
-          const receipt = await requestBatchTranslation(
-            descriptors.map(({ item }) => item),
-            targetLang,
-            {
-              accessToken: token,
-              csrfHeaders: getCsrfHeaders(),
-              signal: controller.signal,
-            }
+          const batches: HotListTranslationDescriptor[][] = []
+          for (
+            let offset = 0;
+            offset < descriptors.length;
+            offset += MAX_HOT_TRANSLATION_BATCH_SIZE
+          ) {
+            batches.push(descriptors.slice(offset, offset + MAX_HOT_TRANSLATION_BATCH_SIZE))
+          }
+          const receipts = await Promise.all(
+            batches.map((batch) =>
+              requestBatchTranslation(
+                batch.map(({ item }) => item),
+                targetLang,
+                {
+                  accessToken: token,
+                  csrfHeaders: getCsrfHeaders(),
+                  signal: controller.signal,
+                }
+              )
+            )
           )
           const active = activeListTranslationRef.current
           if (!active || active.sequence !== sequence || !translationScopeIsCurrent(scope)) return
 
+          const translatedResults = Object.assign(
+            {},
+            ...receipts.map((receipt) => receipt.results)
+          ) as Record<string, { translatedText: string; cached: boolean }>
           const current = translatedListPostsRef.current
           let next = current
           for (const descriptor of descriptors) {
-            const result = receipt.results[descriptor.item.id]
+            const result = translatedResults[descriptor.item.id]
             if (result.translatedText.trim() === descriptor.item.text.trim()) {
               listTranslationCacheRef.current.delete(descriptor.laneKey)
               continue
@@ -937,6 +989,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
             setTranslatedListPosts(next)
           }
         } catch {
+          if (!controller.signal.aborted) {
+            controller.abort(new DOMException('Hot translation batch failed', 'AbortError'))
+          }
           // Automatic translation remains silent and publishes no partial cache.
         } finally {
           const active = activeListTranslationRef.current
@@ -950,29 +1005,28 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       return promise
     },
     [
-      accessToken,
       captureTranslationScope,
-      isChineseText,
       removeStaleListTranslations,
       setTranslatedListPosts,
       setTranslatingList,
+      translationAccessToken,
       translationScopeIsCurrent,
     ]
   )
 
   // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
   useEffect(() => {
-    if (posts.length > 0 && accessToken) {
+    if (translationAccessToken) {
       // Translate posts into the active UI language (zh/en/ja/ko).
       translateListPosts(posts, language)
     }
-  }, [accessToken, posts, language, translateListPosts])
+  }, [language, posts, translateListPosts, translationAccessToken])
 
   // Translate post content (with cache)
   const translateContent = useCallback(
     async (postId: string, content: string, targetLang: TranslationTargetLanguage) => {
       // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
-      const token = accessToken
+      const token = translationAccessToken
       if (!token || !postId || !content || activeLanguageRef.current !== targetLang) return
       const scope = captureTranslationScope(token, targetLang)
       const cacheKey = translationLaneKey(postId, targetLang)
@@ -1082,13 +1136,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       return promise
     },
     [
-      accessToken,
       captureTranslationScope,
       setShowingOriginal,
       setTranslatedContent,
       setTranslating,
       showToast,
       t,
+      translationAccessToken,
       translationScopeIsCurrent,
     ]
   )
@@ -1124,10 +1178,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       }
 
       if (post.body) {
-        const isChinese = isChineseText(post.body)
-        // zh → translate non-Chinese posts; en → translate Chinese posts;
-        // ja/ko → translate anything (sources are a zh/en mix).
-        const needsTranslation = needsHotTranslation(isChinese, language)
+        // Detect all supported scripts. Ambiguous or mixed text is sent to the
+        // strict translation contract instead of being guessed as English.
+        const needsTranslation = needsHotTranslation(post.body, language)
 
         if (needsTranslation) {
           translateContent(post.id, post.body, language)
@@ -1140,7 +1193,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     },
     [
       cancelContentTranslation,
-      isChineseText,
       language,
       router,
       searchParams,
@@ -1217,9 +1269,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const openTranslationPostId = openPost?.id
   const openTranslationContent = openPost?.body
   useEffect(() => {
-    if (openTranslationPostId && openTranslationContent && accessToken) {
-      const isChinese = isChineseText(openTranslationContent)
-      const needsTranslation = needsHotTranslation(isChinese, language)
+    if (openTranslationPostId && openTranslationContent && translationAccessToken) {
+      const needsTranslation = needsHotTranslation(openTranslationContent, language)
 
       setTranslatedContent(null)
       setShowingOriginal(true)
@@ -1233,15 +1284,14 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       cancelContentTranslation()
     }
   }, [
-    accessToken,
     cancelContentTranslation,
-    isChineseText,
     language,
     openTranslationContent,
     openTranslationPostId,
     setShowingOriginal,
     setTranslatedContent,
     translateContent,
+    translationAccessToken,
   ])
 
   // Submit comment
