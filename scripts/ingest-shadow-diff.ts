@@ -8,7 +8,7 @@
  *
  *   1. public.leaderboard_ranks is keyed by
  *      (season_id, source, source_trader_id);
- *   2. score-visible rows have arena_score > 0 and are not outliers;
+ *   2. public rows have a published rank, arena_score > 0, and are not outliers;
  *   3. /api/rankings additionally rejects ROI outside +/-50,000 and
  *      case-folds 0x identities while de-duplicating a response;
  *   4. totals come from the current leaderboard_count_cache `_gt0`
@@ -207,6 +207,7 @@ async function main() {
            ) AS latest_computed_at
            FROM public.leaderboard_ranks rank_row
           WHERE rank_row.season_id = ANY(ARRAY['7D', '30D', '90D'])
+            AND rank_row.rank IS NOT NULL
             AND rank_row.source IN (
               SELECT DISTINCT filter_source FROM registry_windows
             )
@@ -275,6 +276,7 @@ async function main() {
            FROM public.leaderboard_ranks rank_row
           WHERE rank_row.season_id = ANY(ARRAY['7D', '30D', '90D'])
             AND rank_row.source LIKE $1
+            AND rank_row.rank IS NOT NULL
             AND rank_row.arena_score > 0
             AND rank_row.is_outlier IS NOT TRUE
           GROUP BY rank_row.source, rank_row.season_id

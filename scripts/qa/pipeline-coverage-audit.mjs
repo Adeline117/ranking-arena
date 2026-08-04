@@ -120,6 +120,7 @@ async function main() {
           ) AS api_identities
           FROM public.leaderboard_ranks rank_row
          WHERE rank_row.season_id = ANY(ARRAY['7D', '30D', '90D'])
+           AND rank_row.rank IS NOT NULL
            AND rank_row.source IN (
              SELECT DISTINCT filter_source FROM source_windows
            )
@@ -183,6 +184,7 @@ async function main() {
           max(rank_row.arena_score) AS arena_score
           FROM public.leaderboard_ranks rank_row
          WHERE rank_row.season_id = ANY(ARRAY['7D', '30D', '90D'])
+           AND rank_row.rank IS NOT NULL
            AND rank_row.arena_score > 0
            AND rank_row.is_outlier IS NOT TRUE
            AND rank_row.roi BETWEEN -50000 AND 50000
