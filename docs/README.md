@@ -2,9 +2,10 @@
 
 ## Start Here
 
-| Document                         | Description                                                 |
-| -------------------------------- | ----------------------------------------------------------- |
-| [ONBOARDING.md](./ONBOARDING.md) | New teammate? Start here. Setup, reading order, first task. |
+| Document                                             | Description                                                 |
+| ---------------------------------------------------- | ----------------------------------------------------------- |
+| [ONBOARDING.md](./ONBOARDING.md)                     | New teammate? Start here. Setup, reading order, first task. |
+| [REPOSITORY_STRUCTURE.md](./REPOSITORY_STRUCTURE.md) | Deployable boundaries, dependency rules, and target layout  |
 
 ## Core
 

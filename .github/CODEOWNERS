@@ -17,19 +17,37 @@
 
 # 鉴权 / RLS / 安全边界
 /lib/auth/                  @Adeline117
+/lib/security/              @Adeline117
 /lib/api/with-admin-auth.ts @Adeline117
 /lib/api/with-cron.ts       @Adeline117
 /supabase/migrations/       @Adeline117
 /lib/exchange/secure-encryption.ts @Adeline117
+/lib/exchange/credentials/  @Adeline117
 
 # CI / 部署 / 质量门禁（改这些影响所有会话与生产部署）
 /.github/workflows/         @Adeline117
 /vercel.json                @Adeline117
 /scripts/git-hooks/         @Adeline117
+/scripts/qa/                @Adeline117
 /eslint.config.mjs          @Adeline117
 /tsconfig.json              @Adeline117
+/package.json               @Adeline117
+/package-lock.json          @Adeline117
+/docs/ARCHITECTURE.md       @Adeline117
+/docs/DECISIONS.md          @Adeline117
+/docs/REPOSITORY_STRUCTURE.md @Adeline117
+/infra/                     @Adeline117
 
 # 数据管道核心
 /lib/ingest/                @Adeline117
 /lib/pipeline/validate-before-write.ts @Adeline117
 /worker/                    @Adeline117
+
+# 独立部署单元与发布资产
+/cloudflare-worker/         @Adeline117
+/contracts/                 @Adeline117
+/script/                    @Adeline117
+/test/                      @Adeline117
+/android/                   @Adeline117
+/ios/                       @Adeline117
+/appstore/                  @Adeline117
