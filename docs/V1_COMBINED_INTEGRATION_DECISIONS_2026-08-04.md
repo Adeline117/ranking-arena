@@ -50,6 +50,9 @@ deployment, worker start, migration, production database write, or backup run.
    byte-identical to `5ed4718b6`; only the four i18n dictionaries also retain
    newer main/V1 translations. This prevents a future V1 deployment from
    reopening the retired token surface.
+9. The six latest-main `040440`–`040540` migration files raise the immutable
+   history-shape ratchet from 588/397 total/modern entries to 594/403. Legacy
+   debt counts and hashes remain unchanged.
 
 ## Verification boundary
 

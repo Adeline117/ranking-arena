@@ -13,13 +13,25 @@
  */
 
 import { spawn } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
-import { createReadStream, createWriteStream, mkdtempSync, rmSync, unlinkSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
+import {
+  closeSync,
+  constants as fsConstants,
+  createReadStream,
+  createWriteStream,
+  fstatSync,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  realpathSync,
+  rmSync,
+  unlinkSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { createGzip } from 'node:zlib'
 import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
@@ -431,6 +443,45 @@ export function createBackupWorkspace(filename) {
   return { directory, localPath: join(directory, filename) }
 }
 
+function sameFileIdentity(left, right) {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mode === right.mode &&
+    left.nlink === right.nlink &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
+  )
+}
+
+function readSealedFileState(fd, localPath, expected) {
+  const descriptor = fstatSync(fd, { bigint: true })
+  const pathname = lstatSync(localPath, { bigint: true })
+  if (!descriptor.isFile() || !pathname.isFile() || descriptor.nlink !== 1n) {
+    throw new Error('backup artifact must be one exclusively owned regular file')
+  }
+  if (!sameFileIdentity(descriptor, pathname)) {
+    throw new Error('backup artifact pathname identity changed')
+  }
+  if (expected && !sameFileIdentity(descriptor, expected)) {
+    throw new Error('sealed backup artifact changed after validation')
+  }
+  return descriptor
+}
+
+async function sha256FileDescriptor(fd, size) {
+  const hash = createHash('sha256')
+  const stream = createReadStream('', {
+    fd,
+    autoClose: false,
+    start: 0,
+    end: size - 1,
+  })
+  for await (const chunk of stream) hash.update(chunk)
+  return hash.digest('hex')
+}
+
 /**
  * Keep production side effects behind a validated local artifact. Injection is
  * deliberate: tests execute the real producer and prove rejected artifacts
@@ -444,15 +495,51 @@ export async function produceAndCommitBackup({
   completionToken,
   requiredRelations = [],
   upload,
+  verifyUpload,
 }) {
   await produce()
-  const size = await assertBackupArtifact(localPath, minimumBytes, {
-    completionToken,
-    requiredRelations,
-  })
-  await upload(size)
-  unlinkSync(localPath)
-  return size
+  const noFollow = fsConstants.O_NOFOLLOW ?? 0
+  const fd = openSync(localPath, fsConstants.O_RDONLY | noFollow)
+  let body
+  try {
+    const sealedState = readSealedFileState(fd, localPath)
+    const size = await assertBackupArtifact(localPath, minimumBytes, {
+      completionToken,
+      requiredRelations,
+    })
+    if (sealedState.size !== BigInt(size)) {
+      throw new Error('validated backup size disagrees with sealed file')
+    }
+    readSealedFileState(fd, localPath, sealedState)
+    const sha256 = await sha256FileDescriptor(fd, size)
+    readSealedFileState(fd, localPath, sealedState)
+
+    body = createReadStream('', {
+      fd,
+      autoClose: false,
+      start: 0,
+      end: size - 1,
+    })
+    const evidence = Object.freeze({ size, sha256, body })
+    const uploadResult = await upload(evidence)
+    if (!body.readableEnded) {
+      throw new Error('backup upload returned before consuming the sealed artifact')
+    }
+    readSealedFileState(fd, localPath, sealedState)
+    if (typeof verifyUpload === 'function') {
+      await verifyUpload(evidence, uploadResult)
+      readSealedFileState(fd, localPath, sealedState)
+    }
+    unlinkSync(localPath)
+    return size
+  } finally {
+    if (body && !body.destroyed && !body.readableEnded) body.destroy()
+    try {
+      closeSync(fd)
+    } catch (error) {
+      if (error?.code !== 'EBADF') throw error
+    }
+  }
 }
 
 async function run() {
@@ -519,17 +606,33 @@ async function run() {
       minimumBytes,
       completionToken,
       requiredRelations: MINIMUM_APPLICATION_BACKUP_RELATIONS,
-      upload: async (size) => {
+      upload: async ({ size, sha256, body }) => {
         const sizeMB = (size / 1024 / 1024).toFixed(1)
         console.log(`[backup] Dump complete: ${sizeMB} MB`)
         console.log(`[backup] Uploading to R2: ${R2_BUCKET}/${r2Key}`)
-        const remote = await uploadAndAttestBackupArtifact({
+        const objectMetadata = {
+          ...metadata,
+          'artifact-size': String(size),
+          'artifact-sha256': sha256,
+        }
+        const uploaded = await uploadBackupArtifact({
           client: s3,
           bucket: R2_BUCKET,
           key: r2Key,
-          localPath,
+          body,
           size,
-          metadata,
+          metadata: objectMetadata,
+        })
+        return { objectMetadata, uploadETag: uploaded.ETag, sizeMB }
+      },
+      verifyUpload: async ({ size }, { objectMetadata, uploadETag, sizeMB }) => {
+        const remote = await attestUploadedBackupArtifact({
+          client: s3,
+          bucket: R2_BUCKET,
+          key: r2Key,
+          size,
+          metadata: objectMetadata,
+          uploadETag,
         })
         console.log(
           `[backup] ✓ Uploaded and attested: ${r2Key} (${sizeMB} MB, ETag ${remote.ETag})`
@@ -550,7 +653,7 @@ async function run() {
 }
 
 const isDirectRun =
-  process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 if (isDirectRun) {
   run()
 }
