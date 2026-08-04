@@ -28,6 +28,7 @@ import {
   isSettingsViewerCurrent,
   type SettingsViewerSnapshot,
 } from './settings-viewer-scope'
+import type { TablesUpdate } from '@/lib/supabase/database.types'
 
 type NotificationWriteContext = {
   accessToken: string
@@ -321,9 +322,12 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
   const handleValidation = validateHandle(handle, t, initialValuesRef.current?.handle ?? null)
 
-  const markTouched = useCallback((field: keyof typeof touchedFields) => {
-    setTouchedFields((prev) => ({ ...prev, [field]: true }))
-  }, [])
+  const markTouched = useCallback(
+    (field: keyof typeof touchedFields) => {
+      setTouchedFields((prev) => ({ ...prev, [field]: true }))
+    },
+    [setTouchedFields]
+  )
 
   // ===== Debounced handle uniqueness check =====
   useEffect(() => {
@@ -888,7 +892,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         }
       }
 
-      const profileUpdates: Record<string, unknown> = {
+      const profileUpdates: TablesUpdate<'user_profiles'> = {
         bio: bio || null,
         avatar_url: finalAvatarUrl || null,
         cover_url: finalCoverUrl || null,
@@ -1319,7 +1323,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         if (loadIsCurrent()) setLoadingPasskeys(false)
       }
     },
-    [captureViewer, viewerIsCurrent]
+    [captureViewer, setLoadingPasskeys, setPasskeys, viewerIsCurrent]
   )
 
   const handleAddPasskey = async () => {
@@ -1479,7 +1483,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     } finally {
       if (loadIsCurrent()) setLoadingSessions(false)
     }
-  }, [captureViewer, viewerIsCurrent])
+  }, [captureViewer, setLoadingSessions, setSessions, viewerIsCurrent])
 
   const handleRevokeSession = async (sessionId: string) => {
     const scope = captureViewer()
@@ -1585,7 +1589,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     } finally {
       if (loadIsCurrent()) setLoadingBlockedUsers(false)
     }
-  }, [captureViewer, viewerIsCurrent])
+  }, [captureViewer, setBlockedUsers, setLoadingBlockedUsers, viewerIsCurrent])
 
   const handleUnblock = async (blockedId: string) => {
     const scope = captureViewer()

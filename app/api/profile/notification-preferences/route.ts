@@ -7,6 +7,7 @@ import {
 } from '@/lib/profile/notification-preferences'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import type { TablesUpdate } from '@/lib/supabase/database.types'
 
 const logger = createLogger('api:profile-notification-preferences')
 const requestSchema = z.union([
@@ -65,9 +66,15 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin()
+    const updateData: TablesUpdate<'user_profiles'> = {}
+    if (parsedBody.data.field === 'email_digest') {
+      updateData.email_digest = parsedBody.data.value
+    } else {
+      updateData[parsedBody.data.field] = parsedBody.data.value
+    }
     const { data, error } = await supabase
       .from('user_profiles')
-      .update({ [parsedBody.data.field]: parsedBody.data.value })
+      .update(updateData)
       .eq('id', user.id)
       .select('id')
       .maybeSingle()

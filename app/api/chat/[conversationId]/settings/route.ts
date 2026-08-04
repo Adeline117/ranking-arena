@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import type { TablesInsert, TablesUpdate } from '@/lib/supabase/database.types'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +23,11 @@ type SettingsBody = {
   cleared_before?: string | null // ISO timestamp
 }
 
-async function verifyMembership(supabase: ReturnType<typeof getSupabaseAdmin>, conversationId: string, userId: string) {
+async function verifyMembership(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  conversationId: string,
+  userId: string
+) {
   const { data: conversation, error } = await supabase
     .from('conversations')
     .select('id, user1_id, user2_id')
@@ -56,10 +61,7 @@ export async function GET(
 
     const membership = await verifyMembership(supabase, conversationId, user.id)
     if (!membership.valid) {
-      return NextResponse.json(
-        { error: membership.message },
-        { status: membership.status }
-      )
+      return NextResponse.json({ error: membership.message }, { status: membership.status })
     }
 
     // Get or create member settings
@@ -78,7 +80,7 @@ export async function GET(
         is_blocked: false,
         cleared_before: null,
         updated_at: null,
-      }
+      },
     })
   } catch (error: unknown) {
     logger.apiError('/api/chat/[conversationId]/settings', error, { method: 'GET' })
@@ -105,10 +107,7 @@ export async function PATCH(
 
     const membership = await verifyMembership(supabase, conversationId, user.id)
     if (!membership.valid) {
-      return NextResponse.json(
-        { error: membership.message },
-        { status: membership.status }
-      )
+      return NextResponse.json({ error: membership.message }, { status: membership.status })
     }
 
     const body: SettingsBody = await request.json()
@@ -119,7 +118,7 @@ export async function PATCH(
     }
 
     // Build update object with only provided fields
-    const updateData: Record<string, unknown> = {}
+    const updateData: TablesUpdate<'conversation_members'> = {}
     if ('remark' in body) updateData.remark = body.remark || null
     if ('is_muted' in body) updateData.is_muted = Boolean(body.is_muted)
     if ('is_pinned' in body) updateData.is_pinned = Boolean(body.is_pinned)
@@ -156,7 +155,7 @@ export async function PATCH(
       result = data
     } else {
       // Insert new record
-      const insertData = {
+      const insertData: TablesInsert<'conversation_members'> = {
         conversation_id: conversationId,
         user_id: user.id,
         remark: null,

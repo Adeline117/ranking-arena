@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '@/lib/api'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
+import type { TablesUpdate } from '@/lib/supabase/database.types'
 
 const _logger = createLogger('compute-leaderboard')
 
@@ -226,7 +227,7 @@ export async function deriveWinRateMDD(
     // (leaderboard_ranks has composite PK so we need per-row updates, but we batch them)
     const results = await Promise.all(
       batch.map((upd) => {
-        const updateFields: Record<string, number> = {}
+        const updateFields: TablesUpdate<'leaderboard_ranks'> = {}
         // Validate against VALIDATION_BOUNDS before write
         if (upd.win_rate != null && upd.win_rate >= 0 && upd.win_rate <= 100)
           updateFields.win_rate = upd.win_rate

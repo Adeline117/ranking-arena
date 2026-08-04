@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyUnsubscribeToken } from '@/lib/utils/unsubscribe-token'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import type { TablesUpdate } from '@/lib/supabase/database.types'
 
 const logger = createLogger('email-unsubscribe')
 
@@ -22,18 +23,26 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token')
 
   if (!token) {
-    return renderPage('Invalid Link', 'The unsubscribe link is missing a token. Please use the link from your email.', false)
+    return renderPage(
+      'Invalid Link',
+      'The unsubscribe link is missing a token. Please use the link from your email.',
+      false
+    )
   }
 
   const payload = verifyUnsubscribeToken(token)
   if (!payload) {
-    return renderPage('Invalid or Expired Link', 'This unsubscribe link is invalid or has expired. You can manage your email preferences in Settings.', false)
+    return renderPage(
+      'Invalid or Expired Link',
+      'This unsubscribe link is invalid or has expired. You can manage your email preferences in Settings.',
+      false
+    )
   }
 
   try {
     const supabase = getSupabaseAdmin()
 
-    const updateData: Record<string, unknown> = {}
+    const updateData: TablesUpdate<'user_profiles'> = {}
 
     if (payload.type === 'digest') {
       updateData.email_digest = 'none'
@@ -52,20 +61,34 @@ export async function GET(req: NextRequest) {
       .eq('id', payload.userId)
 
     if (error) {
-      logger.error('Failed to update user preferences', { userId: payload.userId, error: error.message })
-      return renderPage('Something Went Wrong', 'We could not update your preferences. Please try again or manage your settings directly.', false)
+      logger.error('Failed to update user preferences', {
+        userId: payload.userId,
+        error: error.message,
+      })
+      return renderPage(
+        'Something Went Wrong',
+        'We could not update your preferences. Please try again or manage your settings directly.',
+        false
+      )
     }
 
     logger.info('User unsubscribed via email link', { userId: payload.userId, type: payload.type })
 
-    const message = payload.type === 'all'
-      ? 'You have been unsubscribed from all Arena email notifications.'
-      : 'You have been unsubscribed from the Arena email digest.'
+    const message =
+      payload.type === 'all'
+        ? 'You have been unsubscribed from all Arena email notifications.'
+        : 'You have been unsubscribed from the Arena email digest.'
 
     return renderPage('Unsubscribed Successfully', message, true)
   } catch (err) {
-    logger.error('Unsubscribe endpoint error', { error: err instanceof Error ? err.message : String(err) })
-    return renderPage('Something Went Wrong', 'An unexpected error occurred. Please try again later.', false)
+    logger.error('Unsubscribe endpoint error', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return renderPage(
+      'Something Went Wrong',
+      'An unexpected error occurred. Please try again later.',
+      false
+    )
   }
 }
 

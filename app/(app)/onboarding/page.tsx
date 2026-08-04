@@ -33,6 +33,7 @@ import { loadOnboardingGroups, loadOnboardingTraders } from './load-data'
 import { trackEvent } from '@/lib/analytics/track'
 import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import type { TablesUpdate } from '@/lib/supabase/database.types'
 
 type Theme = 'dark' | 'light'
 type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
@@ -599,7 +600,7 @@ export default function OnboardingPage() {
       throw new OnboardingScopeUnavailableError('Onboarding session is unavailable or stale')
     }
 
-    const updates: Record<string, unknown> = { onboarding_completed: true }
+    const updates: TablesUpdate<'user_profiles'> = { onboarding_completed: true }
     if (interests && interests.length > 0) updates.interests = interests
     const { data: updatedProfile, error } = await supabase
       .from('user_profiles')

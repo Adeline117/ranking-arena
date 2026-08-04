@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { channelIdSchema } from '../contracts'
+import type { TablesUpdate } from '@/lib/supabase/database.types'
 
 const logger = createLogger('api:channels:channelId')
 
@@ -238,7 +239,7 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    const updates: TablesUpdate<'chat_channels'> = { updated_at: new Date().toISOString() }
 
     if (body.name !== undefined) updates.name = body.name.trim()
     if (body.avatar_url !== undefined) updates.avatar_url = body.avatar_url

@@ -2,6 +2,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError, success } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { z } from 'zod'
+import type { TablesInsert } from '@/lib/supabase/database.types'
 
 const logger = createLogger('api:interactions')
 
@@ -51,7 +52,9 @@ export const POST = withAuth(
 
     // Normalize all formats into interactions table rows
     const data = parsed.data
-    const toRow = (event: z.infer<typeof SingleEventSchema>) => ({
+    const toRow = (
+      event: z.infer<typeof SingleEventSchema>
+    ): TablesInsert<'user_interactions'> => ({
       user_id: user.id,
       action: event.action,
       target_type: event.target_type,
@@ -59,7 +62,7 @@ export const POST = withAuth(
       ...(event.metadata ? { metadata: event.metadata } : {}),
     })
 
-    const insertRows =
+    const insertRows: TablesInsert<'user_interactions'>[] =
       'type' in data
         ? [
             {
