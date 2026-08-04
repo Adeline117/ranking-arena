@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text } from '@/app/components/base'
@@ -68,6 +68,7 @@ export default function ChatSettingsDrawer({
   const [editingRemark, setEditingRemark] = useState(false)
   const [remarkInput, setRemarkInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const mutationInFlightRef = useRef(false)
   const [reportModalOpen, setReportModalOpen] = useState(false)
 
   const loadSettings = useCallback(async () => {
@@ -95,6 +96,8 @@ export default function ChatSettingsDrawer({
   }, [isOpen, loadSettings])
 
   const updateSetting = async (updates: ChatSettingsPatch): Promise<boolean> => {
+    if (mutationInFlightRef.current) return false
+    mutationInFlightRef.current = true
     setSaving(true)
     try {
       const res = await fetch(`/api/chat/${conversationId}/settings`, {
@@ -132,11 +135,13 @@ export default function ChatSettingsDrawer({
       showToast(t('updateFailed'), 'error')
       return false
     } finally {
+      mutationInFlightRef.current = false
       setSaving(false)
     }
   }
 
   const handleRemarkSave = () => {
+    if (mutationInFlightRef.current) return
     const trimmed = remarkInput.trim()
     if (trimmed.length > 50) {
       showToast(t('remarkMaxLength'), 'warning')
@@ -147,6 +152,7 @@ export default function ChatSettingsDrawer({
   }
 
   const handleClearHistory = async () => {
+    if (mutationInFlightRef.current) return
     if (!confirm(t('confirmClearChat'))) {
       return
     }
@@ -157,6 +163,7 @@ export default function ChatSettingsDrawer({
   }
 
   const handleBlock = async () => {
+    if (mutationInFlightRef.current) return
     if (settings.is_blocked) {
       await updateSetting({ is_blocked: false })
     } else {
@@ -532,6 +539,7 @@ export default function ChatSettingsDrawer({
                 label={t('clearChatHistory')}
                 onClick={handleClearHistory}
                 danger
+                disabled={saving}
               />
 
               {/* Block */}
@@ -554,6 +562,7 @@ export default function ChatSettingsDrawer({
                 label={settings.is_blocked ? t('unblockUser') : t('blockUser')}
                 onClick={handleBlock}
                 danger={!settings.is_blocked}
+                disabled={saving}
               />
 
               {/* Report */}
@@ -600,11 +609,13 @@ function SettingsButton({
   label,
   onClick,
   danger,
+  disabled,
 }: {
   icon: React.ReactNode
   label: string
   onClick: () => void
   danger?: boolean
+  disabled?: boolean
 }) {
   const textColor = danger ? tokens.colors.accent.error : tokens.colors.text.primary
   const iconColor = danger ? tokens.colors.accent.error : tokens.colors.text.secondary
@@ -612,6 +623,7 @@ function SettingsButton({
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         width: '100%',
         display: 'flex',
@@ -622,7 +634,8 @@ function SettingsButton({
         background: 'transparent',
         color: textColor,
         fontSize: 14,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
         transition: 'background 0.2s',
         textAlign: 'left',
       }}
