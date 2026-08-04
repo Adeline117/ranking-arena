@@ -122,7 +122,7 @@ function RecordKindPanel({
 }) {
   const records = useTraderRecords({ source, exchangeTraderId, kind, tf, enabled: true })
   if (records.isLoading) return <ModuleSkeleton height={160} />
-  if (records.error) return <ModuleDegraded onRetry={() => records.refetch()} />
+  if (records.isInitialError) return <ModuleDegraded onRetry={() => records.refetch()} />
   if (records.isPendingUpstream && records.rows.length === 0) {
     return <ModuleDegraded onRetry={() => records.refetch()} />
   }
@@ -136,7 +136,8 @@ function RecordKindPanel({
         rows={records.rows}
         hasNextPage={records.hasNextPage}
         isFetchingNextPage={records.isFetchingNextPage}
-        onLoadMore={() => records.fetchNextPage()}
+        hasLoadMoreError={records.isFetchNextPageError}
+        onLoadMore={() => void records.fetchNextPage()}
       />
       {records.provenance && (
         <RecordProvenanceFooter provenance={records.provenance} exchangeName={exchangeName} />

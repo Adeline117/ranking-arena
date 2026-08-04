@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import RecordsTable from '../RecordsTable'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -47,5 +47,63 @@ describe('RecordsTable asset quantities', () => {
     expect(screen.getAllByText('—')).toHaveLength(2)
     expect(screen.getByText('+$12 USDC')).toBeInTheDocument()
     expect(screen.queryByText(/USDT/)).not.toBeInTheDocument()
+  })
+})
+
+describe('RecordsTable pagination recovery', () => {
+  it('keeps successful rows visible and offers an inline retry after load-more fails', () => {
+    const onLoadMore = jest.fn()
+
+    render(
+      <RecordsTable
+        columns={[{ key: 'symbol', i18nKey: 'colSymbol' }]}
+        rows={[{ symbol: 'BTCUSDT' }]}
+        hasNextPage
+        hasLoadMoreError
+        onLoadMore={onLoadMore}
+      />
+    )
+
+    expect(screen.getByText('BTCUSDT')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('loadMoreFailed')
+
+    const retry = screen.getByRole('button', { name: 'moduleRetry' })
+    expect(retry).toHaveAttribute('type', 'button')
+    fireEvent.click(retry)
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains pagination focus when the same action becomes a retry', () => {
+    const props = {
+      columns: [{ key: 'symbol', i18nKey: 'colSymbol' }],
+      rows: [{ symbol: 'BTCUSDT' }],
+      hasNextPage: true,
+      onLoadMore: jest.fn(),
+    }
+    const view = render(<RecordsTable {...props} />)
+    screen.getByRole('button', { name: 'recordsLoadMore' }).focus()
+
+    view.rerender(<RecordsTable {...props} hasLoadMoreError />)
+
+    expect(screen.getByRole('button', { name: 'moduleRetry' })).toHaveFocus()
+  })
+
+  it('disables the pagination action while a retry is running', () => {
+    render(
+      <RecordsTable
+        columns={[{ key: 'symbol', i18nKey: 'colSymbol' }]}
+        rows={[{ symbol: 'ETHUSDT' }]}
+        hasNextPage
+        hasLoadMoreError
+        isFetchingNextPage
+        onLoadMore={jest.fn()}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'loading' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'loading' }).parentElement).toHaveAttribute(
+      'aria-busy',
+      'true'
+    )
   })
 })
