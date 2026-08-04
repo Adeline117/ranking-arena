@@ -46,6 +46,10 @@ import {
   LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
 } from '../../acquisition-manifest'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import {
   assertCanonicalBitgetBotsSource,
   assertBitgetBotsLeaderboardPublication,
   inspectBitgetBotsBoardPage,
@@ -53,6 +57,11 @@ import {
   parseBitgetBotsCopiers,
   parseBitgetBotsProfile,
 } from './bots-parsers'
+import {
+  BITGET_BOTS_COPIER_PAGE_CONTRACT,
+  BITGET_BOTS_COPIER_URL,
+  bitgetBotsCopierSnapshotVerifier,
+} from './bots-copier-snapshot'
 
 const S_BASE = 'https://www.bitget.com/v1/strategyPlatform/public'
 
@@ -192,6 +201,45 @@ function validateBitgetBotsProfile(
 function endpoint(src: SourceRow, key: string, fallback: string): string {
   const endpoints = (src.meta.endpoints ?? {}) as Record<string, string>
   return endpoints[key] ?? fallback
+}
+
+const COPIER_SOURCE_BOARDS = {
+  bitget_bots_futures: {
+    productType: 'futures',
+    boards: ['futures_grid', 'futures_martingale'],
+  },
+  bitget_bots_spot: {
+    productType: 'spot',
+    boards: ['spot_grid', 'spot_martingale'],
+  },
+} as const
+
+function exactArray(value: unknown, expected: readonly unknown[]): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    value.every((entry, index) => entry === expected[index])
+  )
+}
+
+function isCanonicalCopierSource(src: SourceRow): boolean {
+  const contract = COPIER_SOURCE_BOARDS[src.slug as keyof typeof COPIER_SOURCE_BOARDS]
+  return Boolean(
+    contract &&
+    src.status === 'active' &&
+    src.serving_mode === 'serving' &&
+    src.adapter_slug === 'bitget_bots' &&
+    src.trader_kind_scope === 'bot' &&
+    src.product_type === contract.productType &&
+    src.currency === 'USDT' &&
+    src.copier_table_depth === 'top10' &&
+    src.page_size === 20 &&
+    src.pagination_kind === 'numeric' &&
+    exactArray(src.timeframes_native, [30]) &&
+    exactArray(src.timeframes_derived, []) &&
+    exactArray(src.meta.boards, contract.boards) &&
+    endpoint(src, 'copiers', BITGET_BOTS_COPIER_URL) === BITGET_BOTS_COPIER_URL
+  )
 }
 
 /** One warm page load per session establishes WAF cookies (as for the
@@ -401,6 +449,10 @@ const bitgetBotsAdapter: SourceAdapter = {
     copiers: true, // followRank {strategyId} — ts from lastUpdateTime
   },
 
+  verifyCopierSnapshot(src) {
+    return isCanonicalCopierSource(src) ? bitgetBotsCopierSnapshotVerifier : null
+  },
+
   /**
    * One source covers two boards (e.g. futures_grid + futures_martingale,
    * src.meta.boards). Pages from the second board continue the pageIndex
@@ -499,21 +551,37 @@ const bitgetBotsAdapter: SourceAdapter = {
     session: FetchSession,
     src: SourceRow,
     exchangeTraderId: string,
-    kind: HistoryKind
-  ): AsyncIterable<RawPage> {
+    kind: HistoryKind,
+    _cursor: string | null
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
     if (kind !== 'copiers') {
       throw new Error(`[bitget_bots] history surface ${kind} not supported`)
     }
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const url = endpoint(src, 'copiers', `${S_BASE}/followRank`)
-    const payload = await replayJson(session, fetcher, {
+    const request = { strategyId: exchangeTraderId }
+    const response = await replayJson(session, fetcher, {
       url,
       method: 'POST',
       headers: HEADERS,
-      body: { strategyId: exchangeTraderId },
+      body: request,
     })
-    yield { pageIndex: 1, payload, url, fetchedAt: new Date().toISOString() }
+    yield {
+      pageIndex: 1,
+      payload: {
+        contract: BITGET_BOTS_COPIER_PAGE_CONTRACT,
+        historyTraderIdentity: exchangeTraderId,
+        request,
+        response,
+      },
+      url,
+      fetchedAt: new Date().toISOString(),
+    }
+    return {
+      contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+      observations: [{ segment_id: 'default', reason: 'snapshot_complete', page_ordinal: 1 }],
+    }
   },
 
   parseLeaderboard: parseBitgetBotsBoardPage,
@@ -529,7 +597,9 @@ const bitgetBotsAdapter: SourceAdapter = {
     if (kind !== 'copiers') {
       throw new Error(`[bitget_bots] history parser ${kind} not supported`)
     }
-    return parseBitgetBotsCopiers(raw, ctx)
+    const response =
+      isRecord(raw) && raw.contract === BITGET_BOTS_COPIER_PAGE_CONTRACT ? raw.response : raw
+    return parseBitgetBotsCopiers(response, ctx)
   },
 }
 

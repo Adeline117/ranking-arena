@@ -39,7 +39,9 @@ function int(v: unknown): number | null {
 
 function isoFromMs(v: unknown): string | null {
   const n = num(v)
-  return n === null ? null : new Date(n).toISOString()
+  if (n === null) return null
+  const parsed = new Date(n)
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null
 }
 
 function botsHash(...fields: unknown[]): string {
