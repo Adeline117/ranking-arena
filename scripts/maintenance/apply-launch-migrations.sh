@@ -226,6 +226,7 @@ PREDEPLOY_MIGRATIONS=(
   20260803105000_bind_bookmark_count_consistency.sql
   20260803106000_durable_comment_reaction_count_repair.sql
   20260803107000_set_comment_reaction_desired_state.sql
+  20260803108000_comment_reaction_causal_intents.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
