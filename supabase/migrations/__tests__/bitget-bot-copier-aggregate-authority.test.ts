@@ -114,8 +114,8 @@ describe('Bitget bot copier aggregate authority', () => {
     )
   })
 
-  it('maps SQL NULL to the existing pending/no-store API contract', () => {
-    expect(recordsReader).toContain('if (error || !data) return null')
+  it('maps SQL NULL or malformed JSON to the existing pending/no-store API contract', () => {
+    expect(recordsReader).toContain('if (error || !isPlainRecord(data)) return null')
     expect(recordsRoute).toMatch(
       /if \(aggregate\)[\s\S]*withCache\([\s\S]*return apiSuccess\(\{ cacheState: 'pending' as const \}, 200, \{ 'Cache-Control': 'no-store' \}\)/
     )
