@@ -1,11 +1,11 @@
 'use client'
 
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { truncateGraphemes } from '@/lib/utils/truncate'
 import Image from 'next/image'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { STALE_SLOW } from '@/lib/hooks/cache-presets'
-// Supabase: dynamic import — only used for auth check in translate call (non-critical)
 const getSb = () =>
   import('@/lib/supabase/client').then(
     (m) => m.supabase as import('@supabase/supabase-js').SupabaseClient
@@ -15,7 +15,14 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { useDeferredKey } from '@/lib/hooks/useDeferredKey'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { jwtSubject } from '@/lib/auth/token-subject'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  requestBatchTranslation,
+  type BatchTranslationItem,
+  type TranslationTargetLanguage,
+} from '@/lib/translations/translation-client-contract'
 
 type HotPost = {
   id: string
@@ -28,6 +35,77 @@ type HotPost = {
   author_avatar_url: string | null
   created_at: string
   translated?: boolean
+  translatedTitle?: boolean
+  translatedContent?: boolean
+}
+
+type TranslatedPostParts = {
+  title?: string
+  content?: string
+}
+
+type TranslationDescriptor = {
+  item: BatchTranslationItem
+  postId: string
+  part: keyof TranslatedPostParts
+}
+
+type SidebarTranslationScope = {
+  key: string
+  targetLang: TranslationTargetLanguage
+  accessToken: string
+  descriptors: TranslationDescriptor[]
+}
+
+type ActiveSidebarTranslation = {
+  key: string
+  accessToken: string
+  sequence: number
+  controller: AbortController
+  promise: Promise<void>
+}
+
+const MAX_TRANSLATION_SNAPSHOTS = 8
+const MAX_TRANSLATION_BATCH_SIZE = 20
+
+function needsTranslation(source: string, targetLang: TranslationTargetLanguage): boolean {
+  const hasJapaneseKana = /[\u3040-\u30ff]/.test(source)
+  const hasKorean = /[\uac00-\ud7af]/.test(source)
+  if (targetLang === 'ja') return !hasJapaneseKana
+  if (targetLang === 'ko') return !hasKorean
+  if (hasJapaneseKana || hasKorean) return true
+
+  const chineseCharacterCount = source.match(/[\u4e00-\u9fff]/g)?.length ?? 0
+  const nonWhitespaceLength = source.replace(/\s/g, '').length || 1
+  const sourceIsChinese = chineseCharacterCount / nonWhitespaceLength > 0.1
+  return targetLang === 'en' ? sourceIsChinese : !sourceIsChinese
+}
+
+function createTranslationDescriptors(
+  posts: readonly HotPost[],
+  targetLang: TranslationTargetLanguage
+): TranslationDescriptor[] {
+  const descriptors: TranslationDescriptor[] = []
+  const addPart = (postId: string, part: keyof TranslatedPostParts, source: string | null) => {
+    if (!source?.trim() || !needsTranslation(source, targetLang)) return
+    descriptors.push({
+      item: {
+        id: `item-${descriptors.length}`,
+        text: source,
+        contentType: part === 'title' ? 'post_title' : 'post_content',
+        contentId: postId,
+        targetLang,
+      },
+      postId,
+      part,
+    })
+  }
+
+  for (const post of posts) {
+    addPart(post.id, 'title', post.title)
+    addPart(post.id, 'content', post.content)
+  }
+  return descriptors
 }
 
 function HotTag({ score }: { score: number }) {
@@ -74,9 +152,9 @@ function HotTag({ score }: { score: number }) {
   )
 }
 
-async function fetchHotPosts(_key: string, limit: number, targetLang?: string): Promise<HotPost[]> {
+async function fetchHotPosts(limit: number, signal?: AbortSignal): Promise<HotPost[]> {
   const supabase = await getSb()
-  const { data } = await supabase
+  const query = supabase
     .from('posts')
     .select(
       'id, title, content, hot_score, like_count, comment_count, created_at, author_handle, author_avatar_url'
@@ -85,10 +163,12 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
     .eq('status', 'active')
     .order('hot_score', { ascending: false })
     .limit(limit)
+  const { data, error } = await (signal ? query.abortSignal(signal) : query)
 
-  if (!data) return []
+  if (error) throw new Error(`Hot discussions query failed: ${error.message}`)
+  if (!data) throw new Error('Hot discussions query returned no data receipt')
 
-  const posts: HotPost[] = data.map((p) => ({
+  return data.map((p) => ({
     id: p.id,
     title: p.title,
     content: p.content,
@@ -100,116 +180,263 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
     author_avatar_url: p.author_avatar_url || null,
     translated: false,
   }))
-
-  // If viewing in non-source language, fetch translations from cache
-  if (targetLang) {
-    const postIds = posts.map((p: HotPost) => p.id)
-    const { data: titleCache } = await supabase
-      .from('translation_cache')
-      .select('content_id, translated_text')
-      .eq('content_type', 'post_title')
-      .eq('target_lang', targetLang)
-      .in('content_id', postIds)
-    const { data: contentCache } = await supabase
-      .from('translation_cache')
-      .select('content_id, translated_text')
-      .eq('content_type', 'post_content')
-      .eq('target_lang', targetLang)
-      .in('content_id', postIds)
-
-    const titleMap = new Map<string, string>(
-      (titleCache || []).map((t: { content_id: string; translated_text: string }) => [
-        t.content_id,
-        t.translated_text,
-      ])
-    )
-    const contentMap = new Map<string, string>(
-      (contentCache || []).map((t: { content_id: string; translated_text: string }) => [
-        t.content_id,
-        t.translated_text,
-      ])
-    )
-
-    // Apply cached translations
-    const needsTranslation: Array<{
-      id: string
-      text: string
-      contentType: string
-      contentId: string
-    }> = []
-    for (const p of posts) {
-      let wasTranslated = false
-      if (titleMap.has(p.id)) {
-        p.title = titleMap.get(p.id)!
-        wasTranslated = true
-      } else if (p.title) {
-        needsTranslation.push({
-          id: `t-${p.id}`,
-          text: p.title,
-          contentType: 'post_title',
-          contentId: p.id,
-        })
-      }
-      if (contentMap.has(p.id)) {
-        p.content = contentMap.get(p.id)!
-        wasTranslated = true
-      } else if (p.content) {
-        needsTranslation.push({
-          id: `c-${p.id}`,
-          text: p.content,
-          contentType: 'post_content',
-          contentId: p.id,
-        })
-      }
-      if (wasTranslated) p.translated = true
-    }
-
-    // Fire-and-forget: translate uncached posts in background (requires auth)
-    if (needsTranslation.length > 0) {
-      getSb()
-        .then((sb) => sb.auth.getSession())
-        .then(({ data }) => {
-          if (!data.session) return // Skip translate for unauthenticated users (avoids 401)
-          fetch('/api/translate', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${data.session.access_token}`,
-              ...getCsrfHeaders(),
-            },
-            body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
-          })
-            // eslint-disable-next-line no-restricted-syntax
-            .catch(() => {}) // Silently fail — translation is non-critical
-        })
-    }
-  }
-
-  return posts
 }
 
 export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
+  const { userId, isLoggedIn, authChecked, accessToken, viewerKey, sessionGeneration } =
+    useAuthSession()
+  const targetLang: TranslationTargetLanguage = language
+  const [translationCacheRevision, setTranslationCacheRevision] = useState(0)
+  const [translationLoadingKey, setTranslationLoadingKey] = useState<string | null>(null)
+  const translationCacheRef = useRef(new Map<string, Record<string, TranslatedPostParts>>())
+  const activeTranslationRef = useRef<ActiveSidebarTranslation | null>(null)
+  const translationSequenceRef = useRef(0)
+  const translationMountedRef = useRef(false)
+  const committedTranslationScopeRef = useRef<SidebarTranslationScope | null>(null)
 
-  const targetLang = language
-  const _queryClient = useQueryClient()
   // Defer query activation until after LCP — prevents simultaneous sidebar fetches from blocking main thread
   const deferredReady = useDeferredKey(true, 1400)
 
   const {
     data: posts = [],
-    isLoading: loading,
+    isLoading: queryLoading,
     error: swrError,
     refetch,
   } = useQuery({
-    queryKey: ['hot-discussions', limit, language],
-    queryFn: () => fetchHotPosts('hot-discussions', limit, targetLang),
+    queryKey: ['hot-discussions', limit],
+    queryFn: ({ signal }) => fetchHotPosts(limit, signal),
     enabled: !!deferredReady,
     refetchOnWindowFocus: false,
     staleTime: STALE_SLOW,
     retry: 3,
     retryDelay: (attempt) => 1000 * Math.pow(2, attempt),
   })
+  const loading = !deferredReady || queryLoading
+
+  const resultIdentity = JSON.stringify(posts.map((post) => [post.id, post.title, post.content]))
+  const hasUniqueResultIds =
+    posts.every((post) => typeof post.id === 'string' && post.id.trim().length > 0) &&
+    new Set(posts.map((post) => post.id)).size === posts.length
+  const translationDescriptors = useMemo(
+    () => createTranslationDescriptors(posts, targetLang),
+    [posts, targetLang]
+  )
+  const translationScope: SidebarTranslationScope | null =
+    deferredReady &&
+    posts.length > 0 &&
+    hasUniqueResultIds &&
+    authChecked &&
+    isLoggedIn &&
+    typeof userId === 'string' &&
+    userId.trim().length > 0 &&
+    viewerKey === `user:${userId}` &&
+    jwtSubject(accessToken)?.toLowerCase() === userId.toLowerCase() &&
+    Number.isSafeInteger(sessionGeneration) &&
+    sessionGeneration >= 0 &&
+    typeof accessToken === 'string' &&
+    accessToken.trim()
+      ? {
+          key: JSON.stringify([
+            'sidebar-hot-discussions',
+            viewerKey,
+            sessionGeneration,
+            userId,
+            targetLang,
+            limit,
+            resultIdentity,
+          ]),
+          targetLang,
+          accessToken,
+          descriptors: translationDescriptors,
+        }
+      : null
+  const translationScopeKey = translationScope?.key ?? null
+
+  const translatedParts = useMemo(() => {
+    if (!translationScope) return {}
+    return translationCacheRef.current.get(translationScope.key) ?? {}
+    // Ref-backed bounded cache writes are exposed through this revision.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translationCacheRevision, translationScopeKey])
+  const translating = translationScope !== null && translationLoadingKey === translationScope.key
+
+  const displayPosts = useMemo(
+    () =>
+      posts.map((post) => {
+        const translated = translatedParts[post.id]
+        const translatedTitle = typeof translated?.title === 'string'
+        const translatedContent = typeof translated?.content === 'string'
+        return {
+          ...post,
+          title: translated?.title ?? post.title,
+          content: translated?.content ?? post.content,
+          translatedTitle,
+          translatedContent,
+          translated: translatedTitle || translatedContent,
+        }
+      }),
+    [posts, translatedParts]
+  )
+
+  // Only committed renders may own async publication. Speculative concurrent
+  // renders must not invalidate or accept a translation receipt.
+  useEffect(() => {
+    committedTranslationScopeRef.current = translationScope
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, translationScopeKey])
+
+  useEffect(() => {
+    const translationCache = translationCacheRef.current
+    translationMountedRef.current = true
+    return () => {
+      translationMountedRef.current = false
+      translationSequenceRef.current += 1
+      const active = activeTranslationRef.current
+      if (active && !active.controller.signal.aborted) {
+        active.controller.abort(
+          new DOMException('Hot discussions translation unmounted', 'AbortError')
+        )
+      }
+      activeTranslationRef.current = null
+      translationCache.clear()
+    }
+  }, [])
+
+  useEffect(() => {
+    const scope = committedTranslationScopeRef.current
+    if (!scope) {
+      const active = activeTranslationRef.current
+      if (active && !active.controller.signal.aborted) {
+        active.controller.abort(
+          new DOMException('Hot discussions translation scope closed', 'AbortError')
+        )
+      }
+      activeTranslationRef.current = null
+      setTranslationLoadingKey(null)
+      return
+    }
+
+    if (translationCacheRef.current.has(scope.key)) {
+      const active = activeTranslationRef.current
+      if (active && active.key !== scope.key && !active.controller.signal.aborted) {
+        active.controller.abort(
+          new DOMException('Hot discussions translation superseded by cache', 'AbortError')
+        )
+        activeTranslationRef.current = null
+      }
+      setTranslationLoadingKey(null)
+      return
+    }
+
+    if (scope.descriptors.length === 0) {
+      translationCacheRef.current.set(scope.key, {})
+      setTranslationCacheRevision((revision) => revision + 1)
+      setTranslationLoadingKey(null)
+      return
+    }
+
+    const existing = activeTranslationRef.current
+    if (existing?.key === scope.key && existing.accessToken === scope.accessToken) return
+    if (existing && !existing.controller.signal.aborted) {
+      existing.controller.abort(
+        new DOMException('Hot discussions translation superseded', 'AbortError')
+      )
+    }
+
+    const controller = new AbortController()
+    const sequence = ++translationSequenceRef.current
+    setTranslationLoadingKey(scope.key)
+
+    const promise = (async () => {
+      try {
+        const batches: BatchTranslationItem[][] = []
+        for (let index = 0; index < scope.descriptors.length; index += MAX_TRANSLATION_BATCH_SIZE) {
+          batches.push(
+            scope.descriptors
+              .slice(index, index + MAX_TRANSLATION_BATCH_SIZE)
+              .map(({ item }) => item)
+          )
+        }
+        const receipts = await Promise.all(
+          batches.map((items) =>
+            requestBatchTranslation(items, scope.targetLang, {
+              accessToken: scope.accessToken,
+              csrfHeaders: getCsrfHeaders(),
+              signal: controller.signal,
+            })
+          )
+        )
+
+        const active = activeTranslationRef.current
+        if (
+          !translationMountedRef.current ||
+          active?.sequence !== sequence ||
+          committedTranslationScopeRef.current?.key !== scope.key
+        ) {
+          return
+        }
+
+        const results = Object.assign({}, ...receipts.map((receipt) => receipt.results)) as Record<
+          string,
+          { translatedText: string; cached: boolean }
+        >
+        const next: Record<string, TranslatedPostParts> = {}
+        for (const descriptor of scope.descriptors) {
+          const translatedText = results[descriptor.item.id]?.translatedText
+          if (!translatedText || translatedText.trim() === descriptor.item.text.trim()) {
+            throw new Error('Hot discussions translation returned an invalid source echo')
+          }
+          next[descriptor.postId] = {
+            ...next[descriptor.postId],
+            [descriptor.part]: translatedText,
+          }
+        }
+
+        translationCacheRef.current.set(scope.key, next)
+        while (translationCacheRef.current.size > MAX_TRANSLATION_SNAPSHOTS) {
+          const oldestKey = translationCacheRef.current.keys().next().value
+          if (typeof oldestKey !== 'string') break
+          translationCacheRef.current.delete(oldestKey)
+        }
+        setTranslationCacheRevision((revision) => revision + 1)
+      } catch {
+        if (!controller.signal.aborted) {
+          controller.abort(
+            new DOMException('Hot discussions translation batch failed', 'AbortError')
+          )
+        }
+        // Automatic translation is best-effort and never publishes a partial batch.
+      } finally {
+        const active = activeTranslationRef.current
+        if (active?.sequence === sequence) {
+          activeTranslationRef.current = null
+          setTranslationLoadingKey((key) => (key === scope.key ? null : key))
+        }
+      }
+    })()
+
+    activeTranslationRef.current = {
+      key: scope.key,
+      accessToken: scope.accessToken,
+      sequence,
+      controller,
+      promise,
+    }
+
+    return () => {
+      const active = activeTranslationRef.current
+      if (active?.sequence === sequence) {
+        if (!controller.signal.aborted) {
+          controller.abort(
+            new DOMException('Hot discussions translation scope changed', 'AbortError')
+          )
+        }
+        activeTranslationRef.current = null
+      }
+    }
+  }, [accessToken, translationScopeKey])
+
   const mutate = () => refetch()
 
   function getTitle(post: HotPost): string {
@@ -230,8 +457,16 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
 
   return (
     <SidebarCard title={t('sidebarHotDiscussions')}>
+      {translating && (
+        <span role="status" className="sr-only">
+          {t('translating')}
+        </span>
+      )}
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1.5] }}>
+        <div
+          aria-busy={loading || translating}
+          style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1.5] }}
+        >
           {Array.from({ length: 5 }).map((_, i) => (
             <div
               key={i}
@@ -242,6 +477,8 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
         </div>
       ) : swrError ? (
         <div
+          role="alert"
+          aria-busy={loading || translating}
           style={{
             fontSize: tokens.typography.fontSize.sm,
             color: 'var(--color-text-tertiary)',
@@ -251,10 +488,13 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
         >
           <div>{t('loadFailed')}</div>
           <button
-            onClick={() => mutate()}
+            type="button"
+            onClick={() => void mutate()}
             style={{
               marginTop: tokens.spacing[1.5],
               padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              minWidth: 44,
+              minHeight: 44,
               borderRadius: tokens.radius.sm,
               border: '1px solid var(--glass-border-light)',
               background: 'transparent',
@@ -268,6 +508,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
         </div>
       ) : posts.length === 0 ? (
         <p
+          aria-busy={loading || translating}
           style={{
             fontSize: tokens.typography.fontSize.sm,
             color: 'var(--color-text-tertiary)',
@@ -278,9 +519,13 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           {t('sidebarNoDiscussions')}
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2.5] }}>
-          {posts.map((post) => {
+        <div
+          aria-busy={loading || translating}
+          style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2.5] }}
+        >
+          {displayPosts.map((post) => {
             const contentPreview = getContentPreview(post)
+            const titleWasTranslated = post.title ? post.translatedTitle : post.translatedContent
             return (
               <Link
                 key={post.id}
@@ -296,6 +541,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   color: 'inherit',
                   transition: `all ${tokens.transition.fast}`,
                   position: 'relative',
+                  minHeight: 44,
                   background: 'var(--glass-bg-light)',
                   border: '1px solid var(--glass-border-light)',
                 }}
@@ -322,7 +568,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                     style={{
                       fontSize: tokens.typography.fontSize.sm,
                       fontWeight: tokens.typography.fontWeight.semibold,
-                      color: post.translated
+                      color: titleWasTranslated
                         ? 'var(--color-translated)'
                         : 'var(--color-text-primary)',
                       lineHeight: tokens.typography.lineHeight.snug,
@@ -361,10 +607,10 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   <p
                     style={{
                       fontSize: tokens.typography.fontSize.xs,
-                      color: post.translated
+                      color: post.translatedContent
                         ? 'var(--color-translated)'
                         : 'var(--color-text-secondary)',
-                      opacity: post.translated ? 0.8 : 1,
+                      opacity: post.translatedContent ? 0.8 : 1,
                       lineHeight: tokens.typography.lineHeight.snug,
                       margin: 0,
                       display: '-webkit-box',
