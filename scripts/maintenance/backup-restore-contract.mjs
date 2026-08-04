@@ -43,6 +43,15 @@ export function parseCompleteBackupFilename(filename) {
   return null
 }
 
+export function parseCompleteBackupKey(key) {
+  if (typeof key !== 'string') return null
+  const keyMatch = key.match(/^db-backups\/(\d{4})\/(\d{2})\/([^/]+)$/)
+  if (!keyMatch) return null
+  const identity = parseCompleteBackupFilename(keyMatch[3])
+  if (!identity || `${keyMatch[1]}${keyMatch[2]}` !== identity.date.slice(0, 6)) return null
+  return identity
+}
+
 const PG_DUMP_PREFIX = '--\n-- PostgreSQL database dump\n--\n\n'
 const PG_DUMP_COMPLETE = '--\n-- PostgreSQL database dump complete\n--\n\n'
 const COMPLETION_WINDOW_BYTES = 64 * 1024
@@ -85,6 +94,10 @@ function metadataTokens(value, separator) {
   )
 }
 
+function sameTokens(left, right) {
+  return left.size === right.size && [...left].every((token) => right.has(token))
+}
+
 export function assertCompleteBackupMetadata(filenameMode, metadata) {
   const normalized = normalizeBackupMetadata(metadata)
   const backupType = normalized['backup-type']?.toLowerCase()
@@ -111,9 +124,12 @@ export function assertCompleteBackupMetadata(filenameMode, metadata) {
     !typedSchemas.has('arena') ||
     !typedSchemas.has('public') ||
     !tableSchemas.has('arena') ||
-    !tableSchemas.has('public')
+    !tableSchemas.has('public') ||
+    !sameTokens(typedSchemas, tableSchemas)
   ) {
-    throw new Error('selected schemas backup metadata does not include both arena and public')
+    throw new Error(
+      'selected schemas backup metadata must describe the same set including arena and public'
+    )
   }
   return normalized
 }
@@ -131,8 +147,7 @@ export function assertCompleteBackupObject(object, minimumBytes = COMPLETE_BACKU
   if (!keyMatch) {
     throw new Error('selected R2 object is not a db-backups/*.sql.gz backup')
   }
-  const filename = keyMatch[3]
-  const filenameIdentity = parseCompleteBackupFilename(filename)
+  const filenameIdentity = parseCompleteBackupFilename(keyMatch[3])
   if (!filenameIdentity) {
     throw new Error('selected R2 object is not a complete schemas/full backup')
   }
