@@ -3,13 +3,19 @@
  * LRU 驱逐、server-ACK-only 更新原则、评论去重/计数联动、分页守卫。
  */
 
+import { waitFor } from '@testing-library/react'
+
 const mockFetchPostCommentsPage = jest.fn()
 const mockAuthedFetch = jest.fn()
+const mockCreatePostReactionRequestId = jest.fn()
 const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const REACTION_OTHER_ACTOR_ID = '22222222-2222-4222-8222-222222222222'
 const REACTION_POST_ID = '33333333-3333-4333-8333-333333333333'
 const REACTION_OTHER_POST_ID = '44444444-4444-4444-8444-444444444444'
 const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
+const REACTION_REQUEST_ID_1 = '00000000000000000000000000000001'
+const REACTION_REQUEST_ID_2 = '00000000000000000000000000000002'
+const REACTION_REQUEST_ID_3 = '00000000000000000000000000000003'
 
 jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
@@ -22,6 +28,13 @@ jest.mock('@/lib/api/comments-client', () => ({
     !ok && status >= 400 && status < 500 && status !== 408,
 }))
 jest.mock('@/lib/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }))
+jest.mock('@/lib/posts/post-reaction-client-contract', () => {
+  const actual = jest.requireActual('@/lib/posts/post-reaction-client-contract')
+  return {
+    ...actual,
+    createPostReactionRequestId: () => mockCreatePostReactionRequestId(),
+  }
+})
 
 import {
   usePostStore,
@@ -67,17 +80,23 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function reactionReceipt(overrides: Record<string, unknown> = {}) {
+function reactionReceipt(
+  requestId = REACTION_REQUEST_ID_1,
+  desiredReaction: 'up' | 'down' | null = 'up',
+  overrides: Record<string, unknown> = {}
+) {
   return {
     success: true,
     data: {
       actor_id: REACTION_ACTOR_ID,
       post_id: REACTION_POST_ID,
-      requested_reaction: 'up',
-      action: 'added',
-      reaction: 'up',
-      like_count: 6,
-      dislike_count: 1,
+      request_id: requestId,
+      operation: 'set_reaction',
+      desired_reaction: desiredReaction,
+      action: desiredReaction === null ? 'removed' : 'added',
+      reaction: desiredReaction,
+      like_count: desiredReaction === 'up' ? 6 : 5,
+      dislike_count: desiredReaction === 'down' ? 2 : 1,
       ...overrides,
     },
     meta: { timestamp: REACTION_TIMESTAMP },
@@ -98,6 +117,11 @@ beforeEach(() => {
   usePostStore.getState().clear()
   mockAuthedFetch.mockReset()
   mockFetchPostCommentsPage.mockReset()
+  mockCreatePostReactionRequestId.mockReset()
+  mockCreatePostReactionRequestId
+    .mockReturnValueOnce(REACTION_REQUEST_ID_1)
+    .mockReturnValueOnce(REACTION_REQUEST_ID_2)
+    .mockReturnValue(REACTION_REQUEST_ID_3)
 })
 
 describe('post 缓存 + LRU', () => {
@@ -594,11 +618,13 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
   it('reaction 成功 → 仅采用 actor/post/reaction 绑定的 server 绝对值', async () => {
     const scope = activateReactionActor()
     usePostStore.getState().setPost(post(REACTION_POST_ID, { like_count: 5 }))
-    mockAuthedFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: reactionReceipt(),
-    })
+    mockAuthedFetch.mockImplementation((_url, _method, _token, body: Record<string, unknown>) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        data: reactionReceipt(String(body.request_id), body.desired_reaction as 'up'),
+      })
+    )
     const result = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
 
     expect(result).toEqual({ success: true })
@@ -611,7 +637,11 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
       `/api/posts/${REACTION_POST_ID}/like`,
       'POST',
       'tok',
-      { reaction_type: 'up' },
+      {
+        operation: 'set_reaction',
+        request_id: REACTION_REQUEST_ID_1,
+        desired_reaction: 'up',
+      },
       15_000,
       { expectedUserId: REACTION_ACTOR_ID, expectedSessionGeneration: scope.sessionGeneration }
     )
@@ -625,23 +655,27 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      data: reactionReceipt({ like_count: null, dislike_count: null }),
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up', {
+        like_count: null,
+        dislike_count: null,
+      }),
     })
 
     const result = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
 
-    expect(result).toEqual({ success: false, error: '操作失败' })
+    expect(result).toEqual({ success: false, error: '操作结果未知，请刷新后确认' })
     expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
-      like_count: 5,
+      like_count: 6,
       dislike_count: 2,
-      user_reaction: null,
+      user_reaction: 'up',
     })
   })
 
   it.each([
     ['another actor', { actor_id: REACTION_OTHER_ACTOR_ID }],
     ['another post', { post_id: REACTION_OTHER_POST_ID }],
-    ['another requested reaction', { requested_reaction: 'down' }],
+    ['another request', { request_id: REACTION_REQUEST_ID_2 }],
+    ['another desired reaction', { desired_reaction: 'down', reaction: 'down' }],
   ])('reaction ACK bound to %s does not write the store', async (_name, overrides) => {
     const scope = activateReactionActor()
     usePostStore
@@ -650,37 +684,224 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      data: reactionReceipt(overrides),
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up', overrides),
     })
 
     const result = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
 
-    expect(result).toEqual({ success: false, error: '操作失败' })
+    expect(result).toEqual({ success: false, error: '操作结果未知，请刷新后确认' })
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 6,
+      dislike_count: 2,
+      user_reaction: 'up',
+    })
+  })
+
+  it('serializes two same-frame up clicks as up then null', async () => {
+    const scope = activateReactionActor()
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 1, user_reaction: null }))
+    const firstResponse = deferred<unknown>()
+    const secondResponse = deferred<unknown>()
+    mockAuthedFetch
+      .mockReturnValueOnce(firstResponse.promise)
+      .mockReturnValueOnce(secondResponse.promise)
+
+    const first = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+    const second = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBeNull()
+
+    firstResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBeNull()
+
+    secondResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_2, null),
+    })
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { success: true },
+      { success: true },
+    ])
     expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
       like_count: 5,
-      dislike_count: 2,
+      dislike_count: 1,
       user_reaction: null,
     })
   })
 
-  it('single-flights same-frame reaction requests', async () => {
+  it('coalesces three same-frame up clicks when the latest desired state matches the in-flight command', async () => {
     const scope = activateReactionActor()
-    usePostStore.getState().setPost(post(REACTION_POST_ID, { like_count: 5 }))
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 1, user_reaction: null }))
     const response = deferred<unknown>()
     mockAuthedFetch.mockReturnValue(response.promise)
 
     const first = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
-    const duplicate = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+    const second = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+    const third = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
 
-    await expect(duplicate).resolves.toEqual({
-      success: false,
-      error: 'REACTION_IN_FLIGHT',
-    })
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
-
-    response.resolve({ ok: true, status: 200, data: reactionReceipt() })
-    await expect(first).resolves.toEqual({ success: true })
     expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBe('up')
+
+    response.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+    })
+    await expect(Promise.all([first, second, third])).resolves.toEqual([
+      { success: true },
+      { success: true },
+      { success: true },
+    ])
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 6,
+      user_reaction: 'up',
+    })
+  })
+
+  it('replays an uncertain command with the same request id and keeps newer intent after a later 4xx', async () => {
+    const scope = activateReactionActor()
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 1, user_reaction: null }))
+    const firstAttempt = deferred<unknown>()
+    const replay = deferred<unknown>()
+    const newerAttempt = deferred<unknown>()
+    mockAuthedFetch
+      .mockReturnValueOnce(firstAttempt.promise)
+      .mockReturnValueOnce(replay.promise)
+      .mockReturnValueOnce(newerAttempt.promise)
+
+    const up = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+    const down = togglePostReaction(REACTION_POST_ID, 'down', 'tok', scope)
+
+    firstAttempt.resolve({ ok: false, status: 425, data: { error: 'too early' } })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual(mockAuthedFetch.mock.calls[0][3])
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual({
+      operation: 'set_reaction',
+      request_id: REACTION_REQUEST_ID_1,
+      desired_reaction: 'up',
+    })
+
+    replay.resolve({ ok: false, status: 503, data: { error: 'unavailable' } })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+    expect(mockAuthedFetch.mock.calls[2][3]).toEqual({
+      operation: 'set_reaction',
+      request_id: REACTION_REQUEST_ID_2,
+      desired_reaction: 'down',
+    })
+
+    newerAttempt.resolve({ ok: false, status: 403, data: { error: 'forbidden' } })
+    await expect(Promise.all([up, down])).resolves.toEqual([
+      { success: false, error: 'forbidden' },
+      { success: false, error: 'forbidden' },
+    ])
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_reaction: 'down',
+    })
+  })
+
+  it('serializes a newer opposite intent and never lets the older ACK overwrite it', async () => {
+    const scope = activateReactionActor()
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 1, user_reaction: null }))
+    const firstResponse = deferred<unknown>()
+    const secondResponse = deferred<unknown>()
+    mockAuthedFetch
+      .mockReturnValueOnce(firstResponse.promise)
+      .mockReturnValueOnce(secondResponse.promise)
+
+    const first = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+    const opposite = togglePostReaction(REACTION_POST_ID, 'down', 'tok', scope)
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBe('down')
+
+    firstResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBe('down')
+
+    secondResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_2, 'down'),
+    })
+    await expect(Promise.all([first, opposite])).resolves.toEqual([
+      { success: true },
+      { success: true },
+    ])
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_reaction: 'down',
+    })
+  })
+
+  it('rejects hydration started inside an active reaction lane so the later ACK can reconcile', async () => {
+    const scope = activateReactionActor()
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 1, user_reaction: null }))
+    const mutationResponse = deferred<unknown>()
+    const hydrationResponse = deferred<unknown>()
+    mockAuthedFetch
+      .mockReturnValueOnce(mutationResponse.promise)
+      .mockReturnValueOnce(hydrationResponse.promise)
+
+    const mutation = togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
+    const hydration = loadPostForViewer(REACTION_POST_ID, 'tok', scope)
+    hydrationResponse.resolve({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: {
+          post: post(REACTION_POST_ID, {
+            like_count: 5,
+            dislike_count: 1,
+            user_reaction: null,
+          }),
+        },
+      },
+    })
+
+    await expect(hydration).resolves.toBe(false)
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 6,
+      dislike_count: 1,
+      user_reaction: 'up',
+    })
+
+    mutationResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up', { like_count: 9 }),
+    })
+    await expect(mutation).resolves.toEqual({ success: true })
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 9,
+      dislike_count: 1,
+      user_reaction: 'up',
+    })
   })
 
   it('drops a late exact ACK after viewer scope changes', async () => {
@@ -694,7 +915,11 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
     usePostStore
       .getState()
       .setPost(post(REACTION_POST_ID, { like_count: 50, dislike_count: 4, user_reaction: 'down' }))
-    response.resolve({ ok: true, status: 200, data: reactionReceipt() })
+    response.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+    })
 
     await expect(mutation).resolves.toEqual({ success: false, error: 'STALE_AUTH_SCOPE' })
     expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
@@ -704,29 +929,51 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
     })
   })
 
-  it('deadline/network failure publishes no ACK and releases the lock for retry', async () => {
+  it('uncertain failure retains the possibly committed desired state without blind rollback', async () => {
     const scope = activateReactionActor()
     usePostStore.getState().setPost(post(REACTION_POST_ID, { like_count: 5, user_reaction: null }))
-    mockAuthedFetch
-      .mockResolvedValueOnce({ ok: false, status: 0, data: null })
-      .mockResolvedValueOnce({ ok: true, status: 200, data: reactionReceipt() })
+    mockAuthedFetch.mockResolvedValue({ ok: false, status: 0, data: null })
 
     await expect(togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)).resolves.toEqual({
       success: false,
-      error: '操作失败',
+      error: '操作结果未知，请刷新后确认',
     })
-    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBeNull()
-
-    await expect(togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)).resolves.toEqual({
-      success: true,
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 6,
+      user_reaction: 'up',
     })
     expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual(mockAuthedFetch.mock.calls[0][3])
+  })
+
+  it('definitive 4xx rejection safely reverses only the local viewer delta', async () => {
+    const scope = activateReactionActor()
+    usePostStore
+      .getState()
+      .setPost(post(REACTION_POST_ID, { like_count: 5, dislike_count: 2, user_reaction: null }))
+    mockAuthedFetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      data: { error: 'forbidden' },
+    })
+
+    await expect(togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)).resolves.toEqual({
+      success: false,
+      error: 'forbidden',
+    })
+    expect(usePostStore.getState().posts[REACTION_POST_ID]).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_reaction: null,
+    })
   })
 
   it('reaction 网络抛错 → success:false,不外抛', async () => {
     const scope = activateReactionActor()
+    usePostStore.getState().setPost(post(REACTION_POST_ID, { user_reaction: null }))
     mockAuthedFetch.mockRejectedValue(new Error('offline'))
     const r = await togglePostReaction(REACTION_POST_ID, 'up', 'tok', scope)
-    expect(r.success).toBe(false)
+    expect(r).toEqual({ success: false, error: '操作结果未知，请刷新后确认' })
+    expect(usePostStore.getState().posts[REACTION_POST_ID].user_reaction).toBe('up')
   })
 })

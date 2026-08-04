@@ -1,12 +1,16 @@
 /**
  * 帖子点赞 API
- * POST /api/posts/[id]/like - 点赞/取消点赞
+ * POST /api/posts/[id]/like - 收敛到明确的点赞/踩/无反应状态
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { success } from '@/lib/api'
-import { togglePostReaction, getPostById, PostInteractionMutationError } from '@/lib/data/posts'
+import {
+  setPostReactionDesiredState,
+  getPostById,
+  PostInteractionMutationError,
+} from '@/lib/data/posts'
 import { sendNotification } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import logger from '@/lib/logger'
@@ -14,11 +18,21 @@ import { fireAndForget } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import { z } from 'zod'
+import {
+  POST_REACTION_OPERATION,
+  isCanonicalPostReactionRequestId,
+} from '@/lib/posts/post-reaction-client-contract'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 const uuidSchema = z.string().uuid()
-const reactionRequestSchema = z.object({ reaction_type: z.enum(['up', 'down']) }).strict()
+const reactionRequestSchema = z
+  .object({
+    operation: z.literal(POST_REACTION_OPERATION),
+    request_id: z.string().refine(isCanonicalPostReactionRequestId),
+    desired_reaction: z.enum(['up', 'down']).nullable(),
+  })
+  .strict()
 const PRIVATE_NO_STORE_HEADERS = {
   'Cache-Control': 'private, no-store, max-age=0',
   'CDN-Cache-Control': 'no-store',
@@ -66,14 +80,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
         )
       }
 
-      const reactionType = parsedBody.data.reaction_type
+      const desiredReaction = parsedBody.data.desired_reaction
+      const requestId = parsedBody.data.request_id
       const actorId = parsedActorId.data.toLowerCase()
       const postId = parsedPostId.data.toLowerCase()
 
       // 执行点赞/踩操作
       let result
       try {
-        result = await togglePostReaction(supabase, postId, actorId, reactionType)
+        result = await setPostReactionDesiredState(supabase, postId, actorId, desiredReaction)
       } catch (error) {
         if (error instanceof PostInteractionMutationError) {
           if (error.kind === 'not_found') {
@@ -96,7 +111,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       // already returned source-of-truth counters in its strict acknowledgement.
       let post: Awaited<ReturnType<typeof getPostById>> = null
 
-      if (result.action === 'added' && reactionType === 'up') {
+      if (result.action !== 'unchanged' && result.reaction === 'up') {
         try {
           post = await getPostById(supabase, postId, actorId)
         } catch (fetchError) {
@@ -106,8 +121,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       // Send like notification (fire-and-forget, deduped — same actor+post within 1h won't send again)
       if (
-        result.action === 'added' &&
-        reactionType === 'up' &&
+        result.action !== 'unchanged' &&
+        result.reaction === 'up' &&
         post?.author_id &&
         post.author_id !== user.id
       ) {
@@ -136,7 +151,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         {
           actor_id: actorId,
           post_id: postId,
-          requested_reaction: reactionType,
+          request_id: requestId,
+          operation: POST_REACTION_OPERATION,
+          desired_reaction: desiredReaction,
           action: result.action,
           reaction: result.reaction,
           like_count: result.like_count,

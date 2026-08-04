@@ -104,11 +104,18 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [mobileViewMode, setMobileViewMode] = useState<'list' | 'masonry'>('list')
   const [refreshing, setRefreshing] = useState(false)
+  const reactionRevisionSequenceRef = useRef(0)
+  const reactionStateRevisionRef = useRef(new Map<string, number>())
 
   const feedRefreshTrigger = usePostStore((s) => s.feedRefreshTrigger)
   const [newPostCount, setNewPostCount] = useViewerOwnedState(0, () => 0, feedScopeKey)
 
   const pageSize = props.limit || 20
+
+  useEffect(() => {
+    reactionRevisionSequenceRef.current = 0
+    reactionStateRevisionRef.current.clear()
+  }, [feedScopeKey])
 
   // React Query: infinite scroll for posts
   const {
@@ -133,6 +140,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       feedRefreshTrigger,
     ],
     queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
+      const reactionRevisionAtStart = reactionRevisionSequenceRef.current
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (accessTokenRef.current) {
         headers['Authorization'] = `Bearer ${accessTokenRef.current}`
@@ -179,6 +187,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         posts: loadedPosts,
         hasMore,
         offset: pageParam + loadedPosts.length,
+        reactionRevisionAtStart,
       }
     },
     initialPageParam: 0,
@@ -191,6 +200,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 posts: props.initialPosts as Post[],
                 hasMore: true,
                 offset: (props.initialPosts as Post[]).length,
+                reactionRevisionAtStart: 0,
               },
             ],
             pageParams: [0],
@@ -208,7 +218,16 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   })
 
   // Local posts state — synced from query, mutated by realtime/optimistic updates
-  const fetchedPosts = useMemo(() => postPages?.pages.flatMap((p) => p.posts) ?? [], [postPages])
+  const fetchedPostSnapshots = useMemo(
+    () =>
+      postPages?.pages.flatMap((page) =>
+        page.posts.map((post) => ({
+          post,
+          reactionRevisionAtStart: page.reactionRevisionAtStart ?? 0,
+        }))
+      ) ?? [],
+    [postPages]
+  )
   const [posts, setPosts] = useViewerOwnedState<Post[]>(
     (props.initialPosts as Post[]) || [],
     () => [],
@@ -217,8 +236,26 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const postsRef = useRef<Post[]>([])
   postsRef.current = posts
   useEffect(() => {
-    setPosts(fetchedPosts)
-  }, [feedScopeKey, fetchedPosts, setPosts])
+    setPosts((previous) => {
+      const previousById = new Map(previous.map((post) => [post.id, post]))
+      return fetchedPostSnapshots.map(({ post, reactionRevisionAtStart }) => {
+        const localRevision = reactionStateRevisionRef.current.get(post.id) ?? 0
+        const current = previousById.get(post.id)
+        if (localRevision <= reactionRevisionAtStart || !current) return post
+        return {
+          ...post,
+          like_count: current.like_count,
+          dislike_count: current.dislike_count,
+          user_reaction: current.user_reaction,
+        }
+      })
+    })
+  }, [feedScopeKey, fetchedPostSnapshots, setPosts])
+
+  const markReactionStateChanged = useCallback((postId: string) => {
+    const revision = ++reactionRevisionSequenceRef.current
+    reactionStateRevisionRef.current.set(postId, revision)
+  }, [])
 
   const loading = queryLoading && posts.length === 0
   const hasMore = hasNextPage ?? false
@@ -410,6 +447,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     setPosts,
     openPost,
     setOpenPost,
+    onReactionStateChange: markReactionStateChanged,
     showToast,
     showDangerConfirm,
     t,

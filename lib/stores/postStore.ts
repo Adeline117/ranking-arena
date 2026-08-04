@@ -21,9 +21,15 @@ import {
 import { logger } from '@/lib/logger'
 import { getViewerScope, subscribeViewerScope } from '@/lib/auth/viewer-scope'
 import {
+  POST_REACTION_OPERATION,
   POST_REACTION_REQUEST_TIMEOUT_MS,
+  createPostReactionRequestId,
+  isDefinitivePostReactionRejection,
+  nextPostReactionState,
+  postReactionCountDelta,
   readPostReactionAcknowledgement,
   type PostReaction,
+  type PostReactionAcknowledgement,
 } from '@/lib/posts/post-reaction-client-contract'
 
 export type PostData = {
@@ -137,7 +143,29 @@ function evictOldest<T>(record: Record<string, T>, maxSize: number): Record<stri
 }
 
 const initialViewerScope = getViewerScope()
-const postReactionMutationLocks = new Set<string>()
+
+type PostReactionMutationResult = { success: boolean; error?: string }
+
+type PostReactionTruth = {
+  reaction: PostReaction | null
+  likeCount: number
+  dislikeCount: number
+}
+
+type PostReactionMutationLane = {
+  key: string
+  scope: PostStoreViewerScope
+  postId: string
+  accessToken: string
+  desired: PostReaction | null
+  revision: number
+  storeRevision: number
+  confirmed: PostReactionTruth
+  confirmedTruthIsCertain: boolean
+  promise: Promise<PostReactionMutationResult>
+}
+
+const postReactionMutationLanes = new Map<string, PostReactionMutationLane>()
 
 export const usePostStore = create<PostStoreState & PostStoreActions>((set) => ({
   viewerKey: initialViewerScope.viewerKey,
@@ -327,7 +355,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
 // cache. Components may still call setViewerScope while hydrating, but cache
 // safety never depends on waiting for a passive effect.
 subscribeViewerScope((scope) => {
-  postReactionMutationLocks.clear()
+  postReactionMutationLanes.clear()
   usePostStore.getState().setViewerScope(scope.viewerKey, scope.sessionGeneration)
 })
 
@@ -417,6 +445,7 @@ export async function loadPostForViewer(
   const generation = (postLoadGeneration.get(key) || 0) + 1
   postLoadGeneration.set(key, generation)
   const requestStartRevision = usePostStore.getState().postsRevision[postId] || 0
+  const reactionLaneWasActive = postReactionMutationLanes.has(`reaction\u0000${key}`)
 
   try {
     const result = await authedFetch<{
@@ -430,6 +459,7 @@ export async function loadPostForViewer(
       !result.ok ||
       result.stale ||
       result.data?.success !== true ||
+      reactionLaneWasActive ||
       !storeScopeIsCurrent(capturedScope) ||
       postLoadGeneration.get(key) !== generation
     ) {
@@ -693,8 +723,128 @@ export async function submitPostComment(
   }
 }
 
+function applyStoreReactionDesired(postId: string, desired: PostReaction | null): number | null {
+  const store = usePostStore.getState()
+  const post = store.posts[postId]
+  if (!post) return null
+  const current = post.user_reaction ?? null
+  const delta = postReactionCountDelta(current, desired)
+  store.updatePostReaction(postId, {
+    like_count: Math.max(0, post.like_count + delta.likeCount),
+    dislike_count: Math.max(0, post.dislike_count + delta.dislikeCount),
+    reaction: desired,
+  })
+  return usePostStore.getState().postsRevision[postId] || 0
+}
+
+function applyStoreReactionAcknowledgement(
+  lane: PostReactionMutationLane,
+  acknowledgement: PostReactionAcknowledgement
+): boolean {
+  const store = usePostStore.getState()
+  const post = store.posts[lane.postId]
+  if (!post || (store.postsRevision[lane.postId] || 0) !== lane.storeRevision) return false
+
+  const delta = postReactionCountDelta(acknowledgement.reaction, lane.desired)
+  store.updatePostReaction(lane.postId, {
+    like_count: Math.max(0, acknowledgement.likeCount + delta.likeCount),
+    dislike_count: Math.max(0, acknowledgement.dislikeCount + delta.dislikeCount),
+    reaction: lane.desired,
+  })
+  lane.storeRevision = usePostStore.getState().postsRevision[lane.postId] || 0
+  return true
+}
+
+async function runPostReactionMutationLane(
+  lane: PostReactionMutationLane
+): Promise<PostReactionMutationResult> {
+  while (postReactionMutationLanes.get(lane.key) === lane && storeScopeIsCurrent(lane.scope)) {
+    const desired = lane.desired
+    const revision = lane.revision
+    const requestId = createPostReactionRequestId()
+    let response: Awaited<ReturnType<typeof authedFetch<Record<string, unknown>>>> | null = null
+    let transportError: unknown = null
+    let acknowledgement: PostReactionAcknowledgement | null = null
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        response = await authedFetch<Record<string, unknown>>(
+          `/api/posts/${lane.postId}/like`,
+          'POST',
+          lane.accessToken,
+          {
+            operation: POST_REACTION_OPERATION,
+            request_id: requestId,
+            desired_reaction: desired,
+          },
+          POST_REACTION_REQUEST_TIMEOUT_MS,
+          viewerReadOptions(lane.scope)
+        )
+        transportError = null
+      } catch (error) {
+        response = null
+        transportError = error
+      }
+
+      if (!storeScopeIsCurrent(lane.scope)) {
+        return { success: false, error: 'STALE_AUTH_SCOPE' }
+      }
+      if (postReactionMutationLanes.get(lane.key) !== lane || response?.stale) {
+        return { success: false, error: 'STALE_AUTH_SCOPE' }
+      }
+
+      acknowledgement =
+        response?.ok && response.status === 200 && lane.scope.userId
+          ? readPostReactionAcknowledgement(response.data, {
+              actorId: lane.scope.userId,
+              postId: lane.postId,
+              requestId,
+              desiredReaction: desired,
+            })
+          : null
+      if (acknowledgement || (response && isDefinitivePostReactionRejection(response.status))) {
+        break
+      }
+      lane.confirmedTruthIsCertain = false
+    }
+
+    if (acknowledgement) {
+      lane.confirmed = {
+        reaction: acknowledgement.reaction,
+        likeCount: acknowledgement.likeCount,
+        dislikeCount: acknowledgement.dislikeCount,
+      }
+      lane.confirmedTruthIsCertain = true
+      if (!applyStoreReactionAcknowledgement(lane, acknowledgement)) {
+        return { success: false, error: 'REACTION_STATE_CHANGED' }
+      }
+      if (lane.revision === revision || lane.desired === desired) return { success: true }
+      continue
+    }
+
+    const definitiveRejection =
+      response != null && isDefinitivePostReactionRejection(response.status)
+    if (lane.revision !== revision) continue
+
+    if (definitiveRejection) {
+      if (lane.confirmedTruthIsCertain) {
+        const storeRevision = applyStoreReactionDesired(lane.postId, lane.confirmed.reaction)
+        if (storeRevision !== null) lane.storeRevision = storeRevision
+      }
+      const error = response?.data?.error
+      return { success: false, error: typeof error === 'string' ? error : '操作失败' }
+    }
+
+    if (!response) logger.error('[postStore] togglePostReaction failed:', transportError)
+    return { success: false, error: '操作结果未知，请刷新后确认' }
+  }
+
+  return { success: false, error: 'STALE_AUTH_SCOPE' }
+}
+
 /**
- * Toggle post reaction (like/dislike). Only updates store on server ACK.
+ * Converge a viewer's post reaction to an absolute desired state. The local
+ * projection makes subsequent opposite intent observable while one command
+ * is in flight; only a definitive pre-commit rejection may reverse it.
  */
 export async function togglePostReaction(
   postId: string,
@@ -706,58 +856,45 @@ export async function togglePostReaction(
   if (!capturedScope.userId || !storeScopeIsCurrent(capturedScope)) {
     return { success: false, error: 'STALE_AUTH_SCOPE' }
   }
-  const lockKey = `reaction\u0000${requestKey(capturedScope, postId)}`
-  if (postReactionMutationLocks.has(lockKey)) {
-    return { success: false, error: 'REACTION_IN_FLIGHT' }
+  const post = usePostStore.getState().posts[postId]
+  if (!post) return { success: false, error: 'POST_NOT_LOADED' }
+
+  const key = `reaction\u0000${requestKey(capturedScope, postId)}`
+  const existingLane = postReactionMutationLanes.get(key)
+  if (existingLane) {
+    const desired = nextPostReactionState(existingLane.desired, reactionType)
+    existingLane.accessToken = accessToken
+    if (existingLane.desired === desired) return existingLane.promise
+    existingLane.desired = desired
+    existingLane.revision += 1
+    const storeRevision = applyStoreReactionDesired(postId, desired)
+    if (storeRevision === null) return { success: false, error: 'POST_NOT_LOADED' }
+    existingLane.storeRevision = storeRevision
+    return existingLane.promise
   }
-  postReactionMutationLocks.add(lockKey)
-  try {
-    const response = await authedFetch<Record<string, unknown>>(
-      `/api/posts/${postId}/like`,
-      'POST',
-      accessToken,
-      { reaction_type: reactionType },
-      POST_REACTION_REQUEST_TIMEOUT_MS,
-      {
-        expectedUserId: capturedScope.userId,
-        expectedSessionGeneration: capturedScope.sessionGeneration,
-      }
-    )
 
-    if (!storeScopeIsCurrent(capturedScope) || response.stale) {
-      return { success: false, error: 'STALE_AUTH_SCOPE' }
-    }
-    const json = response.data
-    const acknowledgement =
-      response.ok && response.status === 200
-        ? readPostReactionAcknowledgement(json, {
-            actorId: capturedScope.userId,
-            postId,
-            requestedReaction: reactionType,
-          })
-        : null
-
-    if (acknowledgement) {
-      const store = usePostStore.getState()
-      const existing = store.posts[postId]
-      if (existing) {
-        store.updatePostReaction(postId, {
-          like_count: acknowledgement.likeCount,
-          dislike_count: acknowledgement.dislikeCount,
-          reaction: acknowledgement.reaction,
-        })
-      }
-      return { success: true }
-    }
-
-    return {
-      success: false,
-      error: typeof json?.error === 'string' ? json.error : '操作失败',
-    }
-  } catch (err) {
-    logger.error('[postStore] togglePostReaction failed:', err)
-    return { success: false, error: '操作失败' }
-  } finally {
-    postReactionMutationLocks.delete(lockKey)
+  const desired = nextPostReactionState(post.user_reaction ?? null, reactionType)
+  const storeRevision = applyStoreReactionDesired(postId, desired)
+  if (storeRevision === null) return { success: false, error: 'POST_NOT_LOADED' }
+  const lane: PostReactionMutationLane = {
+    key,
+    scope: capturedScope,
+    postId,
+    accessToken,
+    desired,
+    revision: 1,
+    storeRevision,
+    confirmed: {
+      reaction: post.user_reaction ?? null,
+      likeCount: post.like_count,
+      dislikeCount: post.dislike_count,
+    },
+    confirmedTruthIsCertain: true,
+    promise: Promise.resolve({ success: false, error: 'REACTION_NOT_STARTED' }),
   }
+  postReactionMutationLanes.set(key, lane)
+  lane.promise = runPostReactionMutationLane(lane).finally(() => {
+    if (postReactionMutationLanes.get(key) === lane) postReactionMutationLanes.delete(key)
+  })
+  return lane.promise
 }

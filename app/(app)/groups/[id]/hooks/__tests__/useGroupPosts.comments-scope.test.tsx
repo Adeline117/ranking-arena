@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 
 const mockFetchPostCommentsPage = jest.fn()
 const mockSupabaseFrom = jest.fn()
+const mockCreatePostReactionRequestId = jest.fn()
 
 jest.mock('@/lib/supabase/client', () => ({
   supabase: { from: (...args: unknown[]) => mockSupabaseFrom(...args) },
@@ -18,6 +19,13 @@ jest.mock('@/lib/api/comments-client', () => {
   }
 })
 jest.mock('@/lib/logger', () => ({ logger: { warn: jest.fn(), error: jest.fn() } }))
+jest.mock('@/lib/posts/post-reaction-client-contract', () => {
+  const actual = jest.requireActual('@/lib/posts/post-reaction-client-contract')
+  return {
+    ...actual,
+    createPostReactionRequestId: () => mockCreatePostReactionRequestId(),
+  }
+})
 
 import { useGroupPosts, type CommentWithAuthor } from '../useGroupPosts'
 import { authedFetch } from '@/lib/api/client'
@@ -32,6 +40,9 @@ const REACTION_OTHER_ACTOR_ID = '66666666-6666-4666-8666-666666666666'
 const REACTION_POST_ID = '77777777-7777-4777-8777-777777777777'
 const REACTION_GROUP_ID = '88888888-8888-4888-8888-888888888888'
 const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
+const REACTION_REQUEST_ID_1 = '00000000000000000000000000000001'
+const REACTION_REQUEST_ID_2 = '00000000000000000000000000000002'
+const REACTION_REQUEST_ID_3 = '00000000000000000000000000000003'
 const REPOST_ACTOR_ID = '99999999-9999-4999-8999-999999999999'
 const REPOST_OTHER_ACTOR_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const REPOST_POST_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
@@ -107,17 +118,23 @@ function bookmarkStatusReceipt(requestId: string, bookmarked = true) {
   }
 }
 
-function reactionReceipt(overrides: Record<string, unknown> = {}) {
+function reactionReceipt(
+  requestId = REACTION_REQUEST_ID_1,
+  desiredReaction: 'up' | 'down' | null = 'up',
+  overrides: Record<string, unknown> = {}
+) {
   return {
     success: true,
     data: {
       actor_id: REACTION_ACTOR_ID,
       post_id: REACTION_POST_ID,
-      requested_reaction: 'up',
-      action: 'added',
-      reaction: 'up',
-      like_count: 6,
-      dislike_count: 2,
+      request_id: requestId,
+      operation: 'set_reaction',
+      desired_reaction: desiredReaction,
+      action: desiredReaction === null ? 'removed' : 'added',
+      reaction: desiredReaction,
+      like_count: desiredReaction === 'up' ? 6 : 5,
+      dislike_count: desiredReaction === 'down' ? 3 : 2,
       ...overrides,
     },
     meta: { timestamp: REACTION_TIMESTAMP },
@@ -178,6 +195,11 @@ describe('useGroupPosts comment audience and viewer scope', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.clear()
+    mockCreatePostReactionRequestId.mockReset()
+    mockCreatePostReactionRequestId
+      .mockReturnValueOnce(REACTION_REQUEST_ID_1)
+      .mockReturnValueOnce(REACTION_REQUEST_ID_2)
+      .mockReturnValue(REACTION_REQUEST_ID_3)
   })
 
   it('stops a posts request at unmount before enrichment, state, or toast work', async () => {
@@ -506,6 +528,20 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     const requestA = deferred<unknown>()
     mockAuthedFetch.mockReturnValueOnce(requestA.promise)
     const { result, rerender } = renderGroupHook(userA, undefined, jest.fn(), REACTION_GROUP_ID)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: REACTION_POST_ID,
+          group_id: REACTION_GROUP_ID,
+          title: 'A post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          like_count: 5,
+          dislike_count: 2,
+          user_liked: false,
+          user_reaction: null,
+        },
+      ])
+    })
 
     let mutation!: Promise<void>
     act(() => {
@@ -516,7 +552,11 @@ describe('useGroupPosts comment audience and viewer scope', () => {
       `/api/posts/${REACTION_POST_ID}/like`,
       'POST',
       'token-a',
-      { reaction_type: 'up' },
+      {
+        operation: 'set_reaction',
+        request_id: REACTION_REQUEST_ID_1,
+        desired_reaction: 'up',
+      },
       15_000,
       { expectedUserId: REACTION_ACTOR_ID, expectedSessionGeneration: 1 }
     )
@@ -545,7 +585,11 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     })
 
     await act(async () => {
-      requestA.resolve({ ok: true, status: 200, data: reactionReceipt() })
+      requestA.resolve({
+        ok: true,
+        status: 200,
+        data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+      })
       await mutation
     })
 
@@ -558,7 +602,7 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     })
   })
 
-  it('locks same-frame likes and adopts only the server reaction ACK', async () => {
+  it('serializes two same-frame like clicks as up then null', async () => {
     const props = {
       ...baseProps,
       accessToken: 'token-a',
@@ -566,8 +610,11 @@ describe('useGroupPosts comment audience and viewer scope', () => {
       viewerKey: `user:${REACTION_ACTOR_ID}`,
       isMember: true,
     }
-    const request = deferred<unknown>()
-    mockAuthedFetch.mockReturnValue(request.promise)
+    const firstResponse = deferred<unknown>()
+    const secondResponse = deferred<unknown>()
+    mockAuthedFetch
+      .mockReturnValueOnce(firstResponse.promise)
+      .mockReturnValueOnce(secondResponse.promise)
     const { result } = renderGroupHook(props, undefined, jest.fn(), REACTION_GROUP_ID)
     act(() => {
       result.current.setPosts([
@@ -585,31 +632,236 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     })
 
     let first!: Promise<void>
-    let duplicate!: Promise<void>
+    let second!: Promise<void>
     act(() => {
       first = result.current.handleLike(REACTION_POST_ID)
-      duplicate = result.current.handleLike(REACTION_POST_ID)
+      second = result.current.handleLike(REACTION_POST_ID)
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
     expect(result.current.likeLoading[REACTION_POST_ID]).toBe(true)
 
+    expect(result.current.posts[0].user_reaction).toBeNull()
+    firstResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(result.current.posts[0].user_reaction).toBeNull()
+
+    secondResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_2, null),
+    })
     await act(async () => {
-      request.resolve({
-        ok: true,
-        status: 200,
-        data: reactionReceipt({ dislike_count: 3 }),
-      })
-      await Promise.all([first, duplicate])
+      await Promise.all([first, second])
+    })
+
+    expect(result.current.posts[0]).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_liked: false,
+      user_reaction: null,
+    })
+    expect(result.current.likeLoading[REACTION_POST_ID]).toBe(false)
+  })
+
+  it('coalesces three same-frame clicks when the latest desired state matches the in-flight command', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: REACTION_ACTOR_ID,
+      viewerKey: `user:${REACTION_ACTOR_ID}`,
+      isMember: true,
+    }
+    const response = deferred<unknown>()
+    mockAuthedFetch.mockReturnValue(response.promise)
+    const { result } = renderGroupHook(props, undefined, jest.fn(), REACTION_GROUP_ID)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: REACTION_POST_ID,
+          group_id: REACTION_GROUP_ID,
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          like_count: 5,
+          dislike_count: 2,
+          user_liked: false,
+          user_reaction: null,
+        },
+      ])
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    let third!: Promise<void>
+    act(() => {
+      first = result.current.handleLike(REACTION_POST_ID)
+      second = result.current.handleLike(REACTION_POST_ID)
+      third = result.current.handleLike(REACTION_POST_ID)
+    })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(result.current.posts[0].user_reaction).toBe('up')
+
+    response.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+    })
+    await act(async () => {
+      await Promise.all([first, second, third])
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(result.current.posts[0]).toMatchObject({
+      like_count: 6,
+      user_liked: true,
+      user_reaction: 'up',
+    })
+  })
+
+  it('replays an uncertain command with the same request id and does not roll back a newer intent', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: REACTION_ACTOR_ID,
+      viewerKey: `user:${REACTION_ACTOR_ID}`,
+      isMember: true,
+    }
+    const firstAttempt = deferred<unknown>()
+    const replay = deferred<unknown>()
+    const newerAttempt = deferred<unknown>()
+    mockAuthedFetch
+      .mockReturnValueOnce(firstAttempt.promise)
+      .mockReturnValueOnce(replay.promise)
+      .mockReturnValueOnce(newerAttempt.promise)
+    const { result } = renderGroupHook(props, undefined, jest.fn(), REACTION_GROUP_ID)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: REACTION_POST_ID,
+          group_id: REACTION_GROUP_ID,
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          like_count: 5,
+          dislike_count: 2,
+          user_liked: false,
+          user_reaction: null,
+        },
+      ])
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    let third!: Promise<void>
+    act(() => {
+      first = result.current.handleLike(REACTION_POST_ID)
+      second = result.current.handleLike(REACTION_POST_ID)
+      third = result.current.handleLike(REACTION_POST_ID)
+    })
+
+    firstAttempt.resolve({ ok: false, status: 503, data: { error: 'unavailable' } })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual(mockAuthedFetch.mock.calls[0][3])
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual({
+      operation: 'set_reaction',
+      request_id: REACTION_REQUEST_ID_1,
+      desired_reaction: 'up',
+    })
+
+    replay.resolve({ ok: false, status: 408, data: { error: 'timeout' } })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+    expect(mockAuthedFetch.mock.calls[2][3]).toEqual({
+      operation: 'set_reaction',
+      request_id: REACTION_REQUEST_ID_2,
+      desired_reaction: 'up',
+    })
+
+    newerAttempt.resolve({ ok: false, status: 403, data: { error: 'forbidden' } })
+    await act(async () => {
+      await Promise.all([first, second, third])
     })
 
     expect(result.current.posts[0]).toMatchObject({
       like_count: 6,
-      dislike_count: 3,
+      dislike_count: 2,
       user_liked: true,
       user_reaction: 'up',
     })
-    expect(result.current.likeLoading[REACTION_POST_ID]).toBe(false)
+  })
+
+  it('queues a rendered unlike intent and keeps the older like ACK from restoring it', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: REACTION_ACTOR_ID,
+      viewerKey: `user:${REACTION_ACTOR_ID}`,
+      isMember: true,
+    }
+    const firstResponse = deferred<unknown>()
+    const secondResponse = deferred<unknown>()
+    mockAuthedFetch
+      .mockReturnValueOnce(firstResponse.promise)
+      .mockReturnValueOnce(secondResponse.promise)
+    const { result } = renderGroupHook(props, undefined, jest.fn(), REACTION_GROUP_ID)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: REACTION_POST_ID,
+          group_id: REACTION_GROUP_ID,
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          like_count: 5,
+          dislike_count: 2,
+          user_liked: false,
+          user_reaction: null,
+        },
+      ])
+    })
+
+    let like!: Promise<void>
+    act(() => {
+      like = result.current.handleLike(REACTION_POST_ID)
+    })
+    await waitFor(() => expect(result.current.posts[0].user_reaction).toBe('up'))
+
+    let unlike!: Promise<void>
+    act(() => {
+      unlike = result.current.handleLike(REACTION_POST_ID)
+    })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(result.current.posts[0].user_reaction).toBeNull()
+
+    firstResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_1, 'up'),
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(result.current.posts[0].user_reaction).toBeNull()
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual({
+      operation: 'set_reaction',
+      request_id: REACTION_REQUEST_ID_2,
+      desired_reaction: null,
+    })
+
+    secondResponse.resolve({
+      ok: true,
+      status: 200,
+      data: reactionReceipt(REACTION_REQUEST_ID_2, null),
+    })
+    await act(async () => {
+      await Promise.all([like, unlike])
+    })
+
+    expect(result.current.posts[0]).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_liked: false,
+      user_reaction: null,
+    })
   })
 
   it('single-flights group bookmarks and adopts only the exact bound receipt', async () => {
@@ -974,7 +1226,7 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     expect(showToast).toHaveBeenCalledWith('postDeleted', 'success')
   })
 
-  it('rejects a malformed reaction ACK without changing local state and unlocks retry', async () => {
+  it('keeps possibly committed intent after a malformed ACK, then sends the next absolute intent', async () => {
     const props = {
       ...baseProps,
       accessToken: 'token-a',
@@ -987,12 +1239,23 @@ describe('useGroupPosts comment audience and viewer scope', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        data: reactionReceipt({ actor_id: REACTION_OTHER_ACTOR_ID, like_count: 99 }),
+        data: reactionReceipt(REACTION_REQUEST_ID_1, 'up', {
+          actor_id: REACTION_OTHER_ACTOR_ID,
+          like_count: 99,
+        }),
       })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        data: reactionReceipt({ dislike_count: 1 }),
+        data: reactionReceipt(REACTION_REQUEST_ID_1, 'up', {
+          actor_id: REACTION_OTHER_ACTOR_ID,
+          like_count: 99,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: reactionReceipt(REACTION_REQUEST_ID_2, null, { dislike_count: 1 }),
       })
     const { result } = renderGroupHook(props, undefined, showToast, REACTION_GROUP_ID)
     act(() => {
@@ -1012,20 +1275,27 @@ describe('useGroupPosts comment audience and viewer scope', () => {
 
     await act(async () => result.current.handleLike(REACTION_POST_ID))
     expect(result.current.posts[0]).toMatchObject({
-      like_count: 5,
-      dislike_count: 1,
-      user_liked: false,
-      user_reaction: null,
-    })
-    expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
-
-    await act(async () => result.current.handleLike(REACTION_POST_ID))
-    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
-    expect(result.current.posts[0]).toMatchObject({
       like_count: 6,
       dislike_count: 1,
       user_liked: true,
       user_reaction: 'up',
+    })
+    expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual(mockAuthedFetch.mock.calls[0][3])
+
+    await act(async () => result.current.handleLike(REACTION_POST_ID))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
+    expect(mockAuthedFetch.mock.calls[2][3]).toEqual({
+      operation: 'set_reaction',
+      request_id: REACTION_REQUEST_ID_2,
+      desired_reaction: null,
+    })
+    expect(result.current.posts[0]).toMatchObject({
+      like_count: 5,
+      dislike_count: 1,
+      user_liked: false,
+      user_reaction: null,
     })
   })
 

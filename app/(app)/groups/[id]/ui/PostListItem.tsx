@@ -440,7 +440,7 @@ export default function PostListItem(props: PostListItemProps) {
             variant="text"
             size="sm"
             onClick={() => handleLike(post.id)}
-            disabled={likeLoading[post.id]}
+            aria-busy={likeLoading[post.id] || undefined}
             style={{
               padding: 0,
               minWidth: 'auto',

@@ -34,8 +34,15 @@ import {
   readPostDeleteError,
 } from '@/lib/posts/post-delete-contract'
 import {
+  POST_REACTION_OPERATION,
   POST_REACTION_REQUEST_TIMEOUT_MS,
+  createPostReactionRequestId,
+  isDefinitivePostReactionRejection,
+  nextPostReactionState,
+  postReactionCountDelta,
   readPostReactionAcknowledgement,
+  type PostReaction,
+  type PostReactionAcknowledgement,
 } from '@/lib/posts/post-reaction-client-contract'
 import {
   POST_REPOST_OPERATION,
@@ -58,8 +65,44 @@ import {
 
 type Post = PostWithUserState
 
+type ReactionIntent = {
+  desired: PostReaction | null
+  revision: number
+}
+
+type ReactionTruth = {
+  reaction: PostReaction | null
+  likeCount: number
+  dislikeCount: number
+}
+
+type ReactionCommandOutcome =
+  | { kind: 'acknowledged'; acknowledgement: PostReactionAcknowledgement }
+  | { kind: 'definitive-rejection'; error: string | null }
+  | { kind: 'uncertain'; error: unknown }
+
 const EMPTY_BOOKMARK_FLAGS: Record<string, boolean> = {}
 const EMPTY_BOOKMARK_COUNTS: Record<string, number> = {}
+
+function applyDesiredReaction(post: Post, desired: PostReaction | null): Post {
+  const current = post.user_reaction ?? null
+  const delta = postReactionCountDelta(current, desired)
+  return {
+    ...post,
+    like_count: Math.max(0, post.like_count + delta.likeCount),
+    dislike_count: Math.max(0, post.dislike_count + delta.dislikeCount),
+    user_reaction: desired,
+  }
+}
+
+function applyReactionTruth(post: Post, truth: ReactionTruth): Post {
+  return {
+    ...post,
+    like_count: truth.likeCount,
+    dislike_count: truth.dislikeCount,
+    user_reaction: truth.reaction,
+  }
+}
 
 function consumePromise(work: Promise<unknown>): void {
   void work.then(
@@ -199,6 +242,7 @@ export function usePostActions({
   openPost,
   setOpenPost,
   openPostAliasesPosts = false,
+  onReactionStateChange,
   showToast,
   showDangerConfirm,
   t,
@@ -217,6 +261,8 @@ export function usePostActions({
    * `setPosts` path or the second whole-object write can overwrite newer data.
    */
   openPostAliasesPosts?: boolean
+  /** Marks a local reaction write so an older feed read cannot overwrite it. */
+  onReactionStateChange?: (postId: string) => void
   showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   t: (key: string) => string
@@ -242,11 +288,17 @@ export function usePostActions({
     []
   )
   const lockRef = useRef<Set<string>>(new Set())
+  const reactionIntentRef = useRef(new Map<string, ReactionIntent>())
+  const reactionWorkerRef = useRef(new Map<string, Promise<void>>())
+  const reactionRevisionRef = useRef(0)
   const bookmarkLockRef = useRef<Set<string>>(new Set())
   const bookmarkStatusLockRef = useRef<Set<string>>(new Set())
   const bookmarkMutationRevisionRef = useRef(new Map<string, number>())
   const bookmarkHydrationRevisionRef = useRef(new Map<string, number>())
   useEffect(() => {
+    reactionIntentRef.current.clear()
+    reactionWorkerRef.current.clear()
+    reactionRevisionRef.current = 0
     // Revision keys include the viewer scope, but retaining completed entries
     // from prior identities would grow these maps for the lifetime of the tab.
     bookmarkMutationRevisionRef.current.clear()
@@ -467,165 +519,242 @@ export function usePostActions({
         return
       }
       if (!capturedScope.userId) return
+      const actorId = capturedScope.userId
       const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000react-${postId}`
-      if (lockRef.current.has(key)) return
-      lockRef.current.add(key)
-
-      // Compute delta from CURRENT state (not a captured snapshot) to avoid
-      // stale-reference bugs when parent re-renders during the fetch.
       const currentPost = postsRef.current.find((p) => p.id === postId)
-      if (!currentPost) {
-        lockRef.current.delete(key)
-        return
-      }
+      if (!currentPost) return
 
-      const currentReaction = currentPost.user_reaction
-      const newReaction = currentReaction === reactionType ? null : reactionType
-      // Store the delta so rollback can reverse it from latest state
-      const likeDelta =
-        reactionType === 'up'
-          ? currentReaction === 'up'
-            ? -1
-            : 1
-          : currentReaction === 'up'
-            ? -1
-            : 0
-      const dislikeDelta =
-        reactionType === 'down'
-          ? currentReaction === 'down'
-            ? -1
-            : 1
-          : currentReaction === 'down'
-            ? -1
-            : 0
+      // A second click can land before React renders the first optimistic
+      // update. The queued desired state, not a stale component snapshot, is
+      // therefore the source for the next intent.
+      const currentIntent = reactionIntentRef.current.get(key)
+      const desiredReaction = nextPostReactionState(
+        currentIntent?.desired ?? currentPost.user_reaction ?? null,
+        reactionType
+      )
+      reactionIntentRef.current.set(key, {
+        desired: desiredReaction,
+        revision: ++reactionRevisionRef.current,
+      })
 
-      // Optimistic update — apply delta
+      onReactionStateChange?.(postId)
       setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                like_count: p.like_count + likeDelta,
-                dislike_count: p.dislike_count + dislikeDelta,
-                user_reaction: newReaction,
-              }
-            : p
+        prev.map((post) =>
+          post.id === postId ? applyDesiredReaction(post, desiredReaction) : post
         )
       )
       {
         const op = openPostRef.current
         if (!openPostAliasesPosts && op?.id === postId)
-          setOpenPost({
-            ...op,
-            like_count: op.like_count + likeDelta,
-            dislike_count: op.dislike_count + dislikeDelta,
-            user_reaction: newReaction,
-          } as Post)
+          setOpenPost(applyDesiredReaction(op, desiredReaction))
       }
       haptic('light')
 
-      const rollback = () => {
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? {
-                  ...p,
-                  like_count: p.like_count - likeDelta,
-                  dislike_count: p.dislike_count - dislikeDelta,
-                  user_reaction: currentReaction,
-                }
-              : p
+      const sendCommand = async (intent: ReactionIntent): Promise<ReactionCommandOutcome> => {
+        const requestId = createPostReactionRequestId()
+        let lastError: unknown = new Error('Post reaction acknowledgement unavailable')
+
+        // Replaying an absolute desired state is safe. One bounded retry turns
+        // a lost HTTP response into canonical database truth without toggling.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          if (!scopeIsCurrent(capturedScope)) return { kind: 'uncertain', error: lastError }
+          const controller = new AbortController()
+          const timeoutId = setTimeout(
+            () =>
+              controller.abort(new DOMException('Post reaction request timed out', 'AbortError')),
+            POST_REACTION_REQUEST_TIMEOUT_MS
           )
-        )
-        const op = openPostRef.current
-        if (!openPostAliasesPosts && op?.id === postId) {
-          setOpenPost({
-            ...op,
-            like_count: op.like_count - likeDelta,
-            dislike_count: op.dislike_count - dislikeDelta,
-            user_reaction: currentReaction,
-          } as Post)
+          try {
+            const response = await waitWithinAbortSignal(
+              fetch(`/api/posts/${postId}/like`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${accessToken}`,
+                  ...getCsrfHeaders(),
+                },
+                body: JSON.stringify({
+                  operation: POST_REACTION_OPERATION,
+                  request_id: requestId,
+                  desired_reaction: intent.desired,
+                }),
+                cache: 'no-store',
+                signal: controller.signal,
+              }),
+              controller.signal
+            )
+
+            let json: unknown
+            try {
+              json = await waitWithinAbortSignal(response.json(), controller.signal)
+            } catch (error) {
+              if (isDefinitivePostReactionRejection(response.status)) {
+                return { kind: 'definitive-rejection', error: null }
+              }
+              lastError = error
+              continue
+            }
+
+            const acknowledgement =
+              response.ok && response.status === 200
+                ? readPostReactionAcknowledgement(json, {
+                    actorId,
+                    postId,
+                    requestId,
+                    desiredReaction: intent.desired,
+                  })
+                : null
+            if (acknowledgement) return { kind: 'acknowledged', acknowledgement }
+
+            const rawError =
+              json !== null && typeof json === 'object' && !Array.isArray(json)
+                ? (json as Record<string, unknown>).error
+                : null
+            if (isDefinitivePostReactionRejection(response.status)) {
+              return {
+                kind: 'definitive-rejection',
+                error: typeof rawError === 'string' ? rawError : null,
+              }
+            }
+            lastError = typeof rawError === 'string' ? new Error(rawError) : lastError
+          } catch (error) {
+            lastError = error
+          } finally {
+            clearTimeout(timeoutId)
+          }
+        }
+
+        return { kind: 'uncertain', error: lastError }
+      }
+
+      const drainIntents = async (): Promise<void> => {
+        let knownTruth: ReactionTruth = {
+          reaction: currentPost.user_reaction ?? null,
+          likeCount: currentPost.like_count,
+          dislikeCount: currentPost.dislike_count,
+        }
+        let knownTruthIsCertain = true
+
+        while (scopeIsCurrent(capturedScope)) {
+          const intent = reactionIntentRef.current.get(key)
+          if (!intent) return
+          const outcome = await sendCommand(intent)
+          if (!scopeIsCurrent(capturedScope)) return
+          const latestIntent = reactionIntentRef.current.get(key)
+
+          if (outcome.kind === 'acknowledged') {
+            const acknowledgement = outcome.acknowledgement
+            knownTruth = {
+              reaction: acknowledgement.reaction,
+              likeCount: acknowledgement.likeCount,
+              dislikeCount: acknowledgement.dislikeCount,
+            }
+            knownTruthIsCertain = true
+
+            // An older ACK must not overwrite a newer opposite click. If the
+            // latest intent converged to the same state, it can be coalesced.
+            if (latestIntent?.desired === acknowledgement.reaction) {
+              onReactionStateChange?.(postId)
+              setPosts((prev) =>
+                prev.map((post) =>
+                  post.id === postId ? applyReactionTruth(post, knownTruth) : post
+                )
+              )
+              usePostStore.getState().updatePostReaction(postId, {
+                like_count: acknowledgement.likeCount,
+                dislike_count: acknowledgement.dislikeCount,
+                reaction: acknowledgement.reaction,
+              })
+              const op = openPostRef.current
+              if (!openPostAliasesPosts && op?.id === postId) {
+                setOpenPost(applyReactionTruth(op, knownTruth))
+              }
+              reactionIntentRef.current.delete(key)
+              if (acknowledgement.action !== 'unchanged' && acknowledgement.reaction) {
+                trackEvent('post_reaction', {
+                  post_id: acknowledgement.postId,
+                  reaction: acknowledgement.reaction,
+                })
+              }
+              return
+            }
+            continue
+          }
+
+          if (outcome.kind === 'definitive-rejection') {
+            if (latestIntent?.revision === intent.revision) {
+              // Rollback is valid only while every earlier command has a
+              // definitive result. Once an older request is uncertain, its
+              // commit state can differ from this pre-command snapshot.
+              if (knownTruthIsCertain) {
+                onReactionStateChange?.(postId)
+                setPosts((prev) =>
+                  prev.map((post) =>
+                    post.id === postId ? applyReactionTruth(post, knownTruth) : post
+                  )
+                )
+                usePostStore.getState().updatePostReaction(postId, {
+                  like_count: knownTruth.likeCount,
+                  dislike_count: knownTruth.dislikeCount,
+                  reaction: knownTruth.reaction,
+                })
+                const op = openPostRef.current
+                if (!openPostAliasesPosts && op?.id === postId) {
+                  setOpenPost(applyReactionTruth(op, knownTruth))
+                }
+              }
+              reactionIntentRef.current.delete(key)
+              showToast(outcome.error ?? t('operationFailed'), 'error')
+              return
+            }
+            continue
+          }
+
+          // Both attempts are uncertain. The first may have committed, so a
+          // blind inverse rollback would fabricate state. A newer absolute
+          // intent can still safely converge; otherwise retain the optimistic
+          // state and let the next click/hydration reconcile it.
+          knownTruthIsCertain = false
+          if (latestIntent?.revision === intent.revision) {
+            reactionIntentRef.current.delete(key)
+            logger.error('[PostFeed] reaction result remains uncertain:', outcome.error)
+            showToast(getNetworkErrorMessage(outcome.error, t), 'error')
+            return
+          }
         }
       }
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(
-        () => controller.abort(new DOMException('Post reaction request timed out', 'AbortError')),
-        POST_REACTION_REQUEST_TIMEOUT_MS
-      )
+      const startWorker = (): Promise<void> => {
+        const running = reactionWorkerRef.current.get(key)
+        if (running) return running
+        const worker = drainIntents().finally(() => {
+          if (reactionWorkerRef.current.get(key) === worker) {
+            reactionWorkerRef.current.delete(key)
+          }
+        })
+        reactionWorkerRef.current.set(key, worker)
+        return worker
+      }
 
       try {
-        const response = await waitWithinAbortSignal(
-          fetch(`/api/posts/${postId}/like`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-              ...getCsrfHeaders(),
-            },
-            body: JSON.stringify({ reaction_type: reactionType }),
-            cache: 'no-store',
-            signal: controller.signal,
-          }),
-          controller.signal
-        )
-        const json: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
-        if (!scopeIsCurrent(capturedScope)) return
-        const acknowledgement =
-          response.ok && response.status === 200
-            ? readPostReactionAcknowledgement(json, {
-                actorId: capturedScope.userId,
-                postId,
-                requestedReaction: reactionType,
-              })
-            : null
-        if (acknowledgement) {
-          // Reconcile with server truth (overwrites optimistic)
-          const reconcileServer = (post: Post): Post => ({
-            ...post,
-            like_count: acknowledgement.likeCount,
-            dislike_count: acknowledgement.dislikeCount,
-            user_reaction: acknowledgement.reaction,
-          })
-          setPosts((prev) => prev.map((p) => (p.id === postId ? reconcileServer(p) : p)))
-          usePostStore.getState().updatePostReaction(postId, {
-            like_count: acknowledgement.likeCount,
-            dislike_count: acknowledgement.dislikeCount,
-            reaction: acknowledgement.reaction,
-          })
-          {
-            const op = openPostRef.current
-            if (!openPostAliasesPosts && op?.id === postId) setOpenPost(reconcileServer(op))
-          }
-          // Analytics: only count a NEW reaction, not an un-react.
-          if (acknowledgement.reaction) {
-            trackEvent('post_reaction', {
-              post_id: acknowledgement.postId,
-              reaction: acknowledgement.reaction,
-            })
-          }
-        } else {
-          rollback()
-          const errorMessage =
-            json !== null && typeof json === 'object' && !Array.isArray(json)
-              ? (json as Record<string, unknown>).error
-              : null
-          showToast(typeof errorMessage === 'string' ? errorMessage : t('operationFailed'), 'error')
+        // A click arriving during the worker's final microtask can enqueue
+        // after its last map read. Recheck until no current-scope intent is
+        // stranded without a worker.
+        while (scopeIsCurrent(capturedScope) && reactionIntentRef.current.has(key)) {
+          await startWorker()
         }
-      } catch (err) {
+      } catch (error) {
         if (!scopeIsCurrent(capturedScope)) return
-        rollback()
-        logger.error('[PostFeed] toggleReaction error:', err)
-        showToast(getNetworkErrorMessage(err, t), 'error')
-      } finally {
-        clearTimeout(timeoutId)
-        lockRef.current.delete(key)
+        reactionIntentRef.current.delete(key)
+        logger.error('[PostFeed] reaction queue failed:', error)
+        showToast(getNetworkErrorMessage(error, t), 'error')
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       accessToken,
       captureRenderedScope,
+      onReactionStateChange,
       openPost?.id,
       openPostAliasesPosts,
       scopeIsCurrent,
@@ -1664,7 +1793,7 @@ export function usePostActions({
     [
       accessToken,
       captureRenderedScope,
-      openPost?.id,
+      openPost,
       scopeIsCurrent,
       setOpenPost,
       setPosts,

@@ -204,6 +204,92 @@ describe('PostFeed comment loading stability', () => {
     expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves a reaction changed after an older feed read started', async () => {
+    const view = render(<PostFeed initialPosts={[post]} />)
+    const actionProps = mockUsePostActions.mock.calls.at(-1)?.[0]
+
+    act(() => {
+      actionProps.onReactionStateChange('post-1')
+      actionProps.setPosts((previous: (typeof post)[]) =>
+        previous.map((candidate) =>
+          candidate.id === 'post-1'
+            ? { ...candidate, like_count: 1, user_reaction: 'up' as const }
+            : candidate
+        )
+      )
+    })
+
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          {
+            posts: [{ ...post, like_count: 0, user_reaction: null }],
+            hasMore: false,
+            offset: 1,
+            reactionRevisionAtStart: 0,
+          },
+        ],
+      },
+      fetchNextPage: jest.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn().mockResolvedValue(undefined),
+    })
+    view.rerender(<PostFeed initialPosts={[post]} />)
+
+    await waitFor(() =>
+      expect(mockUsePostActions.mock.calls.at(-1)?.[0].posts[0]).toMatchObject({
+        like_count: 1,
+        user_reaction: 'up',
+      })
+    )
+  })
+
+  it('accepts reaction truth from a feed read started after the local write', async () => {
+    const view = render(<PostFeed initialPosts={[post]} />)
+    const actionProps = mockUsePostActions.mock.calls.at(-1)?.[0]
+
+    act(() => {
+      actionProps.onReactionStateChange('post-1')
+      actionProps.setPosts((previous: (typeof post)[]) =>
+        previous.map((candidate) =>
+          candidate.id === 'post-1'
+            ? { ...candidate, like_count: 1, user_reaction: 'up' as const }
+            : candidate
+        )
+      )
+    })
+
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          {
+            posts: [{ ...post, like_count: 7, user_reaction: 'down' as const }],
+            hasMore: false,
+            offset: 1,
+            reactionRevisionAtStart: 1,
+          },
+        ],
+      },
+      fetchNextPage: jest.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn().mockResolvedValue(undefined),
+    })
+    view.rerender(<PostFeed initialPosts={[post]} />)
+
+    await waitFor(() =>
+      expect(mockUsePostActions.mock.calls.at(-1)?.[0].posts[0]).toMatchObject({
+        like_count: 7,
+        user_reaction: 'down',
+      })
+    )
+  })
+
   it('discards callbacks captured by the previous viewer session', async () => {
     const auth = {
       accessToken: 'token-a',

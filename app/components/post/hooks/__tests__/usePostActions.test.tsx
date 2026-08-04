@@ -137,15 +137,22 @@ function responseWithJson(json: () => Promise<unknown>, ok = true, status = 200)
   return { ok, status, json } as Response
 }
 
-function reactionReceipt(overrides: Record<string, unknown> = {}) {
+function reactionReceiptForRequest(
+  options: RequestInit | undefined,
+  overrides: Record<string, unknown> = {}
+) {
+  const requestBody = parsedRequestBody(options)
+  const desiredReaction = requestBody.desired_reaction
   return {
     success: true,
     data: {
       actor_id: REACTION_ACTOR_ID,
       post_id: REACTION_POST_ID,
-      requested_reaction: 'up',
-      action: 'added',
-      reaction: 'up',
+      request_id: requestBody.request_id,
+      operation: 'set_reaction',
+      desired_reaction: desiredReaction,
+      action: desiredReaction === null ? 'removed' : 'added',
+      reaction: desiredReaction,
       like_count: 12,
       dislike_count: 3,
       ...overrides,
@@ -409,7 +416,9 @@ describe('usePostActions aliased detail state', () => {
   })
 
   it('adopts only the exact actor- and post-bound reaction receipt', async () => {
-    ;(global.fetch as jest.Mock).mockResolvedValue(jsonResponse(reactionReceipt()))
+    ;(global.fetch as jest.Mock).mockImplementation((_url: string, options?: RequestInit) =>
+      Promise.resolve(jsonResponse(reactionReceiptForRequest(options)))
+    )
     const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
     act(() => {
       result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
@@ -436,9 +445,14 @@ describe('usePostActions aliased detail state', () => {
         Authorization: `Bearer ${reactionViewer.accessToken}`,
         'Content-Type': 'application/json',
       }),
-      body: JSON.stringify({ reaction_type: 'up' }),
+      body: expect.any(String),
       cache: 'no-store',
       signal: expect.any(AbortSignal),
+    })
+    expect(parsedRequestBody((global.fetch as jest.Mock).mock.calls[0][1])).toEqual({
+      operation: 'set_reaction',
+      request_id: expect.stringMatching(/^[0-9a-f]{32}$/),
+      desired_reaction: 'up',
     })
   })
 
@@ -806,9 +820,9 @@ describe('usePostActions aliased detail state', () => {
     expect(mockShowToast).not.toHaveBeenCalledWith('bookmarked', 'success')
   })
 
-  it('reverses one optimistic reaction delta when the server rejects the request', async () => {
+  it('reverses one optimistic reaction delta after a definitive pre-commit rejection', async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue(
-      jsonResponse({ success: false, error: 'rejected' }, false)
+      jsonResponse({ success: false, error: 'rejected' }, false, 400)
     )
     const { result } = renderHook(() => useAliasedPostActions())
 
@@ -822,35 +836,45 @@ describe('usePostActions aliased detail state', () => {
       user_reaction: null,
     })
     expect(mockSetOpenPost).not.toHaveBeenCalled()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
   it.each([
-    ['another actor', reactionReceipt({ actor_id: '33333333-3333-4333-8333-333333333333' }), 200],
-    ['another post', reactionReceipt({ post_id: '33333333-3333-4333-8333-333333333333' }), 200],
-    ['another requested reaction', reactionReceipt({ requested_reaction: 'down' }), 200],
-    ['an extra receipt field', reactionReceipt({ invented: true }), 200],
-    ['an exact body with a non-200 status', reactionReceipt(), 201],
-  ])('rolls back a 2xx reaction response bound to %s', async (_name, body, status) => {
-    ;(global.fetch as jest.Mock).mockResolvedValue(jsonResponse(body, true, status))
-    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
-    act(() => {
-      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
-    })
+    ['another actor', { actor_id: '33333333-3333-4333-8333-333333333333' }, 200],
+    ['another post', { post_id: '33333333-3333-4333-8333-333333333333' }, 200],
+    ['another request', { request_id: 'f'.repeat(32) }, 200],
+    ['another desired reaction', { desired_reaction: 'down' }, 200],
+    ['an extra receipt field', { invented: true }, 200],
+    ['an exact body with a non-200 status', {}, 201],
+  ])(
+    'retains optimistic state after an uncertain response bound to %s',
+    async (_name, overrides, status) => {
+      ;(global.fetch as jest.Mock).mockImplementation((_url: string, options?: RequestInit) =>
+        Promise.resolve(
+          jsonResponse(reactionReceiptForRequest(options, overrides), true, status as number)
+        )
+      )
+      const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+      act(() => {
+        result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+      })
 
-    await act(async () => {
-      await result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
-    })
+      await act(async () => {
+        await result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      })
 
-    expect(result.current.post).toMatchObject({
-      like_count: 10,
-      dislike_count: 2,
-      user_reaction: null,
-    })
-    expect(mockUpdatePostReaction).not.toHaveBeenCalled()
-    expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error')
-  })
+      expect(result.current.post).toMatchObject({
+        like_count: 11,
+        dislike_count: 2,
+        user_reaction: 'up',
+      })
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(mockUpdatePostReaction).not.toHaveBeenCalled()
+      expect(mockShowToast).toHaveBeenCalled()
+    }
+  )
 
-  it('rolls back a non-JSON 200 reaction response', async () => {
+  it('retains optimistic state after two non-JSON 200 responses', async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
@@ -868,14 +892,54 @@ describe('usePostActions aliased detail state', () => {
     })
 
     expect(result.current.post).toMatchObject({
-      like_count: 10,
+      like_count: 11,
       dislike_count: 2,
-      user_reaction: null,
+      user_reaction: 'up',
     })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
     expect(mockUpdatePostReaction).not.toHaveBeenCalled()
   })
 
-  it('single-flights two reaction clicks for one viewer, session and post', async () => {
+  it('serializes two rapid same-button clicks and preserves the final removal intent', async () => {
+    const firstResponse = deferred<Response>()
+    ;(global.fetch as jest.Mock)
+      .mockReturnValueOnce(firstResponse.promise)
+      .mockImplementation((_url: string, options?: RequestInit) =>
+        Promise.resolve(jsonResponse(reactionReceiptForRequest(options)))
+      )
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      second = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      const firstOptions = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+      firstResponse.resolve(jsonResponse(reactionReceiptForRequest(firstOptions)))
+      await Promise.all([first, second])
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(parsedRequestBody((global.fetch as jest.Mock).mock.calls[1][1])).toMatchObject({
+      operation: 'set_reaction',
+      desired_reaction: null,
+    })
+    expect(result.current.post).toMatchObject({
+      like_count: 12,
+      dislike_count: 3,
+      user_reaction: null,
+    })
+    expect(mockUpdatePostReaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('coalesces three rapid clicks when the latest desired state matches the in-flight command', async () => {
     const response = deferred<Response>()
     ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
     const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
@@ -884,31 +948,108 @@ describe('usePostActions aliased detail state', () => {
     })
 
     let first!: Promise<void>
-    let duplicate!: Promise<void>
+    let second!: Promise<void>
+    let third!: Promise<void>
     act(() => {
       first = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
-      duplicate = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      second = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      third = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
     })
 
     expect(global.fetch).toHaveBeenCalledTimes(1)
     await act(async () => {
-      response.resolve(jsonResponse(reactionReceipt()))
-      await Promise.all([first, duplicate])
+      const options = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+      response.resolve(jsonResponse(reactionReceiptForRequest(options)))
+      await Promise.all([first, second, third])
     })
 
+    expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(result.current.post).toMatchObject({
       like_count: 12,
       dislike_count: 3,
       user_reaction: 'up',
     })
+  })
+
+  it('converges a newer opposite intent after an older command remains uncertain', async () => {
+    let call = 0
+    ;(global.fetch as jest.Mock).mockImplementation((_url: string, options?: RequestInit) => {
+      call += 1
+      if (call <= 2) {
+        return Promise.resolve(
+          jsonResponse({ success: false, error: 'upstream failed' }, false, 503)
+        )
+      }
+      return Promise.resolve(jsonResponse(reactionReceiptForRequest(options)))
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      second = result.current.actions.toggleReaction(REACTION_POST_ID, 'down')
+    })
+    await act(async () => Promise.all([first, second]))
+
+    expect(global.fetch).toHaveBeenCalledTimes(3)
+    expect(parsedRequestBody((global.fetch as jest.Mock).mock.calls[2][1])).toMatchObject({
+      operation: 'set_reaction',
+      desired_reaction: 'down',
+    })
+    expect(result.current.post).toMatchObject({
+      like_count: 12,
+      dislike_count: 3,
+      user_reaction: 'down',
+    })
     expect(mockUpdatePostReaction).toHaveBeenCalledTimes(1)
   })
 
-  it('bounds a transport that ignores AbortSignal, rolls back and releases its lock', async () => {
+  it('does not roll back to stale truth when an older command is uncertain and the latest is rejected', async () => {
+    let call = 0
+    ;(global.fetch as jest.Mock).mockImplementation(() => {
+      call += 1
+      return Promise.resolve(
+        call <= 2
+          ? jsonResponse({ success: false, error: 'upstream failed' }, false, 503)
+          : jsonResponse({ success: false, error: 'rejected' }, false, 400)
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      second = result.current.actions.toggleReaction(REACTION_POST_ID, 'down')
+    })
+    await act(async () => Promise.all([first, second]))
+
+    expect(global.fetch).toHaveBeenCalledTimes(3)
+    expect(result.current.post).toMatchObject({
+      like_count: 10,
+      dislike_count: 3,
+      user_reaction: 'down',
+    })
+    expect(mockUpdatePostReaction).not.toHaveBeenCalled()
+    expect(mockShowToast).toHaveBeenCalledWith('rejected', 'error')
+  })
+
+  it('replays one timed-out desired state without toggling it away', async () => {
     jest.useFakeTimers()
     try {
       const lateResponse = deferred<Response>()
-      ;(global.fetch as jest.Mock).mockReturnValueOnce(lateResponse.promise)
+      ;(global.fetch as jest.Mock)
+        .mockReturnValueOnce(lateResponse.promise)
+        .mockImplementation((_url: string, options?: RequestInit) =>
+          Promise.resolve(jsonResponse(reactionReceiptForRequest(options, { action: 'unchanged' })))
+        )
       const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
       act(() => {
         result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
@@ -928,27 +1069,67 @@ describe('usePostActions aliased detail state', () => {
 
       expect(firstSignal.aborted).toBe(true)
       expect(result.current.post).toMatchObject({
-        like_count: 10,
-        dislike_count: 2,
-        user_reaction: null,
+        like_count: 12,
+        dislike_count: 3,
+        user_reaction: 'up',
       })
-      expect(mockShowToast).toHaveBeenCalledWith('requestTimeout', 'error')
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      const firstBody = parsedRequestBody((global.fetch as jest.Mock).mock.calls[0][1])
+      const retryBody = parsedRequestBody((global.fetch as jest.Mock).mock.calls[1][1])
+      expect(retryBody).toEqual(firstBody)
+      expect(mockShowToast).not.toHaveBeenCalled()
       await act(async () => {
-        lateResponse.resolve(jsonResponse(reactionReceipt({ like_count: 99 })))
+        const firstOptions = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+        lateResponse.resolve(
+          jsonResponse(reactionReceiptForRequest(firstOptions, { like_count: 99 }))
+        )
         await Promise.resolve()
       })
       expect(result.current.post).toMatchObject({
-        like_count: 10,
-        dislike_count: 2,
-        user_reaction: null,
+        like_count: 12,
+        dislike_count: 3,
+        user_reaction: 'up',
       })
-      expect(mockUpdatePostReaction).not.toHaveBeenCalled()
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce(jsonResponse(reactionReceipt()))
+      expect(mockUpdatePostReaction).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('does not blindly roll back after both bounded attempts time out', async () => {
+    jest.useFakeTimers()
+    try {
+      const firstResponse = deferred<Response>()
+      const retryResponse = deferred<Response>()
+      ;(global.fetch as jest.Mock)
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockReturnValueOnce(retryResponse.promise)
+      const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+      act(() => {
+        result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+      })
+
+      let request!: Promise<void>
+      act(() => {
+        request = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      })
       await act(async () => {
-        await result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+        jest.advanceTimersByTime(15_000)
+        await Promise.resolve()
       })
       expect(global.fetch).toHaveBeenCalledTimes(2)
-      expect(result.current.post.user_reaction).toBe('up')
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await request
+      })
+
+      expect(result.current.post).toMatchObject({
+        like_count: 11,
+        dislike_count: 2,
+        user_reaction: 'up',
+      })
+      expect(mockUpdatePostReaction).not.toHaveBeenCalled()
+      expect(mockShowToast).toHaveBeenCalledWith('requestTimeout', 'error')
     } finally {
       jest.useRealTimers()
     }
@@ -986,7 +1167,8 @@ describe('usePostActions aliased detail state', () => {
       }))
     })
     await act(async () => {
-      response.resolve(jsonResponse(reactionReceipt({ like_count: 99 })))
+      const options = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+      response.resolve(jsonResponse(reactionReceiptForRequest(options, { like_count: 99 })))
       await request
     })
 

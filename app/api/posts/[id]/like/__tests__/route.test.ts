@@ -28,6 +28,12 @@ jest.mock('next/server', () => {
 
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const POST_ID = '22222222-2222-4222-8222-222222222222'
+const REQUEST_ID = '0123456789abcdef0123456789abcdef'
+const UP_REQUEST = {
+  operation: 'set_reaction',
+  request_id: REQUEST_ID,
+  desired_reaction: 'up',
+} as const
 const mockSupabase = { marker: 'canonical-admin-client' }
 let mockMiddlewareResponse: NextResponse | null = null
 
@@ -57,7 +63,7 @@ jest.mock('@/lib/data/posts', () => {
     }
   }
   return {
-    togglePostReaction: jest.fn(),
+    setPostReactionDesiredState: jest.fn(),
     getPostById: jest.fn(),
     PostInteractionMutationError,
   }
@@ -77,7 +83,7 @@ jest.mock('@/lib/utils/logger', () => ({
   createLogger: jest.fn().mockReturnValue({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
 }))
 
-const { togglePostReaction, getPostById, PostInteractionMutationError } =
+const { setPostReactionDesiredState, getPostById, PostInteractionMutationError } =
   jest.requireMock('@/lib/data/posts')
 
 function request(body: unknown, raw = false): NextRequest {
@@ -99,7 +105,7 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockMiddlewareResponse = null
-    togglePostReaction.mockResolvedValue({
+    setPostReactionDesiredState.mockResolvedValue({
       action: 'added',
       reaction: 'up',
       like_count: 5,
@@ -112,8 +118,8 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
     })
   })
 
-  it('returns the exact actor, post and requested-reaction receipt', async () => {
-    const response = await invoke({ reaction_type: 'up' })
+  it('returns the exact actor, post, request and desired-state receipt', async () => {
+    const response = await invoke(UP_REQUEST)
     const body = await response.json()
 
     expect(response.status).toBe(200)
@@ -122,11 +128,13 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
       [
         'action',
         'actor_id',
+        'desired_reaction',
         'dislike_count',
         'like_count',
+        'operation',
         'post_id',
         'reaction',
-        'requested_reaction',
+        'request_id',
       ].sort()
     )
     expect(body).toMatchObject({
@@ -134,7 +142,9 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
       data: {
         actor_id: ACTOR_ID,
         post_id: POST_ID,
-        requested_reaction: 'up',
+        request_id: REQUEST_ID,
+        operation: 'set_reaction',
+        desired_reaction: 'up',
         action: 'added',
         reaction: 'up',
         like_count: 5,
@@ -142,47 +152,80 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
       },
       meta: { timestamp: expect.any(String) },
     })
-    expect(togglePostReaction).toHaveBeenCalledWith(mockSupabase, POST_ID, ACTOR_ID, 'up')
+    expect(setPostReactionDesiredState).toHaveBeenCalledWith(mockSupabase, POST_ID, ACTOR_ID, 'up')
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
     expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
     expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
   })
 
-  it('binds a down-reaction change to the submitted desired toggle', async () => {
-    togglePostReaction.mockResolvedValue({
+  it('binds a down-reaction change to the submitted desired state', async () => {
+    setPostReactionDesiredState.mockResolvedValue({
       action: 'changed',
       reaction: 'down',
       like_count: 4,
       dislike_count: 2,
     })
 
-    const response = await invoke({ reaction_type: 'down' })
+    const response = await invoke({ ...UP_REQUEST, desired_reaction: 'down' })
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       data: {
         actor_id: ACTOR_ID,
         post_id: POST_ID,
-        requested_reaction: 'down',
+        request_id: REQUEST_ID,
+        operation: 'set_reaction',
+        desired_reaction: 'down',
         action: 'changed',
         reaction: 'down',
         like_count: 4,
         dislike_count: 2,
       },
     })
-    expect(togglePostReaction).toHaveBeenCalledWith(mockSupabase, POST_ID, ACTOR_ID, 'down')
+    expect(setPostReactionDesiredState).toHaveBeenCalledWith(
+      mockSupabase,
+      POST_ID,
+      ACTOR_ID,
+      'down'
+    )
+  })
+
+  it('accepts null as the explicit desired absence and echoes an unchanged replay', async () => {
+    setPostReactionDesiredState.mockResolvedValue({
+      action: 'unchanged',
+      reaction: null,
+      like_count: 4,
+      dislike_count: 2,
+    })
+
+    const response = await invoke({ ...UP_REQUEST, desired_reaction: null })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        request_id: REQUEST_ID,
+        desired_reaction: null,
+        action: 'unchanged',
+        reaction: null,
+      },
+    })
+    expect(setPostReactionDesiredState).toHaveBeenCalledWith(mockSupabase, POST_ID, ACTOR_ID, null)
+    expect(getPostById).not.toHaveBeenCalled()
   })
 
   it.each([
-    ['a missing reaction', {}],
+    ['a missing command', {}],
     ['a null body', null],
-    ['an unknown reaction', { reaction_type: 'love' }],
-    ['an extra field', { reaction_type: 'up', post_id: POST_ID }],
+    ['a missing operation', { request_id: REQUEST_ID, desired_reaction: 'up' }],
+    ['a toggle operation', { ...UP_REQUEST, operation: 'toggle' }],
+    ['an invalid request identity', { ...UP_REQUEST, request_id: 'bad' }],
+    ['an unknown reaction', { ...UP_REQUEST, desired_reaction: 'love' }],
+    ['an extra field', { ...UP_REQUEST, post_id: POST_ID }],
   ])('rejects %s without mutating', async (_name, body) => {
     const response = await invoke(body)
 
     expect(response.status).toBe(400)
-    expect(togglePostReaction).not.toHaveBeenCalled()
+    expect(setPostReactionDesiredState).not.toHaveBeenCalled()
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 
@@ -190,15 +233,15 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
     const response = await invoke('{broken', POST_ID, true)
 
     expect(response.status).toBe(400)
-    expect(togglePostReaction).not.toHaveBeenCalled()
+    expect(setPostReactionDesiredState).not.toHaveBeenCalled()
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 
   it('rejects an invalid post identity before parsing the body or mutating', async () => {
-    const response = await invoke({ reaction_type: 'up' }, 'post-1')
+    const response = await invoke(UP_REQUEST, 'post-1')
 
     expect(response.status).toBe(400)
-    expect(togglePostReaction).not.toHaveBeenCalled()
+    expect(setPostReactionDesiredState).not.toHaveBeenCalled()
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 
@@ -208,9 +251,9 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
   ] as const)(
     'maps the atomic %s result without issuing a receipt',
     async (kind, status, error) => {
-      togglePostReaction.mockRejectedValue(new PostInteractionMutationError(kind))
+      setPostReactionDesiredState.mockRejectedValue(new PostInteractionMutationError(kind))
 
-      const response = await invoke({ reaction_type: 'up' })
+      const response = await invoke(UP_REQUEST)
 
       expect(response.status).toBe(status)
       await expect(response.json()).resolves.toEqual({ success: false, error })
@@ -224,10 +267,10 @@ describe('POST /api/posts/[id]/like canonical receipt', () => {
       { status: 429 }
     )
 
-    const response = await invoke({ reaction_type: 'up' })
+    const response = await invoke(UP_REQUEST)
 
     expect(response.status).toBe(429)
-    expect(togglePostReaction).not.toHaveBeenCalled()
+    expect(setPostReactionDesiredState).not.toHaveBeenCalled()
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 })

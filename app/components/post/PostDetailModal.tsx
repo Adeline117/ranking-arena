@@ -173,8 +173,10 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
 
   const handleReaction = useCallback(
     async (reactionType: 'up' | 'down') => {
-      // Prevent duplicate reactions
-      if (reactionPendingRef.current || reacting || !auth.authChecked) return
+      // Absolute desired-state mutations are queued by the store. Keep the
+      // controls interactive so a second click can express removal or an
+      // opposite reaction while the first request is still in flight.
+      if (!auth.authChecked) return
 
       const token = auth.isLoggedIn ? auth.accessToken : null
       if (!token) return
@@ -191,6 +193,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         const result = await togglePostReaction(postId, reactionType, token, scope)
         const current = authScopeRef.current
         if (
+          reactionPendingRef.current !== operation ||
           current.viewerKey !== scope.viewerKey ||
           current.sessionGeneration !== scope.sessionGeneration ||
           current.userId !== scope.userId
@@ -205,6 +208,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       } catch {
         const current = authScopeRef.current
         if (
+          reactionPendingRef.current === operation &&
           current.viewerKey === scope.viewerKey &&
           current.sessionGeneration === scope.sessionGeneration &&
           current.userId === scope.userId
@@ -218,7 +222,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         }
       }
     },
-    [postId, auth, showToast, reacting, t]
+    [postId, auth, showToast, t]
   )
 
   const handleLoadMore = useCallback(() => {
@@ -405,7 +409,9 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         >
           <button
             onClick={() => handleReaction('up')}
-            disabled={reacting}
+            aria-label={t('like')}
+            aria-pressed={post.user_reaction === 'up'}
+            aria-busy={reacting || undefined}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -421,7 +427,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                 post.user_reaction === 'up'
                   ? tokens.colors.accent.success
                   : tokens.colors.text.secondary,
-              cursor: reacting ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.semibold,
               opacity: reacting ? 0.6 : 1,
@@ -431,7 +437,9 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           </button>
           <button
             onClick={() => handleReaction('down')}
-            disabled={reacting}
+            aria-label={t('dislike')}
+            aria-pressed={post.user_reaction === 'down'}
+            aria-busy={reacting || undefined}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -447,7 +455,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                 post.user_reaction === 'down'
                   ? tokens.colors.accent.error
                   : tokens.colors.text.secondary,
-              cursor: reacting ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.semibold,
               opacity: reacting ? 0.6 : 1,

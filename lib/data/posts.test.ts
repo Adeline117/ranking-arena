@@ -16,6 +16,7 @@ import {
   updatePost,
   deletePost,
   getUserPostReaction,
+  setPostReactionDesiredState,
   togglePostReaction,
   getUserPostVote,
   togglePostVote,
@@ -481,6 +482,109 @@ describe('togglePostReaction', () => {
       togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
     ).rejects.toMatchObject({ kind: 'not_found' })
   })
+})
+
+describe('setPostReactionDesiredState', () => {
+  test.each([
+    ['adds', 'up', 'added', 'up', 1, 0],
+    ['changes', 'down', 'changed', 'down', 0, 1],
+    ['removes', null, 'removed', null, 0, 0],
+    ['replays without toggling', 'up', 'unchanged', 'up', 2, 0],
+    ['replays absence without adding', null, 'unchanged', null, 2, 1],
+  ] as const)(
+    '%s the absolute reaction state',
+    async (_label, desiredReaction, action, reaction, likeCount, dislikeCount) => {
+      const mockSupabase = createMockSupabase()
+      mockSupabase.rpc.mockResolvedValueOnce({
+        data: {
+          status: action,
+          action,
+          reaction,
+          like_count: likeCount,
+          dislike_count: dislikeCount,
+        },
+        error: null,
+      })
+
+      await expect(
+        setPostReactionDesiredState(
+          mockSupabase as unknown as SupabaseClient,
+          'post1',
+          'user1',
+          desiredReaction
+        )
+      ).resolves.toEqual({
+        action,
+        reaction,
+        like_count: likeCount,
+        dislike_count: dislikeCount,
+      })
+      expect(mockSupabase.rpc).toHaveBeenCalledWith('set_post_reaction_desired_state_atomic', {
+        p_actor_id: 'user1',
+        p_post_id: 'post1',
+        p_desired_reaction: desiredReaction,
+      })
+    }
+  )
+
+  test.each([
+    null,
+    { status: 'not_found', invented: true },
+    { status: 'invalid', action: 'unchanged' },
+    {
+      status: 'removed',
+      action: 'removed',
+      reaction: 'up',
+      like_count: 1,
+      dislike_count: 0,
+    },
+    {
+      status: 'added',
+      action: 'added',
+      reaction: null,
+      like_count: 0,
+      dislike_count: 0,
+    },
+    {
+      status: 'unchanged',
+      action: 'unchanged',
+      reaction: 'up',
+      like_count: 0,
+      dislike_count: 0,
+    },
+    {
+      status: 'unchanged',
+      action: 'unchanged',
+      reaction: 'up',
+      like_count: 1,
+      dislike_count: 0,
+      actor_id: 'user1',
+    },
+  ])('fails closed for malformed desired-state acknowledgement %#', async (data) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({ data, error: null })
+
+    await expect(
+      setPostReactionDesiredState(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
+    ).rejects.toMatchObject({ kind: 'invalid_ack' })
+  })
+
+  test.each(['not_found', 'invalid'] as const)(
+    'surfaces the exact %s failure acknowledgement',
+    async (status) => {
+      const mockSupabase = createMockSupabase()
+      mockSupabase.rpc.mockResolvedValueOnce({ data: { status }, error: null })
+
+      await expect(
+        setPostReactionDesiredState(
+          mockSupabase as unknown as SupabaseClient,
+          'post1',
+          'user1',
+          'up'
+        )
+      ).rejects.toMatchObject({ kind: status })
+    }
+  )
 })
 
 describe('getUserPostVote', () => {

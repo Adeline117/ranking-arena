@@ -24,8 +24,14 @@ import {
   readPostDeleteError,
 } from '@/lib/posts/post-delete-contract'
 import {
+  POST_REACTION_OPERATION,
+  createPostReactionRequestId,
+  isDefinitivePostReactionRejection,
+  nextPostReactionState,
+  postReactionCountDelta,
   readPostReactionAcknowledgement,
   type PostReaction,
+  type PostReactionAcknowledgement,
 } from '@/lib/posts/post-reaction-client-contract'
 import {
   POST_BOOKMARK_OPERATION,
@@ -64,6 +70,61 @@ export interface Post {
   user_reaction?: PostReaction | null
   user_bookmarked?: boolean
   user_reposted?: boolean
+}
+
+type GroupReactionTruth = {
+  reaction: PostReaction | null
+  likeCount: number
+  dislikeCount: number
+}
+
+type GroupReactionContext = {
+  scope: { viewerKey: string; sessionGeneration: number; userId: string | null }
+  groupId: string
+}
+
+type GroupReactionLane = {
+  key: string
+  context: GroupReactionContext
+  postId: string
+  desired: PostReaction | null
+  revision: number
+  confirmed: GroupReactionTruth
+  confirmedTruthIsCertain: boolean
+  promise: Promise<void>
+}
+
+function applyGroupReactionDesired(post: Post, desired: PostReaction | null): Post {
+  const current = post.user_reaction ?? null
+  const delta = postReactionCountDelta(current, desired)
+  return {
+    ...post,
+    user_liked: desired === 'up',
+    user_reaction: desired,
+    like_count: Math.max(0, (post.like_count ?? 0) + delta.likeCount),
+    dislike_count: Math.max(0, (post.dislike_count ?? 0) + delta.dislikeCount),
+  }
+}
+
+function applyGroupReactionAcknowledgement(
+  post: Post,
+  acknowledgement: PostReactionAcknowledgement,
+  latestDesired: PostReaction | null
+): Post {
+  return applyGroupReactionDesired(
+    {
+      ...post,
+      user_liked: acknowledgement.reaction === 'up',
+      user_reaction: acknowledgement.reaction,
+      like_count: acknowledgement.likeCount,
+      dislike_count: acknowledgement.dislikeCount,
+    },
+    latestDesired
+  )
+}
+
+function groupReactionKey(context: GroupReactionContext, postId: string): string {
+  return `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
 }
 
 export interface CommentWithAuthor {
@@ -333,7 +394,8 @@ export function useGroupPosts({
     scopeKey
   )
   const [repostComment, setRepostComment] = useViewerOwnedState('', () => '', scopeKey)
-  const likeRequestLockRef = useRef<Set<string>>(new Set())
+  const likeRequestLaneRef = useRef<Map<string, GroupReactionLane>>(new Map())
+  const reactionStateRevisionRef = useRef<Map<string, number>>(new Map())
   const bookmarkRequestLockRef = useRef<Set<string>>(new Set())
   const repostRequestLockRef = useRef<Set<string>>(new Set())
   const editRequestLockRef = useRef<Set<string>>(new Set())
@@ -411,6 +473,9 @@ export function useGroupPosts({
   )
   const commentLoadGenerationRef = useRef(new Map<string, number>())
   const commentLoadPromisesRef = useRef(new Map<string, Promise<boolean>>())
+  const loadCommentsRef = useRef<(postId: string, showError?: boolean) => Promise<boolean>>(() =>
+    Promise.resolve(false)
+  )
   const commentMutationLocksRef = useRef(new Map<string, symbol>())
   const replyMutationLocksRef = useRef(new Map<string, symbol>())
   const postsRequestGenerationRef = useRef(0)
@@ -543,7 +608,8 @@ export function useGroupPosts({
     commentLoadPromisesRef.current.clear()
     commentMutationLocksRef.current.clear()
     replyMutationLocksRef.current.clear()
-    likeRequestLockRef.current.clear()
+    likeRequestLaneRef.current.clear()
+    reactionStateRevisionRef.current.clear()
     bookmarkRequestLockRef.current.clear()
     repostRequestLockRef.current.clear()
     pinRequestLockRef.current.clear()
@@ -605,6 +671,36 @@ export function useGroupPosts({
     []
   )
 
+  const markReactionStateChanged = useCallback((key: string) => {
+    reactionStateRevisionRef.current.set(key, (reactionStateRevisionRef.current.get(key) || 0) + 1)
+  }, [])
+
+  const preserveNewerReactionState = useCallback(
+    (
+      incoming: Post[],
+      revisionAtStart: ReadonlyMap<string, number>,
+      context: GroupReactionContext
+    ): Post[] => {
+      const currentById = new Map(postsRef.current.map((post) => [post.id, post]))
+      return incoming.map((post) => {
+        const key = groupReactionKey(context, post.id)
+        const changedAfterReadStarted =
+          (reactionStateRevisionRef.current.get(key) || 0) !== (revisionAtStart.get(key) || 0)
+        if (!changedAfterReadStarted && !likeRequestLaneRef.current.has(key)) return post
+        const current = currentById.get(post.id)
+        if (!current) return post
+        return {
+          ...post,
+          user_liked: current.user_liked,
+          user_reaction: current.user_reaction,
+          like_count: current.like_count,
+          dislike_count: current.dislike_count,
+        }
+      })
+    },
+    []
+  )
+
   // Fetch posts from database with optional cursor
   const fetchPosts = useCallback(
     async (cursor?: string): Promise<Post[]> => {
@@ -643,6 +739,8 @@ export function useGroupPosts({
   const loadPosts = useCallback(
     async (_forceLoad = false) => {
       const capturedScope = activeScopeRef.current
+      const reactionRevisionAtStart = new Map(reactionStateRevisionRef.current)
+      const reactionContext = { scope: capturedScope, groupId }
       if (!scopeIsCurrent(capturedScope)) return
       if (!groupId) {
         setPosts([])
@@ -666,7 +764,7 @@ export function useGroupPosts({
         ) {
           return
         }
-        setPosts(postsList)
+        setPosts(preserveNewerReactionState(postsList, reactionRevisionAtStart, reactionContext))
         setHasMorePosts(postsList.length === POST_PAGE_SIZE)
       } catch (err) {
         if (
@@ -684,12 +782,24 @@ export function useGroupPosts({
         showToast(error, 'error')
       }
     },
-    [enrichPosts, fetchPosts, groupId, scopeIsCurrent, setHasMorePosts, setPosts, showToast, t]
+    [
+      enrichPosts,
+      fetchPosts,
+      groupId,
+      preserveNewerReactionState,
+      scopeIsCurrent,
+      setHasMorePosts,
+      setPosts,
+      showToast,
+      t,
+    ]
   )
 
   // Infinite scroll: load more
   const loadMorePosts = useCallback(async () => {
     const capturedScope = activeScopeRef.current
+    const reactionRevisionAtStart = new Map(reactionStateRevisionRef.current)
+    const reactionContext = { scope: capturedScope, groupId }
     if (!scopeIsCurrent(capturedScope) || loadingMore || !hasMorePosts || posts.length === 0) return
     const requestGeneration = ++postsRequestGenerationRef.current
     setLoadingMore(true)
@@ -711,7 +821,12 @@ export function useGroupPosts({
         ) {
           return
         }
-        setPosts((prev) => [...prev, ...postsList])
+        const safePosts = preserveNewerReactionState(
+          postsList,
+          reactionRevisionAtStart,
+          reactionContext
+        )
+        setPosts((prev) => [...prev, ...safePosts])
         setHasMorePosts(postsList.length === POST_PAGE_SIZE)
       } else {
         setHasMorePosts(false)
@@ -731,9 +846,11 @@ export function useGroupPosts({
   }, [
     enrichPosts,
     fetchPosts,
+    groupId,
     hasMorePosts,
     loadingMore,
     posts,
+    preserveNewerReactionState,
     scopeIsCurrent,
     setHasMorePosts,
     setLoadingMore,
@@ -850,6 +967,93 @@ export function useGroupPosts({
     [scopeIsCurrent, t]
   )
 
+  const runReactionLane = useCallback(
+    async (lane: GroupReactionLane): Promise<void> => {
+      while (
+        likeRequestLaneRef.current.get(lane.key) === lane &&
+        mutationContextIsCurrent(lane.context)
+      ) {
+        const desired = lane.desired
+        const revision = lane.revision
+        const requestId = createPostReactionRequestId()
+        let result: Awaited<ReturnType<typeof apiCall>> | null = null
+        let acknowledgement: PostReactionAcknowledgement | null = null
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          result = await apiCall(
+            `/api/posts/${lane.postId}/like`,
+            {
+              body: {
+                operation: POST_REACTION_OPERATION,
+                request_id: requestId,
+                desired_reaction: desired,
+              },
+            },
+            lane.context.scope
+          )
+
+          if (
+            likeRequestLaneRef.current.get(lane.key) !== lane ||
+            !mutationContextIsCurrent(lane.context) ||
+            result.stale
+          ) {
+            return
+          }
+
+          acknowledgement =
+            result.ok && result.status === 200 && lane.context.scope.userId
+              ? readPostReactionAcknowledgement(result.data, {
+                  actorId: lane.context.scope.userId,
+                  postId: lane.postId,
+                  requestId,
+                  desiredReaction: desired,
+                })
+              : null
+          if (acknowledgement || isDefinitivePostReactionRejection(result.status)) break
+          lane.confirmedTruthIsCertain = false
+        }
+
+        if (!result) return
+
+        if (acknowledgement) {
+          lane.confirmed = {
+            reaction: acknowledgement.reaction,
+            likeCount: acknowledgement.likeCount,
+            dislikeCount: acknowledgement.dislikeCount,
+          }
+          lane.confirmedTruthIsCertain = true
+          const latestDesired = lane.desired
+          markReactionStateChanged(lane.key)
+          setPosts((previous) =>
+            previous.map((post) =>
+              post.id === lane.postId
+                ? applyGroupReactionAcknowledgement(post, acknowledgement, latestDesired)
+                : post
+            )
+          )
+          if (lane.revision === revision || latestDesired === desired) return
+          continue
+        }
+
+        const definitiveRejection = isDefinitivePostReactionRejection(result.status)
+        if (lane.revision !== revision) continue
+
+        if (definitiveRejection && lane.confirmedTruthIsCertain) {
+          const confirmedReaction = lane.confirmed.reaction
+          markReactionStateChanged(lane.key)
+          setPosts((previous) =>
+            previous.map((post) =>
+              post.id === lane.postId ? applyGroupReactionDesired(post, confirmedReaction) : post
+            )
+          )
+        }
+
+        showToast(result.error || t('operationFailed'), 'error')
+        return
+      }
+    },
+    [apiCall, markReactionStateChanged, mutationContextIsCurrent, setPosts, showToast, t]
+  )
+
   // Like handler
   const handleLike = useCallback(
     async (postId: string) => {
@@ -859,55 +1063,66 @@ export function useGroupPosts({
       }
       const context = captureMutationContext()
       if (!context.scope.userId || !mutationContextIsCurrent(context)) return
-      const lockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
-      if (likeRequestLockRef.current.has(lockKey)) return
-      likeRequestLockRef.current.add(lockKey)
-      setPostLoading(setLikeLoading, postId, true)
-      try {
-        const result = await apiCall(
-          `/api/posts/${postId}/like`,
-          { body: { reaction_type: 'up' } },
-          context.scope
-        )
-        if (!mutationContextIsCurrent(context)) return
-
-        const acknowledgement =
-          result.ok && result.status === 200
-            ? readPostReactionAcknowledgement(result.data, {
-                actorId: context.scope.userId,
-                postId,
-                requestedReaction: 'up',
-              })
-            : null
-        if (!acknowledgement) {
-          showToast(result.error || t('operationFailed'), 'error')
-          return
-        }
-
-        setPosts((prev) =>
-          prev.map((post) =>
-            post.id === postId
-              ? {
-                  ...post,
-                  user_liked: acknowledgement.reaction === 'up',
-                  user_reaction: acknowledgement.reaction,
-                  like_count: acknowledgement.likeCount,
-                  dislike_count: acknowledgement.dislikeCount,
-                }
-              : post
+      const post = postsRef.current.find((candidate) => candidate.id === postId)
+      if (!post) return
+      const key = groupReactionKey(context, postId)
+      const existingLane = likeRequestLaneRef.current.get(key)
+      if (existingLane) {
+        const desired = nextPostReactionState(existingLane.desired, 'up')
+        if (existingLane.desired === desired) return existingLane.promise
+        existingLane.desired = desired
+        existingLane.revision += 1
+        markReactionStateChanged(key)
+        setPosts((previous) =>
+          previous.map((candidate) =>
+            candidate.id === postId ? applyGroupReactionDesired(candidate, desired) : candidate
           )
         )
+        return existingLane.promise
+      }
+
+      const desired = nextPostReactionState(post.user_reaction ?? null, 'up')
+      const lane: GroupReactionLane = {
+        key,
+        context,
+        postId,
+        desired,
+        revision: 1,
+        confirmed: {
+          reaction: post.user_reaction ?? null,
+          likeCount: post.like_count ?? 0,
+          dislikeCount: post.dislike_count ?? 0,
+        },
+        confirmedTruthIsCertain: true,
+        promise: Promise.resolve(),
+      }
+      likeRequestLaneRef.current.set(key, lane)
+      markReactionStateChanged(key)
+      setPosts((previous) =>
+        previous.map((candidate) =>
+          candidate.id === postId ? applyGroupReactionDesired(candidate, desired) : candidate
+        )
+      )
+      setPostLoading(setLikeLoading, postId, true)
+      try {
+        lane.promise = runReactionLane(lane)
+        await lane.promise
       } finally {
-        if (likeRequestLockRef.current.delete(lockKey) && mutationContextIsCurrent(context)) {
+        if (
+          likeRequestLaneRef.current.get(key) === lane &&
+          likeRequestLaneRef.current.delete(key) &&
+          mutationContextIsCurrent(context)
+        ) {
           setPostLoading(setLikeLoading, postId, false)
         }
       }
     },
     [
       accessToken,
-      apiCall,
       captureMutationContext,
       mutationContextIsCurrent,
+      markReactionStateChanged,
+      runReactionLane,
       setLikeLoading,
       setPostLoading,
       setPosts,
@@ -1401,7 +1616,7 @@ export function useGroupPosts({
             commentLoadGenerationRef.current.delete(scopedPostKey)
             if (retryAfterNewerState) {
               queueMicrotask(() => {
-                if (scopeIsCurrent(capturedScope)) void loadComments(postId, false)
+                if (scopeIsCurrent(capturedScope)) void loadCommentsRef.current(postId, false)
               })
             }
           }
@@ -1425,6 +1640,7 @@ export function useGroupPosts({
       t,
     ]
   )
+  loadCommentsRef.current = loadComments
 
   const reconcileCommentsAfterMutation = useCallback(
     async (postId: string, capturedScope = activeScopeRef.current): Promise<boolean> => {

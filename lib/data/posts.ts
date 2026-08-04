@@ -830,6 +830,78 @@ export async function togglePostReaction(
 }
 
 /**
+ * Converge one actor's reaction to an absolute desired state. Unlike the
+ * legacy toggle RPC, replaying this command after a lost response can never
+ * reverse a successfully committed reaction.
+ */
+export async function setPostReactionDesiredState(
+  supabase: SupabaseClient,
+  postId: string,
+  userId: string,
+  desiredReaction: 'up' | 'down' | null
+): Promise<{
+  action: 'added' | 'removed' | 'changed' | 'unchanged'
+  reaction: 'up' | 'down' | null
+  like_count: number
+  dislike_count: number
+}> {
+  const { data, error } = await supabase.rpc('set_post_reaction_desired_state_atomic', {
+    p_actor_id: userId,
+    p_post_id: postId,
+    p_desired_reaction: desiredReaction,
+  })
+
+  if (error) throw error
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new PostInteractionMutationError('invalid_ack')
+  }
+
+  const result = data as Record<string, unknown>
+  const resultKeys = Object.keys(result).sort()
+  if (
+    resultKeys.length === 1 &&
+    resultKeys[0] === 'status' &&
+    (result.status === 'not_found' || result.status === 'invalid')
+  ) {
+    throw new PostInteractionMutationError(result.status)
+  }
+
+  const expectedResultKeys = ['action', 'dislike_count', 'like_count', 'reaction', 'status'].sort()
+  const action = result.action
+  const reaction = result.reaction
+  const validAction =
+    action === 'added' || action === 'removed' || action === 'changed' || action === 'unchanged'
+  const actionMatchesDesired =
+    (action === 'removed' && desiredReaction === null) ||
+    ((action === 'added' || action === 'changed') && desiredReaction !== null) ||
+    action === 'unchanged'
+
+  if (
+    resultKeys.length !== expectedResultKeys.length ||
+    !resultKeys.every((key, index) => key === expectedResultKeys[index]) ||
+    result.status !== action ||
+    !validAction ||
+    !actionMatchesDesired ||
+    reaction !== desiredReaction ||
+    !Number.isSafeInteger(result.like_count) ||
+    (result.like_count as number) < 0 ||
+    !Number.isSafeInteger(result.dislike_count) ||
+    (result.dislike_count as number) < 0 ||
+    (reaction === 'up' && (result.like_count as number) < 1) ||
+    (reaction === 'down' && (result.dislike_count as number) < 1)
+  ) {
+    throw new PostInteractionMutationError('invalid_ack')
+  }
+
+  return {
+    action,
+    reaction: reaction as 'up' | 'down' | null,
+    like_count: result.like_count as number,
+    dislike_count: result.dislike_count as number,
+  }
+}
+
+/**
  * 获取用户对帖子的投票
  */
 export async function getUserPostVote(
