@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Restore a complete arena+public R2 backup into a target PostgreSQL database.
+ * Inspect and validate legacy arena+public/full R2 capture artifacts.
  *
- * This command is deliberately fail-closed: the remote object and downloaded
- * gzip must satisfy the same completeness contract as the producer, both
- * sides of gunzip|psql must succeed, and critical restored tables must contain
- * positive finite row counts before the command reports DONE.
+ * Automated apply is intentionally disabled: current plain SQL captures are
+ * marked target-model=unproven, conflict with pre-existing public/auth catalogs
+ * on fresh managed Supabase, and do not provide an auth recovery sidecar.
+ * Low-level download/apply helpers remain exported for isolated fixture work;
+ * they are not a certified disaster-recovery workflow.
  */
 import {
   GetObjectCommand,
@@ -15,10 +16,8 @@ import {
 } from '@aws-sdk/client-s3'
 import { execFileSync } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
 import { isIP } from 'node:net'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { pathToFileURL } from 'node:url'
 import { config } from 'dotenv'
@@ -28,6 +27,7 @@ import {
 } from '../attest-production-types-source.mjs'
 import {
   assertBackupArtifact,
+  assertCompleteBackupObject,
   COMPLETE_BACKUP_MIN_BYTES,
   arenaCompletionTokenFromMetadata,
   preparePostgresConnection,
@@ -223,69 +223,8 @@ export function formatTargetIdentity(identity) {
   return `${identity.user}@${identity.host}:${identity.port}/${identity.database}`
 }
 
-function normalizeBackupMetadata(metadata) {
-  return Object.fromEntries(
-    Object.entries(metadata ?? {}).map(([key, value]) => [key.toLowerCase(), String(value).trim()])
-  )
-}
-
-function metadataTokens(value, separator) {
-  return new Set(
-    value
-      .split(separator)
-      .map((token) => token.trim().toLowerCase())
-      .filter(Boolean)
-  )
-}
-
-function assertCompleteBackupMetadata(filenameMode, metadata) {
-  const normalized = normalizeBackupMetadata(metadata)
-  const backupType = normalized['backup-type']?.toLowerCase()
-  const tables = normalized.tables?.toLowerCase()
-
-  if (filenameMode === 'full') {
-    if (backupType !== 'full' || tables !== 'all') {
-      throw new Error('selected full backup is missing full/all completeness metadata')
-    }
-    return
-  }
-
-  const schemaMatch = backupType?.match(/^schemas:(.+)$/)
-  if (!schemaMatch || !tables) {
-    throw new Error('selected schemas backup is missing arena+public completeness metadata')
-  }
-  const typedSchemas = metadataTokens(schemaMatch[1], '+')
-  const tableSchemas = metadataTokens(tables, ',')
-  if (
-    !typedSchemas.has('arena') ||
-    !typedSchemas.has('public') ||
-    !tableSchemas.has('arena') ||
-    !tableSchemas.has('public')
-  ) {
-    throw new Error('selected schemas backup metadata does not include both arena and public')
-  }
-}
-
 export function assertRestorableObject(object, minimumBytes = COMPLETE_BACKUP_MIN_BYTES) {
-  if (!object?.Key?.startsWith('db-backups/') || !object.Key.endsWith('.sql.gz')) {
-    throw new Error('selected R2 object is not a db-backups/*.sql.gz backup')
-  }
-  const filename = object.Key.split('/').at(-1)
-  const filenameMatch = filename.match(/^arena-backup-\d{8}-(schemas|full)\.sql\.gz$/)
-  if (!filenameMatch) {
-    throw new Error('selected R2 object is not a complete schemas/full backup')
-  }
-  if (!Number.isSafeInteger(object.Size) || object.Size < minimumBytes) {
-    throw new Error(
-      `selected backup object is incomplete: ${String(object.Size)} bytes < required ${minimumBytes} bytes`
-    )
-  }
-  if (typeof object.ETag !== 'string' || object.ETag.trim() === '') {
-    throw new Error('selected backup object is missing an ETag identity')
-  }
-  assertCompleteBackupMetadata(filenameMatch[1], object.Metadata)
-  arenaCompletionTokenFromMetadata(object.Metadata)
-  return object
+  return assertCompleteBackupObject(object, minimumBytes)
 }
 
 export async function listBackups(s3, bucket) {
@@ -509,24 +448,22 @@ export async function restoreSelectedBackup({
 
 export async function runRestoreCli({ argv = process.argv.slice(2), env = process.env } = {}) {
   const args = parseRestoreArgs(argv)
-  const accountId = env.R2_ACCOUNT_ID
-  const accessKeyId = env.R2_ACCESS_KEY_ID
-  const secretAccessKey = env.R2_SECRET_ACCESS_KEY
-  const bucket = env.R2_BUCKET || 'arena-backups'
-
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error(
-      'Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)'
-    )
-  }
-
-  const s3 = new S3Client({
-    region: 'auto',
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-  })
 
   if (args.listOnly) {
+    const accountId = env.R2_ACCOUNT_ID
+    const accessKeyId = env.R2_ACCESS_KEY_ID
+    const secretAccessKey = env.R2_SECRET_ACCESS_KEY
+    const bucket = env.R2_BUCKET || 'arena-backups'
+    if (!accountId || !accessKeyId || !secretAccessKey) {
+      throw new Error(
+        'Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)'
+      )
+    }
+    const s3 = new S3Client({
+      region: 'auto',
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: { accessKeyId, secretAccessKey },
+    })
     const backups = await listBackups(s3, bucket)
     if (backups.length === 0) {
       throw new Error('No .sql.gz backups found in R2 — backup pipeline may be broken')
@@ -547,7 +484,6 @@ export async function runRestoreCli({ argv = process.argv.slice(2), env = proces
     throw new Error('RESTORE_TARGET_URL not set. Refusing to guess a target.')
   }
 
-  const preparedTarget = preparePostgresConnection(target, 'RESTORE_TARGET_URL')
   const targetIdentity = normalizePostgresIdentity(target, 'RESTORE_TARGET_URL')
   const productionIdentity = env.DATABASE_URL
     ? normalizePostgresIdentity(env.DATABASE_URL, 'DATABASE_URL')
@@ -561,56 +497,8 @@ export async function runRestoreCli({ argv = process.argv.slice(2), env = proces
     allowUnverifiedTarget: args.allowUnverifiedTarget,
   })
 
-  const selected = await selectBackup(s3, bucket, args.key)
-  if (!selected) {
-    throw new Error('No .sql.gz backups found in R2 — backup pipeline may be broken')
-  }
-  assertRestorableObject(selected)
-
-  console.log(`[restore] Source: ${bucket}/${selected.Key} (${selected.Size} bytes)`)
-  console.log(`[restore] Target: ${formatTargetIdentity(targetIdentity)}`)
-
-  const restoreDirectory = await mkdtemp(join(tmpdir(), 'arena-restore-'))
-  const localGz = join(restoreDirectory, 'backup.sql.gz')
-  const psqlPath = env.PSQL_PATH || DEFAULT_PSQL_PATH
-  const gunzipPath = env.GUNZIP_PATH || DEFAULT_GUNZIP_PATH
-
-  let counts
-  try {
-    counts = await restoreSelectedBackup({
-      selected,
-      localPath: localGz,
-      download: () =>
-        downloadBackupObject({
-          s3,
-          bucket,
-          selected,
-          localPath: localGz,
-          minimumBytes: COMPLETE_BACKUP_MIN_BYTES,
-        }),
-      apply: () =>
-        runRestorePipeline({
-          localGz,
-          gunzipPath,
-          psqlPath,
-          ...preparedTarget,
-        }),
-      verify: () =>
-        queryCriticalTableCounts({
-          psqlPath,
-          ...preparedTarget,
-        }),
-    })
-  } finally {
-    await rm(restoreDirectory, { force: true, recursive: true })
-  }
-
-  console.log('[restore] Verified critical row counts:')
-  for (const table of CRITICAL_RESTORE_TABLES) {
-    console.log(`  ${table}=${counts[table]}`)
-  }
-  console.log(
-    '[restore] DONE. Re-apply canonical migrations for policies/grants; auth is PITR-only.'
+  throw new Error(
+    'AUTOMATED RESTORE DISABLED: schemas/full artifacts are target-model=unproven and cannot restore managed auth. Use Supabase PITR; build and verify the v2 app+auth manifest workflow on an isolated managed scratch project before enabling apply.'
   )
 }
 

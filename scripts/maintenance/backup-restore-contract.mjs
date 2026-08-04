@@ -8,8 +8,51 @@ import { createGunzip } from 'node:zlib'
 // valid-but-empty 20-byte gzip can never become a restore point.
 export const COMPLETE_BACKUP_MIN_BYTES = 1024 * 1024 * 1024
 export const ARENA_BACKUP_COMPLETION_CONTRACT = 'arena.pg-dump-complete.v1'
+export const BACKUP_TARGET_MODEL_UNPROVEN = 'unproven'
+export const BACKUP_RECOVERY_CERTIFIED_FALSE = 'false'
 export const PG_DUMP_RESTRICT_TOKEN_PATTERN = /^[0-9A-Za-z]{1,256}$/
 export const ARENA_BACKUP_COMPLETION_TOKEN_PATTERN = /^[0-9a-f]{64}$/
+export const IMMUTABLE_BACKUP_FILENAME_PATTERN =
+  /^arena-backup-(\d{8}T\d{9}Z)-([0-9a-f]{32})-(schemas|full)\.sql\.gz$/
+export const LEGACY_COMPLETE_BACKUP_FILENAME_PATTERN =
+  /^arena-backup-(\d{8})-(schemas|full)\.sql\.gz$/
+
+export function parseCompleteBackupFilename(filename) {
+  if (typeof filename !== 'string') return null
+
+  const immutable = filename.match(IMMUTABLE_BACKUP_FILENAME_PATTERN)
+  if (immutable) {
+    return {
+      date: immutable[1].slice(0, 8),
+      format: 'immutable',
+      mode: immutable[3],
+      runId: immutable[2],
+      timestamp: immutable[1],
+    }
+  }
+
+  const legacy = filename.match(LEGACY_COMPLETE_BACKUP_FILENAME_PATTERN)
+  if (legacy) {
+    return {
+      date: legacy[1],
+      format: 'legacy',
+      mode: legacy[2],
+      runId: null,
+      timestamp: null,
+    }
+  }
+
+  return null
+}
+
+export function parseCompleteBackupKey(key) {
+  if (typeof key !== 'string') return null
+  const keyMatch = key.match(/^db-backups\/(\d{4})\/(\d{2})\/([^/]+)$/)
+  if (!keyMatch) return null
+  const identity = parseCompleteBackupFilename(keyMatch[3])
+  if (!identity || `${keyMatch[1]}${keyMatch[2]}` !== identity.date.slice(0, 6)) return null
+  return identity
+}
 
 const PG_DUMP_PREFIX = '--\n-- PostgreSQL database dump\n--\n\n'
 const PG_DUMP_COMPLETE = '--\n-- PostgreSQL database dump complete\n--\n\n'
@@ -36,6 +79,141 @@ export function arenaCompletionTokenFromMetadata(metadata) {
     throw new Error('backup completion metadata is incomplete or invalid')
   }
   return token
+}
+
+export function unverifiedBackupRecoveryMetadata(mode) {
+  if (mode === 'schemas') {
+    return {
+      'recovery-scope': 'application-data-only',
+      'auth-coverage': 'none',
+      'target-model': BACKUP_TARGET_MODEL_UNPROVEN,
+      'recovery-certified': BACKUP_RECOVERY_CERTIFIED_FALSE,
+    }
+  }
+  if (mode === 'full') {
+    return {
+      'recovery-scope': 'full-database-capture',
+      'auth-coverage': 'captured-unverified',
+      'target-model': BACKUP_TARGET_MODEL_UNPROVEN,
+      'recovery-certified': BACKUP_RECOVERY_CERTIFIED_FALSE,
+    }
+  }
+  throw new Error('backup recovery metadata mode is invalid')
+}
+
+function assertUnverifiedBackupRecoveryMetadata(mode, metadata) {
+  for (const [name, expected] of Object.entries(unverifiedBackupRecoveryMetadata(mode))) {
+    if (metadata[name] !== expected) {
+      throw new Error(`immutable backup recovery metadata is invalid: ${name}`)
+    }
+  }
+}
+
+function normalizeBackupMetadata(metadata) {
+  return Object.fromEntries(
+    Object.entries(metadata ?? {}).map(([key, value]) => [key.toLowerCase(), String(value).trim()])
+  )
+}
+
+function metadataTokens(value, separator) {
+  return new Set(
+    value
+      .split(separator)
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean)
+  )
+}
+
+function sameTokens(left, right) {
+  return left.size === right.size && [...left].every((token) => right.has(token))
+}
+
+export function assertCompleteBackupMetadata(filenameMode, metadata) {
+  const normalized = normalizeBackupMetadata(metadata)
+  const backupType = normalized['backup-type']?.toLowerCase()
+  const tables = normalized.tables?.toLowerCase()
+
+  if (filenameMode === 'full') {
+    if (backupType !== 'full' || tables !== 'all') {
+      throw new Error('selected full backup is missing full/all completeness metadata')
+    }
+    return normalized
+  }
+
+  if (filenameMode !== 'schemas') {
+    throw new Error('selected backup filename mode is invalid')
+  }
+
+  const schemaMatch = backupType?.match(/^schemas:(.+)$/)
+  if (!schemaMatch || !tables) {
+    throw new Error('selected schemas backup is missing arena+public completeness metadata')
+  }
+  const typedSchemas = metadataTokens(schemaMatch[1], '+')
+  const tableSchemas = metadataTokens(tables, ',')
+  if (
+    !typedSchemas.has('arena') ||
+    !typedSchemas.has('public') ||
+    !tableSchemas.has('arena') ||
+    !tableSchemas.has('public') ||
+    !sameTokens(typedSchemas, tableSchemas)
+  ) {
+    throw new Error(
+      'selected schemas backup metadata must describe the same set including arena and public'
+    )
+  }
+  return normalized
+}
+
+/**
+ * Shared R2 object boundary used by upload attestation, freshness monitoring,
+ * and restore selection. It proves an object is a complete application-schema
+ * or full-database artifact; it does not claim managed auth recovery coverage.
+ */
+export function assertCompleteBackupObject(object, minimumBytes = COMPLETE_BACKUP_MIN_BYTES) {
+  const keyMatch =
+    typeof object?.Key === 'string'
+      ? object.Key.match(/^db-backups\/(\d{4})\/(\d{2})\/([^/]+)$/)
+      : null
+  if (!keyMatch) {
+    throw new Error('selected R2 object is not a db-backups/*.sql.gz backup')
+  }
+  const filenameIdentity = parseCompleteBackupFilename(keyMatch[3])
+  if (!filenameIdentity) {
+    throw new Error('selected R2 object is not a complete schemas/full backup')
+  }
+  if (`${keyMatch[1]}${keyMatch[2]}` !== filenameIdentity.date.slice(0, 6)) {
+    throw new Error('selected backup key path does not match its filename date')
+  }
+  if (!Number.isSafeInteger(object.Size) || object.Size < minimumBytes) {
+    throw new Error(
+      `selected backup object is incomplete: ${String(object.Size)} bytes < required ${minimumBytes} bytes`
+    )
+  }
+  if (typeof object.ETag !== 'string' || object.ETag.trim() === '') {
+    throw new Error('selected backup object is missing an ETag identity')
+  }
+  const normalizedMetadata = assertCompleteBackupMetadata(filenameIdentity.mode, object.Metadata)
+  const completionToken = arenaCompletionTokenFromMetadata(object.Metadata)
+  if (filenameIdentity.format === 'immutable') {
+    if (!completionToken) {
+      throw new Error('immutable backup is missing completion metadata')
+    }
+    const timestamp = filenameIdentity.timestamp
+    const expectedBackupDate =
+      `${timestamp.slice(0, 4)}-${timestamp.slice(4, 6)}-${timestamp.slice(6, 8)}` +
+      `T${timestamp.slice(9, 11)}:${timestamp.slice(11, 13)}:${timestamp.slice(13, 15)}.` +
+      `${timestamp.slice(15, 18)}Z`
+    const parsedBackupDate = new Date(expectedBackupDate)
+    if (
+      !Number.isFinite(parsedBackupDate.getTime()) ||
+      parsedBackupDate.toISOString() !== expectedBackupDate ||
+      normalizedMetadata['backup-date'] !== expectedBackupDate
+    ) {
+      throw new Error('immutable backup filename and backup-date metadata do not match')
+    }
+    assertUnverifiedBackupRecoveryMetadata(filenameIdentity.mode, normalizedMetadata)
+  }
+  return object
 }
 
 /**

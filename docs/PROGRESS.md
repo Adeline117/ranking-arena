@@ -209,9 +209,11 @@ Investigated, already handled: flash-news + compare + claim + competitions all h
 - `precompute-composite`: 4h → 2h (matches compute-leaderboard cadence)
 - `detect-contracts`: 48x/day → 4x/day (no-ops once addresses checked)
 
-**Investigated, no code change needed**:
+**Investigated / follow-up**:
 
-- `trader_position_history` partition cutover: DBA operation, documented in RUNBOOK
+- `trader_position_history` 已由 041/044 迁移收敛为冻结取证档案，旧 reader/writer 已由 041、Token
+  publication 已由 043 迁移 fail closed；生产应用证据仍必须按 RUNBOOK 的 migration ledger、generation
+  zero、ACL 与关系冻结门禁逐项验收；原来的手工 DBA cutover 结论已失效
 - 20 unmonitored crons: false positive — verified only 1 (health-check, intentionally public)
 
 ---

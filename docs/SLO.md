@@ -42,16 +42,21 @@
   `source_as_of`，也不得用 `computed_at` 或 `now()` 回填来制造假新鲜；
   数据不可信时宁可显示 stale 标记也不静默喂旧数据。
 
-### 4. 备份新鲜度 ≤ 26h + 可恢复
+### 4. 应用数据备份新鲜度 ≤ 26h；完整恢复尚未达标
 
-- **定义**：R2 上最新 pg_dump 距今 ≤ 26h（日备 + 2h 容差）
-- **测量**：备份新鲜度哨兵（scripts/openclaw/backup-freshness-check.mjs，
-  随 health monitor cron 跑）
-- **告警**：>26h → Telegram
-- **违约动作**：查 Mac Mini local-cron-backup；连续 2 天失败 = SEV2，
-  手动跑 `npm run backup:r2` 补一份
-- **恢复演练**：每季度从 R2 拉一份到本地 psql 恢复验证一次（企业级要求
-  "备份可恢复才算备份"——只备不演练等于没备）
+- **定义**：R2 上最新、同时通过共享 schemas/full 文件名、`HeadObject`
+  大小/ETag、范围元数据与完成 token 契约的 pg_dump 距今 ≤ 26h（日备 + 2h 容差）。
+  任意 `.sql.gz`、旧无范围后缀 partial、`NaN` 大小或只有 LIST 元数据都不计入。
+- **测量**：备份新鲜度哨兵（`scripts/openclaw/backup-freshness-check.mjs`，
+  随 health monitor cron 跑）。最新候选的 HEAD 契约失败必须报红，不得回退旧对象报绿。
+- **告警**：无合格对象、HEAD 契约失败或 >26h → Telegram；告警发送非 2xx 也算检查失败。
+- **违约动作**：查 GitHub `backup-db` 与 Mac Mini `backup:r2` 日程；连续 2 天失败 = SEV2，
+  手动跑 `BACKUP_SCHEMAS=arena,public npm run backup:r2` 补一份应用数据备份。
+- **恢复状态**：本 SLO 的“完整恢复”门当前**未通过**。`arena+public` 不含托管
+  `auth`，plain dump 在 fresh PostgreSQL/managed Supabase 的既有 `public/auth`
+  catalog 上也有冲突。只有应用 dump、同一一致性点的 auth data-only sidecar、配对
+  manifest、目标 catalog 兼容检查和隔离 managed scratch 演练全部通过，才能改为
+  “可恢复”。此后仍须每季度重跑并记录 RPO/RTO。
 
 ### 5. 写路径可用性（发帖→赞→评论→删）
 

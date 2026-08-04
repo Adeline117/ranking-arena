@@ -9,6 +9,8 @@ import {
 import { strictCanonicalJson, strictCanonicalSha256 } from './strict-canonical-json'
 import { binancePositionHistorySourceFactContract } from './adapters/binance/position-history-source-facts'
 import { binancePositionHistoryTerminalVerifier } from './adapters/binance/history-terminal'
+import { okxPositionHistorySourceFactContract } from './adapters/okx/position-history-source-facts'
+import { okxPositionHistoryTerminalVerifier } from './adapters/okx/history-terminal'
 
 export const POSITION_HISTORY_SOURCE_FACT_LEDGER_CONTRACT =
   'arena.ingest.position-history-source-fact-ledger@1' as const
@@ -152,6 +154,11 @@ const reviewedSourceFactRegistry: readonly ReviewedSourceFactRegistryEntry[] = O
   Object.freeze({
     sourceFactContract: binancePositionHistorySourceFactContract,
     terminalVerifier: binancePositionHistoryTerminalVerifier,
+    activeForBuild: true,
+  }),
+  Object.freeze({
+    sourceFactContract: okxPositionHistorySourceFactContract,
+    terminalVerifier: okxPositionHistoryTerminalVerifier,
     activeForBuild: true,
   }),
 ])
@@ -461,8 +468,7 @@ export type PositionHistorySourceFactEvidence =
     }>
 
 export type PositionHistorySourceFactLedgerVerification =
-  | Readonly<{ verified: true; ledgerSha256: string }>
-  | Readonly<{ verified: false; reason: string }>
+  Readonly<{ verified: true; ledgerSha256: string }> | Readonly<{ verified: false; reason: string }>
 
 const acquisitionAnchorSchema = z
   .object({

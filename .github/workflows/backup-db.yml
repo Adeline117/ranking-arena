@@ -1,9 +1,9 @@
 # DB 备份冗余 → R2（企业级差距 #2 单点消除 · Phase 2）
 #
 # 消除 Mac Mini 备份单点：GH Actions 每日 pg_dump→R2，与 Mac Mini crontab(03:30)
-# 错峰。关键改进(2026-07 发现)：**用 schema 模式抓 arena+public 主数据层**——
-# Mac 的默认模式只 dump public.* 遗留表(数据已迁 arena.*，漏了 2.8GB leaderboard_entries
-# + trader_series/trader_stats 等主数据)。
+# 错峰。关键改进(2026-07 发现)：**用显式 schema 模式抓 arena+public 主数据层**。
+# 该产物覆盖应用数据，但不含托管 auth/storage，也尚未通过 managed scratch
+# 恢复演练，因此不能标记成完整灾备恢复点。
 #
 # 安全：连接用**只读角色 arena_backup_ro**(pg_read_all_data + BYPASSRLS)而非主
 # service DATABASE_URL——GH secret 泄露最坏只能读(可 exfiltrate)、不能写(不可
@@ -40,7 +40,7 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-17
           /usr/lib/postgresql/17/bin/pg_dump --version
 
-      - name: Backup arena+public schemas → R2（只读角色）
+      - name: Backup arena+public application schemas → R2（只读角色）
         env:
           DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           BACKUP_SCHEMAS: arena,public

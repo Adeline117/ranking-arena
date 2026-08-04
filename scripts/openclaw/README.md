@@ -72,10 +72,14 @@ Action:
 
 ```
 Trigger: Daily at 03:00
-Script: cd ~/ranking-arena && npm run backup:r2
-Action: Dump 31 trader tables → gzip → upload to R2
-Full backup (weekly, Sunday): cd ~/ranking-arena && npm run backup:r2:full
+Script: cd ~/ranking-arena && BACKUP_SCHEMAS=arena,public npm run backup:r2
+Action: Dump the arena+public application schemas → gzip → multipart upload + HEAD attestation in R2
+Full-database capture (weekly, Sunday): cd ~/ranking-arena && npm run backup:r2:full
 ```
+
+`arena+public` is an application-data backup, not a managed-auth recovery point.
+The full-database capture is also not a proven restore point until it passes the
+managed scratch compatibility drill documented in `docs/RUNBOOK.md`.
 
 ### 4. Mac Mini Crontab
 
@@ -92,9 +96,9 @@ Add these lines to `crontab -e`:
 0 9 * * * cd ~/ranking-arena && node scripts/openclaw/ux-patrol.mjs >> /tmp/arena-ux.log 2>&1
 
 # Arena Daily Backup to R2 (3 AM)
-0 3 * * * cd ~/ranking-arena && npm run backup:r2 >> /tmp/arena-backup.log 2>&1
+0 3 * * * cd ~/ranking-arena && BACKUP_SCHEMAS=arena,public npm run backup:r2 >> /tmp/arena-backup.log 2>&1
 
-# Arena Full Backup to R2 (Sunday 4 AM)
+# Arena Full-Database Capture to R2 (Sunday 4 AM; recovery is not yet certified)
 0 4 * * 0 cd ~/ranking-arena && npm run backup:r2:full >> /tmp/arena-backup-full.log 2>&1
 
 # Sentry Error Convergence (Friday 10 AM)

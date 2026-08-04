@@ -10,6 +10,7 @@ import {
   ARENA_BACKUP_COMPLETION_CONTRACT,
   arenaBackupCompletionSentinel,
   preparePostgresConnection,
+  unverifiedBackupRecoveryMetadata,
 } from './backup-restore-contract.mjs'
 import { POSTGRES_CONNECTION_ENV_NAMES } from './postgres-cli-env.mjs'
 import {
@@ -275,6 +276,71 @@ test('requires HEAD metadata to prove arena+public completeness before download'
     )
   )
   assert.doesNotThrow(() => assertRestorableObject(arenaSchemasObject()))
+  assert.doesNotThrow(() =>
+    assertRestorableObject(
+      arenaSchemasObject({
+        Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+        Metadata: {
+          'backup-date': '2026-08-04T07:08:09.123Z',
+          'backup-type': 'schemas:arena+public',
+          tables: 'arena,public',
+          'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
+          'completion-token': ARENA_TOKEN,
+          ...unverifiedBackupRecoveryMetadata('schemas'),
+        },
+      })
+    )
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+        })
+      ),
+    /filename and backup-date metadata do not match/
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        completeSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+          Metadata: {
+            'backup-date': '2026-08-04T07:08:09.123Z',
+            'backup-type': 'schemas:arena+public',
+            tables: 'arena,public',
+          },
+        })
+      ),
+    /missing completion metadata/
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/07/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`,
+        })
+      ),
+    /key path does not match/
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-${'a'.repeat(32)}-full.sql.gz`,
+        })
+      ),
+    /full\/all completeness metadata/
+  )
+  assert.throws(
+    () =>
+      assertRestorableObject(
+        arenaSchemasObject({
+          Key: `db-backups/2026/08/arena-backup-20260804T070809123Z-short-schemas.sql.gz`,
+        })
+      ),
+    /not a complete schemas\/full backup/
+  )
   for (const Metadata of [
     {
       'backup-type': 'schemas:arena+public',
@@ -895,6 +961,19 @@ test('the CLI fails before R2 access when no production identity baseline is ava
   }
 })
 
+test('the CLI refuses legacy plain artifact apply even for an isolated verified target', async () => {
+  await assert.rejects(
+    runRestoreCli({
+      argv: [],
+      env: {
+        DATABASE_URL: 'postgresql://production@db.production.example.com/app',
+        RESTORE_TARGET_URL: 'postgresql://restore@isolated.example.com/scratch',
+      },
+    }),
+    /AUTOMATED RESTORE DISABLED.*target-model=unproven.*managed auth/
+  )
+})
+
 test('verification accepts exactly one positive finite count for every critical table', () => {
   assert.deepEqual(parseCriticalTableCounts(criticalCounts()), {
     'arena.traders': 125n,
@@ -1033,5 +1112,7 @@ test('the executable is fail-closed and its real behavior contract runs in CI', 
   assert.match(source, /parseCriticalTableCounts\(await verify\(\)\)/)
   assert.doesNotMatch(source, /execSync\(/)
   assert.doesNotMatch(source, /`[^`]*\$\{TARGET\}/)
+  assert.match(source, /AUTOMATED RESTORE DISABLED/)
+  assert.doesNotMatch(source, /\[restore\] DONE/)
   assert.match(ci, /node --test scripts\/maintenance\/restore-from-r2\.test\.mjs/)
 })

@@ -324,46 +324,48 @@ Sources: `lib/utils/arena-score.ts`,
 > **当前硬缺口（2026-07-17）**：`db push --dry-run` 报告 252 remote-only +
 > 34 local-only。生产 schema 健康，但仓库历史不能 fresh replay；灾备重建禁止
 > 使用裸 `db push` 或 `migration repair --status reverted`。
+>
+> **2026-08-03 恢复审计**：当前 R2 产物与 restore 行为测试只能证明文件/传输
+> 契约，不能证明 managed Supabase 可恢复。`arena+public` plain dump 会包含
+> `CREATE SCHEMA public`，fresh PostgreSQL/Supabase 已有 `public`；直接加入 `-n auth`
+> 还会与平台管理的 auth DDL/owner 冲突。因此本节当前是取证与恢复开发 runbook，
+> 不是已验收的灾备按钮。
 
 **备份是什么**:`backup-to-r2.mjs` 每日 dump `-n arena -n public`(PLAIN SQL,
-`--no-owner --no-privileges`)→ gzip → R2 `db-backups/YYYY/MM/arena-backup-YYYYMMDD-schemas.sql.gz`
-(实测 ~4.8GB/份,保留 12 份)。**不含 `auth`/`storage` schema** —— 用户账号
-靠 Supabase 托管 PITR(付费档),不在 R2 dump 里。
+`--no-owner --no-privileges`)→ gzip → multipart upload → 条件 HEAD 验证，写入
+`db-backups/YYYY/MM/arena-backup-<UTC毫秒>-<run-id>-schemas.sql.gz`（schema 产物
+保留 14 天）。这是**应用数据备份**，不含 `auth`/`storage`；用户身份当前只有
+Supabase 托管 PITR，R2 没有已验证的独立恢复副本。
 
-**列出可用备份**(只读,验证凭据):
+**列出对象清单**（只读，只验证凭据；清单出现不等于对象可恢复）：
 
 ```bash
 node scripts/maintenance/restore-from-r2.mjs --list
 ```
 
-**恢复到 scratch 库演练**(季度演练 = 测真实 RTO):
-
-```bash
-# 1. 建一个空 Postgres(本地 docker 或新 Supabase 项目),拿其连接串
-export RESTORE_TARGET_URL='postgres://…/scratch'
-# 2. 默认只验证并恢复 newest；若它损坏会硬失败，不会自动降级到旧备份
-#    需恢复旧对象时，先独立验证，再用 --key 明确指定
-node scripts/maintenance/restore-from-r2.mjs
-#    脚本 gunzip|psql(ON_ERROR_STOP)+ 恢复后打印三张关键表行数
-# 3. 记录耗时 = 真实 RTO,写回 SLO.md
-```
+**当前禁止把 `node scripts/maintenance/restore-from-r2.mjs` 的本地行为测试或一次
+`psql` 退出 0 记为恢复演练通过。** 合格演练必须在隔离的 managed scratch 项目，
+从既有平台 catalog 开始，验证 schema、auth 持久数据、应用数据、FK/RLS/grants、
+登录与三张关键业务表；并记录真实 RPO/RTO。该演练尚无通过证据。
 
 **真灾难时(Supabase 项目本身出事)**:
 
 1. 先看 Supabase PITR 是否可用(付费档,恢复 auth+全库,首选,`--nuclear` 见下)。
-2. PITR 也没了 → 只能用**已独立验证的 canonical baseline**建立新项目，再以
-   `RESTORE_TARGET_URL=<新项目>` 运行 restore 脚本并核对 RLS/grants。baseline
-   尚未验收时，不得把历史目录临时 `db push` 伪装成可恢复方案；升级事故并受控
-   地从可信 schema snapshot/clone 重建。
-3. auth 用户:无 R2 副本 → 只能靠 PITR;若彻底丢,用户需重新注册(已知缺口,
-   见 LAUNCH_AUDIT_2026-07-11 运营 #2,建议 BACKUP_SCHEMAS 加 auth)。
+2. PITR 也没了 → 当前没有一键全恢复路径。先升级事故；R2 应用数据只能在
+   **已独立验证的 canonical baseline**与目标 catalog 兼容检查通过后受控提取，
+   不得把历史目录临时 `db push` 或一次 plain SQL 导入伪装成可恢复方案。
+3. auth 用户当前无 R2 副本；PITR 彻底丢失会要求重新注册。修复方向是同一 MVCC
+   snapshot 下生成 auth **data-only sidecar**（排除平台迁移/session/token 表）并用
+   manifest 与应用 dump 配对；不要把 `-n auth` 直接塞进现有 plain dump。
 
-canonical baseline 必须在独立维护波次中捕获，并在空白 PG17/shadow 项目完成
-schema、权限、R2 数据恢复与 `npm run qa:schema` 演练后才能进入本 runbook。
+canonical baseline 与 auth sidecar 必须在独立维护波次中实现，并在 managed
+scratch 项目完成 catalog 指纹、身份/应用数据、权限、RLS、登录和
+`npm run qa:schema` 演练后，才能把恢复步骤重新写入本 runbook。
 
-**脚本安全**:`RESTORE_TARGET_URL == DATABASE_URL`(生产)时硬拒绝,除非
-`--force-prod`(几乎永远不该用)。缺少 `DATABASE_URL` 生产身份基准时默认硬拒绝；
-只有已独立证明 scratch 隔离后才可显式传 `--allow-unverified-target`。
+**脚本安全**：当前 restore CLI 在目标身份预检后无条件拒绝 apply；
+`--force-prod` 与 `--allow-unverified-target` 只覆盖身份预检分支，不能启用恢复。
+在 managed scratch 的 v2 app+auth manifest 演练通过并另行审核前，不得把这两个
+参数描述为恢复开关，也不得绕过该最终禁用门禁。
 
 ## Deployment Rollback
 
