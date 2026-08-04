@@ -4,6 +4,7 @@ import { BASE_URL } from '@/lib/constants/urls'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   getPopularTokenRankingSnapshot,
+  TokenRankingReadError,
   type PopularTokenRankingSnapshot,
 } from '@/lib/rankings/token-ranking-snapshot'
 
@@ -12,21 +13,24 @@ import {
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// SSR timeout guard: getPopularTokens now reads the pre-aggregated MV via RPC
-// (fast), but keep a bound so a cold cache-miss never hangs the page render.
+// Keep a bound so a cold publication-head/cache read never hangs the page render.
 const SSR_TIMEOUT_MS = 4000
 
 export const metadata: Metadata = {
-  title: 'Token Rankings — Who Trades BTC Best?',
+  title: 'Token Ranking Verification',
   description:
-    'Discover the best traders for every token. See who profits most trading BTC, ETH, SOL, and other assets across current ranking source boards.',
+    'Token-level trader rankings publish only from verified authority snapshots. Partial history, untrusted prices, unknown cost basis, and incomplete FX evidence are excluded.',
   alternates: {
     canonical: `${BASE_URL}/rankings/tokens`,
   },
+  robots: {
+    index: false,
+    follow: true,
+  },
   openGraph: {
-    title: 'Token Rankings — Who Trades BTC Best?',
+    title: 'Token Ranking Verification | Arena',
     description:
-      'Token-level trader rankings across current public source boards. Find the best BTC, ETH, and SOL traders by PnL.',
+      'Token-level rankings publish only after history, price, cost-basis, and FX evidence pass verification.',
     url: `${BASE_URL}/rankings/tokens`,
     siteName: 'Arena',
     type: 'website',
@@ -36,8 +40,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Token Rankings — Who Trades BTC Best?',
-    description: 'Token-level trader rankings. Find the best BTC, ETH, SOL traders.',
+    title: 'Token Ranking Verification | Arena',
+    description: 'Token-level rankings backed by verified authority snapshots.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
@@ -73,11 +77,14 @@ async function withSsrTimeout<T>(loader: (signal: AbortSignal) => Promise<T>): P
 
 export default async function TokensPage() {
   let initialSnapshot: PopularTokenRankingSnapshot | null = null
-  let initialStatus: 'success' | 'error' = 'success'
+  let initialStatus: 'success' | 'unpublished' | 'error' = 'success'
   try {
     initialSnapshot = await withSsrTimeout((signal) => loadPopularTokensSSR(signal))
-  } catch {
-    initialStatus = 'error'
+  } catch (error) {
+    initialStatus =
+      error instanceof TokenRankingReadError && error.kind === 'not_published'
+        ? 'unpublished'
+        : 'error'
   }
 
   return (
