@@ -70,6 +70,11 @@ import {
   readGroupNotificationAcknowledgement,
 } from './group-notification-operation'
 import {
+  appendUniqueGroupPosts,
+  buildGroupPostCursorFilter,
+  GroupPostPaginationLedger,
+} from './post-pagination-client'
+import {
   GROUP_AUDIT_PAGE_LIMIT,
   loadGroupAuditActivities,
   type GroupAuditActivity,
@@ -416,6 +421,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [notifySending, setNotifySending] = useViewerSlotState(manageStateOwnerKey, false)
   const notificationOperationsRef = useRef(new GroupNotificationOperationLedger())
   const notificationRequestsRef = useRef(new GroupNotificationRequestSingleFlight())
+  const postPaginationRef = useRef(new GroupPostPaginationLedger())
   const pinRequestLockRef = useRef<Set<string>>(new Set())
   const destructiveRequestLockRef = useRef<Set<string>>(new Set())
   const memberMutationLockRef = useRef<Set<string>>(new Set())
@@ -525,6 +531,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
             .eq('group_id', requestGroupId)
             .order('is_pinned', { ascending: false, nullsFirst: false })
             .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
             .limit(POSTS_PER_PAGE),
         ])
         if (!requestIsCurrent()) return
@@ -617,9 +624,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           (membershipResult.data?.role as 'owner' | 'admin' | 'member' | undefined) || null
         )
         setMembers(loadedMembers)
+        postPaginationRef.current.reset(manageStateOwnerKey, loadedPosts)
         setPosts(loadedPosts)
         setComments(commentsData.map((comment) => ({ ...comment, deleted_at: null })))
         setHasMorePosts(loadedPosts.length === POSTS_PER_PAGE)
+        setLoadingMorePosts(false)
         setEditName(groupData?.name || '')
         setEditNameEn(groupData?.name_en || '')
         setEditDescription(groupData?.description || '')
@@ -648,6 +657,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           setPosts([])
           setComments([])
           setHasMorePosts(false)
+          setLoadingMorePosts(false)
           setEditName('')
           setEditNameEn('')
           setEditDescription('')
@@ -686,6 +696,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     setHasMorePosts,
     setIsPremiumOnly,
     setLoading,
+    setLoadingMorePosts,
     setMembers,
     setPosts,
     setShowMultiLang,
@@ -1122,44 +1133,41 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const loadMorePosts = async () => {
     const requestScope = manageOwnerScope
     const requestGroupId = requestScope.groupId
-    const requestCursor = posts.at(-1)?.created_at
     const requestIsCurrent = () => isManageScopeCurrent(requestScope)
-    if (
-      !requestGroupId ||
-      !requestCursor ||
-      loadingMorePosts ||
-      !hasMorePosts ||
-      !requestIsCurrent()
-    )
-      return
+    if (!requestGroupId || !hasMorePosts || !requestIsCurrent()) return
+    const operation = postPaginationRef.current.begin(manageStateOwnerKey)
+    if (!operation) return
     setLoadingMorePosts(true)
     try {
       const { data, error } = await supabase
         .from('posts')
         .select('id, group_id, title, content, author_handle, created_at, is_pinned')
         .eq('group_id', requestGroupId)
-        .lt('created_at', requestCursor)
+        .or(buildGroupPostCursorFilter(operation.cursor))
+        .order('is_pinned', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .limit(POSTS_PER_PAGE)
       if (!requestIsCurrent()) return
       if (error) throw error
       if (data && data.length > 0) {
-        setPosts((prev) => [
-          ...prev,
-          ...(data.map((p) => ({
-            ...p,
-            group_id: requestGroupId,
-            deleted_at: null,
-          })) as Post[]),
-        ])
+        if (!postPaginationRef.current.advance(operation, data as Post[])) return
+        const loadedPosts = data.map((p) => ({
+          ...p,
+          group_id: requestGroupId,
+          deleted_at: null,
+        })) as Post[]
+        setPosts((prev) => appendUniqueGroupPosts(prev, loadedPosts))
         setHasMorePosts(data.length === POSTS_PER_PAGE)
       } else {
+        postPaginationRef.current.advance(operation, [])
         setHasMorePosts(false)
       }
     } catch (err) {
       if (requestIsCurrent()) logger.error('Load more posts error:', err)
     } finally {
-      if (requestIsCurrent()) setLoadingMorePosts(false)
+      const released = postPaginationRef.current.finish(operation)
+      if (released && requestIsCurrent()) setLoadingMorePosts(false)
     }
   }
 
