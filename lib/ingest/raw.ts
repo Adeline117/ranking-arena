@@ -13,7 +13,7 @@ import { gzipSync, gunzipSync } from 'node:zlib'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { PoolClient } from 'pg'
 import { getIngestPool, ingestClientConnect, type IngestQueryExecutor } from './db'
-import type { RankingTimeframe, RawPage } from './core/types'
+import type { HistoryKind, RankingTimeframe, RawPage } from './core/types'
 import {
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
@@ -56,6 +56,12 @@ export const POSITION_HISTORY_RAW_JOB_TYPE = 'history:position_history' as const
 export const EVENT_HISTORY_RAW_ARTIFACT_ROLE = 'event_history' as const
 export const POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
   'arena.position-history-publication-evidence@1' as const
+export const EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
+  'arena.event-history-publication-evidence@1' as const
+
+export function historyRawJobType(kind: HistoryKind): `history:${HistoryKind}` {
+  return `history:${kind}`
+}
 export type RawSerializationContract =
   | typeof RAW_JSON_STRINGIFY_CONTRACT
   | typeof STRICT_CANONICAL_JSON_CONTRACT
@@ -1014,10 +1020,12 @@ export async function writeAttemptBoundLeaderboardRawArtifactSet(
   return { ...receipts, projection }
 }
 
-export interface WritePositionHistoryRawArtifactInput {
+export interface WriteHistoryRawArtifactInput {
   sourceRunId: string
   artifact: HistoryAcquisitionArtifact
 }
+
+export type WritePositionHistoryRawArtifactInput = WriteHistoryRawArtifactInput
 
 interface NormalizedPositionHistoryRawArtifactInput {
   sourceId: number
@@ -1054,7 +1062,8 @@ function positionHistoryArtifactError(detail: string): Error {
 }
 
 function normalizePositionHistoryRawArtifactInput(
-  input: WritePositionHistoryRawArtifactInput
+  input: WriteHistoryRawArtifactInput,
+  expectedKind: HistoryKind | null
 ): NormalizedPositionHistoryRawArtifactInput {
   if (!/^[0-9a-f]{64}$/.test(input.sourceRunId)) {
     throw positionHistoryArtifactError('source run id must be a lowercase SHA-256 digest')
@@ -1066,8 +1075,12 @@ function normalizePositionHistoryRawArtifactInput(
   } catch (cause) {
     throw positionHistoryArtifactError(`history artifact is invalid: ${asError(cause).message}`)
   }
-  if (artifact.history_kind !== 'position_history') {
-    throw positionHistoryArtifactError('only position_history may bind the event_history role')
+  if (expectedKind !== null && artifact.history_kind !== expectedKind) {
+    throw positionHistoryArtifactError(
+      expectedKind === 'position_history'
+        ? 'only position_history may bind the event_history role'
+        : `only ${expectedKind} may bind this event_history writer`
+    )
   }
   if (strictCanonicalSha256(artifact) !== input.sourceRunId) {
     throw positionHistoryArtifactError('canonical artifact hash does not match source run id')
@@ -1096,16 +1109,19 @@ function preparePositionHistoryRawArtifact(
   }
   return {
     storagePath:
-      `${input.sourceSlug}/history_trust/position_history/${input.sourceRunId}/` +
+      `${input.sourceSlug}/history_trust/${input.artifact.history_kind}/${input.sourceRunId}/` +
       `${EVENT_HISTORY_RAW_ARTIFACT_ROLE}_${contentHash}.json.gz`,
     jsonBytes,
     gzipBytes,
     contentHash,
     durableCompressedBytes: gzipBytes.byteLength,
     metaBase: {
-      surface: 'position_history',
+      surface: input.artifact.history_kind,
       data_contract: input.artifact.contract,
-      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      history_evidence_contract:
+        input.artifact.history_kind === 'position_history'
+          ? POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT
+          : EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
       source_run_id: input.sourceRunId,
       source_slug: input.sourceSlug,
       exchange_trader_id: input.exchangeTraderId,
@@ -1204,13 +1220,14 @@ function validatePositionHistoryTrustPointer(
     const storedMeta = strictCanonicalJson(row.meta)
     metaMatches =
       storedMeta === strictCanonicalJson(positionHistoryArtifactMeta(artifact)) ||
-      storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact))
+      (input.artifact.history_kind === 'position_history' &&
+        storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact)))
   } catch {
     metaMatches = false
   }
   if (
     row.source_id !== input.sourceId ||
-    row.job_type !== POSITION_HISTORY_RAW_JOB_TYPE ||
+    row.job_type !== historyRawJobType(input.artifact.history_kind) ||
     row.trader_id !== input.traderId ||
     row.timeframe !== null ||
     Date.parse(row.fetched_at) !== Date.parse(input.fetchedAt) ||
@@ -1244,7 +1261,7 @@ async function insertPositionHistoryTrustPointer(
      ON CONFLICT (storage_path) DO NOTHING`,
     [
       input.sourceId,
-      POSITION_HISTORY_RAW_JOB_TYPE,
+      historyRawJobType(input.artifact.history_kind),
       input.traderId,
       input.fetchedAt,
       artifact.storagePath,
@@ -1264,7 +1281,7 @@ async function persistPositionHistoryTrustPointer(
 ): Promise<RawObjectReceipt> {
   await transaction.query(
     `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
-    [`arena.position-history-raw-artifact:${input.sourceRunId}`]
+    [`arena.history-raw-artifact:${input.artifact.history_kind}:${input.sourceRunId}`]
   )
 
   let rows = await loadPositionHistoryTrustPointers(transaction, artifact, input.sourceRunId)
@@ -1275,20 +1292,15 @@ async function persistPositionHistoryTrustPointer(
   return validatePositionHistoryTrustPointer(rows, input, artifact)
 }
 
-/**
- * Persist one immutable position-history acquisition artifact. The artifact is
- * the event_history payload: it contains every captured upstream page plus its
- * terminal proof or explicit partial/unknown blocker. Storage is durable before
- * the caller-owned transaction publishes the exact source/trader pointer.
- */
-export async function writePositionHistoryRawArtifact(
-  input: WritePositionHistoryRawArtifactInput,
-  runTransaction: IngestTransactionRunner
+async function writeHistoryRawArtifactInternal(
+  input: WriteHistoryRawArtifactInput,
+  runTransaction: IngestTransactionRunner,
+  expectedKind: HistoryKind | null
 ): Promise<RawObjectReceipt> {
   if (typeof runTransaction !== 'function') {
     throw positionHistoryArtifactError('a claimed transaction runner is required')
   }
-  const normalizedInput = normalizePositionHistoryRawArtifactInput(input)
+  const normalizedInput = normalizePositionHistoryRawArtifactInput(input, expectedKind)
   const artifact = preparePositionHistoryRawArtifact(normalizedInput)
   artifact.durableCompressedBytes = await uploadDeterministicRaw(
     artifact,
@@ -1297,6 +1309,27 @@ export async function writePositionHistoryRawArtifact(
   return runTransaction((transaction) =>
     persistPositionHistoryTrustPointer(transaction, normalizedInput, artifact)
   )
+}
+
+/**
+ * Persist one immutable history acquisition artifact. The event_history object
+ * contains every captured upstream page plus terminal proof or an explicit
+ * partial/unknown blocker. Storage is durable before the caller-owned
+ * transaction publishes the exact source/trader pointer.
+ */
+export async function writeHistoryRawArtifact(
+  input: WriteHistoryRawArtifactInput,
+  runTransaction: IngestTransactionRunner
+): Promise<RawObjectReceipt> {
+  return writeHistoryRawArtifactInternal(input, runTransaction, null)
+}
+
+/** Backward-compatible strict writer for position-history callers. */
+export async function writePositionHistoryRawArtifact(
+  input: WritePositionHistoryRawArtifactInput,
+  runTransaction: IngestTransactionRunner
+): Promise<RawObjectReceipt> {
+  return writeHistoryRawArtifactInternal(input, runTransaction, 'position_history')
 }
 
 interface PreparedRawObjectPointer {

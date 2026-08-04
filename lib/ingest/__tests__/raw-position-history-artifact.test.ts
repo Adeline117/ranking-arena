@@ -25,10 +25,13 @@ import {
   type HistoryTerminalClaim,
 } from '@/lib/ingest/history-acquisition'
 import {
+  EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+  historyRawJobType,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   POSITION_HISTORY_RAW_JOB_TYPE,
   type IngestTransactionRunner,
+  writeHistoryRawArtifact,
   writePositionHistoryRawArtifact,
   type WritePositionHistoryRawArtifactInput,
 } from '@/lib/ingest/raw'
@@ -61,10 +64,10 @@ function terminalClaim(): HistoryTerminalClaim {
 }
 
 async function artifactInput(
-  options: { kind?: HistoryKind; upstreamError?: boolean } = {}
+  options: { kind?: HistoryKind; upstreamError?: boolean; missingClaim?: boolean } = {}
 ): Promise<WritePositionHistoryRawArtifactInput> {
   const kind = options.kind ?? 'position_history'
-  async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
+  async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     yield {
       pageIndex: 1,
       payload: { data: [{ id: 'closed-position-1' }], total: 1 },
@@ -72,7 +75,7 @@ async function artifactInput(
       fetchedAt,
     }
     if (options.upstreamError) throw new Error('upstream failed after the durable page')
-    return terminalClaim()
+    return options.missingClaim ? undefined : terminalClaim()
   }
 
   const captured = await captureHistoryAcquisition({
@@ -313,6 +316,77 @@ describe('writePositionHistoryRawArtifact', () => {
 
     expect(mockUpload).not.toHaveBeenCalled()
     expect(database.runTransaction).not.toHaveBeenCalled()
+  })
+
+  it.each<HistoryKind>(['orders', 'transfers', 'copiers'])(
+    'persists %s as its own deterministic event-history artifact',
+    async (kind) => {
+      const input = await artifactInput({ kind })
+      const database = databaseHarness()
+
+      const receipt = await writeHistoryRawArtifact(input, database.runTransaction)
+
+      expect(receipt.storagePath).toBe(
+        `binance_futures/history_trust/${kind}/${input.sourceRunId}/` +
+          `event_history_${input.sourceRunId}.json.gz`
+      )
+      expect(database.pointers).toHaveLength(1)
+      expect(database.pointers[0]).toMatchObject({
+        job_type: historyRawJobType(kind),
+        source_run_id: input.sourceRunId,
+        trust_artifact_role: EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+      })
+      expect(database.pointers[0].meta).toMatchObject({
+        surface: kind,
+        history_kind: kind,
+        history_evidence_contract: EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+        termination: input.artifact.termination,
+      })
+    }
+  )
+
+  it('replays an exact generic artifact without duplicating its pointer', async () => {
+    const input = await artifactInput({ kind: 'orders' })
+    const database = databaseHarness()
+
+    const first = await writeHistoryRawArtifact(input, database.runTransaction)
+    const second = await writeHistoryRawArtifact(input, database.runTransaction)
+
+    expect(second).toEqual(first)
+    expect(database.pointers).toHaveLength(1)
+    expect(mockUpload).toHaveBeenCalledTimes(2)
+    expect(mockDownload).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['missing claim', { missingClaim: true }, 'missing'],
+    ['upstream error', { upstreamError: true }, 'upstream_error'],
+  ] as const)(
+    'persists generic %s evidence without upgrading it',
+    async (_label, options, evidenceState) => {
+      const input = await artifactInput({ kind: 'orders', ...options })
+      const database = databaseHarness()
+
+      await writeHistoryRawArtifact(input, database.runTransaction)
+
+      expect(input.artifact.termination.evidence_state).toBe(evidenceState)
+      expect(database.pointers[0].meta).toMatchObject({
+        surface: 'orders',
+        terminal_evidence_state: evidenceState,
+        termination: input.artifact.termination,
+      })
+    }
+  )
+
+  it('rejects a generic retry whose pointer changed history kind', async () => {
+    const input = await artifactInput({ kind: 'orders' })
+    const database = databaseHarness()
+    await writeHistoryRawArtifact(input, database.runTransaction)
+    database.pointers[0].job_type = POSITION_HISTORY_RAW_JOB_TYPE
+
+    await expect(writeHistoryRawArtifact(input, database.runTransaction)).rejects.toThrow(
+      'database pointer 41 does not match the artifact'
+    )
   })
 
   it('durably labels upstream-error evidence as partial without upgrading its terminal state', async () => {
