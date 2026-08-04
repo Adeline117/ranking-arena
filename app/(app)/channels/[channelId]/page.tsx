@@ -28,6 +28,10 @@ import {
   type ChannelMessageSendIntent,
 } from './channel-message-send-operation'
 import { readChannelMessageSendAcknowledgement } from './channel-message-send-client'
+import {
+  readChannelMemberDeleteAcknowledgement,
+  readChannelMemberRoleAcknowledgement,
+} from './channel-member-client'
 
 type ChannelMessage = {
   id: string
@@ -64,11 +68,19 @@ type Channel = {
   created_by: string
 }
 
+type ChannelMemberMutationScope = {
+  actorId: string
+  channelId: string
+  accessToken: string
+  viewerKey: string
+  sessionGeneration: number
+}
+
 export default function ChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
-  const { email, accessToken, userId, authChecked } = useAuthSession()
+  const { accessToken, userId, authChecked, viewerKey, sessionGeneration } = useAuthSession()
   const [channelId, setChannelId] = useState('')
   const [channel, setChannel] = useState<Channel | null>(null)
   const [members, setMembers] = useState<Member[]>([])
@@ -90,6 +102,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     fileSize?: number
   } | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [pendingMemberMutations, setPendingMemberMutations] = useState<Record<string, true>>({})
   // Reply / quote: the message currently being replied to (null = not replying)
   const [replyingTo, setReplyingTo] = useState<ChannelMessage | null>(null)
   // Per-message context menu (react / reply / copy)
@@ -111,12 +124,54 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   // React state is not a synchronous exclusion primitive. This scope-bound set
   // closes the same-tick double-click/Enter race before operation acquisition.
   const sendInFlightRef = useRef<Set<string>>(new Set())
+  const memberMutationInFlightRef = useRef<Set<string>>(new Set())
   const messagesRef = useRef(messages)
   const userIdRef = useRef(userId)
   const channelIdRef = useRef(channelId)
+  const viewerKeyRef = useRef(viewerKey)
+  const sessionGenerationRef = useRef(sessionGeneration)
   messagesRef.current = messages
   userIdRef.current = userId
   channelIdRef.current = channelId
+  viewerKeyRef.current = viewerKey
+  sessionGenerationRef.current = sessionGeneration
+
+  const captureMemberMutationScope = (): ChannelMemberMutationScope | null => {
+    if (!userId || !channelId || !accessToken) return null
+    return { actorId: userId, channelId, accessToken, viewerKey, sessionGeneration }
+  }
+
+  const memberMutationScopeIsCurrent = (operation: ChannelMemberMutationScope): boolean =>
+    mountedRef.current &&
+    userIdRef.current === operation.actorId &&
+    channelIdRef.current === operation.channelId &&
+    viewerKeyRef.current === operation.viewerKey &&
+    sessionGenerationRef.current === operation.sessionGeneration
+
+  const beginMemberMutation = (
+    operation: ChannelMemberMutationScope,
+    targetId: string
+  ): string | null => {
+    const requestKey = `${operation.viewerKey}\u0000${operation.sessionGeneration}\u0000${operation.channelId}\u0000${targetId}`
+    if (memberMutationInFlightRef.current.has(requestKey)) return null
+    memberMutationInFlightRef.current.add(requestKey)
+    setPendingMemberMutations((current) => ({ ...current, [targetId]: true }))
+    return requestKey
+  }
+
+  const finishMemberMutation = (
+    operation: ChannelMemberMutationScope,
+    targetId: string,
+    requestKey: string
+  ) => {
+    memberMutationInFlightRef.current.delete(requestKey)
+    if (!memberMutationScopeIsCurrent(operation)) return
+    setPendingMemberMutations((current) => {
+      const next = { ...current }
+      delete next[targetId]
+      return next
+    })
+  }
 
   const memberIds = members.map((m) => m.user_id)
   const { getUserPresence } = usePresence(
@@ -158,7 +213,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     // A dynamic-route transition can reuse this component. Never let an old
     // channel's pending state disable the new viewer/channel composer.
     setSending(false)
-  }, [channelId, userId])
+    memberMutationInFlightRef.current.clear()
+    setPendingMemberMutations({})
+  }, [channelId, sessionGeneration, userId, viewerKey])
 
   const loadChannel = useCallback(async () => {
     if (!channelId || !accessToken) return
@@ -638,62 +695,95 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   }
 
   const handleRemoveMember = async (targetId: string) => {
-    if (!confirm(t('confirmRemoveMember'))) return
+    const operation = captureMemberMutationScope()
+    if (!operation || targetId === operation.actorId) return
+    const requestKey = beginMemberMutation(operation, targetId)
+    if (!requestKey) return
     try {
-      const res = await globalThis.fetch(`/api/channels/${channelId}/members`, {
+      if (!confirm(t('confirmRemoveMember')) || !memberMutationScopeIsCurrent(operation)) return
+      const res = await globalThis.fetch(`/api/channels/${operation.channelId}/members`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${operation.accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ userId: targetId }),
       })
-      if (res.ok) {
+      const data: unknown = await res.json().catch(() => null)
+      if (!memberMutationScopeIsCurrent(operation)) return
+      if (res.ok && readChannelMemberDeleteAcknowledgement(data, 'removed')) {
         setMembers((prev) => prev.filter((m) => m.user_id !== targetId))
         showToast(t('memberRemoved'), 'success')
+      } else {
+        showToast(t('operationFailed'), 'error')
       }
     } catch {
-      showToast(t('operationFailed'), 'error')
+      if (memberMutationScopeIsCurrent(operation)) showToast(t('operationFailed'), 'error')
+    } finally {
+      finishMemberMutation(operation, targetId, requestKey)
     }
   }
 
   const handleLeave = async () => {
-    if (!confirm(t('confirmLeaveGroup'))) return
+    const operation = captureMemberMutationScope()
+    if (!operation) return
+    const requestKey = beginMemberMutation(operation, operation.actorId)
+    if (!requestKey) return
     try {
-      const res = await globalThis.fetch(`/api/channels/${channelId}/members`, {
+      if (!confirm(t('confirmLeaveGroup')) || !memberMutationScopeIsCurrent(operation)) return
+      const res = await globalThis.fetch(`/api/channels/${operation.channelId}/members`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${operation.accessToken}`,
           ...getCsrfHeaders(),
         },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId: operation.actorId }),
       })
-      if (res.ok) {
+      const data: unknown = await res.json().catch(() => null)
+      if (!memberMutationScopeIsCurrent(operation)) return
+      if (res.ok && readChannelMemberDeleteAcknowledgement(data, 'left')) {
         showToast(t('leftGroup'), 'success')
         router.push('/inbox?tab=messages&chat=group')
+      } else {
+        showToast(t('operationFailed'), 'error')
       }
     } catch {
-      showToast(t('operationFailed'), 'error')
+      if (memberMutationScopeIsCurrent(operation)) showToast(t('operationFailed'), 'error')
+    } finally {
+      finishMemberMutation(operation, operation.actorId, requestKey)
     }
   }
 
   const handleToggleRole = async (targetId: string, currentRole: string) => {
+    const operation = captureMemberMutationScope()
+    if (!operation || targetId === operation.actorId) return
     const newRole = currentRole === 'admin' ? 'member' : 'admin'
+    const requestKey = beginMemberMutation(operation, targetId)
+    if (!requestKey) return
     try {
-      await globalThis.fetch(`/api/channels/${channelId}/members`, {
+      const res = await globalThis.fetch(`/api/channels/${operation.channelId}/members`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${operation.accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ userId: targetId, role: newRole }),
       })
+      const data: unknown = await res.json().catch(() => null)
+      if (!memberMutationScopeIsCurrent(operation)) return
+      if (!res.ok || !readChannelMemberRoleAcknowledgement(data)) {
+        showToast(t('operationFailed'), 'error')
+        return
+      }
       setMembers((prev) => prev.map((m) => (m.user_id === targetId ? { ...m, role: newRole } : m)))
+      showToast(t('roleUpdatedSuccessfully'), 'success')
     } catch {
-      showToast(t('operationFailed'), 'error')
+      if (memberMutationScopeIsCurrent(operation)) showToast(t('operationFailed'), 'error')
+    } finally {
+      finishMemberMutation(operation, targetId, requestKey)
     }
   }
 
@@ -1137,6 +1227,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             </Text>
             {members.map((m) => {
               const presence = getUserPresence(m.user_id)
+              const memberMutationPending = !!pendingMemberMutations[m.user_id]
               return (
                 <Box
                   key={m.user_id}
@@ -1192,16 +1283,21 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                   {myRole === 'owner' && m.user_id !== userId && (
                     <Box style={{ display: 'flex', gap: 4 }}>
                       <button
+                        type="button"
                         onClick={() => handleToggleRole(m.user_id, m.role)}
+                        disabled={memberMutationPending}
+                        aria-busy={memberMutationPending}
+                        aria-label={m.role === 'admin' ? t('removeAdmin') : t('setAsAdmin')}
                         title={m.role === 'admin' ? t('removeAdmin') : t('setAsAdmin')}
                         style={{
-                          width: 36,
-                          height: 36,
+                          width: 44,
+                          height: 44,
                           borderRadius: '50%',
                           border: 'none',
                           background: 'transparent',
                           color: tokens.colors.text.tertiary,
-                          cursor: 'pointer',
+                          cursor: memberMutationPending ? 'not-allowed' : 'pointer',
+                          opacity: memberMutationPending ? 0.5 : 1,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -1219,16 +1315,21 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                         </svg>
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleRemoveMember(m.user_id)}
+                        disabled={memberMutationPending}
+                        aria-busy={memberMutationPending}
+                        aria-label={t('removeMember')}
                         title={t('removeMember')}
                         style={{
-                          width: 36,
-                          height: 36,
+                          width: 44,
+                          height: 44,
                           borderRadius: '50%',
                           border: 'none',
                           background: 'transparent',
                           color: tokens.colors.accent.error,
-                          cursor: 'pointer',
+                          cursor: memberMutationPending ? 'not-allowed' : 'pointer',
+                          opacity: memberMutationPending ? 0.5 : 1,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -1252,7 +1353,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             })}
             {myRole !== 'owner' && (
               <button
+                type="button"
                 onClick={handleLeave}
+                disabled={!!(userId && pendingMemberMutations[userId])}
+                aria-busy={!!(userId && pendingMemberMutations[userId])}
                 style={{
                   width: '100%',
                   padding: '10px',
@@ -1261,12 +1365,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                   border: `1px solid ${alpha(tokens.colors.accent.error, 20)}`,
                   background: `${alpha(tokens.colors.accent.error, 7)}`,
                   color: tokens.colors.accent.error,
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: 'pointer',
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  fontSize: tokens.typography.fontSize.sm,
+                  cursor: userId && pendingMemberMutations[userId] ? 'not-allowed' : 'pointer',
+                  opacity: userId && pendingMemberMutations[userId] ? 0.6 : 1,
                 }}
               >
-                {t('leaveGroup')}
+                {userId && pendingMemberMutations[userId] ? t('loading') : t('leaveGroup')}
               </button>
             )}
           </Box>
