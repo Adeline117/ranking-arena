@@ -10,6 +10,7 @@ import { TRANSLATION_SERVER_REQUEST_TIMEOUT_MS } from './translation-server-cont
 import {
   TRANSLATION_MAX_BATCH_ITEMS,
   TRANSLATION_MAX_BATCH_TEXT_LENGTH,
+  TRANSLATION_MAX_OUTPUT_TEXT_LENGTH,
   TRANSLATION_MAX_TEXT_LENGTH,
 } from './translation-limits'
 
@@ -145,6 +146,23 @@ describe('translation client contract', () => {
     ).toBeNull()
   })
 
+  it('accepts legitimate output expansion while preserving a finite output cap', () => {
+    const expandedTranslation = 'T'.repeat(TRANSLATION_MAX_TEXT_LENGTH + 1)
+    expect(expandedTranslation.length).toBeLessThanOrEqual(TRANSLATION_MAX_OUTPUT_TEXT_LENGTH)
+    expect(
+      readSingleTranslationResponse(
+        singleEnvelope({ translatedText: expandedTranslation }),
+        singleRequest
+      )
+    ).toMatchObject({ translatedText: expandedTranslation, sameLanguage: false })
+    expect(
+      readSingleTranslationResponse(
+        singleEnvelope({ translatedText: 'T'.repeat(TRANSLATION_MAX_OUTPUT_TEXT_LENGTH + 1) }),
+        singleRequest
+      )
+    ).toBeNull()
+  })
+
   it.each(['ja', 'ko'] as const)(
     'binds supported %s targets without weakening identity checks',
     (targetLang) => {
@@ -195,6 +213,21 @@ describe('translation client contract', () => {
         batchItems
       )
     ).toBeNull()
+  })
+
+  it('accepts expanded output in a complete batch receipt', () => {
+    const expandedTranslation = 'T'.repeat(TRANSLATION_MAX_TEXT_LENGTH + 1)
+    expect(
+      readBatchTranslationResponse(
+        batchEnvelope({
+          'item-0': { translatedText: expandedTranslation, cached: true },
+          'item-1': { translatedText: 'Body', cached: false },
+        }),
+        batchItems
+      )
+    ).toMatchObject({
+      results: { 'item-0': { translatedText: expandedTranslation, cached: true } },
+    })
   })
 
   it.each([

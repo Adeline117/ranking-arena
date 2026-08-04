@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   TRANSLATION_MAX_BATCH_ITEMS,
   TRANSLATION_MAX_BATCH_TEXT_LENGTH,
+  TRANSLATION_MAX_OUTPUT_TEXT_LENGTH,
   TRANSLATION_MAX_TEXT_LENGTH,
 } from './translation-limits'
 import { detectClearTranslationSourceLanguage } from './translation-language'
@@ -9,6 +10,7 @@ import { detectClearTranslationSourceLanguage } from './translation-language'
 export {
   TRANSLATION_MAX_BATCH_ITEMS,
   TRANSLATION_MAX_BATCH_TEXT_LENGTH,
+  TRANSLATION_MAX_OUTPUT_TEXT_LENGTH,
   TRANSLATION_MAX_TEXT_LENGTH,
 } from './translation-limits'
 
@@ -299,7 +301,7 @@ export function isUsableTranslationText(value: unknown, sourceText: string): val
   return (
     typeof value === 'string' &&
     value.trim().length > 0 &&
-    value.length <= TRANSLATION_MAX_TEXT_LENGTH * 4 &&
+    value.length <= TRANSLATION_MAX_OUTPUT_TEXT_LENGTH &&
     value.trim() !== sourceText.trim()
   )
 }

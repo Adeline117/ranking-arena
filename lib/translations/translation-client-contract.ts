@@ -2,6 +2,7 @@ import { apiFetch } from '@/lib/utils/api-fetch'
 import {
   TRANSLATION_MAX_BATCH_ITEMS,
   TRANSLATION_MAX_BATCH_TEXT_LENGTH,
+  TRANSLATION_MAX_OUTPUT_TEXT_LENGTH,
   TRANSLATION_MAX_TEXT_LENGTH,
 } from './translation-limits'
 
@@ -48,11 +49,19 @@ function isNonnegativeSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0
 }
 
-function isTranslationText(value: unknown): value is string {
+function isTranslationSourceText(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.trim().length > 0 &&
     value.length <= TRANSLATION_MAX_TEXT_LENGTH
+  )
+}
+
+function isTranslationOutputText(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.trim().length > 0 &&
+    value.length <= TRANSLATION_MAX_OUTPUT_TEXT_LENGTH
   )
 }
 
@@ -76,7 +85,7 @@ export function readSingleTranslationResponse(
   expected: Pick<SingleTranslationRequest, 'text' | 'targetLang'>
 ): SingleTranslationReceipt | null {
   if (
-    !isTranslationText(expected.text) ||
+    !isTranslationSourceText(expected.text) ||
     !isTranslationTarget(expected.targetLang) ||
     !isRecord(value) ||
     !hasExactKeys(value, ['data', 'success']) ||
@@ -92,7 +101,7 @@ export function readSingleTranslationResponse(
     : ['cached', 'originalText', 'targetLang', 'translatedText']
   if (
     !hasExactKeys(data, keys) ||
-    !isTranslationText(data.translatedText) ||
+    !isTranslationOutputText(data.translatedText) ||
     data.originalText !== expected.text ||
     data.targetLang !== expected.targetLang ||
     typeof data.cached !== 'boolean'
@@ -135,7 +144,7 @@ export function readBatchTranslationResponse(
       (item) =>
         !item.id ||
         !item.contentId ||
-        !isTranslationText(item.text) ||
+        !isTranslationSourceText(item.text) ||
         !isTranslationContentType(item.contentType) ||
         !isTranslationTarget(item.targetLang)
     ) ||
@@ -173,7 +182,7 @@ export function readBatchTranslationResponse(
     if (
       !isRecord(result) ||
       !hasExactKeys(result, ['cached', 'translatedText']) ||
-      !isTranslationText(result.translatedText) ||
+      !isTranslationOutputText(result.translatedText) ||
       typeof result.cached !== 'boolean'
     ) {
       return null
@@ -208,7 +217,7 @@ export async function requestSingleTranslation(
   request: SingleTranslationRequest,
   options: TranslationRequestOptions
 ): Promise<SingleTranslationReceipt> {
-  if (!isTranslationText(request.text)) {
+  if (!isTranslationSourceText(request.text)) {
     throw new Error('Translation source text is outside the admitted limits')
   }
   const value = await apiFetch<unknown>('/api/translate', {
@@ -233,7 +242,7 @@ export async function requestBatchTranslation(
   if (
     items.length === 0 ||
     items.length > TRANSLATION_MAX_BATCH_ITEMS ||
-    items.some((item) => !isTranslationText(item.text)) ||
+    items.some((item) => !isTranslationSourceText(item.text)) ||
     items.reduce((total, item) => total + item.text.length, 0) > TRANSLATION_MAX_BATCH_TEXT_LENGTH
   ) {
     throw new Error('Translation batch is outside the admitted limits')
