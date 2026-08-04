@@ -8,6 +8,12 @@ name: Deploy Freshness Sentinel
 # origin/main and, if the oldest undeployed commit has been waiting for >45min,
 # alerts via a de-duplicated GitHub ISSUE (does not depend on Telegram) + fails
 # loudly. Self-heals: closes the issue once prod catches up.
+#
+# SECURITY SUSPENDED (V1 NO-GO): main currently has no enforceable protection,
+# so default-branch code must not receive issue-write or alert credentials. The
+# job is fixed false below. Restore only after credentials are environment-only,
+# that environment has a required reviewer, and main is protected against direct
+# writes.
 
 on:
   schedule:
@@ -23,6 +29,7 @@ concurrency:
 
 jobs:
   check:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

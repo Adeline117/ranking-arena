@@ -6,9 +6,22 @@ import { parse } from 'yaml'
 const workflowPath = '.github/workflows/lighthouse-ci.yml'
 const workflow = readFileSync(workflowPath, 'utf8')
 const parsed = parse(workflow)
+const credentialExpression =
+  /\b(?:secrets\s*(?:\.|\[\s*['"])|github\s*(?:\.token\b|\[\s*['"]token['"]\s*\]))/
+
+test('credential matcher rejects dot and bracket GitHub expression syntax', () => {
+  for (const expression of [
+    '${{ secrets.PROD_KEY }}',
+    "${{ secrets['PROD_KEY'] }}",
+    '${{ github.token }}',
+    '${{ github["token"] }}',
+  ]) {
+    assert.match(expression, credentialExpression)
+  }
+})
 
 test('Lighthouse PR builds receive no repository or production secrets', () => {
-  assert.doesNotMatch(workflow, /\bsecrets\.|github\.token/)
+  assert.doesNotMatch(workflow, credentialExpression)
   assert.deepEqual(parsed.permissions, { contents: 'read' })
   assert.equal(parsed.jobs.lighthouse.permissions, undefined)
   assert.equal(parsed.env.NEXT_PUBLIC_SUPABASE_URL, 'https://placeholder.supabase.co')
@@ -35,7 +48,7 @@ test('repository commands cannot inherit a persisted, cached, or later write cre
   )
   assert.ok(firstRepositoryCommand > checkoutIndex)
   for (const step of parsed.jobs.lighthouse.steps.slice(checkoutIndex + 1)) {
-    assert.doesNotMatch(JSON.stringify(step), /secrets\.|github\.token/)
+    assert.doesNotMatch(JSON.stringify(step), credentialExpression)
   }
   for (const step of parsed.jobs.lighthouse.steps.slice(firstRepositoryCommand)) {
     assert.equal(

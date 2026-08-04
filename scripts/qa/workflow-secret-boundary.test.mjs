@@ -7,11 +7,25 @@ const workflowDirectory = '.github/workflows'
 const pushMainOnly = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
 const disabled = '${{ false }}'
 const alwaysPushMainOnly = `always() && ${pushMainOnly}`
+const credentialExpression =
+  /\b(?:secrets\s*(?:\.|\[\s*['"])|github\s*(?:\.token\b|\[\s*['"]token['"]\s*\]))/
 
 function loadWorkflow(name) {
   const source = readFileSync(`${workflowDirectory}/${name}.yml`, 'utf8')
   return { source, workflow: parse(source) }
 }
+
+test('credential matcher rejects dot and bracket GitHub expression syntax', () => {
+  for (const expression of [
+    '${{ secrets.PROD_KEY }}',
+    "${{ secrets['PROD_KEY'] }}",
+    '${{ github.token }}',
+    '${{ github["token"] }}',
+  ]) {
+    assert.match(expression, credentialExpression)
+  }
+  assert.doesNotMatch('ci-build-service-placeholder', credentialExpression)
+})
 
 test('push and schedule workflows expose no arbitrary-ref dispatch', () => {
   const expectedTriggers = new Map([
@@ -64,7 +78,9 @@ test('event-driven privileged workflows provision no runner during NO-GO', () =>
   const expectedTriggers = new Map([
     ['backup-db', ['schedule']],
     ['build-ingest-image', ['push']],
+    ['deploy-freshness', ['schedule']],
     ['deploy-gate', ['workflow_run']],
+    ['health-monitor', ['schedule']],
     ['openclaw-sentinels', ['schedule']],
     ['post-deploy-evaluate', ['deployment_status']],
     ['post-deploy-smoke', ['deployment_status']],
@@ -109,10 +125,10 @@ test('Lighthouse PR repository commands receive placeholders and no secret expre
   const { source, workflow } = loadWorkflow('lighthouse-ci')
   assert.deepEqual(Object.keys(workflow.on), ['pull_request'])
   assert.equal(workflow.on.pull_request_target, undefined)
-  assert.doesNotMatch(source, /\$\{\{\s*secrets\./)
+  assert.doesNotMatch(source, credentialExpression)
   assert.deepEqual(workflow.permissions, { contents: 'read' })
   assert.equal(workflow.jobs.lighthouse.permissions, undefined)
-  assert.doesNotMatch(JSON.stringify(workflow.env ?? {}), /secrets\.|github\.token/)
+  assert.doesNotMatch(JSON.stringify(workflow.env ?? {}), credentialExpression)
 
   const checkout = workflow.jobs.lighthouse.steps.find((step) =>
     step.uses?.startsWith('actions/checkout@')
@@ -134,7 +150,7 @@ test('CI pull requests have read-only token handling and no secret-bearing comma
   assert.deepEqual(workflow.permissions, { contents: 'read' })
   assert.doesNotMatch(
     JSON.stringify(workflow.env ?? {}),
-    /secrets\.|github\.token/,
+    credentialExpression,
     'CI workflow-level env exposes a credential to every PR job'
   )
 
@@ -142,7 +158,7 @@ test('CI pull requests have read-only token handling and no secret-bearing comma
     const jobGuard = String(job.if ?? '')
     assert.equal(job.permissions, undefined, `${jobName} overrides the read-only workflow token`)
     const jobWithoutSteps = { ...job, steps: undefined }
-    if (JSON.stringify(jobWithoutSteps).includes('secrets.')) {
+    if (credentialExpression.test(JSON.stringify(jobWithoutSteps))) {
       assert.equal(jobGuard, disabled, `${jobName} exposes job-level secrets while runnable`)
     }
 
@@ -161,7 +177,7 @@ test('CI pull requests have read-only token handling and no secret-bearing comma
       }
 
       const serializedStep = JSON.stringify(step)
-      if (serializedStep.includes('secrets.') || serializedStep.includes('github.token')) {
+      if (credentialExpression.test(serializedStep)) {
         const stepGuard = String(step.if ?? '')
         assert.ok(
           jobGuard === disabled || stepGuard === alwaysPushMainOnly,
