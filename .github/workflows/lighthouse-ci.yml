@@ -45,24 +45,49 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Install Lighthouse CI
-        run: npm install -g @lhci/cli@0.14.x
-
-      - name: Start server
-        run: npm start &
-        env:
-          PORT: 3000
-
-      - name: Wait for server
+      - name: Run Lighthouse CI
         run: |
-          for i in $(seq 1 30); do
-            if curl -s http://localhost:3000 > /dev/null 2>&1; then
-              echo "Server is ready"
+          set -euo pipefail
+
+          LHCI_PORT=3000
+          export LHCI_ORIGIN="http://127.0.0.1:${LHCI_PORT}"
+          SERVER_LOG="$RUNNER_TEMP/arena-lighthouse-server.log"
+          node ./node_modules/next/dist/bin/next start \
+            --hostname 127.0.0.1 \
+            --port "$LHCI_PORT" >"$SERVER_LOG" 2>&1 &
+          SERVER_PID=$!
+          cleanup_server() {
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          }
+          trap cleanup_server EXIT INT TERM
+
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 10 \
+              "$LHCI_ORIGIN/" >/dev/null; then
+              ready=1
               break
             fi
-            echo "Waiting for server... ($i/30)"
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "::error::Lighthouse server exited before readiness"
+              tail -n 100 "$SERVER_LOG"
+              exit 1
+            fi
+            echo "Waiting for server... ($attempt/30)"
             sleep 2
           done
 
-      - name: Run Lighthouse CI
-        run: lhci autorun
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::Lighthouse server did not become ready"
+            tail -n 100 "$SERVER_LOG"
+            exit 1
+          fi
+
+          for path in / /methodology /about; do
+            curl --fail --silent --show-error --max-time 15 \
+              "$LHCI_ORIGIN$path" >/dev/null
+          done
+
+          npx --no-install lhci collect
+          npx --no-install lhci assert

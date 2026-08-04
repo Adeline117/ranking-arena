@@ -1,14 +1,35 @@
+const defaultOrigin = 'http://127.0.0.1:3000'
+const configuredOrigin = process.env.LHCI_ORIGIN || defaultOrigin
+let origin
+
+try {
+  const parsedOrigin = new URL(configuredOrigin)
+  const port = Number(parsedOrigin.port)
+  const isLoopbackOrigin =
+    parsedOrigin.protocol === 'http:' &&
+    parsedOrigin.hostname === '127.0.0.1' &&
+    parsedOrigin.username === '' &&
+    parsedOrigin.password === '' &&
+    parsedOrigin.pathname === '/' &&
+    parsedOrigin.search === '' &&
+    parsedOrigin.hash === '' &&
+    Number.isInteger(port) &&
+    port >= 1 &&
+    port <= 65535
+
+  if (!isLoopbackOrigin) throw new Error('origin is not a loopback HTTP origin')
+  origin = parsedOrigin.origin
+} catch (error) {
+  throw new Error(`Invalid LHCI_ORIGIN: ${error.message}`)
+}
+
 module.exports = {
   ci: {
     collect: {
-      url: [
-        'http://localhost:3000/',
-        'http://localhost:3000/rankings/binance_futures',
-        'http://localhost:3000/library',
-      ],
-      numberOfRuns: 1,
+      url: [`${origin}/`, `${origin}/methodology`, `${origin}/about`],
+      numberOfRuns: 3,
       settings: {
-        // Use mobile throttling (Lighthouse default)
+        // Desktop is intentional: mobile coverage remains in Playwright/nightly.
         preset: 'desktop',
         // Skip some audits that require real network conditions
         skipAudits: ['uses-http2'],
@@ -16,13 +37,16 @@ module.exports = {
     },
     assert: {
       assertions: {
-        'categories:performance': ['warn', { minScore: 0.5 }],
+        'http-status-code': 'error',
+        'categories:performance': ['error', { minScore: 0.5 }],
         'categories:accessibility': ['error', { minScore: 0.8 }],
         'categories:best-practices': ['error', { minScore: 0.8 }],
       },
     },
     upload: {
-      target: 'temporary-public-storage',
+      // Future `autorun` calls must remain local; PR reports are not public data.
+      target: 'filesystem',
+      outputDir: '.lighthouseci/reports',
     },
   },
 }

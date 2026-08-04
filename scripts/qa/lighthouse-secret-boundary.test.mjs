@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { parse } from 'yaml'
 import { hasCredentialExpression } from './workflow-credential-expression.mjs'
+import packageLock from '../../package-lock.json' with { type: 'json' }
+import packageJson from '../../package.json' with { type: 'json' }
+
+const require = createRequire(import.meta.url)
+const lighthouseConfig = require('../../lighthouserc.js')
 
 const workflowPath = '.github/workflows/lighthouse-ci.yml'
 const workflow = readFileSync(workflowPath, 'utf8')
@@ -90,4 +97,83 @@ test('every Lighthouse third-party action is pinned to an immutable commit', () 
     .filter((value) => typeof value === 'string')
   assert.ok(actions.length > 0)
   for (const action of actions) assert.match(action, /^[^@\s]+@[0-9a-f]{40}$/)
+})
+
+test('Lighthouse audits real pages repeatedly and fails on HTTP or score regressions', () => {
+  const lighthouse = lighthouseConfig.ci
+  assert.deepEqual(lighthouse.collect.url, [
+    'http://127.0.0.1:3000/',
+    'http://127.0.0.1:3000/methodology',
+    'http://127.0.0.1:3000/about',
+  ])
+  assert.equal(lighthouse.collect.numberOfRuns, 3)
+  assert.equal(lighthouse.collect.settings.preset, 'desktop')
+  assert.equal(lighthouse.assert.assertions['http-status-code'], 'error')
+  assert.equal(lighthouse.assert.assertions['categories:performance'][0], 'error')
+  assert.equal(lighthouse.upload.target, 'filesystem')
+  assert.equal(lighthouse.upload.outputDir, '.lighthouseci/reports')
+})
+
+test('Lighthouse readiness and execution fail closed without public upload', () => {
+  const step = parsed.jobs.lighthouse.steps.find(
+    (candidate) => candidate.name === 'Run Lighthouse CI'
+  )
+  assert.ok(step)
+  assert.match(step.run, /set -euo pipefail/)
+  assert.match(step.run, /export LHCI_ORIGIN="http:\/\/127\.0\.0\.1:\$\{LHCI_PORT\}"/)
+  assert.match(step.run, /node \.\/node_modules\/next\/dist\/bin\/next start/)
+  assert.match(step.run, /--hostname 127\.0\.0\.1/)
+  assert.match(step.run, /curl --fail --silent --show-error/)
+  assert.match(step.run, /if \[ "\$ready" -ne 1 \]/)
+  assert.match(step.run, /kill -0 "\$SERVER_PID"/)
+  assert.match(step.run, /trap cleanup_server EXIT INT TERM/)
+  assert.match(step.run, /npx --no-install lhci collect/)
+  assert.match(step.run, /npx --no-install lhci assert/)
+  assert.doesNotMatch(step.run, /autorun|lhci upload|--no-sandbox/)
+  assert.equal(packageJson.devDependencies['@lhci/cli'], '0.15.1')
+  assert.equal(packageLock.packages['node_modules/@lhci/cli'].version, '0.15.1')
+  assert.equal(packageJson.overrides.tmp, '0.2.7')
+  assert.deepEqual(
+    Object.entries(packageLock.packages)
+      .filter(([path]) => path === 'node_modules/tmp' || path.endsWith('/node_modules/tmp'))
+      .map(([path, metadata]) => [path, metadata.version]),
+    [['node_modules/tmp', '0.2.7']]
+  )
+})
+
+test('Lighthouse origin override accepts only a credential-free loopback HTTP origin', () => {
+  const command = [
+    '-e',
+    "process.stdout.write(require('./lighthouserc.js').ci.collect.url.join('\\n'))",
+  ]
+  const accepted = spawnSync(process.execPath, command, {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: { ...process.env, LHCI_ORIGIN: 'http://127.0.0.1:43117' },
+  })
+  assert.equal(accepted.status, 0, accepted.stderr)
+  assert.equal(
+    accepted.stdout,
+    [
+      'http://127.0.0.1:43117/',
+      'http://127.0.0.1:43117/methodology',
+      'http://127.0.0.1:43117/about',
+    ].join('\n')
+  )
+
+  for (const unsafeOrigin of [
+    'https://127.0.0.1:43117',
+    'http://localhost:43117',
+    'http://user:password@127.0.0.1:43117',
+    'http://127.0.0.1:43117/prefix',
+    'http://example.com:43117',
+  ]) {
+    const rejected = spawnSync(process.execPath, command, {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: { ...process.env, LHCI_ORIGIN: unsafeOrigin },
+    })
+    assert.notEqual(rejected.status, 0, unsafeOrigin)
+    assert.match(rejected.stderr, /Invalid LHCI_ORIGIN/)
+  }
 })

@@ -184,6 +184,7 @@
     },
     "sharp": "$sharp",
     "postcss": "8.5.23",
+    "tmp": "0.2.7",
     "brace-expansion": "$brace-expansion"
   },
   "pnpm": {
@@ -198,6 +199,7 @@
       "viem>ws": "^8.21.0",
       "sharp": "$sharp",
       "postcss": "8.5.23",
+      "tmp": "0.2.7",
       "brace-expansion": "$brace-expansion"
     }
   },
@@ -216,6 +218,7 @@
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
+    "@lhci/cli": "0.15.1",
     "@next/bundle-analyzer": "^16.2.1",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
