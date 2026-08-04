@@ -83,9 +83,10 @@ Some enrichment/fetch scripts may also require proxy credentials.
 
 ---
 
-Retired standalone status and data-validation scripts must not be restored. Use
-`npm run diagnose` for routine public diagnostics, `scripts/pipeline-health-check.mjs`
-for pipeline investigation, and `npm run qa:serving` for the release acceptance gate.
+Retired standalone status/data-validation entrypoints and legacy scraper-validation helpers must
+not be restored. Use `npm run diagnose` for routine public diagnostics,
+`scripts/pipeline-health-check.mjs` for pipeline investigation, `lib/ingest/staging/validate.ts`
+for ingest validation, and `npm run qa:serving` for the release acceptance gate.
 
 Pre-arena write scripts and orphaned import/browser helpers must also stay removed. New import and
 enrichment tooling must use the current `arena.*` source taxonomy, supported ingest runtime, and

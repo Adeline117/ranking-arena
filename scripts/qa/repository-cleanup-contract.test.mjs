@@ -29,6 +29,7 @@ test('retired pre-arena tools stay removed', () => {
   const retiredPreArenaTools = [
     'scripts/generate-trader-bios.ts',
     'scripts/lib/base-importer.mjs',
+    'scripts/lib/data-validation.mjs',
     'scripts/lib/platform-config.mjs',
     'scripts/lib/stealth-browser.mjs',
   ]
