@@ -193,6 +193,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const commentReactionDesiredStateMigration =
     '20260803107000_set_comment_reaction_desired_state.sql'
   const commentReactionCausalIntentsMigration = '20260803108000_comment_reaction_causal_intents.sql'
+  const closeLegacyCommentReactionDesiredStateMigration =
+    '20260803109000_close_legacy_comment_reaction_desired_state.sql'
   const accountHardDeleteRecoveryBarrierMigration =
     '20260729075300_account_hard_delete_recovery_barrier.sql'
   const verifiedAuthProfileEmailMigration = '20260729075400_verified_auth_profile_email.sql'
@@ -285,7 +287,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     latestMutationAuthorityMigrations
   )
   assert.ok(predeploy.includes(inactiveAuthSubjectMutationBarrierMigration))
-  assert.equal(postdeploy.length, 16)
+  assert.equal(postdeploy.length, 17)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -303,6 +305,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     postCreateDirectWriteClosureMigration,
     postHashtagCountIntegrityMigration,
     closeLegacyPostEditSignatureMigration,
+    closeLegacyCommentReactionDesiredStateMigration,
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   assert.deepEqual(recoveryPrerequisites, [
@@ -420,7 +423,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 224)
+  assert.equal(new Set(all).size, 225)
   assert.equal(
     postdeploy.filter((migration) => migration === postCreateDirectWriteClosureMigration).length,
     1
@@ -464,6 +467,17 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     postdeploy.indexOf(postHashtagCountIntegrityMigration) + 1
   )
   assert.ok(!predeploy.includes(closeLegacyPostEditSignatureMigration))
+  assert.equal(
+    postdeploy.filter((migration) => migration === closeLegacyCommentReactionDesiredStateMigration)
+      .length,
+    1
+  )
+  assert.equal(
+    postdeploy.indexOf(closeLegacyCommentReactionDesiredStateMigration),
+    postdeploy.indexOf(closeLegacyPostEditSignatureMigration) + 1
+  )
+  assert.equal(postdeploy.at(-1), closeLegacyCommentReactionDesiredStateMigration)
+  assert.ok(!predeploy.includes(closeLegacyCommentReactionDesiredStateMigration))
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,

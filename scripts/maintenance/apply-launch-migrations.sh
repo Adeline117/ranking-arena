@@ -244,7 +244,9 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 
 # These contracts revoke compatibility writes or change identity uniqueness
 # used by old routes. They must run only after the target application is serving
-# production.
+# production. The comment-reaction 1090 contract additionally requires an
+# atomic traffic cutover with every old instance drained to zero before its
+# owner-only legacy ACL is published.
 POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
@@ -262,6 +264,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260729185000_close_post_create_direct_writes.sql
   20260729186000_post_hashtag_count_integrity.sql
   20260729187000_close_legacy_post_edit_signature.sql
+  20260803109000_close_legacy_comment_reaction_desired_state.sql
 )
 
 # Recovery repairs the immutable application snapshot whose original cutover
