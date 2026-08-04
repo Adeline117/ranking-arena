@@ -19,6 +19,7 @@ import {
 import {
   readExchangeDisconnectAcknowledgement,
   readExchangeMutationError,
+  readExchangeSyncAcknowledgement,
 } from '@/lib/exchange/connection-mutation-contract'
 
 interface ExchangeConnectionProps {
@@ -228,11 +229,11 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       })
       if (!mutationIsCurrent(operation)) return
 
-      const result = (await response.json()) as { error?: unknown }
+      const result: unknown = await response.json().catch(() => null)
       if (!mutationIsCurrent(operation)) return
 
-      if (!response.ok) {
-        showToast(typeof result.error === 'string' ? result.error : t('syncError'), 'error')
+      if (!response.ok || !readExchangeSyncAcknowledgement(result, exchange)) {
+        showToast(readExchangeMutationError(result) || t('syncError'), 'error')
         return
       }
 

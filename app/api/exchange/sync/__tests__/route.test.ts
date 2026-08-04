@@ -64,8 +64,8 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({ rpc: (...args: unknown[]) => mockRpc(...args) })),
 }))
 
-jest.mock('@/lib/exchange', () => ({
-  SUPPORTED_EXCHANGES: ['binance', 'bybit', 'bitget', 'mexc', 'coinex', 'htx'],
+jest.mock('@/lib/exchange/read-only-platforms', () => ({
+  API_KEY_CONNECTION_PLATFORMS: ['binance', 'bybit', 'bitget'] as const,
 }))
 
 const mockDecrypt = jest.fn((ciphertext: string) => `plain:${ciphertext}`)
@@ -164,11 +164,25 @@ describe('POST /api/exchange/sync generation fence', () => {
     })
   })
 
-  it('returns stats only after the claimed generation is recorded', async () => {
+  it('returns an exact exchange-bound receipt only after the claimed generation is recorded', async () => {
     const response = await POST(request())
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual(expect.objectContaining({ success: true }))
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      exchange: 'binance',
+      data: {
+        message: 'Sync successful',
+        tradesCount: 0,
+        stats: {
+          totalTrades: 0,
+          avgProfit: 0,
+          avgLoss: 0,
+          profitableTradesPct: 0,
+          tradesPerWeek: 0,
+        },
+      },
+    })
     expect(mockRpc).toHaveBeenNthCalledWith(1, 'claim_exchange_api_sync_atomic', {
       p_user_id: mockUserId,
       p_exchange: 'binance',
@@ -230,27 +244,52 @@ describe('POST /api/exchange/sync generation fence', () => {
     })
   })
 
-  it('does not report a zero-trade success for an unimplemented exchange client', async () => {
+  it('rejects unsupported exchanges before claiming a credential', async () => {
+    const response = await POST(request('htx'))
+
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([null, {}, { exchange: 'binance', extra: true }, { exchange: 'BINANCE' }])(
+    'rejects malformed input before claiming a credential: %p',
+    async (body) => {
+      const malformedRequest = new NextRequest('http://localhost/api/exchange/sync', {
+        method: 'POST',
+        body,
+      })
+
+      const response = await POST(malformedRequest)
+
+      expect(response.status).toBe(400)
+      expect(mockRpc).not.toHaveBeenCalled()
+    }
+  )
+
+  it('records invalid calculated statistics as a failed sync', async () => {
+    mockCalculateBinanceStats.mockReturnValue({
+      totalTrades: 1,
+      avgProfit: Number.NaN,
+      avgLoss: 0,
+      profitableTradesPct: 0,
+      tradesPerWeek: 0,
+    })
     mockRpc.mockImplementation(async (name: string) => {
       if (name === 'claim_exchange_api_sync_atomic') {
-        return {
-          data: { ...claimResult(), exchange: 'htx' },
-          error: null,
-        }
+        return { data: claimResult(), error: null }
       }
       return { data: finishResult('error'), error: null }
     })
 
-    const response = await POST(request('htx'))
+    const response = await POST(request())
 
     expect(response.status).toBe(500)
-    expect(mockRpc).toHaveBeenNthCalledWith(
-      2,
-      'finish_exchange_api_sync_atomic',
-      expect.objectContaining({
-        p_succeeded: false,
-        p_error: 'Live sync is not implemented for htx',
-      })
-    )
+    expect(mockRpc).toHaveBeenNthCalledWith(2, 'finish_exchange_api_sync_atomic', {
+      p_user_id: mockUserId,
+      p_connection_id: CONNECTION_ID,
+      p_generation: 7,
+      p_succeeded: false,
+      p_error: 'Exchange returned invalid trading statistics',
+    })
   })
 })

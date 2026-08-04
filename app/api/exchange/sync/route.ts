@@ -4,15 +4,15 @@
  */
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, forbidden, notFound, serverError } from '@/lib/api/response'
-import { validateEnum } from '@/lib/api/validation'
 import {
   exchangeApiSyncClaimResultSchema,
   exchangeApiSyncFinishResultSchema,
 } from '@/lib/exchange/api-key-lifecycle'
 import { decrypt } from '@/lib/exchange/encryption'
-import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
+import { API_KEY_CONNECTION_PLATFORMS } from '@/lib/exchange/read-only-platforms'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -28,28 +28,32 @@ import {
   getBitgetTrades,
   calculateBitgetTradingStats,
 } from '@/lib/exchange/bitget'
-import { getMexcAccount, getMexcTrades, calculateMexcTradingStats } from '@/lib/exchange/mexc'
-import {
-  getCoinexAccount,
-  getCoinexTrades,
-  calculateCoinexTradingStats,
-} from '@/lib/exchange/coinex'
-
 const logger = createLogger('exchange-sync')
+
+const SyncBodySchema = z.object({ exchange: z.enum(API_KEY_CONNECTION_PLATFORMS) }).strict()
+const TradingStatsSchema = z
+  .object({
+    totalTrades: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    avgProfit: z.number().finite(),
+    avgLoss: z.number().finite(),
+    profitableTradesPct: z.number().finite().min(0).max(100),
+    tradesPerWeek: z.number().finite().nonnegative(),
+    activeSince: z.date().nullable().optional(),
+  })
+  .strict()
 
 export const POST = withAuth(
   async ({ user, request }) => {
-    let body: Record<string, unknown>
+    let rawBody: unknown
     try {
-      body = await request.json()
+      rawBody = await request.json()
     } catch {
       return badRequest('Invalid JSON body')
     }
 
-    const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {
-      required: true,
-      fieldName: 'exchange',
-    })!
+    const parsedBody = SyncBodySchema.safeParse(rawBody)
+    if (!parsedBody.success) return badRequest('Invalid exchange request')
+    const { exchange } = parsedBody.data
 
     // Claim the exact credential generation under the account lifecycle lock.
     // The exchange call itself is necessarily outside the transaction; its
@@ -165,7 +169,7 @@ export const POST = withAuth(
         passphrase = decrypt(passphraseCipher)
       }
       // 根据交易所类型获取数据
-      switch (exchange as Exchange) {
+      switch (exchange) {
         case 'binance': {
           await getBinanceAccount({ apiKey, apiSecret })
           const binanceTrades = await getBinanceTrades({ apiKey, apiSecret })
@@ -186,24 +190,11 @@ export const POST = withAuth(
           stats = calculateBitgetTradingStats(bitgetTrades)
           break
         }
-
-        case 'mexc': {
-          await getMexcAccount({ apiKey, apiSecret })
-          const mexcTrades = await getMexcTrades({ apiKey, apiSecret }, 'BTCUSDT')
-          stats = calculateMexcTradingStats(mexcTrades)
-          break
-        }
-
-        case 'coinex': {
-          await getCoinexAccount({ apiKey, apiSecret })
-          const coinexTrades = await getCoinexTrades({ apiKey, apiSecret }, 'BTCUSDT')
-          stats = calculateCoinexTradingStats(coinexTrades)
-          break
-        }
-
-        default:
-          throw new Error(`Live sync is not implemented for ${exchange}`)
       }
+
+      const parsedStats = TradingStatsSchema.safeParse(stats)
+      if (!parsedStats.success) throw new Error('Exchange returned invalid trading statistics')
+      stats = parsedStats.data
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Sync failed'
       logger.error(`${exchange} sync failed`, { error: errorMessage })
@@ -224,6 +215,7 @@ export const POST = withAuth(
 
     return NextResponse.json({
       success: true,
+      exchange,
       data: {
         message: 'Sync successful',
         tradesCount: stats?.totalTrades ?? 0,

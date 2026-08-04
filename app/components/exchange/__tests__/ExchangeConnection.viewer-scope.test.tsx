@@ -136,8 +136,26 @@ function connectionResponse(viewerId: string, marker: string) {
   }
 }
 
-function successResponse() {
-  return { ok: true, status: 200, json: async () => ({ success: true }) }
+function successResponse(exchange = 'binance') {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      success: true,
+      exchange,
+      data: {
+        message: 'Sync successful',
+        tradesCount: 0,
+        stats: {
+          totalTrades: 0,
+          avgProfit: 0,
+          avgLoss: 0,
+          profitableTradesPct: 0,
+          tradesPerWeek: 0,
+        },
+      },
+    }),
+  }
 }
 
 function disconnectResponse(exchange = 'binance', extra: Record<string, unknown> = {}) {
@@ -386,6 +404,24 @@ describe('ExchangeConnectionManager viewer ownership', () => {
     })
     expect(await screen.findByText(/viewer-b-secret/)).toBeInTheDocument()
     expect(connectionLoads.filter((viewer) => viewer === 'viewer-b')).toHaveLength(2)
+  })
+
+  it('does not report success or reload after a mismatched sync acknowledgement', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(connectionResponse('viewer-a', 'viewer-a-secret'))
+      .mockResolvedValueOnce(successResponse('bybit'))
+    global.fetch = fetchMock as typeof fetch
+
+    render(<ExchangeConnectionManager userId="viewer-a" />)
+    expect(await screen.findByText(/viewer-a-secret/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'refreshData' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('syncError', 'error'))
+    expect(mockShowToast).not.toHaveBeenCalledWith('syncSuccess', 'success')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: 'refreshData' })).toBeEnabled()
   })
 
   it('fails closed when the prop, canonical viewer and bearer subject disagree', async () => {
