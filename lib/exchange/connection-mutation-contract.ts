@@ -1,3 +1,6 @@
+import type { ExchangeConnection } from './index'
+import { API_KEY_CONNECTION_PLATFORMS } from './read-only-platforms'
+
 type JsonRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -76,6 +79,85 @@ export function readExchangeSyncAcknowledgement(
   }
 
   return { tradesCount: value.data.tradesCount as number }
+}
+
+const currentConnectionExchanges = new Set<string>(API_KEY_CONNECTION_PLATFORMS)
+const syncStatuses = new Set(['success', 'error', 'pending'])
+const isoTimestampPattern =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/
+
+function isIsoTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    isoTimestampPattern.test(value) &&
+    Number.isFinite(Date.parse(value))
+  )
+}
+
+function isNullableIsoTimestamp(value: unknown): value is string | null {
+  return value === null || isIsoTimestamp(value)
+}
+
+function isNullableBoundedString(value: unknown, maximumLength: number): value is string | null {
+  return value === null || (typeof value === 'string' && value.length <= maximumLength)
+}
+
+function isExchangeConnectionRow(value: unknown, expectedUserId: string): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, [
+      'created_at',
+      'exchange',
+      'id',
+      'is_active',
+      'last_sync_at',
+      'last_sync_error',
+      'last_sync_status',
+      'updated_at',
+      'user_id',
+    ]) &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    value.id.length <= 64 &&
+    value.user_id === expectedUserId &&
+    typeof value.exchange === 'string' &&
+    currentConnectionExchanges.has(value.exchange) &&
+    typeof value.is_active === 'boolean' &&
+    isNullableIsoTimestamp(value.last_sync_at) &&
+    (value.last_sync_status === null ||
+      (typeof value.last_sync_status === 'string' && syncStatuses.has(value.last_sync_status))) &&
+    isNullableBoundedString(value.last_sync_error, 500) &&
+    isIsoTimestamp(value.created_at) &&
+    isIsoTimestamp(value.updated_at)
+  )
+}
+
+export function readExchangeConnectionsAcknowledgement(
+  value: unknown,
+  expectedUserId: string
+): ExchangeConnection[] | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['data', 'meta', 'success']) ||
+    value.success !== true ||
+    !isRecord(value.meta) ||
+    !hasExactKeys(value.meta, ['timestamp']) ||
+    !isIsoTimestamp(value.meta.timestamp) ||
+    !isRecord(value.data) ||
+    !hasExactKeys(value.data, ['connections']) ||
+    !Array.isArray(value.data.connections) ||
+    value.data.connections.length > currentConnectionExchanges.size ||
+    value.data.connections.some(
+      (connection) => !isExchangeConnectionRow(connection, expectedUserId)
+    )
+  ) {
+    return null
+  }
+
+  const exchanges = value.data.connections.map((connection) => (connection as JsonRecord).exchange)
+  if (new Set(exchanges).size !== exchanges.length) return null
+
+  return value.data.connections as ExchangeConnection[]
 }
 
 export function readExchangeMutationError(value: unknown): string | null {

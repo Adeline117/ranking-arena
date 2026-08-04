@@ -113,25 +113,33 @@ function setMockViewer(viewerId: string, tokenSubject = viewerId) {
   }
 }
 
-function connectionResponse(viewerId: string, marker: string) {
+function connectionResponse(
+  viewerId: string,
+  marker: string,
+  rowOverrides: Record<string, unknown> = {}
+) {
   return {
     ok: true,
     status: 200,
     json: async () => ({
+      success: true,
       data: {
         connections: [
           {
-            id: `connection-${viewerId}`,
+            id: '22222222-2222-4222-8222-222222222222',
             user_id: viewerId,
             exchange: 'binance',
             is_active: true,
+            last_sync_at: null,
             last_sync_status: 'error',
             last_sync_error: marker,
             created_at: '2026-01-01T00:00:00.000Z',
             updated_at: '2026-01-01T00:00:00.000Z',
+            ...rowOverrides,
           },
         ],
       },
+      meta: { timestamp: '2026-01-01T00:00:00.000Z' },
     }),
   }
 }
@@ -167,7 +175,15 @@ function disconnectResponse(exchange = 'binance', extra: Record<string, unknown>
 }
 
 function emptyConnectionResponse() {
-  return { ok: true, status: 200, json: async () => ({ data: { connections: [] } }) }
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      success: true,
+      data: { connections: [] },
+      meta: { timestamp: '2026-01-01T00:00:00.000Z' },
+    }),
+  }
 }
 
 describe('ExchangeConnectionManager viewer ownership', () => {
@@ -192,6 +208,20 @@ describe('ExchangeConnectionManager viewer ownership', () => {
     expect(source).not.toContain('auth.getSession')
     expect(source).not.toContain('auth.getUser')
     expect(source).not.toContain("from('user_exchange_connections')")
+  })
+
+  it('fails closed when the connection projection contains an unexpected field', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        connectionResponse('viewer-a', 'must-not-render', { api_key_encrypted: 'secret' })
+      ) as typeof fetch
+
+    render(<ExchangeConnectionManager userId="viewer-a" />)
+
+    expect(await screen.findByText('loadConnectionsFailed')).toBeInTheDocument()
+    expect(screen.queryByText(/must-not-render/)).not.toBeInTheDocument()
+    expect(mockShowToast).toHaveBeenCalledWith('loadConnectionsFailed', 'error')
   })
 
   it('hides A synchronously and discards A responses after switching to B', async () => {

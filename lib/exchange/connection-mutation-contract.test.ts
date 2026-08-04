@@ -1,4 +1,5 @@
 import {
+  readExchangeConnectionsAcknowledgement,
   readExchangeDisconnectAcknowledgement,
   readExchangeMutationError,
   readExchangeSyncAcknowledgement,
@@ -81,6 +82,61 @@ describe('exchange connection mutation contract', () => {
       readExchangeSyncAcknowledgement(
         buildReceipt({ ...baseStats, activeSince: '2026-01-01' }),
         'binance'
+      )
+    ).toBeNull()
+  })
+
+  it('accepts only the exact owner-bound safe connection projection', () => {
+    const row = {
+      id: '22222222-2222-4222-8222-222222222222',
+      user_id: 'viewer-a',
+      exchange: 'binance',
+      is_active: true,
+      last_sync_at: null,
+      last_sync_status: 'success',
+      last_sync_error: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00+00:00',
+    }
+    const receipt = {
+      success: true,
+      data: { connections: [row] },
+      meta: { timestamp: '2026-01-01T00:00:00.000Z' },
+    }
+
+    expect(readExchangeConnectionsAcknowledgement(receipt, 'viewer-a')).toEqual([row])
+    expect(readExchangeConnectionsAcknowledgement(receipt, 'viewer-b')).toBeNull()
+    expect(
+      readExchangeConnectionsAcknowledgement(
+        { ...receipt, data: { connections: [{ ...row, api_key_encrypted: 'secret' }] } },
+        'viewer-a'
+      )
+    ).toBeNull()
+  })
+
+  it('rejects duplicate exchanges and malformed response metadata', () => {
+    const row = {
+      id: '22222222-2222-4222-8222-222222222222',
+      user_id: 'viewer-a',
+      exchange: 'binance',
+      is_active: true,
+      last_sync_at: '2026-01-01T00:00:00.000Z',
+      last_sync_status: 'pending',
+      last_sync_error: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    }
+    const duplicateReceipt = {
+      success: true,
+      data: { connections: [row, { ...row, id: 'other-id' }] },
+      meta: { timestamp: '2026-01-01T00:00:00.000Z' },
+    }
+
+    expect(readExchangeConnectionsAcknowledgement(duplicateReceipt, 'viewer-a')).toBeNull()
+    expect(
+      readExchangeConnectionsAcknowledgement(
+        { ...duplicateReceipt, data: { connections: [] }, meta: { timestamp: 'yesterday' } },
+        'viewer-a'
       )
     ).toBeNull()
   })

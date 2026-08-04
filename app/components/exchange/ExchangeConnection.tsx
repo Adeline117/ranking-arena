@@ -17,6 +17,7 @@ import {
   type ExchangeViewerSnapshot,
 } from '@/lib/exchange/viewer-scope'
 import {
+  readExchangeConnectionsAcknowledgement,
   readExchangeDisconnectAcknowledgement,
   readExchangeMutationError,
   readExchangeSyncAcknowledgement,
@@ -102,17 +103,11 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         })
         if (!loadIsCurrent()) return
 
-        const payload = (await response.json()) as {
-          data?: { connections?: ExchangeConnection[] }
-        }
+        const payload: unknown = await response.json().catch(() => null)
         if (!loadIsCurrent()) return
 
-        const nextConnections = payload.data?.connections
-        if (
-          !response.ok ||
-          !Array.isArray(nextConnections) ||
-          nextConnections.some((connection) => connection.user_id !== snapshot.userId)
-        ) {
+        const nextConnections = readExchangeConnectionsAcknowledgement(payload, snapshot.userId)
+        if (!response.ok || !nextConnections) {
           throw new Error(failureMessage)
         }
 

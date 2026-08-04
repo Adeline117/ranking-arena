@@ -27,9 +27,9 @@ export interface ExchangeConnection {
   exchange: Exchange
   exchange_user_id?: string
   is_active: boolean
-  last_sync_at?: string
-  last_sync_status?: 'success' | 'error' | 'pending'
-  last_sync_error?: string
+  last_sync_at?: string | null
+  last_sync_status?: 'success' | 'error' | 'pending' | null
+  last_sync_error?: string | null
   created_at: string
   updated_at: string
 }
