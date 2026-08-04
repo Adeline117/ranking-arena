@@ -38,10 +38,11 @@
 | P0-11 | 通知过滤后分页、mark-read/delete/create 和排名批量通知分步执行，会漏项、重复、串用户或误发 push。      | 原子 filtered page/mutation/create/batch authority；稳定 event identity 去重；500 分片、逐条 ACK 绑定，只对 `CREATED` 发 push。                                                        | ✅ 代码/PG17；⏳迁移与通知/推送 E2E。                                                                                            |
 | P0-12 | leaderboard 直接 writer、零行成功、过期 edge cache 或不完整来源可把错误排名发布给所有用户。            | publication fence、typed batch receipt、sealed rankings/source freshness、零行/部分写 fail-closed、旧 writer 关闭、last-good 保留。                                                    | ✅ 代码/PG17；⏳生产数据链和 release SHA 实证。                                                                                  |
 | P0-13 | API key 创建/列出/撤销若相信残缺响应，会泄露完整 secret、展示错套餐额度或把失败当成功。                | 创建、列表、撤销均验证 exact ACK；列表验证 owner/tier/limit/usage/time 并脱敏；一次性 secret 在后续刷新失败时仍保留给用户。                                                            | ✅ 代码与前端回归；⏳部署后真实 key canary。                                                                                     |
-| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260803103000` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                                               | ✅ 192 predeploy、16 postdeploy、5 concurrent recovery、3 recovery、1 quarantined、1 superseded，共 218 项唯一迁移；⏳生产执行。 |
+| P0-14 | 新应用依赖的数据库 authority 未进入 launch runner，会在部署后让核心功能整体不可用。                    | 所有截至 `20260803104500` 的当前迁移加入精确、有序、唯一的 runner；body/hash/ledger 与外层事务门禁保留。                                                                               | ✅ 194 predeploy、16 postdeploy、5 concurrent recovery、3 recovery、1 quarantined、1 superseded，共 220 项唯一迁移；⏳生产执行。 |
+| P0-15 | 四个 hot-score SECURITY DEFINER RPC 保留 PUBLIC EXECUTE，外部可重算帖子排序。                          | `20260803104500` 绑定安全 config/source comment，并只允许 `service_role` EXECUTE。                                                                                                     | ✅代码/PG17；⏳生产 migration 与只读 attestation。                                                                               |
 
 P0 的“代码已修”不等于“生产已清零”。P0-01 至 P0-04 的 owner/基础设施动作、
-P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布结论保持 **NO-GO**。
+P0-02/P0-06 至 P0-15 的生产迁移与同 SHA 验收全部完成前，发布结论保持 **NO-GO**。
 
 ### P1 — 重要：当前清单
 
@@ -77,7 +78,7 @@ P0-02/P0-06 至 P0-14 的生产迁移与同 SHA 验收全部完成前，发布�
 | P1-28 | Hot 发现页把 500/畸形响应当空列表，group 请求悬挂，旧 viewer 请求可覆盖当前内容。                                                      | `91281603e` 对 posts/groups 使用严格合同和 15 秒物理截止，补 viewer/query 迟到隔离、last-good/error/retry，并把 tabs、retry、modal、show-more 触控目标提升到至少 44px。✅                                                                     |
 | P1-29 | Hot、Groups 与共享 store 的帖子 reaction 仍有宽松或重复 parser，跨 actor/post 的回执可能落入错误表面。                                 | 所有现存调用方现共享 desired-state 合同、绝对乐观状态、同帖串行 lane、同请求号重试和旧读取覆盖门；详情与 Groups 按钮在请求中仍可表达取消/反向意图。✅                                                                                         |
 | P1-30 | Compare 的订阅、关注、搜索、对比任一请求可无界等待；畸形/缺项响应会伪装为空，跨账户迟到结果会串线。                                    | `d93a7b99f` 严格绑定 ordered source/account partition 与 following identity/count，所有私有 lane 有物理截止、owner/query generation、last-good/error/401 恢复；交互目标至少 44px。✅                                                          |
-| P1-31 | 其他账户 hard-delete 的 FK cascade 不进入帖子 reaction/vote 的 post-wide advisory 域，可能在 RPC recount 后让缓存计数暂时偏高。        | 子行删除仍正确，后续任一合法 desired-state（含 no-op）会绝对重算修复；但未有 lock-order-safe 的 cascade reconciliation 前不得宣称全局计数闭环。⏳红色 P1 发布门。                                                                             |
+| P1-31 | 其他账户 hard-delete 的 FK cascade 不进入帖子 reaction/vote 的 post-wide advisory 域，可能在 RPC recount 后让缓存计数暂时偏高。        | `1040` 无 FK 队列、no-lock trigger 与 `P → posts → Q` worker；runner 和独立 5 分钟 cron 已闭合。✅代码/PG17/runner/worker；⏳生产初始 backfill 清零、15 分钟 SLA、只读 drift attestation 后才清门。                                           |
 | P1-32 | 内置看多/看空/观望投票在现行详情 UI 不可达；toggle 重试会反转，跨 actor 绝对重算会丢计数，禁用 poll 仍可写，旧列表读取也会覆盖新点击。 | 新 desired-state RPC 与 legacy 统一 post-wide 锁、账户/受众/poll-enabled 门和绝对三态重算；API/客户端绑定 actor/post/request/desired，latest-intent 同帖队列与同 ID 重试；详情页补可访问三态卡和读取 revision gate。✅代码/PG17；⏳生产迁移。 |
 
 ### P2 — 边缘：明确上线后
@@ -110,11 +111,14 @@ checked-in serving 证据是 2026-07-16 的 34 个 source boards，不能冒充 
 
 ### 当前验证证据
 
-- `npm run qa:launch-migration-runner`：19/19 通过；当前 migration 集合 218 个
+- `npm run qa:launch-migration-runner`：19/19 通过；当前 migration 集合 220 个
   唯一成员（含 pre/post/recovery/quarantine/superseded）。
 - PostgreSQL 17：帖子媒体 bucket、标签计数完整性、facet-aware 编辑、子表写入封口及
   reaction/vote desired-state 的首装、重放、权限、并发与漂移拒绝全部通过；runner 的事务/锁
   不变量继续通过。
+- PostgreSQL 17：1040 durable repair 的 cascade/退避/锁序和 1045 hot-score service-only
+  authority 均通过；组合只读 attestation 在零 backlog/五计数零 drift 快照通过。独立 cron
+  worker/route 为 2 suites / 17 tests；生产 drain 与同 SHA attestation 仍未完成。
 - production build：在生产数据库 Cloudflare 522 时仍成功，静态页面和 sitemap
   不再被动态数据库 shard 阻塞。
 - 首页 first-paint：响应式几何在绘制前阻塞加载；Playwright 慢 chunk 证明确认
@@ -167,8 +171,8 @@ reaction 核心为 **10 suites / 323 tests**，comment reaction 为 **4 suites /
 
 当前软件分支已经完成的修复不能替代最后三道门：
 
-1. 192 个 predeploy、16 个 postdeploy、5 个 concurrent recovery、3 个
-   transactional recovery、1 个 quarantined、1 个 superseded（共 218 个唯一成员）
+1. 194 个 predeploy、16 个 postdeploy、5 个 concurrent recovery、3 个
+   transactional recovery、1 个 quarantined、1 个 superseded（共 220 个唯一成员）
    必须在生产 exact ledger；当前只完成仓库 runner 证明；
 2. 最终应用必须持久进入 `main`，且生产健康端点返回该 release 的精确 SHA；
 3. 生产浏览器和数据验收必须在同一个 SHA 开始并结束，owner 还须关闭外部
@@ -222,7 +226,7 @@ fail closed，直到 P0-06 的 readiness、writer 撤权和 live canary 全部�
 | Follow 登录恢复   | pending follow 在伪未登录瞬间被消费/丢失。                                                                                                                              | 只在确认 auth restore 后执行。✅                                                                                                                          |
 | Follow 聚合       | 粉丝数、相似交易员、排行榜评分按 raw id 统计，会把不同交易所同 id 合并；fallback 还可能被 1,000 行上限截断。                                                            | 新 source/account RPC；reader 全部用 JSON tuple key；fallback 显式分页且部分页失败整批丢弃。✅代码/类型/生产 RPC                                          |
 | Digest/Activity   | weekly digest、follow activity 和 trader event reference 按 raw id 关联，可能把另一个交易所账户的活动发给用户。                                                         | digest/follow/activity/alert 全部 source-scope；legacy null 只在唯一候选时兼容，否则跳过；同 raw id 双 source 回归已覆盖。✅                              |
-| 迁移 runner       | 只看 version 数量、host 先查再执行，账本可在事务开始前漂移；重跑也可能把同名错误结构当成功。                                                                            | exact name/hash/body/idempotency；事务内重验并 `FOR SHARE` 锁行；missing 才执行；当前 192 predeploy + 16 postdeploy，218 项唯一分类。✅Node + PG17        |
+| 迁移 runner       | 只看 version 数量、host 先查再执行，账本可在事务开始前漂移；重跑也可能把同名错误结构当成功。                                                                            | exact name/hash/body/idempotency；事务内重验并 `FOR SHARE` 锁行；missing 才执行；当前 194 predeploy + 16 postdeploy，220 项唯一分类。✅Node + PG17        |
 | Onboarding        | 完成页跳转早于 follow intents 写完，选择的关注可能丢失。                                                                                                                | 跳转前 drain 全部 intent。✅                                                                                                                              |
 | Search People     | API 有 public people，前端模型丢弃，People tab 假空。                                                                                                                   | 统一结果模型并展示公开用户。✅                                                                                                                            |
 | Search retry      | 搜索失败只能改关键词，没有明确重试。                                                                                                                                    | 增加 retry，保留查询和结果。✅                                                                                                                            |

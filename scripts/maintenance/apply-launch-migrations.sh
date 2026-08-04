@@ -221,6 +221,8 @@ PREDEPLOY_MIGRATIONS=(
   20260803101000_close_post_interaction_child_direct_writes.sql
   20260803102000_set_post_reaction_desired_state.sql
   20260803103000_set_post_vote_desired_state.sql
+  20260803104000_durable_post_interaction_count_repair.sql
+  20260803104500_close_hot_score_batch_public_execute.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
