@@ -28,6 +28,7 @@ import {
   createSealedRankingCacheEntry,
   parseSealedRankingCacheEntry,
 } from '@/lib/rankings/sealed-ranking-cache'
+import { withTimeout } from '@/lib/utils/timeout'
 
 export const runtime = 'nodejs'
 
@@ -41,6 +42,11 @@ interface PopularToken {
 const POPULAR_TOKENS_CACHE_KEY = 'rankings:popular-tokens'
 const POPULAR_TOKENS_LAST_GOOD_KEY = 'rankings:popular-tokens:last-good:v1'
 const POPULAR_TOKENS_LAST_GOOD_TTL_SECONDS = 30 * 24 * 60 * 60
+// Leave enough time for a bounded last-known-good read before the client's
+// 15-second deadline. AbortSignal alone is not a deadline because a transport
+// implementation can ignore cancellation.
+const POPULAR_TOKENS_PRIMARY_TIMEOUT_MS = 12_000
+const POPULAR_TOKENS_FALLBACK_TIMEOUT_MS = 2_000
 
 function isPopularTokenList(value: unknown): value is PopularToken[] {
   if (!Array.isArray(value) || value.length > 50) return false
@@ -125,51 +131,55 @@ function isTokenRankingResponse(
 // ── Popular Tokens Handler ──────────────────────────────────────────────────
 async function handlePopularTokens(): Promise<NextResponse> {
   try {
-    const result = await tieredGetOrSet<PopularToken[]>(
-      POPULAR_TOKENS_CACHE_KEY,
-      async () => {
-        const supabase = getSupabaseAdmin()
+    const result = await withTimeout(
+      tieredGetOrSet<PopularToken[]>(
+        POPULAR_TOKENS_CACHE_KEY,
+        async () => {
+          const supabase = getSupabaseAdmin()
 
-        // Use AbortController with 10s timeout
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 10_000)
+          // Use AbortController with 10s timeout
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 10_000)
 
-        try {
-          // Use SQL aggregate via RPC — avoids fetching 50K rows into JS memory.
-          // MV now filters junk at source (migration 20260709232817); 50 rows are clean.
-          const { data, error } = await supabase
-            .rpc('get_popular_tokens', { lookback_days: 90, max_tokens: 50 })
-            .abortSignal(controller.signal)
+          try {
+            // Use SQL aggregate via RPC — avoids fetching 50K rows into JS memory.
+            // MV now filters junk at source (migration 20260709232817); 50 rows are clean.
+            const { data, error } = await supabase
+              .rpc('get_popular_tokens', { lookback_days: 90, max_tokens: 50 })
+              .abortSignal(controller.signal)
 
-          if (error) throw new Error(error.message)
-          if (!data || data.length === 0) return []
+            if (error) throw new Error(error.message)
+            if (!data || data.length === 0) return []
 
-          return (
-            (
-              data as Array<{
-                token: string
-                trade_count: number
-                trader_count: number
-                total_pnl: number
-              }>
+            return (
+              (
+                data as Array<{
+                  token: string
+                  trade_count: number
+                  trader_count: number
+                  total_pnl: number
+                }>
+              )
+                // U1-5: drop junk symbols (HL-107 / XYZ:TSLA / numeric ids) so the
+                // token board matches the SSR list, then cap at 50.
+                .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
+                .slice(0, 50)
+                .map((row) => ({
+                  token: String(row.token).toUpperCase(),
+                  trade_count: Number(row.trade_count),
+                  trader_count: Number(row.trader_count),
+                  total_pnl: Number(row.total_pnl),
+                }))
             )
-              // U1-5: drop junk symbols (HL-107 / XYZ:TSLA / numeric ids) so the
-              // token board matches the SSR list, then cap at 50.
-              .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
-              .slice(0, 50)
-              .map((row) => ({
-                token: String(row.token).toUpperCase(),
-                trade_count: Number(row.trade_count),
-                trader_count: Number(row.trader_count),
-                total_pnl: Number(row.total_pnl),
-              }))
-          )
-        } finally {
-          clearTimeout(timeout)
-        }
-      },
-      'cold',
-      ['rankings', 'popular-tokens']
+          } finally {
+            clearTimeout(timeout)
+          }
+        },
+        'cold',
+        ['rankings', 'popular-tokens']
+      ),
+      POPULAR_TOKENS_PRIMARY_TIMEOUT_MS,
+      'popular token rankings primary read'
     )
 
     if (!isPopularTokenList(result)) {
@@ -202,7 +212,13 @@ async function handlePopularTokens(): Promise<NextResponse> {
     logger.error('[popular-tokens]', err instanceof Error ? err : new Error(String(err)))
     let fallbackData: unknown = null
     try {
-      fallbackData = (await tieredGet<unknown>(POPULAR_TOKENS_LAST_GOOD_KEY, 'cold')).data
+      fallbackData = (
+        await withTimeout(
+          tieredGet<unknown>(POPULAR_TOKENS_LAST_GOOD_KEY, 'cold'),
+          POPULAR_TOKENS_FALLBACK_TIMEOUT_MS,
+          'popular token rankings fallback read'
+        )
+      ).data
     } catch (fallbackError) {
       logger.warn('[popular-tokens] last-known-good read failed', fallbackError)
     }

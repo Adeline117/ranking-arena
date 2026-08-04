@@ -10,6 +10,7 @@ import ErrorState from '@/app/components/ui/ErrorState'
 import { tokens } from '@/lib/design-tokens'
 import { formatPnL } from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 
 export interface PopularToken {
   token: string
@@ -37,6 +38,69 @@ const FEATURED_TOKENS = [
 
 type SortKey = 'traders' | 'trades' | 'pnl'
 const CLIENT_REQUEST_TIMEOUT_MS = 15_000
+
+interface PopularTokensResponse {
+  tokens: PopularToken[]
+  degraded: boolean
+}
+
+function parsePopularTokensResponse(value: unknown): PopularTokensResponse | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const keys = Object.keys(value)
+  if (!keys.includes('tokens') || keys.some((key) => key !== 'tokens' && key !== 'degraded')) {
+    return null
+  }
+
+  const tokenRows = Reflect.get(value, 'tokens')
+  const degraded = Reflect.get(value, 'degraded')
+  if (!Array.isArray(tokenRows) || tokenRows.length > 50) return null
+  if (degraded !== undefined && degraded !== true) return null
+
+  const seen = new Set<string>()
+  const parsed: PopularToken[] = []
+  for (const row of tokenRows) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+    const rowKeys = Object.keys(row)
+    if (
+      rowKeys.length !== 4 ||
+      rowKeys.some(
+        (key) =>
+          key !== 'token' && key !== 'trade_count' && key !== 'trader_count' && key !== 'total_pnl'
+      )
+    ) {
+      return null
+    }
+
+    const token = Reflect.get(row, 'token')
+    const tradeCount = Reflect.get(row, 'trade_count')
+    const traderCount = Reflect.get(row, 'trader_count')
+    const totalPnl = Reflect.get(row, 'total_pnl')
+    if (
+      typeof token !== 'string' ||
+      token !== token.toUpperCase() ||
+      !isValidTokenSymbol(token) ||
+      seen.has(token) ||
+      !Number.isSafeInteger(tradeCount) ||
+      Number(tradeCount) < 0 ||
+      !Number.isSafeInteger(traderCount) ||
+      Number(traderCount) < 0 ||
+      typeof totalPnl !== 'number' ||
+      !Number.isFinite(totalPnl)
+    ) {
+      return null
+    }
+    seen.add(token)
+    parsed.push({
+      token,
+      trade_count: Number(tradeCount),
+      trader_count: Number(traderCount),
+      total_pnl: totalPnl,
+    })
+  }
+
+  return { tokens: parsed, degraded: degraded === true }
+}
 
 function sortValue(tk: PopularToken, key: SortKey): number {
   switch (key) {
@@ -79,6 +143,7 @@ const TOKENS_INDEX_CSS = `
   font-size:13px;
   font-weight:600;
   color:var(--color-text-tertiary);
+  min-height:44px;
   cursor:pointer;
   transition:color .15s ease,border-color .15s ease,background .15s ease;
 }
@@ -124,39 +189,44 @@ export default function TokensIndexClient({
     const controller = new AbortController()
     requestRef.current = controller
     let timedOut = false
-    const timeout = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, CLIENT_REQUEST_TIMEOUT_MS)
+    let timeout: ReturnType<typeof setTimeout> | undefined
     setLoadState('loading')
 
     try {
-      const response = await fetch('/api/rankings/by-token?action=popular-tokens', {
-        signal: controller.signal,
-      })
-      if (!response.ok) throw new Error(`popular-tokens: ${response.status}`)
-      const data: unknown = await response.json()
-      if (
-        typeof data !== 'object' ||
-        data === null ||
-        !Array.isArray((data as { tokens?: unknown }).tokens)
-      ) {
-        throw new Error('popular-tokens: invalid response')
-      }
+      const request = (async () => {
+        const response = await fetch('/api/rankings/by-token?action=popular-tokens', {
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error(`popular-tokens: ${response.status}`)
+        const parsed = parsePopularTokensResponse(await response.json())
+        if (!parsed) throw new Error('popular-tokens: invalid response')
+        return parsed
+      })()
+      const data = await Promise.race([
+        request,
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            timedOut = true
+            controller.abort()
+            reject(new Error('popular-tokens: request timed out'))
+          }, CLIENT_REQUEST_TIMEOUT_MS)
+        }),
+      ])
       if (requestRef.current !== controller || controller.signal.aborted) return
 
-      setPopularTokens((data as { tokens: PopularToken[] }).tokens)
+      setPopularTokens(data.tokens)
       setHasSuccessfulData(true)
       // A last-known-good response remains useful, but keep the compact retry
       // notice visible so stale discovery counts are never presented as live.
-      setLoadState((data as { degraded?: unknown }).degraded === true ? 'error' : 'success')
+      setLoadState(data.degraded ? 'error' : 'success')
     } catch (error) {
       if (requestRef.current !== controller) return
       if (controller.signal.aborted && !timedOut) return
       if (error instanceof Error && error.name === 'AbortError' && !timedOut) return
       setLoadState('error')
     } finally {
-      clearTimeout(timeout)
+      if (timeout) clearTimeout(timeout)
+      if (requestRef.current === controller) requestRef.current = null
     }
   }, [])
 
@@ -166,7 +236,10 @@ export default function TokensIndexClient({
     // through to the wire.
     if (initialStatus === 'success') return
     void loadPopularTokens()
-    return () => requestRef.current?.abort()
+    return () => {
+      requestRef.current?.abort()
+      requestRef.current = null
+    }
   }, [initialStatus, loadPopularTokens])
 
   // Merge featured tokens with popular tokens (dedup by symbol).
@@ -232,7 +305,10 @@ export default function TokensIndexClient({
           disabled={!interactive}
           style={{
             flex: '1 1 240px',
+            minWidth: 0,
             maxWidth: 400,
+            minHeight: 44,
+            boxSizing: 'border-box',
             padding: '10px 16px',
             borderRadius: tokens.radius.lg,
             border: `1px solid ${tokens.colors.border.primary}`,

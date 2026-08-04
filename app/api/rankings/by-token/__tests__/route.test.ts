@@ -200,6 +200,38 @@ describe('GET /api/rankings/by-token publication cache', () => {
     })
   })
 
+  it('bounds a primary read even when the cache transport ignores cancellation', async () => {
+    jest.useFakeTimers()
+    try {
+      mockTieredGetOrSet.mockReturnValueOnce(new Promise(() => undefined))
+      const responsePromise = GET(popularRequest())
+
+      await jest.advanceTimersByTimeAsync(12_000)
+
+      const response = await responsePromise
+      expect(response.status).toBe(503)
+      expect(response.headers.get('Retry-After')).toBe('30')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('bounds a hung last-known-good read after the primary fails', async () => {
+    jest.useFakeTimers()
+    try {
+      mockTieredGetOrSet.mockRejectedValueOnce(new Error('database unavailable'))
+      mockTieredGet.mockReturnValueOnce(new Promise(() => undefined))
+      const responsePromise = GET(popularRequest())
+
+      await jest.advanceTimersByTimeAsync(2_000)
+
+      const response = await responsePromise
+      expect(response.status).toBe(503)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('rejects malformed last-known-good cache data', async () => {
     mockTieredGetOrSet.mockRejectedValueOnce(new Error('database unavailable'))
     mockTieredGet.mockResolvedValueOnce({

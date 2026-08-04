@@ -54,6 +54,34 @@ describe('token rankings index SSR state', () => {
     })
   })
 
+  it('rejects malformed valid-token metrics instead of serving a partial success', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ token: 'BTC', trade_count: -1, trader_count: 2, total_pnl: 10 }],
+      error: null,
+    })
+
+    await expect(loadPopularTokensSSR()).rejects.toThrow(
+      'Popular token rankings returned invalid metrics'
+    )
+
+    const element = (await TokensPage()) as ReactElement<TokensPageProps>
+    expect(element.props).toMatchObject({
+      initialTokens: [],
+      initialStatus: 'error',
+    })
+  })
+
+  it('normalizes valid lowercase symbols before hydrating the client', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ token: 'btc', trade_count: '3', trader_count: '2', total_pnl: '10.5' }],
+      error: null,
+    })
+
+    await expect(loadPopularTokensSSR()).resolves.toEqual([
+      { token: 'BTC', trade_count: 3, trader_count: 2, total_pnl: 10.5 },
+    ])
+  })
+
   it('marks an SSR timeout as failure instead of an empty success', async () => {
     jest.useFakeTimers()
     try {

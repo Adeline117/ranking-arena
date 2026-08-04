@@ -57,23 +57,44 @@ export async function loadPopularTokensSSR(): Promise<PopularToken[]> {
     max_tokens: 50,
   })
   if (error) throw new Error(error.message)
-  if (!data || data.length === 0) return []
+  if (!data) return []
+  if (!Array.isArray(data) || data.length > 50) {
+    throw new Error('Popular token rankings returned an invalid row set')
+  }
 
-  return (
-    data as Array<{
-      token: string
-      trade_count: number
-      trader_count: number
-      total_pnl: number
-    }>
-  )
-    .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
-    .map((row) => ({
-      token: row.token,
-      trade_count: Number(row.trade_count),
-      trader_count: Number(row.trader_count),
-      total_pnl: Number(row.total_pnl),
-    }))
+  const normalized: PopularToken[] = []
+  const seen = new Set<string>()
+  for (const row of data as Array<Record<string, unknown>>) {
+    const token = String(row?.token ?? '').toUpperCase()
+    // The aggregate can contain non-crypto instruments. Those are excluded by
+    // policy, while malformed metrics for a valid token fail the whole seed so
+    // corrupt rows are never presented as a legitimate empty/partial result.
+    if (!isValidTokenSymbol(token)) continue
+
+    const tradeCount = Number(row.trade_count)
+    const traderCount = Number(row.trader_count)
+    const totalPnl = Number(row.total_pnl)
+    if (
+      seen.has(token) ||
+      !Number.isSafeInteger(tradeCount) ||
+      tradeCount < 0 ||
+      !Number.isSafeInteger(traderCount) ||
+      traderCount < 0 ||
+      !Number.isFinite(totalPnl)
+    ) {
+      throw new Error('Popular token rankings returned invalid metrics')
+    }
+
+    seen.add(token)
+    normalized.push({
+      token,
+      trade_count: tradeCount,
+      trader_count: traderCount,
+      total_pnl: totalPnl,
+    })
+  }
+
+  return normalized
 }
 
 // Bump the cache namespace so empty values written by the former fail-soft
