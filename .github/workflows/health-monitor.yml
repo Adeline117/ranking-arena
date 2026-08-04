@@ -1,6 +1,12 @@
 # Arena Health Monitor — redundant backup for OpenClaw Mac Mini (M-17)
 # Runs every 30 minutes, checks pipeline health, sends Telegram alerts on failure.
 # This ensures monitoring continues even if Mac Mini is down.
+#
+# SECURITY SUSPENDED (V1 NO-GO): main currently has no enforceable protection,
+# and this job carries service-level CRON_SECRET plus issue/alert credentials.
+# The job is fixed false below. Restore only after secrets are environment-only,
+# the environment has a required reviewer, and main is protected against direct
+# writes. A read-oriented endpoint does not make its bearer token read-only.
 
 name: Health Monitor
 
@@ -14,6 +20,7 @@ permissions:
 
 jobs:
   health-check:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
