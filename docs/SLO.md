@@ -50,7 +50,7 @@
 - **测量**：备份新鲜度哨兵（`scripts/openclaw/backup-freshness-check.mjs`，
   随 health monitor cron 跑）。最新候选的 HEAD 契约失败必须报红，不得回退旧对象报绿。
 - **告警**：无合格对象、HEAD 契约失败或 >26h → Telegram；告警发送非 2xx 也算检查失败。
-- **违约动作**：查 Mac Mini local-cron-backup；连续 2 天失败 = SEV2，
+- **违约动作**：查 GitHub `backup-db` 与 Mac Mini `backup:r2` 日程；连续 2 天失败 = SEV2，
   手动跑 `BACKUP_SCHEMAS=arena,public npm run backup:r2` 补一份应用数据备份。
 - **恢复状态**：本 SLO 的“完整恢复”门当前**未通过**。`arena+public` 不含托管
   `auth`，plain dump 在 fresh PostgreSQL/managed Supabase 的既有 `public/auth`
