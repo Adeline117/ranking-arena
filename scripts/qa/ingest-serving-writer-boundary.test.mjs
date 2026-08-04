@@ -53,9 +53,15 @@ const retiredPositionHistorySqlReference =
 const retiredPositionHistoryRpc = /\.\s*rpc\s*\(\s*(['"`])publish_verified_position_history\1/i
 const retiredPositionHistoryPublisher = /\bpublishTierBVerifiedPositionHistoryInTransaction\b/i
 const genericHistoryPublisherCall = /\bpublishHistoryRows(?:InTransaction)?\s*\(/m
+const legacyCopierRelation = String.raw`(?:(?:"arena"|arena)\s*\.\s*)?(?:"copier_records"|copier_records)(?![A-Za-z0-9_$])`
+const directLegacyCopierWriter = new RegExp(
+  String.raw`\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|COPY|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?${legacyCopierRelation}`,
+  'i'
+)
+const legacyCopierQueryBuilderWriter =
+  /\.from\s*\(\s*(['"`])copier_records\1\s*\)\s*\.\s*(?:insert|upsert|update|delete)\s*\(/i
 const REVIEWED_GENERIC_HISTORY_CALLERS = new Set([
   'lib/ingest/serving/publish.ts',
-  'scripts/ingest-test-surfaces.ts',
   'worker/src/ingest/processors/tier-b-profiles.ts',
   'worker/src/ingest/processors/tier-c-profile.ts',
 ])
@@ -74,6 +80,10 @@ function hasPositionHistoryBypass(source) {
     retiredPositionHistoryRpc.test(source) ||
     retiredPositionHistoryPublisher.test(source)
   )
+}
+
+function hasLegacyCopierWriter(source) {
+  return directLegacyCopierWriter.test(source) || legacyCopierQueryBuilderWriter.test(source)
 }
 
 function productionSources(directory) {
@@ -188,7 +198,59 @@ test('repository production TS/JS has no direct or retired position-history writ
   )
 })
 
-test('generic history publication remains confined to reviewed non-position call sites', () => {
+test('legacy copier writer detector covers direct DML and query builders', () => {
+  for (const writer of [
+    'INSERT INTO arena.copier_records (trader_id) VALUES (1)',
+    'UPDATE ONLY "arena" . "copier_records" SET raw = $1',
+    'DELETE FROM copier_records WHERE trader_id = $1',
+    'MERGE INTO arena.copier_records AS target USING incoming ON true',
+    'COPY "arena"."copier_records" FROM STDIN',
+    'TRUNCATE TABLE arena.copier_records',
+    "client.from('copier_records').upsert(rows)",
+  ]) {
+    assert.equal(hasLegacyCopierWriter(writer), true, `writer fixture was missed: ${writer}`)
+  }
+  for (const reader of [
+    'SELECT * FROM arena.copier_records',
+    "client.from('copier_records').select('*')",
+    "client.from('copier_snapshot_rows').insert(rows)",
+  ]) {
+    assert.equal(
+      hasLegacyCopierWriter(reader),
+      false,
+      `reader fixture was misclassified: ${reader}`
+    )
+  }
+})
+
+test('repository production TS/JS has no direct legacy copier publisher', () => {
+  const offenders = []
+  for (const sourceRoot of SOURCE_ROOTS) {
+    const absoluteRoot = resolve(ROOT, sourceRoot)
+    if (!existsSync(absoluteRoot)) continue
+    for (const file of productionSources(absoluteRoot)) {
+      const source = readFileSync(resolve(ROOT, file), 'utf8')
+      if (hasLegacyCopierWriter(source)) offenders.push(file)
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `copier snapshots require receipt-bound publication; legacy writers found: ${offenders.join(', ')}`
+  )
+
+  // Retention cleanup uses a fixed table allowlist and a dynamic identifier;
+  // keep that privacy deletion explicit without reopening any insert path.
+  const retention = readFileSync(resolve(ROOT, 'lib/ingest/serving/series.ts'), 'utf8')
+  assert.match(retention, /'copier_records'/)
+  assert.match(retention, /DELETE FROM arena\.\$\{table\}/)
+  assert.doesNotMatch(
+    retention,
+    /(?:INSERT\s+INTO|UPDATE|MERGE\s+INTO|COPY|TRUNCATE(?:\s+TABLE)?)\s+arena\.\$\{table\}/i
+  )
+})
+
+test('generic history publication remains confined to reviewed orders/transfers call sites', () => {
   const callers = []
   for (const sourceRoot of SOURCE_ROOTS) {
     const absoluteRoot = resolve(ROOT, sourceRoot)
@@ -201,9 +263,14 @@ test('generic history publication remains confined to reviewed non-position call
   assert.deepEqual(callers.sort(), [...REVIEWED_GENERIC_HISTORY_CALLERS].sort())
 
   const manualSmoke = readFileSync(resolve(ROOT, 'scripts/ingest-test-surfaces.ts'), 'utf8')
-  assert.match(manualSmoke, /for \(const kind of \['copiers'\] as const\)/)
+  assert.doesNotMatch(manualSmoke, genericHistoryPublisherCall)
+  assert.doesNotMatch(manualSmoke, /getHistoryCursor/)
+  assert.match(manualSmoke, /buildCopierSnapshotArtifact\s*\(/)
+  assert.match(manualSmoke, /writeCopierSnapshotRawArtifact\s*\(/)
+  assert.match(manualSmoke, /publishCopierSnapshotInTransaction\s*\(/)
+  assert.match(manualSmoke, /callerLimited:\s*false/)
   assert.doesNotMatch(
     manualSmoke,
-    /for \(const kind of \[[^\]]*position_history[^\]]*\] as const\)/
+    /for \(const kind of \[[^\]]*position_history[^\]]*\] as const\)|pages\.length\s*>=\s*3/
   )
 })

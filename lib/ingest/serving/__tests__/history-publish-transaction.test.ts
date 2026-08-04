@@ -10,7 +10,7 @@ jest.mock('@/lib/ingest/db', () => ({
   })),
 }))
 
-import type { HistoryKind, ParsedHistoryRow, SourceRow } from '../../core/types'
+import type { ParsedHistoryRow, SourceRow } from '../../core/types'
 import type { IngestQueryExecutor } from '../../db'
 import type { QueryResult, QueryResultRow } from 'pg'
 import { publishHistoryRows, publishHistoryRowsInTransaction } from '../publish'
@@ -41,6 +41,16 @@ const order: ParsedHistoryRow = {
   dedupeHash: 'order-1',
   raw: { id: 'order-1' },
 }
+const copier: ParsedHistoryRow = {
+  kind: 'copiers',
+  ts: '2026-08-02T00:00:00.000Z',
+  copierLabel: 'private-copier',
+  copierPnl: 12,
+  copierInvested: 100,
+  copyDurationDays: 7,
+  dedupeHash: 'copier-1',
+  raw: { id: 'copier-1' },
+}
 const nextCursor = '2026-08-02T00:00:00.000Z'
 
 function successfulQuery() {
@@ -59,6 +69,28 @@ function executor(query: jest.Mock): IngestQueryExecutor {
       values?: readonly unknown[]
     ): Promise<QueryResult<R>> => query(text, values),
   }
+}
+
+function publishUncheckedInTransaction(
+  transaction: IngestQueryExecutor,
+  kind: ParsedHistoryRow['kind'],
+  rows: ParsedHistoryRow[]
+): Promise<number> {
+  return Reflect.apply(publishHistoryRowsInTransaction, undefined, [
+    transaction,
+    source,
+    11,
+    kind,
+    rows,
+    null,
+  ])
+}
+
+function publishUnchecked(
+  kind: ParsedHistoryRow['kind'],
+  rows: ParsedHistoryRow[]
+): Promise<number> {
+  return Reflect.apply(publishHistoryRows, undefined, [source, 11, kind, rows, null])
 }
 
 describe('history transaction publication', () => {
@@ -128,28 +160,31 @@ describe('history transaction publication', () => {
   it('rejects every generic position-history call before queries or connection work', async () => {
     const query = successfulQuery()
     const transaction = executor(query)
-    const unsafeInTransaction = publishHistoryRowsInTransaction as unknown as (
-      transaction: IngestQueryExecutor,
-      src: SourceRow,
-      traderId: number,
-      kind: HistoryKind,
-      rows: ParsedHistoryRow[],
-      cursor: string | null
-    ) => Promise<number>
-    const unsafeWrapper = publishHistoryRows as unknown as (
-      src: SourceRow,
-      traderId: number,
-      kind: HistoryKind,
-      rows: ParsedHistoryRow[],
-      cursor: string | null
-    ) => Promise<number>
 
     for (const rows of [[position], []] as ParsedHistoryRow[][]) {
       await expect(
-        unsafeInTransaction(transaction, source, 11, 'position_history', rows, null)
+        publishUncheckedInTransaction(transaction, 'position_history', rows)
       ).rejects.toThrow('position_history requires parser-conservation publication')
-      await expect(unsafeWrapper(source, 11, 'position_history', rows, null)).rejects.toThrow(
+      await expect(publishUnchecked('position_history', rows)).rejects.toThrow(
         'position_history requires parser-conservation publication'
+      )
+    }
+
+    expect(query).not.toHaveBeenCalled()
+    expect(mockClientQuery).not.toHaveBeenCalled()
+    expect(mockClientRelease).not.toHaveBeenCalled()
+  })
+
+  it('rejects every generic copier call before queries or connection work', async () => {
+    const query = successfulQuery()
+    const transaction = executor(query)
+
+    for (const rows of [[copier], []] as ParsedHistoryRow[][]) {
+      await expect(publishUncheckedInTransaction(transaction, 'copiers', rows)).rejects.toThrow(
+        'copiers require snapshot-receipt publication'
+      )
+      await expect(publishUnchecked('copiers', rows)).rejects.toThrow(
+        'copiers require snapshot-receipt publication'
       )
     }
 
