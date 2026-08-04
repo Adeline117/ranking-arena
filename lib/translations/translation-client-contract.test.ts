@@ -6,6 +6,12 @@ import {
   TRANSLATION_REQUEST_TIMEOUT_MS,
   type BatchTranslationItem,
 } from './translation-client-contract'
+import { TRANSLATION_SERVER_REQUEST_TIMEOUT_MS } from './translation-server-contract'
+import {
+  TRANSLATION_MAX_BATCH_ITEMS,
+  TRANSLATION_MAX_BATCH_TEXT_LENGTH,
+  TRANSLATION_MAX_TEXT_LENGTH,
+} from './translation-limits'
 
 const singleRequest = {
   text: '交易策略',
@@ -73,6 +79,10 @@ function batchEnvelope(
 }
 
 describe('translation client contract', () => {
+  it('keeps the client deadline beyond the server-owned deadline', () => {
+    expect(TRANSLATION_REQUEST_TIMEOUT_MS).toBeGreaterThan(TRANSLATION_SERVER_REQUEST_TIMEOUT_MS)
+  })
+
   const originalFetch = globalThis.fetch
 
   beforeEach(() => {
@@ -203,6 +213,30 @@ describe('translation client contract', () => {
         { ...batchItems[1], id: 'item-0' },
       ])
     ).toBeNull()
+  })
+
+  it('rejects oversized client work before making a network request', async () => {
+    const fetchMock = globalThis.fetch as jest.MockedFunction<typeof fetch>
+
+    await expect(
+      requestSingleTranslation(
+        { ...singleRequest, text: 'x'.repeat(TRANSLATION_MAX_TEXT_LENGTH + 1) },
+        { accessToken: 'token-a' }
+      )
+    ).rejects.toThrow('outside the admitted limits')
+    await expect(
+      requestBatchTranslation(
+        Array.from({ length: 5 }, (_value, index) => ({
+          ...batchItems[0],
+          id: `item-${index}`,
+          contentId: `post-${index}`,
+          text: 'x'.repeat(TRANSLATION_MAX_BATCH_TEXT_LENGTH / 5 + 1),
+        })),
+        'en',
+        { accessToken: 'token-a' }
+      )
+    ).rejects.toThrow('outside the admitted limits')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('physically bounds a single fetch that ignores AbortSignal', async () => {

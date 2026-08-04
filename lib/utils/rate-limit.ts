@@ -157,7 +157,8 @@ const memoryRateLimits = new Map<string, { count: number; resetAt: number }>()
 
 function checkMemoryRateLimit(
   identifier: string,
-  config: RateLimitConfig
+  config: RateLimitConfig,
+  cost: number
 ): { success: boolean; remaining: number; reset: number } {
   const now = Date.now()
   const key = `${config.prefix}:${identifier}`
@@ -173,15 +174,18 @@ function checkMemoryRateLimit(
   if (!entry || entry.resetAt < now) {
     // 新窗口
     const resetAt = now + config.window * 1000
-    memoryRateLimits.set(key, { count: 1, resetAt })
-    return { success: true, remaining: config.requests - 1, reset: resetAt }
+    if (cost > config.requests) {
+      return { success: false, remaining: 0, reset: resetAt }
+    }
+    memoryRateLimits.set(key, { count: cost, resetAt })
+    return { success: true, remaining: config.requests - cost, reset: resetAt }
   }
 
-  if (entry.count >= config.requests) {
+  if (entry.count + cost > config.requests) {
     return { success: false, remaining: 0, reset: entry.resetAt }
   }
 
-  entry.count++
+  entry.count += cost
   return { success: true, remaining: config.requests - entry.count, reset: entry.resetAt }
 }
 
@@ -202,10 +206,15 @@ export interface RateLimitResult {
 export async function checkRateLimitFull(
   request: NextRequest,
   config?: Partial<RateLimitConfig>,
-  userId?: string
+  userId?: string,
+  cost = 1
 ): Promise<RateLimitResult> {
   const finalConfig = { ...defaultConfig, ...config }
   const identifier = getIdentifier(request, userId)
+
+  if (!Number.isSafeInteger(cost) || cost < 1) {
+    throw new TypeError('Rate-limit cost must be a positive safe integer')
+  }
 
   try {
     const redisClient = getUpstashRedis()
@@ -248,7 +257,7 @@ export async function checkRateLimitFull(
           '[RATE-LIMIT] Falling back to in-memory rate limiting — not suitable for horizontal scaling'
         )
       }
-      const memResult = checkMemoryRateLimit(identifier, finalConfig)
+      const memResult = checkMemoryRateLimit(identifier, finalConfig, cost)
       if (!memResult.success) {
         const retryAfter = Math.ceil((memResult.reset - Date.now()) / 1000)
         return {
@@ -284,7 +293,7 @@ export async function checkRateLimitFull(
     }
 
     const limiter = getRateLimiter(finalConfig, redisClient)
-    const { success, limit, remaining, reset } = await limiter.limit(identifier)
+    const { success, limit, remaining, reset } = await limiter.limit(identifier, { rate: cost })
 
     if (!success) {
       const retryAfter = Math.ceil((reset - Date.now()) / 1000)
@@ -355,9 +364,10 @@ export async function checkRateLimitFull(
 export async function checkRateLimit(
   request: NextRequest,
   config?: Partial<RateLimitConfig>,
-  userId?: string
+  userId?: string,
+  cost = 1
 ): Promise<NextResponse | null> {
-  const result = await checkRateLimitFull(request, config, userId)
+  const result = await checkRateLimitFull(request, config, userId, cost)
   return result.response
 }
 

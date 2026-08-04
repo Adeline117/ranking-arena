@@ -164,6 +164,52 @@ describe('In-memory rate limiter — boundary behavior', () => {
     expect(blocked.response!.headers.get('X-RateLimit-Remaining')).toBe('0')
     expect(blocked.response!.headers.get('Retry-After')).toBeTruthy()
   })
+
+  it('charges a weighted request atomically without admitting a partial cost', async () => {
+    const prefix = `weighted-${Date.now()}`
+    const userId = `user-weighted-${Date.now()}`
+    const req = makeRequest({ 'x-forwarded-for': '87.87.87.87' })
+    const config = { requests: 3, window: 60, prefix }
+
+    const first = await checkRateLimitFull(req, config, userId, 2)
+    expect(first.response).toBeNull()
+    expect(first.meta?.remaining).toBe(1)
+
+    const rejected = await checkRateLimitFull(req, config, userId, 2)
+    expect(rejected.response?.status).toBe(429)
+
+    const finalUnit = await checkRateLimitFull(req, config, userId, 1)
+    expect(finalUnit.response).toBeNull()
+    expect(finalUnit.meta?.remaining).toBe(0)
+  })
+
+  it('rejects an overweight first request without consuming the window', async () => {
+    const prefix = `weighted-over-${Date.now()}`
+    const userId = `user-weighted-over-${Date.now()}`
+    const req = makeRequest({ 'x-forwarded-for': '86.86.86.86' })
+    const config = { requests: 3, window: 60, prefix }
+
+    const rejected = await checkRateLimitFull(req, config, userId, 4)
+    expect(rejected.response?.status).toBe(429)
+
+    const allowed = await checkRateLimitFull(req, config, userId, 3)
+    expect(allowed.response).toBeNull()
+    expect(allowed.meta?.remaining).toBe(0)
+  })
+
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid weighted cost %s',
+    async (cost) => {
+      await expect(
+        checkRateLimitFull(
+          makeRequest({ 'x-forwarded-for': '85.85.85.85' }),
+          { requests: 3, window: 60, prefix: `invalid-cost-${cost}` },
+          'invalid-cost-user',
+          cost
+        )
+      ).rejects.toThrow('positive safe integer')
+    }
+  )
 })
 
 // ============================================

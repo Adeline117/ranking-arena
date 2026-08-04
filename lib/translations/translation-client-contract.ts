@@ -1,6 +1,11 @@
 import { apiFetch } from '@/lib/utils/api-fetch'
+import {
+  TRANSLATION_MAX_BATCH_ITEMS,
+  TRANSLATION_MAX_BATCH_TEXT_LENGTH,
+  TRANSLATION_MAX_TEXT_LENGTH,
+} from './translation-limits'
 
-export const TRANSLATION_REQUEST_TIMEOUT_MS = 15_000
+export const TRANSLATION_REQUEST_TIMEOUT_MS = 45_000
 
 export type TranslationTargetLanguage = 'zh' | 'en' | 'ja' | 'ko'
 
@@ -44,7 +49,11 @@ function isNonnegativeSafeInteger(value: unknown): value is number {
 }
 
 function isTranslationText(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
+  return (
+    typeof value === 'string' &&
+    value.trim().length > 0 &&
+    value.length <= TRANSLATION_MAX_TEXT_LENGTH
+  )
 }
 
 function isTranslationTarget(value: unknown): value is TranslationTargetLanguage {
@@ -119,7 +128,9 @@ export function readBatchTranslationResponse(
 ): BatchTranslationReceipt | null {
   if (
     expectedItems.length === 0 ||
-    expectedItems.length > 20 ||
+    expectedItems.length > TRANSLATION_MAX_BATCH_ITEMS ||
+    expectedItems.reduce((total, item) => total + item.text.length, 0) >
+      TRANSLATION_MAX_BATCH_TEXT_LENGTH ||
     expectedItems.some(
       (item) =>
         !item.id ||
@@ -197,6 +208,9 @@ export async function requestSingleTranslation(
   request: SingleTranslationRequest,
   options: TranslationRequestOptions
 ): Promise<SingleTranslationReceipt> {
+  if (!isTranslationText(request.text)) {
+    throw new Error('Translation source text is outside the admitted limits')
+  }
   const value = await apiFetch<unknown>('/api/translate', {
     method: 'POST',
     cache: 'no-store',
@@ -216,6 +230,14 @@ export async function requestBatchTranslation(
   targetLang: TranslationTargetLanguage,
   options: TranslationRequestOptions
 ): Promise<BatchTranslationReceipt> {
+  if (
+    items.length === 0 ||
+    items.length > TRANSLATION_MAX_BATCH_ITEMS ||
+    items.some((item) => !isTranslationText(item.text)) ||
+    items.reduce((total, item) => total + item.text.length, 0) > TRANSLATION_MAX_BATCH_TEXT_LENGTH
+  ) {
+    throw new Error('Translation batch is outside the admitted limits')
+  }
   if (items.some((item) => item.targetLang !== targetLang)) {
     throw new Error('Translation batch target language is inconsistent')
   }
