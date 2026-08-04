@@ -441,6 +441,7 @@ BEGIN
           ARRAY['p_actor_id', 'p_post_id', 'p_comment_id', 'p_desired_reaction']::text[],
           0,
           'comment-reaction-desired-state:v1:',
+          '2c40ab0522cd0afceb7bbc6a44e29a09',
           false
         ),
         (
@@ -448,6 +449,7 @@ BEGIN
           ARRAY['p_actor_id', 'p_post_id', 'p_comment_id', 'p_request_id', 'p_desired_reaction']::text[],
           0,
           'comment-reaction-causal-intent:reserve-v1:',
+          '2fdaa03887397d4e3c0222d771328c1b',
           true
         ),
         (
@@ -455,6 +457,7 @@ BEGIN
           ARRAY['p_actor_id', 'p_post_id', 'p_comment_id', 'p_request_id', 'p_intent_sequence', 'p_desired_reaction']::text[],
           0,
           'comment-reaction-causal-intent:apply-v1:',
+          'bd71579634a5312dd8af6093235b2bf8',
           true
         ),
         (
@@ -462,6 +465,7 @@ BEGIN
           ARRAY['p_limit']::text[],
           1,
           'comment-reaction-causal-intent:cleanup-v1:',
+          'c9d0d109b295740e1f6b47d45e523c6b',
           true
         )
     ) AS expected(
@@ -469,6 +473,7 @@ BEGIN
       argument_names,
       argument_defaults,
       source_prefix,
+      source_digest,
       require_service_execute
     )
   LOOP
@@ -509,8 +514,9 @@ BEGIN
     INTO STRICT v_source, v_comment
     FROM pg_catalog.pg_proc AS function_row
     WHERE function_row.oid = v_function;
-    IF v_comment IS DISTINCT FROM
-         v_expected.source_prefix || pg_catalog.md5(v_source)
+    IF pg_catalog.md5(v_source) IS DISTINCT FROM v_expected.source_digest
+       OR v_comment IS DISTINCT FROM
+         v_expected.source_prefix || v_expected.source_digest
     THEN
       RAISE EXCEPTION
         'comment reaction function source seal drifted: %',
@@ -695,8 +701,10 @@ BEGIN
       'lock_timeout=5s',
       'statement_timeout=15s'
     ]::text[];
-  IF v_comment IS DISTINCT FROM
-       'comment-reaction-desired-state:v1:' || pg_catalog.md5(v_source)
+  IF pg_catalog.md5(v_source) IS DISTINCT FROM
+       '2c40ab0522cd0afceb7bbc6a44e29a09'
+     OR v_comment IS DISTINCT FROM
+       'comment-reaction-desired-state:v1:2c40ab0522cd0afceb7bbc6a44e29a09'
      OR NOT pg_catalog.has_function_privilege(
        v_postgres,
        v_base,
@@ -739,25 +747,29 @@ BEGIN
           'public.reserve_comment_reaction_intent_atomic(uuid,uuid,uuid,text,text)',
           ARRAY['p_actor_id', 'p_post_id', 'p_comment_id', 'p_request_id', 'p_desired_reaction']::text[],
           0,
-          'comment-reaction-causal-intent:reserve-v1:'
+          'comment-reaction-causal-intent:reserve-v1:',
+          '2fdaa03887397d4e3c0222d771328c1b'
         ),
         (
           'public.set_comment_reaction_desired_state_causal_atomic(uuid,uuid,uuid,text,bigint,text)',
           ARRAY['p_actor_id', 'p_post_id', 'p_comment_id', 'p_request_id', 'p_intent_sequence', 'p_desired_reaction']::text[],
           0,
-          'comment-reaction-causal-intent:apply-v1:'
+          'comment-reaction-causal-intent:apply-v1:',
+          'bd71579634a5312dd8af6093235b2bf8'
         ),
         (
           'public.cleanup_comment_reaction_intents_atomic(integer)',
           ARRAY['p_limit']::text[],
           1,
-          'comment-reaction-causal-intent:cleanup-v1:'
+          'comment-reaction-causal-intent:cleanup-v1:',
+          'c9d0d109b295740e1f6b47d45e523c6b'
         )
     ) AS expected(
       signature,
       argument_names,
       argument_defaults,
-      source_prefix
+      source_prefix,
+      source_digest
     )
   LOOP
     v_function := pg_catalog.to_regprocedure(v_expected.signature);
@@ -787,8 +799,9 @@ BEGIN
         'lock_timeout=5s',
         'statement_timeout=15s'
       ]::text[];
-    IF v_comment IS DISTINCT FROM
-         v_expected.source_prefix || pg_catalog.md5(v_source)
+    IF pg_catalog.md5(v_source) IS DISTINCT FROM v_expected.source_digest
+       OR v_comment IS DISTINCT FROM
+         v_expected.source_prefix || v_expected.source_digest
        OR NOT EXISTS (
          SELECT 1
          FROM pg_catalog.pg_proc AS function_row

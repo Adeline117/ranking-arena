@@ -78,7 +78,8 @@ describe('legacy comment reaction desired-state postdeploy closure', () => {
       "'row_security=off'",
       "'lock_timeout=5s'",
       "'statement_timeout=15s'",
-      'v_expected.source_prefix || pg_catalog.md5(v_source)',
+      'pg_catalog.md5(v_source) IS DISTINCT FROM v_expected.source_digest',
+      'v_expected.source_prefix || v_expected.source_digest',
       'acl_entry.grantee NOT IN (function_row.proowner, v_service)',
       'AND NOT acl_entry.is_grantable',
     ]) {
@@ -91,6 +92,14 @@ describe('legacy comment reaction desired-state postdeploy closure', () => {
       'comment-reaction-causal-intent:cleanup-v1:',
     ]) {
       expect(migration).toContain(prefix)
+    }
+    for (const digest of [
+      '2c40ab0522cd0afceb7bbc6a44e29a09',
+      '2fdaa03887397d4e3c0222d771328c1b',
+      'bd71579634a5312dd8af6093235b2bf8',
+      'c9d0d109b295740e1f6b47d45e523c6b',
+    ]) {
+      expect(migration).toContain(digest)
     }
   })
 
@@ -133,6 +142,7 @@ describe('legacy comment reaction desired-state postdeploy closure', () => {
       'private_column_acl_drift_rejected',
       'causal_acl_drift_rejected',
       'causal_source_seal_drift_rejected',
+      'resealed_body_drift_rejected',
       'unexpected_overload_rejected',
       'legacy comment reaction desired-state closure PG17 proof passed',
     ]) {

@@ -195,6 +195,62 @@ END
 $restore_causal_apply_seal$;
 SQL
 
+# resealed_body_drift_rejected: an owner-level attacker cannot replace a body
+# and bless it by recomputing the comment from that altered prosrc. The
+# contract pins the reviewed digest independently of the live self-seal.
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.cleanup_comment_reaction_intents_atomic(
+  p_limit integer DEFAULT 500
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET row_security = off
+SET lock_timeout = '5s'
+SET statement_timeout = '15s'
+AS $function$
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'service role required';
+  END IF;
+  RETURN pg_catalog.jsonb_build_object(
+    'status', 'ok',
+    'operations_deleted', 0,
+    'heads_deleted', 0
+  );
+END
+$function$;
+
+DO $reseal_modified_cleanup$
+DECLARE
+  v_source text;
+BEGIN
+  SELECT function_row.prosrc
+  INTO STRICT v_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid =
+    'public.cleanup_comment_reaction_intents_atomic(integer)'::regprocedure;
+  EXECUTE pg_catalog.format(
+    'COMMENT ON FUNCTION public.cleanup_comment_reaction_intents_atomic(integer) IS %L',
+    'comment-reaction-causal-intent:cleanup-v1:' || pg_catalog.md5(v_source)
+  );
+END
+$reseal_modified_cleanup$;
+SQL
+assert_migration_fails \
+  resealed_body_drift_rejected \
+  'comment reaction function source seal drifted'
+
+# Restore the canonical expansion in the disposable database. 1080 requires
+# its rolling-compatibility grant during preflight; 1090 immediately closes it
+# again after the canonical body and reviewed seal have been restored.
+psql_cmd -c \
+  'GRANT EXECUTE ON FUNCTION public.set_comment_reaction_desired_state_atomic(uuid,uuid,uuid,text) TO service_role'
+psql_cmd -f "$CAUSAL_MIGRATION"
+psql_cmd -f "$CONTRACT_MIGRATION"
+
 # unexpected_overload_rejected: exact reviewed names/signatures are pinned;
 # adding even an owner-only overload aborts contract publication.
 psql_cmd <<'SQL'
