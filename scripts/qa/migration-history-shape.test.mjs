@@ -14,6 +14,10 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BASELINE_PATH = path.join(ROOT, 'scripts', 'qa', 'migration-history-shape-baseline.txt')
+// Modern files are already checked for exact 14-digit names and duplicate
+// versions. Keep their count as a monotonic deletion ratchet so every valid new
+// migration does not require an unrelated fixture edit.
+const MODERN_MIGRATION_COUNT_FLOOR = 477
 
 function entry(migrationPath, contents) {
   return { path: migrationPath, contents: Buffer.from(contents) }
@@ -23,14 +27,28 @@ test('checked-in migration history matches the offline legacy fingerprint', () =
   const result = scanMigrationDirectory()
 
   assert.deepEqual(result.errors, [])
-  assert.deepEqual(result.summary, {
-    migrationCount: 579,
-    modernCount: 388,
-    legacyCount: 191,
-    legacyLetterVersionCount: 93,
-    shortCollisionCount: 3,
-    baselineCount: 191,
-  })
+  assert.equal(
+    result.summary.migrationCount,
+    result.summary.modernCount + result.summary.legacyCount
+  )
+  assert.ok(
+    result.summary.modernCount >= MODERN_MIGRATION_COUNT_FLOOR,
+    `modern migration count regressed below ${MODERN_MIGRATION_COUNT_FLOOR}: ${result.summary.modernCount}`
+  )
+  assert.deepEqual(
+    {
+      legacyCount: result.summary.legacyCount,
+      legacyLetterVersionCount: result.summary.legacyLetterVersionCount,
+      shortCollisionCount: result.summary.shortCollisionCount,
+      baselineCount: result.summary.baselineCount,
+    },
+    {
+      legacyCount: 191,
+      legacyLetterVersionCount: 93,
+      shortCollisionCount: 3,
+      baselineCount: 191,
+    }
+  )
 })
 
 test('committed baseline retains all letter-version and short-collision debts', () => {
