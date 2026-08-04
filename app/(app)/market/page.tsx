@@ -1,21 +1,26 @@
 import type { Metadata } from 'next'
 import { unstable_cache } from 'next/cache'
+import { Suspense } from 'react'
 import MarketPageClient from './MarketPageClient'
 import { BASE_URL } from '@/lib/constants/urls'
+import {
+  fetchCoinGeckoSpot,
+  type MarketSpotSnapshot,
+} from '@/lib/market/market-spot-client-contract'
 
 export const revalidate = 60 // ISR: 1 min
 
 export const metadata: Metadata = {
-  title: 'Crypto Market Overview | Live Prices, Gainers & Losers',
+  title: 'Crypto Market Overview | Prices, Gainers & Losers',
   description:
-    'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens. Updated every minute.',
+    'Track available crypto prices, gainers, losers, volume, and market cap across up to 100 tokens. Provider coverage and update timing may vary.',
   alternates: {
     canonical: `${BASE_URL}/market`,
   },
   openGraph: {
     title: 'Crypto Market Overview',
     description:
-      'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens.',
+      'Track available crypto prices, gainers, losers, volume, and market cap across up to 100 tokens.',
     url: `${BASE_URL}/market`,
     siteName: 'Arena',
     type: 'website',
@@ -31,90 +36,37 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Crypto Market Overview',
-    description:
-      'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap.',
+    description: 'Track available crypto prices, gainers, losers, volume, and market cap.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
 }
 
-interface SpotCoinSSR {
-  id: string
-  symbol: string
-  name: string
-  image: string
-  price: number
-  change24h: number
-  high24h: number
-  low24h: number
-  volume24h: number
-  marketCap: number
-  rank: number
-}
-
-interface SpotMarketSnapshot {
-  coins: SpotCoinSSR[]
-  fetchedAt: number
-}
-
 // Prefetch spot market data server-side via CoinGecko
 const getSpotMarketData = unstable_cache(
-  async (): Promise<SpotMarketSnapshot> => {
-    try {
-      const url =
-        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h'
-
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 8000)
-
-      const res = await fetch(url, {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      })
-      clearTimeout(timeoutId)
-
-      if (!res.ok) return { coins: [], fetchedAt: 0 }
-
-      const raw = await res.json()
-      if (!Array.isArray(raw)) return { coins: [], fetchedAt: 0 }
-
-      return {
-        coins: raw.map((c: Record<string, unknown>) => ({
-          id: String(c.id ?? ''),
-          symbol: String(c.symbol ?? '').toUpperCase(),
-          name: String(c.name ?? ''),
-          image: typeof c.image === 'string' ? c.image.replace('/large/', '/small/') : '',
-          price: Number(c.current_price) || 0,
-          change24h: Number(c.price_change_percentage_24h) || 0,
-          high24h: Number(c.high_24h) || 0,
-          low24h: Number(c.low_24h) || 0,
-          volume24h: Number(c.total_volume) || 0,
-          marketCap: Number(c.market_cap) || 0,
-          rank: Number(c.market_cap_rank) || 0,
-        })),
-        // Stored inside unstable_cache with the payload, so server markup and
-        // browser hydration share one truthful collection timestamp.
-        fetchedAt: Date.now(),
-      }
-    } catch {
-      return { coins: [], fetchedAt: 0 }
-    }
-  },
-  // Version the cache key because the cached value changed from an array to a
-  // snapshot object; a rolling deploy must never deserialize the old shape.
-  ['market-spot-ssr-v2'],
+  async (): Promise<MarketSpotSnapshot> => fetchCoinGeckoSpot(undefined, 4_000),
+  // A rejected fetch is not converted to an empty success and therefore is not
+  // cached as healthy market data. Versioned for the provider-receipt shape.
+  ['market-spot-ssr-v3'],
   { revalidate: 60, tags: ['market'] }
 )
 
-export default async function MarketPage() {
-  const initialSpotSnapshot = await getSpotMarketData()
-  const hasData = initialSpotSnapshot.coins.length > 0
+export async function MarketPageWithSeed() {
+  let initialSpotSnapshot: MarketSpotSnapshot | undefined
+  let initialError = false
+  try {
+    initialSpotSnapshot = await getSpotMarketData()
+  } catch {
+    initialError = true
+  }
 
+  return <MarketPageClient initialSpotSnapshot={initialSpotSnapshot} initialError={initialError} />
+}
+
+export default function MarketPage() {
   return (
-    <MarketPageClient
-      initialSpotData={initialSpotSnapshot.coins}
-      initialSpotDataUpdatedAt={initialSpotSnapshot.fetchedAt}
-      initialError={!hasData}
-    />
+    <Suspense fallback={<MarketPageClient />}>
+      <MarketPageWithSeed />
+    </Suspense>
   )
 }

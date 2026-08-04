@@ -22,6 +22,8 @@ interface MarketTableProps<T> {
   defaultSortDir?: 'asc' | 'desc'
   rowKey: (row: T) => string
   onRowClick?: (row: T) => void
+  rowActionColumnKey?: string
+  rowActionLabel?: (row: T) => string
 }
 
 function MarketTableInner<T>({
@@ -32,6 +34,8 @@ function MarketTableInner<T>({
   defaultSortDir = 'desc',
   rowKey,
   onRowClick,
+  rowActionColumnKey,
+  rowActionLabel,
 }: MarketTableProps<T>) {
   const { t } = useLanguage()
   const [sortKey, setSortKey] = useState(defaultSortKey || '')
@@ -85,7 +89,10 @@ function MarketTableInner<T>({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     width: col.width,
+    height: 44,
   })
+
+  const actionColumnKey = rowActionColumnKey ?? columns[0]?.key
 
   if (loading) {
     return (
@@ -196,47 +203,116 @@ function MarketTableInner<T>({
                       <line x1="3" y1="9" x2="21" y2="9" />
                       <line x1="9" y1="21" x2="9" y2="9" />
                     </svg>
-                    <span style={{ fontSize: 13 }}>{t('noDataGeneric')}</span>
+                    <span style={{ fontSize: tokens.typography.fontSize.sm }}>
+                      {t('noDataGeneric')}
+                    </span>
                   </div>
                 </td>
               </tr>
             ) : (
-              sorted.map((row, i) => (
-                <tr
-                  key={rowKey(row)}
-                  onClick={() => onRowClick?.(row)}
-                  style={{
-                    background: i % 2 === 0 ? 'transparent' : tokens.colors.bg.tertiary,
-                    cursor: onRowClick ? 'pointer' : 'default',
-                    transition: tokens.transition.fast,
-                  }}
-                  onMouseEnter={(e) => {
-                    ;(e.currentTarget as HTMLElement).style.background = tokens.colors.bg.hover
-                  }}
-                  onMouseLeave={(e) => {
-                    ;(e.currentTarget as HTMLElement).style.background =
-                      i % 2 === 0 ? 'transparent' : tokens.colors.bg.tertiary
-                  }}
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      style={{
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                        textAlign: col.align || 'right',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                      }}
-                    >
-                      {col.render
+              sorted.map((row, i) => {
+                const key = rowKey(row)
+                const actionLabel = rowActionLabel?.(row) ?? key
+                return (
+                  <tr
+                    key={key}
+                    onClick={
+                      onRowClick
+                        ? (event) => {
+                            const target = event.target
+                            if (
+                              target instanceof Element &&
+                              target.closest(
+                                'a, button, input, select, textarea, [role="button"], [role="link"]'
+                              )
+                            ) {
+                              return
+                            }
+                            onRowClick(row)
+                          }
+                        : undefined
+                    }
+                    style={{
+                      height: 44,
+                      background: i % 2 === 0 ? 'transparent' : tokens.colors.bg.tertiary,
+                      cursor: onRowClick ? 'pointer' : 'default',
+                      transition: tokens.transition.fast,
+                    }}
+                    onMouseEnter={(e) => {
+                      ;(e.currentTarget as HTMLElement).style.background = tokens.colors.bg.hover
+                    }}
+                    onMouseLeave={(e) => {
+                      ;(e.currentTarget as HTMLElement).style.background =
+                        i % 2 === 0 ? 'transparent' : tokens.colors.bg.tertiary
+                    }}
+                  >
+                    {columns.map((col) => {
+                      const content = col.render
                         ? col.render(row, i)
-                        : (((row as Record<string, unknown>)[col.key] as React.ReactNode) ?? '—')}
-                    </td>
-                  ))}
-                </tr>
-              ))
+                        : (((row as Record<string, unknown>)[col.key] as React.ReactNode) ?? '—')
+                      const isActionColumn = Boolean(onRowClick) && col.key === actionColumnKey
+                      return (
+                        <td
+                          key={col.key}
+                          style={{
+                            height: 44,
+                            padding: `${isActionColumn ? 0 : tokens.spacing[2]} ${tokens.spacing[3]}`,
+                            textAlign: col.align || 'right',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                          }}
+                        >
+                          {isActionColumn ? (
+                            <button
+                              type="button"
+                              aria-label={actionLabel}
+                              title={actionLabel}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                onRowClick?.(row)
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  onRowClick?.(row)
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                minWidth: 44,
+                                minHeight: 44,
+                                padding: 0,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent:
+                                  col.align === 'left'
+                                    ? 'flex-start'
+                                    : col.align === 'center'
+                                      ? 'center'
+                                      : 'flex-end',
+                                overflow: 'hidden',
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'inherit',
+                                cursor: 'pointer',
+                                font: 'inherit',
+                                textAlign: col.align || 'right',
+                              }}
+                            >
+                              {content}
+                            </button>
+                          ) : (
+                            content
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>

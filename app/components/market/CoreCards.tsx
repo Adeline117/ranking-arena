@@ -8,24 +8,17 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import ErrorState from '@/app/components/ui/ErrorState'
 import Link from 'next/link'
-import { apiFetch } from '@/lib/utils/api-fetch'
 import { formatTokenPrice } from '@/lib/utils/format'
-import type { SpotCoin } from '@/lib/hooks/useMarketSpot'
+import {
+  fetchMarketCore,
+  fetchMarketExchanges,
+  type MarketCoreRow as CoinRow,
+} from '@/lib/market/market-core-client-contract'
+import type { MarketSpotCoin } from '@/lib/market/market-spot-client-contract'
 
-interface CoinRow {
-  symbol: string
-  price: string
-  changePct: string
-  direction: 'up' | 'down'
-  // Optional coingecko icon URL (from spot data). Preferred over CryptoIcon's
-  // CoinCap CDN fallback, which browsers block via ORB (repeated console errors).
+type DisplayCoinRow = CoinRow & {
+  // Optional CoinGecko icon URL from the independently verified spot lane.
   image?: string
-}
-
-interface ExchangeInfo {
-  id: string
-  name: string
-  trade_volume_24h_btc: number
 }
 
 function CardWrapper({
@@ -98,6 +91,9 @@ function CardWrapper({
               display: 'inline-flex',
               alignItems: 'center',
               gap: 2,
+              minWidth: 44,
+              minHeight: 44,
+              justifyContent: 'center',
               padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
               borderRadius: tokens.radius.sm,
               transition: `all ${tokens.transition.fast}`,
@@ -331,7 +327,7 @@ const UpdatedAgoLabel = memo(function UpdatedAgoLabel({
   )
 })
 
-function spotRowsToCoins(spots: SpotCoin[]): CoinRow[] {
+function spotRowsToCoins(spots: MarketSpotCoin[]): DisplayCoinRow[] {
   return spots
     .filter((s) => s.change24h != null && s.price != null)
     .map((s) => ({
@@ -345,18 +341,18 @@ function spotRowsToCoins(spots: SpotCoin[]): CoinRow[] {
     }))
 }
 
-export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
+export default function CoreCards({ spotData }: { spotData?: MarketSpotCoin[] }) {
   const { t } = useLanguage()
   // Market data — auto-refreshes every 60s via React Query
   const {
-    data: marketData,
-    dataUpdatedAt,
+    data: marketSnapshot,
+    error: marketRequestError,
     isLoading: marketLoading,
-    isError: marketError,
+    isError: marketFailed,
     refetch: refetchMarket,
-  } = useQuery<{ rows: CoinRow[] }>({
+  } = useQuery({
     queryKey: ['market-core'],
-    queryFn: () => apiFetch<{ rows: CoinRow[] }>('/api/market'),
+    queryFn: ({ signal }) => fetchMarketCore(signal),
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     staleTime: STALE_STANDARD,
@@ -366,29 +362,33 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
 
   // Exchange data — refreshes every 60s
   const {
-    data: exchangeData,
+    data: exchangeSnapshot,
+    error: exchangeRequestError,
     isLoading: exchangesLoading,
-    isError: exchangesError,
+    isError: exchangesFailed,
     refetch: refetchExchanges,
-  } = useQuery<ExchangeInfo[]>({
+  } = useQuery({
     queryKey: ['market-exchanges'],
-    queryFn: async () => {
-      const json = await apiFetch<ExchangeInfo[]>('/api/market/exchanges')
-      return Array.isArray(json) ? json.slice(0, 5) : []
-    },
+    queryFn: ({ signal }) => fetchMarketExchanges(signal),
     refetchInterval: 60_000,
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
     retry: false,
   })
 
-  const exchanges = exchangeData ?? []
-  const lastFetchedAt = dataUpdatedAt || null
+  const exchanges = exchangeSnapshot?.items ?? []
+  const exchangeDegraded =
+    !!exchangeSnapshot?.partial || (!!exchangeRequestError && exchanges.length > 0)
+  const lastFetchedAt = marketSnapshot?.collectedAt ? Date.parse(marketSnapshot.collectedAt) : null
   const hasSpotFallback = !!spotData?.length
+  const marketDegraded =
+    !!marketSnapshot?.partial ||
+    !!marketSnapshot?.stale ||
+    (!!marketRequestError && !!marketSnapshot)
 
   // Derive gainers/losers from market data + spot fallback
   const { gainers, losers } = useMemo(() => {
-    const rows: CoinRow[] = marketData?.rows ?? []
+    const rows: DisplayCoinRow[] = marketSnapshot?.rows ?? []
     if (rows.length === 0 && spotData && spotData.length > 0) {
       const spotRows = spotRowsToCoins(spotData)
       const sorted = [...spotRows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
@@ -430,7 +430,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
       }
     }
     return { gainers: g, losers: l }
-  }, [marketData, spotData])
+  }, [marketSnapshot, spotData])
 
   const maxVol =
     exchanges.length > 0 ? Math.max(...exchanges.map((e) => e.trade_volume_24h_btc)) : 0
@@ -438,6 +438,47 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
   return (
     <div>
       <UpdatedAgoLabel timestamp={lastFetchedAt} label={t('marketPriceFeedChecked')} t={t} />
+      {(marketDegraded || (marketRequestError && hasSpotFallback)) && (
+        <div
+          role="alert"
+          data-testid="market-core-degraded"
+          style={{
+            minHeight: 44,
+            marginBottom: tokens.spacing[3],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            border: `1px solid ${tokens.colors.accent.warning}`,
+            borderRadius: tokens.radius.md,
+            color: tokens.colors.text.secondary,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: tokens.spacing[3],
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
+          <span>
+            {t(marketSnapshot?.partial ? 'dataLoadIncomplete' : 'dataStaleWarning')}
+            {marketSnapshot?.partial && marketRequestError ? ` · ${t('dataStaleWarning')}` : null}
+          </span>
+          <button
+            type="button"
+            onClick={() => void refetchMarket()}
+            style={{
+              minWidth: 44,
+              minHeight: 44,
+              padding: `0 ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: tokens.glass.border.light,
+              background: tokens.colors.bg.tertiary,
+              color: tokens.colors.text.primary,
+              cursor: 'pointer',
+              fontWeight: tokens.typography.fontWeight.semibold,
+            }}
+          >
+            {t('retry')}
+          </button>
+        </div>
+      )}
       <div
         className="core-cards-grid"
         style={{
@@ -451,12 +492,13 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
           {gainers.length === 0 ? (
             marketLoading && !hasSpotFallback ? (
               <div style={{ height: 160 }} className="skeleton" />
-            ) : marketError && !hasSpotFallback ? (
+            ) : marketFailed && !hasSpotFallback ? (
               <ErrorState
                 title={t('marketDataError')}
                 description={t('loadFailedRetryShort')}
                 retry={() => void refetchMarket()}
                 variant="compact"
+                retryButtonSize="md"
               />
             ) : (
               <div
@@ -492,12 +534,13 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
           {losers.length === 0 ? (
             marketLoading && !hasSpotFallback ? (
               <div style={{ height: 160 }} className="skeleton" />
-            ) : marketError && !hasSpotFallback ? (
+            ) : marketFailed && !hasSpotFallback ? (
               <ErrorState
                 title={t('marketDataError')}
                 description={t('loadFailedRetryShort')}
                 retry={() => void refetchMarket()}
                 variant="compact"
+                retryButtonSize="md"
               />
             ) : (
               <div
@@ -530,30 +573,49 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
           )}
         </CardWrapper>
         <CardWrapper title={t('fundFlow')} accentColor={tokens.gradient.purple}>
-          {exchangesLoading ? (
+          {exchangesLoading && exchanges.length === 0 ? (
             <div style={{ height: 160 }} className="skeleton" />
-          ) : exchangesError ? (
+          ) : exchangesFailed && exchanges.length === 0 ? (
             <ErrorState
               title={t('marketDataError')}
               description={t('loadFailedRetryShort')}
               retry={() => void refetchExchanges()}
               variant="compact"
+              retryButtonSize="md"
             />
           ) : exchanges.length === 0 ? (
-            <div
-              style={{
-                height: 160,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: tokens.colors.text.tertiary,
-                fontSize: tokens.typography.fontSize.sm,
-              }}
-            >
-              {t('noDataGeneric')}
-            </div>
+            <ErrorState
+              title={t('marketDataError')}
+              description={t('loadFailedRetryShort')}
+              retry={() => void refetchExchanges()}
+              variant="compact"
+              retryButtonSize="md"
+            />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {exchangeDegraded && (
+                <button
+                  type="button"
+                  onClick={() => void refetchExchanges()}
+                  style={{
+                    minHeight: 44,
+                    width: '100%',
+                    padding: `0 ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.accent.warning}`,
+                    background: tokens.colors.bg.tertiary,
+                    color: tokens.colors.text.secondary,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontSize: tokens.typography.fontSize.xs,
+                  }}
+                >
+                  {t(exchangeSnapshot?.partial ? 'dataLoadIncomplete' : 'dataStaleWarning')}
+                  {exchangeSnapshot?.partial && exchangeRequestError
+                    ? ` · ${t('dataStaleWarning')}`
+                    : null}
+                </button>
+              )}
               {exchanges.map((ex, i) => (
                 <div
                   key={ex.id}
@@ -564,7 +626,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
                     background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
-                    minHeight: 40,
+                    minHeight: 44,
                   }}
                 >
                   <span

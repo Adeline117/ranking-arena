@@ -9,9 +9,12 @@ import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import PageHeader from '@/app/components/ui/PageHeader'
-import ErrorState from '@/app/components/ui/ErrorState'
-import { supabase } from '@/lib/supabase/client'
 import { useMarketSpotData, type SpotCoin } from '@/lib/hooks/useMarketSpot'
+import {
+  isRenderableMarketSpotCoin,
+  type MarketSpotCoin,
+  type MarketSpotSnapshot,
+} from '@/lib/market/market-spot-client-contract'
 
 // Core above-fold components: direct import for faster LCP
 import CoreCards from '@/app/components/market/CoreCards'
@@ -62,10 +65,10 @@ const LoadingCard = memo(function LoadingCard({
 })
 
 const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState<boolean | null>(null)
 
   const handleResize = useCallback(() => {
-    setIsMobile(window.innerWidth < 768)
+    setIsMobile(window.matchMedia?.('(max-width: 767px)').matches ?? window.innerWidth < 768)
   }, [])
 
   useEffect(() => {
@@ -78,7 +81,7 @@ const useIsMobile = () => {
 }
 
 // Mobile-specific components
-function MobileOverviewTab({ spotData }: { spotData?: SpotCoin[] }) {
+function MobileOverviewTab({ spotData }: { spotData?: MarketSpotCoin[] }) {
   return (
     <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
       <Suspense fallback={<LoadingCard height={200} />}>
@@ -88,17 +91,11 @@ function MobileOverviewTab({ spotData }: { spotData?: SpotCoin[] }) {
   )
 }
 
-function MobileMoversTab({
-  spotData,
-  initialSpotData,
-}: {
-  spotData?: SpotCoin[]
-  initialSpotData?: SpotCoinSSR[]
-}) {
+function MobileMoversTab({ spotData }: { spotData?: SpotCoin[] }) {
   return (
     <SectionErrorBoundary fallbackMessage="Market data failed to load">
       <Suspense fallback={<LoadingCard height={300} />}>
-        <SpotMarket spotData={spotData} initialData={initialSpotData} />
+        <SpotMarket spotData={spotData} />
       </Suspense>
     </SectionErrorBoundary>
   )
@@ -173,7 +170,7 @@ function MobileSectorsTab({ spotData }: { spotData?: SpotCoin[] }) {
           alignItems: 'center',
           justifyContent: 'center',
           color: tokens.colors.text.tertiary,
-          fontSize: 14,
+          fontSize: tokens.typography.fontSize.base,
         }}
       >
         {t('noData')}
@@ -201,13 +198,12 @@ function MobileSectorsTab({ spotData }: { spotData?: SpotCoin[] }) {
               borderRadius: tokens.radius.lg,
               border: tokens.glass.border.light,
               borderLeft: `3px solid ${color}`,
-              cursor: 'pointer',
             }}
           >
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 600,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 color: tokens.colors.text.tertiary,
                 marginBottom: 6,
                 letterSpacing: '0.3px',
@@ -219,8 +215,8 @@ function MobileSectorsTab({ spotData }: { spotData?: SpotCoin[] }) {
             <div
               style={
                 {
-                  fontSize: 18,
-                  fontWeight: 800,
+                  fontSize: tokens.typography.fontSize.lg,
+                  fontWeight: tokens.typography.fontWeight.black,
                   color,
                   fontFamily: 'var(--font-mono, monospace)',
                   fontVariantNumeric: 'tabular-nums',
@@ -243,14 +239,13 @@ function MobileSectorsTab({ spotData }: { spotData?: SpotCoin[] }) {
 }
 
 function MarketPageContent({
-  initialSpotData,
-  initialSpotDataUpdatedAt,
+  initialSpotSnapshot,
+  initialError,
 }: {
-  initialSpotData?: SpotCoinSSR[]
-  initialSpotDataUpdatedAt?: number
+  initialSpotSnapshot?: MarketSpotSnapshot
+  initialError: boolean
 }) {
   const { t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
   const [selectedToken, setSelectedToken] = useState<{
     id: string
     symbol: string
@@ -267,22 +262,40 @@ function MarketPageContent({
   const [sectorFilter, setSectorFilter] = useState<string | null>(null)
   const isMobile = useIsMobile()
 
-  // Single shared fetch for /api/market/spot — data passed as props to all children.
-  // Seed with the SSR-delivered spot data so the hook doesn't refetch the same
-  // ~33KB/100-coin payload on mount (it was already in the document).
+  // One strictly verified /api/market/spot lane is shared by every spot panel.
+  // The SSR seed carries the provider collection receipt, so cached data is not
+  // relabeled as freshly fetched during hydration.
   const {
-    data: spotData,
+    data: spotSnapshot,
     isLoading: spotLoading,
-    isError: spotError,
+    error: spotRequestError,
     refetch: refetchSpot,
-  } = useMarketSpotData(initialSpotData, initialSpotDataUpdatedAt)
-  const hasUsableSpotData = !!spotData?.length || !!initialSpotData?.length
+  } = useMarketSpotData(initialSpotSnapshot)
+  const allSpotData = spotSnapshot?.coins
+  const renderableSpotData = useMemo(
+    () => allSpotData?.filter(isRenderableMarketSpotCoin),
+    [allSpotData]
+  )
+  // Existing table/treemap props predate nullable provider metrics. Their
+  // formatters already render null as "--"; keep nulls truthful at runtime.
+  const spotData = renderableSpotData as SpotCoin[] | undefined
+  const sectorSpotData = useMemo(
+    () =>
+      renderableSpotData?.filter((coin) => coin.marketCap !== null && coin.volume24h !== null) as
+        | SpotCoin[]
+        | undefined,
+    [renderableSpotData]
+  )
+  const hasUsableSpotData = !!spotData?.length
   const spotPending = spotLoading && !hasUsableSpotData
-  const spotFailed = spotError && !hasUsableSpotData
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
-  }, [])
+  const spotFailed =
+    !hasUsableSpotData &&
+    (!!spotRequestError || (!!spotSnapshot && spotSnapshot.completeCount === 0))
+  const sectorSpotFailed = spotFailed || (!!spotSnapshot && !sectorSpotData?.length)
+  const spotDegraded =
+    !!spotSnapshot?.partial ||
+    (!!spotRequestError && hasUsableSpotData) ||
+    (initialError && !spotSnapshot)
 
   const handleSectorClick = useCallback((category: string) => {
     setSectorFilter((prev) => (prev === category ? null : category))
@@ -313,6 +326,7 @@ function MarketPageContent({
 
   return (
     <div
+      className="market-page"
       style={{
         minHeight: '100vh',
         background: tokens.colors.bg.primary,
@@ -333,17 +347,22 @@ function MarketPageContent({
           title={t('market')}
           compact
           actions={
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Link
                 href="/market/funding-rates"
                 style={{
-                  fontSize: 13,
+                  fontSize: tokens.typography.fontSize.sm,
                   color: tokens.colors.text.secondary,
                   textDecoration: 'none',
-                  padding: '4px 10px',
+                  padding: '8px 12px',
                   borderRadius: tokens.radius.sm,
                   background: tokens.colors.bg.secondary,
-                  fontWeight: 600,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  minWidth: 44,
+                  minHeight: 44,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 {t('fundingRates')}
@@ -351,13 +370,18 @@ function MarketPageContent({
               <Link
                 href="/market/open-interest"
                 style={{
-                  fontSize: 13,
+                  fontSize: tokens.typography.fontSize.sm,
                   color: tokens.colors.text.secondary,
                   textDecoration: 'none',
-                  padding: '4px 10px',
+                  padding: '8px 12px',
                   borderRadius: tokens.radius.sm,
                   background: tokens.colors.bg.secondary,
-                  fontWeight: 600,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  minWidth: 44,
+                  minHeight: 44,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 {t('openInterest')}
@@ -381,12 +405,76 @@ function MarketPageContent({
         <GlobalMarketBar />
       </SectionErrorBoundary>
 
-      {isMobile ? (
+      {spotDegraded && (
+        <div
+          role="alert"
+          data-testid="market-spot-degraded"
+          style={{
+            maxWidth: 1400,
+            minHeight: 44,
+            margin: `${tokens.spacing[3]} auto 0`,
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+            border: `1px solid ${tokens.colors.accent.warning}`,
+            borderRadius: tokens.radius.md,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: tokens.spacing[3],
+            color: tokens.colors.text.secondary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
+          <span>
+            {spotSnapshot?.partial
+              ? t('dataLoadIncomplete')
+              : hasUsableSpotData
+                ? t('dataStaleWarning')
+                : t('marketDataError')}
+            {spotSnapshot?.partial && spotRequestError ? ` · ${t('dataStaleWarning')}` : null}
+          </span>
+          <button
+            type="button"
+            onClick={() => void refetchSpot()}
+            style={{
+              minWidth: 44,
+              minHeight: 44,
+              padding: `0 ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.md,
+              border: tokens.glass.border.light,
+              background: tokens.colors.bg.tertiary,
+              color: tokens.colors.text.primary,
+              cursor: 'pointer',
+              fontWeight: tokens.typography.fontWeight.semibold,
+            }}
+          >
+            {t('retry')}
+          </button>
+        </div>
+      )}
+
+      {isMobile === null ? (
+        <div
+          data-testid="market-layout-resolving"
+          aria-busy="true"
+          style={{
+            maxWidth: 1400,
+            minHeight: '70vh',
+            margin: '0 auto',
+            padding: '20px 24px 40px',
+          }}
+        >
+          <div className="market-layout-skeleton-grid">
+            <LoadingCard height={220} />
+            <LoadingCard height={284} />
+            <LoadingCard height={400} />
+          </div>
+        </div>
+      ) : isMobile ? (
         /* Mobile: Tab Layout */
         <Suspense fallback={<LoadingCard height={400} />}>
           <MobileMarketTabs>
             {{
-              overview: <MobileOverviewTab spotData={spotData} />,
+              overview: <MobileOverviewTab spotData={allSpotData} />,
               movers: (
                 <MarketSpotDataGate
                   pending={spotPending}
@@ -394,17 +482,17 @@ function MarketPageContent({
                   retry={() => void refetchSpot()}
                   height={300}
                 >
-                  <MobileMoversTab spotData={spotData} initialSpotData={initialSpotData} />
+                  <MobileMoversTab spotData={spotData} />
                 </MarketSpotDataGate>
               ),
               sectors: (
                 <MarketSpotDataGate
                   pending={spotPending}
-                  failed={spotFailed}
+                  failed={sectorSpotFailed}
                   retry={() => void refetchSpot()}
                   height={200}
                 >
-                  <MobileSectorsTab spotData={spotData} />
+                  <MobileSectorsTab spotData={sectorSpotData} />
                 </MarketSpotDataGate>
               ),
               watchlist: <MarketWatchlistEntry />,
@@ -424,7 +512,7 @@ function MarketPageContent({
           <section style={{ marginBottom: 24 }}>
             <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
               <Suspense fallback={<LoadingCard height={160} />}>
-                <CoreCards spotData={spotData} />
+                <CoreCards spotData={allSpotData} />
               </Suspense>
             </SectionErrorBoundary>
           </section>
@@ -486,7 +574,6 @@ function MarketPageContent({
                     spotData={spotData}
                     onTokenClick={handleTokenClick}
                     sectorFilter={sectorFilter}
-                    initialData={initialSpotData}
                   />
                 </MarketSpotDataGate>
               </Suspense>
@@ -496,11 +583,11 @@ function MarketPageContent({
                 <Suspense fallback={<LoadingCard height={300} />}>
                   <MarketSpotDataGate
                     pending={spotPending}
-                    failed={spotFailed}
+                    failed={sectorSpotFailed}
                     retry={() => void refetchSpot()}
                     height={300}
                   >
-                    <SectorTreemap spotData={spotData} onSectorClick={handleSectorClick} />
+                    <SectorTreemap spotData={sectorSpotData} onSectorClick={handleSectorClick} />
                   </MarketSpotDataGate>
                 </Suspense>
               </SectionErrorBoundary>
@@ -514,12 +601,13 @@ function MarketPageContent({
                     padding: '4px 12px',
                     background: tokens.colors.bg.tertiary,
                     borderRadius: tokens.radius.md,
-                    fontSize: 12,
+                    fontSize: tokens.typography.fontSize.xs,
                     color: tokens.colors.text.secondary,
                   }}
                 >
                   {t('filter')}: {sectorFilter}
                   <button
+                    type="button"
                     onClick={() => setSectorFilter(null)}
                     aria-label="Clear filter"
                     style={{
@@ -532,7 +620,7 @@ function MarketPageContent({
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: tokens.colors.text.tertiary,
-                      fontSize: 14,
+                      fontSize: tokens.typography.fontSize.base,
                       lineHeight: 1.2,
                       margin: '-14px -16px -14px 0',
                     }}
@@ -561,31 +649,47 @@ function MarketPageContent({
       </Suspense>
 
       <FloatingActionButton />
+
+      <style>{`
+        .market-page button,
+        .market-page input,
+        .market-page select {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .market-page a {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .market-page tr {
+          height: 44px;
+        }
+        .market-page th[tabindex="0"] {
+          height: 44px;
+        }
+        .market-layout-skeleton-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+        @media (min-width: 768px) {
+          .market-layout-skeleton-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          .market-layout-skeleton-grid > :last-child {
+            grid-column: 1 / -1;
+          }
+        }
+      `}</style>
     </div>
   )
 }
 
-export interface SpotCoinSSR {
-  id: string
-  symbol: string
-  name: string
-  image: string
-  price: number
-  change24h: number
-  high24h: number
-  low24h: number
-  volume24h: number
-  marketCap: number
-  rank: number
-}
-
 export default function MarketPage({
-  initialSpotData,
-  initialSpotDataUpdatedAt,
-  initialError,
+  initialSpotSnapshot,
+  initialError = false,
 }: {
-  initialSpotData?: SpotCoinSSR[]
-  initialSpotDataUpdatedAt?: number
+  initialSpotSnapshot?: MarketSpotSnapshot
   initialError?: boolean
 }) {
   return (
@@ -595,20 +699,7 @@ export default function MarketPage({
         // Market page error handled by ErrorBoundary
       }}
     >
-      {initialError && (!initialSpotData || initialSpotData.length === 0) ? (
-        <div style={{ padding: '48px 16px', textAlign: 'center' }}>
-          <ErrorState
-            title="Market data temporarily unavailable"
-            description="We couldn't load market prices. Please try again in a moment."
-            retry={() => window.location.reload()}
-          />
-        </div>
-      ) : (
-        <MarketPageContent
-          initialSpotData={initialSpotData}
-          initialSpotDataUpdatedAt={initialSpotDataUpdatedAt}
-        />
-      )}
+      <MarketPageContent initialSpotSnapshot={initialSpotSnapshot} initialError={initialError} />
     </ErrorBoundary>
   )
 }

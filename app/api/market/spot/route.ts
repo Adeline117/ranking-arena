@@ -6,8 +6,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
-import { CoinGeckoMarketsResponseSchema, validateCoinGeckoResponse } from './schemas'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  createMarketSpotSnapshot,
+  marketSpotReceiptHeaders,
+  readCoinGeckoSpotResponse,
+  type MarketSpotCoin,
+  type MarketSpotSnapshot,
+} from '@/lib/market/market-spot-client-contract'
+import { fetchMarketJson } from '@/lib/market/market-fetch'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,130 +49,102 @@ const BINANCE_SYMBOLS = [
   { symbol: 'WIF', binance: 'WIFUSDT', id: 'dogwifcoin', name: 'dogwifhat' },
 ]
 
-interface SpotCoin {
-  id: string
-  symbol: string
-  name: string
-  image: string | null
-  price: number | null
-  change1h: number | null
-  change24h: number | null
-  change7d: number | null
-  high24h: number | null
-  low24h: number | null
-  volume24h: number | null
-  marketCap: number | null
-  rank: number | null
-}
-
-async function fetchFromCoinGecko(): Promise<SpotCoin[]> {
+async function fetchFromCoinGecko(): Promise<MarketSpotSnapshot> {
   const perPage = 100
   const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=1&sparkline=false&price_change_percentage=1h,24h,7d`
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 8000)
-
-  try {
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      next: { revalidate: 60 },
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    if (!res.ok) {
-      throw new Error(`CoinGecko request failed: ${res.status}`)
-    }
-
-    const rawJson = await res.json()
-    const raw = validateCoinGeckoResponse(CoinGeckoMarketsResponseSchema, rawJson, 'spot/top100')
-
-    return raw.map((c) => ({
-      id: c.id,
-      symbol: (c.symbol as string).toUpperCase(),
-      name: c.name,
-      image: typeof c.image === 'string' ? c.image.replace('/large/', '/small/') : (c.image ?? null),
-      price: c.current_price,
-      change1h: c.price_change_percentage_1h_in_currency ?? null,
-      change24h: c.price_change_percentage_24h ?? null,
-      change7d: c.price_change_percentage_7d_in_currency ?? null,
-      high24h: c.high_24h ?? null,
-      low24h: c.low_24h ?? null,
-      volume24h: c.total_volume ?? null,
-      marketCap: c.market_cap ?? null,
-      rank: c.market_cap_rank ?? null,
-    }))
-  } catch (e) {
-    clearTimeout(timeoutId)
-    throw e
-  }
+  const response = await fetchMarketJson(url, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+    timeoutMs: 8_000,
+  })
+  const snapshot = readCoinGeckoSpotResponse(response.value)
+  return createMarketSpotSnapshot({
+    ...snapshot,
+    coins: snapshot.coins.map((coin) => ({
+      ...coin,
+      image: typeof coin.image === 'string' ? coin.image.replace('/large/', '/small/') : coin.image,
+    })),
+  })
 }
 
-async function fetchFromBinance(): Promise<SpotCoin[]> {
-  const symbols = BINANCE_SYMBOLS.map(s => `"${s.binance}"`).join(',')
+function positiveOrNull(value: string): number | null {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function nonnegativeOrNull(value: string): number | null {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+async function fetchFromBinance(): Promise<MarketSpotSnapshot> {
+  const symbols = BINANCE_SYMBOLS.map((s) => `"${s.binance}"`).join(',')
   const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=[${encodeURIComponent(symbols)}]`
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 8000)
+  const response = await fetchMarketJson(url, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+    timeoutMs: 8_000,
+  })
+  if (!Array.isArray(response.value)) throw new Error('Binance returned a malformed body')
 
-  try {
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    if (!res.ok) {
-      throw new Error(`Binance ticker API failed: ${res.status}`)
-    }
-
-    interface BinanceTicker {
-      symbol: string
-      lastPrice: string
-      priceChangePercent: string
-      highPrice: string
-      lowPrice: string
-      volume: string
-      quoteVolume: string
-    }
-
-    const tickers = await res.json() as BinanceTicker[]
-
-    const mapped: (SpotCoin | null)[] = tickers.map((t, idx) => {
-      const meta = BINANCE_SYMBOLS.find(s => s.binance === t.symbol)
-      if (!meta) return null
-      const price = parseFloat(t.lastPrice)
-      const change24h = parseFloat(t.priceChangePercent)
-      const coin: SpotCoin = {
-        id: meta.id,
-        symbol: meta.symbol,
-        name: meta.name,
-        image: null, // Binance doesn't provide images
-        price: Number.isFinite(price) ? price : null,
-        change1h: null,
-        change24h: Number.isFinite(change24h) ? change24h : null,
-        change7d: null,
-        high24h: parseFloat(t.highPrice) || null,
-        low24h: parseFloat(t.lowPrice) || null,
-        volume24h: parseFloat(t.quoteVolume) || null,
-        marketCap: null,
-        rank: idx + 1,
-      }
-      return coin
-    })
-    return mapped.filter((c): c is SpotCoin => c !== null)
-  } catch (e) {
-    clearTimeout(timeoutId)
-    throw e
+  interface BinanceTicker {
+    symbol?: unknown
+    lastPrice?: unknown
+    priceChangePercent?: unknown
+    highPrice?: unknown
+    lowPrice?: unknown
+    quoteVolume?: unknown
   }
+
+  const coins: MarketSpotCoin[] = []
+  for (const candidate of response.value as BinanceTicker[]) {
+    if (
+      typeof candidate.symbol !== 'string' ||
+      typeof candidate.lastPrice !== 'string' ||
+      typeof candidate.priceChangePercent !== 'string' ||
+      typeof candidate.highPrice !== 'string' ||
+      typeof candidate.lowPrice !== 'string' ||
+      typeof candidate.quoteVolume !== 'string'
+    ) {
+      continue
+    }
+    const meta = BINANCE_SYMBOLS.find((item) => item.binance === candidate.symbol)
+    const price = positiveOrNull(candidate.lastPrice)
+    const change24h = Number(candidate.priceChangePercent)
+    if (!meta || price === null || !Number.isFinite(change24h)) continue
+    coins.push({
+      id: meta.id,
+      symbol: meta.symbol,
+      name: meta.name,
+      image: null,
+      price,
+      change1h: null,
+      change24h,
+      change7d: null,
+      high24h: positiveOrNull(candidate.highPrice),
+      low24h: positiveOrNull(candidate.lowPrice),
+      volume24h: nonnegativeOrNull(candidate.quoteVolume),
+      marketCap: null,
+      rank: BINANCE_SYMBOLS.findIndex((item) => item.binance === candidate.symbol) + 1,
+    })
+  }
+  if (coins.length === 0) throw new Error('Binance returned no usable spot rows')
+  return createMarketSpotSnapshot({
+    coins,
+    source: 'binance',
+    providerLimit: BINANCE_SYMBOLS.length,
+    collectedAt: new Date().toISOString(),
+  })
 }
 
 export async function GET(_req: NextRequest) {
   try {
     const rl = await checkRateLimit(_req, RateLimitPresets.read)
     if (rl) return rl
-    const data = await tieredGetOrSet(
-      'api:market:spot:top100',
+    const cachedSnapshot = await tieredGetOrSet<MarketSpotSnapshot>(
+      'api:market:spot:top100:v2',
       async () => {
         // Primary: CoinGecko
         try {
@@ -182,20 +161,25 @@ export async function GET(_req: NextRequest) {
       ['market', 'spot']
     )
 
-    return NextResponse.json(data, {
+    const snapshot = createMarketSpotSnapshot(cachedSnapshot)
+    return NextResponse.json(snapshot.coins, {
       headers: {
         'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+        ...marketSpotReceiptHeaders(snapshot),
       },
     })
   } catch (e: unknown) {
-    logger.error('All market spot sources failed', { error: e instanceof Error ? e.message : String(e) })
-    // Return empty array (not 500) so the ticker shows "–" instead of crashing
-    return NextResponse.json([], {
-      status: 200,
-      headers: {
-        'Cache-Control': 'no-store',
-        'X-Market-Error': e instanceof Error ? e.message : 'unknown',
-      },
+    logger.error('All market spot sources failed', {
+      error: e instanceof Error ? e.message : String(e),
     })
+    return NextResponse.json(
+      { error: 'Market spot data unavailable' },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
+    )
   }
 }

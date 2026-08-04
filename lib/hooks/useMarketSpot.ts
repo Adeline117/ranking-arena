@@ -11,49 +11,34 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { fetcher } from './fetchers'
 import { STALE_REALTIME, REFETCH_REALTIME } from './cache-presets'
+import {
+  fetchMarketSpot,
+  type CompleteMarketSpotCoin,
+  type MarketSpotSnapshot,
+} from '@/lib/market/market-spot-client-contract'
 
-export interface SpotCoin {
-  id: string
-  symbol: string
-  name: string
-  image: string
-  price: number
-  change1h?: number
-  change24h: number
-  change7d?: number
-  high24h: number
-  low24h: number
-  volume24h: number
-  marketCap: number
-  rank: number
-}
+export type SpotCoin = CompleteMarketSpotCoin
 
 /**
- * @param initialData SSR-fetched spot coins (from page.tsx getSpotMarketData).
+ * @param initialSnapshot SSR-fetched spot coins and their provider receipt.
  *   When provided, it seeds React Query so the hook does NOT immediately refetch
  *   the same ~33KB/100-coin dataset on mount — the SSR already delivered it.
- * @param initialDataUpdatedAt Epoch milliseconds captured with the SSR payload.
- *   This must not be Date.now() at render time: the server and browser render at
- *   different moments, and cached SSR data may already be older than staleTime.
  */
-export function useMarketSpotData(initialData?: SpotCoin[], initialDataUpdatedAt?: number) {
-  const hasSeed = !!initialData && initialData.length > 0
-  return useQuery<SpotCoin[]>({
+export function useMarketSpotData(initialSnapshot?: MarketSpotSnapshot) {
+  const hasSeed = !!initialSnapshot?.coins.length
+  return useQuery<MarketSpotSnapshot>({
     queryKey: ['market-spot'],
     placeholderData: (prev) => prev,
-    queryFn: () => fetcher<SpotCoin[]>('/api/market/spot'),
+    queryFn: ({ signal }) => fetchMarketSpot(signal),
     refetchInterval: REFETCH_REALTIME,
     refetchOnWindowFocus: false,
     retry: false,
     staleTime: STALE_REALTIME,
     ...(hasSeed
       ? {
-          initialData,
-          // Unknown collection time is deliberately stale rather than being
-          // relabeled as freshly fetched during each render.
-          initialDataUpdatedAt: initialDataUpdatedAt ?? 0,
+          initialData: initialSnapshot,
+          initialDataUpdatedAt: Date.parse(initialSnapshot.collectedAt),
         }
       : {}),
   })

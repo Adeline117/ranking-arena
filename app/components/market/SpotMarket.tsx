@@ -182,7 +182,7 @@ export default function SpotMarket({
   // Use shared spotData from parent when available
   useEffect(() => {
     if (spotData === undefined) return
-    setData(spotData as unknown as SpotCoin[])
+    setData(spotData as SpotCoin[])
     setLoading(false)
   }, [spotData])
 
@@ -550,6 +550,8 @@ export default function SpotMarket({
         defaultSortDir="asc"
         rowKey={(r) => r.id}
         onRowClick={onTokenClick}
+        rowActionColumnKey="symbol"
+        rowActionLabel={(row) => `${row.symbol}: ${t('viewDetails')}`}
       />
     </div>
   )

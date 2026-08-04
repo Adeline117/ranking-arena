@@ -148,8 +148,8 @@ function getTileTextTheme(
     name: tokens.colors.white,
     pct: tokens.colors.white,
     cat: tokens.colors.white,
-    nameShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
-    softShadow: '0 1px 3px rgba(0,0,0,0.6)',
+    nameShadow: '0 1px 4px var(--color-backdrop-heavy), 0 0 1px var(--color-backdrop-heavy)',
+    softShadow: '0 1px 3px var(--color-backdrop-heavy)',
   }
 }
 
@@ -175,12 +175,13 @@ interface TreemapNode extends TreemapDatum {
 // the user-visible label goes through t('sectorTreemapOthers').
 const OTHERS_NAME = '__others__'
 
-// WCAG 2.5.8 minimum pointer target is 24×24 CSS px. Squarified tiles stay
-// near-square (worst aspect ratio in practice ≲ 2.5), so a tile needs roughly
-// 2.5× the minimum square's AREA to keep its short side above 24px. Coins
-// whose area ∝ market cap would fall below this are folded into one "Others"
-// aggregate tile instead of rendering as untappable slivers.
-const MIN_TILE_SIDE = 24
+// Ranking Arena uses a 44×44 CSS px touch target even though WCAG 2.5.8's
+// minimum is smaller. Squarified tiles stay near-square (worst aspect ratio in
+// practice ≲ 2.5), so a tile needs roughly 2.5× the target square's area to
+// keep its short side above 44px. Tiny coins are folded into one "Others" tile
+// where possible; any remaining undersized visual tile gets a separate 44px
+// native-button action below the chart.
+const MIN_TILE_SIDE = 44
 const MIN_TILE_AREA = MIN_TILE_SIDE * MIN_TILE_SIDE * 2.5
 
 // True squarified treemap (Bruls, Huizing & van Wijk 2000): pack items into
@@ -284,9 +285,9 @@ export default function SectorTreemap({
       name: string
       category: string
       marketCap: number
-      change1h: number
+      change1h: number | null
       change24h: number
-      change7d: number
+      change7d: number | null
     }[]
   >([])
   const [loading, setLoading] = useState(spotData === undefined)
@@ -326,9 +327,9 @@ export default function SectorTreemap({
         name: c.symbol,
         category: CATEGORY_MAP[c.symbol] || 'Other',
         marketCap: c.marketCap,
-        change1h: (c as unknown as { change1h?: number }).change1h ?? 0,
-        change24h: c.change24h ?? 0,
-        change7d: (c as unknown as { change7d?: number }).change7d ?? 0,
+        change1h: c.change1h,
+        change24h: c.change24h,
+        change7d: c.change7d,
       }))
     setCoins(mapped)
     setLoading(false)
@@ -349,14 +350,16 @@ export default function SectorTreemap({
     return () => observer.disconnect()
   }, [])
 
-  const coinsWithPct: TreemapDatum[] = coins.map((c) => ({
-    name: c.name,
-    category: c.category,
-    marketCap: c.marketCap,
-    changePct: timeframe === '1h' ? c.change1h : timeframe === '7d' ? c.change7d : c.change24h,
-  }))
-  // Long-tail aggregation (WCAG 2.5.8): coins whose area-∝-market-cap tile
-  // would land under the 24px pointer target get merged into one "Others"
+  const coinsWithPct: TreemapDatum[] = coins.flatMap((c) => {
+    const changePct =
+      timeframe === '1h' ? c.change1h : timeframe === '7d' ? c.change7d : c.change24h
+    return changePct === null
+      ? []
+      : [{ name: c.name, category: c.category, marketCap: c.marketCap, changePct }]
+  })
+  const unavailableChangeCount = coins.length - coinsWithPct.length
+  // Long-tail aggregation: coins whose area-∝-market-cap tile would land
+  // under the product's 44px pointer target get merged into one "Others"
   // tile. Its click reuses the existing onSectorClick path with the 'Other'
   // category; its change % is the market-cap-weighted average of members.
   const totalCap = coinsWithPct.reduce((s, c) => s + c.marketCap, 0)
@@ -381,6 +384,9 @@ export default function SectorTreemap({
     ]
   }
   const nodes = squarify(layoutData, 0, 0, size.width, size.height)
+  const compactActionNodes = onSectorClick
+    ? nodes.filter((node) => node.width < MIN_TILE_SIDE || node.height < MIN_TILE_SIDE)
+    : []
   const timeframes: { key: TimeFrame; label: string }[] = [
     { key: '1h', label: t('sectorTreemap1h') },
     { key: '24h', label: t('sectorTreemap24h') },
@@ -397,7 +403,13 @@ export default function SectorTreemap({
           marginBottom: 12,
         }}
       >
-        <span style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.text.primary }}>
+        <span
+          style={{
+            fontSize: tokens.typography.fontSize.md,
+            fontWeight: tokens.typography.fontWeight.bold,
+            color: tokens.colors.text.primary,
+          }}
+        >
           {t('sectorTreemapTitle')}
         </span>
         <div
@@ -412,11 +424,18 @@ export default function SectorTreemap({
           {timeframes.map((tf) => (
             <button
               key={tf.key}
+              type="button"
+              aria-pressed={timeframe === tf.key}
               onClick={() => setTimeframe(tf.key)}
               style={{
                 padding: '5px 14px',
-                fontSize: 12,
-                fontWeight: timeframe === tf.key ? 700 : 500,
+                minWidth: 44,
+                minHeight: 44,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight:
+                  timeframe === tf.key
+                    ? tokens.typography.fontWeight.bold
+                    : tokens.typography.fontWeight.medium,
                 borderRadius: tokens.radius.sm,
                 border: 'none',
                 cursor: 'pointer',
@@ -450,7 +469,7 @@ export default function SectorTreemap({
               alignItems: 'center',
               justifyContent: 'center',
               color: tokens.colors.text.tertiary,
-              fontSize: 14,
+              fontSize: tokens.typography.fontSize.base,
             }}
           >
             {t('sectorTreemapLoading')}
@@ -464,15 +483,17 @@ export default function SectorTreemap({
               alignItems: 'center',
               justifyContent: 'center',
               color: tokens.colors.text.tertiary,
-              fontSize: 14,
+              fontSize: tokens.typography.fontSize.base,
             }}
           >
-            {t('noDataGeneric')}
+            {coins.length > 0 ? t('dataUnavailable') : t('noDataGeneric')}
           </div>
         ) : (
           nodes.map((node) => {
             const isHovered = hoveredNode === node.name
             const displayName = node.isOthers ? t('sectorTreemapOthers') : node.name
+            const isActionableTile =
+              Boolean(onSectorClick) && node.width >= MIN_TILE_SIDE && node.height >= MIN_TILE_SIDE
             const showName = node.width > 36 && node.height > 28
             const showPct = node.width > 44 && node.height > 44
             const showCat = node.width > 70 && node.height > 60
@@ -481,8 +502,8 @@ export default function SectorTreemap({
             return (
               <div
                 key={node.name}
-                role="button"
-                tabIndex={0}
+                role={isActionableTile ? 'button' : 'img'}
+                tabIndex={isActionableTile ? 0 : undefined}
                 // Stable locator anchor for tests/scanners. The accessible NAME
                 // stays stable too (name + category only) — live spot numbers
                 // tick every 30s (useMarketSpot REFETCH_REALTIME), and putting
@@ -492,24 +513,32 @@ export default function SectorTreemap({
                 data-testid={`treemap-tile-${node.name}`}
                 aria-label={`${displayName} (${node.category})`}
                 aria-describedby={`treemap-desc-${node.name}`}
-                onClick={() => onSectorClick?.(node.category)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    onSectorClick?.(node.category)
-                  }
-                }}
+                onClick={isActionableTile ? () => onSectorClick?.(node.category) : undefined}
+                onKeyDown={
+                  isActionableTile
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onSectorClick?.(node.category)
+                        }
+                      }
+                    : undefined
+                }
                 onMouseEnter={() => setHoveredNode(node.name)}
                 onMouseMove={(e) => setTooltipPos({ x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setHoveredNode(null)}
-                onFocus={(e) => {
-                  // Keyboard focus has no pointer coords — anchor the tooltip to
-                  // the focused tile's rect so it renders in place (not at 0,0).
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  setTooltipPos({ x: rect.left, y: rect.top + 40 })
-                  setHoveredNode(node.name)
-                }}
-                onBlur={() => setHoveredNode(null)}
+                onFocus={
+                  isActionableTile
+                    ? (e) => {
+                        // Keyboard focus has no pointer coords — anchor the tooltip
+                        // to the tile instead of rendering it at the viewport origin.
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setTooltipPos({ x: rect.left, y: rect.top + 40 })
+                        setHoveredNode(node.name)
+                      }
+                    : undefined
+                }
+                onBlur={isActionableTile ? () => setHoveredNode(null) : undefined}
                 style={{
                   position: 'absolute',
                   left: node.x,
@@ -518,7 +547,7 @@ export default function SectorTreemap({
                   height: node.height,
                   background: getChangeColor(node.changePct, isLight),
                   border: '1px solid var(--color-overlay-light)',
-                  cursor: 'pointer',
+                  cursor: isActionableTile ? 'pointer' : 'default',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -541,7 +570,7 @@ export default function SectorTreemap({
                   <span
                     style={{
                       fontSize,
-                      fontWeight: 800,
+                      fontWeight: tokens.typography.fontWeight.extrabold,
                       color: textTheme.name,
                       textShadow: textTheme.nameShadow,
                       lineHeight: 1.1,
@@ -559,7 +588,7 @@ export default function SectorTreemap({
                     style={
                       {
                         fontSize: Math.max(9, fontSize * 0.7),
-                        fontWeight: 700,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         color: textTheme.pct,
                         textShadow: textTheme.softShadow,
                         lineHeight: 1.1,
@@ -575,8 +604,8 @@ export default function SectorTreemap({
                 {showCat && (
                   <span
                     style={{
-                      fontSize: 10,
-                      fontWeight: 500,
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.medium,
                       color: textTheme.cat,
                       textShadow: textTheme.softShadow,
                       marginTop: 2,
@@ -594,6 +623,79 @@ export default function SectorTreemap({
           })
         )}
       </div>
+      {!loading && nodes.length > 0 && unavailableChangeCount > 0 && (
+        <div
+          role="status"
+          style={{
+            marginTop: 6,
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.xs,
+          }}
+        >
+          {timeframe.toUpperCase()} · {t('notAvailable')} {unavailableChangeCount}/{coins.length}
+        </div>
+      )}
+      {compactActionNodes.length > 0 && (
+        <div
+          data-testid="treemap-compact-actions"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginTop: 8,
+          }}
+        >
+          {compactActionNodes.map((node) => {
+            const displayName = node.isOthers ? t('sectorTreemapOthers') : node.name
+            const descriptionId = `treemap-compact-desc-${node.name}`
+            return (
+              <button
+                key={node.name}
+                type="button"
+                data-testid={`treemap-compact-action-${node.name}`}
+                aria-label={`${displayName} (${node.category})`}
+                aria-describedby={descriptionId}
+                onClick={() => onSectorClick?.(node.category)}
+                style={{
+                  minWidth: 44,
+                  minHeight: 44,
+                  padding: '6px 10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.primary,
+                  cursor: 'pointer',
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                }}
+              >
+                <span aria-hidden="true">{displayName}</span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    color:
+                      node.changePct >= 0
+                        ? tokens.colors.accent.success
+                        : tokens.colors.accent.error,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {node.changePct >= 0 ? '+' : ''}
+                  {node.changePct.toFixed(1)}%
+                </span>
+                <span id={descriptionId} className="sr-only">
+                  {`${node.changePct >= 0 ? '+' : ''}${node.changePct.toFixed(1)}%, ${t('sectorTreemapMCap')} $${(node.marketCap / 1e9).toFixed(1)}B`}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
       {hoveredNode &&
         (() => {
           const node = nodes.find((n) => n.name === hoveredNode)
@@ -608,7 +710,7 @@ export default function SectorTreemap({
                 color: 'var(--foreground)',
                 padding: '6px 10px',
                 borderRadius: tokens.radius.sm,
-                fontSize: 12,
+                fontSize: tokens.typography.fontSize.xs,
                 pointerEvents: 'none',
                 zIndex: tokens.zIndex.tooltip,
                 whiteSpace: 'nowrap',
@@ -635,7 +737,7 @@ export default function SectorTreemap({
           justifyContent: 'center',
           gap: 16,
           marginTop: 8,
-          fontSize: 11,
+          fontSize: tokens.typography.fontSize.xs,
           color: tokens.colors.text.tertiary,
         }}
       >
@@ -650,7 +752,7 @@ export default function SectorTreemap({
               style={{
                 width: 12,
                 height: 12,
-                borderRadius: 2,
+                borderRadius: tokens.radius.sm,
                 background: getChangeColor(item.val, isLight),
               }}
             />
