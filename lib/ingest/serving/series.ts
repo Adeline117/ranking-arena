@@ -56,13 +56,13 @@ export async function downsampleOldSeries(keepDays = 90): Promise<DownsampleResu
 
 /** Keep monthly partitions 2 months ahead on all partitioned arena tables. */
 export async function ensurePartitions(): Promise<number> {
-  // Verified position history is append-only in verified_position_history_facts.
-  // The legacy position_history parent is frozen by the publication authority
-  // migration, so creating new children beneath it would both waste storage and
-  // reopen a direct-child write path that the parent fence cannot inherit.
+  // Position history remains an expand-first fallback until each identity has
+  // its first verified publication. Keep its legacy hierarchy writable during
+  // that coexistence window; the eventual contract-phase cutover owns removal.
   const tables = [
     'leaderboard_entries',
     'trader_series',
+    'position_history',
     'order_records',
     'transfer_history',
     'copier_records',
@@ -108,11 +108,11 @@ export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number
  * passed snapshot within the last 30 days.
  */
 export async function pruneLongTailHistories(retentionDays = 180): Promise<number> {
-  // Never DELETE from the frozen legacy position_history hierarchy. Verified
-  // facts have their own immutable retention authority; including the legacy
-  // parent here would abort the loop before the remaining mutable surfaces run.
-  const tables = ['order_records', 'transfer_history', 'copier_records']
+  // This only maintains the mutable legacy fallback. Verified facts and their
+  // publication/audit evidence have separate immutable retention authority.
+  const tables = ['position_history', 'order_records', 'transfer_history', 'copier_records']
   const tsCol: Record<string, string> = {
+    position_history: 'closed_at',
     order_records: 'ts',
     transfer_history: 'ts',
     copier_records: 'ts',
