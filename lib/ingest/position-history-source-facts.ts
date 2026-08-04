@@ -141,6 +141,7 @@ export interface ReviewedPositionHistorySourceFactContract {
 interface ReviewedSourceFactRegistryEntry {
   readonly sourceFactContract: ReviewedPositionHistorySourceFactContract
   readonly terminalVerifier: SelectedHistoryTerminalVerifier
+  readonly activeForBuild: boolean
 }
 
 /**
@@ -151,6 +152,7 @@ const reviewedSourceFactRegistry: readonly ReviewedSourceFactRegistryEntry[] = O
   Object.freeze({
     sourceFactContract: binancePositionHistorySourceFactContract,
     terminalVerifier: binancePositionHistoryTerminalVerifier,
+    activeForBuild: true,
   }),
 ])
 
@@ -658,12 +660,18 @@ function verifiedArtifactView(raw: unknown): ArtifactView | null {
   }
 }
 
-function selectRegistryEntry(artifact: ArtifactView): ReviewedSourceFactRegistryEntry | null {
+function selectRegistryEntry(
+  artifact: ArtifactView,
+  sourceFactContract: string | null
+): ReviewedSourceFactRegistryEntry | null {
   const matches = reviewedSourceFactRegistry.filter(
     (entry) =>
       entry.sourceFactContract.sourceSlug === artifact.sourceSlug &&
       entry.sourceFactContract.terminalVerifierContract === artifact.terminalVerifierContract &&
-      entry.terminalVerifier.contract === artifact.terminalVerifierContract
+      entry.terminalVerifier.contract === artifact.terminalVerifierContract &&
+      (sourceFactContract === null
+        ? entry.activeForBuild
+        : entry.sourceFactContract.contract === sourceFactContract)
   )
   return matches.length === 1 ? matches[0] : null
 }
@@ -723,19 +731,10 @@ function revalidateTerminalEvidence(
   }
 }
 
-/**
- * Enumerate the complete candidate denominator before any parser runs.
- *
- * The candidate contract and terminal verifier are selected together from the
- * closed reviewed registry. Runtime input can provide neither one.
- */
-export function buildPositionHistorySourceFactEvidence(input: {
-  artifact: unknown
-}): PositionHistorySourceFactEvidence {
-  const artifact = verifiedArtifactView(input.artifact)
-  if (!artifact) return unavailable('verified_position_history_artifact_required')
-  const registryEntry = selectRegistryEntry(artifact)
-  if (!registryEntry) return unavailable('source_fact_contract_unavailable')
+function buildPositionHistorySourceFactEvidenceWithRegistryEntry(
+  artifact: ArtifactView,
+  registryEntry: ReviewedSourceFactRegistryEntry
+): PositionHistorySourceFactEvidence {
   const selected = normalizedContract(registryEntry.sourceFactContract)
   if (!selected) return unavailable('registered_source_fact_contract_invalid')
   if (!revalidateTerminalEvidence(artifact, registryEntry.terminalVerifier)) {
@@ -902,6 +901,21 @@ export function buildPositionHistorySourceFactEvidence(input: {
   })
 }
 
+/**
+ * Enumerate the complete candidate denominator before any parser runs.
+ * New evidence always uses the single active contract selected from the
+ * closed registry; runtime input can provide neither contract nor verifier.
+ */
+export function buildPositionHistorySourceFactEvidence(input: {
+  artifact: unknown
+}): PositionHistorySourceFactEvidence {
+  const artifact = verifiedArtifactView(input.artifact)
+  if (!artifact) return unavailable('verified_position_history_artifact_required')
+  const registryEntry = selectRegistryEntry(artifact, null)
+  if (!registryEntry) return unavailable('source_fact_contract_unavailable')
+  return buildPositionHistorySourceFactEvidenceWithRegistryEntry(artifact, registryEntry)
+}
+
 export function parsePositionHistorySourceFactLedger(
   raw: unknown
 ): PositionHistorySourceFactLedger {
@@ -937,9 +951,18 @@ export function revalidatePositionHistorySourceFactLedger(input: {
   ) {
     return Object.freeze({ verified: false, reason: 'acquisition_anchor_mismatch' })
   }
-  const rebuilt = buildPositionHistorySourceFactEvidence({
-    artifact: input.artifact,
-  })
+  const artifact = verifiedArtifactView(input.artifact)
+  if (!artifact) {
+    return Object.freeze({
+      verified: false,
+      reason: 'verified_position_history_artifact_required',
+    })
+  }
+  const registryEntry = selectRegistryEntry(artifact, supplied.source_fact_contract)
+  if (!registryEntry) {
+    return Object.freeze({ verified: false, reason: 'source_fact_contract_unavailable' })
+  }
+  const rebuilt = buildPositionHistorySourceFactEvidenceWithRegistryEntry(artifact, registryEntry)
   if (rebuilt.state !== 'verified') {
     return Object.freeze({ verified: false, reason: rebuilt.reason })
   }
