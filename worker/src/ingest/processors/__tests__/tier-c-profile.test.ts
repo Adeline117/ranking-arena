@@ -144,7 +144,21 @@ const ordersJob = {
   },
 } as Job<TierCJobData>
 
-function positionRow(id: number): ParsedHistoryRow {
+const transfersJob = {
+  data: {
+    ...job.data,
+    surface: 'transfers',
+  },
+} as Job<TierCJobData>
+
+const copiersJob = {
+  data: {
+    ...job.data,
+    surface: 'copiers',
+  },
+} as Job<TierCJobData>
+
+function positionRow(id: number): Extract<ParsedHistoryRow, { kind: 'position_history' }> {
   return {
     kind: 'position_history',
     openedAt: `2026-07-${String(id).padStart(2, '0')}T10:00:00.000Z`,
@@ -161,7 +175,7 @@ function positionRow(id: number): ParsedHistoryRow {
   }
 }
 
-const orderRow: ParsedHistoryRow = {
+const orderRow: Extract<ParsedHistoryRow, { kind: 'orders' }> = {
   kind: 'orders',
   ts: '2026-07-15T11:00:00.000Z',
   orderKind: 'close_long',
@@ -171,6 +185,27 @@ const orderRow: ParsedHistoryRow = {
   qty: 1,
   dedupeHash: 'order-1',
   raw: { id: 'order-1' },
+}
+
+const transferRow: Extract<ParsedHistoryRow, { kind: 'transfers' }> = {
+  kind: 'transfers',
+  ts: '2026-07-15T10:00:00.000Z',
+  direction: 'in',
+  asset: 'BTC',
+  amount: 0.5,
+  dedupeHash: 'transfer-1',
+  raw: { id: 'transfer-1' },
+}
+
+const copierRow: Extract<ParsedHistoryRow, { kind: 'copiers' }> = {
+  kind: 'copiers',
+  ts: '2026-07-15T09:00:00.000Z',
+  copierLabel: 'private-user@example.com',
+  copierPnl: 125,
+  copierInvested: 1_000,
+  copyDurationDays: 30,
+  dedupeHash: 'copier-1',
+  raw: { userId: 'private-1' },
 }
 
 function positionHistoryStream(
@@ -233,6 +268,36 @@ function ordersAdapter() {
       orders: true,
       transfers: false,
       copiers: false,
+    },
+    getHistory: mockGetHistory,
+    parseHistory: mockParseHistory,
+  }
+}
+
+function transfersAdapter() {
+  return {
+    capabilities: {
+      profile: true,
+      positions: true,
+      positionHistory: false,
+      orders: false,
+      transfers: true,
+      copiers: false,
+    },
+    getHistory: mockGetHistory,
+    parseHistory: mockParseHistory,
+  }
+}
+
+function copiersAdapter() {
+  return {
+    capabilities: {
+      profile: true,
+      positions: true,
+      positionHistory: false,
+      orders: false,
+      transfers: false,
+      copiers: true,
     },
     getHistory: mockGetHistory,
     parseHistory: mockParseHistory,
@@ -542,10 +607,20 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
     expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
-    expect(renderPayload.rows).toEqual([
-      expect.not.objectContaining({ raw: expect.anything() }),
-      expect.not.objectContaining({ raw: expect.anything() }),
-    ])
+    expect(renderPayload.rows).toEqual(
+      [positionRow(1), positionRow(2)].map((row) => ({
+        symbol: row.symbol,
+        side: row.side,
+        leverage: row.leverage,
+        size: row.size,
+        entry_price: row.entryPrice,
+        exit_price: row.exitPrice,
+        realized_pnl: row.realizedPnl,
+        opened_at: row.openedAt,
+        closed_at: row.closedAt,
+        currency: 'USDC',
+      }))
+    )
     expect(renderPayload.nextCursor).toBeNull()
     expect(renderPayload).toMatchObject({
       sourceAsOf: null,
@@ -669,6 +744,76 @@ describe('Tier-C incomplete profile window gate', () => {
       [orderRow],
       '2026-07-15T11:00:00.000Z'
     )
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload.rows).toEqual([
+      {
+        ts: orderRow.ts,
+        kind: orderRow.orderKind,
+        symbol: orderRow.symbol,
+        side: orderRow.side,
+        price: orderRow.price,
+        qty: orderRow.qty,
+        currency: 'USDC',
+      },
+    ])
+    expect(renderPayload.rows[0]).not.toHaveProperty('orderKind')
+    expect(renderPayload.rows[0]).not.toHaveProperty('dedupeHash')
+    expect(renderPayload.rows[0]).not.toHaveProperty('raw')
+  })
+
+  it('renders transfer parser rows with the warm RPC field contract', async () => {
+    mockGetAdapter.mockReturnValue(transfersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(1))
+    mockParseHistory.mockReturnValue([transferRow])
+
+    await expect(processTierC(transfersJob, 'local')).resolves.toMatchObject({
+      traderId: 42,
+      surface: 'transfers',
+      rows: 1,
+    })
+
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload.rows).toEqual([
+      {
+        ts: transferRow.ts,
+        direction: transferRow.direction,
+        asset: transferRow.asset,
+        amount: transferRow.amount,
+        currency: 'USDC',
+      },
+    ])
+    expect(renderPayload.rows[0]).not.toHaveProperty('dedupeHash')
+    expect(renderPayload.rows[0]).not.toHaveProperty('raw')
+  })
+
+  it('never publishes individual copier rows to Redis or profile cache', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(1))
+    mockParseHistory.mockReturnValue([copierRow])
+
+    await expect(processTierC(copiersJob, 'local')).resolves.toMatchObject({
+      traderId: 42,
+      surface: 'copiers',
+      rows: 0,
+    })
+
+    expect(mockPublishHistoryRows).toHaveBeenCalledWith(
+      src,
+      42,
+      'copiers',
+      [copierRow],
+      '2026-07-15T11:00:00.000Z'
+    )
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload.rows).toEqual([])
+    const cacheCall = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('arena.profile_cache')
+    )
+    const publicPayloads = `${mockRedisSet.mock.calls[0][1]} ${cacheCall?.[1]?.[4]}`
+    expect(publicPayloads).not.toContain('private-user@example.com')
+    expect(publicPayloads).not.toContain('private-1')
+    expect(publicPayloads).not.toContain('copierPnl')
+    expect(publicPayloads).not.toContain('copierInvested')
   })
 
   it('keeps position source freshness distinct from the capture clock', async () => {
@@ -694,6 +839,20 @@ describe('Tier-C incomplete profile window gate', () => {
       observedAt: '2026-07-15T12:00:00.000Z',
       publishedAt: null,
     })
+    expect(renderPayload.rows).toEqual([
+      {
+        symbol: 'BTCUSDT',
+        side: 'long',
+        leverage: 2,
+        size: 1,
+        entry_price: 100,
+        mark_price: 110,
+        unrealized_pnl: 10,
+        currency: 'USDC',
+      },
+    ])
+    expect(renderPayload.rows[0]).not.toHaveProperty('entryPrice')
+    expect(renderPayload.rows[0]).not.toHaveProperty('raw')
     expect(renderPayload).not.toHaveProperty('asOf')
   })
 
