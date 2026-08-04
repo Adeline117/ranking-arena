@@ -16,6 +16,7 @@ import { t as i18nT, getLanguage } from '@/lib/i18n'
 import { formatDateLocalized } from '@/lib/utils/format'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import Metric from '@/app/components/ui/Metric'
+import HistoryCompletenessNotice from './HistoryCompletenessNotice'
 
 interface RecentActivityCardProps {
   source: string
@@ -31,13 +32,17 @@ interface OrderRow {
 }
 
 const ROWS_SHOWN = 5
+const UNBOUND_HISTORY = {
+  state: 'unknown' as const,
+  reason: 'history_evidence_not_bound' as const,
+}
 
 export const RecentActivityCard = memo(function RecentActivityCard({
   source,
   exchangeTraderId,
   enabled,
 }: RecentActivityCardProps) {
-  const { rows } = useTraderRecords({
+  const { rows, completeness } = useTraderRecords({
     source,
     exchangeTraderId,
     kind: 'orders',
@@ -64,6 +69,7 @@ export const RecentActivityCard = memo(function RecentActivityCard({
       >
         {i18nT('recentActivityTitle')}
       </Text>
+      <HistoryCompletenessNotice completeness={completeness ?? UNBOUND_HISTORY} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
         {recent.map((r, i) => {
           const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null

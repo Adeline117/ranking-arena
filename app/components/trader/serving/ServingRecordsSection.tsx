@@ -87,6 +87,11 @@ const AUTO_SELECT_ORDER: RecordKind[] = [
   'copiers',
 ]
 
+const UNBOUND_HISTORY = {
+  state: 'unknown' as const,
+  reason: 'history_evidence_not_bound' as const,
+}
+
 function ModuleSkeleton({ height }: { height: number }) {
   return (
     <div
@@ -124,9 +129,9 @@ function RecordKindPanel({
   }
   return (
     <Box>
-      {kind === 'position_history' && (
-        <HistoryCompletenessNotice completeness={records.completeness} />
-      )}
+      <HistoryCompletenessNotice
+        completeness={kind === 'positions' ? null : (records.completeness ?? UNBOUND_HISTORY)}
+      />
       <RecordsTable
         columns={RECORD_COLUMNS[kind]}
         rows={records.rows}
@@ -236,11 +241,11 @@ export default function ServingRecordsSection({
               background: 'transparent',
               borderBottom:
                 effectiveKind === kind
-                  ? '2px solid var(--color-accent-primary, #6366f1)'
+                  ? `2px solid ${tokens.colors.accent.primary}`
                   : '2px solid transparent',
               color:
                 effectiveKind === kind ? tokens.colors.text.primary : tokens.colors.text.secondary,
-              fontSize: 13,
+              fontSize: tokens.typography.fontSize.sm,
               fontWeight: effectiveKind === kind ? 600 : 400,
               cursor: 'pointer',
               whiteSpace: 'nowrap',

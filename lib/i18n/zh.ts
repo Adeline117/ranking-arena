@@ -6089,7 +6089,7 @@ const zh = {
   colUnrealizedPnl: '未实现盈亏',
   colRealizedPnl: '已实现盈亏',
   recentActivityTitle: '最近成交',
-  recentActivityViewAll: '完整记录见 统计 → 交易记录',
+  recentActivityViewAll: '更多记录见 统计 → 交易记录',
   colNotional: '名义价值',
   colMargin: '保证金',
   colMarginMode: '模式',
