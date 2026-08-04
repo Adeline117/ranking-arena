@@ -280,6 +280,8 @@ describe('GET /api/traders/[handle]', () => {
     const pageData = {
       performance: { roi: 42.5 },
       profile: { handle: 'CachedTrader' },
+      positionHistory: [{ symbol: 'BTCUSDT', pnlUsd: 42 }],
+      historyCompleteness: { state: 'complete' },
     }
     mockTieredGetOrSet.mockResolvedValueOnce({
       pageData,
@@ -290,8 +292,15 @@ describe('GET /api/traders/[handle]', () => {
     const params = Promise.resolve({ handle: 'CachedTrader' })
 
     const res = await GET(request as any, { params })
+    const body = await res.json()
 
     expect(res.status).toBe(200)
+    expect(body.data.positionHistory).toEqual([])
+    expect(body.data.historyCompleteness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
+    expect(pageData.positionHistory).toHaveLength(1)
     expect(res.headers.get('Cache-Control')).toBe(
       'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
     )
