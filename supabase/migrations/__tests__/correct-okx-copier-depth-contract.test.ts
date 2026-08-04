@@ -76,7 +76,7 @@ describe('OKX copier depth contract correction', () => {
     }
   })
 
-  it('runs immediately after 054000 while the manual 055000 cutover stays absent', () => {
+  it('runs after the 054200 hardening while the manual 055000 cutover stays absent', () => {
     const predeployStart = runner.indexOf('PREDEPLOY_MIGRATIONS=(')
     const predeployEnd = runner.indexOf('\n)', predeployStart)
     const predeploy = runner.slice(predeployStart, predeployEnd)
@@ -84,10 +84,11 @@ describe('OKX copier depth contract correction', () => {
     const postdeployEnd = runner.indexOf('\n)', postdeployStart)
     const postdeploy = runner.slice(postdeployStart, postdeployEnd)
     const authority = '20260804054000_copier_snapshot_publication_authority.sql'
+    const provenance = '20260804054200_harden_copier_snapshot_receipt_provenance.sql'
     const correction = '20260804054500_correct_okx_copier_depth_contract.sql'
     const cutover = '20260804055000_copier_snapshot_direct_write_cutover.sql'
 
-    expect(predeploy).toContain(`${authority}\n  ${correction}`)
+    expect(predeploy).toContain(`${authority}\n  ${provenance}\n  ${correction}`)
     expect(predeploy).not.toContain(cutover)
     expect(postdeploy).not.toContain(cutover)
   })

@@ -101,6 +101,7 @@
     "qa:serving-trader-resolver-pg17": "bash supabase/migrations/__tests__/harden-serving-trader-resolver.pg17.sh",
     "qa:bingx-rank-quarantine-pg17": "bash supabase/migrations/__tests__/bingx-rank-authority-quarantine.pg17.sh",
     "qa:copier-snapshot-authority-pg17": "bash supabase/migrations/__tests__/copier-snapshot-publication-authority.pg17.sh",
+    "qa:copier-snapshot-provenance-pg17": "bash supabase/migrations/__tests__/harden-copier-snapshot-receipt-provenance.pg17.sh",
     "qa:okx-copier-depth-contract-pg17": "bash supabase/migrations/__tests__/correct-okx-copier-depth-contract.pg17.sh",
     "qa:copier-snapshot-cutover-pg17": "bash supabase/migrations/__tests__/copier-snapshot-direct-write-cutover.pg17.sh",
     "qa:score-v5-pg17": "bash supabase/migrations/__tests__/pure-arena-score-v5-zero-metrics.pg17.sh",

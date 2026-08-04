@@ -218,6 +218,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:copier-snapshot-authority-pg17
 
+      - name: Prove copier snapshot receipt provenance and privacy
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:copier-snapshot-provenance-pg17
+
       - name: Prove canonical OKX copier depth correction
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

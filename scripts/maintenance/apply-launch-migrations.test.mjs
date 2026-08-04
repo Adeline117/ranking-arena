@@ -158,10 +158,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const bingxRankQuarantineMigration = '20260804052500_quarantine_bingx_rank_authority.sql'
   const copierSubstrateMigration = '20260804053000_copier_snapshot_publication_substrate.sql'
   const copierAuthorityMigration = '20260804054000_copier_snapshot_publication_authority.sql'
+  const copierProvenanceMigration = '20260804054200_harden_copier_snapshot_receipt_provenance.sql'
   const okxCopierDepthMigration = '20260804054500_correct_okx_copier_depth_contract.sql'
   const copierCutoverMigration = '20260804055000_copier_snapshot_direct_write_cutover.sql'
 
-  assert.equal(predeploy.length, 135)
+  assert.equal(predeploy.length, 136)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -268,6 +269,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           bingxRankQuarantineMigration,
           copierSubstrateMigration,
           copierAuthorityMigration,
+          copierProvenanceMigration,
           okxCopierDepthMigration,
         ].includes(migration)
     ),
@@ -287,7 +289,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 150)
+  assert.equal(new Set(all).size, 151)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -365,6 +367,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     copierContainmentMigration,
     copierSubstrateMigration,
     copierAuthorityMigration,
+    copierProvenanceMigration,
     okxCopierDepthMigration,
   ]) {
     assert.equal(predeploy.filter((candidate) => candidate === migration).length, 1)
@@ -376,8 +379,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     assert.ok(!superseded.includes(migration))
   }
   assert.equal(
-    predeploy.indexOf(okxCopierDepthMigration),
+    predeploy.indexOf(copierProvenanceMigration),
     predeploy.indexOf(copierAuthorityMigration) + 1
+  )
+  assert.equal(
+    predeploy.indexOf(okxCopierDepthMigration),
+    predeploy.indexOf(copierProvenanceMigration) + 1
   )
   assert.ok(!predeploy.includes(copierCutoverMigration))
   assert.ok(!postdeploy.includes(copierCutoverMigration))
@@ -387,7 +394,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(copierCutoverMigration))
   assert.ok(!superseded.includes(copierCutoverMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-94), [
+  assert.deepEqual(predeploy.slice(-95), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -481,6 +488,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     bingxRankQuarantineMigration,
     copierSubstrateMigration,
     copierAuthorityMigration,
+    copierProvenanceMigration,
     okxCopierDepthMigration,
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
@@ -573,7 +581,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes(verifiedTraderProfileRevisionMigration))
   assert.ok(predeploy.includes(hashtagReadAuthorityMigration))
   assert.ok(predeploy.includes(postInteractionReadPrivacyMigration))
-  assert.deepEqual(predeploy.slice(-15), [
+  assert.deepEqual(predeploy.slice(-16), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
@@ -588,6 +596,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     bingxRankQuarantineMigration,
     copierSubstrateMigration,
     copierAuthorityMigration,
+    copierProvenanceMigration,
     okxCopierDepthMigration,
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))

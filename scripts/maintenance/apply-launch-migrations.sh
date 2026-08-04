@@ -163,6 +163,7 @@ PREDEPLOY_MIGRATIONS=(
   20260804052500_quarantine_bingx_rank_authority.sql
   20260804053000_copier_snapshot_publication_substrate.sql
   20260804054000_copier_snapshot_publication_authority.sql
+  20260804054200_harden_copier_snapshot_receipt_provenance.sql
   20260804054500_correct_okx_copier_depth_contract.sql
 )
 
