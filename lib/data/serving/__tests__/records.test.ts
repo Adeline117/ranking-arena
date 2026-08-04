@@ -176,6 +176,85 @@ describe('getRecordsPage', () => {
     }
   )
 
+  it('accepts a complete empty position-history page only with an exact publication identity', async () => {
+    const sourceRunId = 'a'.repeat(64)
+    const page = await getRecordsPage(
+      rpcClient({
+        rows: [],
+        nextCursor: null,
+        sourceAsOf: null,
+        observedAt: '2026-08-03T12:00:00.000Z',
+        publishedAt: '2026-08-03T12:00:01.000Z',
+        publicationId: 42,
+        stateId: 42,
+        sourceRunId,
+        completeness: {
+          blockerReasons: [],
+          contract: 'arena.position-history-completeness@2',
+          evidenceState: 'verified',
+          publicationId: 42,
+          reason: 'verified_terminal_history',
+          scanTerminalState: 'exhausted',
+          state: 'complete',
+        },
+      }),
+      'bitget_futures',
+      'abc',
+      'position_history',
+      null
+    )
+
+    expect(page).toMatchObject({
+      rows: [],
+      nextCursor: null,
+      cacheState: 'warm',
+      completeness: {
+        state: 'complete',
+        reason: 'verified_terminal_history',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
+      },
+    })
+  })
+
+  it.each([
+    ['mismatched state', { stateId: 41 }],
+    ['missing source run', { sourceRunId: null }],
+    ['missing publication clock', { publishedAt: null }],
+  ])('keeps a forged complete verdict unknown when it has %s', async (_label, drift) => {
+    const response = {
+      rows: [],
+      observedAt: '2026-08-03T12:00:00.000Z',
+      publishedAt: '2026-08-03T12:00:01.000Z',
+      publicationId: 42,
+      stateId: 42,
+      sourceRunId: 'a'.repeat(64),
+      completeness: {
+        blockerReasons: [],
+        contract: 'arena.position-history-completeness@2',
+        evidenceState: 'verified',
+        publicationId: 42,
+        reason: 'verified_terminal_history',
+        scanTerminalState: 'exhausted',
+        state: 'complete',
+      },
+      ...drift,
+    }
+
+    const page = await getRecordsPage(
+      rpcClient(response),
+      'bitget_futures',
+      'abc',
+      'position_history',
+      null
+    )
+    expect(page?.completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
+  })
+
   it('does not attach history completeness to current positions', async () => {
     const page = await getRecordsPage(
       rpcClient({ rows: [], nextCursor: null, asOf: '2026-06-10T12:00:00Z' }),

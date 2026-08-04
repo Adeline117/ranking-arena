@@ -46,6 +46,9 @@ const HISTORY_BLOCKER_REASONS: ReadonlySet<HistoryCompletenessBlockerReason> = n
   'caller_limit',
   'upstream_error',
 ])
+const VERIFIED_POSITION_HISTORY_COMPLETENESS_CONTRACT =
+  'arena.position-history-completeness@2' as const
+const SOURCE_RUN_SHA256 = /^[0-9a-f]{64}$/
 
 function asCurrency(v: unknown): ServingCurrency {
   return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : 'USDT'
@@ -73,6 +76,15 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const prototype = Object.getPrototypeOf(value)
   return prototype === Object.prototype || prototype === null
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return (
+    keys.length === sortedExpected.length &&
+    keys.every((key, index) => key === sortedExpected[index])
+  )
 }
 
 function isHistoryRecordKind(kind: Exclude<RecordKind, 'copiers'>): boolean {
@@ -123,6 +135,72 @@ function nonNegativeSafeIntegerOrNull(value: unknown): number | null {
 
 function unknownHistoryCompleteness(): HistoryCompleteness {
   return { state: 'unknown', reason: 'history_evidence_not_bound' }
+}
+
+const VERIFIED_COMPLETENESS_KEYS = [
+  'blockerReasons',
+  'contract',
+  'evidenceState',
+  'publicationId',
+  'reason',
+  'scanTerminalState',
+  'state',
+] as const
+
+/**
+ * A warm page becomes complete only when the read RPC binds its verdict to one
+ * immutable verified publication. Rows/counts alone are not evidence: an old
+ * or drifted RPC response remains explicitly unknown.
+ */
+function verifiedPositionHistoryCompleteness(
+  payload: Record<string, unknown>
+): HistoryCompleteness | null {
+  const completeness = payload.completeness
+  if (!isPlainRecord(completeness) || !hasExactKeys(completeness, VERIFIED_COMPLETENESS_KEYS)) {
+    return null
+  }
+
+  const publicationId = nonNegativeSafeIntegerOrNull(payload.publicationId)
+  const stateId = nonNegativeSafeIntegerOrNull(payload.stateId)
+  const verdictPublicationId = nonNegativeSafeIntegerOrNull(completeness.publicationId)
+  if (
+    publicationId === null ||
+    publicationId === 0 ||
+    stateId !== publicationId ||
+    verdictPublicationId !== publicationId ||
+    completeness.contract !== VERIFIED_POSITION_HISTORY_COMPLETENESS_CONTRACT ||
+    completeness.state !== 'complete' ||
+    completeness.reason !== 'verified_terminal_history' ||
+    completeness.evidenceState !== 'verified' ||
+    (completeness.scanTerminalState !== 'exhausted' &&
+      completeness.scanTerminalState !== 'cursor_overlap') ||
+    !Array.isArray(completeness.blockerReasons) ||
+    completeness.blockerReasons.length !== 0 ||
+    typeof payload.sourceRunId !== 'string' ||
+    !SOURCE_RUN_SHA256.test(payload.sourceRunId) ||
+    payload.sourceRunId === '0'.repeat(64) ||
+    validTimestampOrNull(payload.observedAt) === null ||
+    validTimestampOrNull(payload.publishedAt) === null
+  ) {
+    return null
+  }
+
+  return {
+    state: 'complete',
+    reason: 'verified_terminal_history',
+    evidenceState: 'verified',
+    scanTerminalState: completeness.scanTerminalState,
+    blockerReasons: [],
+  }
+}
+
+function opaqueCursorOrNull(value: unknown): string | null {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 200 &&
+    value === value.trim()
+    ? value
+    : null
 }
 
 /**
@@ -202,12 +280,18 @@ export async function getRecordsPage(
   logRpcError('arena_records_page', error)
   if (error || !isPlainRecord(data)) return null
   const d = data
+  const historyCompleteness =
+    kind === 'position_history'
+      ? (verifiedPositionHistoryCompleteness(d) ?? unknownHistoryCompleteness())
+      : isHistoryRecordKind(kind)
+        ? unknownHistoryCompleteness()
+        : undefined
   return {
     rows: sanitizeRecordRows(d.rows),
-    nextCursor: typeof d.nextCursor === 'string' ? d.nextCursor : null,
+    nextCursor: opaqueCursorOrNull(d.nextCursor),
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
-    ...(isHistoryRecordKind(kind) ? { completeness: unknownHistoryCompleteness() } : {}),
+    ...(historyCompleteness ? { completeness: historyCompleteness } : {}),
   }
 }
 

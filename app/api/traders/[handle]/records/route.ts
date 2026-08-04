@@ -84,9 +84,9 @@ export async function GET(
         kind,
         cursor
       )
-      // Cursor pages and non-empty first pages are warm truth; an empty
-      // cursorless page may just be a cold cache → try the Tier-C bridge.
-      if (page && (page.rows.length > 0 || cursor)) {
+      // Cursor pages, non-empty first pages, and an explicitly verified empty
+      // history are warm truth. Only an unbound empty first page may be cold.
+      if (page && (page.rows.length > 0 || cursor || page.completeness?.state === 'complete')) {
         return withCache(apiSuccess<RecordsPage>(page), {
           maxAge: 30,
           staleWhileRevalidate: 120,

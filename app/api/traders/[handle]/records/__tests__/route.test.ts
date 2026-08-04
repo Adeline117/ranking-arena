@@ -160,4 +160,32 @@ describe('records route history trust boundary', () => {
     expect(body.data.cacheState).toBe('pending')
     expect(body.data.completeness).toBeUndefined()
   })
+
+  it('returns a verified complete empty history page without a Tier-C request', async () => {
+    const completeEmpty: RecordsPage = {
+      rows: [],
+      nextCursor: null,
+      provenance: {
+        source: 'bitget_futures',
+        sourceAsOf: null,
+        observedAt: '2026-08-03T12:00:00.000Z',
+        publishedAt: '2026-08-03T12:00:01.000Z',
+      },
+      cacheState: 'warm',
+      completeness: {
+        state: 'complete',
+        reason: 'verified_terminal_history',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
+      },
+    }
+    mockGetRecordsPage.mockResolvedValue(completeEmpty)
+
+    const response = await callRoute('position_history')
+    const body = await response.json()
+
+    expect(body.data).toEqual(completeEmpty)
+    expect(mockRequestTierC).not.toHaveBeenCalled()
+  })
 })
