@@ -3,6 +3,13 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import OpenInterestClient from './OpenInterestClient'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
+import { createBudget, withTimeout } from '@/lib/utils/timeout'
+import {
+  dedupeLatestOpenInterest,
+  hasUniqueOpenInterestIdentities,
+  readOpenInterestRows,
+  type OpenInterestRow,
+} from './open-interest-data'
 
 const logger = createLogger('open-interest')
 
@@ -38,22 +45,50 @@ export const metadata: Metadata = {
 // revalidate actually takes effect and the DB hit leaves the hot path.
 export const revalidate = 900 // 15 minutes
 
-interface OpenInterestRow {
-  platform: string
-  symbol: string
-  open_interest_usd: number
-  open_interest_contracts: number | null
-  timestamp: string
+interface OpenInterestLoadResult {
+  rows: OpenInterestRow[]
+  loadError: boolean
+  degraded: boolean
 }
 
-async function getOpenInterest(): Promise<{ rows: OpenInterestRow[]; loadError: boolean }> {
+export const OPEN_INTEREST_TOTAL_TIMEOUT_MS = 4_000
+const OPEN_INTEREST_RPC_TIMEOUT_MS = 1_750
+
+type AbortableQuery<T> = PromiseLike<T> & {
+  abortSignal?: (signal: AbortSignal) => PromiseLike<T>
+}
+
+async function settleOpenInterestQuery<T>(
+  query: AbortableQuery<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  const controller = new AbortController()
+  const pending =
+    typeof query.abortSignal === 'function'
+      ? Promise.resolve(query.abortSignal(controller.signal))
+      : Promise.resolve(query)
+  try {
+    return await withTimeout(pending, timeoutMs, label)
+  } finally {
+    controller.abort()
+  }
+}
+
+async function getOpenInterest(): Promise<OpenInterestLoadResult> {
   const supabase = getSupabaseAdmin()
+  const budget = createBudget(OPEN_INTEREST_TOTAL_TIMEOUT_MS)
 
   // Use DB-side deduplication via RPC (DISTINCT ON is far more efficient)
   try {
-    const { data, error } = await supabase.rpc('get_latest_open_interest')
-    if (!error && Array.isArray(data)) {
-      return { rows: data as OpenInterestRow[], loadError: false }
+    const { data, error } = await settleOpenInterestQuery(
+      supabase.rpc('get_latest_open_interest'),
+      Math.min(OPEN_INTEREST_RPC_TIMEOUT_MS, budget.remaining()),
+      'latest open interest RPC'
+    )
+    const rows = !error ? readOpenInterestRows(data) : null
+    if (rows && hasUniqueOpenInterestIdentities(rows)) {
+      return { rows, loadError: false, degraded: false }
     }
   } catch {
     // RPC not available, fall back to client-side dedup
@@ -61,35 +96,47 @@ async function getOpenInterest(): Promise<{ rows: OpenInterestRow[]; loadError: 
 
   try {
     // Fallback: fetch and deduplicate in memory
-    const { data, error } = await supabase
+    const fallbackQuery = supabase
       .from('open_interest')
       .select('platform, symbol, open_interest_usd, open_interest_contracts, timestamp')
       .order('timestamp', { ascending: false })
       .limit(500)
+    const { data, error } = await settleOpenInterestQuery(
+      fallbackQuery,
+      budget.remaining(),
+      'open interest fallback'
+    )
 
     if (error) {
       logger.error('[open-interest] fetch error:', error.message)
-      return { rows: [], loadError: true }
+      return { rows: [], loadError: true, degraded: false }
     }
 
-    const seen = new Set<string>()
-    const deduped: OpenInterestRow[] = []
-    for (const row of data || []) {
-      const key = `${row.platform}:${row.symbol}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        deduped.push(row)
-      }
+    const rows = readOpenInterestRows(data)
+    if (!rows) {
+      logger.error('[open-interest] fetch error:', 'invalid open interest response')
+      return { rows: [], loadError: true, degraded: false }
     }
-    return { rows: deduped, loadError: false }
+    return {
+      rows: dedupeLatestOpenInterest(rows),
+      loadError: false,
+      degraded: true,
+    }
   } catch (error) {
     logger.error('[open-interest] unexpected fetch error:', error)
-    return { rows: [], loadError: true }
+    return { rows: [], loadError: true, degraded: false }
   }
 }
 
 export default async function OpenInterestPage() {
-  const { rows, loadError } = await getOpenInterest()
+  const { rows, loadError, degraded } = await getOpenInterest()
 
-  return <OpenInterestClient rows={rows} loadError={loadError} />
+  return (
+    <OpenInterestClient
+      rows={rows}
+      loadError={loadError}
+      degraded={degraded}
+      observedAt={new Date().toISOString()}
+    />
+  )
 }

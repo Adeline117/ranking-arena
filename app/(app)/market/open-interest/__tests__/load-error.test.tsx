@@ -69,10 +69,12 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 import OpenInterestPage from '../page'
+import OpenInterestClient from '../OpenInterestClient'
 
 type PageElementProps = {
   rows: unknown[]
   loadError: boolean
+  degraded: boolean
 }
 
 describe('OpenInterestPage load state', () => {
@@ -80,12 +82,16 @@ describe('OpenInterestPage load state', () => {
     jest.clearAllMocks()
   })
 
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   it('passes a retryable error to the client when RPC and fallback both fail', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC unavailable' } })
     mockLimit.mockResolvedValue({ data: null, error: { message: 'DB unavailable' } })
 
     const element = (await OpenInterestPage()) as ReactElement<PageElementProps>
-    expect(element.props).toMatchObject({ rows: [], loadError: true })
+    expect(element.props).toMatchObject({ rows: [], loadError: true, degraded: false })
 
     render(element)
 
@@ -100,12 +106,97 @@ describe('OpenInterestPage load state', () => {
     mockRpc.mockResolvedValue({ data: [], error: null })
 
     const element = (await OpenInterestPage()) as ReactElement<PageElementProps>
-    expect(element.props).toMatchObject({ rows: [], loadError: false })
+    expect(element.props).toMatchObject({ rows: [], loadError: false, degraded: false })
 
     render(element)
 
     expect(screen.getByText('No open interest data')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('physically bounds both database attempts when the query client never settles', async () => {
+    jest.useFakeTimers()
+    mockRpc.mockReturnValue(new Promise(() => undefined))
+    mockLimit.mockReturnValue(new Promise(() => undefined))
+
+    const request = OpenInterestPage()
+    await jest.advanceTimersByTimeAsync(4_000)
+    const element = (await request) as ReactElement<PageElementProps>
+
+    expect(element.props).toMatchObject({ rows: [], loadError: true, degraded: false })
+  })
+
+  it('rejects malformed canonical data and labels the bounded fallback as incomplete', async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        {
+          platform: 'binance',
+          symbol: 'BTCUSDT',
+          open_interest_usd: -1,
+          open_interest_contracts: 2,
+          timestamp: '2026-08-03T20:00:00.000Z',
+        },
+      ],
+      error: null,
+    })
+    mockLimit.mockResolvedValue({
+      data: [
+        {
+          platform: 'binance',
+          symbol: 'BTCUSDT',
+          open_interest_usd: 1_000,
+          open_interest_contracts: 2,
+          timestamp: '2026-08-03T20:00:00.000Z',
+        },
+      ],
+      error: null,
+    })
+
+    const element = (await OpenInterestPage()) as ReactElement<PageElementProps>
+    expect(element.props).toMatchObject({ loadError: false, degraded: true })
+
+    render(element)
+    expect(screen.getByRole('status')).toHaveTextContent('dataLoadIncomplete')
+  })
+
+  it('separates a symbol-filter miss from a genuine empty authority', () => {
+    render(
+      <OpenInterestClient
+        rows={[
+          {
+            platform: 'binance',
+            symbol: 'BTCUSDT',
+            open_interest_usd: 1_000,
+            open_interest_contracts: 2,
+            timestamp: '2026-08-03T20:00:00.000Z',
+          },
+        ]}
+        observedAt="2026-08-03T20:30:00.000Z"
+      />
+    )
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'ETH' } })
+    expect(screen.getByText('noMatchingResults')).toBeInTheDocument()
+    expect(screen.queryByText('noOpenInterestData')).not.toBeInTheDocument()
+  })
+
+  it('marks an entirely old snapshot as incomplete even when its rows are mutually recent', () => {
+    render(
+      <OpenInterestClient
+        rows={[
+          {
+            platform: 'binance',
+            symbol: 'BTCUSDT',
+            open_interest_usd: 1_000,
+            open_interest_contracts: null,
+            timestamp: '2026-08-01T20:00:00.000Z',
+          },
+        ]}
+        observedAt="2026-08-03T20:30:00.000Z"
+      />
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent('dataLoadIncomplete')
   })
 })

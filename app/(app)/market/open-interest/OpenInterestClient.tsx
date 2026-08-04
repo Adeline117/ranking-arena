@@ -53,15 +53,20 @@ function formatShare(share: number): string {
 export default function OpenInterestClient({
   rows,
   loadError = false,
+  degraded = false,
+  observedAt,
 }: {
   rows: OpenInterestRow[]
   loadError?: boolean
+  degraded?: boolean
+  observedAt?: string
 }) {
   const { t } = useLanguage()
   const router = useRouter()
   const [sortField, setSortField] = useState<SortField>('open_interest_usd')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
+  const [search, setSearch] = useState('')
 
   // 陈旧数据过滤(显示层):摄取 cron 自 2/14 起只抓 BTC/ETH/SOL 等少数 symbol,
   // 其余行停在数月前。这些陈旧值若并排展示且计入聚合卡/占比条,会严重误导。
@@ -80,6 +85,9 @@ export default function OpenInterestClient({
     })
   }, [rows, freshestTs, STALE_MS])
   const staleCount = rows.length - freshRows.length
+  const observedAtMs = observedAt ? Date.parse(observedAt) : Number.NaN
+  const authorityStale =
+    freshestTs > 0 && Number.isFinite(observedAtMs) && observedAtMs - freshestTs > STALE_MS
 
   const platforms = useMemo(() => {
     const set = new Set(freshRows.map((r) => r.platform))
@@ -87,8 +95,12 @@ export default function OpenInterestClient({
   }, [freshRows])
 
   const sorted = useMemo(() => {
-    const filtered =
-      filterPlatform === 'all' ? freshRows : freshRows.filter((r) => r.platform === filterPlatform)
+    const query = search.trim().toLowerCase()
+    const filtered = freshRows.filter(
+      (row) =>
+        (filterPlatform === 'all' || row.platform === filterPlatform) &&
+        (query === '' || normalizeSymbol(row.symbol).toLowerCase().includes(query))
+    )
     return [...filtered].sort((a, b) => {
       let cmp = 0
       switch (sortField) {
@@ -107,7 +119,7 @@ export default function OpenInterestClient({
       }
       return sortDir === 'desc' ? -cmp : cmp
     })
-  }, [freshRows, sortField, sortDir, filterPlatform])
+  }, [freshRows, sortField, sortDir, filterPlatform, search])
 
   // Aggregate by symbol across exchanges
   const aggregated = useMemo(() => {
@@ -166,6 +178,9 @@ export default function OpenInterestClient({
               textDecoration: 'underline',
               textDecorationThickness: '1px',
               textUnderlineOffset: 3,
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: tokens.touchTarget.min,
             }}
           >
             {t('market')}
@@ -211,6 +226,42 @@ export default function OpenInterestClient({
             </p>
           )}
         </div>
+
+        {!loadError && (degraded || authorityStale) && (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: tokens.spacing[3],
+              padding: tokens.spacing[3],
+              marginBottom: tokens.spacing[4],
+              border: `1px solid ${tokens.colors.accent.warning}`,
+              borderRadius: tokens.radius.md,
+              color: tokens.colors.text.secondary,
+            }}
+          >
+            <span>{t('dataLoadIncomplete')}</span>
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              style={{
+                minWidth: tokens.touchTarget.min,
+                minHeight: tokens.touchTarget.min,
+                padding: `0 ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.md,
+                border: tokens.glass.border.light,
+                background: tokens.glass.bg.secondary,
+                color: tokens.colors.text.primary,
+                cursor: 'pointer',
+                fontWeight: tokens.typography.fontWeight.semibold,
+              }}
+            >
+              {t('retry')}
+            </button>
+          </div>
+        )}
 
         {/* Aggregate summary cards */}
         {!loadError && aggregated.length > 0 && (
@@ -339,6 +390,7 @@ export default function OpenInterestClient({
                   fontSize: tokens.typography.fontSize.sm,
                   fontWeight: tokens.typography.fontWeight.medium,
                   cursor: 'pointer',
+                  minHeight: tokens.touchTarget.min,
                 }}
               >
                 {t('all')}
@@ -367,16 +419,39 @@ export default function OpenInterestClient({
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: tokens.typography.fontWeight.medium,
                     cursor: 'pointer',
+                    minHeight: tokens.touchTarget.min,
                   }}
                 >
                   {PLATFORM_LABELS[p] || p}
                 </button>
               ))}
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t('searchSymbolPlaceholder')}
+                aria-label={t('searchSymbolPlaceholder')}
+                style={{
+                  minWidth: 160,
+                  minHeight: tokens.touchTarget.min,
+                  marginLeft: 'auto',
+                  padding: '6px 12px',
+                  borderRadius: tokens.radius.md,
+                  border: tokens.glass.border.light,
+                  background: tokens.glass.bg.secondary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                }}
+              />
             </div>
 
             {/* Table */}
             {sorted.length === 0 ? (
-              <EmptyState title={t('noOpenInterestData')} description={t('marketDataPending')} />
+              freshRows.length === 0 ? (
+                <EmptyState title={t('noOpenInterestData')} description={t('marketDataPending')} />
+              ) : (
+                <EmptyState title={t('noMatchingResults')} description={t('noResults')} />
+              )
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table
@@ -422,6 +497,7 @@ export default function OpenInterestClient({
                             fontSize: tokens.typography.fontSize.xs,
                             textTransform: 'uppercase',
                             letterSpacing: '0.5px',
+                            height: tokens.touchTarget.min,
                           }}
                         >
                           {label}
