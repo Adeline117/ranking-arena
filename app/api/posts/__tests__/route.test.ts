@@ -264,6 +264,19 @@ describe('/api/posts', () => {
       expect(body.data.posts[0].user_vote).toBeNull()
     })
 
+    it('rejects an invalid bearer on a public sort instead of returning anonymous state', async () => {
+      mockGetAuthUser.mockResolvedValue(null)
+      const req = new NextRequest('http://localhost/api/posts?sort_by=hot_score', {
+        headers: { authorization: 'Bearer expired-token' },
+      })
+
+      const res = await GET(req)
+
+      expect(res.status).toBe(401)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(mockGetPosts).not.toHaveBeenCalled()
+    })
+
     it('handles group_id filter', async () => {
       mockGetPosts.mockResolvedValue([])
 

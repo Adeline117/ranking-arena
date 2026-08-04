@@ -23,6 +23,7 @@ import {
   type ApiVersion,
 } from './versioning'
 import { getOrCreateCorrelationId, runWithCorrelationId } from './correlation'
+import { getOptionalAuthUser } from './optional-auth'
 import * as Sentry from '@sentry/nextjs'
 
 const logger = createLogger('api-middleware')
@@ -56,6 +57,8 @@ interface MiddlewareOptions {
    * 非强制认证路由是否仍需读取 user（例如 /feedback 想记录可选 user_id）。
    * 默认 false — 绝大多数公开路由根本不读 ctx.user，却因带 Authorization 头
    * 被迫走一次 Supabase Auth 查询，每请求 +50-150ms。opt-in 设为 true 才查。
+   * 未提供 Authorization 时保持匿名；一旦提供，凭证无效必须返回 401，不能
+   * 静默降级为匿名状态。
    */
   readsAuth?: boolean
   /** 限流配置 */
@@ -76,6 +79,21 @@ export type { VersionContext, ApiVersion }
  */
 function createResponse(data: unknown, status = 200) {
   return NextResponse.json(data, { status })
+}
+
+function markAuthSensitive(response: NextResponse): NextResponse {
+  response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+  response.headers.set('CDN-Cache-Control', 'no-store')
+  response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
+  const vary = new Set(
+    (response.headers.get('Vary') ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  )
+  vary.add('Authorization')
+  response.headers.set('Vary', [...vary].join(', '))
+  return response
 }
 
 /**
@@ -210,6 +228,7 @@ export function withApiMiddleware<T>(
           user = await getAuthUser(request)
           if (!user) {
             const errorResponse = createErrorResponse('未授权', 401)
+            markAuthSensitive(errorResponse)
             if (versioning) {
               addVersionHeaders(errorResponse, versionContext)
             }
@@ -218,10 +237,7 @@ export function withApiMiddleware<T>(
         } else if (readsAuth) {
           // Opt-in: only routes that actually read ctx.user (e.g. /feedback) pay the ~50-150ms
           // Supabase Auth round-trip. Public hot-path routes like /rankings and /trader skip this.
-          const authHeader = request.headers.get('authorization')
-          if (authHeader) {
-            user = await getAuthUser(request)
-          }
+          user = await getOptionalAuthUser(request)
         }
 
         // Set Sentry context for error attribution
@@ -316,6 +332,13 @@ export function withApiMiddleware<T>(
 
         // Sanitize error messages — createErrorResponse applies safe message filtering
         const errorResponse = createErrorResponse(internalMessage, statusCode)
+        const suppliedAuthorization = request.headers.get('authorization')
+        if (
+          needsAuth ||
+          (readsAuth && suppliedAuthorization !== null && suppliedAuthorization !== undefined)
+        ) {
+          markAuthSensitive(errorResponse)
+        }
         if (versioning) {
           addVersionHeaders(errorResponse, versionContext)
         }

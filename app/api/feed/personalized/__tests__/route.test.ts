@@ -125,6 +125,10 @@ function postId(index: number): string {
   return `40000000-0000-4000-8000-${String(index).padStart(12, '0')}`
 }
 
+function viewerRequest(url = 'http://localhost/api/feed/personalized'): NextRequest {
+  return new NextRequest(url, { headers: { authorization: 'Bearer viewer-token' } })
+}
+
 function currentPost(id: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
@@ -163,6 +167,21 @@ describe('GET /api/feed/personalized', () => {
       factory()
     )
     mockRpc.mockResolvedValue({ data: [], error: null })
+  })
+
+  it('rejects an invalid bearer instead of serving the anonymous hot fallback', async () => {
+    mockGetAuthUser.mockResolvedValue(null)
+    const req = new NextRequest('https://arena.test/api/feed/personalized', {
+      headers: { authorization: 'Bearer expired-token' },
+    })
+
+    const res = await GET(req)
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('Vary')).toContain('Authorization')
+    expect(mockGetOrSet).not.toHaveBeenCalled()
+    expect(mockSupabaseFrom).not.toHaveBeenCalled()
   })
 
   it('caches only ordered hot IDs and rebuilds current post, author, and group fields', async () => {
@@ -223,7 +242,7 @@ describe('GET /api/feed/personalized', () => {
     expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
     expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
     expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
-    expect(mockGetAuthUser).toHaveBeenCalledWith(expect.anything())
+    expect(mockGetAuthUser).not.toHaveBeenCalled()
   })
 
   it('reflects current post, author, and group edits on the next hit of the same ID cache', async () => {
@@ -323,7 +342,7 @@ describe('GET /api/feed/personalized', () => {
     })
     queueTableResult('user_profiles', { data: [currentProfile()], error: null })
 
-    const res = await GET(new NextRequest('http://localhost/api/feed/personalized'))
+    const res = await GET(viewerRequest())
     const body = await res.json()
 
     expect(body.data.posts.map((post: { id: string }) => post.id)).toEqual([second, first])
@@ -353,8 +372,8 @@ describe('GET /api/feed/personalized', () => {
       .mockImplementationOnce(async (_supabase: unknown, rows: unknown[]) => rows)
       .mockResolvedValueOnce([])
 
-    const first = await GET(new NextRequest('http://localhost/api/feed/personalized'))
-    const second = await GET(new NextRequest('http://localhost/api/feed/personalized'))
+    const first = await GET(viewerRequest())
+    const second = await GET(viewerRequest())
 
     expect((await first.json()).data.posts).toHaveLength(1)
     expect((await second.json()).data.posts).toEqual([])
@@ -401,7 +420,7 @@ describe('GET /api/feed/personalized', () => {
       .mockResolvedValueOnce([])
       .mockImplementationOnce(async (_supabase: unknown, rows: unknown[]) => rows)
 
-    const res = await GET(new NextRequest('http://localhost/api/feed/personalized?limit=1'))
+    const res = await GET(viewerRequest('http://localhost/api/feed/personalized?limit=1'))
     const body = await res.json()
 
     expect(body.data.posts.map((post: { id: string }) => post.id)).toEqual([visibleId])
@@ -431,9 +450,7 @@ describe('GET /api/feed/personalized', () => {
       { data: [currentProfile()], error: null }
     )
 
-    const res = await GET(
-      new NextRequest('http://localhost/api/feed/personalized?offset=40&limit=1')
-    )
+    const res = await GET(viewerRequest('http://localhost/api/feed/personalized?offset=40&limit=1'))
     const body = await res.json()
 
     expect(body.data.posts.map((post: { id: string }) => post.id)).toEqual([postId(41)])
@@ -466,7 +483,7 @@ describe('GET /api/feed/personalized', () => {
     mockGetUserPostReactions.mockResolvedValue(new Map([[id, 'up']]))
     mockGetUserPostVotes.mockResolvedValue(new Map([[id, 'bull']]))
 
-    const res = await GET(new NextRequest('http://localhost/api/feed/personalized'))
+    const res = await GET(viewerRequest())
     const body = await res.json()
 
     expect(body.data.posts[0]).toEqual(
@@ -485,7 +502,7 @@ describe('GET /api/feed/personalized', () => {
     )
     queueTableResult('user_profiles', { data: [currentProfile()], error: null })
 
-    const res = await GET(new NextRequest('http://localhost/api/feed/personalized'))
+    const res = await GET(viewerRequest())
     const body = await res.json()
 
     expect(body.data.posts.map((post: { id: string }) => post.id)).toEqual([id])
@@ -516,7 +533,7 @@ describe('GET /api/feed/personalized', () => {
     mockGetAuthUser.mockResolvedValue({ id: USER_A })
     mockRpc.mockResolvedValue({ data: [{ post_id: 'not-a-uuid' }], error: null })
 
-    const res = await GET(new NextRequest('http://localhost/api/feed/personalized'))
+    const res = await GET(viewerRequest())
 
     expect(res.status).toBe(500)
     expect(mockSupabaseFrom).not.toHaveBeenCalled()
@@ -565,8 +582,8 @@ describe('GET /api/feed/personalized', () => {
         actorId === USER_A ? rows : []
     )
 
-    const allowed = await GET(new NextRequest('http://localhost/api/feed/personalized'))
-    const denied = await GET(new NextRequest('http://localhost/api/feed/personalized'))
+    const allowed = await GET(viewerRequest())
+    const denied = await GET(viewerRequest())
 
     expect((await allowed.json()).data.posts).toHaveLength(1)
     expect((await denied.json()).data.posts).toEqual([])

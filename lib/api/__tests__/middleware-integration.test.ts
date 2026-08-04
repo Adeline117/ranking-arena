@@ -200,6 +200,35 @@ describe('withApiMiddleware integration', () => {
 
       expect(mockedGetAuthUser).not.toHaveBeenCalled()
     })
+
+    it('keeps readsAuth anonymous only when no Authorization header was supplied', async () => {
+      const handler = jest.fn().mockResolvedValue({ ok: true })
+      const wrapped = withApiMiddleware(handler, { readsAuth: true })
+
+      const res = await wrapped(new NextRequest('http://localhost/api/public'))
+
+      expect(res.status).toBe(200)
+      expect(mockedGetAuthUser).not.toHaveBeenCalled()
+      expect(handler.mock.calls[0][0].user).toBeNull()
+    })
+
+    it('returns a private 401 when readsAuth receives an invalid bearer', async () => {
+      mockedGetAuthUser.mockResolvedValueOnce(null)
+      const handler = jest.fn().mockResolvedValue({ ok: true })
+      const wrapped = withApiMiddleware(handler, { readsAuth: true })
+
+      const res = await wrapped(
+        new NextRequest('http://localhost/api/public', {
+          headers: { authorization: 'Bearer expired-token' },
+        })
+      )
+
+      expect(res.status).toBe(401)
+      expect(handler).not.toHaveBeenCalled()
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+      expect(res.headers.get('Vary')).toContain('Authorization')
+    })
   })
 
   // --- Rate limiting ---

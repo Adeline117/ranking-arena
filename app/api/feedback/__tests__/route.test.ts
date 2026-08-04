@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = { set: jest.fn(), get: jest.fn().mockReturnValue(null) }
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -31,14 +33,19 @@ jest.mock('next/server', () => {
     _body: unknown
     cookies: { get: () => undefined }
 
-    constructor(url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) {
+    constructor(
+      url: string,
+      init?: { method?: string; headers?: Record<string, string>; body?: string }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
       this.method = init?.method || 'POST'
-      this._headers = new Map(Object.entries({
-        'user-agent': 'Mozilla/5.0 (Test)',
-        ...(init?.headers || {}),
-      }))
+      this._headers = new Map(
+        Object.entries({
+          'user-agent': 'Mozilla/5.0 (Test)',
+          ...(init?.headers || {}),
+        })
+      )
       this._body = init?.body ? JSON.parse(init.body) : undefined
       this.cookies = { get: () => undefined }
     }
@@ -78,7 +85,10 @@ jest.mock('@/lib/supabase/server', () => ({
 
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: jest.fn(() => ({
-    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
   })),
 }))
 
@@ -115,10 +125,7 @@ import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
 // Helper to create a feedback request
-function createRequest(
-  body: Record<string, unknown>,
-  headers: Record<string, string> = {}
-) {
+function createRequest(body: Record<string, unknown>, headers: Record<string, string> = {}) {
   return new NextRequest('http://localhost/api/feedback', {
     method: 'POST',
     headers: { 'x-forwarded-for': `${Math.random()}.0.0.1`, ...headers },
@@ -208,9 +215,7 @@ describe('POST /api/feedback', () => {
     const res = await POST(req)
 
     expect(res.status).toBe(200)
-    expect(mockInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Hello world' })
-    )
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ message: 'Hello world' }))
   })
 
   // --- Auth (optional) ---
@@ -227,12 +232,10 @@ describe('POST /api/feedback', () => {
 
     expect(res.status).toBe(200)
     expect(body.data?.ok ?? body.ok).toBe(true)
-    expect(mockInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: 'user-123' })
-    )
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'user-123' }))
   })
 
-  it('sets user_id to null when Bearer token is invalid', async () => {
+  it('rejects an invalid Bearer token instead of relabeling feedback as anonymous', async () => {
     mockGetAuthUser.mockResolvedValue(null)
 
     const req = createRequest(
@@ -241,10 +244,10 @@ describe('POST /api/feedback', () => {
     )
     const res = await POST(req)
 
-    expect(res.status).toBe(200)
-    expect(mockInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: null })
-    )
+    expect(res.status).toBe(401)
+    expect(res.headers.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store, max-age=0')
+    expect(res.headers.set).toHaveBeenCalledWith('Vary', 'Authorization')
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 
   // --- Database Error ---
@@ -278,8 +281,12 @@ describe('POST /api/feedback', () => {
 
   it('returns 429 when rate limit is exceeded', async () => {
     // Mock checkRateLimitFull to return a 429 response (middleware uses checkRateLimitFull)
-    const rateLimit = jest.requireMock('@/lib/utils/rate-limit') as { checkRateLimitFull: jest.Mock }
-    const { NextResponse: NR } = jest.requireMock('next/server') as { NextResponse: typeof import('next/server').NextResponse }
+    const rateLimit = jest.requireMock('@/lib/utils/rate-limit') as {
+      checkRateLimitFull: jest.Mock
+    }
+    const { NextResponse: NR } = jest.requireMock('next/server') as {
+      NextResponse: typeof import('next/server').NextResponse
+    }
     rateLimit.checkRateLimitFull.mockResolvedValueOnce({
       response: NR.json({ error: 'Too many requests' }, { status: 429 }),
       meta: null,

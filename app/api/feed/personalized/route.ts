@@ -12,7 +12,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import {
   getSupabaseAdmin,
-  getAuthUser,
+  getOptionalAuthUser,
   successWithPagination,
   handleError,
   validateNumber,
@@ -32,6 +32,21 @@ const MAX_PAGE_OFFSET = 10_000
 // consume the remainder; the bound still prevents an unbounded service scan.
 const MAX_RAW_CANDIDATES = MAX_PAGE_OFFSET + CANDIDATE_BATCH_SIZE * 3
 const CANDIDATE_CACHE_TTL_SECONDS = 60
+
+function privateNoStore<T extends Response>(response: T): T {
+  response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+  response.headers.set('CDN-Cache-Control', 'no-store')
+  response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
+  const vary = new Set(
+    (response.headers.get('Vary') ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  )
+  vary.add('Authorization')
+  response.headers.set('Vary', [...vary].join(', '))
+  return response
+}
 
 // Redis is allowed to remember ranking only. Runtime validation prevents an
 // older full-payload entry (or any other schema drift) from reaching hydration.
@@ -271,7 +286,7 @@ async function collectCurrentPage(
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return privateNoStore(rateLimitResponse)
 
   try {
     const { searchParams } = new URL(request.url)
@@ -281,7 +296,7 @@ export async function GET(request: NextRequest) {
       validateNumber(searchParams.get('offset'), { min: 0, max: MAX_PAGE_OFFSET, integer: true }) ??
       0
 
-    const user = await getAuthUser(request)
+    const user = await getOptionalAuthUser(request)
     const supabase = getSupabaseAdmin()
     let page: { posts: CurrentPostRow[]; hasMore: boolean }
 
@@ -324,11 +339,8 @@ export async function GET(request: NextRequest) {
       { posts: postsWithState },
       { limit, offset, has_more: page.hasMore }
     )
-    response.headers.set('Cache-Control', 'private, no-store, max-age=0')
-    response.headers.set('CDN-Cache-Control', 'no-store')
-    response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
-    return response
+    return privateNoStore(response)
   } catch (error: unknown) {
-    return handleError(error, 'personalized feed GET')
+    return privateNoStore(handleError(error, 'personalized feed GET'))
   }
 }
