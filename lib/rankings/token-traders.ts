@@ -1,27 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/lib/supabase/database.types'
-
-const PERIOD_DAYS: Record<string, number> = {
-  '7D': 7,
-  '30D': 30,
-  '90D': 90,
-}
-
-// Cache namespace is versioned because the original endpoint cached empty
-// results produced by its retired raw-history query. Reusing that namespace
-// after switching to the aggregate RPC can keep a repaired token board empty
-// until the old Redis entry expires.
-export const TOKEN_TRADER_RANKING_CACHE_VERSION = 'v3'
-
-export function getTokenTraderRankingCacheKey(
-  token: string,
-  period: string,
-  limit: number,
-  offset: number
-): string {
-  return `rankings:by-token:${TOKEN_TRADER_RANKING_CACHE_VERSION}:${token}:${period}:${limit}:${offset}`
-}
-
 interface AggregatedTokenTrader {
   source: string
   source_trader_id: string
@@ -155,33 +131,4 @@ export function mergeTokenRankingsWithProfiles(
     total,
     traders,
   }
-}
-
-export async function getTokenTraderRankings(
-  supabase: SupabaseClient<Database>,
-  token: string,
-  period: string,
-  limit: number,
-  offset: number
-): Promise<TokenTraderRankingPage> {
-  const { data, error } = await supabase.rpc('get_token_trader_rankings', {
-    token_symbol: token,
-    lookback_days: PERIOD_DAYS[period] || 90,
-    max_traders: limit,
-    row_offset: offset,
-  })
-
-  if (error) throw new Error(error.message)
-
-  const rows = (data || []) as AggregatedTokenTrader[]
-  if (rows.length === 0) return { traders: [], total: 0 }
-
-  const traderIds = rows.map((row) => row.source_trader_id)
-  const { data: profileData } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl')
-    .eq('season_id', period)
-    .in('source_trader_id', traderIds)
-
-  return mergeTokenRankingsWithProfiles(rows, (profileData || []) as LeaderboardProfile[])
 }
