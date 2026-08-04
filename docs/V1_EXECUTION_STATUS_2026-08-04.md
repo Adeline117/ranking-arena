@@ -22,6 +22,9 @@
   仅 `4/32 fresh`、`13 stale`、`15 critical`。这不是 GO 信号。
 - `2026-08-04T20:32Z` 再次从公网只读检查：health 仍是同一 202/degraded 状态；
   token containment checker 的 4 个 API、2 个页面、2 个 sitemap 检查全部通过。
+- `2026-08-04T22:53Z` 最新公网只读复核仍为 HTTP 202/degraded、精确 production
+  commit `5ed4718b6`；数据库与 Redis 为 pass，freshness 仍仅 `4/32 fresh`、
+  `13 stale`、`15 critical`。
 - 未来 GitHub Actions 与 Vercel Production 的 Telegram token/chat-id 已于 19:03Z
   更新，且 provider API 身份检查返回 200；当前 Vercel deployment 早于该更新，
   更新后也尚无真实消息投递证明，因此告警恢复仍为待验证。
