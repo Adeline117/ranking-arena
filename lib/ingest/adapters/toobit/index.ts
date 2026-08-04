@@ -43,12 +43,21 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import {
   parseToobitHistory,
   parseToobitLeaderboardPage,
   parseToobitLeaderboardSeries,
   parseToobitPositions,
   parseToobitProfile,
 } from './parsers'
+import {
+  TOOBIT_COPIER_DETAIL_URL,
+  TOOBIT_COPIER_FOLLOWERS_URL,
+  toobitCopierSnapshotVerifier,
+} from './copier-snapshot'
 
 const API_BASE = 'https://bapi.toobit.com/bapi/v1/copy-trading'
 const MAX_BOARD_PAGES = 400 // ~265 at survey; hard safety cap
@@ -61,8 +70,8 @@ function base(src: SourceRow): string {
   return endpoints.base ?? API_BASE
 }
 
-/** Paced plain-HTTP GET; toobit envelopes everything as {code,data,msg}. */
-async function fetchData<T = unknown>(session: FetchSession, url: string): Promise<T> {
+/** Paced plain-HTTP GET retaining the exact upstream JSON envelope. */
+async function fetchPayload(session: FetchSession, url: string): Promise<unknown> {
   return session.paced(async () => {
     const res = await fetch(url, {
       headers: {
@@ -76,14 +85,23 @@ async function fetchData<T = unknown>(session: FetchSession, url: string): Promi
     })
     if (isBlockedStatus(res.status)) throw new BlockedUpstreamError(res.status, url)
     if (!res.ok) throw new Error(`[toobit] HTTP ${res.status} from ${url}`)
-    const payload = (await res.json()) as { code?: unknown; data?: unknown; msg?: unknown }
-    if (payload.code !== 200) {
-      throw new Error(
-        `[toobit] API code ${String(payload.code)} (${String(payload.msg)}) from ${url}`
-      )
-    }
-    return payload.data as T
+    return res.json()
   })
+}
+
+/** Legacy data projection used by non-copier surfaces. */
+async function fetchData<T = unknown>(session: FetchSession, url: string): Promise<T> {
+  const payload = (await fetchPayload(session, url)) as {
+    code?: unknown
+    data?: unknown
+    msg?: unknown
+  }
+  if (payload.code !== 200) {
+    throw new Error(
+      `[toobit] API code ${String(payload.code)} (${String(payload.msg)}) from ${url}`
+    )
+  }
+  return payload.data as T
 }
 
 // ── leader-detail, memoized per (session, trader) — TF-independent ──
@@ -114,6 +132,21 @@ const toobitAdapter: SourceAdapter = {
     orders: false, // not exposed publicly
     transfers: false, // leader-transfer-history needs auth
     copiers: true, // top-followers
+  },
+
+  verifyCopierSnapshot(src) {
+    return src.slug === 'toobit_futures' &&
+      src.status === 'active' &&
+      src.serving_mode === 'serving' &&
+      src.adapter_slug === 'toobit' &&
+      src.product_type === 'futures' &&
+      src.trader_kind_scope === 'human' &&
+      src.currency === 'USDT' &&
+      src.copier_table_depth === 'full' &&
+      `${base(src)}/leader-detail` === TOOBIT_COPIER_DETAIL_URL &&
+      `${base(src)}/top-followers` === TOOBIT_COPIER_FOLLOWERS_URL
+      ? toobitCopierSnapshotVerifier
+      : null
   },
 
   /**
@@ -217,12 +250,30 @@ const toobitAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     if (kind === 'copiers') {
-      const url = `${base(src)}/top-followers?leaderUserId=${exchangeTraderId}`
-      const data = await fetchData<Dict[]>(session, url)
-      yield { pageIndex: 1, payload: { data }, url, fetchedAt: new Date().toISOString() }
-      return
+      const encodedLeaderId = encodeURIComponent(exchangeTraderId)
+      const detailUrl = `${base(src)}/leader-detail?leaderUserId=${encodedLeaderId}`
+      const detailPayload = await fetchPayload(session, detailUrl)
+      yield {
+        pageIndex: 1,
+        payload: detailPayload,
+        url: detailUrl,
+        fetchedAt: new Date().toISOString(),
+      }
+
+      const followersUrl = `${base(src)}/top-followers?leaderUserId=${encodedLeaderId}`
+      const followersPayload = await fetchPayload(session, followersUrl)
+      yield {
+        pageIndex: 2,
+        payload: followersPayload,
+        url: followersUrl,
+        fetchedAt: new Date().toISOString(),
+      }
+      return {
+        contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+        observations: [{ segment_id: 'default', reason: 'snapshot_complete', page_ordinal: 2 }],
+      }
     }
     if (kind !== 'position_history') {
       throw new Error(`[toobit] history surface ${kind} not supported`)
