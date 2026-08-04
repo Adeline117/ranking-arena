@@ -34,9 +34,15 @@ import {
   type LeaderboardManifestOutcomeProjection,
 } from './acquisition-attempts'
 import {
+  HISTORY_ACQUISITION_ARTIFACT_CONTRACT,
   parseHistoryAcquisitionArtifact,
   type HistoryAcquisitionArtifact,
 } from './history-acquisition'
+import {
+  POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT,
+  revalidatePositionHistoryAcquisitionArtifactV2,
+  type PositionHistoryAcquisitionArtifactV2,
+} from './position-history-acquisition-v2'
 import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
@@ -1014,9 +1020,13 @@ export async function writeAttemptBoundLeaderboardRawArtifactSet(
   return { ...receipts, projection }
 }
 
+export type PositionHistoryRawArtifact =
+  | HistoryAcquisitionArtifact
+  | PositionHistoryAcquisitionArtifactV2
+
 export interface WritePositionHistoryRawArtifactInput {
   sourceRunId: string
-  artifact: HistoryAcquisitionArtifact
+  artifact: PositionHistoryRawArtifact
 }
 
 interface NormalizedPositionHistoryRawArtifactInput {
@@ -1026,7 +1036,8 @@ interface NormalizedPositionHistoryRawArtifactInput {
   exchangeTraderId: string
   sourceRunId: string
   fetchedAt: string
-  artifact: HistoryAcquisitionArtifact
+  artifact: PositionHistoryRawArtifact
+  acquisition: HistoryAcquisitionArtifact
 }
 
 interface PreparedPositionHistoryRawArtifact extends PreparedDeterministicRawArtifact {
@@ -1060,27 +1071,97 @@ function normalizePositionHistoryRawArtifactInput(
     throw positionHistoryArtifactError('source run id must be a lowercase SHA-256 digest')
   }
 
-  let artifact: HistoryAcquisitionArtifact
-  try {
-    artifact = parseHistoryAcquisitionArtifact(input.artifact)
-  } catch (cause) {
-    throw positionHistoryArtifactError(`history artifact is invalid: ${asError(cause).message}`)
+  let artifact: PositionHistoryRawArtifact
+  let acquisition: HistoryAcquisitionArtifact
+  if (
+    isRecord(input.artifact) &&
+    input.artifact.contract === POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT
+  ) {
+    const verification = revalidatePositionHistoryAcquisitionArtifactV2({
+      artifact: input.artifact,
+      expectedSourceRunId: input.sourceRunId,
+    })
+    if (!verification.verified) {
+      throw positionHistoryArtifactError(`history artifact v2 is invalid: ${verification.reason}`)
+    }
+    artifact = verification.artifact
+    acquisition = verification.artifact.acquisition
+  } else {
+    try {
+      acquisition = parseHistoryAcquisitionArtifact(input.artifact)
+    } catch (cause) {
+      throw positionHistoryArtifactError(`history artifact is invalid: ${asError(cause).message}`)
+    }
+    artifact = acquisition
+    if (strictCanonicalSha256(artifact) !== input.sourceRunId) {
+      throw positionHistoryArtifactError('canonical artifact hash does not match source run id')
+    }
   }
-  if (artifact.history_kind !== 'position_history') {
+  if (acquisition.history_kind !== 'position_history') {
     throw positionHistoryArtifactError('only position_history may bind the event_history role')
-  }
-  if (strictCanonicalSha256(artifact) !== input.sourceRunId) {
-    throw positionHistoryArtifactError('canonical artifact hash does not match source run id')
   }
 
   return {
-    sourceId: artifact.source.id,
-    sourceSlug: artifact.source.slug,
-    traderId: artifact.trader.id,
-    exchangeTraderId: artifact.trader.exchange_trader_id,
+    sourceId: acquisition.source.id,
+    sourceSlug: acquisition.source.slug,
+    traderId: acquisition.trader.id,
+    exchangeTraderId: acquisition.trader.exchange_trader_id,
     sourceRunId: input.sourceRunId,
-    fetchedAt: artifact.pages.at(-1)?.fetched_at ?? artifact.attempt_started_at,
+    fetchedAt: acquisition.pages.at(-1)?.fetched_at ?? acquisition.attempt_started_at,
     artifact,
+    acquisition,
+  }
+}
+
+function positionHistoryArtifactMetaBase(
+  input: NormalizedPositionHistoryRawArtifactInput
+): Record<string, unknown> {
+  const acquisition = input.acquisition
+  if (input.artifact.contract === POSITION_HISTORY_ACQUISITION_ARTIFACT_V2_CONTRACT) {
+    return {
+      surface: 'position_history',
+      data_contract: input.artifact.contract,
+      source_run_id: input.sourceRunId,
+      source_slug: input.sourceSlug,
+      exchange_trader_id: input.exchangeTraderId,
+      history_kind: acquisition.history_kind,
+      attempt_started_at: acquisition.attempt_started_at,
+      starting_cursor: acquisition.starting_cursor,
+      capture_config: acquisition.capture_config,
+      observed_at: input.fetchedAt,
+      page_count: acquisition.pages.length,
+      terminal_evidence_state: acquisition.termination.evidence_state,
+      scan_terminal_state: acquisition.termination.scan_terminal_state,
+      verifier_contract: acquisition.termination.verifier_contract,
+      termination: acquisition.termination,
+      acquisition_contract: input.artifact.acquisition.contract,
+      acquisition_source_run_id: input.artifact.acquisition_source_run_id,
+      candidate_ledger_contract: input.artifact.candidate_ledger.contract,
+      candidate_ledger_sha256: input.artifact.candidate_ledger_sha256,
+      source_fact_contract: input.artifact.candidate_ledger.source_fact_contract,
+      observed_candidate_count: input.artifact.candidate_ledger.observed_candidate_count,
+      unique_source_fact_count: input.artifact.candidate_ledger.unique_source_fact_count,
+      fact_set_sha256: input.artifact.candidate_ledger.fact_set_sha256,
+    }
+  }
+
+  return {
+    surface: 'position_history',
+    data_contract: input.artifact.contract,
+    history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+    source_run_id: input.sourceRunId,
+    source_slug: input.sourceSlug,
+    exchange_trader_id: input.exchangeTraderId,
+    history_kind: acquisition.history_kind,
+    attempt_started_at: acquisition.attempt_started_at,
+    starting_cursor: acquisition.starting_cursor,
+    capture_config: acquisition.capture_config,
+    observed_at: input.fetchedAt,
+    page_count: acquisition.pages.length,
+    terminal_evidence_state: acquisition.termination.evidence_state,
+    scan_terminal_state: acquisition.termination.scan_terminal_state,
+    verifier_contract: acquisition.termination.verifier_contract,
+    termination: acquisition.termination,
   }
 }
 
@@ -1102,24 +1183,7 @@ function preparePositionHistoryRawArtifact(
     gzipBytes,
     contentHash,
     durableCompressedBytes: gzipBytes.byteLength,
-    metaBase: {
-      surface: 'position_history',
-      data_contract: input.artifact.contract,
-      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
-      source_run_id: input.sourceRunId,
-      source_slug: input.sourceSlug,
-      exchange_trader_id: input.exchangeTraderId,
-      history_kind: input.artifact.history_kind,
-      attempt_started_at: input.artifact.attempt_started_at,
-      starting_cursor: input.artifact.starting_cursor,
-      capture_config: input.artifact.capture_config,
-      observed_at: input.fetchedAt,
-      page_count: input.artifact.pages.length,
-      terminal_evidence_state: input.artifact.termination.evidence_state,
-      scan_terminal_state: input.artifact.termination.scan_terminal_state,
-      verifier_contract: input.artifact.termination.verifier_contract,
-      termination: input.artifact.termination,
-    },
+    metaBase: positionHistoryArtifactMetaBase(input),
   }
 }
 
@@ -1143,7 +1207,9 @@ function positionHistoryArtifactMeta(
 function legacyPositionHistoryArtifactMeta(
   input: NormalizedPositionHistoryRawArtifactInput,
   artifact: PreparedPositionHistoryRawArtifact
-): Record<string, unknown> {
+): Record<string, unknown> | null {
+  if (input.artifact.contract !== HISTORY_ACQUISITION_ARTIFACT_CONTRACT) return null
+
   return rawIntegrityMeta(
     {
       surface: 'position_history',
@@ -1151,11 +1217,11 @@ function legacyPositionHistoryArtifactMeta(
       source_run_id: input.sourceRunId,
       source_slug: input.sourceSlug,
       exchange_trader_id: input.exchangeTraderId,
-      history_kind: input.artifact.history_kind,
-      page_count: input.artifact.pages.length,
-      terminal_evidence_state: input.artifact.termination.evidence_state,
-      scan_terminal_state: input.artifact.termination.scan_terminal_state,
-      verifier_contract: input.artifact.termination.verifier_contract,
+      history_kind: input.acquisition.history_kind,
+      page_count: input.acquisition.pages.length,
+      terminal_evidence_state: input.acquisition.termination.evidence_state,
+      scan_terminal_state: input.acquisition.termination.scan_terminal_state,
+      verifier_contract: input.acquisition.termination.verifier_contract,
     },
     STRICT_CANONICAL_JSON_CONTRACT,
     artifact.durableCompressedBytes,
@@ -1202,9 +1268,10 @@ function validatePositionHistoryTrustPointer(
   let metaMatches = false
   try {
     const storedMeta = strictCanonicalJson(row.meta)
+    const legacyMeta = legacyPositionHistoryArtifactMeta(input, artifact)
     metaMatches =
       storedMeta === strictCanonicalJson(positionHistoryArtifactMeta(artifact)) ||
-      storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact))
+      (legacyMeta !== null && storedMeta === strictCanonicalJson(legacyMeta))
   } catch {
     metaMatches = false
   }
@@ -1276,10 +1343,13 @@ async function persistPositionHistoryTrustPointer(
 }
 
 /**
- * Persist one immutable position-history acquisition artifact. The artifact is
- * the event_history payload: it contains every captured upstream page plus its
- * terminal proof or explicit partial/unknown blocker. Storage is durable before
- * the caller-owned transaction publishes the exact source/trader pointer.
+ * Persist one immutable position-history acquisition artifact. A legacy @1
+ * payload contains every captured upstream page plus its terminal proof or
+ * explicit partial/unknown blocker. A verified @2 payload additionally binds a
+ * replayed candidate ledger, but remains acquisition evidence only: it carries
+ * no @1 publication-evidence marker and cannot claim parser or rank eligibility.
+ * Storage is durable before the caller-owned transaction publishes the exact
+ * source/trader pointer.
  */
 export async function writePositionHistoryRawArtifact(
   input: WritePositionHistoryRawArtifactInput,
@@ -1393,7 +1463,12 @@ export async function writeRawObject(
   return persistRawObjectPointer(getIngestPool(), prepared)
 }
 
-/** Re-read a stored raw payload (re-parse path, spec §5.5). */
+/**
+ * Re-read a stored raw payload (re-parse path, spec §5.5).
+ * This generic compatibility reader verifies stored bytes, not trust-pointer
+ * identity or source-specific semantics. Callers must not use it as a trusted
+ * position-history @2 replay or publication authority.
+ */
 export async function readRawObject(rawObjectId: number): Promise<unknown> {
   const { rows } = await getIngestPool().query<RawObjectPointer>(
     `SELECT storage_path, bytes, content_hash, meta
