@@ -61,21 +61,47 @@ writer-boundary, records/Tier-C, migration/NFT and token-containment tests,
 application and worker type checks, and the relevant offline QA contracts pass.
 Production/staging database execution remains a separate explicit gate.
 
+The clean offline candidate validation completed with the following evidence:
+
+- Node 22.23.2 clean install from lockfile SHA-256
+  `c60a9fddee366d056b6b60525867c356c9f241846575396fe7595261700db609`;
+  exact `@lhci/cli` 0.15.1 and overridden `tmp` 0.2.7.
+- `npm audit --audit-level=high`: zero high and zero critical findings (2 low,
+  23 moderate remain and are not silently auto-fixed).
+- 278/278 offline QA contracts and all 18 PostgreSQL 17 gate groups passed.
+- Full Jest coverage with Redis 7.4.9 and a reproducible two-worker budget:
+  1084 suites passed, 2 skipped; 12334 tests passed, 17 skipped.
+- Next.js 16.2.11 production-like build passed, including 161 static pages and
+  the postbuild BigInt scan across 1094 browser chunks. Later candidate changes
+  affect only workflows, QA, documentation, and a dev-only Lighthouse package;
+  the exact PR commit must still pass the hosted Build job.
+- Private Lighthouse collection made nine runs across `/`, `/methodology`, and
+  `/about`. Minimum per-page performance was 0.84/0.98/0.96, accessibility
+  0.96/0.99/0.96, best-practices 0.96 for all pages, and HTTP-status 1.0 for
+  every run. Reports stayed on the validation host.
+
+The migration lint now derives the exact PR merge-base or push before/after
+state, scans committed regular blobs, handles renames and root/non-fast-forward
+pushes, rejects malformed SQL, and conservatively detects destructive DDL in
+quoted executable bodies. Its 19 focused tests include the previous semicolon
+inside a quoted default `SET NOT NULL` false-negative.
+
 ## Current CI interpretation
 
-- Frozen main `046a44d33` preflight is blocked by the `brace-expansion`
-  GHSA-rgw5-rvv9-x895 dependency finding. This combined tree already contains
-  the byte-identical `5.0.8` -> `5.0.9` compatibility-facade and lockfile fix;
-  acceptance still requires a clean install, the exact-version compatibility
-  test, and an audit showing zero high/critical findings.
+- Frozen main `046a44d33` was blocked by the `brace-expansion`
+  GHSA-rgw5-rvv9-x895 dependency finding. The combined tree contains the
+  byte-identical `5.0.8` -> `5.0.9` compatibility facade and lockfile fix; clean
+  install, compatibility tests, and the zero-high/critical audit now pass.
 - `types-live` failures caused by missing Actions `DATABASE_URL`,
   `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are credential-context
   failures. This branch retains V1's explicit disabled/fail-closed
   production-secret jobs; it does not weaken them to make CI green.
-- The Playwright smoke itself passed; its workflow failed while uploading an
-  artifact because storage quota was exhausted. Treat that as control-plane
-  evidence loss, not a product-smoke failure, and do not call the workflow green
-  until artifact retention is repaired.
+- The earlier Playwright smoke itself passed while artifact upload failed from
+  storage quota. A read-only inventory now shows only about 266.7 MB across 252
+  unexpired artifacts; 1727 expired records account for about 87.93 GB of the
+  nominal API total. Combined PR jobs do not upload those heavy artifacts, so
+  PR execution is unblocked, while quota reclamation remains an operational
+  follow-up rather than a reason to delete release evidence during this change.
 - PR 253 has six real conflicts with main and is superseded for integration
   review by this combined branch after the `5ed4718b6` containment forward-port.
 
