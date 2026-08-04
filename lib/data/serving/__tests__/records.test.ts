@@ -80,7 +80,9 @@ describe('copier PII rule (spec §6)', () => {
         totalCopierPnl: 900.5,
         currency: 'USDT',
         depth: 'full',
-        asOf: '2026-06-10T12:00:00Z',
+        sourceAsOf: '2026-06-10T11:00:00Z',
+        observedAt: '2026-06-10T12:00:00Z',
+        publishedAt: '2026-06-10T12:01:00Z',
         pnlDistribution: [
           { bucket: '0~1000', count: 20 },
           { bucket: '>10000', count: 1 },
@@ -98,7 +100,12 @@ describe('copier PII rule (spec §6)', () => {
         { bucket: '>10000', count: 1 },
       ],
       depth: 'full',
-      provenance: { source: 'bitget_futures', asOf: '2026-06-10T12:00:00Z' },
+      provenance: {
+        source: 'bitget_futures',
+        sourceAsOf: '2026-06-10T11:00:00Z',
+        observedAt: '2026-06-10T12:00:00Z',
+        publishedAt: '2026-06-10T12:01:00Z',
+      },
     })
     // The serialized aggregate must contain no copier identifiers anywhere.
     expect(JSON.stringify(aggregate)).not.toMatch(/copier_label|copierLabel|email/)
@@ -136,7 +143,13 @@ describe('getRecordsPage', () => {
     ])
     expect(page!.nextCursor).toBe('2026-06-01 00:00:00+00|abc')
     expect(page!.cacheState).toBe('warm')
-    expect(page!.provenance).toEqual({ source: 'bitget_futures', asOf: '2026-06-10T12:00:00Z' })
+    // Legacy `asOf` was often synthesized by the RPC and is intentionally ignored.
+    expect(page!.provenance).toEqual({
+      source: 'bitget_futures',
+      sourceAsOf: null,
+      observedAt: null,
+      publishedAt: null,
+    })
     // The legacy RPC does not bind rows to terminal evidence. Its own claim
     // cannot upgrade the serving boundary.
     expect(page!.completeness).toEqual({
@@ -173,6 +186,51 @@ describe('getRecordsPage', () => {
     )
 
     expect(page?.completeness).toBeUndefined()
+  })
+
+  it('keeps source, observation, and publication clocks distinct', async () => {
+    const page = await getRecordsPage(
+      rpcClient({
+        rows: [],
+        sourceAsOf: '2026-06-10T11:00:00Z',
+        observedAt: '2026-06-10T12:00:00Z',
+        publishedAt: '2026-06-10T12:01:00Z',
+      }),
+      'bitget_futures',
+      'abc',
+      'positions',
+      null
+    )
+
+    expect(page?.provenance).toEqual({
+      source: 'bitget_futures',
+      sourceAsOf: '2026-06-10T11:00:00Z',
+      observedAt: '2026-06-10T12:00:00Z',
+      publishedAt: '2026-06-10T12:01:00Z',
+    })
+  })
+
+  it('does not synthesize request time for missing, legacy, or invalid clocks', async () => {
+    const page = await getRecordsPage(
+      rpcClient({
+        rows: [],
+        asOf: '2026-06-10T13:00:00Z',
+        sourceAsOf: 'not-a-time',
+        observedAt: ' 2026-06-10T12:00:00Z',
+        publishedAt: 123,
+      }),
+      'bitget_futures',
+      'abc',
+      'orders',
+      null
+    )
+
+    expect(page?.provenance).toEqual({
+      source: 'bitget_futures',
+      sourceAsOf: null,
+      observedAt: null,
+      publishedAt: null,
+    })
   })
 
   it('returns null for unknown traders (RPC NULL) and on error', async () => {
@@ -216,7 +274,9 @@ describe('recordsPageFromTierC', () => {
       const page = recordsPageFromTierC('bitget_futures', kind, {
         rows: [{ symbol: 'BTCUSDT', copier_label: 'leak' }],
         nextCursor: 'must-not-escape',
-        asOf: '2026-06-10T12:00:00Z',
+        sourceAsOf: null,
+        observedAt: '2026-06-10T12:00:00Z',
+        publishedAt: null,
         completeness: {
           state: 'partial',
           reason: 'interactive_preview',
@@ -230,6 +290,12 @@ describe('recordsPageFromTierC', () => {
         cacheState: 'cold-fetched',
         rows: [{ symbol: 'BTCUSDT' }],
         nextCursor: null,
+        provenance: {
+          source: 'bitget_futures',
+          sourceAsOf: null,
+          observedAt: '2026-06-10T12:00:00Z',
+          publishedAt: null,
+        },
         completeness: {
           state: 'partial',
           reason: 'interactive_preview',

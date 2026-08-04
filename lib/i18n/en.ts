@@ -6143,6 +6143,9 @@ const en = {
   // ── ARENA_DATA_SPEC v1.2 serving layer (spec §2.4/§6) ──
   provenanceSource: 'Source',
   provenanceAsOf: 'as of',
+  recordProvenanceSourceAsOf: 'source data as of',
+  recordProvenanceObservedAt: 'Arena captured',
+  recordProvenanceUnknown: 'unknown',
   provenanceTracked: 'Tracked',
   provenanceTrackedTip:
     'Metrics are scraped from the exchange’s public leaderboard and have NOT been independently verified via API access. Connect a read-only API key to earn a ✓ Verified badge.',

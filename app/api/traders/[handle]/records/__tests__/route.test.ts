@@ -101,7 +101,12 @@ describe('records route history trust boundary', () => {
       const fetched: RecordsPage = {
         rows: [{ symbol: 'BTCUSDT' }],
         nextCursor: null,
-        provenance: { source: 'bitget_futures', asOf: '2026-08-03T12:00:00.000Z' },
+        provenance: {
+          source: 'bitget_futures',
+          sourceAsOf: null,
+          observedAt: '2026-08-03T12:00:00.000Z',
+          publishedAt: null,
+        },
         cacheState: 'cold-fetched',
         completeness: { state: 'partial', reason: 'interactive_preview' },
       }
@@ -133,11 +138,18 @@ describe('records route history trust boundary', () => {
         rows: [],
         nextCursor: null,
         cacheState: 'pending',
+        provenance: {
+          source: 'bitget_futures',
+          sourceAsOf: null,
+          observedAt: null,
+          publishedAt: null,
+        },
         completeness: {
           state: 'unknown',
           reason: 'history_evidence_not_bound',
         },
       })
+      expect(body.data.provenance).not.toHaveProperty('asOf')
     }
   )
 

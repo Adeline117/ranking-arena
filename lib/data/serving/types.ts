@@ -21,6 +21,18 @@ export interface Provenance {
   derived?: boolean
 }
 
+/**
+ * Record surfaces carry three independent clocks. None may substitute for
+ * another: sourceAsOf is upstream-disclosed freshness, observedAt is when
+ * Arena captured the response, and publishedAt is the serving commit time.
+ */
+export interface RecordProvenance {
+  source: string
+  sourceAsOf: string | null
+  observedAt: string | null
+  publishedAt: string | null
+}
+
 export interface Money {
   value: number
   currency: ServingCurrency
@@ -128,7 +140,7 @@ export interface HistoryCompleteness {
 export interface RecordsPage<T = Record<string, unknown>> {
   rows: T[]
   nextCursor: string | null
-  provenance: Provenance
+  provenance: RecordProvenance
   cacheState: CoreCacheState
   /** Present only when the response has an explicit history-evidence verdict. */
   completeness?: HistoryCompleteness
@@ -141,7 +153,7 @@ export interface CopierAggregate {
   totalCopierPnl: Money | null
   pnlDistribution: Array<{ bucket: string; count: number }>
   depth: 'full' | 'top10' | 'top3_preview' | 'none'
-  provenance: Provenance
+  provenance: RecordProvenance
 }
 
 /** Capability matrix — data, not code (spec §6): derived from the sources

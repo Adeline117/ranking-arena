@@ -15,7 +15,12 @@ function aggregate(source: string, copierCount: number): CopierAggregate {
     totalCopierPnl: null,
     pnlDistribution: [],
     depth: 'full',
-    provenance: { source, asOf: '2026-07-29T12:00:00.000Z' },
+    provenance: {
+      source,
+      sourceAsOf: null,
+      observedAt: '2026-07-29T12:00:00.000Z',
+      publishedAt: null,
+    },
   }
 }
 
@@ -82,7 +87,12 @@ function recordsPage(overrides: Partial<RecordsPage> = {}): RecordsPage {
   return {
     rows: [],
     nextCursor: null,
-    provenance: { source: 'gmx', asOf: '2026-07-29T12:00:00.000Z' },
+    provenance: {
+      source: 'gmx',
+      sourceAsOf: null,
+      observedAt: '2026-07-29T12:00:00.000Z',
+      publishedAt: null,
+    },
     cacheState: 'warm',
     ...overrides,
   }
@@ -309,6 +319,71 @@ describe('useTraderRecords completeness isolation', () => {
       await pendingB.promise
     })
     await waitFor(() => expect(view.result.current.completeness?.state).toBe('unknown'))
+
+    view.unmount()
+    client.clear()
+  })
+})
+
+describe('useTraderRecords provenance aggregation', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('uses the oldest complete clock and never lets a later page fill a missing clock', async () => {
+    ;(fetcher as jest.Mock).mockImplementation((url: string) =>
+      Promise.resolve(
+        recordsResponse(
+          url.includes('cursor=next')
+            ? recordsPage({
+                provenance: {
+                  source: 'gmx',
+                  sourceAsOf: null,
+                  observedAt: '2026-07-29T11:00:00.000Z',
+                  publishedAt: '2026-07-29T12:06:00.000Z',
+                },
+              })
+            : recordsPage({
+                nextCursor: 'next',
+                provenance: {
+                  source: 'gmx',
+                  sourceAsOf: '2026-07-29T11:30:00.000Z',
+                  observedAt: '2026-07-29T12:00:00.000Z',
+                  publishedAt: '2026-07-29T12:05:00.000Z',
+                },
+              })
+        )
+      )
+    )
+    const client = queryClient()
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    await waitFor(() =>
+      expect(view.result.current.provenance).toEqual({
+        source: 'gmx',
+        sourceAsOf: '2026-07-29T11:30:00.000Z',
+        observedAt: '2026-07-29T12:00:00.000Z',
+        publishedAt: '2026-07-29T12:05:00.000Z',
+      })
+    )
+    await act(async () => {
+      await view.result.current.fetchNextPage()
+    })
+    await waitFor(() =>
+      expect(view.result.current.provenance).toEqual({
+        source: 'gmx',
+        sourceAsOf: null,
+        observedAt: '2026-07-29T11:00:00.000Z',
+        publishedAt: '2026-07-29T12:05:00.000Z',
+      })
+    )
 
     view.unmount()
     client.clear()

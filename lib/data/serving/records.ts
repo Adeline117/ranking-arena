@@ -17,6 +17,7 @@ import type {
   HistoryEvidenceState,
   HistoryScanTerminalState,
   RecordKind,
+  RecordProvenance,
   RecordsPage,
   ServingCurrency,
 } from './types'
@@ -48,6 +49,24 @@ const HISTORY_BLOCKER_REASONS: ReadonlySet<HistoryCompletenessBlockerReason> = n
 
 function asCurrency(v: unknown): ServingCurrency {
   return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : 'USDT'
+}
+
+function validTimestampOrNull(value: unknown): string | null {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value === value.trim() &&
+    Number.isFinite(Date.parse(value))
+    ? value
+    : null
+}
+
+function recordProvenance(source: string, payload: Record<string, unknown>): RecordProvenance {
+  return {
+    source,
+    sourceAsOf: validTimestampOrNull(payload.sourceAsOf),
+    observedAt: validTimestampOrNull(payload.observedAt),
+    publishedAt: validTimestampOrNull(payload.publishedAt),
+  }
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -186,10 +205,7 @@ export async function getRecordsPage(
   return {
     rows: sanitizeRecordRows(d.rows),
     nextCursor: typeof d.nextCursor === 'string' ? d.nextCursor : null,
-    provenance: {
-      source,
-      asOf: typeof d.asOf === 'string' ? d.asOf : new Date().toISOString(),
-    },
+    provenance: recordProvenance(source, d),
     cacheState: 'warm',
     ...(isHistoryRecordKind(kind) ? { completeness: unknownHistoryCompleteness() } : {}),
   }
@@ -229,10 +245,7 @@ export async function getCopierAggregate(
     totalCopierPnl: totalPnl === null ? null : money(totalPnl, asCurrency(d.currency)),
     pnlDistribution: distribution,
     depth,
-    provenance: {
-      source,
-      asOf: typeof d.asOf === 'string' ? d.asOf : new Date().toISOString(),
-    },
+    provenance: recordProvenance(source, d),
   }
 }
 
@@ -256,10 +269,7 @@ export function recordsPageFromTierC(
       : typeof payload.nextCursor === 'string'
         ? payload.nextCursor
         : null,
-    provenance: {
-      source,
-      asOf: typeof payload.asOf === 'string' ? payload.asOf : new Date().toISOString(),
-    },
+    provenance: recordProvenance(source, payload),
     cacheState: 'cold-fetched',
     ...(historyPreview
       ? {

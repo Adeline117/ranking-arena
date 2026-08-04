@@ -16,6 +16,7 @@ import type {
   CopierAggregate,
   HistoryCompleteness,
   RecordKind,
+  RecordProvenance,
   RecordsPage,
   ServingTimeframe,
 } from '@/lib/data/serving/types'
@@ -74,6 +75,37 @@ function combinedHistoryCompleteness(
   )
 }
 
+function oldestCompleteClock(
+  pages: RecordsPage[],
+  key: 'sourceAsOf' | 'observedAt' | 'publishedAt'
+): string | null {
+  const values = pages.map((page) => page.provenance[key])
+  if (
+    values.some(
+      (value) =>
+        value === null ||
+        typeof value !== 'string' ||
+        value.trim() !== value ||
+        !Number.isFinite(Date.parse(value))
+    )
+  ) {
+    return null
+  }
+  return (values as string[]).reduce((oldest, value) =>
+    Date.parse(value) < Date.parse(oldest) ? value : oldest
+  )
+}
+
+function combinedRecordProvenance(source: string, pages: RecordsPage[]): RecordProvenance | null {
+  if (pages.length === 0) return null
+  return {
+    source,
+    sourceAsOf: oldestCompleteClock(pages, 'sourceAsOf'),
+    observedAt: oldestCompleteClock(pages, 'observedAt'),
+    publishedAt: oldestCompleteClock(pages, 'publishedAt'),
+  }
+}
+
 export function useTraderRecords({
   source,
   exchangeTraderId,
@@ -99,12 +131,12 @@ export function useTraderRecords({
 
   const pages = query.data?.pages ?? []
   const rows = pages.flatMap((p) => p.rows)
-  const lastPage = pages[pages.length - 1]
   const completeness = combinedHistoryCompleteness(kind, pages)
+  const provenance = combinedRecordProvenance(source, pages)
 
   return {
     rows,
-    provenance: lastPage?.provenance ?? null,
+    provenance,
     completeness,
     /** First page is still cold-fetching upstream (Tier-C pending). */
     isPendingUpstream: pages.length === 1 && pages[0].cacheState === 'pending',

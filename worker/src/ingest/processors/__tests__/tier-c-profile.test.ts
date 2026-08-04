@@ -216,6 +216,33 @@ function historyAdapter() {
   }
 }
 
+function positionsAdapter() {
+  return {
+    capabilities: {
+      profile: true,
+      positions: true,
+      positionHistory: false,
+      orders: false,
+      transfers: false,
+      copiers: false,
+    },
+    supportsSurface: () => true,
+    getPositions: mockGetPositions,
+    parsePositions: jest.fn(() => [
+      {
+        symbol: 'BTCUSDT',
+        side: 'long',
+        leverage: 2,
+        size: 1,
+        entryPrice: 100,
+        markPrice: 110,
+        unrealizedPnl: 10,
+        raw: {},
+      },
+    ]),
+  }
+}
+
 describe('Tier-C incomplete profile window gate', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -522,6 +549,64 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps position source freshness distinct from the capture clock', async () => {
+    mockGetSourceBySlug.mockResolvedValue({
+      ...src,
+      meta: { positions_delay_hours: 1 },
+    })
+    mockGetAdapter.mockReturnValue(positionsAdapter())
+    mockGetPositions.mockResolvedValue(bundle)
+
+    await expect(
+      processTierC({ data: { ...job.data, surface: 'positions' } } as Job<TierCJobData>, 'local')
+    ).resolves.toMatchObject({ traderId: 42, surface: 'positions', rows: 1 })
+
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload).toMatchObject({
+      sourceAsOf: '2026-07-15T11:00:00.000Z',
+      observedAt: '2026-07-15T12:00:00.000Z',
+      publishedAt: null,
+    })
+    expect(renderPayload).not.toHaveProperty('asOf')
+    expect(mockPublishPositions).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: src.slug }),
+      42,
+      expect.any(Array),
+      '2026-07-15T11:00:00.000Z',
+      expect.any(Object)
+    )
+
+    const cacheCall = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO arena.profile_cache')
+    )
+    expect(JSON.parse(String(cacheCall?.[1]?.[4]))).toEqual(renderPayload)
+  })
+
+  it('does not infer position source freshness without an explicit delay contract', async () => {
+    mockGetAdapter.mockReturnValue(positionsAdapter())
+    mockGetPositions.mockResolvedValue(bundle)
+
+    await processTierC(
+      { data: { ...job.data, surface: 'positions' } } as Job<TierCJobData>,
+      'local'
+    )
+
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload).toMatchObject({
+      sourceAsOf: null,
+      observedAt: '2026-07-15T12:00:00.000Z',
+      publishedAt: null,
+    })
+    expect(renderPayload).not.toHaveProperty('asOf')
+    expect(mockPublishPositions).toHaveBeenCalledWith(
+      src,
+      42,
+      expect.any(Array),
+      '2026-07-15T12:00:00.000Z',
+      expect.any(Object)
+    )
+  })
+
   it.each(['position_history', 'orders', 'transfers', 'copiers'] as const)(
     'keeps the %s interactive result partial, private, and RAW-only',
     async (surface) => {
@@ -587,7 +672,6 @@ describe('Tier-C incomplete profile window gate', () => {
           expect.objectContaining({ kind: surface }),
         ],
         nextCursor: null,
-        asOf: expect.any(String),
         sourceAsOf: null,
         observedAt: expect.any(String),
         publishedAt: null,
@@ -599,6 +683,7 @@ describe('Tier-C incomplete profile window gate', () => {
           blockerReasons: ['caller_limit'],
         },
       })
+      expect(renderPayload).not.toHaveProperty('asOf')
       for (const row of renderPayload.rows) {
         expect(row.raw).toBeUndefined()
         expect(row.copierLabel).toBeUndefined()

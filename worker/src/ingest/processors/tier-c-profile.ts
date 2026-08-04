@@ -283,6 +283,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
     let rows: Record<string, unknown>[] = []
     let rawPayload: unknown = null
     let rawPersisted = false
+    let warmPayload: Record<string, unknown> | null = null
 
     if (surface === 'positions') {
       const bundle = await adapter.getPositions(session, src, exchangeTraderId, traderMeta)
@@ -301,18 +302,31 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         bundle,
         `${src.slug}/${exchangeTraderId}`
       )
+      const observedAt = bundle.pages.at(-1)?.fetchedAt ?? null
+      if (observedAt === null || !Number.isFinite(Date.parse(observedAt))) {
+        throw new Error('[tier-c] positions capture has no valid observation clock')
+      }
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
       rows = positions.map((p) => ({ ...p, currency: src.currency }))
 
-      await redis.set(
-        resultKey,
-        JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
-        'EX',
-        120
-      )
-      const delayHours = Number(src.meta.positions_delay_hours ?? 0)
-      const asOf = new Date(Date.parse(scrapedAt) - delayHours * 3600_000).toISOString()
-      await publishPositions(src, traderId, positions, asOf, positionEvidence)
+      const configuredDelayHours = src.meta.positions_delay_hours
+      const sourceAsOf =
+        typeof configuredDelayHours === 'number' &&
+        Number.isFinite(configuredDelayHours) &&
+        configuredDelayHours >= 0
+          ? new Date(Date.parse(observedAt) - configuredDelayHours * 3600_000).toISOString()
+          : null
+      warmPayload = {
+        rows,
+        nextCursor: null,
+        sourceAsOf,
+        observedAt,
+        publishedAt: null,
+      }
+      await redis.set(resultKey, JSON.stringify(warmPayload), 'EX', 120)
+      // positions_current.as_of remains a legacy NOT NULL clock. Persist the
+      // observation as a fallback, but never label it sourceAsOf in the API.
+      await publishPositions(src, traderId, positions, sourceAsOf ?? observedAt, positionEvidence)
     } else {
       const kind = surface as HistoryKind
       const acquisition = await captureHistoryAcquisition({
@@ -346,7 +360,6 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
       const renderPayload = () => ({
         rows,
         nextCursor: null,
-        asOf: observedAt ?? scrapedAt,
         sourceAsOf: null,
         observedAt,
         publishedAt: null,
@@ -409,6 +422,9 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         meta: { surface },
       })
     }
+    if (warmPayload === null) {
+      throw new Error('[tier-c] heavy surface has no durable render payload')
+    }
     await getIngestPool().query(
       `INSERT INTO arena.profile_cache
          (trader_id, timeframe, surface, fetched_at, expires_at, is_refreshing, payload)
@@ -418,13 +434,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
          expires_at = EXCLUDED.expires_at,
          is_refreshing = false,
          payload = EXCLUDED.payload`,
-      [
-        traderId,
-        timeframe,
-        surface,
-        src.profile_cache_ttl_seconds,
-        JSON.stringify({ rows, nextCursor: null, asOf: scrapedAt }),
-      ]
+      [traderId, timeframe, surface, src.profile_cache_ttl_seconds, JSON.stringify(warmPayload)]
     )
 
     return { traderId, surface, rows: rows.length }
