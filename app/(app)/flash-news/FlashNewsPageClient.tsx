@@ -95,6 +95,53 @@ type FlashNewsTranslationDescriptor = {
 }
 
 const FLASH_NEWS_TRANSLATION_BATCH_SIZE = 20
+const FLASH_NEWS_HAN_RE = /\p{Script=Han}/u
+const FLASH_NEWS_HIRAGANA_RE = /\p{Script=Hiragana}/u
+const FLASH_NEWS_KATAKANA_RE = /\p{Script=Katakana}/u
+const FLASH_NEWS_HANGUL_RE = /\p{Script=Hangul}/u
+const FLASH_NEWS_LATIN_RE = /\p{Script=Latin}/u
+
+/**
+ * Detect only a clear four-language source. Numbers, emoji and punctuation do
+ * not make a source English, while mixed scripts need a unique >60% leader.
+ * Unknown/ambiguous text deliberately stays eligible for server-side `auto`.
+ */
+function detectedFlashNewsSourceLanguage(text: string): TranslationTargetLanguage | null {
+  let han = 0
+  let kana = 0
+  let hangul = 0
+  let latin = 0
+
+  for (const character of text) {
+    if (FLASH_NEWS_HIRAGANA_RE.test(character) || FLASH_NEWS_KATAKANA_RE.test(character)) {
+      kana += 1
+    } else if (FLASH_NEWS_HANGUL_RE.test(character)) {
+      hangul += 1
+    } else if (FLASH_NEWS_HAN_RE.test(character)) {
+      han += 1
+    } else if (FLASH_NEWS_LATIN_RE.test(character)) {
+      latin += 1
+    }
+  }
+
+  const candidates: Array<[TranslationTargetLanguage, number]> =
+    kana > 0
+      ? [
+          ['ja', kana + han],
+          ['ko', hangul],
+          ['en', latin],
+        ]
+      : [
+          ['zh', han],
+          ['ko', hangul],
+          ['en', latin],
+        ]
+  candidates.sort((left, right) => right[1] - left[1])
+
+  const [leader, runnerUp] = candidates
+  const recognizedCharacters = candidates.reduce((total, candidate) => total + candidate[1], 0)
+  return leader[1] > runnerUp[1] && leader[1] / recognizedCharacters > 0.6 ? leader[0] : null
+}
 
 function pretranslatedContent(
   item: FlashNews,
@@ -114,7 +161,8 @@ function pretranslatedContent(
 
 function translationSource(item: FlashNews, targetLang: TranslationTargetLanguage): string | null {
   if (pretranslatedContent(item, targetLang)) return null
-  return typeof item.content === 'string' && item.content.trim() ? item.content : null
+  if (typeof item.content !== 'string' || !item.content.trim()) return null
+  return detectedFlashNewsSourceLanguage(item.content) === targetLang ? null : item.content
 }
 
 function sameTranslationScope(
@@ -756,9 +804,12 @@ export default function FlashNewsPageClient() {
             const receipt = receipts[batchIndex]
             for (const descriptor of batch) {
               const result = receipt?.results[descriptor.id]
-              if (!result || result.translatedText.trim() === descriptor.source.trim()) {
-                throw new Error('Flash news translation did not translate every requested item')
-              }
+              if (!result) throw new Error('Flash news translation lost a requested item')
+              // Ambiguous/unknown sources are intentionally sent with server-side
+              // auto detection. A legitimate same-language identity result keeps
+              // that one item on its original text without poisoning valid sibling
+              // translations or weakening cross-batch atomic publication.
+              if (result.translatedText.trim() === descriptor.source.trim()) continue
               staged.set(descriptor.id, {
                 source: descriptor.source,
                 targetLang,
@@ -766,15 +817,12 @@ export default function FlashNewsPageClient() {
               })
             }
           })
-          if (staged.size !== unambiguousDescriptors.length) {
-            throw new Error('Flash news translation lost a requested item')
-          }
 
           const current = translatedContentRef.current
           let next = current
           for (const descriptor of unambiguousDescriptors) {
             const translated = staged.get(descriptor.id)
-            if (!translated) throw new Error('Flash news translation staging failed')
+            if (!translated) continue
             translationCacheRef.current.set(descriptor.id, translated)
             if (next === current) next = { ...current }
             next[descriptor.id] = translated.translatedText

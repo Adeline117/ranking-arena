@@ -179,8 +179,11 @@ describe('FlashNewsPageClient translation truth', () => {
     intersectionCallbacks = []
     mockLanguage = 'en'
     mockUseAuthSession.mockReturnValue(authenticatedSession())
-    window.IntersectionObserver =
-      MockIntersectionObserver as unknown as typeof window.IntersectionObserver
+    Object.defineProperty(window, 'IntersectionObserver', {
+      configurable: true,
+      value: MockIntersectionObserver,
+      writable: true,
+    })
   })
 
   afterEach(() => {
@@ -248,6 +251,107 @@ describe('FlashNewsPageClient translation truth', () => {
   })
 
   it.each([
+    ['Chinese', 'zh', '比特币价格今日持续上涨', 'English source needs a translation'],
+    ['English', 'en', 'Bitcoin markets rallied after the announcement', '比特币价格今日持续上涨'],
+    ['Japanese', 'ja', 'ビットコイン価格が上昇しました', 'English source needs a translation'],
+    ['Korean', 'ko', '비트코인 가격이 오늘 상승했습니다', 'English source needs a translation'],
+  ] as const)(
+    'skips a clearly %s source for its target while translating required siblings',
+    async (_label, targetLang, sameLanguageSource, sourceToTranslate) => {
+      mockLanguage = targetLang
+      const sameLanguage = newsItem('same-language', sameLanguageSource)
+      const needsTranslation = newsItem('needs-translation', sourceToTranslate)
+      let translationRequest: ReturnType<typeof parsedBody> | undefined
+      const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
+        const url = String(input)
+        if (url.startsWith('/api/flash-news')) {
+          return Promise.resolve(response(newsPage([sameLanguage, needsTranslation])))
+        }
+        if (url === '/api/translate') {
+          translationRequest = parsedBody(options)
+          return Promise.resolve(
+            response(
+              batchEnvelope({
+                [needsTranslation.id]: {
+                  translatedText: `translated-${targetLang}`,
+                  cached: false,
+                },
+              })
+            )
+          )
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      })
+      globalThis.fetch = fetchMock as never
+
+      render(<FlashNewsPageClient />)
+
+      expect(await screen.findByText(`translated-${targetLang}`)).toBeInTheDocument()
+      expect(translationRequest).toMatchObject({ targetLang })
+      expect(translationRequest?.items).toEqual([
+        {
+          id: needsTranslation.id,
+          text: needsTranslation.content,
+          contentType: 'flash_news',
+          contentId: needsTranslation.id,
+        },
+      ])
+      expect(screen.getByText(sameLanguage.content)).toBeInTheDocument()
+      expect(screen.getByTestId(`news-${sameLanguage.id}`)).toHaveAttribute(
+        'data-translated',
+        'false'
+      )
+      expect(itemTranslationState(sameLanguage.id)).toHaveAttribute('aria-busy', 'false')
+    }
+  )
+
+  it('translates Japanese and Korean sources while an ambiguous same-language echo stays local', async () => {
+    const sameLanguage = newsItem('same-en', 'Bitcoin markets rallied today')
+    const japanese = newsItem('source-ja', 'ビットコイン価格が上昇しました')
+    const korean = newsItem('source-ko', '비트코인 가격이 상승했습니다')
+    const mixed = newsItem('source-mixed', '比特币BTC')
+    let translationRequest: ReturnType<typeof parsedBody> | undefined
+    const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/flash-news')) {
+        return Promise.resolve(response(newsPage([sameLanguage, japanese, korean, mixed])))
+      }
+      if (url === '/api/translate') {
+        translationRequest = parsedBody(options)
+        const payload = batchEnvelope({
+          [japanese.id]: { translatedText: 'Japanese news in English', cached: false },
+          [korean.id]: { translatedText: 'Korean news in English', cached: false },
+          [mixed.id]: { translatedText: mixed.content, cached: true },
+        })
+        payload.data.cached = 1
+        payload.data.translated = 2
+        return Promise.resolve(response(payload))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    globalThis.fetch = fetchMock as never
+
+    render(<FlashNewsPageClient />)
+
+    expect(await screen.findByText('Japanese news in English')).toBeInTheDocument()
+    expect(await screen.findByText('Korean news in English')).toBeInTheDocument()
+    expect(translationRequest?.items.map(({ id }) => id)).toEqual([
+      japanese.id,
+      korean.id,
+      mixed.id,
+    ])
+    expect(translationRequest?.items.every(({ text }) => text.length > 0)).toBe(true)
+    expect(screen.getByText(sameLanguage.content)).toBeInTheDocument()
+    expect(screen.getByText(mixed.content)).toBeInTheDocument()
+    expect(screen.getByTestId(`news-${sameLanguage.id}`)).toHaveAttribute(
+      'data-translated',
+      'false'
+    )
+    expect(screen.getByTestId(`news-${mixed.id}`)).toHaveAttribute('data-translated', 'false')
+    expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it.each([
     ['JWT subject differs from the user', { accessToken: TOKEN_B }],
     ['viewer key differs from the user', { viewerKey: `user:${USER_B}` }],
     ['authentication is not checked', { authChecked: false }],
@@ -275,7 +379,7 @@ describe('FlashNewsPageClient translation truth', () => {
   })
 
   it.each([
-    ['partial result', (item: NewsFixture) => batchEnvelope({}, 1)],
+    ['partial result', (_item: NewsFixture) => batchEnvelope({}, 1)],
     [
       'original echo',
       (item: NewsFixture) =>
@@ -301,6 +405,7 @@ describe('FlashNewsPageClient translation truth', () => {
   })
 
   it('translates the complete list in bounded batches and publishes all batches atomically', async () => {
+    mockLanguage = 'ja'
     const items = Array.from({ length: 21 }, (_, index) =>
       newsItem(`news-${index}`, `complete-source-${index}-${'x'.repeat(80)}`)
     )
@@ -358,6 +463,7 @@ describe('FlashNewsPageClient translation truth', () => {
   })
 
   it('aborts pending sibling batches and publishes nothing when any batch fails', async () => {
+    mockLanguage = 'ja'
     const items = Array.from({ length: 41 }, (_, index) =>
       newsItem(`news-${index}`, `failure-source-${index}`)
     )
@@ -606,7 +712,56 @@ describe('FlashNewsPageClient translation truth', () => {
     expect(await screen.findByText('fresh-source')).toBeInTheDocument()
   })
 
+  it('cancels an old request when the replacement list is entirely same-language', async () => {
+    const first = newsItem('news-1', '第一版需要翻译的中文内容')
+    const replacement = newsItem('news-1', 'Replacement English source remains original')
+    const oldTranslation = deferred<Response>()
+    let oldTranslationSignal: AbortSignal | undefined
+    let listRequests = 0
+    let translationCalls = 0
+    const fetchMock = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/flash-news')) {
+        listRequests += 1
+        return Promise.resolve(response(newsPage([listRequests === 1 ? first : replacement])))
+      }
+      if (url === '/api/translate') {
+        translationCalls += 1
+        oldTranslationSignal = options?.signal as AbortSignal
+        return oldTranslation.promise
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    globalThis.fetch = fetchMock as never
+
+    render(<FlashNewsPageClient />)
+    await waitFor(() => expect(translationCalls).toBe(1))
+    expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'newsFlash_cat_btc_eth' }))
+    expect(await screen.findByText(replacement.content)).toBeInTheDocument()
+    await waitFor(() => expect(oldTranslationSignal?.aborted).toBe(true))
+    expect(translationCalls).toBe(1)
+    expect(screen.getByTestId('flash-news-timeline')).toHaveAttribute('aria-busy', 'false')
+
+    oldTranslation.resolve(
+      response(
+        batchEnvelope({
+          [first.id]: { translatedText: 'stale-old-translation', cached: false },
+        })
+      )
+    )
+    await act(async () => {
+      await oldTranslation.promise
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('stale-old-translation')).not.toBeInTheDocument()
+    expect(screen.getByText(replacement.content)).toBeInTheDocument()
+    expect(screen.getByTestId(`news-${replacement.id}`)).toHaveAttribute('data-translated', 'false')
+  })
+
   it('single-flights an in-flight source key when pagination creates an equivalent news array', async () => {
+    mockLanguage = 'ja'
     const firstPage = Array.from({ length: 6 }, (_, index) =>
       newsItem(`news-${index}`, `source-${index}`)
     )
