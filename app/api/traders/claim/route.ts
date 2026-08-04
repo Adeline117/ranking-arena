@@ -10,13 +10,13 @@
 
 import crypto from 'crypto'
 import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   requireAuth,
   success,
   handleError,
   validateString,
-  validateEnum,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
@@ -35,15 +35,38 @@ import { logger } from '@/lib/logger'
 import { canonicalizeWalletIdentity, walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 
-function requireProofString(value: unknown, field: string, maxLength: number): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw ApiError.validation(`${field} must be a non-empty string`)
-  }
-  if (value.length > maxLength) {
-    throw ApiError.validation(`${field} is too long`)
-  }
-  return value
+const ClaimIdentitySchema = {
+  trader_id: z.string().trim().min(1).max(512),
+  source: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .transform((value) => value.toLowerCase()),
 }
+
+const ClaimRequestSchema = z.discriminatedUnion('verification_method', [
+  z
+    .object({
+      ...ClaimIdentitySchema,
+      verification_method: z.literal('api_key'),
+      verification_data: z.object({ verified_uid: z.string().trim().min(1).max(512) }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...ClaimIdentitySchema,
+      verification_method: z.literal('signature'),
+      verification_data: z
+        .object({
+          wallet_address: z.string().min(1).max(512),
+          signature: z.string().min(1).max(2048),
+          message: z.string().min(1).max(2048),
+        })
+        .strict(),
+    })
+    .strict(),
+])
 
 /**
  * GET /api/traders/claim
@@ -123,23 +146,19 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
-    const body = await request.json()
-
-    const rawTraderId = validateString(body.trader_id, {
-      required: true,
-      maxLength: 512,
-      fieldName: 'trader_id',
-    })
-    const rawSource = validateString(body.source, { required: true, fieldName: 'source' })
-    const source = rawSource?.toLowerCase()
-    const verification_method = validateEnum(body.verification_method, [
-      'api_key',
-      'signature',
-    ] as const)
-
-    if (!rawTraderId || !source || !verification_method) {
-      throw ApiError.validation('Missing required parameters')
+    let rawBody: unknown
+    try {
+      rawBody = await request.json()
+    } catch {
+      throw ApiError.validation('Invalid JSON body')
     }
+
+    const parsedBody = ClaimRequestSchema.safeParse(rawBody)
+    if (!parsedBody.success) throw ApiError.validation('Invalid claim request')
+    const body = parsedBody.data
+    const rawTraderId = body.trader_id
+    const source = body.source
+    const verification_method = body.verification_method
 
     let trader_id = rawTraderId
     if (verification_method === 'signature') {
@@ -152,21 +171,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (
+      body.verification_method === 'api_key' &&
+      body.verification_data.verified_uid !== trader_id
+    ) {
+      throw ApiError.validation(
+        'Verification mismatch. The verified UID does not match this trader.'
+      )
+    }
+    if (
+      body.verification_method === 'signature' &&
+      !walletIdentitiesMatch(body.verification_data.wallet_address, trader_id, source)
+    ) {
+      throw ApiError.validation('Wallet address does not match trader account')
+    }
+
     // Early check if already claimed (optimization — DB unique constraint is the real guard against race conditions)
     const isClaimed = await isTraderClaimed(supabase, trader_id, source)
     if (isClaimed) {
       throw ApiError.validation('This trader account has been claimed or is under review')
     }
 
-    // For API key verification, validate that verify-ownership was called and UID matches
-    if (verification_method === 'api_key') {
-      const verifiedUid = body.verification_data?.verified_uid
+    let sanitizedVerificationData: Record<string, unknown>
 
-      if (!verifiedUid) {
-        throw ApiError.validation(
-          'API key verification required. Please complete the verification step first.'
-        )
-      }
+    // For API key verification, validate that verify-ownership was called and UID matches
+    if (body.verification_method === 'api_key') {
+      const verifiedUid = body.verification_data.verified_uid
 
       // Re-check the server-stored proof. Futures/spot leaderboard sources map
       // to the base exchange connection written by verify-ownership.
@@ -186,24 +216,12 @@ export async function POST(request: NextRequest) {
           'Verification mismatch. Your verified account does not match this trader.'
         )
       }
-    }
 
-    // For wallet signature verification, verify the signature server-side
-    if (verification_method === 'signature') {
-      const proof = body.verification_data
-      if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
-        throw ApiError.validation('Wallet signature verification data must be an object')
-      }
-
-      const proofRecord = proof as Record<string, unknown>
-      const walletAddress = requireProofString(proofRecord.wallet_address, 'wallet_address', 512)
-      const signature = requireProofString(proofRecord.signature, 'signature', 2048)
-      const message = requireProofString(proofRecord.message, 'message', 2048)
-
-      // Verify that wallet_address matches trader_id
-      if (!walletIdentitiesMatch(walletAddress, trader_id, source)) {
-        throw ApiError.validation('Wallet address does not match trader account')
-      }
+      const uidHash = crypto.createHash('sha256').update(verifiedUid).digest('hex').slice(0, 16)
+      sanitizedVerificationData = { uid_hash: uidHash }
+    } else {
+      // For wallet signature verification, verify the signature server-side.
+      const { wallet_address: walletAddress, signature, message } = body.verification_data
 
       // Verify wallet ownership directly (no HTTP self-fetch)
       try {
@@ -214,7 +232,7 @@ export async function POST(request: NextRequest) {
           platform: source,
           trader_key: trader_id,
         })
-        body.verification_data = {
+        sanitizedVerificationData = {
           wallet_address: verification.wallet_address,
           signature,
           message,
@@ -232,17 +250,6 @@ export async function POST(request: NextRequest) {
     // activation chain (verified_traders / user_linked_traders / user_profiles
     // / trader_authorizations) moved to activateClaim(), called from the admin
     // approve path (lib/data/trader-claims.ts reviewClaim).
-
-    // Hash sensitive UIDs before storing in verification_data
-    let sanitizedVerificationData = body.verification_data || {}
-    if (verification_method === 'api_key' && sanitizedVerificationData.verified_uid) {
-      const uidHash = crypto
-        .createHash('sha256')
-        .update(String(sanitizedVerificationData.verified_uid))
-        .digest('hex')
-        .slice(0, 16)
-      sanitizedVerificationData = { uid_hash: uidHash }
-    }
 
     let claim
     try {

@@ -3,6 +3,7 @@ const mockSubmitClaim = jest.fn()
 const mockGetUserClaimForTrader = jest.fn()
 const mockGetUserVerifiedTrader = jest.fn()
 const mockVerifyWalletOwnership = jest.fn()
+const mockHasVerifiedClaimConnection = jest.fn()
 const mockSendNotification = jest.fn()
 const mockNotifyTraderClaim = jest.fn()
 
@@ -70,7 +71,7 @@ jest.mock('@/lib/services/wallet-verification', () => ({
 }))
 
 jest.mock('@/lib/services/claim-connection-proof', () => ({
-  hasVerifiedClaimConnection: jest.fn(),
+  hasVerifiedClaimConnection: (...args: unknown[]) => mockHasVerifiedClaimConnection(...args),
 }))
 
 jest.mock('@/lib/data/notifications', () => ({
@@ -111,6 +112,15 @@ function walletClaim(traderId: string, walletAddress: unknown, source = 'hyperli
       signature: '0xsigned',
       message: `I am claiming trader profile ${traderId} on Arena. Timestamp: ${Date.now()}`,
     },
+  }
+}
+
+function apiKeyClaim(traderId: string, verifiedUid = traderId) {
+  return {
+    trader_id: traderId,
+    source: 'binance',
+    verification_method: 'api_key',
+    verification_data: { verified_uid: verifiedUid },
   }
 }
 
@@ -175,6 +185,7 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockIsTraderClaimed.mockResolvedValue(false)
+    mockHasVerifiedClaimConnection.mockResolvedValue(true)
     mockVerifyWalletOwnership.mockResolvedValue({
       verified: true,
       wallet_address: canonicalEvm,
@@ -248,6 +259,91 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
 
     expect(response.status).toBe(400)
     expect(mockVerifyWalletOwnership).not.toHaveBeenCalled()
+    expect(mockSubmitClaim).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    null,
+    { ...walletClaim(canonicalEvm, canonicalEvm), extra: true },
+    {
+      ...walletClaim(canonicalEvm, canonicalEvm),
+      verification_data: {
+        ...walletClaim(canonicalEvm, canonicalEvm).verification_data,
+        extra: true,
+      },
+    },
+    {
+      ...walletClaim(canonicalEvm, canonicalEvm),
+      verification_data: {
+        ...walletClaim(canonicalEvm, canonicalEvm).verification_data,
+        signature: 'x'.repeat(2049),
+      },
+    },
+  ])('rejects a malformed exact request before querying claim state: %p', async (body) => {
+    const response = await POST(request(body))
+
+    expect(response.status).toBe(400)
+    expect(mockIsTraderClaimed).not.toHaveBeenCalled()
+    expect(mockVerifyWalletOwnership).not.toHaveBeenCalled()
+    expect(mockSubmitClaim).not.toHaveBeenCalled()
+  })
+
+  it('maps unreadable JSON to a validation response', async () => {
+    const unreadableRequest = {
+      json: jest.fn().mockRejectedValue(new SyntaxError('invalid JSON')),
+    } as unknown as NextRequest
+
+    const response = await POST(unreadableRequest)
+
+    expect(response.status).toBe(400)
+    expect(mockIsTraderClaimed).not.toHaveBeenCalled()
+  })
+
+  it('binds an API-key claim to the exact verified UID and stores only its hash', async () => {
+    const traderId = 'binance-uid-123'
+    mockSubmitClaim.mockResolvedValue({
+      id: 'claim-api-1',
+      user_id: 'user-1',
+      trader_id: traderId,
+      source: 'binance',
+      verification_method: 'api_key',
+      verification_data: { uid_hash: 'hashed' },
+      status: 'reviewing',
+      reject_reason: null,
+      reviewed_by: null,
+      reviewed_at: null,
+      verified_at: null,
+      created_at: '2026-07-16T00:00:00.000Z',
+      updated_at: '2026-07-16T00:00:00.000Z',
+    })
+
+    const response = await POST(request(apiKeyClaim(traderId)))
+
+    expect(response.status).toBe(200)
+    expect(mockHasVerifiedClaimConnection).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
+      'binance',
+      traderId
+    )
+    expect(mockSubmitClaim).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
+      expect.objectContaining({
+        trader_id: traderId,
+        source: 'binance',
+        verification_method: 'api_key',
+        verification_data: { uid_hash: expect.stringMatching(/^[a-f0-9]{16}$/) },
+      })
+    )
+  })
+
+  it('rejects a client UID that differs from the trader identity before proof lookup', async () => {
+    const response = await POST(request(apiKeyClaim('binance-uid-123', 'other-uid')))
+
+    expect(response.status).toBe(400)
+    expect(mockIsTraderClaimed).not.toHaveBeenCalled()
+    expect(mockHasVerifiedClaimConnection).not.toHaveBeenCalled()
     expect(mockSubmitClaim).not.toHaveBeenCalled()
   })
 
