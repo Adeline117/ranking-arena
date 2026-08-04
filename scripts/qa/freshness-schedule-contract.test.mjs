@@ -15,6 +15,10 @@ const computeWatchdog = readFileSync(
   join(root, 'app/api/cron/compute-leaderboard-watchdog/route.ts'),
   'utf8'
 )
+const computeRecoveryTrigger = readFileSync(
+  join(root, 'app/api/cron/compute-leaderboard-watchdog/recovery-trigger.ts'),
+  'utf8'
+)
 
 function countNamedFiles(directory, fileName) {
   let count = 0
@@ -69,15 +73,34 @@ test('budgets the compute watchdog for every sequential season trigger', () => {
   const maxDurationSeconds = Number(
     computeWatchdog.match(/export const maxDuration = (\d+)/)?.[1] ?? 0
   )
+  const workTimeoutMs = Number(
+    (
+      computeWatchdog.match(/const workSignal = AbortSignal\.timeout\(([\d_]+)\)/)?.[1] ?? '0'
+    ).replaceAll('_', '')
+  )
+  const safetyTimeoutMs = Number(
+    (computeWatchdog.match(/safetyTimeoutMs: ([\d_]+)/)?.[1] ?? '0').replaceAll('_', '')
+  )
   const triggerTimeoutMs = Number(
-    (computeWatchdog.match(/AbortSignal\.timeout\(([\d_]+)\)/)?.[1] ?? '0').replaceAll('_', '')
+    (computeRecoveryTrigger.match(/options\.timeoutMs \?\? ([\d_]+)/)?.[1] ?? '0').replaceAll(
+      '_',
+      ''
+    )
   )
 
   assert.match(computeWatchdog, /const SEASONS = \['90D', '30D', '7D'\] as const/)
   assert.ok(triggerTimeoutMs > 0)
   assert.ok(
-    maxDurationSeconds * 1000 >= triggerTimeoutMs * 3 + 30_000,
-    'watchdog duration must cover three sequential trigger timeouts plus finalization headroom'
+    workTimeoutMs >= triggerTimeoutMs * 3 + 25_000,
+    'watchdog work budget must cover three sequential trigger timeouts plus finalization headroom'
+  )
+  assert.ok(
+    safetyTimeoutMs >= workTimeoutMs + 20_000,
+    'cron wrapper must leave headroom after the watchdog work deadline'
+  )
+  assert.ok(
+    maxDurationSeconds * 1000 >= safetyTimeoutMs + 10_000,
+    'serverless runtime must leave headroom after the cron wrapper deadline'
   )
 })
 
