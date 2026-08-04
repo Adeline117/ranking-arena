@@ -5,13 +5,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
+  ApiError,
+  conflict,
+  forbidden,
   getSupabaseAdmin,
   requireAuth,
   success,
   handleError,
-  validateString,
-  validateBoolean,
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { parseCollectionMutationAck } from '@/lib/collections/atomic'
@@ -22,6 +24,19 @@ const NO_STORE_HEADERS = {
   'CDN-Cache-Control': 'no-store',
   'Vercel-CDN-Cache-Control': 'no-store',
 } as const
+
+const CreateCollectionSchema = z
+  .object({
+    name: z.string().trim().min(1).max(50),
+    description: z
+      .string()
+      .max(200)
+      .transform((value) => value.trim() || null)
+      .nullable()
+      .optional(),
+    is_public: z.boolean().optional(),
+  })
+  .strict()
 
 function noStore<T extends NextResponse>(response: T): T {
   for (const [name, value] of Object.entries(NO_STORE_HEADERS)) response.headers.set(name, value)
@@ -35,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     const currentAudience = await readPublicProfileAudienceById(supabase, user.id)
     if (currentAudience.status !== 'active') {
-      return success({ error: 'Account is not active' }, 403, NO_STORE_HEADERS)
+      return noStore(forbidden('Account is not active'))
     }
 
     const { error: defaultsError } = await supabase.rpc('ensure_default_collections', {
@@ -49,7 +64,7 @@ export async function GET(request: NextRequest) {
       if (defaultsError.code === '42501') {
         const deniedAudience = await readPublicProfileAudienceById(supabase, user.id)
         if (deniedAudience.status !== 'active') {
-          return success({ error: 'Account is not active' }, 403, NO_STORE_HEADERS)
+          return noStore(forbidden('Account is not active'))
         }
       }
       throw defaultsError
@@ -57,26 +72,33 @@ export async function GET(request: NextRequest) {
 
     const { data: collections, error } = await supabase
       .from('user_collections')
-      .select('*, collection_items(count)')
+      .select('id, name, collection_items(count)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
 
     if (error) throw error
 
-    const result = (collections || []).map((c: Record<string, unknown>) => ({
-      ...c,
-      item_count: Array.isArray(c.collection_items)
-        ? (c.collection_items[0] as Record<string, number>)?.count || 0
-        : 0,
-      collection_items: undefined,
-    }))
+    const result = (collections || []).map((collection: Record<string, unknown>) => {
+      const count = Array.isArray(collection.collection_items)
+        ? (collection.collection_items[0] as Record<string, unknown> | undefined)?.count
+        : undefined
+      if (
+        typeof collection.id !== 'string' ||
+        typeof collection.name !== 'string' ||
+        !Number.isSafeInteger(count) ||
+        Number(count) < 0
+      ) {
+        throw new Error('Malformed collection list projection')
+      }
+      return { id: collection.id, name: collection.name, item_count: Number(count) }
+    })
 
     const releaseAudience = await readPublicProfileAudienceById(supabase, user.id)
     if (releaseAudience.status !== 'active') {
-      return success({ error: 'Account is not active' }, 403, NO_STORE_HEADERS)
+      return noStore(forbidden('Account is not active'))
     }
 
-    return success({ collections: result }, 200, NO_STORE_HEADERS)
+    return success({ viewerId: user.id, collections: result }, 200, NO_STORE_HEADERS)
   } catch (error: unknown) {
     return noStore(handleError(error, 'collections GET'))
   }
@@ -90,18 +112,19 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    const body = (await request.json()) as Record<string, unknown>
-    const name = validateString(body.name, {
-      required: true,
-      minLength: 1,
-      maxLength: 50,
-      fieldName: 'name',
-    })!
-    const description = validateString(body.description, {
-      maxLength: 200,
-      fieldName: 'description',
-    })
-    const is_public = validateBoolean(body.is_public) ?? false
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      throw ApiError.validation('Invalid JSON body')
+    }
+    const parsed = CreateCollectionSchema.safeParse(body)
+    if (!parsed.success) {
+      throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
+    }
+    const name = parsed.data.name
+    const description = parsed.data.description ?? null
+    const is_public = parsed.data.is_public ?? false
 
     const { data, error } = await supabase.rpc('mutate_user_collection_atomic', {
       p_action: 'create',
@@ -122,13 +145,23 @@ export async function POST(request: NextRequest) {
       collectionId: undefined,
     })
     if (acknowledgement.result_code === 'already_exists') {
-      return success({ error: 'Collection with this name already exists' }, 409, NO_STORE_HEADERS)
+      return noStore(conflict('Collection with this name already exists'))
     }
     if (acknowledgement.result_code === 'inactive_actor') {
-      return success({ error: 'Account is not active' }, 403, NO_STORE_HEADERS)
+      return noStore(forbidden('Account is not active'))
     }
+    if (!acknowledgement.collection) throw new Error('Missing created collection')
 
-    return success({ collection: acknowledgement.collection }, 200, NO_STORE_HEADERS)
+    return success(
+      {
+        action: 'create' as const,
+        actorId: user.id,
+        collectionId: acknowledgement.collection.id,
+        collection: acknowledgement.collection,
+      },
+      200,
+      NO_STORE_HEADERS
+    )
   } catch (error: unknown) {
     return noStore(handleError(error, 'collections POST'))
   }

@@ -5,12 +5,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
+  ApiError,
+  conflict,
+  forbidden,
   getSupabaseAdmin,
+  notFound,
   requireAuth,
   success,
   handleError,
-  validateString,
   validateEnum,
   validateUUID,
 } from '@/lib/api'
@@ -24,6 +28,23 @@ const NO_STORE_HEADERS = {
 } as const
 
 const ITEM_TYPES = ['post', 'activity'] as const
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const AddCollectionItemSchema = z
+  .object({
+    item_type: z.enum(ITEM_TYPES),
+    item_id: z
+      .string()
+      .trim()
+      .regex(UUID_PATTERN)
+      .transform((value) => value.toLowerCase()),
+    note: z
+      .string()
+      .max(500)
+      .transform((value) => value.trim() || null)
+      .nullable()
+      .optional(),
+  })
+  .strict()
 
 function noStore<T extends NextResponse>(response: T): T {
   for (const [name, value] of Object.entries(NO_STORE_HEADERS)) response.headers.set(name, value)
@@ -36,17 +57,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   try {
     const { id: requestedId } = await params
-    const id = validateUUID(requestedId, { required: true, fieldName: 'collection id' })!
+    const id = validateUUID(requestedId, {
+      required: true,
+      fieldName: 'collection id',
+    })!.toLowerCase()
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    const body = (await request.json()) as Record<string, unknown>
-    const item_type = validateEnum(body.item_type, ITEM_TYPES, {
-      required: true,
-      fieldName: 'item_type',
-    })!
-    const item_id = validateUUID(body.item_id, { required: true, fieldName: 'item_id' })!
-    const note = validateString(body.note, { maxLength: 500, fieldName: 'note' })
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      throw ApiError.validation('Invalid JSON body')
+    }
+    const parsed = AddCollectionItemSchema.safeParse(body)
+    if (!parsed.success) {
+      throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
+    }
+    const { item_type, item_id } = parsed.data
+    const note = parsed.data.note ?? null
 
     const { data, error } = await supabase.rpc('mutate_collection_item_atomic', {
       p_action: 'add',
@@ -66,19 +95,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       itemType: item_type,
     })
     if (acknowledgement.result_code === 'already_exists') {
-      return success({ error: 'Item already in collection' }, 409, NO_STORE_HEADERS)
+      return noStore(conflict('Item already in collection'))
     }
     if (acknowledgement.result_code === 'collection_not_found') {
-      return success({ error: 'Collection not found' }, 404, NO_STORE_HEADERS)
+      return noStore(notFound('Collection not found'))
     }
     if (acknowledgement.result_code === 'resource_not_found') {
-      return success({ error: 'Collection item not found' }, 404, NO_STORE_HEADERS)
+      return noStore(notFound('Collection item not found'))
     }
     if (acknowledgement.result_code === 'inactive_actor') {
-      return success({ error: 'Account is not active' }, 403, NO_STORE_HEADERS)
+      return noStore(forbidden('Account is not active'))
     }
+    if (!acknowledgement.item) throw new Error('Missing inserted collection item')
 
-    return success({ item: acknowledgement.item }, 200, NO_STORE_HEADERS)
+    return success(
+      {
+        action: 'add' as const,
+        actorId: user.id,
+        collectionId: id,
+        itemId: item_id,
+        itemType: item_type,
+        item: acknowledgement.item,
+      },
+      200,
+      NO_STORE_HEADERS
+    )
   } catch (error: unknown) {
     return noStore(handleError(error, 'collection-items POST'))
   }
@@ -125,7 +166,7 @@ export async function DELETE(
       itemType: item_type,
     })
     if (acknowledgement.result_code === 'collection_not_found') {
-      return success({ error: 'Collection not found' }, 404, NO_STORE_HEADERS)
+      return noStore(notFound('Collection not found'))
     }
     if (acknowledgement.result_code === 'not_found') {
       // Preserve the endpoint's historical idempotence: deleting an item that
@@ -133,7 +174,7 @@ export async function DELETE(
       return success({ removed: true }, 200, NO_STORE_HEADERS)
     }
     if (acknowledgement.result_code === 'inactive_actor') {
-      return success({ error: 'Account is not active' }, 403, NO_STORE_HEADERS)
+      return noStore(forbidden('Account is not active'))
     }
     return success({ removed: true }, 200, NO_STORE_HEADERS)
   } catch (error: unknown) {
