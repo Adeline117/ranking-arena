@@ -15,45 +15,67 @@ export function ToggleSwitch({
 }) {
   return (
     <button
+      type="button"
+      className="settings-toggle-switch"
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       style={{
         width: 48,
-        height: 26,
-        borderRadius: 13,
-        padding: 3,
+        height: 44,
+        minWidth: 48,
+        minHeight: 44,
+        borderRadius: tokens.radius.full,
+        padding: 0,
         border: 'none',
-        background: checked ? tokens.gradient.primary : tokens.colors.bg.tertiary,
+        background: 'transparent',
         cursor: 'pointer',
-        transition: `all ${tokens.transition.base}`,
         position: 'relative',
         flexShrink: 0,
-        boxShadow: checked ? `${tokens.shadow.glow}, ${tokens.shadow.inner}` : tokens.shadow.inner,
+        boxShadow: 'none',
         outline: 'none',
       }}
       onFocus={(e) => {
         e.currentTarget.style.boxShadow = `0 0 0 ${tokens.focusRing.width} ${tokens.focusRing.color}`
       }}
       onBlur={(e) => {
-        e.currentTarget.style.boxShadow = checked
-          ? `${tokens.shadow.glow}, ${tokens.shadow.inner}`
-          : tokens.shadow.inner
+        e.currentTarget.style.boxShadow = 'none'
       }}
     >
       <span
+        className="settings-toggle-switch-track"
+        aria-hidden="true"
         style={{
+          position: 'absolute',
+          top: 9,
+          left: 0,
           display: 'block',
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          background: tokens.colors.white,
-          transform: checked ? 'translateX(22px)' : 'translateX(0)',
-          transition: `transform ${tokens.transition.bounce}`,
-          boxShadow: tokens.shadow.sm,
+          width: 48,
+          height: 26,
+          padding: 3,
+          borderRadius: tokens.radius.full,
+          background: checked ? tokens.gradient.primary : tokens.colors.bg.tertiary,
+          boxShadow: checked
+            ? `${tokens.shadow.glow}, ${tokens.shadow.inner}`
+            : tokens.shadow.inner,
+          transition: `all ${tokens.transition.base}`,
         }}
-      />
+      >
+        <span
+          className="settings-toggle-switch-thumb"
+          style={{
+            display: 'block',
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: tokens.colors.white,
+            transform: checked ? 'translateX(22px)' : 'translateX(0)',
+            transition: `transform ${tokens.transition.bounce}`,
+            boxShadow: tokens.shadow.sm,
+          }}
+        />
+      </span>
     </button>
   )
 }
@@ -158,6 +180,7 @@ export function RadioOption<T extends string>({
         display: 'flex',
         alignItems: 'flex-start',
         gap: tokens.spacing[3],
+        minHeight: 44,
         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.md,
         cursor: 'pointer',
@@ -167,12 +190,21 @@ export function RadioOption<T extends string>({
       }}
     >
       <input
+        className="settings-radio-input"
         type="radio"
         name={name}
         value={value}
         checked={currentValue === value}
         onChange={() => onChange(value)}
-        style={{ marginTop: 3, accentColor: tokens.colors.accent.brand }}
+        style={{
+          width: 16,
+          height: 16,
+          minWidth: 16,
+          minHeight: 16,
+          margin: '3px 0 0',
+          flexShrink: 0,
+          accentColor: tokens.colors.accent.brand,
+        }}
       />
       <Box>
         <Text size="sm" weight="medium">

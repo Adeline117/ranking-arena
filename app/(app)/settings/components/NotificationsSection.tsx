@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useSyncExternalStore } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -36,10 +36,17 @@ interface NotificationsSectionProps {
   ) => void
 }
 
+const subscribeToHapticSupport = () => () => {}
+
 export const NotificationsSection = React.memo(function NotificationsSection(
   props: NotificationsSectionProps
 ) {
   const { t } = useLanguage()
+  const hapticSupported = useSyncExternalStore(
+    subscribeToHapticSupport,
+    isHapticSupported,
+    () => false
+  )
   const onToast =
     props.onToast ||
     ((msg: string) => {
@@ -151,7 +158,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(
       </Box>
 
       {/* Haptic Feedback */}
-      {isHapticSupported() && (
+      {hapticSupported && (
         <Box
           style={{
             marginTop: tokens.spacing[5],
