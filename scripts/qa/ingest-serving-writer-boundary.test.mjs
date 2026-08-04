@@ -78,7 +78,7 @@ const REVIEWED_GENERIC_HISTORY_CALLERS = new Set([
   'worker/src/ingest/processors/tier-b-profiles.ts',
   'worker/src/ingest/processors/tier-c-profile.ts',
 ])
-const OPERATOR_ONLY_LEGACY_HISTORY_READERS = new Set(['scripts/maintenance/backup-to-r2.mjs'])
+const OPERATOR_ONLY_LEGACY_HISTORY_READERS = new Set()
 
 function hasArenaBotsWriter(source) {
   return (
@@ -293,14 +293,19 @@ test('public legacy position history rejects every runtime read/write path', () 
   }
 })
 
-test('operator-only legacy read allowlist is exact and never permits a writer', () => {
+test('legacy public history has no repository read allowlist and never permits a writer', () => {
   const legacyReader = "client.from('trader_position_history').select('*')"
   const legacyWriter = "client.from('trader_position_history').update({ raw: null })"
 
-  for (const file of OPERATOR_ONLY_LEGACY_HISTORY_READERS) {
-    assert.deepEqual(positionHistoryOffenseReasons(legacyReader, file), [])
-    assert.deepEqual(positionHistoryOffenseReasons(legacyWriter, file), ['public-legacy-writer'])
-  }
+  assert.deepEqual([...OPERATOR_ONLY_LEGACY_HISTORY_READERS], [])
+  assert.deepEqual(
+    positionHistoryOffenseReasons(legacyReader, 'scripts/maintenance/backup-to-r2.mjs'),
+    ['public-legacy-reader']
+  )
+  assert.deepEqual(
+    positionHistoryOffenseReasons(legacyWriter, 'scripts/maintenance/backup-to-r2.mjs'),
+    ['public-legacy-writer']
+  )
   assert.deepEqual(positionHistoryOffenseReasons(legacyReader, 'scripts/check_tables_v2.mjs'), [
     'public-legacy-reader',
   ])
