@@ -39,6 +39,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
+import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseLbankHistory,
   parseLbankLeaderboardPage,
@@ -61,6 +62,10 @@ function endpoint(src: SourceRow, key: string, fallback: string): string {
 /** LBank boards are 7/30 only — clamp anything else to 30. */
 function clampTf(timeframe: Timeframe): 7 | 30 {
   return timeframe === 7 ? 7 : 30
+}
+
+function nonNegativeSafeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
 /** Captured page-request headers per session (see FETCH MODEL above). */
@@ -277,16 +282,41 @@ const lbankAdapter: SourceAdapter = {
     // copiers
     const url = endpoint(src, 'copiers', `${BASE}/stat/v1/followers`)
     const maxPages = Number(src.meta.copier_max_pages) || 30
+    let candidatesSeen = 0
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
       const payload = await replayJson(session, fetcher, {
         url: `${url}?current=${pageIndex}&size=${limit}&traderId=${id}`,
         method: 'GET',
         headers: {},
       })
-      const rows = parseLbankHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
+      const candidateCount = extractCopierCandidateRecords({
+        src,
+        exchangeTraderId,
+        pageIndex,
+        payload,
+      }).candidates.length
+      candidatesSeen += candidateCount
+      if (!Number.isSafeInteger(candidatesSeen)) {
+        throw new Error('[lbank] copier candidate count exceeds the safe-integer range')
+      }
+      const reportedTotal = nonNegativeSafeInteger(
+        ((payload as { data?: { total?: unknown } })?.data ?? {}).total
+      )
+      if (reportedTotal !== null && candidatesSeen > reportedTotal) {
+        throw new Error('[lbank] copier candidates exceed the reported total')
+      }
+
+      const metadataClaimsMore = reportedTotal !== null && candidatesSeen < reportedTotal
+      if (candidateCount === 0) {
+        if (metadataClaimsMore) {
+          throw new Error('[lbank] copier empty page still claims continuation')
+        }
+        return
+      }
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      if (rows.length < limit) return
+      if (metadataClaimsMore) continue
+      if (reportedTotal !== null) return
+      if (candidateCount < limit) return
     }
   },
 

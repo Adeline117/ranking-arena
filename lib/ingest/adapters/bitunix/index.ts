@@ -34,6 +34,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
+import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseBitunixHistory,
   parseBitunixLeaderboardPage,
@@ -52,6 +53,14 @@ const HEADERS = { accept: 'application/json', 'content-type': 'application/json'
 function endpoint(src: SourceRow, key: string, fallback: string): string {
   const endpoints = (src.meta.endpoints ?? {}) as Record<string, string>
   return endpoints[key] ?? fallback
+}
+
+function nonNegativeSafeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
+function positiveSafeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
 }
 
 async function bitunixFetcher(session: FetchSession): Promise<JsonFetcher> {
@@ -207,6 +216,7 @@ const bitunixAdapter: SourceAdapter = {
     // copiers
     const url = endpoint(src, 'copiers', `${BASE}/trader/follow/list`)
     const maxPages = Number(src.meta.copier_max_pages) || 30
+    let candidatesSeen = 0
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
       const payload = await replayJson(session, fetcher, {
         url,
@@ -214,14 +224,42 @@ const bitunixAdapter: SourceAdapter = {
         headers: HEADERS,
         body: { traderUid: Number(exchangeTraderId), page: pageIndex, pageSize: limit },
       })
-      const rows = parseBitunixHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
+      const candidateCount = extractCopierCandidateRecords({
+        src,
+        exchangeTraderId,
+        pageIndex,
+        payload,
+      }).candidates.length
+      candidatesSeen += candidateCount
+      if (!Number.isSafeInteger(candidatesSeen)) {
+        throw new Error('[bitunix] copier candidate count exceeds the safe-integer range')
+      }
+      const data = (payload as { data?: { total?: unknown; totalPage?: unknown } })?.data ?? {}
+      const reportedTotal = nonNegativeSafeInteger(data.total)
+      const totalPage = positiveSafeInteger(data.totalPage)
+      if (reportedTotal !== null && candidatesSeen > reportedTotal) {
+        throw new Error('[bitunix] copier candidates exceed the reported total')
+      }
+
+      const totalClaimsMore = reportedTotal !== null && candidatesSeen < reportedTotal
+      const totalClaimsEnd = reportedTotal !== null && candidatesSeen === reportedTotal
+      const pageClaimsMore = totalPage !== null && pageIndex < totalPage
+      const pageClaimsEnd = totalPage !== null && pageIndex >= totalPage
+      const metadataClaimsMore = totalClaimsMore || pageClaimsMore
+      const metadataClaimsEnd = totalClaimsEnd || pageClaimsEnd
+      if (candidateCount === 0) {
+        if (metadataClaimsMore) {
+          throw new Error('[bitunix] copier empty page still claims continuation')
+        }
+        return
+      }
+      if (metadataClaimsMore && metadataClaimsEnd) {
+        throw new Error('[bitunix] copier pagination metadata is contradictory')
+      }
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      const totalPage = Number(
-        ((payload as { data?: { totalPage?: unknown } })?.data ?? {}).totalPage
-      )
-      if (Number.isFinite(totalPage) && totalPage > 0 && pageIndex >= totalPage) return
-      if (rows.length < limit) return
+      if (metadataClaimsMore) continue
+      if (metadataClaimsEnd) return
+      if (candidateCount < limit) return
     }
   },
 
