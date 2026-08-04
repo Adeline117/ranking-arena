@@ -5893,6 +5893,7 @@ const ja = {
   tabCopiers: 'コピーユーザー',
   recordsEmpty: '記録がありません',
   recordsLoadMore: 'もっと見る',
+  recordsRefreshFailed: '更新に失敗しました。読み込み済みの記録を表示しています。',
   historyCompletenessPartialTitle: '履歴は不完全なプレビューです',
   historyCompletenessPartialDescription:
     '取得済みのプレビューのみを表示しています。全期間の網羅性は未検証で、ランキングには使用されません。',

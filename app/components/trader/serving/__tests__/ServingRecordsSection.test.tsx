@@ -49,6 +49,8 @@ describe('ServingRecordsSection selection scope', () => {
       isLoading: false,
       isInitialError: false,
       isFetchNextPageError: false,
+      isRefetchError: false,
+      isRefetching: false,
       isFetchingNextPage: false,
       hasNextPage: false,
       fetchNextPage: jest.fn(),
@@ -144,6 +146,44 @@ describe('ServingRecordsSection selection scope', () => {
     expect(RecordsTable).not.toHaveBeenCalled()
   })
 
+  it('discloses a failed background refresh while retaining cached rows', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [{ symbol: 'BTCUSDT' }],
+      provenance: null,
+      completeness: null,
+      isPendingUpstream: false,
+      isLoading: false,
+      isInitialError: false,
+      isFetchNextPageError: false,
+      isRefetchError: true,
+      isRefetching: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      error: new Error('refresh failed'),
+      refetch,
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['positions'])}
+        tf={90}
+      />
+    )
+
+    expect(RecordsTable).toHaveBeenCalledWith(
+      expect.objectContaining({ rows: [{ symbol: 'BTCUSDT' }] }),
+      undefined
+    )
+    const message = screen.getByText('recordsRefreshFailed')
+    expect(message.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite')
+    fireEvent.click(screen.getByRole('button', { name: 'moduleRetry' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
   it('resets the active kind for a new subject and fails closed after capability shrinkage', () => {
     const fullCapability = capability(['positions', 'position_history', 'orders'])
     const view = render(
@@ -159,11 +199,10 @@ describe('ServingRecordsSection selection scope', () => {
       'aria-selected',
       'true'
     )
-    fireEvent.click(screen.getByRole('tab', { name: 'tabPositions' }))
-    expect(screen.getByRole('tab', { name: 'tabPositions' })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    )
+    const firstSubjectPositions = screen.getByRole('tab', { name: 'tabPositions' })
+    fireEvent.click(firstSubjectPositions)
+    firstSubjectPositions.focus()
+    expect(firstSubjectPositions).toHaveAttribute('aria-selected', 'true')
 
     view.rerender(
       <ServingRecordsSection
@@ -177,6 +216,7 @@ describe('ServingRecordsSection selection scope', () => {
       'aria-selected',
       'true'
     )
+    expect(screen.getByRole('tab', { name: 'tabPositionHistory' })).toHaveFocus()
     expect(useTraderRecords).toHaveBeenLastCalledWith({
       source: 'hyperliquid_perp',
       exchangeTraderId: 'trader-b',
@@ -185,7 +225,9 @@ describe('ServingRecordsSection selection scope', () => {
       enabled: true,
     })
 
-    fireEvent.click(screen.getByRole('tab', { name: 'tabPositions' }))
+    const shrinkingPositions = screen.getByRole('tab', { name: 'tabPositions' })
+    fireEvent.click(shrinkingPositions)
+    shrinkingPositions.focus()
     view.rerender(
       <ServingRecordsSection
         source="hyperliquid_perp"
@@ -197,6 +239,7 @@ describe('ServingRecordsSection selection scope', () => {
 
     expect(screen.queryByRole('tab', { name: 'tabPositions' })).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'tabOrders' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'tabOrders' })).toHaveFocus()
     expect(useTraderRecords).toHaveBeenLastCalledWith({
       source: 'hyperliquid_perp',
       exchangeTraderId: 'trader-b',
@@ -222,12 +265,15 @@ describe('ServingRecordsSection selection scope', () => {
     )
     const history = screen.getByRole('tab', { name: 'tabPositionHistory' })
     const positions = screen.getByRole('tab', { name: 'tabPositions' })
+    const panel = screen.getByRole('tabpanel', { name: 'tabPositionHistory' })
     expect(history).toHaveAttribute('aria-selected', 'true')
     expect(history).toHaveAttribute('tabindex', '0')
     expect(positions).toHaveAttribute('tabindex', '-1')
-    expect(screen.getByRole('tabpanel', { name: 'tabPositionHistory' }).id).toBe(
-      history.getAttribute('aria-controls')
-    )
+    expect(panel).toHaveAttribute('tabindex', '0')
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveAttribute('aria-controls', panel.id)
+      expect(document.getElementById(tab.getAttribute('aria-controls') as string)).toBe(panel)
+    }
 
     fireEvent.keyDown(history, { key: 'ArrowRight' })
     const orders = screen.getByRole('tab', { name: 'tabOrders' })
@@ -248,6 +294,37 @@ describe('ServingRecordsSection selection scope', () => {
     fireEvent.keyDown(positions, { key: 'ArrowLeft' })
     expect(transfers).toHaveFocus()
     expect(transfers).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('does not steal focus from a control outside the records tablist on subject change', () => {
+    const fullCapability = capability(['positions', 'position_history', 'orders'])
+    const view = render(
+      <>
+        <button type="button">outsideControl</button>
+        <ServingRecordsSection
+          source="gmx"
+          exchangeTraderId="trader-a"
+          capability={fullCapability}
+          tf={90}
+        />
+      </>
+    )
+    const outside = screen.getByRole('button', { name: 'outsideControl' })
+    outside.focus()
+
+    view.rerender(
+      <>
+        <button type="button">outsideControl</button>
+        <ServingRecordsSection
+          source="hyperliquid_perp"
+          exchangeTraderId="trader-b"
+          capability={fullCapability}
+          tf={90}
+        />
+      </>
+    )
+
+    expect(screen.getByRole('button', { name: 'outsideControl' })).toHaveFocus()
   })
 
   it.each(['position_history'] as const)(

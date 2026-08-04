@@ -3,6 +3,7 @@
 import type { NextRequest } from 'next/server'
 import {
   RECORDS_CURSOR_INVALIDATED_CODE,
+  type CopierAggregate,
   type RecordKind,
   type RecordsPage,
 } from '@/lib/data/serving/types'
@@ -97,16 +98,37 @@ function provenance(observedAt: string | null = null) {
   }
 }
 
-function request(kind: RecordKind = 'position_history', cursor?: string): NextRequest {
+function request(
+  kind: RecordKind = 'position_history',
+  cursor?: string,
+  tf: '7' | '30' | '90' | 'inception' = '30'
+): NextRequest {
   const url = new URL(
-    `https://arena.example/api/traders/Trader%20One/records?kind=${kind}&source=bitget_futures&tf=30`
+    `https://arena.example/api/traders/Trader%20One/records?kind=${kind}&source=bitget_futures&tf=${tf}`
   )
   if (cursor !== undefined) url.searchParams.set('cursor', cursor)
   return { nextUrl: url } as NextRequest
 }
 
-async function callRoute(kind: RecordKind = 'position_history', cursor?: string) {
-  return GET(request(kind, cursor), { params: Promise.resolve({ handle: 'Trader%20One' }) })
+async function callRoute(
+  kind: RecordKind = 'position_history',
+  cursor?: string,
+  tf: '7' | '30' | '90' | 'inception' = '30'
+) {
+  return GET(request(kind, cursor, tf), { params: Promise.resolve({ handle: 'Trader%20One' }) })
+}
+
+function copierAggregate(overrides: Partial<CopierAggregate> = {}): CopierAggregate {
+  return {
+    copierCount: 12,
+    copierCountMax: null,
+    totalCopierPnl: null,
+    pnlDistribution: [],
+    depth: 'full',
+    provenance: provenance('2026-08-03T12:00:00.000Z'),
+    completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    ...overrides,
+  }
 }
 
 describe('records route history trust boundary', () => {
@@ -433,5 +455,83 @@ describe('records route history trust boundary', () => {
     expect(mockGetCopierAggregate).toHaveBeenCalledWith(mockSupabase, 'bitget_futures', 'trader-1')
     expect(mockGetRecordsPage).not.toHaveBeenCalled()
     expect(mockRequestTierC).not.toHaveBeenCalled()
+  })
+})
+
+describe('records route copier cold start', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockResolveServingTrader.mockResolvedValue(resolvedTrader)
+    mockGetRecordsPage.mockResolvedValue(null)
+    mockGetCopierAggregate.mockResolvedValue(null)
+    mockRequestTierC.mockResolvedValue(null)
+    mockRecordsPageFromTierC.mockReturnValue(null)
+  })
+
+  it.each(['7', '30', '90', 'inception'] as const)(
+    'serves warm aggregate evidence without a Tier-C request for tf=%s',
+    async (tf) => {
+      const aggregate = copierAggregate()
+      mockGetCopierAggregate.mockResolvedValue(aggregate)
+
+      const response = await callRoute('copiers', undefined, tf)
+      const body = await response.json()
+
+      expect(body.data).toEqual(aggregate)
+      expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
+      expect(mockGetCopierAggregate).toHaveBeenCalledTimes(1)
+      expect(mockRequestTierC).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['7', '30', '90', 'inception'] as const)(
+    'uses one canonical timeframe=0 cold-flight coordinate for tf=%s',
+    async (tf) => {
+      const refreshed = copierAggregate({ copierCount: 5 })
+      mockGetCopierAggregate.mockResolvedValueOnce(null).mockResolvedValueOnce(refreshed)
+      mockRequestTierC.mockResolvedValue({
+        rows: [{ copierLabel: 'private-user', email: 'secret@example.invalid', pnl: 900 }],
+        raw: { private: true },
+      })
+
+      const response = await callRoute('copiers', undefined, tf)
+      const body = await response.json()
+
+      expect(mockRequestTierC).toHaveBeenCalledWith({
+        sourceSlug: 'bitget_futures',
+        fetchRegion: 'vps_sg',
+        exchangeTraderId: 'trader-1',
+        timeframe: 0,
+        surface: 'copiers',
+      })
+      expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
+      expect(body.data).toEqual(refreshed)
+      expect(JSON.stringify(body)).not.toMatch(/private-user|secret@example\.invalid|"raw"/)
+      expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
+      expect(mockRecordsPageFromTierC).not.toHaveBeenCalled()
+    }
+  )
+
+  it('re-reads the aggregate after a bridge timeout and otherwise stays pending/no-store', async () => {
+    const response = await callRoute('copiers')
+    const body = await response.json()
+
+    expect(mockRequestTierC).toHaveBeenCalledTimes(1)
+    expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
+    expect(body.data).toEqual({ cacheState: 'pending' })
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it('serves a committed aggregate found by the mandatory post-timeout re-read', async () => {
+    const committedDuringPoll = copierAggregate({ copierCount: 9 })
+    mockRequestTierC.mockResolvedValue(null)
+    mockGetCopierAggregate.mockResolvedValueOnce(null).mockResolvedValueOnce(committedDuringPoll)
+
+    const response = await callRoute('copiers')
+    const body = await response.json()
+
+    expect(body.data).toEqual(committedDuringPoll)
+    expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
+    expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
   })
 })

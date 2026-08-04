@@ -152,9 +152,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260803170000_atomic_verified_trader_profile_revision.sql'
   const hashtagReadAuthorityMigration = '20260803180000_hashtag_read_authority.sql'
   const postInteractionReadPrivacyMigration = '20260803183000_post_interaction_read_privacy.sql'
+  const servingTraderResolverMigration = '20260804050500_harden_serving_trader_resolver.sql'
   const bingxRankQuarantineMigration = '20260804051000_quarantine_bingx_rank_authority.sql'
 
-  assert.equal(predeploy.length, 129)
+  assert.equal(predeploy.length, 130)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -255,6 +256,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           verifiedTraderProfileRevisionMigration,
           hashtagReadAuthorityMigration,
           postInteractionReadPrivacyMigration,
+          servingTraderResolverMigration,
           bingxRankQuarantineMigration,
         ].includes(migration)
     ),
@@ -274,7 +276,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 144)
+  assert.equal(new Set(all).size, 145)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -328,6 +330,16 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(
+    predeploy.filter((migration) => migration === servingTraderResolverMigration).length,
+    1
+  )
+  assert.ok(!postdeploy.includes(servingTraderResolverMigration))
+  assert.ok(!recoveryPrerequisites.includes(servingTraderResolverMigration))
+  assert.ok(!concurrentRecovery.includes(servingTraderResolverMigration))
+  assert.ok(!recovery.includes(servingTraderResolverMigration))
+  assert.ok(!quarantined.includes(servingTraderResolverMigration))
+  assert.ok(!superseded.includes(servingTraderResolverMigration))
+  assert.equal(
     predeploy.filter((migration) => migration === bingxRankQuarantineMigration).length,
     1
   )
@@ -338,7 +350,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(bingxRankQuarantineMigration))
   assert.ok(!superseded.includes(bingxRankQuarantineMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-88), [
+  assert.deepEqual(predeploy.slice(-89), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -426,6 +438,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     verifiedTraderProfileRevisionMigration,
     hashtagReadAuthorityMigration,
     postInteractionReadPrivacyMigration,
+    servingTraderResolverMigration,
     bingxRankQuarantineMigration,
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
@@ -518,7 +531,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes(verifiedTraderProfileRevisionMigration))
   assert.ok(predeploy.includes(hashtagReadAuthorityMigration))
   assert.ok(predeploy.includes(postInteractionReadPrivacyMigration))
-  assert.deepEqual(predeploy.slice(-9), [
+  assert.deepEqual(predeploy.slice(-10), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
@@ -527,6 +540,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     verifiedTraderProfileRevisionMigration,
     hashtagReadAuthorityMigration,
     postInteractionReadPrivacyMigration,
+    servingTraderResolverMigration,
     bingxRankQuarantineMigration,
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
@@ -537,6 +551,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!recoveryPrerequisites.includes('20260729230000_token_ranking_generation_barrier.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729062000_atomic_trader_follow_limit.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729062500_close_trader_follow_direct_writes.sql'))
+  assert.ok(!recoveryPrerequisites.includes(servingTraderResolverMigration))
   assert.ok(!recoveryPrerequisites.includes(bingxRankQuarantineMigration))
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')

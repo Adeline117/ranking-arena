@@ -45,12 +45,13 @@ import {
   type IngestTransactionRunner,
 } from '@/lib/ingest/raw'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
-import { publishPositions, publishProfile, resolveTraderId } from '@/lib/ingest/serving/publish'
+import { publishHistoryRows, publishPositions, publishProfile } from '@/lib/ingest/serving/publish'
 import { getIngestPool } from '@/lib/ingest/db'
 import { tierCResultKey, type TierCJobData } from '../queues'
 import { runHistoryTransaction } from '../history-transaction'
 
 const RESULT_TTL_SECONDS = 120
+const COPIER_READY_CONTRACT = 'arena.tier-c.copier-ready@1'
 
 type TierCSource = Awaited<ReturnType<typeof getSourceBySlug>>
 
@@ -66,33 +67,43 @@ export async function processTierC(
       `[tier-c] source ${sourceSlug} moved from ${region} to ${src.fetch_region} before fetch`
     )
   }
-  const adapter = getAdapter(src.adapter_slug)
-  const redis = getConnection()
-  const resultKey = tierCResultKey(job.data)
-
-  if (surface !== 'profile') {
-    return processHeavySurface(job, src)
+  if (src.status !== 'active' || src.serving_mode !== 'serving') {
+    throw new Error(
+      `[tier-c] source ${sourceSlug} is not active serving ` +
+        `(status=${src.status}, serving_mode=${src.serving_mode})`
+    )
   }
 
-  // UTA portfolio traders route profile calls by traders.meta (portfolio_id)
-  // — load it so long-tail UTA profiles fetch correctly instead of empty.
   const { rows: traderRows } = await getIngestPool().query<{
     id: number
     meta: Record<string, unknown> | null
   }>(
     `SELECT t.id, t.meta FROM arena.traders t
-      WHERE t.source_id = $1 AND t.exchange_trader_id = $2`,
+      WHERE t.source_id = $1 AND t.exchange_trader_id = $2
+      LIMIT 1`,
     [src.id, exchangeTraderId]
   )
-  const existingTraderId = traderRows[0]?.id ?? null
-  const traderMeta = traderRows[0]?.meta ?? null
+  const trader = traderRows[0]
+  if (!trader) {
+    throw new Error(`[tier-c] trader is not an existing serving subject: ${sourceSlug}`)
+  }
+  const traderId = trader.id
+  const traderMeta = trader.meta ?? null
 
-  // 认领交易员停抓(P3-P2): 第一方 sync 才是权威数据源;按需抓取直接跳过
-  // (/trader/ 页对 claimed 已重定向到 /u/,这里几乎不会被触发,兜底而已)。
+  // First-party sync is authoritative for claimed traders. This guard applies
+  // to every surface, including forged or stale queue jobs that bypass routes.
   if (traderMeta && (traderMeta as { claimed?: unknown }).claimed === true) {
     console.warn(`[tier-c] skip claimed trader ${src.slug}/${exchangeTraderId}`)
     return { surfacesFetched: 0, skipped: 'claimed' }
   }
+
+  if (surface !== 'profile') {
+    return processHeavySurface(job, src, traderId, traderMeta)
+  }
+
+  const adapter = getAdapter(src.adapter_slug)
+  const redis = getConnection()
+  const resultKey = tierCResultKey(job.data)
 
   // The dedicated Tier-C worker runs with concurrency=2. Use two fixed,
   // persistent slots per source so concurrent on-demand jobs cannot share a
@@ -115,7 +126,7 @@ export async function processTierC(
         sourceId: src.id,
         sourceSlug: src.slug,
         jobType: 'tier_c',
-        traderId: existingTraderId,
+        traderId,
         timeframe,
         payload: bundle.pages,
       })
@@ -162,7 +173,7 @@ export async function processTierC(
       }
       await redis.set(resultKey, JSON.stringify(terminalPayload), 'EX', RESULT_TTL_SECONDS)
       return {
-        traderId: existingTraderId,
+        traderId,
         qualityRejected: true,
         reason: qualityRejects[0].reason,
         rejects: qualityRejects.length,
@@ -175,7 +186,6 @@ export async function processTierC(
     const incomplete = findIncompleteProfileWindow(profile)
 
     if (incomplete) {
-      const traderId = await resolveTraderId(src, exchangeTraderId)
       await publishProfile(src, traderId, profile, { fullSeries: false })
       throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
     }
@@ -193,9 +203,8 @@ export async function processTierC(
     await redis.set(resultKey, JSON.stringify(payload), 'EX', RESULT_TTL_SECONDS)
 
     // 2. Persist path (async from the user's perspective — they already
-    //    have the payload): identity + stats/series + profile_cache. RAW was
-    //    written before parsing and is deliberately not duplicated here.
-    const traderId = await resolveTraderId(src, exchangeTraderId)
+    //    have the payload): stats/series + profile_cache for the pre-authorized
+    //    existing trader. RAW was written before parsing and is not duplicated.
     await publishProfile(src, traderId, profile, { fullSeries: false }) // long tail (spec §13.1)
     await getIngestPool().query(
       `INSERT INTO arena.profile_cache
@@ -286,16 +295,21 @@ function historyRowsForRender(
 
 /**
  * Heavy-tab surfaces (spec §2.4-3): positions / position_history / orders /
- * transfers / copiers — fetched only when the user opens that tab. Same
- * history previews are explicitly partial and live only in the short Redis
- * result. They never enter typed history tables, legacy cursors, or
- * profile_cache. Positions retain their evidence-bound persistence path.
+ * transfers / copiers — fetched only when the user opens that tab. History
+ * previews remain partial and RAW-only. Copiers additionally commit private
+ * rows before publishing an opaque readiness marker; no copier row or cache
+ * payload enters Redis.
  *
  * Copier PII rule (spec §6): no individual copier row leaves the worker.
- * Full rows, including label, PnL, investment, duration, and identity, remain
- * only in the immutable private RAW artifact.
+ * Full rows, including label, PnL, investment, duration, and identity, may
+ * enter only the private copier table after the immutable RAW pointer exists.
  */
-async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Promise<unknown> {
+async function processHeavySurface(
+  job: Job<TierCJobData>,
+  src: TierCSource,
+  traderId: number,
+  traderMeta: Record<string, unknown> | null
+): Promise<unknown> {
   const { sourceSlug, exchangeTraderId, timeframe, surface } = job.data
   const adapter = getAdapter(src.adapter_slug)
   const redis = getConnection()
@@ -327,18 +341,6 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
       scrapedAt,
       meta: src.meta,
     }
-    const traderId = await resolveTraderId(src, exchangeTraderId)
-
-    // Some adapters route record fetches by traders.meta (e.g. bingx detail SPA
-    // needs bingx_api_identity to build the signed detail URL) — load it so the
-    // harvest can navigate; omitting it degrades to an empty surface.
-    const { rows: metaRows } = await getIngestPool().query<{
-      meta: Record<string, unknown>
-    }>(`SELECT t.meta FROM arena.traders t WHERE t.source_id = $1 AND t.exchange_trader_id = $2`, [
-      src.id,
-      exchangeTraderId,
-    ])
-    const traderMeta = metaRows[0]?.meta ?? null
 
     let rows: Record<string, unknown>[] = []
     let rawPayload: unknown = null
@@ -428,18 +430,44 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
 
       let storageDurable = false
       let rawPointerDurable = false
+      let copierAggregateReady = false
       const renderPreviewWithRaw: IngestTransactionRunner = async (persistRawPointer) => {
         // The immutable audit pointer commits before any untrusted parser or
-        // Redis work. This lane is preview-only and cannot mutate typed facts,
-        // evidence cursors, or the warm profile cache.
+        // Redis work. Non-copier history remains preview-only and cannot mutate
+        // typed facts, evidence cursors, or the warm profile cache. Copiers are
+        // the narrow private-table exception and publish only after this commit.
         storageDurable = true
         const receipt = await runHistoryTransaction(persistRawPointer)
         rawPointerDurable = true
+
+        if (kind === 'copiers' && acquisition.artifact.pages.length === 0) {
+          throw new Error('[tier-c] copier snapshot returned no upstream response page')
+        }
+
         const parsed = acquisition.pages.flatMap((page) =>
           adapter.parseHistory(page.payload, kind, ctx)
         )
+
+        if (kind === 'copiers') {
+          // An empty parse cannot prove an authoritative empty snapshot. Keep
+          // the last-good private rows and retry instead of falsely waking the
+          // aggregate route as though a refresh completed.
+          if (parsed.length === 0) {
+            throw new Error('[tier-c] copier snapshot returned no private rows')
+          }
+          await publishHistoryRows(src, traderId, kind, parsed, null)
+          const readyMarker = {
+            contract: COPIER_READY_CONTRACT,
+            completed: true,
+            aggregateReady: true,
+          }
+          await redis.set(resultKey, JSON.stringify(readyMarker), 'EX', RESULT_TTL_SECONDS)
+          copierAggregateReady = true
+          return receipt
+        }
+
         rows = historyRowsForRender(parsed, kind, src.currency)
-        await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
+        await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', RESULT_TTL_SECONDS)
         return receipt
       }
 
@@ -460,6 +488,13 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
           }
         }
         throw cause
+      }
+
+      if (kind === 'copiers') {
+        if (!copierAggregateReady) {
+          throw new Error('[tier-c] copier snapshot completed without an aggregate-ready marker')
+        }
+        return { traderId, surface, aggregateReady: true }
       }
 
       return {

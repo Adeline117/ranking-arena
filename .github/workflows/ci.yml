@@ -203,6 +203,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:score-alias-pg17
 
+      - name: Prove active-serving trader resolver boundary
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:serving-trader-resolver-pg17
+
       - name: Prove BingX public-rank authority quarantine
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

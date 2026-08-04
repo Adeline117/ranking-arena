@@ -96,6 +96,30 @@ export async function GET(
         if (aggregate) {
           return withCache(apiSuccess(aggregate), { maxAge: 300, staleWhileRevalidate: 600 })
         }
+
+        // Copier data is a window-independent snapshot. Canonical timeframe=0
+        // gives every 7/30/90/inception viewer one queue flight/result key.
+        // The worker payload is only a readiness signal: never map or return it,
+        // because individual copier rows are private. The public truth boundary
+        // remains the strict aggregate RPC, re-read even after a bridge timeout.
+        await requestTierC({
+          sourceSlug: resolved.source,
+          fetchRegion: resolved.fetchRegion,
+          exchangeTraderId: resolved.exchangeTraderId,
+          timeframe: 0,
+          surface: 'copiers',
+        })
+        const refreshedAggregate = await getCopierAggregate(
+          supabase,
+          resolved.source,
+          resolved.exchangeTraderId
+        )
+        if (refreshedAggregate) {
+          return withCache(apiSuccess(refreshedAggregate), {
+            maxAge: 300,
+            staleWhileRevalidate: 600,
+          })
+        }
         return apiSuccess({ cacheState: 'pending' as const }, 200, { 'Cache-Control': 'no-store' })
       }
 

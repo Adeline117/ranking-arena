@@ -209,6 +209,9 @@ export function useTraderRecords({
     isInitialError: !cursorInvalidated && query.isLoadingError,
     /** A later page failed; keep the successful pages visible and retry in place. */
     isFetchNextPageError: !cursorInvalidated && query.isFetchNextPageError,
+    /** A background refresh failed; cached pages remain visible but must be disclosed. */
+    isRefetchError: !cursorInvalidated && query.isRefetchError,
+    isRefetching: query.isRefetching,
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,

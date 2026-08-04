@@ -6085,6 +6085,7 @@ const zh = {
   tabCopiers: '跟单者',
   recordsEmpty: '暂无记录',
   recordsLoadMore: '加载更多',
+  recordsRefreshFailed: '刷新失败，当前仍显示已加载的记录。',
   historyCompletenessPartialTitle: '历史记录仅为不完整预览',
   historyCompletenessPartialDescription:
     '当前仅展示本次已获取的预览记录，完整覆盖尚未验证；这些记录不参与排名。',

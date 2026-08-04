@@ -416,8 +416,9 @@ export async function getCopierAggregate(
   const currency = currencyOrNull(d.currency)
   const depth =
     d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
+  const explicitlyNotApplicable = d.depth === 'none'
 
-  return {
+  const aggregate: CopierAggregate = {
     copierCount: nonNegativeSafeIntegerOrNull(d.copierCount),
     copierCountMax: nonNegativeSafeIntegerOrNull(d.copierCountMax),
     totalCopierPnl: totalPnl === null || currency === null ? null : money(totalPnl, currency),
@@ -430,6 +431,23 @@ export async function getCopierAggregate(
     // aggregate is bound to a terminal collection receipt.
     completeness: unknownHistoryCompleteness(),
   }
+
+  // Some RPC branches return a syntactically valid all-null object when no
+  // stats or private copier rows exist. That shell is not evidence and must
+  // not be cached as a warm aggregate. An explicit raw `depth=none` is the one
+  // exception: it is a source-level N/A declaration, so no collector should
+  // run. Missing or invalid depth must not normalize into that authority.
+  if (
+    !explicitlyNotApplicable &&
+    aggregate.copierCount === null &&
+    aggregate.copierCountMax === null &&
+    aggregate.totalCopierPnl === null &&
+    aggregate.pnlDistribution.length === 0
+  ) {
+    return null
+  }
+
+  return aggregate
 }
 
 /** Map a Tier-C record-surface result payload into a RecordsPage. */

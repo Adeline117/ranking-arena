@@ -157,6 +157,7 @@ PREDEPLOY_MIGRATIONS=(
   20260803170000_atomic_verified_trader_profile_revision.sql
   20260803180000_hashtag_read_authority.sql
   20260803183000_post_interaction_read_privacy.sql
+  20260804050500_harden_serving_trader_resolver.sql
   20260804051000_quarantine_bingx_rank_authority.sql
 )
 
