@@ -236,6 +236,7 @@
     "sharp": "^0.35.3",
     "tailwindcss": "^4",
     "tsx": "^4.22.3",
-    "typescript": "^6"
+    "typescript": "^6",
+    "yaml": "^2.8.2"
   }
 }

@@ -17,6 +17,9 @@ on:
     - cron: '0 3 * * *' # 每日 03:00 UTC
   workflow_dispatch: # 允许手动触发（拿即时干净结果）
 
+permissions:
+  contents: read
+
 # 独立于 ci-${{ github.ref }}：main 的 push 不会取消本 run。
 concurrency:
   group: e2e-nightly
@@ -82,20 +85,14 @@ jobs:
           CI: true
           NODE_ENV: production # npm start 服务端按生产模式跑（webServer 用 npm start）
 
-      - name: Upload Playwright report
+      - name: Upload Playwright failure diagnostics
         uses: actions/upload-artifact@v6
-        if: always()
+        if: failure()
+        continue-on-error: true
         with:
           name: playwright-report-nightly
           path: |
             playwright-report/
             test-results/
-          retention-days: 14
-
-      - name: Upload screenshots on failure
-        uses: actions/upload-artifact@v6
-        if: failure()
-        with:
-          name: playwright-screenshots-nightly
-          path: test-results/**/*.png
-          retention-days: 14
+          if-no-files-found: warn
+          retention-days: 3
