@@ -431,4 +431,51 @@ describe('useTraderRecords history completeness', () => {
     view.unmount()
     queryClient.clear()
   })
+
+  it('preserves cached rows and exposes a background-refetch failure', async () => {
+    let failRefresh = false
+    ;(fetcher as jest.Mock).mockImplementation(() => {
+      if (failRefresh) return Promise.reject(new Error('refresh failed'))
+      return Promise.resolve(recordsResponse(recordsPage({ rows: [{ id: 'cached' }] })))
+    })
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0, gcTime: Infinity } },
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.rows).toEqual([{ id: 'cached' }]))
+    failRefresh = true
+    await act(async () => {
+      await view.result.current.refetch()
+    })
+
+    await waitFor(() => expect(view.result.current.isRefetchError).toBe(true))
+    expect(view.result.current.isInitialError).toBe(false)
+    expect(view.result.current.isFetchNextPageError).toBe(false)
+    expect(view.result.current.rows).toEqual([{ id: 'cached' }])
+
+    failRefresh = false
+    await act(async () => {
+      await view.result.current.refetch()
+    })
+    await waitFor(() => expect(view.result.current.isRefetchError).toBe(false))
+    expect(view.result.current.rows).toEqual([{ id: 'cached' }])
+
+    view.unmount()
+    queryClient.clear()
+  })
 })

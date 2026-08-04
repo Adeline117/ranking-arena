@@ -6219,6 +6219,7 @@ const en = {
   tabCopiers: 'Copiers',
   recordsEmpty: 'No records to show',
   recordsLoadMore: 'Load more',
+  recordsRefreshFailed: 'Refresh failed. Showing the records already loaded.',
   historyCompletenessPartialTitle: 'Partial history',
   historyCompletenessPartialDescription:
     'Only the captured preview is shown; full coverage is not verified. These records are not used in rankings.',
