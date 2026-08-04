@@ -91,6 +91,11 @@ const post = {
   repost_count: 0,
   view_count: 0,
   hot_score: 0,
+  poll_enabled: true,
+  poll_bull: 0,
+  poll_bear: 0,
+  poll_wait: 0,
+  user_vote: null,
 }
 
 describe('PostFeed comment loading stability', () => {
@@ -190,6 +195,7 @@ describe('PostFeed comment loading stability', () => {
       setShowRepostModal: jest.fn(),
       submitCustomPollVote: jest.fn(),
       toggleReaction: jest.fn(),
+      _toggleVote: jest.fn(),
     })
   })
 
@@ -286,6 +292,94 @@ describe('PostFeed comment loading stability', () => {
       expect(mockUsePostActions.mock.calls.at(-1)?.[0].posts[0]).toMatchObject({
         like_count: 7,
         user_reaction: 'down',
+      })
+    )
+  })
+
+  it('preserves a vote changed after an older feed read started', async () => {
+    const view = render(<PostFeed initialPosts={[post]} />)
+    const actionProps = mockUsePostActions.mock.calls.at(-1)?.[0]
+
+    act(() => {
+      actionProps.onVoteStateChange('post-1')
+      actionProps.setPosts((previous: (typeof post)[]) =>
+        previous.map((candidate) =>
+          candidate.id === 'post-1'
+            ? { ...candidate, poll_bull: 1, user_vote: 'bull' as const }
+            : candidate
+        )
+      )
+    })
+
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          {
+            posts: [{ ...post, poll_bull: 0, user_vote: null }],
+            hasMore: false,
+            offset: 1,
+            reactionRevisionAtStart: 0,
+            voteRevisionAtStart: 0,
+          },
+        ],
+      },
+      fetchNextPage: jest.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn().mockResolvedValue(undefined),
+    })
+    view.rerender(<PostFeed initialPosts={[post]} />)
+
+    await waitFor(() =>
+      expect(mockUsePostActions.mock.calls.at(-1)?.[0].posts[0]).toMatchObject({
+        poll_bull: 1,
+        user_vote: 'bull',
+      })
+    )
+  })
+
+  it('accepts vote truth from a feed read started after the local write', async () => {
+    const view = render(<PostFeed initialPosts={[post]} />)
+    const actionProps = mockUsePostActions.mock.calls.at(-1)?.[0]
+
+    act(() => {
+      actionProps.onVoteStateChange('post-1')
+      actionProps.setPosts((previous: (typeof post)[]) =>
+        previous.map((candidate) =>
+          candidate.id === 'post-1'
+            ? { ...candidate, poll_bull: 1, user_vote: 'bull' as const }
+            : candidate
+        )
+      )
+    })
+
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          {
+            posts: [{ ...post, poll_bear: 7, user_vote: 'bear' as const }],
+            hasMore: false,
+            offset: 1,
+            reactionRevisionAtStart: 0,
+            voteRevisionAtStart: 1,
+          },
+        ],
+      },
+      fetchNextPage: jest.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn().mockResolvedValue(undefined),
+    })
+    view.rerender(<PostFeed initialPosts={[post]} />)
+
+    await waitFor(() =>
+      expect(mockUsePostActions.mock.calls.at(-1)?.[0].posts[0]).toMatchObject({
+        poll_bear: 7,
+        user_vote: 'bear',
       })
     )
   })

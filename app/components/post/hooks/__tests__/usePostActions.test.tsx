@@ -205,15 +205,19 @@ function repostReceipt(requestId: string, overrides: Record<string, unknown> = {
   }
 }
 
-function builtInVoteReceipt(requestId: string, overrides: Record<string, unknown> = {}) {
+function builtInVoteReceipt(
+  requestId: string,
+  desiredChoice: 'bull' | 'bear' | 'wait' | null = 'bull',
+  overrides: Record<string, unknown> = {}
+) {
   return {
     actor_id: REACTION_ACTOR_ID,
     post_id: REACTION_POST_ID,
     request_id: requestId,
-    operation: 'toggle',
-    requested_choice: 'bull',
-    action: 'added',
-    vote: 'bull',
+    operation: 'set_vote',
+    desired_choice: desiredChoice,
+    action: desiredChoice === null ? 'removed' : 'added',
+    vote: desiredChoice,
     poll: { bull: 4, bear: 2, wait: 1 },
     ...overrides,
   }
@@ -1517,10 +1521,19 @@ describe('usePostActions aliased detail state', () => {
     expect(result.current.actions.repostLoading).toEqual({})
   })
 
-  it('serializes built-in choices behind one post lock and applies only an exact receipt', async () => {
+  it('converges rapid built-in choices to the latest absolute intent', async () => {
     ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options: RequestInit) => {
       const requestBody = parsedRequestBody(options)
-      return jsonResponse(builtInVoteReceipt(requestBody.request_id as string))
+      const desiredChoice = requestBody.desired_choice as 'bull' | 'bear' | 'wait' | null
+      return jsonResponse(
+        builtInVoteReceipt(requestBody.request_id as string, desiredChoice, {
+          action: desiredChoice === 'bear' ? 'changed' : 'added',
+          poll:
+            desiredChoice === 'bear'
+              ? { bull: 3, bear: 3, wait: 1 }
+              : { bull: 4, bear: 2, wait: 1 },
+        })
+      )
     })
     const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
     act(() => {
@@ -1542,28 +1555,120 @@ describe('usePostActions aliased detail state', () => {
     })
     await act(async () => Promise.all([first, second]))
 
-    expect(global.fetch).toHaveBeenCalledTimes(1)
-    const [, options] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
-    expect(parsedRequestBody(options)).toEqual({
-      operation: 'toggle',
-      request_id: expect.stringMatching(/^[0-9a-f]{32}$/),
-      choice: 'bull',
-    })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    const requestBodies = (global.fetch as jest.Mock).mock.calls.map((call) =>
+      parsedRequestBody(call[1] as RequestInit)
+    )
+    expect(requestBodies).toEqual([
+      {
+        operation: 'set_vote',
+        request_id: expect.stringMatching(/^[0-9a-f]{32}$/),
+        desired_choice: 'bull',
+      },
+      {
+        operation: 'set_vote',
+        request_id: expect.stringMatching(/^[0-9a-f]{32}$/),
+        desired_choice: 'bear',
+      },
+    ])
+    expect(requestBodies[0]?.request_id).not.toBe(requestBodies[1]?.request_id)
+    const [, options] = (global.fetch as jest.Mock).mock.calls[1] as [string, RequestInit]
     expect(options.cache).toBe('no-store')
     expect(options.signal).toBeInstanceOf(AbortSignal)
     expect(result.current.post).toMatchObject({
-      poll_bull: 4,
-      poll_bear: 2,
+      poll_bull: 3,
+      poll_bear: 3,
       poll_wait: 1,
-      user_vote: 'bull',
+      user_vote: 'bear',
     })
   })
 
-  it('rejects a built-in vote receipt for another actor without changing last-known counts', async () => {
+  it('converges a same-frame second click on one choice to explicit absence', async () => {
     ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options: RequestInit) => {
       const requestBody = parsedRequestBody(options)
       return jsonResponse(
-        builtInVoteReceipt(requestBody.request_id as string, {
+        builtInVoteReceipt(
+          requestBody.request_id as string,
+          requestBody.desired_choice as 'bull' | null,
+          requestBody.desired_choice === null
+            ? { action: 'removed', poll: { bull: 1, bear: 2, wait: 3 } }
+            : { poll: { bull: 2, bear: 2, wait: 3 } }
+        )
+      )
+    })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REACTION_POST_ID,
+        poll_bull: 1,
+        poll_bear: 2,
+        poll_wait: 3,
+      }))
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.actions._toggleVote(REACTION_POST_ID, 'bull')
+      second = result.current.actions._toggleVote(REACTION_POST_ID, 'bull')
+    })
+    await act(async () => Promise.all([first, second]))
+
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(
+      (global.fetch as jest.Mock).mock.calls.map((call) =>
+        parsedRequestBody(call[1] as RequestInit)
+      )
+    ).toEqual([
+      expect.objectContaining({ desired_choice: 'bull' }),
+      expect.objectContaining({ desired_choice: null }),
+    ])
+    expect(result.current.post).toMatchObject({
+      poll_bull: 1,
+      poll_bear: 2,
+      poll_wait: 3,
+      user_vote: null,
+    })
+  })
+
+  it('retries a desired vote once with the same request identity', async () => {
+    ;(global.fetch as jest.Mock)
+      .mockRejectedValueOnce(new TypeError('socket closed'))
+      .mockImplementationOnce(async (_url: string, options: RequestInit) => {
+        const requestBody = parsedRequestBody(options)
+        return jsonResponse(
+          builtInVoteReceipt(requestBody.request_id as string, 'bull', {
+            poll: { bull: 2, bear: 2, wait: 3 },
+          })
+        )
+      })
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REACTION_POST_ID,
+        poll_bull: 1,
+        poll_bear: 2,
+        poll_wait: 3,
+      }))
+    })
+
+    await act(async () => result.current.actions._toggleVote(REACTION_POST_ID, 'bull'))
+
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    const requestIds = (global.fetch as jest.Mock).mock.calls.map(
+      (call) => parsedRequestBody(call[1] as RequestInit).request_id
+    )
+    expect(requestIds[0]).toBe(requestIds[1])
+    expect(result.current.post).toMatchObject({ poll_bull: 2, user_vote: 'bull' })
+  })
+
+  it('retains optimistic truth when two identity-mismatched receipts stay uncertain', async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, options: RequestInit) => {
+      const requestBody = parsedRequestBody(options)
+      return jsonResponse(
+        builtInVoteReceipt(requestBody.request_id as string, 'bull', {
           actor_id: REPOST_OTHER_ACTOR_ID,
         })
       )
@@ -1581,16 +1686,17 @@ describe('usePostActions aliased detail state', () => {
 
     await act(async () => result.current.actions._toggleVote(REACTION_POST_ID, 'bull'))
 
+    expect(global.fetch).toHaveBeenCalledTimes(2)
     expect(result.current.post).toMatchObject({
-      poll_bull: 1,
+      poll_bull: 2,
       poll_bear: 2,
       poll_wait: 3,
-      user_vote: null,
+      user_vote: 'bull',
     })
-    expect(mockShowToast).toHaveBeenCalledWith('voteFailed', 'error')
+    expect(mockShowToast).toHaveBeenCalledWith('unknownError', 'error')
   })
 
-  it('bounds built-in vote JSON parsing and ignores a body that resolves after timeout', async () => {
+  it('bounds built-in vote JSON parsing and ignores bodies that resolve after both attempts', async () => {
     jest.useFakeTimers()
     try {
       const lateBody = deferred<unknown>()
@@ -1616,15 +1722,23 @@ describe('usePostActions aliased detail state', () => {
 
       await act(async () => {
         jest.advanceTimersByTime(15_000)
-        await mutation
-      })
-      expect(result.current.post.poll_bull).toBe(1)
-
-      await act(async () => {
-        lateBody.resolve(builtInVoteReceipt(requestId, { poll: { bull: 99, bear: 2, wait: 3 } }))
+        await Promise.resolve()
         await Promise.resolve()
       })
-      expect(result.current.post.poll_bull).toBe(1)
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await mutation
+      })
+      expect(result.current.post).toMatchObject({ poll_bull: 2, user_vote: 'bull' })
+
+      await act(async () => {
+        lateBody.resolve(
+          builtInVoteReceipt(requestId, 'bull', { poll: { bull: 99, bear: 2, wait: 3 } })
+        )
+        await Promise.resolve()
+      })
+      expect(result.current.post.poll_bull).toBe(2)
     } finally {
       jest.useRealTimers()
     }

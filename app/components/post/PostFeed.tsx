@@ -106,6 +106,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const [refreshing, setRefreshing] = useState(false)
   const reactionRevisionSequenceRef = useRef(0)
   const reactionStateRevisionRef = useRef(new Map<string, number>())
+  const voteRevisionSequenceRef = useRef(0)
+  const voteStateRevisionRef = useRef(new Map<string, number>())
 
   const feedRefreshTrigger = usePostStore((s) => s.feedRefreshTrigger)
   const [newPostCount, setNewPostCount] = useViewerOwnedState(0, () => 0, feedScopeKey)
@@ -115,6 +117,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   useEffect(() => {
     reactionRevisionSequenceRef.current = 0
     reactionStateRevisionRef.current.clear()
+    voteRevisionSequenceRef.current = 0
+    voteStateRevisionRef.current.clear()
   }, [feedScopeKey])
 
   // React Query: infinite scroll for posts
@@ -141,6 +145,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     ],
     queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
       const reactionRevisionAtStart = reactionRevisionSequenceRef.current
+      const voteRevisionAtStart = voteRevisionSequenceRef.current
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (accessTokenRef.current) {
         headers['Authorization'] = `Bearer ${accessTokenRef.current}`
@@ -188,6 +193,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         hasMore,
         offset: pageParam + loadedPosts.length,
         reactionRevisionAtStart,
+        voteRevisionAtStart,
       }
     },
     initialPageParam: 0,
@@ -201,6 +207,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 hasMore: true,
                 offset: (props.initialPosts as Post[]).length,
                 reactionRevisionAtStart: 0,
+                voteRevisionAtStart: 0,
               },
             ],
             pageParams: [0],
@@ -224,6 +231,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         page.posts.map((post) => ({
           post,
           reactionRevisionAtStart: page.reactionRevisionAtStart ?? 0,
+          voteRevisionAtStart: page.voteRevisionAtStart ?? 0,
         }))
       ) ?? [],
     [postPages]
@@ -238,15 +246,28 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   useEffect(() => {
     setPosts((previous) => {
       const previousById = new Map(previous.map((post) => [post.id, post]))
-      return fetchedPostSnapshots.map(({ post, reactionRevisionAtStart }) => {
-        const localRevision = reactionStateRevisionRef.current.get(post.id) ?? 0
+      return fetchedPostSnapshots.map(({ post, reactionRevisionAtStart, voteRevisionAtStart }) => {
+        const localReactionRevision = reactionStateRevisionRef.current.get(post.id) ?? 0
+        const localVoteRevision = voteStateRevisionRef.current.get(post.id) ?? 0
         const current = previousById.get(post.id)
-        if (localRevision <= reactionRevisionAtStart || !current) return post
+        if (!current) return post
         return {
           ...post,
-          like_count: current.like_count,
-          dislike_count: current.dislike_count,
-          user_reaction: current.user_reaction,
+          ...(localReactionRevision > reactionRevisionAtStart
+            ? {
+                like_count: current.like_count,
+                dislike_count: current.dislike_count,
+                user_reaction: current.user_reaction,
+              }
+            : {}),
+          ...(localVoteRevision > voteRevisionAtStart
+            ? {
+                poll_bull: current.poll_bull,
+                poll_bear: current.poll_bear,
+                poll_wait: current.poll_wait,
+                user_vote: current.user_vote,
+              }
+            : {}),
         }
       })
     })
@@ -255,6 +276,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const markReactionStateChanged = useCallback((postId: string) => {
     const revision = ++reactionRevisionSequenceRef.current
     reactionStateRevisionRef.current.set(postId, revision)
+  }, [])
+
+  const markVoteStateChanged = useCallback((postId: string) => {
+    const revision = ++voteRevisionSequenceRef.current
+    voteStateRevisionRef.current.set(postId, revision)
   }, [])
 
   const loading = queryLoading && posts.length === 0
@@ -448,6 +474,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     openPost,
     setOpenPost,
     onReactionStateChange: markReactionStateChanged,
+    onVoteStateChange: markVoteStateChanged,
     showToast,
     showDangerConfirm,
     t,
@@ -1140,6 +1167,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           votingCustomPoll={actions.votingCustomPoll}
           loadCustomPoll={actions.loadCustomPoll}
           submitCustomPollVote={actions.submitCustomPollVote}
+          onToggleBuiltInVote={actions._toggleVote}
           userReaction={openPost.user_reaction}
           userBookmarks={actions.userBookmarks}
           bookmarkCounts={actions.bookmarkCounts}

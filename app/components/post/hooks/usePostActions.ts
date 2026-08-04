@@ -56,11 +56,15 @@ import {
   POST_CUSTOM_POLL_VOTE_OPERATION,
   POST_VOTE_REQUEST_TIMEOUT_MS,
   createPostVoteRequestId,
+  isDefinitivePostBuiltInVoteRejection,
+  nextPostBuiltInVoteState,
+  postBuiltInVoteCountDelta,
   readPostBuiltInVoteAcknowledgement,
   readPostCustomPollAcknowledgement,
   readPostCustomPollVoteAcknowledgement,
   type PostCustomPoll,
   type PostCustomPollLoadState,
+  type PostBuiltInVoteAcknowledgement,
 } from '@/lib/polls/post-vote-client-contract'
 
 type Post = PostWithUserState
@@ -78,6 +82,21 @@ type ReactionTruth = {
 
 type ReactionCommandOutcome =
   | { kind: 'acknowledged'; acknowledgement: PostReactionAcknowledgement }
+  | { kind: 'definitive-rejection'; error: string | null }
+  | { kind: 'uncertain'; error: unknown }
+
+type BuiltInVoteIntent = {
+  desired: PollChoice | null
+  revision: number
+}
+
+type BuiltInVoteTruth = {
+  vote: PollChoice | null
+  poll: { bull: number; bear: number; wait: number }
+}
+
+type BuiltInVoteCommandOutcome =
+  | { kind: 'acknowledged'; acknowledgement: PostBuiltInVoteAcknowledgement }
   | { kind: 'definitive-rejection'; error: string | null }
   | { kind: 'uncertain'; error: unknown }
 
@@ -101,6 +120,28 @@ function applyReactionTruth(post: Post, truth: ReactionTruth): Post {
     like_count: truth.likeCount,
     dislike_count: truth.dislikeCount,
     user_reaction: truth.reaction,
+  }
+}
+
+function applyDesiredBuiltInVote(post: Post, desired: PollChoice | null): Post {
+  const current = post.user_vote ?? null
+  const delta = postBuiltInVoteCountDelta(current, desired)
+  return {
+    ...post,
+    poll_bull: Math.max(0, (post.poll_bull || 0) + delta.bull),
+    poll_bear: Math.max(0, (post.poll_bear || 0) + delta.bear),
+    poll_wait: Math.max(0, (post.poll_wait || 0) + delta.wait),
+    user_vote: desired,
+  }
+}
+
+function applyBuiltInVoteTruth(post: Post, truth: BuiltInVoteTruth): Post {
+  return {
+    ...post,
+    poll_bull: truth.poll.bull,
+    poll_bear: truth.poll.bear,
+    poll_wait: truth.poll.wait,
+    user_vote: truth.vote,
   }
 }
 
@@ -243,6 +284,7 @@ export function usePostActions({
   setOpenPost,
   openPostAliasesPosts = false,
   onReactionStateChange,
+  onVoteStateChange,
   showToast,
   showDangerConfirm,
   t,
@@ -263,6 +305,8 @@ export function usePostActions({
   openPostAliasesPosts?: boolean
   /** Marks a local reaction write so an older feed read cannot overwrite it. */
   onReactionStateChange?: (postId: string) => void
+  /** Marks a local built-in vote write so an older feed read cannot overwrite it. */
+  onVoteStateChange?: (postId: string) => void
   showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   t: (key: string) => string
@@ -291,6 +335,9 @@ export function usePostActions({
   const reactionIntentRef = useRef(new Map<string, ReactionIntent>())
   const reactionWorkerRef = useRef(new Map<string, Promise<void>>())
   const reactionRevisionRef = useRef(0)
+  const builtInVoteIntentRef = useRef(new Map<string, BuiltInVoteIntent>())
+  const builtInVoteWorkerRef = useRef(new Map<string, Promise<void>>())
+  const builtInVoteRevisionRef = useRef(0)
   const bookmarkLockRef = useRef<Set<string>>(new Set())
   const bookmarkStatusLockRef = useRef<Set<string>>(new Set())
   const bookmarkMutationRevisionRef = useRef(new Map<string, number>())
@@ -299,6 +346,9 @@ export function usePostActions({
     reactionIntentRef.current.clear()
     reactionWorkerRef.current.clear()
     reactionRevisionRef.current = 0
+    builtInVoteIntentRef.current.clear()
+    builtInVoteWorkerRef.current.clear()
+    builtInVoteRevisionRef.current = 0
     // Revision keys include the viewer scope, but retaining completed entries
     // from prior identities would grow these maps for the lifetime of the tab.
     bookmarkMutationRevisionRef.current.clear()
@@ -773,88 +823,212 @@ export function usePostActions({
         return
       }
       if (!capturedScope.userId) return
+      const actorId = capturedScope.userId
       const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000vote-${postId}`
-      if (lockRef.current.has(key)) return
-      lockRef.current.add(key)
-      const requestId = createPostVoteRequestId()
-      const controller = new AbortController()
-      const timeoutId = setTimeout(
-        () => controller.abort(new DOMException('Post vote request timed out', 'AbortError')),
-        POST_VOTE_REQUEST_TIMEOUT_MS
+      const currentPost = postsRef.current.find((post) => post.id === postId)
+      if (!currentPost) return
+
+      // Read the latest queued intent so two clicks in one render frame still
+      // mean select -> clear (or select -> change), never "ignore the second".
+      const currentIntent = builtInVoteIntentRef.current.get(key)
+      const desiredChoice = nextPostBuiltInVoteState(
+        currentIntent?.desired ?? currentPost.user_vote ?? null,
+        choice
       )
-      try {
-        const response = await waitWithinAbortSignal(
-          fetch(`/api/posts/${postId}/vote`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-              ...getCsrfHeaders(),
-            },
-            body: JSON.stringify({
-              operation: POST_BUILT_IN_VOTE_OPERATION,
-              request_id: requestId,
-              choice,
-            }),
-            cache: 'no-store',
-            signal: controller.signal,
-          }),
-          controller.signal
+      builtInVoteIntentRef.current.set(key, {
+        desired: desiredChoice,
+        revision: ++builtInVoteRevisionRef.current,
+      })
+
+      onVoteStateChange?.(postId)
+      setPosts((previous) =>
+        previous.map((post) =>
+          post.id === postId ? applyDesiredBuiltInVote(post, desiredChoice) : post
         )
-        const json: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
-        if (!scopeIsCurrent(capturedScope)) return
-        const acknowledgement =
-          response.ok && response.status === 200
-            ? readPostBuiltInVoteAcknowledgement(json, {
-                actorId: capturedScope.userId,
-                postId,
-                requestId,
-                choice,
-              })
-            : null
-        if (acknowledgement) {
-          setPosts((prev) =>
-            prev.map((p) =>
-              p.id === postId
-                ? {
-                    ...p,
-                    poll_bull: acknowledgement.poll.bull,
-                    poll_bear: acknowledgement.poll.bear,
-                    poll_wait: acknowledgement.poll.wait,
-                    user_vote: acknowledgement.vote,
-                  }
-                : p
-            )
-          )
-          const openedPost = openPostRef.current
-          if (!openPostAliasesPosts && openedPost?.id === postId)
-            setOpenPost({
-              ...openedPost,
-              poll_bull: acknowledgement.poll.bull,
-              poll_bear: acknowledgement.poll.bear,
-              poll_wait: acknowledgement.poll.wait,
-              user_vote: acknowledgement.vote,
-            })
-        } else {
-          const rawError =
-            json !== null && typeof json === 'object' && !Array.isArray(json)
-              ? (json as Record<string, unknown>).error
-              : null
-          showToast(typeof rawError === 'string' ? rawError : t('voteFailed'), 'error')
+      )
+      {
+        const openedPost = openPostRef.current
+        if (!openPostAliasesPosts && openedPost?.id === postId) {
+          setOpenPost(applyDesiredBuiltInVote(openedPost, desiredChoice))
         }
-      } catch (err) {
+      }
+      haptic('light')
+
+      const sendCommand = async (intent: BuiltInVoteIntent): Promise<BuiltInVoteCommandOutcome> => {
+        const requestId = createPostVoteRequestId()
+        let lastError: unknown = new Error('Post vote acknowledgement unavailable')
+
+        // The same request identity and absolute desired state are replayed at
+        // most once. A lost response can no longer turn a committed vote off.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          if (!scopeIsCurrent(capturedScope)) return { kind: 'uncertain', error: lastError }
+          const controller = new AbortController()
+          const timeoutId = setTimeout(
+            () => controller.abort(new DOMException('Post vote request timed out', 'AbortError')),
+            POST_VOTE_REQUEST_TIMEOUT_MS
+          )
+          try {
+            const response = await waitWithinAbortSignal(
+              fetch(`/api/posts/${postId}/vote`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${accessToken}`,
+                  ...getCsrfHeaders(),
+                },
+                body: JSON.stringify({
+                  operation: POST_BUILT_IN_VOTE_OPERATION,
+                  request_id: requestId,
+                  desired_choice: intent.desired,
+                }),
+                cache: 'no-store',
+                signal: controller.signal,
+              }),
+              controller.signal
+            )
+
+            let json: unknown
+            try {
+              json = await waitWithinAbortSignal(response.json(), controller.signal)
+            } catch (error) {
+              if (isDefinitivePostBuiltInVoteRejection(response.status)) {
+                return { kind: 'definitive-rejection', error: null }
+              }
+              lastError = error
+              continue
+            }
+
+            const acknowledgement =
+              response.ok && response.status === 200
+                ? readPostBuiltInVoteAcknowledgement(json, {
+                    actorId,
+                    postId,
+                    requestId,
+                    desiredChoice: intent.desired,
+                  })
+                : null
+            if (acknowledgement) return { kind: 'acknowledged', acknowledgement }
+
+            const rawError =
+              json !== null && typeof json === 'object' && !Array.isArray(json)
+                ? (json as Record<string, unknown>).error
+                : null
+            if (isDefinitivePostBuiltInVoteRejection(response.status)) {
+              return {
+                kind: 'definitive-rejection',
+                error: typeof rawError === 'string' ? rawError : null,
+              }
+            }
+            lastError = typeof rawError === 'string' ? new Error(rawError) : lastError
+          } catch (error) {
+            lastError = error
+          } finally {
+            clearTimeout(timeoutId)
+          }
+        }
+
+        return { kind: 'uncertain', error: lastError }
+      }
+
+      const drainIntents = async (): Promise<void> => {
+        let knownTruth: BuiltInVoteTruth = {
+          vote: currentPost.user_vote ?? null,
+          poll: {
+            bull: currentPost.poll_bull || 0,
+            bear: currentPost.poll_bear || 0,
+            wait: currentPost.poll_wait || 0,
+          },
+        }
+        let knownTruthIsCertain = true
+
+        while (scopeIsCurrent(capturedScope)) {
+          const intent = builtInVoteIntentRef.current.get(key)
+          if (!intent) return
+          const outcome = await sendCommand(intent)
+          if (!scopeIsCurrent(capturedScope)) return
+          const latestIntent = builtInVoteIntentRef.current.get(key)
+
+          if (outcome.kind === 'acknowledged') {
+            const acknowledgement = outcome.acknowledgement
+            knownTruth = { vote: acknowledgement.vote, poll: acknowledgement.poll }
+            knownTruthIsCertain = true
+
+            if (latestIntent?.desired === acknowledgement.vote) {
+              onVoteStateChange?.(postId)
+              setPosts((previous) =>
+                previous.map((post) =>
+                  post.id === postId ? applyBuiltInVoteTruth(post, knownTruth) : post
+                )
+              )
+              const openedPost = openPostRef.current
+              if (!openPostAliasesPosts && openedPost?.id === postId) {
+                setOpenPost(applyBuiltInVoteTruth(openedPost, knownTruth))
+              }
+              builtInVoteIntentRef.current.delete(key)
+              return
+            }
+            continue
+          }
+
+          if (outcome.kind === 'definitive-rejection') {
+            if (latestIntent?.revision === intent.revision) {
+              if (knownTruthIsCertain) {
+                onVoteStateChange?.(postId)
+                setPosts((previous) =>
+                  previous.map((post) =>
+                    post.id === postId ? applyBuiltInVoteTruth(post, knownTruth) : post
+                  )
+                )
+                const openedPost = openPostRef.current
+                if (!openPostAliasesPosts && openedPost?.id === postId) {
+                  setOpenPost(applyBuiltInVoteTruth(openedPost, knownTruth))
+                }
+              }
+              builtInVoteIntentRef.current.delete(key)
+              showToast(outcome.error ?? t('voteFailed'), 'error')
+              return
+            }
+            continue
+          }
+
+          knownTruthIsCertain = false
+          if (latestIntent?.revision === intent.revision) {
+            builtInVoteIntentRef.current.delete(key)
+            logger.error('[PostFeed] vote result remains uncertain:', outcome.error)
+            showToast(getNetworkErrorMessage(outcome.error, t), 'error')
+            return
+          }
+        }
+      }
+
+      const startWorker = (): Promise<void> => {
+        const running = builtInVoteWorkerRef.current.get(key)
+        if (running) return running
+        const worker = drainIntents().finally(() => {
+          if (builtInVoteWorkerRef.current.get(key) === worker) {
+            builtInVoteWorkerRef.current.delete(key)
+          }
+        })
+        builtInVoteWorkerRef.current.set(key, worker)
+        return worker
+      }
+
+      try {
+        while (scopeIsCurrent(capturedScope) && builtInVoteIntentRef.current.has(key)) {
+          await startWorker()
+        }
+      } catch (error) {
         if (!scopeIsCurrent(capturedScope)) return
-        logger.error('[PostFeed] toggleVote error:', err)
-        showToast(getNetworkErrorMessage(err, t), 'error')
-      } finally {
-        clearTimeout(timeoutId)
-        lockRef.current.delete(key)
+        builtInVoteIntentRef.current.delete(key)
+        logger.error('[PostFeed] vote queue failed:', error)
+        showToast(getNetworkErrorMessage(error, t), 'error')
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       accessToken,
       captureRenderedScope,
+      onVoteStateChange,
       openPost?.id,
       openPostAliasesPosts,
       scopeIsCurrent,
