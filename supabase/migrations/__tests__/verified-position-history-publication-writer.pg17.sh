@@ -8,6 +8,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SUBSTRATE="$ROOT_DIR/supabase/migrations/20260803100000_record_surface_publication_substrate.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260803101000_verified_position_history_publication_writer.sql"
+RETIREMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260804041000_retire_legacy_position_history_publisher.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -26,6 +27,10 @@ for migration in "$SUBSTRATE" "$MIGRATION"; do
     exit 1
   fi
 done
+if [[ "${VERIFIED_POSITION_HISTORY_RETIREMENT_PROOF:-0}" == "1" && ! -f "$RETIREMENT_MIGRATION" ]]; then
+  echo "Migration not found: $RETIREMENT_MIGRATION" >&2
+  exit 1
+fi
 
 TMP_ROOT="$(mktemp -d /tmp/verified-position-history-writer-pg17.XXXXXX)"
 DATA_DIR="$TMP_ROOT/data"
@@ -767,6 +772,376 @@ FINGERPRINT_AFTER="$(psql_cmd -Atq -c "SELECT (SELECT count(*) FROM arena.record
 if [[ "$FINGERPRINT_BEFORE" != "$FINGERPRINT_AFTER" ]]; then
   echo "[verified-history-writer] fail-closed replay changed durable state" >&2
   exit 1
+fi
+
+if [[ "${VERIFIED_POSITION_HISTORY_RETIREMENT_PROOF:-0}" == "1" ]]; then
+  echo "[verified-history-writer] prove legacy writer retirement"
+
+  psql_cmd -q -c "GRANT postgres TO anon WITH INHERIT FALSE, SET TRUE"
+  expect_failure_contains \
+    "set-only-owner-membership" \
+    "application role can assume a superuser or owner role" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "REVOKE postgres FROM anon"
+
+  psql_cmd -q -c "GRANT postgres TO authenticated WITH INHERIT TRUE, SET FALSE"
+  expect_failure_contains \
+    "inherit-owner-membership" \
+    "application role can assume a superuser or owner role" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "REVOKE postgres FROM authenticated"
+
+  psql_cmd -q -c "GRANT service_role TO anon WITH INHERIT FALSE, SET TRUE"
+  expect_failure_contains \
+    "set-only-checkpoint-membership" \
+    "public application role can assume service_role" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "REVOKE service_role FROM anon"
+
+  psql_cmd -q -c "GRANT service_role TO authenticated WITH INHERIT TRUE, SET FALSE"
+  expect_failure_contains \
+    "inherit-checkpoint-membership" \
+    "public application role can assume service_role" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "REVOKE service_role FROM authenticated"
+
+  psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.publish_verified_position_history(p_unused integer)
+RETURNS jsonb
+LANGUAGE sql
+AS $function$ SELECT '{}'::jsonb $function$;
+ALTER FUNCTION arena.publish_verified_position_history(integer) OWNER TO postgres;
+SQL
+  expect_failure_contains \
+    "unsupported-writer-overload" \
+    "legacy position-history writer overload set is not exact" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "DROP FUNCTION arena.publish_verified_position_history(integer)"
+
+  psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.get_position_history_publication_checkpoint(p_unused integer)
+RETURNS jsonb
+LANGUAGE sql
+AS $function$ SELECT '{}'::jsonb $function$;
+ALTER FUNCTION arena.get_position_history_publication_checkpoint(integer)
+  OWNER TO postgres;
+SQL
+  expect_failure_contains \
+    "unsupported-checkpoint-overload" \
+    "position-history checkpoint overload set is not exact" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "DROP FUNCTION arena.get_position_history_publication_checkpoint(integer)"
+
+  CHAIN_DEFINITION="$(psql_cmd -Atq -c "SELECT pg_get_functiondef('arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'::regprocedure)")"
+  psql_cmd -q <<'SQL'
+CREATE OR REPLACE FUNCTION arena.position_history_publication_chain_healthy(
+  p_root_publication_id bigint,
+  p_source_id smallint,
+  p_trader_id bigint
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog, pg_temp
+SET statement_timeout = '10s'
+SET TimeZone = 'UTC'
+AS $function$
+  SELECT true;
+$function$;
+SQL
+  expect_failure_contains \
+    "tampered-chain-guard-preflight" \
+    "position-history chain guard identity drifted before checkpoint grant" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "$CHAIN_DEFINITION"
+
+  psql_cmd -q -c "ALTER TABLE arena.position_history DISABLE TRIGGER protect_verified_position_history_before_write"
+  expect_failure_contains \
+    "disabled-guard-trigger-preflight" \
+    "position-history guard trigger identity drifted before retirement" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "ALTER TABLE arena.position_history ENABLE TRIGGER protect_verified_position_history_before_write"
+
+  psql_cmd -q -c "ALTER TABLE arena.position_history_future_guard DISABLE TRIGGER protect_verified_position_history_before_write"
+  expect_failure_contains \
+    "disabled-child-guard-trigger-preflight" \
+    "position-history guard trigger identity drifted before retirement" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q -c "ALTER TABLE arena.position_history_future_guard ENABLE TRIGGER protect_verified_position_history_before_write"
+
+  psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.fixture_rogue_position_history_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION arena.fixture_rogue_position_history_guard() OWNER TO postgres;
+DROP TRIGGER protect_verified_position_history_before_write
+  ON arena.position_history;
+CREATE TRIGGER protect_verified_position_history_before_write
+BEFORE INSERT OR UPDATE OR DELETE ON arena.position_history
+FOR EACH ROW EXECUTE FUNCTION arena.fixture_rogue_position_history_guard();
+SQL
+  expect_failure_contains \
+    "rogue-guard-trigger-preflight" \
+    "position-history guard trigger identity drifted before retirement" \
+    "\\i $RETIREMENT_MIGRATION"
+  psql_cmd -q <<'SQL'
+DROP TRIGGER protect_verified_position_history_before_write
+  ON arena.position_history;
+CREATE TRIGGER protect_verified_position_history_before_write
+BEFORE INSERT OR UPDATE OR DELETE ON arena.position_history
+FOR EACH ROW EXECUTE FUNCTION arena.protect_verified_position_history_row();
+DROP FUNCTION arena.fixture_rogue_position_history_guard();
+SQL
+
+  psql_cmd -q <<'SQL'
+CREATE FUNCTION arena.fixture_legacy_history_wrapper()
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_result jsonb;
+BEGIN
+  EXECUTE
+    'SELECT arena.publish_verified_' ||
+    'position_history($1,$2,$3,$4,$5,$6)'
+  INTO v_result
+  USING
+    999999::bigint,
+    NULL::bigint,
+    NULL::timestamptz,
+    '[]'::jsonb,
+    'tier_b'::text,
+    'arena.ingest.position-history-publisher.worker@1'::text;
+  RETURN v_result;
+END
+$function$;
+ALTER FUNCTION arena.fixture_legacy_history_wrapper() OWNER TO postgres;
+REVOKE ALL ON FUNCTION arena.fixture_legacy_history_wrapper()
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION arena.fixture_legacy_history_wrapper()
+  TO service_role;
+SQL
+  expect_failure_contains \
+    "security-definer-wrapper-call" \
+    "RAW pointer is missing or traderless" \
+    "SET ROLE service_role; SELECT arena.fixture_legacy_history_wrapper()"
+
+  IDENTITY_BEFORE="$(psql_cmd -Atq -c "SELECT string_agg(identity, '|' ORDER BY identity) FROM (SELECT oid::text || ':' || proname || CASE WHEN oid IN ('arena.get_position_history_publication_checkpoint(smallint,bigint)'::regprocedure,'arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'::regprocedure) THEN ':' || encode(sha256(convert_to(pg_get_functiondef(oid),'UTF8')),'hex') ELSE '' END AS identity FROM pg_proc WHERE oid IN ('arena.publish_verified_position_history(bigint,bigint,timestamptz,jsonb,text,text)'::regprocedure,'arena.get_position_history_publication_checkpoint(smallint,bigint)'::regprocedure,'arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'::regprocedure,'arena.protect_verified_position_history_row()'::regprocedure) UNION ALL SELECT oid::text || ':' || tgfoid::text || ':' || tgtype::text || ':' || tgenabled::text FROM pg_trigger WHERE tgrelid='arena.position_history'::regclass AND tgname IN ('protect_verified_position_history_before_write','protect_verified_position_history_before_truncate')) AS identities")"
+  PARTITION_TRIGGER_STATE_BEFORE="$(psql_cmd -Atq -c "WITH RECURSIVE guarded_relation(relation_oid) AS (SELECT 'arena.position_history'::regclass UNION ALL SELECT inheritance.inhrelid FROM pg_inherits AS inheritance JOIN guarded_relation AS parent_relation ON parent_relation.relation_oid=inheritance.inhparent) SELECT string_agg(trigger_row.oid::text || ':' || trigger_row.tgrelid::text || ':' || trigger_row.tgparentid::text || ':' || trigger_row.tgfoid::text || ':' || trigger_row.tgtype::text || ':' || trigger_row.tgenabled::text,'|' ORDER BY trigger_row.oid) FROM pg_trigger AS trigger_row WHERE trigger_row.tgrelid IN (SELECT relation_oid FROM guarded_relation) AND trigger_row.tgname IN ('protect_verified_position_history_before_write','protect_verified_position_history_before_truncate')")"
+
+  psql_cmd -q <<'SQL'
+CREATE ROLE fixture_writer_parent NOLOGIN;
+CREATE ROLE fixture_writer_rogue NOLOGIN;
+CREATE ROLE fixture_writer_delegate NOLOGIN;
+GRANT USAGE ON SCHEMA arena TO fixture_writer_parent, fixture_writer_rogue, fixture_writer_delegate;
+GRANT fixture_writer_parent TO service_role WITH INHERIT TRUE, SET FALSE;
+GRANT EXECUTE ON FUNCTION arena.publish_verified_position_history(
+  bigint,bigint,timestamptz,jsonb,text,text
+) TO PUBLIC;
+GRANT EXECUTE ON FUNCTION arena.publish_verified_position_history(
+  bigint,bigint,timestamptz,jsonb,text,text
+) TO fixture_writer_parent;
+GRANT EXECUTE ON FUNCTION arena.publish_verified_position_history(
+  bigint,bigint,timestamptz,jsonb,text,text
+) TO fixture_writer_rogue WITH GRANT OPTION;
+SET ROLE fixture_writer_rogue;
+GRANT EXECUTE ON FUNCTION arena.publish_verified_position_history(
+  bigint,bigint,timestamptz,jsonb,text,text
+) TO fixture_writer_delegate;
+RESET ROLE;
+GRANT EXECUTE ON FUNCTION arena.get_position_history_publication_checkpoint(
+  smallint,bigint
+) TO service_role WITH GRANT OPTION;
+SET ROLE service_role;
+GRANT EXECUTE ON FUNCTION arena.get_position_history_publication_checkpoint(
+  smallint,bigint
+) TO fixture_writer_delegate;
+RESET ROLE;
+SQL
+
+  psql_cmd -q -f "$RETIREMENT_MIGRATION"
+
+  IDENTITY_AFTER="$(psql_cmd -Atq -c "SELECT string_agg(identity, '|' ORDER BY identity) FROM (SELECT oid::text || ':' || proname || CASE WHEN oid IN ('arena.get_position_history_publication_checkpoint(smallint,bigint)'::regprocedure,'arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'::regprocedure) THEN ':' || encode(sha256(convert_to(pg_get_functiondef(oid),'UTF8')),'hex') ELSE '' END AS identity FROM pg_proc WHERE oid IN ('arena.publish_verified_position_history(bigint,bigint,timestamptz,jsonb,text,text)'::regprocedure,'arena.get_position_history_publication_checkpoint(smallint,bigint)'::regprocedure,'arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'::regprocedure,'arena.protect_verified_position_history_row()'::regprocedure) UNION ALL SELECT oid::text || ':' || tgfoid::text || ':' || tgtype::text || ':' || tgenabled::text FROM pg_trigger WHERE tgrelid='arena.position_history'::regclass AND tgname IN ('protect_verified_position_history_before_write','protect_verified_position_history_before_truncate')) AS identities")"
+  PARTITION_TRIGGER_STATE_AFTER="$(psql_cmd -Atq -c "WITH RECURSIVE guarded_relation(relation_oid) AS (SELECT 'arena.position_history'::regclass UNION ALL SELECT inheritance.inhrelid FROM pg_inherits AS inheritance JOIN guarded_relation AS parent_relation ON parent_relation.relation_oid=inheritance.inhparent) SELECT string_agg(trigger_row.oid::text || ':' || trigger_row.tgrelid::text || ':' || trigger_row.tgparentid::text || ':' || trigger_row.tgfoid::text || ':' || trigger_row.tgtype::text || ':' || trigger_row.tgenabled::text,'|' ORDER BY trigger_row.oid) FROM pg_trigger AS trigger_row WHERE trigger_row.tgrelid IN (SELECT relation_oid FROM guarded_relation) AND trigger_row.tgname IN ('protect_verified_position_history_before_write','protect_verified_position_history_before_truncate')")"
+  if [[ "$IDENTITY_BEFORE" != "$IDENTITY_AFTER" ]]; then
+    echo "[verified-history-writer] retirement changed OIDs, trusted readers, or trigger identity" >&2
+    exit 1
+  fi
+  if [[ "$PARTITION_TRIGGER_STATE_BEFORE" != "$PARTITION_TRIGGER_STATE_AFTER" ]]; then
+    echo "[verified-history-writer] retirement changed partition trigger identity" >&2
+    exit 1
+  fi
+
+  expect_failure_contains \
+    "security-definer-wrapper-retired" \
+    "legacy position-history publisher is retired; parser-conservation receipt required" \
+    "SET ROLE service_role; SELECT arena.fixture_legacy_history_wrapper()"
+  expect_failure_contains \
+    "retired-writer-owner" \
+    "legacy position-history publisher is retired; parser-conservation receipt required" \
+    "SELECT arena.publish_verified_position_history(1,NULL,NULL,'[]'::jsonb,'tier_b','arena.ingest.position-history-publisher.worker@1')"
+  psql_cmd -q -c "DROP FUNCTION arena.fixture_legacy_history_wrapper()"
+
+  for role in service_role anon authenticated fixture_writer_parent fixture_writer_rogue fixture_writer_delegate; do
+    expect_failure_contains \
+      "retired-writer-$role" \
+      "permission denied for function publish_verified_position_history" \
+      "SET ROLE $role; SELECT arena.publish_verified_position_history(1,NULL,NULL,'[]'::jsonb,'tier_b','arena.ingest.position-history-publisher.worker@1')"
+  done
+
+  expect_failure_contains \
+    "service-null-receipt-insert" \
+    "position-history insert requires parser-conservation publication authority" \
+    "SET ROLE service_role; INSERT INTO arena.position_history (trader_id,closed_at,symbol,currency,dedupe_hash) VALUES (1,'2026-08-03T13:02:00Z','XRPUSDT','USDT','retired-service-null')"
+  expect_failure_contains \
+    "owner-null-receipt-insert" \
+    "position-history insert requires parser-conservation publication authority" \
+    "INSERT INTO arena.position_history (trader_id,closed_at,symbol,currency,dedupe_hash) VALUES (1,'2026-08-03T13:03:00Z','XRPUSDT','USDT','retired-owner-null')"
+  expect_failure_contains \
+    "future-child-null-receipt-insert" \
+    "position-history insert requires parser-conservation publication authority" \
+    "INSERT INTO arena.position_history_future_guard (trader_id,closed_at,symbol,currency,dedupe_hash) VALUES (1,'2098-01-15T00:00:00Z','XRPUSDT','USDT','retired-future-null')"
+  expect_failure_contains \
+    "future-child-forged-receipt-insert" \
+    "position-history insert requires parser-conservation publication authority" \
+    "INSERT INTO arena.position_history_future_guard (trader_id,closed_at,symbol,currency,dedupe_hash,verified_publication_id) VALUES (1,'2098-01-15T00:01:00Z','XRPUSDT','USDT','retired-future-forged',$HEAD_CURRENT)"
+  expect_failure_contains \
+    "owner-forged-receipt-insert" \
+    "position-history insert requires parser-conservation publication authority" \
+    "SELECT set_config('arena.verified_position_history_publication_id','$HEAD_CURRENT',true); INSERT INTO arena.position_history (trader_id,closed_at,symbol,currency,dedupe_hash,verified_publication_id) VALUES (1,'2026-08-03T13:04:00Z','XRPUSDT','USDT','retired-owner-forged',$HEAD_CURRENT)"
+  expect_failure_contains \
+    "legacy-null-receipt-update" \
+    "verified position-history row content is immutable" \
+    "UPDATE arena.position_history SET realized_pnl=998 WHERE dedupe_hash='position-conflict'"
+  expect_failure_contains \
+    "legacy-receipt-upgrade" \
+    "verified position-history row content is immutable" \
+    "UPDATE arena.position_history SET verified_publication_id=$HEAD_CURRENT WHERE dedupe_hash='position-conflict'"
+  expect_failure_contains \
+    "verified-receipt-rebind" \
+    "verified position-history row content is immutable" \
+    "UPDATE arena.position_history SET verified_publication_id=$ZERO_HEAD WHERE dedupe_hash='position-1'"
+  expect_failure_contains \
+    "retired-verified-row-delete" \
+    "verified position-history rows are immutable" \
+    "DELETE FROM arena.position_history WHERE dedupe_hash='position-1'"
+  expect_failure_contains \
+    "retired-position-history-truncate" \
+    "verified position-history rows cannot be truncated" \
+    "TRUNCATE arena.position_history"
+
+  psql_cmd -q -c "DELETE FROM arena.position_history WHERE dedupe_hash='position-conflict'"
+  LEGACY_ROWS_AFTER_CLEANUP="$(psql_cmd -Atq -c "SELECT count(*) FROM arena.position_history WHERE dedupe_hash='position-conflict'")"
+  if [[ "$LEGACY_ROWS_AFTER_CLEANUP" != "0" ]]; then
+    echo "[verified-history-writer] controlled legacy-row cleanup failed" >&2
+    exit 1
+  fi
+
+  expect_failure_contains \
+    "delegated-checkpoint-retired" \
+    "permission denied for function get_position_history_publication_checkpoint" \
+    "SET ROLE fixture_writer_delegate; SELECT arena.get_position_history_publication_checkpoint(1::smallint,3::bigint)"
+
+  CHECKPOINT_RETAINED="$(psql_cmd -Atq -c "SET ROLE service_role; SELECT arena.get_position_history_publication_checkpoint(1::smallint,3::bigint)")"
+  if [[ "$CHECKPOINT_RETAINED" != *'"publicationId": null'* || "$CHECKPOINT_RETAINED" != *'"cursor": null'* ]]; then
+    echo "[verified-history-writer] service checkpoint was not retained: $CHECKPOINT_RETAINED" >&2
+    exit 1
+  fi
+
+  psql_cmd -q <<'SQL'
+DO $retirement_acl$
+DECLARE
+  v_writer oid := 'arena.publish_verified_position_history(bigint,bigint,timestamptz,jsonb,text,text)'::regprocedure;
+  v_checkpoint oid := 'arena.get_position_history_publication_checkpoint(smallint,bigint)'::regprocedure;
+  v_row_guard oid := 'arena.protect_verified_position_history_row()'::regprocedure;
+  v_service_role oid := 'service_role'::regrole;
+BEGIN
+  IF EXISTS (
+       SELECT 1
+       FROM pg_proc AS function_row
+       CROSS JOIN LATERAL aclexplode(
+         COALESCE(function_row.proacl, acldefault('f', function_row.proowner))
+       ) AS privilege
+       WHERE function_row.oid = v_writer
+         AND privilege.grantee <> function_row.proowner
+     )
+     OR EXISTS (
+       SELECT 1
+       FROM pg_proc AS function_row
+       CROSS JOIN LATERAL aclexplode(
+         COALESCE(function_row.proacl, acldefault('f', function_row.proowner))
+       ) AS privilege
+       WHERE function_row.oid = v_row_guard
+         AND privilege.grantee <> function_row.proowner
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_proc AS function_row
+       WHERE function_row.oid = v_writer
+         AND encode(sha256(convert_to(function_row.prosrc,'UTF8')),'hex') =
+             'c6b9a4e5240227e308e25d2f83e08a89f2dc8c36c443ad54117aae052ab8e6a2'
+         AND strpos(
+           function_row.prosrc,
+           'legacy position-history publisher is retired; parser-conservation receipt required'
+         ) > 0
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_proc AS function_row
+       WHERE function_row.oid = v_row_guard
+         AND encode(sha256(convert_to(function_row.prosrc,'UTF8')),'hex') =
+             '727b58f09c7eb9bb241c39720e011fcfb1a1b2805aca5b8d75575c2380aebc36'
+         AND strpos(
+           function_row.prosrc,
+           'position-history insert requires parser-conservation publication authority'
+         ) > 0
+     )
+     OR (
+       SELECT count(*)
+       FROM pg_proc AS function_row
+       CROSS JOIN LATERAL aclexplode(
+         COALESCE(function_row.proacl, acldefault('f', function_row.proowner))
+       ) AS privilege
+       WHERE function_row.oid = v_checkpoint
+         AND privilege.grantee = v_service_role
+         AND privilege.grantor = function_row.proowner
+         AND privilege.privilege_type = 'EXECUTE'
+         AND NOT privilege.is_grantable
+     ) <> 1
+     OR EXISTS (
+       SELECT 1
+       FROM pg_proc AS function_row
+       CROSS JOIN LATERAL aclexplode(
+         COALESCE(function_row.proacl, acldefault('f', function_row.proowner))
+       ) AS privilege
+       WHERE function_row.oid = v_checkpoint
+         AND privilege.grantee <> function_row.proowner
+         AND privilege.grantee <> v_service_role
+     ) THEN
+    RAISE EXCEPTION 'retirement ACL did not converge';
+  END IF;
+END
+$retirement_acl$;
+SQL
+
+  RETIRED_STATE_BEFORE="$(psql_cmd -Atq -c "SELECT string_agg(concat_ws(':',oid::text,encode(sha256(convert_to(pg_get_functiondef(oid),'UTF8')),'hex'),coalesce(proacl::text,''),coalesce(obj_description(oid,'pg_proc'),'')),'|' ORDER BY oid) FROM pg_proc WHERE oid IN ('arena.publish_verified_position_history(bigint,bigint,timestamptz,jsonb,text,text)'::regprocedure,'arena.get_position_history_publication_checkpoint(smallint,bigint)'::regprocedure,'arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'::regprocedure,'arena.protect_verified_position_history_row()'::regprocedure)")"
+  RETIRED_TRIGGER_STATE_BEFORE="$PARTITION_TRIGGER_STATE_AFTER"
+  psql_cmd -q -f "$RETIREMENT_MIGRATION"
+  RETIRED_STATE_AFTER="$(psql_cmd -Atq -c "SELECT string_agg(concat_ws(':',oid::text,encode(sha256(convert_to(pg_get_functiondef(oid),'UTF8')),'hex'),coalesce(proacl::text,''),coalesce(obj_description(oid,'pg_proc'),'')),'|' ORDER BY oid) FROM pg_proc WHERE oid IN ('arena.publish_verified_position_history(bigint,bigint,timestamptz,jsonb,text,text)'::regprocedure,'arena.get_position_history_publication_checkpoint(smallint,bigint)'::regprocedure,'arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'::regprocedure,'arena.protect_verified_position_history_row()'::regprocedure)")"
+  RETIRED_TRIGGER_STATE_AFTER="$(psql_cmd -Atq -c "WITH RECURSIVE guarded_relation(relation_oid) AS (SELECT 'arena.position_history'::regclass UNION ALL SELECT inheritance.inhrelid FROM pg_inherits AS inheritance JOIN guarded_relation AS parent_relation ON parent_relation.relation_oid=inheritance.inhparent) SELECT string_agg(trigger_row.oid::text || ':' || trigger_row.tgrelid::text || ':' || trigger_row.tgparentid::text || ':' || trigger_row.tgfoid::text || ':' || trigger_row.tgtype::text || ':' || trigger_row.tgenabled::text,'|' ORDER BY trigger_row.oid) FROM pg_trigger AS trigger_row WHERE trigger_row.tgrelid IN (SELECT relation_oid FROM guarded_relation) AND trigger_row.tgname IN ('protect_verified_position_history_before_write','protect_verified_position_history_before_truncate')")"
+  if [[ "$RETIRED_STATE_BEFORE" != "$RETIRED_STATE_AFTER" ||
+        "$RETIRED_TRIGGER_STATE_BEFORE" != "$RETIRED_TRIGGER_STATE_AFTER" ]]; then
+    echo "[verified-history-writer] idempotent retirement changed final ACL state" >&2
+    exit 1
+  fi
 fi
 
 echo "verified position-history publication writer PostgreSQL 17 proof passed"
