@@ -26,13 +26,18 @@ test('retired standalone diagnostics stay removed in favor of supported entrypoi
 })
 
 test('retired ad hoc UI screenshot entrypoint stays removed', () => {
-  const retiredEntrypoint = 'scripts/qa-ui-check.mjs'
+  const retiredEntrypoints = [
+    'scripts/qa-ui-check.mjs',
+    'scripts/qa-screenshot-rankings.mjs',
+    'scripts/qa-screenshot.mjs',
+    'scripts/screenshot-diagnose.ts',
+  ]
   const supportedEntrypoint = 'scripts/qa/visual-audit.mjs'
 
-  assert.equal(
-    existsSync(join(repoRoot, retiredEntrypoint)),
-    false,
-    'retired fixed-route screenshot script must not return; use the maintained visual audit'
+  assert.deepEqual(
+    retiredEntrypoints.filter((path) => existsSync(join(repoRoot, path))),
+    [],
+    'retired fixed-route screenshot scripts must not return; use the maintained visual audit'
   )
   assert.equal(
     existsSync(join(repoRoot, supportedEntrypoint)),
@@ -41,7 +46,22 @@ test('retired ad hoc UI screenshot entrypoint stays removed', () => {
   )
 
   const packageCommands = Object.values(packageJson.scripts).join('\n')
-  assert.doesNotMatch(packageCommands, new RegExp(retiredEntrypoint.replaceAll('.', '\\.')))
+  for (const retiredEntrypoint of retiredEntrypoints) {
+    assert.doesNotMatch(packageCommands, new RegExp(retiredEntrypoint.replaceAll('.', '\\.')))
+  }
+})
+
+test('retired one-off schema and VPS instructions stay removed', () => {
+  const retiredOperationalFiles = ['scripts/get-schema.mjs', 'scripts/DEPLOY_TO_VPS.md']
+
+  assert.deepEqual(
+    retiredOperationalFiles.filter((path) => existsSync(join(repoRoot, path))),
+    [],
+    'retired probes and deployment instructions must not bypass supported schema and ingest workflows'
+  )
+
+  assert.equal(existsSync(join(repoRoot, 'docs/INGEST_WORKER_DEPLOY.md')), true)
+  assert.equal(packageJson.scripts['gen:types'], 'bash scripts/gen-types.sh')
 })
 
 test('retired pre-arena tools stay removed', () => {
