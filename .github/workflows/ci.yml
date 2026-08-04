@@ -213,6 +213,16 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:bingx-rank-quarantine-pg17
 
+      - name: Prove copier snapshot receipt authority
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:copier-snapshot-authority-pg17
+
+      - name: Prove manually attested copier snapshot cutover
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:copier-snapshot-cutover-pg17
+
       - name: Prove Arena Score v5 trusted-zero semantics
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

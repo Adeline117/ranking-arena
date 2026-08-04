@@ -100,6 +100,8 @@
     "qa:score-alias-pg17": "bash supabase/migrations/__tests__/bitget-bot-rank-authority-quarantine.pg17.sh",
     "qa:serving-trader-resolver-pg17": "bash supabase/migrations/__tests__/harden-serving-trader-resolver.pg17.sh",
     "qa:bingx-rank-quarantine-pg17": "bash supabase/migrations/__tests__/bingx-rank-authority-quarantine.pg17.sh",
+    "qa:copier-snapshot-authority-pg17": "bash supabase/migrations/__tests__/copier-snapshot-publication-authority.pg17.sh",
+    "qa:copier-snapshot-cutover-pg17": "bash supabase/migrations/__tests__/copier-snapshot-direct-write-cutover.pg17.sh",
     "qa:score-v5-pg17": "bash supabase/migrations/__tests__/pure-arena-score-v5-zero-metrics.pg17.sh",
     "qa:score-manifest-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-score-input-manifest.pg17.sh",
     "qa:score-projection-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-metric-trust-projection-v2.pg17.sh",

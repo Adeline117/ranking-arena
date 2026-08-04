@@ -158,12 +158,18 @@ PREDEPLOY_MIGRATIONS=(
   20260803180000_hashtag_read_authority.sql
   20260803183000_post_interaction_read_privacy.sql
   20260804050500_harden_serving_trader_resolver.sql
+  20260804051000_harden_serving_source_capabilities.sql
+  20260804052000_fail_closed_unbound_copier_aggregates.sql
   20260804052500_quarantine_bingx_rank_authority.sql
+  20260804053000_copier_snapshot_publication_substrate.sql
+  20260804054000_copier_snapshot_publication_authority.sql
 )
 
-# 054 is retained as immutable history but is never an ordered candidate. 055
-# accepts it only when its exact reviewed ledger and complete object contract
-# are already present; a missing 054 is intentionally skipped.
+# 20260722054000_metric_trust_source_page_lineage.sql is retained as immutable
+# history but is never an ordered candidate. Its reviewed successor
+# 20260722055000_metric_trust_source_page_contract.sql accepts it only when the
+# exact ledger and complete object contract are already present; a missing
+# 20260722054000 migration is intentionally skipped.
 QUARANTINED_PREDEPLOY_MIGRATIONS=(
   20260722054000_metric_trust_source_page_lineage.sql
 )
@@ -184,6 +190,10 @@ POSTDEPLOY_MIGRATIONS=(
   20260729021000_disable_legacy_api_tier_writer.sql
   20260729062500_close_trader_follow_direct_writes.sql
 )
+
+# 20260804055000_copier_snapshot_direct_write_cutover.sql is intentionally in
+# no standard runner phase. It is an irreversible, separately attested manual
+# operation after the receipt-capable Tier-C release and coverage gate pass.
 
 # Recovery repairs the immutable application snapshot whose original cutover
 # was exactly these 41 migrations. Keep this prerequisite frozen: later launch

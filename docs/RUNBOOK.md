@@ -527,7 +527,7 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 
 旧的 2026-08-04 `READ ONLY` production 审计早于 `20260804045000_verified_position_history_raw_prerequisites.sql`、`20260804050000_verified_position_history_publication_authority.sql` 与 `20260804050500_harden_serving_trader_resolver.sql`，其 predeploy/postdeploy 总数、gap 数、missing/live 结论和函数状态只能作为历史线索。当前 production 状态统一为 **PENDING RE-AUDIT**：先冻结当前完整 ordered manifest、ledger、函数 overload、ACL、trigger、relation OID 与 live catalog，再逐项记录 `exact / missing / drift`；新审计完成前不得写总数或批准 DDL。transaction pooler 只用于只读取证，不是 migration writer；`5432 + verify-full` session 通道仍须另证。
 
-以下十六个 2026-08 migration 是当前仓库 inventory；production apply 状态待重新只读复核。这不是 apply 授权，最终 pass 必须绑定同一个 exact candidate SHA：
+以下二十一个 2026-08 migration 是当前仓库 inventory；production apply 状态待重新只读复核。这不是 apply 授权，最终 pass 必须绑定同一个 exact candidate SHA。其中 `040550` 是不可逆的 **runner 外 post-deployment/manual-only** 切换，不属于 standard runner 的任何 phase：
 
 1. `20260803090000_record_provenance_clocks.sql`
 2. `20260803100000_record_surface_publication_substrate.sql`
@@ -544,7 +544,12 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 13. `20260804045000_verified_position_history_raw_prerequisites.sql`
 14. `20260804050000_verified_position_history_publication_authority.sql`
 15. `20260804050500_harden_serving_trader_resolver.sql`
-16. `20260804052500_quarantine_bingx_rank_authority.sql`
+16. `20260804051000_harden_serving_source_capabilities.sql`
+17. `20260804052000_fail_closed_unbound_copier_aggregates.sql`
+18. `20260804052500_quarantine_bingx_rank_authority.sql`
+19. `20260804053000_copier_snapshot_publication_substrate.sql`
+20. `20260804054000_copier_snapshot_publication_authority.sql`
+21. `20260804055000_copier_snapshot_direct_write_cutover.sql`（runner 外 post-deployment/manual-only）
 
 必须使用以下有序流程：
 
@@ -555,19 +560,89 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 4. 完整 predeploy/ranking baseline 与所有 drift 经独立审查闭合后，在受保护 staging 按 `20260803090000` → `20260803100000` → `20260803101000` 逐文件建立 record/publication 基础链。逐项证明 provenance/observation/publication clocks、private immutable publication chain、legacy verified writer、checkpoint/chain-health RPC 与原子 receipt。后续 retirement/reopen 由步骤 7 按真实顺序处理；任何 preflight、ACL、链完整性、artifact 版本混用或 ledger/live drift 都停止。
 5. 在受保护 staging 单文件通道应用 activation migration，证明 epoch 行、v2 RPC、`service_role` 只读指标契约和旧事件解析兼容。
 6. 在 authorization、Portfolio retirement 与 Claim Phase A 尚未应用时，通过受保护发布管线部署候选 exact bridge SHA。证明旧 connect、bind、sync 与 OAuth 入口无条件固定 410；两个 auth-first tombstone `/api/exchange/verify-ownership` 和 `/api/traders/claim/verify-wallet` 必须分别为匿名 401、已登录 410，且没有凭据读取、proof consumption 或 direct-table fallback。另证明新的 authorize POST/Claim 写路径因 RPC 缺失而 fail closed，旧 Portfolio 四入口固定 410，snapshot cron 为认证 no-op 且未调度；Portfolio export RPC 尚不存在时，已认证 export 必须返回 500。保留的 EVM address portfolio/suggestions 不属于旧凭据面。还必须证明 app/worker 不调用 legacy position-history publisher/cursor/maintenance；legacy、漂移或自报 complete 的 history 在 data/API/warm-cache/UI 边界继续 quarantine。Tier-C 仅可提供无 cursor、限页、partial 的 RAW-backed preview，不能写 typed history 或作为排名证据。保持两台 writer 停止，排空 legacy publisher、reader、maintenance、partition creator、queue 与在途事务；记录 exact SHA，到 Phase B 后验证结束不得换包。
-7. 保持该 exact bridge SHA 和 writer 停止，严格按当前文件顺序单文件执行 `040410` → `040420` → `040430` → `040440` → `040450` → `040500` → `040505` → `040510`。其中 `040430` 只验收步骤 3 的独立 token-ranking retirement，不属于 position-history 依赖链，但也不得跳位或提前。`040410` 保留 legacy writer OID/audit/checkpoint chain 但撤销 application execute；`040420` 在过渡阶段把 legacy page 固定为 exact empty/unknown；`040440` 保留旧 relation OID/数据供取证，但撤销 runtime DML/DDL、启用 guard、退役 partition creator，并要求只读 postflight `legacy_history_frozen=true`；`040450` 证明 immutable RAW pointer、source run、artifact/version 与 publication prerequisites；`040500` 仅允许 reviewed 四参数 publisher，以 HMAC cursor 和完整 `arena.position-history-completeness@2` contract 前向重开 verified page；`040505` 再把公开 trader resolver 收紧为 `status='active' AND serving_mode='serving'`，同时保留 source alias、fetch region 绑定与 exact-id 优先级；随后 `040510` 才归档并清空 BingX public rank/freshness/count surface，把两个物理来源保持为 active/shadow，并安装四个 validated fail-close guards。必须分别 smoke：无 publication 首屏 empty/unknown、旧 cursor 无 publication 返回 reset 冲突、合法首屏/续页稳定、legacy overload 与漂移/自报 payload 不可服务、Tier-C 始终 partial 且无 cursor、inactive/shadow source 无法解析，以及 BingX 直接请求返回不可缓存的受控空结果、非 BingX 公榜不含其 row/metadata。不要用真实 production 写入试探；任一排空、preflight、ACL、hash、ledger/live、PostgREST reload、completeness、resolver、archive、guard 或 HTTP 证明失败都停止。
+7. 保持该 exact bridge SHA 和 writer 停止，严格按当前文件顺序单文件执行 `040410` → `040420` → `040430` → `040440` → `040450` → `040500` → `040505` → `040510` → `040520` → `040525` → `040530` → `040540`。其中 `040430` 只验收步骤 3 的独立 token-ranking retirement，不属于 position-history 依赖链，但也不得跳位或提前。`040410` 保留 legacy writer OID/audit/checkpoint chain 但撤销 application execute；`040420` 在过渡阶段把 legacy page 固定为 exact empty/unknown；`040440` 保留旧 relation OID/数据供取证，但撤销 runtime DML/DDL、启用 guard、退役 partition creator，并要求只读 postflight `legacy_history_frozen=true`；`040450` 证明 immutable RAW pointer、source run、artifact/version 与 publication prerequisites；`040500` 仅允许 reviewed 四参数 publisher，以 HMAC cursor 和完整 `arena.position-history-completeness@2` contract 前向重开 verified page；`040505` 把公开 trader resolver 收紧为 `status='active' AND serving_mode='serving'`；`040510` 强制只有 active/serving 且具备必需能力的 source 可被公开服务；`040520` 在新收据链完成前先 fail closed 无收据绑定的 copier aggregate；`040525` 归档并清空 BingX public rank/freshness/count surface，同时保留 active/shadow 采集；`040530` 建立私有、不可变的 copier snapshot receipt/row substrate；`040540` 安装 service-only 原子 publisher 和 receipt-first aggregate reader，SQL 从 exact rows 自行计算 count/total/distribution，并仅在过渡期保留明确标记的 legacy fallback。必须分别 smoke：无 publication 首屏 empty/unknown、旧 cursor 无 publication 返回 reset 冲突、合法首屏/续页稳定、legacy overload 与漂移/自报 payload 不可服务、Tier-C 始终 partial 且无 cursor、inactive/shadow source 无法解析、BingX 直接请求返回不可缓存的受控空结果、非 BingX 公榜不含其 row/metadata，以及 copier publisher 的 exact replay/冲突重放、verified+exhausted verifier 绑定、RAW clock/source-run/hash 绑定、零行与非空行聚合一致性、browser/PII denial。不要用真实 production 写入试探；任一排空、preflight、ACL、hash、ledger/live、PostgREST reload、completeness、resolver、archive、guard 或 HTTP 证明失败都停止。`040550` 严禁在本 predeploy 链或任何 standard runner phase 中执行；它必须等收据版 Tier-C worker 已全量部署到 exact release SHA、所有 legacy worker/queue/in-flight job 已排空、按 serving source 量化的 receipt coverage 达到获准阈值且无 source 将被永久空白后，才能通过独立 ADR-023 runner 外 manual-only 单文件通道执行。单纯证明 `040540` schema 成功绝不授权 `040550`；后者会不可逆地关闭 fallback 并拒绝所有 legacy `copier_records` insert。
 8. 继续保持 writer 停止，证明所有 legacy Tier-A worker/queue 已排空且完整 predeploy manifest exact，再重新只读审计 `20260729061000_tier_a_execution_claim_enforcement.sql`。仅当它确认为 missing 且 live catalog 与 preflight 兼容时，才通过 ADR-023 单文件应用并核对 exact ledger、live marker、触发器、ACL、旧 unclaimed RPC 拒绝和 claimed worker 契约。任何残留 writer/queue 或 catalog drift 都停止。
 9. 保持该 bridge SHA，再应用 authorization migration。它的 preflight 必须拒绝未满足上述 exchange-connection ACL 的环境；迁移必须隔离 active legacy alias、OAuth 或缺少 attestation 的 connection，并撤销没有同用户、同 exact canonical exchange 与同 verified UID 的 active connection 支撑的 authorization。这些账户必须由用户显式 rebind，不得自动提升旧记录。随后证明两张凭据表对 browser roles/PUBLIC 均无 table/column 路径，bind/revoke 两个原子 RPC 均无 browser/PUBLIC execute 路径且仅 service role 可调用。在 disposable fixture 依次证明公开选择器只有 Binance、Bybit、Bitget；首次绑定同时写入两张投影；同一 canonical exchange 重绑撤销旧 active authorization；两种 revoke selector 都同时停用 connection 并撤销全部匹配 authorization；绑定或撤销任一投影失败时整条 RPC 原子回滚。最后运行只读反连接，结果必须为零：每条 active authorization 都必须有同用户、同 exact canonical exchange、同 verified UID 的 active connection。这个顺序有意不按文件时间排序。
 10. 单独应用 Portfolio retirement。核对三表/cascade FK exact shape；browser/PUBLIC 零 table/column 权限；service 无直接 DML、无密文/positions/snapshots direct SELECT，仅有五个 metadata 列 SELECT；唯一 policy 为 service metadata read；`export_legacy_portfolio_data_v1(uuid)` 与 delete RPC 仅 service 可执行。行级 fixture 只在 staging 建立：证明 authenticated RPC deny、HTTP export 固定传认证 user id、迁移后返回 200，`account.legacy_portfolios` 与 manifest 完整包含 portfolios/positions/snapshots 三项及 fixture owner rows，字段精确白名单、无 user id/密文且 child 不越出 owner portfolio set；任一组超过 250,000 行必须返回 413，而不是截断或返回部分成功。同时覆盖跨 owner delete false、parent/child cascade、故障回滚、重放，以及迁移不删除 owner 行、不改写密文。production inventory 若仍为零，只验证 ACL/RPC 与完整空 manifest，不创建 disposable 行；若非零，才导出 owner/交易所 metadata 清单并要求 owner 下载、交易所侧 revoke/rotate 和 Arena 清理裁决。
 11. Claim Phase A 前只读证明 migration role exact 拥有 `trader_claims`，再应用 Phase A。核对 typed submit/reject/cancel、guard、ledger/reload，并证明 legacy activation 与 Arena claimed helper 均不可执行。Phase A 没有批准能力，不是“可批准的向后兼容层”。
 12. 使用同一 exact bridge SHA 完成 authorization 和 Hyperliquid/GMX challenge → submit → `reviewing` → reject/cancel smoke；legacy 与 V2 approval 此时都须 fail closed。所有 CEX claim 均 unsupported，CEX API key 不得创建 claim/badge。
 13. Phase B 前只读证明 migration role exact 拥有 migration preflight 列出的全部 relation。只在同一 SHA 成功 smoke 后单独应用 Phase B，证明 legacy submit/direct DML fail closed、canonical `activate_trader_claim_v2` 管理员批准成功并原子更新 badge/link/profile/Arena，且 unlink 仅 service 可执行、任一步失败全部回滚。Phase A/B 不得批量连续应用。
-14. staging 通过后 production 按当前 ordered manifest 严格重复：维持 token surface HTTP containment；完成 ranking authority prerequisites 与 record provenance/publication/legacy writer 基础链；部署并验证同一 exact bridge；再按 `040410` retirement → `040420` quarantine → `040430` 独立 token-ranking retirement → `040440` freeze → `040450` RAW prerequisites → `040500` verified `@2` authority → `040505` active-serving resolver → `040510` BingX rank quarantine 执行，之后完成 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Claim Phase B。每个文件单独提交并核对 exact ledger/live catalog/ACL/RPC/reload；不得用 `db push`、历史批量重放或仅停 writer 替代。
+14. staging 通过后 production 按当前 ordered manifest 严格重复：维持 token surface HTTP containment；完成 ranking authority prerequisites 与 record provenance/publication/legacy writer 基础链；部署并验证同一 exact bridge；再按 `040410` retirement → `040420` quarantine → `040430` 独立 token-ranking retirement → `040440` freeze → `040450` RAW prerequisites → `040500` verified `@2` authority → `040505` active-serving resolver → `040510` serving capabilities → `040520` unbound-copier containment → `040525` BingX rank quarantine → `040530` copier receipt substrate → `040540` copier publication authority 执行，之后完成 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Claim Phase B。每个文件单独提交并核对 exact ledger/live catalog/ACL/RPC/reload；不得用 `db push`、历史批量重放或仅停 writer 替代。`040550` 仍不属于这条 predeploy 重放，也不在 `apply-postdeploy` 内；只能在收据版 worker 全量、legacy worker 完全消失、coverage 门禁和独立审批全部通过后执行。
 15. production 未获准时不创建 disposable claim 或 portfolio。Phase B 后 legacy application 不是有效回滚目标。
-16. 只有五个额外 ACL 前置、Tier-A postdeploy 当前状态裁决、当前 production manifest 的全部 exact proof、token-ranking、完整 position-history verified `@2` authority、BingX rank quarantine、authorization、Portfolio 和 Claim 全生命周期 smoke 闭合后，才能从 production 运行 `npm run gen:types`。
-17. 运行 migration history shape、前置与 2026-07 suites；`npm run qa:public-rank-authority-pg17` 必须覆盖 token-ranking retirement 的在途 refresh 回滚/排空重试、generation-zero head、reader/writer/MV ACL fail-closed、OID/MV 内容保持、cron identity 保持和 byte-stable replay。再运行 record/publication 基础、legacy writer retirement、records quarantine、relation freeze、`040450` RAW prerequisites、`040500` verified publication authority、`npm run qa:serving-trader-resolver-pg17` 与 `npm run qa:bingx-rank-quarantine-pg17` 的全部静态/PG17 suites，以及 activation、authorization、legacy-portfolio-retirement、claim-cutover suites。任何证据不完整即 NO-GO。
+16. 只有五个额外 ACL 前置、Tier-A postdeploy 当前状态裁决、当前 production manifest 的全部 exact proof、token-ranking、完整 position-history verified `@2` authority、BingX rank quarantine、copier receipt publication authority、authorization、Portfolio 和 Claim 全生命周期 smoke 闭合后，才能从 production 运行 `npm run gen:types`。若预备执行 `040550`，还必须额外闭合其 worker 全量/旧 worker 排空/receipt coverage 手工门禁。
+17. 运行 migration history shape、前置与 2026-07 suites；`npm run qa:public-rank-authority-pg17` 必须覆盖 token-ranking retirement 的在途 refresh 回滚/排空重试、generation-zero head、reader/writer/MV ACL fail-closed、OID/MV 内容保持、cron identity 保持和 byte-stable replay。再运行 record/publication 基础、legacy writer retirement、records quarantine、relation freeze、`040450` RAW prerequisites、`040500` verified publication authority、`npm run qa:serving-trader-resolver-pg17`、`npm run qa:bingx-rank-quarantine-pg17`、`npm run qa:copier-snapshot-authority-pg17` 与 `npm run qa:copier-snapshot-cutover-pg17` 的全部静态/PG17 suites，以及 activation、authorization、legacy-portfolio-retirement、claim-cutover suites。任何证据不完整即 NO-GO。`qa:copier-snapshot-cutover-pg17` 只在隔离 PG17 内证明手工门禁，不授权 production 执行。
 18. Phase B 后重新 inventory 历史 verified rows 与 legacy Portfolio key；零行记录 `zero / N/A`，只对非零行逐项审计身份投影或完成 revoke/rotate、联系与归属裁决。
 19. 从 exact bridge 停止所有旧公开 first-party writer 起等待至少 48 小时，并只读证明没有 fresh `provenance='first_party'` 排名输入后，才可重算或开放 Beta。
+
+#### `040550` runner 外人工切换门禁
+
+`040550` 默认直接执行必须失败，也不得加入 `PREDEPLOY_MIGRATIONS`、`POSTDEPLOY_MIGRATIONS`、recovery 或其他 standard runner array。在同一 exact release SHA 下先保存 worker/process/queue 取证：所有 Tier-C 实例均为 receipt-capable 版本，旧 worker 实例、旧 queue 和 in-flight job 均为零，且至少观察一个完整调度周期无 legacy `copier_records` insert。再用只读 session 保存以下按 source coverage 结果：
+
+```sql
+WITH required_trader AS (
+  SELECT source_row.id AS source_id,
+         source_row.slug AS source_slug,
+         trader_row.id AS trader_id
+  FROM arena.sources AS source_row
+  JOIN arena.traders AS trader_row
+    ON trader_row.source_id = source_row.id
+  WHERE source_row.status = 'active'
+    AND source_row.serving_mode = 'serving'
+    AND source_row.copier_table_depth IN ('full', 'top10', 'top3_preview')
+), latest_candidate AS (
+  SELECT DISTINCT ON (publication.source_id, publication.trader_id)
+         publication.*
+  FROM arena.copier_snapshot_publications AS publication
+  JOIN required_trader AS required
+    ON required.source_id = publication.source_id
+   AND required.trader_id = publication.trader_id
+  ORDER BY publication.source_id,
+           publication.trader_id,
+           publication.observed_at DESC,
+           publication.publication_id DESC
+), covered AS (
+  SELECT candidate.source_id, candidate.trader_id
+  FROM latest_candidate AS candidate
+  WHERE candidate.evidence_state = 'verified'
+    AND candidate.scan_terminal_state = 'exhausted'
+    AND NOT candidate.caller_limited
+    AND candidate.blocker_reasons = '[]'::jsonb
+    AND candidate.copier_count = candidate.parsed_row_count
+    AND (
+      candidate.live_raw_object_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM arena.raw_objects AS raw_object
+        WHERE raw_object.id = candidate.live_raw_object_id
+          AND NOT raw_object.quarantined
+      )
+    )
+)
+SELECT required.source_slug,
+       count(*) AS required_traders,
+       count(covered.trader_id) AS receipt_covered_traders,
+       round(100.0 * count(covered.trader_id) / NULLIF(count(*), 0), 2)
+         AS receipt_coverage_percent
+FROM required_trader AS required
+LEFT JOIN covered
+  ON covered.source_id = required.source_id
+ AND covered.trader_id = required.trader_id
+GROUP BY required.source_slug
+ORDER BY required.source_slug;
+```
+
+每个 source 必须达到变更单事先批准的阈值，且不得因切换而变成永久空白；临时在执行时自行降低阈值无效。独立审批必须绑定 coverage 结果、worker/queue 证据、migration SHA 和 release SHA。全部闭合后，只在同一个受保护的 direct PG17 session 内设置一次性确认值并单文件执行：
+
+```bash
+psql "$DIRECT_SESSION_DATABASE_URL" -X --set ON_ERROR_STOP=1 <<'SQL'
+SET arena.copier_snapshot_direct_write_cutover_attestation =
+  'RECEIPT_CAPABLE_TIER_C_FULLY_DEPLOYED_LEGACY_DRAINED_COVERAGE_APPROVED';
+\ir supabase/migrations/20260804055000_copier_snapshot_direct_write_cutover.sql
+RESET arena.copier_snapshot_direct_write_cutover_attestation;
+SQL
+```
+
+不在同一 session 内设置该 exact 值、任一 coverage/worker/queue 证据不完整，或默认执行未 fail closed，都必须停在 `040540` 过渡状态。
 
 ### 排名权威数据库先行门禁（BLOCKED / 已取证）
 
