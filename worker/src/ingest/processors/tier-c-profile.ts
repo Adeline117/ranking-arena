@@ -226,6 +226,22 @@ function historyRowsForRender(
       const { copierLabel: _pii, raw: _raw, ...rest } = row
       return rest
     }
+    if (row.kind === 'position_history') {
+      // Claim-substrate provenance stays inside the worker: it feeds the
+      // terminal verifier, names upstream response paths, and is never
+      // projected by arena_records_page. Emitting it here would let the
+      // Tier-C preview advertise a wider row contract than the DB path.
+      const {
+        raw: _raw,
+        sourceFactId: _factId,
+        sourceLifecycleMarker: _lifecycle,
+        sourceReturn: _return,
+        fieldSources: _fieldSources,
+        limitations: _limitations,
+        ...rest
+      } = row
+      return rest
+    }
     const { raw: _raw, ...rest } = row
     return rest
   })

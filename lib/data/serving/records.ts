@@ -94,6 +94,20 @@ const BANNED_ROW_KEYS: ReadonlySet<string> = new Set([
   // RAW is an internal evidence substrate, not a serving field. Keeping it
   // out also prevents nested upstream identifiers from bypassing this guard.
   'raw',
+  // Claim-substrate provenance is parser-internal: it names upstream response
+  // paths (e.g. `data[].subPosId`) and drives verification, never rendering.
+  // arena_records_page projects an explicit column list and never emits these,
+  // so leaving them on the Tier-C preview path would make the two serving
+  // tiers disagree on the row contract.
+  'sourceFactId',
+  'source_fact_id',
+  'sourceLifecycleMarker',
+  'source_lifecycle_marker',
+  'sourceReturn',
+  'source_return',
+  'fieldSources',
+  'field_sources',
+  'limitations',
   // Never assign these untrusted keys onto a normal object.
   '__proto__',
   'prototype',
