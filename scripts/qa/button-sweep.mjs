@@ -273,7 +273,10 @@ async function main() {
   const coreLangRoutes = [...STATIC_CORE_LANG_ROUTES]
   const skips = [...SKIPPED_AUTH_ROUTES.map((r) => `${r} (需登录态 → auth-sweep)`)]
   const jget = async (path) => {
-    const response = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(15000) })
+    const response = await fetch(`${BASE}${path}`, {
+      headers: { 'user-agent': 'ArenaQA button-sweep' },
+      signal: AbortSignal.timeout(15000),
+    })
     if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`)
     return response.json()
   }

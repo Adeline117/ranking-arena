@@ -94,7 +94,10 @@ async function main() {
 
   // 动态样本 ID（与 button-sweep 同源）
   const jget = async (path) => {
-    const response = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(15000) })
+    const response = await fetch(`${BASE}${path}`, {
+      headers: { 'user-agent': 'ArenaQA visual-audit' },
+      signal: AbortSignal.timeout(15000),
+    })
     if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`)
     return response.json()
   }

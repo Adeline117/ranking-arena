@@ -40,6 +40,12 @@ test('the visual audit resolves public entities and reports missing samples', ()
   assert.match(visualSource, /\?platform=\$\{encodeURIComponent\(source\)\}/)
   assert.match(visualSource, /addDynamic\('\/u\/\[handle\]'/)
   assert.match(visualSource, /显式跳过/)
+  assert.match(visualSource, /'user-agent': 'ArenaQA visual-audit'/)
+})
+
+test('public sweep samplers identify themselves to the API proxy', () => {
+  assert.match(source, /'user-agent': 'ArenaQA button-sweep'/)
+  assert.match(exhaustiveSource, /'user-agent': 'ArenaQA exhaustive-sweep'/)
 })
 
 test('the exhaustive audit resolves every public dynamic entity without dead fixtures', () => {
