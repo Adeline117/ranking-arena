@@ -11,6 +11,7 @@ import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import {
   COMMENT_REACTION_OPERATION,
+  isCanonicalCommentReactionIntentSequence,
   isCanonicalCommentReactionRequestId,
   type CommentReaction,
 } from '@/lib/comments/comment-reaction-client-contract'
@@ -19,6 +20,7 @@ const ReactionRequestSchema = z
   .object({
     operation: z.literal(COMMENT_REACTION_OPERATION),
     request_id: z.string().refine(isCanonicalCommentReactionRequestId),
+    intent_sequence: z.string().refine(isCanonicalCommentReactionIntentSequence),
     comment_id: z.string().uuid('Invalid comment ID'),
     desired_reaction: z.enum(['like', 'dislike']).nullable(),
   })
@@ -40,6 +42,8 @@ interface AtomicCommentReactionResult {
   like_count: number
   dislike_count: number
   reaction: CommentReaction | null
+  intent_sequence: string
+  replayed: boolean
 }
 
 const ATOMIC_RESULT_KEYS = [
@@ -49,8 +53,49 @@ const ATOMIC_RESULT_KEYS = [
   'like_count',
   'liked',
   'reaction',
+  'intent_sequence',
+  'replayed',
   'status',
 ] as const
+
+type AtomicFailureStatus =
+  | 'stale'
+  | 'expired'
+  | 'unknown_ticket'
+  | 'operation_conflict'
+  | 'too_many_pending'
+  | 'invalid'
+  | 'not_found'
+
+const FAILURE_HTTP: Record<AtomicFailureStatus, { status: number; code: string; error: string }> = {
+  stale: { status: 409, code: 'COMMENT_REACTION_STALE', error: 'Reaction intent is stale' },
+  expired: { status: 410, code: 'COMMENT_REACTION_EXPIRED', error: 'Reaction intent expired' },
+  unknown_ticket: {
+    status: 409,
+    code: 'COMMENT_REACTION_UNKNOWN_TICKET',
+    error: 'Reaction intent is unknown',
+  },
+  operation_conflict: {
+    status: 409,
+    code: 'COMMENT_REACTION_OPERATION_CONFLICT',
+    error: 'Reaction intent conflicts with an existing operation',
+  },
+  too_many_pending: {
+    status: 429,
+    code: 'COMMENT_REACTION_TOO_MANY_PENDING',
+    error: 'Too many pending reaction intents',
+  },
+  invalid: {
+    status: 400,
+    code: 'COMMENT_REACTION_INVALID',
+    error: 'Invalid reaction request',
+  },
+  not_found: {
+    status: 404,
+    code: 'COMMENT_REACTION_NOT_FOUND',
+    error: 'Comment not found',
+  },
+}
 
 function privateNoStore(response: NextResponse): NextResponse {
   for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
@@ -68,7 +113,8 @@ function extractPostId(url: string): string | undefined {
 
 function isAtomicReactionResult(
   value: unknown,
-  desiredReaction: CommentReaction | null
+  desiredReaction: CommentReaction | null,
+  intentSequence: string
 ): value is AtomicCommentReactionResult {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const result = value as Record<string, unknown>
@@ -98,6 +144,9 @@ function isAtomicReactionResult(
   return (
     typeof result.liked === 'boolean' &&
     typeof result.disliked === 'boolean' &&
+    typeof result.replayed === 'boolean' &&
+    isCanonicalCommentReactionIntentSequence(result.intent_sequence) &&
+    result.intent_sequence === intentSequence &&
     !(result.liked && result.disliked) &&
     Number.isSafeInteger(result.like_count) &&
     (result.like_count as number) >= 0 &&
@@ -114,12 +163,22 @@ function isAtomicReactionResult(
   )
 }
 
-function atomicFailureStatus(value: unknown): 'invalid' | 'not_found' | null {
+function atomicFailureStatus(value: unknown): AtomicFailureStatus | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const result = value as Record<string, unknown>
   const keys = Object.keys(result)
   if (keys.length !== 1 || keys[0] !== 'status') return null
-  return result.status === 'invalid' || result.status === 'not_found' ? result.status : null
+  return Object.prototype.hasOwnProperty.call(FAILURE_HTTP, String(result.status))
+    ? (result.status as AtomicFailureStatus)
+    : null
+}
+
+function atomicFailureResponse(failure: AtomicFailureStatus): NextResponse {
+  const mapped = FAILURE_HTTP[failure]
+  return NextResponse.json(
+    { success: false, code: mapped.code, error: mapped.error },
+    { status: mapped.status }
+  )
 }
 
 const authenticatedPost = withAuth(
@@ -156,13 +215,16 @@ const authenticatedPost = withAuth(
     const commentId = parsed.data.comment_id.toLowerCase()
     const actorId = actorIdResult.data.toLowerCase()
     const requestId = parsed.data.request_id
+    const intentSequence = parsed.data.intent_sequence
     const desiredReaction = parsed.data.desired_reaction
 
-    const { data, error } = await supabase.rpc('set_comment_reaction_desired_state_atomic', {
+    const { data, error } = await supabase.rpc('set_comment_reaction_desired_state_causal_atomic', {
       p_actor_id: actorId,
       p_post_id: postId,
       p_comment_id: commentId,
+      p_request_id: requestId,
       p_desired_reaction: desiredReaction,
+      p_intent_sequence: intentSequence,
     })
 
     if (error) {
@@ -186,14 +248,9 @@ const authenticatedPost = withAuth(
     }
 
     const failureStatus = atomicFailureStatus(data)
-    if (failureStatus === 'not_found') {
-      return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
-    }
-    if (failureStatus === 'invalid') {
-      return NextResponse.json({ error: 'Invalid reaction request' }, { status: 400 })
-    }
+    if (failureStatus) return atomicFailureResponse(failureStatus)
 
-    if (!isAtomicReactionResult(data, desiredReaction)) {
+    if (!isAtomicReactionResult(data, desiredReaction, intentSequence)) {
       logger.error('[comment reaction] atomic RPC returned an invalid result')
       return NextResponse.json({ error: 'Comment reaction failed' }, { status: 500 })
     }
@@ -205,6 +262,7 @@ const authenticatedPost = withAuth(
         comment_id: commentId,
         request_id: requestId,
         operation: COMMENT_REACTION_OPERATION,
+        intent_sequence: data.intent_sequence,
         desired_reaction: desiredReaction,
         action: data.action,
         reaction: data.reaction,
@@ -212,6 +270,7 @@ const authenticatedPost = withAuth(
         disliked: data.disliked,
         like_count: data.like_count,
         dislike_count: data.dislike_count,
+        replayed: data.replayed,
       },
       200,
       PRIVATE_NO_STORE_HEADERS

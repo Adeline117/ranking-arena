@@ -47,6 +47,7 @@ const ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const POST_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 const COMMENT_ID = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
 const REQUEST_ID = '0123456789abcdef0123456789abcdef'
+const INTENT_SEQUENCE = '42'
 const RESPONSE_TIMESTAMP = '2026-08-03T21:30:00.000Z'
 const mockUser = { id: ACTOR_ID, email: 'test@test.com' }
 
@@ -86,6 +87,7 @@ import { POST } from '../route'
 const LIKE_REQUEST = {
   operation: 'set_reaction',
   request_id: REQUEST_ID,
+  intent_sequence: INTENT_SEQUENCE,
   comment_id: COMMENT_ID,
   desired_reaction: 'like',
 } as const
@@ -106,6 +108,8 @@ function result(overrides: Record<string, unknown> = {}) {
     like_count: 3,
     dislike_count: 1,
     reaction: 'like',
+    intent_sequence: INTENT_SEQUENCE,
+    replayed: false,
     ...overrides,
   }
 }
@@ -145,11 +149,13 @@ describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenCalledTimes(1)
-    expect(mockRpc).toHaveBeenCalledWith('set_comment_reaction_desired_state_atomic', {
+    expect(mockRpc).toHaveBeenCalledWith('set_comment_reaction_desired_state_causal_atomic', {
       p_actor_id: ACTOR_ID,
       p_post_id: POST_ID,
       p_comment_id: COMMENT_ID,
+      p_request_id: REQUEST_ID,
       p_desired_reaction: 'dislike',
+      p_intent_sequence: INTENT_SEQUENCE,
     })
     expect(await response.json()).toEqual({
       success: true,
@@ -159,6 +165,7 @@ describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
         comment_id: COMMENT_ID,
         request_id: REQUEST_ID,
         operation: 'set_reaction',
+        intent_sequence: INTENT_SEQUENCE,
         desired_reaction: 'dislike',
         action: 'changed',
         reaction: 'dislike',
@@ -166,6 +173,7 @@ describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
         disliked: true,
         like_count: 2,
         dislike_count: 2,
+        replayed: false,
       },
       meta: { timestamp: RESPONSE_TIMESTAMP },
     })
@@ -204,7 +212,7 @@ describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenCalledWith(
-      'set_comment_reaction_desired_state_atomic',
+      'set_comment_reaction_desired_state_causal_atomic',
       expect.objectContaining({ p_desired_reaction: null })
     )
     await expect(response.json()).resolves.toEqual(
@@ -227,6 +235,8 @@ describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
     ['missing desired state', { ...LIKE_REQUEST, desired_reaction: undefined }, POST_ID],
     ['unknown desired state', { ...LIKE_REQUEST, desired_reaction: 'love' }, POST_ID],
     ['invalid request identity', { ...LIKE_REQUEST, request_id: 'bad' }, POST_ID],
+    ['invalid intent sequence', { ...LIKE_REQUEST, intent_sequence: '0' }, POST_ID],
+    ['numeric intent sequence', { ...LIKE_REQUEST, intent_sequence: 42 }, POST_ID],
     ['uppercase request identity', { ...LIKE_REQUEST, request_id: 'A'.repeat(32) }, POST_ID],
     ['unexpected body field', { ...LIKE_REQUEST, admin: true }, POST_ID],
     ['non-object body', ['not', 'an', 'object'], POST_ID],
@@ -266,14 +276,21 @@ describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
   })
 
   it.each([
-    ['not_found', 404],
-    ['invalid', 400],
-  ])('maps exact %s sentinel to HTTP %i', async (status, expectedStatus) => {
+    ['stale', 409, 'COMMENT_REACTION_STALE'],
+    ['expired', 410, 'COMMENT_REACTION_EXPIRED'],
+    ['unknown_ticket', 409, 'COMMENT_REACTION_UNKNOWN_TICKET'],
+    ['operation_conflict', 409, 'COMMENT_REACTION_OPERATION_CONFLICT'],
+    ['too_many_pending', 429, 'COMMENT_REACTION_TOO_MANY_PENDING'],
+    ['not_found', 404, 'COMMENT_REACTION_NOT_FOUND'],
+    ['invalid', 400, 'COMMENT_REACTION_INVALID'],
+  ])('maps exact %s sentinel to HTTP %i', async (status, expectedStatus, code) => {
     mockRpc.mockResolvedValue({ data: { status }, error: null })
 
     const response = await POST(request(LIKE_REQUEST))
 
     expect(response.status).toBe(expectedStatus)
+    expect(await response.json()).toEqual({ success: false, code, error: expect.any(String) })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 
   it.each([
@@ -286,6 +303,9 @@ describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
     result({ like_count: -1 }),
     result({ dislike_count: 1.5 }),
     result({ like_count: 0 }),
+    result({ intent_sequence: '0' }),
+    result({ intent_sequence: '43' }),
+    result({ replayed: 'false' }),
     { status: 'not_found', invented: true },
     result({ invented: true }),
   ])('fails closed for malformed or contradictory RPC result %#', async (data) => {
