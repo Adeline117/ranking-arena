@@ -4,6 +4,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import type {
   UnifiedTrader,
   TraderDetail,
@@ -99,7 +100,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  * rank authority.
  */
 export async function getLeaderboard(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   params: {
     platform?: string
     period?: TradingPeriod

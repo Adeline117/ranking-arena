@@ -27,6 +27,7 @@
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import type { Database } from '@/lib/supabase/database.types'
 import type {
   Window,
   LeaderboardPlatform,
@@ -60,6 +61,35 @@ import {
 // not create a separate CDN/ISR generation that the publisher cannot purge.
 export const dynamic = 'force-dynamic'
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
+
+type LeaderboardRankTableRow = Database['public']['Tables']['leaderboard_ranks']['Row']
+const LEADERBOARD_RANK_SELECT_COLUMNS = [
+  'source',
+  'source_trader_id',
+  'handle',
+  'avatar_url',
+  'source_type',
+  'roi',
+  'pnl',
+  'win_rate',
+  'max_drawdown',
+  'trades_count',
+  'followers',
+  'arena_score',
+  'rank',
+  'computed_at',
+  'sharpe_ratio',
+  'trading_style',
+  'avg_holding_hours',
+] as const satisfies readonly (keyof LeaderboardRankTableRow)[]
+type LeaderboardRankSelectRow = Pick<
+  LeaderboardRankTableRow,
+  (typeof LEADERBOARD_RANK_SELECT_COLUMNS)[number]
+>
+
+// Building the selector from generated-schema keys keeps the result boundary exact without
+// asking PostgREST's recursive literal parser to expand the entire query on every clean build.
+const LEADERBOARD_RANK_SELECT: string = LEADERBOARD_RANK_SELECT_COLUMNS.join(',')
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const v2RankingsSchema = z.object({
@@ -172,14 +202,7 @@ export const GET = withPublic(
 
         let query = supabase
           .from('leaderboard_ranks')
-          .select(
-            `source, source_trader_id, handle, avatar_url, source_type,
-       roi, pnl, win_rate, max_drawdown, trades_count, followers,
-       arena_score, rank, computed_at, season_id,
-       sharpe_ratio,
-       profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, trader_type`
-          )
+          .select(LEADERBOARD_RANK_SELECT)
           .eq('source', platform)
           .eq('season_id', seasonId)
           .not('rank', 'is', null)
@@ -243,11 +266,7 @@ export const GET = withPublic(
           data: rows,
           count,
           error,
-        } = (await query) as {
-          data: Record<string, unknown>[] | null
-          count: number | null
-          error: { message: string } | null
-        }
+        } = await query.overrideTypes<LeaderboardRankSelectRow[], { merge: false }>()
 
         if (error) {
           throw new Error('Database query failed')
