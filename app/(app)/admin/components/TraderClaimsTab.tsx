@@ -18,6 +18,7 @@ interface TraderClaim {
   verification_method: string
   status: string
   reject_reason: string | null
+  reviewed_by: string | null
   created_at: string
   verified_at: string | null
   user_email?: string
@@ -28,6 +29,13 @@ interface TraderClaimsTabProps {
 }
 
 type ClaimFilter = 'all' | 'pending' | 'verified' | 'rejected'
+type ReviewAction = 'approve' | 'reject'
+
+interface InFlightReview {
+  claimId: string
+  action: ReviewAction
+  requestId: number
+}
 
 interface LoadClaimsOptions {
   append?: boolean
@@ -35,6 +43,7 @@ interface LoadClaimsOptions {
 }
 
 const CLAIM_PAGE_SIZE = 50
+const REJECT_REASON_MAX_LENGTH = 500
 
 async function readResponseError(response: Response, fallback: string): Promise<string> {
   try {
@@ -64,7 +73,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState<InFlightReview | null>(null)
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
   const [filter, setFilter] = useState<ClaimFilter>('pending')
   const [totals, setTotals] = useState<Partial<Record<ClaimFilter, number>>>({})
@@ -73,7 +82,15 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({})
   const loadRequestIdRef = useRef(0)
   const nextOffsetRef = useRef(0)
-  const actionInFlightRef = useRef<string | null>(null)
+  const actionInFlightRef = useRef<InFlightReview | null>(null)
+  const actionRequestIdRef = useRef(0)
+  const reviewListIdentityRef = useRef({ accessToken, filter })
+  if (
+    reviewListIdentityRef.current.accessToken !== accessToken ||
+    reviewListIdentityRef.current.filter !== filter
+  ) {
+    reviewListIdentityRef.current = { accessToken, filter }
+  }
 
   const loadClaims = useCallback(
     async ({ append = false, showSpinner = true }: LoadClaimsOptions = {}): Promise<boolean> => {
@@ -164,10 +181,28 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
     }
   }, [loadClaims])
 
+  useEffect(() => {
+    // A review belongs to the exact authenticated list where it started. If
+    // that identity changes, its late response must not update or refresh the
+    // replacement list with the previous credentials.
+    actionRequestIdRef.current += 1
+    actionInFlightRef.current = null
+    setActionLoading(null)
+    setActionErrors({})
+    setRejectInputs({})
+    setRejectReasons({})
+  }, [accessToken, filter])
+
   const handleReview = async (claimId: string, approved: boolean) => {
     if (!accessToken || actionInFlightRef.current) return
-    actionInFlightRef.current = claimId
-    setActionLoading(claimId)
+    const action: ReviewAction = approved ? 'approve' : 'reject'
+    const requestId = ++actionRequestIdRef.current
+    const listIdentity = reviewListIdentityRef.current
+    const isCurrentRequest = () =>
+      requestId === actionRequestIdRef.current && reviewListIdentityRef.current === listIdentity
+    const inFlightReview = { claimId, action, requestId }
+    actionInFlightRef.current = inFlightReview
+    setActionLoading(inFlightReview)
     setActionErrors((prev) => {
       const next = { ...prev }
       delete next[claimId]
@@ -192,13 +227,28 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
         throw new Error(await readResponseError(res, t('claimFailed')))
       }
 
-      const payload = (await res.json()) as { data?: { claim?: Partial<TraderClaim> } }
+      const payload = (await res.json()) as {
+        success?: unknown
+        data?: {
+          claim?: Partial<TraderClaim>
+          ack?: { claimId?: unknown; action?: unknown; reviewerId?: unknown }
+        }
+      }
+      if (!isCurrentRequest()) return
       const reviewedClaim = payload.data?.claim
+      const ack = payload.data?.ack
       const expectedStatus = approved ? 'verified' : 'rejected'
       if (
+        payload.success !== true ||
         !reviewedClaim ||
+        !ack ||
         reviewedClaim.id !== claimId ||
-        reviewedClaim.status !== expectedStatus
+        reviewedClaim.status !== expectedStatus ||
+        ack.claimId !== claimId ||
+        ack.action !== action ||
+        typeof ack.reviewerId !== 'string' ||
+        !ack.reviewerId ||
+        reviewedClaim.reviewed_by !== ack.reviewerId
       ) {
         throw new Error(t('claimFailed'))
       }
@@ -215,12 +265,15 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
       showToast(approved ? t('approved') : t('rejected'), 'success')
       await loadClaims({ showSpinner: false })
     } catch (error) {
+      if (!isCurrentRequest()) return
       const message = error instanceof Error && error.message ? error.message : t('claimFailed')
       setActionErrors((prev) => ({ ...prev, [claimId]: message }))
       showToast(message, 'error')
     } finally {
-      actionInFlightRef.current = null
-      setActionLoading(null)
+      if (isCurrentRequest()) {
+        actionInFlightRef.current = null
+        setActionLoading(null)
+      }
     }
   }
 
@@ -256,7 +309,10 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
             variant={filter === f ? 'primary' : 'secondary'}
             size="sm"
             disabled={actionLoading !== null || loadingMore}
-            onClick={() => setFilter(f)}
+            onClick={() => {
+              if (actionInFlightRef.current) return
+              setFilter(f)
+            }}
           >
             {f === 'all' ? t('all') : f.charAt(0).toUpperCase() + f.slice(1)}
             {typeof totals[f] === 'number' && totals[f] > 0 && ` (${totals[f]})`}
@@ -374,7 +430,9 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                       size="sm"
                       onClick={() => handleReview(claim.id, true)}
                       disabled={actionLoading !== null}
-                      loading={actionLoading === claim.id}
+                      loading={
+                        actionLoading?.claimId === claim.id && actionLoading.action === 'approve'
+                      }
                     >
                       {t('approve')}
                     </Button>
@@ -412,10 +470,13 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                           }
                           placeholder={t('adminRejectReasonPlaceholder')}
                           value={rejectReasons[claim.id] || ''}
-                          maxLength={500}
+                          maxLength={REJECT_REASON_MAX_LENGTH}
                           disabled={actionLoading !== null}
                           onChange={(e) => {
-                            setRejectReasons((prev) => ({ ...prev, [claim.id]: e.target.value }))
+                            setRejectReasons((prev) => ({
+                              ...prev,
+                              [claim.id]: e.target.value.slice(0, REJECT_REASON_MAX_LENGTH),
+                            }))
                             setActionErrors((prev) => {
                               const next = { ...prev }
                               delete next[claim.id]
@@ -449,7 +510,9 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                           size="sm"
                           onClick={() => handleReview(claim.id, false)}
                           disabled={actionLoading !== null}
-                          loading={actionLoading === claim.id}
+                          loading={
+                            actionLoading?.claimId === claim.id && actionLoading.action === 'reject'
+                          }
                         >
                           {t('confirm')}
                         </Button>

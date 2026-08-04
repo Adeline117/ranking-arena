@@ -57,8 +57,19 @@ export async function POST(req: NextRequest) {
         throw error
       })
 
+      const action = approved ? 'approve' : 'reject'
+      const expectedStatus = approved ? 'verified' : 'rejected'
+      if (
+        claim.id !== claimId ||
+        claim.status !== expectedStatus ||
+        claim.reviewed_by !== admin.id
+      ) {
+        throw new Error('Trader claim review returned an invalid acknowledgement')
+      }
+
       return apiSuccess({
         claim,
+        ack: { claimId, action, reviewerId: admin.id },
         message: approved ? 'Claim approved' : 'Claim rejected',
       })
     },

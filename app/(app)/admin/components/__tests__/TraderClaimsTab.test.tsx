@@ -119,9 +119,30 @@ function claim(
     verification_method: 'api_key',
     status,
     reject_reason: null,
+    reviewed_by:
+      status === 'verified' || status === 'rejected'
+        ? '22222222-2222-4222-8222-222222222222'
+        : null,
     created_at: '2026-07-16T10:00:00.000Z',
     verified_at: null,
   }
+}
+
+function committedReviewResponse(
+  reviewedClaim: ReturnType<typeof claim>,
+  action: 'approve' | 'reject' = reviewedClaim.status === 'verified' ? 'approve' : 'reject'
+) {
+  return response({
+    success: true,
+    data: {
+      claim: reviewedClaim,
+      ack: {
+        claimId: reviewedClaim.id,
+        action,
+        reviewerId: reviewedClaim.reviewed_by,
+      },
+    },
+  })
 }
 
 function claimsResponse(
@@ -174,9 +195,7 @@ describe('TraderClaimsTab review UX', () => {
   it('keeps the committed terminal state when the follow-up refresh fails', async () => {
     mockFetch
       .mockResolvedValueOnce(claimsResponse([claim('claim-a', 'trader-a')]))
-      .mockResolvedValueOnce(
-        response({ success: true, data: { claim: claim('claim-a', 'trader-a', 'verified') } })
-      )
+      .mockResolvedValueOnce(committedReviewResponse(claim('claim-a', 'trader-a', 'verified')))
       .mockResolvedValueOnce(response({ error: 'Refresh temporarily unavailable' }, 503))
 
     render(<TraderClaimsTab accessToken="admin-token" />)
@@ -265,13 +284,138 @@ describe('TraderClaimsTab review UX', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
 
     await act(async () =>
-      resolveReview(
-        response({
-          success: true,
-          data: { claim: claim('claim-a', 'trader-a', 'verified') },
-        })
-      )
+      resolveReview(committedReviewResponse(claim('claim-a', 'trader-a', 'verified')))
     )
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3))
+  })
+
+  it('deduplicates approve and reject confirmation submitted in the same frame', async () => {
+    let resolveReview!: (value: Response) => void
+    const pendingReview = new Promise<Response>((resolve) => {
+      resolveReview = resolve
+    })
+    mockFetch
+      .mockResolvedValueOnce(claimsResponse([claim('claim-a', 'trader-a')]))
+      .mockReturnValueOnce(pendingReview)
+      .mockResolvedValueOnce(claimsResponse([]))
+
+    render(<TraderClaimsTab accessToken="admin-token" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    const confirm = screen.getByRole('button', { name: 'Confirm' })
+
+    act(() => {
+      approve.click()
+      confirm.click()
+    })
+
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(String(mockFetch.mock.calls[1][1]?.body))).toMatchObject({
+      claimId: 'claim-a',
+      approved: true,
+    })
+
+    await act(async () =>
+      resolveReview(committedReviewResponse(claim('claim-a', 'trader-a', 'verified')))
+    )
+  })
+
+  it('binds busy feedback to the submitted action while disabling all review controls', async () => {
+    let resolveReview!: (value: Response) => void
+    const pendingReview = new Promise<Response>((resolve) => {
+      resolveReview = resolve
+    })
+    mockFetch
+      .mockResolvedValueOnce(claimsResponse([claim('claim-a', 'trader-a')]))
+      .mockReturnValueOnce(pendingReview)
+      .mockResolvedValueOnce(claimsResponse([]))
+
+    render(<TraderClaimsTab accessToken="admin-token" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    const confirm = screen.getByRole('button', { name: 'Confirm' })
+    fireEvent.click(confirm)
+
+    expect(confirm).toHaveAttribute('aria-busy', 'true')
+    expect(approve).toBeDisabled()
+    expect(approve).toHaveAttribute('aria-busy', 'false')
+
+    await act(async () =>
+      resolveReview(committedReviewResponse(claim('claim-a', 'trader-a', 'rejected')))
+    )
+  })
+
+  it('does not accept a 2xx acknowledgement for another action or reviewer', async () => {
+    mockFetch
+      .mockResolvedValueOnce(claimsResponse([claim('claim-a', 'trader-a')]))
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          data: {
+            claim: claim('claim-a', 'trader-a', 'verified'),
+            ack: {
+              claimId: 'claim-a',
+              action: 'reject',
+              reviewerId: 'different-reviewer',
+            },
+          },
+        })
+      )
+
+    render(<TraderClaimsTab accessToken="admin-token" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Claim failed')
+    expect(mockShowToast).toHaveBeenCalledWith('Claim failed', 'error')
+    expect(screen.getByText('pending')).toBeInTheDocument()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a late review response after the access-token list identity changes', async () => {
+    let resolveOldReview!: (value: Response) => void
+    const oldReview = new Promise<Response>((resolve) => {
+      resolveOldReview = resolve
+    })
+    mockFetch
+      .mockResolvedValueOnce(claimsResponse([claim('claim-a', 'old-trader')]))
+      .mockReturnValueOnce(oldReview)
+      .mockResolvedValueOnce(claimsResponse([claim('claim-b', 'new-trader')]))
+
+    const view = render(<TraderClaimsTab accessToken="old-token" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+    view.rerender(<TraderClaimsTab accessToken="new-token" />)
+    expect(await screen.findByText('new-trader')).toBeInTheDocument()
+
+    await act(async () =>
+      resolveOldReview(committedReviewResponse(claim('claim-a', 'old-trader', 'verified')))
+    )
+
+    expect(screen.getByText('new-trader')).toBeInTheDocument()
+    expect(screen.queryByText('old-trader')).not.toBeInTheDocument()
+    expect(mockShowToast).not.toHaveBeenCalledWith('Approved', 'success')
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('bounds and trims the rejection reason before sending it', async () => {
+    mockFetch
+      .mockResolvedValueOnce(claimsResponse([claim('claim-a', 'trader-a')]))
+      .mockResolvedValueOnce(committedReviewResponse(claim('claim-a', 'trader-a', 'rejected')))
+      .mockResolvedValueOnce(claimsResponse([]))
+
+    render(<TraderClaimsTab accessToken="admin-token" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Reject reason (optional)' }), {
+      target: { value: `  ${'x'.repeat(501)}  ` },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3))
+    expect(JSON.parse(String(mockFetch.mock.calls[1][1]?.body))).toEqual({
+      claimId: 'claim-a',
+      approved: false,
+      rejectReason: 'x'.repeat(498),
+    })
   })
 })

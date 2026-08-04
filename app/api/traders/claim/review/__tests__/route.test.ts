@@ -64,6 +64,7 @@ const approvedClaim = {
   trader_id: 'trader-1',
   source: 'binance_futures',
   status: 'verified',
+  reviewed_by: ADMIN_ID,
 }
 
 function request(body: unknown, invalidJson = false): NextRequest {
@@ -84,6 +85,13 @@ describe('POST /api/traders/claim/review', () => {
     const response = await POST(request({ claimId: CLAIM_ID, approved: true }))
 
     expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        claim: approvedClaim,
+        ack: { claimId: CLAIM_ID, action: 'approve', reviewerId: ADMIN_ID },
+      },
+    })
     expect(mockReviewClaim).toHaveBeenCalledWith(mockSupabase, CLAIM_ID, ADMIN_ID, true, undefined)
     expect(mockFrom).not.toHaveBeenCalled()
   })
@@ -138,5 +146,37 @@ describe('POST /api/traders/claim/review', () => {
     const response = await POST(request({ claimId: CLAIM_ID, approved: false }))
 
     expect(response.status).toBe(404)
+  })
+
+  it.each([
+    ['claim', { ...approvedClaim, id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }],
+    ['action', { ...approvedClaim, status: 'rejected' }],
+    ['reviewer', { ...approvedClaim, reviewed_by: '33333333-3333-4333-8333-333333333333' }],
+  ])('does not acknowledge a mutation result bound to another %s', async (_binding, claim) => {
+    mockReviewClaim.mockResolvedValue(claim)
+
+    const response = await POST(request({ claimId: CLAIM_ID, approved: true }))
+
+    expect(response.status).toBe(500)
+  })
+
+  it('trims before enforcing the rejection-reason boundary', async () => {
+    mockReviewClaim.mockResolvedValue({
+      ...approvedClaim,
+      status: 'rejected',
+    })
+
+    const response = await POST(
+      request({ claimId: CLAIM_ID, approved: false, rejectReason: ` ${'x'.repeat(500)} ` })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockReviewClaim).toHaveBeenCalledWith(
+      mockSupabase,
+      CLAIM_ID,
+      ADMIN_ID,
+      false,
+      'x'.repeat(500)
+    )
   })
 })
