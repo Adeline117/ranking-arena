@@ -9,8 +9,12 @@ import { arenaBackupCompletionSentinel } from './backup-restore-contract.mjs'
 
 import {
   assertBackupArtifact,
+  backupDateFromKey,
+  buildBackupArtifactIdentity,
   COMPLETE_BACKUP_MIN_BYTES,
+  IMMUTABLE_BACKUP_FILENAME_PATTERN,
   normalizeCompleteBackupSchemas,
+  parseBackupMode,
   preparePgDumpConnection,
   produceAndCommitBackup,
   runPgDumpPipeline,
@@ -87,6 +91,68 @@ test('normalizes complete schema mode and rejects partial schema sets', () => {
     () => normalizeCompleteBackupSchemas('arena,extensions'),
     /requires both arena and public/
   )
+})
+
+test('requires exactly one explicit complete backup mode', () => {
+  assert.deepEqual(parseBackupMode({ argv: ['--full'], schemasEnv: '' }), {
+    type: 'full',
+    schemas: [],
+  })
+  assert.deepEqual(parseBackupMode({ argv: [], schemasEnv: 'public,arena' }), {
+    type: 'schemas',
+    schemas: ['public', 'arena'],
+  })
+
+  assert.throws(() => parseBackupMode({ argv: [], schemasEnv: '' }), /refusing incomplete backup/)
+  assert.throws(
+    () => parseBackupMode({ argv: ['--full'], schemasEnv: 'arena,public' }),
+    /mutually exclusive/
+  )
+  assert.throws(
+    () => parseBackupMode({ argv: ['--full', '--full'], schemasEnv: '' }),
+    /only be specified once/
+  )
+  assert.throws(
+    () => parseBackupMode({ argv: ['--legacy-tables'], schemasEnv: '' }),
+    /unknown backup argument/
+  )
+})
+
+test('builds unique timestamped artifact identities without credential-derived names', () => {
+  const now = new Date('2026-08-04T07:08:09.123Z')
+  const mode = parseBackupMode({ argv: [], schemasEnv: 'arena,public' })
+  const first = buildBackupArtifactIdentity({ now, mode, runId: 'a'.repeat(32) })
+  const second = buildBackupArtifactIdentity({ now, mode, runId: 'b'.repeat(32) })
+
+  assert.equal(first.filename, `arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`)
+  assert.equal(first.localPath, `/tmp/${first.filename}`)
+  assert.equal(first.r2Key, `db-backups/2026/08/${first.filename}`)
+  assert.deepEqual(first.filename.match(IMMUTABLE_BACKUP_FILENAME_PATTERN)?.slice(1), [
+    '20260804T070809123Z',
+    'a'.repeat(32),
+    'schemas',
+  ])
+  assert.notEqual(first.filename, second.filename)
+  assert.notEqual(first.localPath, second.localPath)
+  assert.notEqual(first.r2Key, second.r2Key)
+  assert.equal(backupDateFromKey(first.r2Key), '20260804')
+  assert.equal(
+    backupDateFromKey('db-backups/2026/07/arena-backup-20260731-schemas.sql.gz'),
+    '20260731'
+  )
+  assert.equal(backupDateFromKey('db-backups/2026/06/arena-backup-20260612.sql.gz'), '20260612')
+  assert.equal(backupDateFromKey('db-backups/not-a-backup-20260612.sql.gz'), '')
+
+  const credential = 'postgresql://backup:do-not-leak@db.example.com/app'
+  assert.throws(
+    () => buildBackupArtifactIdentity({ now, mode, runId: credential }),
+    (error) => {
+      assert.match(error.message, /run id is invalid/)
+      assert.equal(error.message.includes('do-not-leak'), false)
+      return true
+    }
+  )
+  assert.equal(JSON.stringify(first).includes('do-not-leak'), false)
 })
 
 test('moves an encoded authority password out of the pg_dump URL', () => {
@@ -528,6 +594,8 @@ test('the executable uses the safe pipeline and CI runs the behavioral contract'
   assert.match(source, /'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT/)
   assert.match(source, /'completion-token': completionToken/)
   assert.match(source, /cleanPostgresConnectionEnv\(/)
+  assert.match(source, /parseBackupMode\(/)
+  assert.doesNotMatch(source, /TRADER_TABLES|trader-tables/)
   assert.doesNotMatch(source, /execSync\(/)
   assert.doesNotMatch(source, /`\$\{pgDumpPath\}/)
   assert.match(ci, /node --test scripts\/maintenance\/backup-to-r2\.test\.mjs/)

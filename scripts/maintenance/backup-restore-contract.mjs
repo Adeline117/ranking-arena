@@ -10,6 +10,38 @@ export const COMPLETE_BACKUP_MIN_BYTES = 1024 * 1024 * 1024
 export const ARENA_BACKUP_COMPLETION_CONTRACT = 'arena.pg-dump-complete.v1'
 export const PG_DUMP_RESTRICT_TOKEN_PATTERN = /^[0-9A-Za-z]{1,256}$/
 export const ARENA_BACKUP_COMPLETION_TOKEN_PATTERN = /^[0-9a-f]{64}$/
+export const IMMUTABLE_BACKUP_FILENAME_PATTERN =
+  /^arena-backup-(\d{8}T\d{9}Z)-([0-9a-f]{32})-(schemas|full)\.sql\.gz$/
+export const LEGACY_COMPLETE_BACKUP_FILENAME_PATTERN =
+  /^arena-backup-(\d{8})-(schemas|full)\.sql\.gz$/
+
+export function parseCompleteBackupFilename(filename) {
+  if (typeof filename !== 'string') return null
+
+  const immutable = filename.match(IMMUTABLE_BACKUP_FILENAME_PATTERN)
+  if (immutable) {
+    return {
+      date: immutable[1].slice(0, 8),
+      format: 'immutable',
+      mode: immutable[3],
+      runId: immutable[2],
+      timestamp: immutable[1],
+    }
+  }
+
+  const legacy = filename.match(LEGACY_COMPLETE_BACKUP_FILENAME_PATTERN)
+  if (legacy) {
+    return {
+      date: legacy[1],
+      format: 'legacy',
+      mode: legacy[2],
+      runId: null,
+      timestamp: null,
+    }
+  }
+
+  return null
+}
 
 const PG_DUMP_PREFIX = '--\n-- PostgreSQL database dump\n--\n\n'
 const PG_DUMP_COMPLETE = '--\n-- PostgreSQL database dump complete\n--\n\n'

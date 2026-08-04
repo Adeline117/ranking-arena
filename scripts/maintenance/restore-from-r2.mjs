@@ -30,6 +30,7 @@ import {
   assertBackupArtifact,
   COMPLETE_BACKUP_MIN_BYTES,
   arenaCompletionTokenFromMetadata,
+  parseCompleteBackupFilename,
   preparePostgresConnection,
 } from './backup-restore-contract.mjs'
 import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
@@ -271,8 +272,8 @@ export function assertRestorableObject(object, minimumBytes = COMPLETE_BACKUP_MI
     throw new Error('selected R2 object is not a db-backups/*.sql.gz backup')
   }
   const filename = object.Key.split('/').at(-1)
-  const filenameMatch = filename.match(/^arena-backup-\d{8}-(schemas|full)\.sql\.gz$/)
-  if (!filenameMatch) {
+  const filenameIdentity = parseCompleteBackupFilename(filename)
+  if (!filenameIdentity) {
     throw new Error('selected R2 object is not a complete schemas/full backup')
   }
   if (!Number.isSafeInteger(object.Size) || object.Size < minimumBytes) {
@@ -283,7 +284,7 @@ export function assertRestorableObject(object, minimumBytes = COMPLETE_BACKUP_MI
   if (typeof object.ETag !== 'string' || object.ETag.trim() === '') {
     throw new Error('selected backup object is missing an ETag identity')
   }
-  assertCompleteBackupMetadata(filenameMatch[1], object.Metadata)
+  assertCompleteBackupMetadata(filenameIdentity.mode, object.Metadata)
   arenaCompletionTokenFromMetadata(object.Metadata)
   return object
 }
