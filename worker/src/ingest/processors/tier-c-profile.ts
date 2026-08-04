@@ -34,10 +34,13 @@ import type { HistoryCompleteness } from '@/lib/data/serving/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import {
+  writeCopierSnapshotRawArtifact,
   writePositionHistoryRawArtifact,
   writeRawObject,
   type IngestTransactionRunner,
 } from '@/lib/ingest/raw'
+import { buildCopierSnapshotArtifact } from '@/lib/ingest/copier-snapshot-artifact'
+import { publishCopierSnapshotInTransaction } from '@/lib/ingest/serving/copier-snapshot-publish'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import {
   getHistoryCursor,
@@ -303,7 +306,8 @@ function historyRowsForRender(
  *
  * Copier PII rule (spec §6): no individual copier row leaves the worker.
  * Full rows (including label, PnL, investment, duration, and dedupe identity)
- * only reach arena.copier_records, which has no public access.
+ * only reach receipt-bound arena.copier_snapshot_rows, which has no public
+ * access.
  */
 async function processHeavySurface(
   job: Job<TierCJobData>,
@@ -486,6 +490,64 @@ async function processHeavySurface(
         rawPayload = pages
         observedAt = pages.at(-1)?.fetchedAt ?? null
 
+        if (kind === 'copiers') {
+          if (fetchError !== null || observedAt === null) {
+            // Failed/empty captures remain diagnostic RAW only. They cannot
+            // satisfy the page-bearing trusted artifact or wake a public read.
+            await writeRawObject({
+              sourceId: src.id,
+              sourceSlug: src.slug,
+              jobType: 'tier_c',
+              traderId,
+              timeframe,
+              payload: rawPayload,
+              meta: {
+                surface,
+                caller_limited: callerLimited,
+                fetch_failed: fetchError !== null,
+                capture_rejected: observedAt === null ? 'no_evidence_page' : null,
+              },
+            })
+            rawPersisted = true
+            if (fetchError !== null) throw fetchError
+            throw new Error('[tier-c] copier capture returned no evidence page')
+          }
+
+          const artifact = buildCopierSnapshotArtifact({
+            src,
+            traderId,
+            exchangeTraderId,
+            lane: 'tier_c',
+            requestTimeframe: timeframe,
+            pages,
+            callerLimited,
+          })
+          const rawReceipt = await writeCopierSnapshotRawArtifact(
+            { artifact },
+            runHistoryTransaction
+          )
+          rawPersisted = true
+          const parsed = pages.flatMap((page) => adapter.parseHistory(page.payload, kind, ctx))
+
+          // PostgreSQL commits the immutable receipt and all private rows as
+          // one authority statement. Only that successful commit may wake the
+          // route; the marker contains no person-level data or evidence IDs.
+          await runHistoryTransaction((transaction) =>
+            publishCopierSnapshotInTransaction(transaction, {
+              artifact,
+              rawReceipt,
+              rows: parsed,
+            })
+          )
+          const readyMarker = {
+            contract: COPIER_READY_CONTRACT,
+            completed: true,
+            aggregateReady: true,
+          }
+          await redis.set(resultKey, JSON.stringify(readyMarker), 'EX', RESULT_TTL_SECONDS)
+          return { traderId, surface, aggregateReady: true }
+        }
+
         // Non-ranking history surfaces retain the compatibility RAW path.
         await writeRawObject({
           sourceId: src.id,
@@ -504,21 +566,7 @@ async function processHeavySurface(
         if (fetchError !== null) throw fetchError
 
         const parsed = pages.flatMap((page) => adapter.parseHistory(page.payload, kind, ctx))
-        const nextCursor =
-          kind === 'copiers' || callerLimited ? null : nextHistoryCursor(parsed, cursor)
-
-        if (kind === 'copiers') {
-          // Private commit is the authority boundary. Never publish parsed
-          // rows, counts, labels, PnL, or RAW through Redis/profile_cache.
-          await publishHistoryRows(src, traderId, kind, parsed, nextCursor)
-          const readyMarker = {
-            contract: COPIER_READY_CONTRACT,
-            completed: true,
-            aggregateReady: true,
-          }
-          await redis.set(resultKey, JSON.stringify(readyMarker), 'EX', RESULT_TTL_SECONDS)
-          return { traderId, surface, aggregateReady: true }
-        }
+        const nextCursor = callerLimited ? null : nextHistoryCursor(parsed, cursor)
 
         rows = historyRowsForRender(parsed, kind, src.currency)
 
