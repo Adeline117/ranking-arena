@@ -17,6 +17,11 @@ test('coverage audit checks every registry-declared window against the current s
   assert.match(coverage, /source_row\.status = 'active'/)
   assert.match(coverage, /snapshot\.timeframe = source_window\.timeframe/)
   assert.match(coverage, /rank_row\.arena_score > 0/)
+  assert.equal(
+    (coverage.match(/rank_row\.rank IS NOT NULL/g) ?? []).length,
+    2,
+    'both rank-count and profile-sample cohorts must exclude partial/unknown rows'
+  )
   assert.match(coverage, /rank_row\.is_outlier IS NOT TRUE/)
   assert.match(coverage, /rank_row\.roi BETWEEN -50000 AND 50000/)
   assert.match(coverage, /source = '_all_gt0'/)
@@ -36,6 +41,11 @@ test('rank/cache diff preserves composite identity and the API 0x normalization 
     /WHEN rank_row\.source_trader_id LIKE '0x%'[\s\S]*THEN lower\(rank_row\.source_trader_id\)/
   )
   assert.match(rankCacheDiff, /rank_row\.arena_score > 0/)
+  assert.equal(
+    (rankCacheDiff.match(/rank_row\.rank IS NOT NULL/g) ?? []).length,
+    2,
+    'both serving and registry-drift counts must use the published rank cohort'
+  )
   assert.match(rankCacheDiff, /rank_row\.is_outlier IS NOT TRUE/)
   assert.match(rankCacheDiff, /rank_row\.roi BETWEEN -50000 AND 50000/)
   assert.match(rankCacheDiff, /source_row\.status = 'active'/)
