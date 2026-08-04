@@ -15,6 +15,12 @@ const runner = readFileSync(
   'utf8'
 )
 const runbook = readFileSync(resolve(process.cwd(), 'docs/RUNBOOK.md'), 'utf8')
+const authorityPlan = readFileSync(
+  resolve(process.cwd(), 'docs/TOKEN_RANKING_DATA_AUTHORITY_PLAN_2026-07-29.md'),
+  'utf8'
+)
+const readme = readFileSync(resolve(process.cwd(), 'README.md'), 'utf8')
+const progress = readFileSync(resolve(process.cwd(), 'docs/PROGRESS.md'), 'utf8')
 
 describe('get_token_trader_rankings SQL authority', () => {
   it('returns a deterministic token_rank before limit/offset pagination', () => {
@@ -49,5 +55,17 @@ describe('get_token_trader_rankings SQL authority', () => {
     expect(runbook).toContain('/rest/v1/rpc/get_token_ranking_publication_head')
     expect(runbook).toContain('legacy_token_rpcs_closed')
     expect(runbook).not.toContain('.[0].token_rank')
+  })
+
+  it('documents verification hold and the frozen history archive without a legacy rollback', () => {
+    expect(authorityPlan).toContain('intentional unpublished / verification hold')
+    expect(authorityPlan).toContain('generation zero')
+    expect(authorityPlan).toContain('不重开 legacy')
+    expect(authorityPlan).not.toContain('公共 Token 榜暂时仍是 legacy 数据产品')
+    expect(readme).toContain('Frozen forensic archive; no application reads')
+    expect(progress).toContain('冻结取证档案')
+    expect(progress).not.toContain(
+      '`trader_position_history` partition cutover: DBA operation, documented in RUNBOOK'
+    )
   })
 })

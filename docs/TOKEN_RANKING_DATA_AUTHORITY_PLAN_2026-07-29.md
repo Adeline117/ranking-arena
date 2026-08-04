@@ -9,18 +9,21 @@
 
 - Binance、OKX 等 CEX 的公开页面/API 确实提供大量交易员、持仓、历史和来源自报 PnL 字段；
   Wallet 与 DEX 也可通过上游接口或链上事件补齐大量指标。
-- 统一 ingest 已把新历史写入 `arena.position_history`，但当前 Token 聚合仍从
-  `public.trader_position_history` 读取。两条链路没有权威桥接，新采集不等于已进入 Token 榜。
-- 当前 Token 聚合只检查时间、token 形式和 `pnl_usd IS NOT NULL`，没有逐行验证来源状态、历史覆盖、
-  价格、成本基础、币种/FX、完整平仓、重复事件和 RAW 证据。
+- 统一 ingest 已把新历史写入 `arena.position_history`；旧 Token 聚合曾从
+  `public.trader_position_history` 读取，但仓库中的 041/043/044 退休迁移已切断旧 writer/reader、把
+  Token publication 固定为 generation zero，并把遗留关系冻结为只读取证档案。它不能再作为回滚排名源。
+- generation-bound snapshot 曾只能保证“一次发布内部一致”，不能证明输入正确；当前 API/UI 因此把
+  generation zero 明确呈现为“权威快照验证中”，而不是空交易数据或可重试故障。
+- 新权威层仍未完成逐行来源状态、历史覆盖、价格、成本基础、币种/FX、完整平仓、重复事件和 RAW
+  证据验证，所以不能从冻结档案或现有 `arena.position_history` 直接生成公共 Token 名次。
 - 当前定时 history lane 只遍历 `deep_profile_topn`；长尾依赖按需 Tier-C，而 Tier-C 主动限制为两页。
   这两条 lane 都不能证明“大部分公开交易员”的 90D 完整历史。
-- 已上线的 generation-bound snapshot 解决了页面跨代拼接、翻页漂移和伪造排名问题，但只保证
-  “一次发布内部一致”，不证明发布输入正确。
 - 截图、字段文档和 RAW payload 证明上游 surface 存在；只有 typed parser、完整分页、窗口闭合、
   可复放 RAW 与来源合同同时通过，才能证明 Arena 当前真的覆盖了它。
 
-因此，公共 Token 榜暂时仍是 legacy 数据产品；不能把它描述成“全部交易所和链上交易员的完整实时榜”。
+因此，仓库目标态中的公共 Token 榜处于 intentional unpublished / verification hold，而不是 legacy
+数据产品。生产是否已收敛到该状态必须按 RUNBOOK 核验迁移 ledger、generation zero、ACL 和冻结关系；
+没有证据时只能记为 `unknown`，不能声称已上线，也不能描述成“完整实时榜”。
 
 ## 2. 排名资格的不可绕过硬门
 
@@ -80,13 +83,13 @@
 
 | 阶段                     | 状态   | 交付物                                                                                        | 验收门                                                                      |
 | ------------------------ | ------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| DA-0 现状审计            | 完成   | legacy/public 与 arena/new ingest 断点、逐维缺口                                              | 文档和代码定位一致                                                          |
+| DA-0 现状审计            | 完成   | legacy/public 与 arena/new ingest 断点、旧 publication 停发和档案冻结                         | 文档、代码与离线 PG17 证明一致；生产仍需 RUNBOOK 验证                       |
 | DA-1 影子权威层          | 进行中 | typed trade fact、7/30/90D coverage evidence、私有 shadow authority                           | 不改公共 MV/RPC；旧行全部 ineligible                                        |
 | DA-2 写入链路            | 待做   | RAW receipt/run、terminal coverage、fact evidence 与 history 同事务发布                       | fetch/parser/publish 失败不推进证据或 cursor；Tier-C 永久为 preview/partial |
 | DA-3 来源合同            | 待做   | Binance、OKX、Hyperliquid、gTrade 的静态字段/方法合同和 adapter 证据                          | fixture replay 与恶意自证测试通过                                           |
 | DA-4 全人口回填与 canary | 待做   | 独立 checkpointed history lane 遍历 PASSED census 全体；7/30/90D 影子回填、覆盖矩阵、对账样本 | 可断点续跑；cap/partial/stale 比例可见；零假 eligible                       |
 | DA-5 eligible-only 聚合  | 待做   | 从一个冻结 cohort 生成 Token daily/popular/detail 候选 MV                                     | 同 cohort、同 window、同 generation；legacy 对比可解释                      |
-| DA-6 公共切换            | 待做   | generation-bound RPC 指向权威聚合，旧链路保留短期回滚                                         | production canary、性能预算、数据阈值、回滚演练通过                         |
+| DA-6 公共切换            | 待做   | generation-bound RPC 指向权威聚合；失败只回到 verification hold，不重开 legacy                | production canary、性能预算、数据阈值、回滚演练通过                         |
 
 每个阶段必须独立 commit + push；不得把影子 schema、writer、adapter、公共 cutover 堆成一个不可回滚提交。
 
