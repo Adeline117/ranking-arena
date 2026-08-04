@@ -27,6 +27,7 @@ jest.mock('@/lib/ingest/db', () => ({
 import {
   EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   type IngestTransactionRunner,
+  POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   POSITION_HISTORY_RAW_JOB_TYPE,
   RAW_JSON_STRINGIFY_CONTRACT,
@@ -571,7 +572,7 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
       30,
       POSITION_HISTORY_RAW_JOB_TYPE,
       EVENT_HISTORY_RAW_ARTIFACT_ROLE,
-      POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      [POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT, POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT],
     ])
     expect(mockClientQuery.mock.invocationCallOrder[retireIndex]).toBeLessThan(
       mockRemove.mock.invocationCallOrder[0]
@@ -582,19 +583,19 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     expect(mockClientRelease).toHaveBeenCalledTimes(1)
   })
 
-  it('never admits versioned position-history evidence to the generic GC queue', async () => {
+  it('never admits publication or audit position-history evidence to the generic GC queue', async () => {
     await expect(cleanupRawObjects(30)).resolves.toBe(0)
 
     const retireIndex = rawGcQueryIndex('WITH candidates AS MATERIALIZED')
     const retireSql = String(mockClientQuery.mock.calls[retireIndex][0])
     expect(retireSql).toContain('job_type IS DISTINCT FROM $2')
     expect(retireSql).toContain('trust_artifact_role IS DISTINCT FROM $3')
-    expect(retireSql).toContain("meta->>'history_evidence_contract' IS DISTINCT FROM $4")
+    expect(retireSql).toContain("meta->>'history_evidence_contract' = ANY($4::text[])")
     expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([
       30,
       POSITION_HISTORY_RAW_JOB_TYPE,
       EVENT_HISTORY_RAW_ARTIFACT_ROLE,
-      POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      [POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT, POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT],
     ])
     expect(mockRemove).not.toHaveBeenCalled()
   })

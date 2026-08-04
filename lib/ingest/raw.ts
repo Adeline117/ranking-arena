@@ -38,6 +38,16 @@ import {
   type HistoryAcquisitionArtifact,
 } from './history-acquisition'
 import {
+  buildReviewedPositionHistoryEvidence,
+  POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+  positionHistoryPublicationRawMetaBase,
+  positionHistoryPublicationRawMetaFromBase,
+  REVIEWED_POSITION_HISTORY_CONTRACTS,
+  type PositionHistoryPublicationRawMetaBase,
+  type ReviewedPositionHistoryRejectionCode,
+  reviewedPositionHistoryRejectionCode,
+} from './reviewed-position-history'
+import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
   strictCanonicalSha256,
@@ -54,10 +64,14 @@ const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_q
 export const RAW_JSON_STRINGIFY_CONTRACT = 'arena.raw-json-stringify@1' as const
 export const POSITION_HISTORY_RAW_JOB_TYPE = 'history:position_history' as const
 export const EVENT_HISTORY_RAW_ARTIFACT_ROLE = 'event_history' as const
-export const POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
-  'arena.position-history-publication-evidence@1' as const
 export const EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
   'arena.event-history-publication-evidence@1' as const
+export const POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT =
+  'arena.position-history-audit-evidence@1' as const
+
+export type PositionHistoryAuditReason = ReviewedPositionHistoryRejectionCode
+
+export { POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT } from './reviewed-position-history'
 
 export function historyRawJobType(kind: HistoryKind): `history:${HistoryKind}` {
   return `history:${kind}`
@@ -349,25 +363,33 @@ function serializeRawPayload(
   throw new TypeError(`[ingest] unsupported RAW serialization contract: ${serializationContract}`)
 }
 
+function rawIntegrity(
+  serializationContract: RawSerializationContract,
+  compressedBytes: number,
+  uncompressedBytes: number
+): Record<string, unknown> {
+  return {
+    version: 1,
+    content_type: 'application/json',
+    encoding: 'utf-8',
+    compression: 'gzip',
+    hash_algorithm: 'sha256',
+    hash_scope: 'json_utf8',
+    serialization_contract: serializationContract,
+    compressed_bytes: compressedBytes,
+    uncompressed_bytes: uncompressedBytes,
+  }
+}
+
 function rawIntegrityMeta(
-  metaBase: Record<string, unknown>,
+  metaBase: Readonly<object>,
   serializationContract: RawSerializationContract,
   compressedBytes: number,
   uncompressedBytes: number
 ): Record<string, unknown> {
   return {
     ...metaBase,
-    raw_integrity: {
-      version: 1,
-      content_type: 'application/json',
-      encoding: 'utf-8',
-      compression: 'gzip',
-      hash_algorithm: 'sha256',
-      hash_scope: 'json_utf8',
-      serialization_contract: serializationContract,
-      compressed_bytes: compressedBytes,
-      uncompressed_bytes: uncompressedBytes,
-    },
+    raw_integrity: rawIntegrity(serializationContract, compressedBytes, uncompressedBytes),
   }
 }
 
@@ -1038,7 +1060,8 @@ interface NormalizedPositionHistoryRawArtifactInput {
 }
 
 interface PreparedPositionHistoryRawArtifact extends PreparedDeterministicRawArtifact {
-  metaBase: Record<string, unknown>
+  metaBase: Readonly<object>
+  publicationMetaBase: PositionHistoryPublicationRawMetaBase | null
 }
 
 interface PositionHistoryTrustPointerRow {
@@ -1059,6 +1082,22 @@ interface PositionHistoryTrustPointerRow {
 
 function positionHistoryArtifactError(detail: string): Error {
   return new Error(`[ingest] position-history RAW artifact failed: ${detail}`)
+}
+
+function positionHistoryAuditReason(
+  artifact: HistoryAcquisitionArtifact,
+  cause: unknown
+): PositionHistoryAuditReason {
+  if (!Object.hasOwn(REVIEWED_POSITION_HISTORY_CONTRACTS, artifact.source.slug)) {
+    return 'source_not_reviewed'
+  }
+  if (
+    artifact.termination.evidence_state !== 'verified' ||
+    artifact.termination.blocker_reasons.length !== 0
+  ) {
+    return 'terminal_evidence_not_verified'
+  }
+  return reviewedPositionHistoryRejectionCode(cause) ?? 'reviewed_contract_rejected'
 }
 
 function normalizePositionHistoryRawArtifactInput(
@@ -1107,6 +1146,52 @@ function preparePositionHistoryRawArtifact(
   if (contentHash !== input.sourceRunId) {
     throw positionHistoryArtifactError('serialized artifact digest does not match source run id')
   }
+  let publicationMetaBase: PositionHistoryPublicationRawMetaBase | null = null
+  let metaBase: Readonly<object>
+  if (input.artifact.history_kind === 'position_history') {
+    try {
+      const evidence = buildReviewedPositionHistoryEvidence(input.artifact, input.sourceRunId)
+      publicationMetaBase = positionHistoryPublicationRawMetaBase(evidence)
+      metaBase = publicationMetaBase
+    } catch (cause) {
+      metaBase = {
+        surface: 'position_history_audit',
+        publication_eligible: false,
+        history_evidence_contract: POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
+        audit_reason: positionHistoryAuditReason(input.artifact, cause),
+        data_contract: input.artifact.contract,
+        source_run_id: input.sourceRunId,
+        source_slug: input.sourceSlug,
+        exchange_trader_id: input.exchangeTraderId,
+        history_kind: input.artifact.history_kind,
+        attempt_started_at: input.artifact.attempt_started_at,
+        starting_cursor: input.artifact.starting_cursor,
+        capture_config: input.artifact.capture_config,
+        observed_at: input.fetchedAt,
+        page_count: input.artifact.pages.length,
+        termination: input.artifact.termination,
+      }
+    }
+  } else {
+    metaBase = {
+      surface: input.artifact.history_kind,
+      data_contract: input.artifact.contract,
+      history_evidence_contract: EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      source_run_id: input.sourceRunId,
+      source_slug: input.sourceSlug,
+      exchange_trader_id: input.exchangeTraderId,
+      history_kind: input.artifact.history_kind,
+      attempt_started_at: input.artifact.attempt_started_at,
+      starting_cursor: input.artifact.starting_cursor,
+      capture_config: input.artifact.capture_config,
+      observed_at: input.fetchedAt,
+      page_count: input.artifact.pages.length,
+      terminal_evidence_state: input.artifact.termination.evidence_state,
+      scan_terminal_state: input.artifact.termination.scan_terminal_state,
+      verifier_contract: input.artifact.termination.verifier_contract,
+      termination: input.artifact.termination,
+    }
+  }
   return {
     storagePath:
       `${input.sourceSlug}/history_trust/${input.artifact.history_kind}/${input.sourceRunId}/` +
@@ -1115,13 +1200,42 @@ function preparePositionHistoryRawArtifact(
     gzipBytes,
     contentHash,
     durableCompressedBytes: gzipBytes.byteLength,
-    metaBase: {
-      surface: input.artifact.history_kind,
+    metaBase,
+    publicationMetaBase,
+  }
+}
+
+function positionHistoryArtifactMeta(
+  artifact: PreparedPositionHistoryRawArtifact
+): Record<string, unknown> {
+  const integrity = rawIntegrity(
+    STRICT_CANONICAL_JSON_CONTRACT,
+    artifact.durableCompressedBytes,
+    artifact.jsonBytes.byteLength
+  )
+  if (artifact.publicationMetaBase !== null) {
+    return {
+      ...positionHistoryPublicationRawMetaFromBase(artifact.publicationMetaBase, integrity),
+    }
+  }
+  return rawIntegrityMeta(
+    artifact.metaBase,
+    STRICT_CANONICAL_JSON_CONTRACT,
+    artifact.durableCompressedBytes,
+    artifact.jsonBytes.byteLength
+  )
+}
+
+/** Exact publication metadata emitted before the shared page-manifest contract. */
+function previousPositionHistoryArtifactMeta(
+  input: NormalizedPositionHistoryRawArtifactInput,
+  artifact: PreparedPositionHistoryRawArtifact
+): Record<string, unknown> {
+  return rawIntegrityMeta(
+    {
+      surface: 'position_history',
       data_contract: input.artifact.contract,
-      history_evidence_contract:
-        input.artifact.history_kind === 'position_history'
-          ? POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT
-          : EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
       source_run_id: input.sourceRunId,
       source_slug: input.sourceSlug,
       exchange_trader_id: input.exchangeTraderId,
@@ -1136,14 +1250,6 @@ function preparePositionHistoryRawArtifact(
       verifier_contract: input.artifact.termination.verifier_contract,
       termination: input.artifact.termination,
     },
-  }
-}
-
-function positionHistoryArtifactMeta(
-  artifact: PreparedPositionHistoryRawArtifact
-): Record<string, unknown> {
-  return rawIntegrityMeta(
-    artifact.metaBase,
     STRICT_CANONICAL_JSON_CONTRACT,
     artifact.durableCompressedBytes,
     artifact.jsonBytes.byteLength
@@ -1221,7 +1327,8 @@ function validatePositionHistoryTrustPointer(
     metaMatches =
       storedMeta === strictCanonicalJson(positionHistoryArtifactMeta(artifact)) ||
       (input.artifact.history_kind === 'position_history' &&
-        storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact)))
+        (storedMeta === strictCanonicalJson(previousPositionHistoryArtifactMeta(input, artifact)) ||
+          storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact))))
   } catch {
     metaMatches = false
   }
@@ -1615,7 +1722,10 @@ export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
             AND (
               job_type IS DISTINCT FROM $2
               OR trust_artifact_role IS DISTINCT FROM $3
-              OR meta->>'history_evidence_contract' IS DISTINCT FROM $4
+              OR NOT COALESCE(
+                meta->>'history_evidence_contract' = ANY($4::text[]),
+                FALSE
+              )
             )
           ORDER BY fetched_at, id
           FOR UPDATE SKIP LOCKED
@@ -1635,7 +1745,7 @@ export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
         retentionDays,
         POSITION_HISTORY_RAW_JOB_TYPE,
         EVENT_HISTORY_RAW_ARTIFACT_ROLE,
-        POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+        [POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT, POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT],
       ]
     )
 

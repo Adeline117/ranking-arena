@@ -18,16 +18,23 @@ jest.mock('@/lib/ingest/db', () => ({
 }))
 
 import type { HistoryKind, RawPage } from '@/lib/ingest/core/types'
+import {
+  BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
+  BITGET_POSITION_HISTORY_URL,
+  bitgetPositionHistoryTerminalVerifier,
+} from '@/lib/ingest/adapters/bitget/history-terminal'
 import type { IngestQueryExecutor } from '@/lib/ingest/db'
 import {
   captureHistoryAcquisition,
   HISTORY_TERMINAL_CLAIM_CONTRACT,
   type HistoryTerminalClaim,
+  type SelectedHistoryTerminalVerifier,
 } from '@/lib/ingest/history-acquisition'
 import {
   EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   historyRawJobType,
+  POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
   POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   POSITION_HISTORY_RAW_JOB_TYPE,
   type IngestTransactionRunner,
@@ -35,7 +42,12 @@ import {
   writePositionHistoryRawArtifact,
   type WritePositionHistoryRawArtifactInput,
 } from '@/lib/ingest/raw'
-import { strictCanonicalJson } from '@/lib/ingest/strict-canonical-json'
+import {
+  POSITION_HISTORY_PAGE_MANIFEST_KEYS,
+  POSITION_HISTORY_RAW_META_KEYS,
+  POSITION_HISTORY_SOURCE_ROW_MANIFEST_KEYS,
+} from '@/lib/ingest/reviewed-position-history'
+import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-canonical-json'
 
 interface PointerRow {
   id: number
@@ -55,6 +67,8 @@ interface PointerRow {
 
 const attemptStartedAt = '2026-08-03T10:00:00.000Z'
 const fetchedAt = '2026-08-03T10:00:01.000Z'
+const openedMs = String(Date.parse('2026-08-03T08:00:00.000Z'))
+const closedMs = String(Date.parse('2026-08-03T09:00:00.000Z'))
 
 function terminalClaim(): HistoryTerminalClaim {
   return {
@@ -64,7 +78,12 @@ function terminalClaim(): HistoryTerminalClaim {
 }
 
 async function artifactInput(
-  options: { kind?: HistoryKind; upstreamError?: boolean; missingClaim?: boolean } = {}
+  options: {
+    kind?: HistoryKind
+    upstreamError?: boolean
+    missingClaim?: boolean
+    sourceSlug?: string
+  } = {}
 ): Promise<WritePositionHistoryRawArtifactInput> {
   const kind = options.kind ?? 'position_history'
   async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
@@ -79,7 +98,7 @@ async function artifactInput(
   }
 
   const captured = await captureHistoryAcquisition({
-    source: { id: 1, slug: 'binance_futures' },
+    source: { id: 1, slug: options.sourceSlug ?? 'binance_futures' },
     traderId: 11,
     exchangeTraderId: 'portfolio-1',
     kind,
@@ -90,6 +109,55 @@ async function artifactInput(
       contract: `arena.ingest.history-terminal-verifier.test.${kind}@1`,
       verify: () => ({ verified: true, scanTerminalState: 'exhausted' }),
     },
+  })
+  return { artifact: captured.artifact, sourceRunId: captured.sourceRunId }
+}
+
+function reviewedBitgetRaw(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    orderNo: 'order-1',
+    openTime: openedMs,
+    closeTime: closedMs,
+    symbolDisplayName: 'BTCUSDT',
+    position: 1,
+    openLevel: '5',
+    closeDealCount: '2',
+    openAvgPrice: '100',
+    closeAvgPrice: '110',
+    netProfit: '20',
+    returnRate: '0.2',
+    ...overrides,
+  }
+}
+
+async function reviewedBitgetArtifactInput(
+  rows: readonly Record<string, unknown>[] = [reviewedBitgetRaw()],
+  terminalVerifier: SelectedHistoryTerminalVerifier = bitgetPositionHistoryTerminalVerifier
+): Promise<WritePositionHistoryRawArtifactInput> {
+  async function* stream(): AsyncGenerator<RawPage, HistoryTerminalClaim, void> {
+    yield {
+      pageIndex: 1,
+      url: BITGET_POSITION_HISTORY_URL,
+      fetchedAt,
+      payload: {
+        contract: BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT,
+        historyTraderIdentity: 'portfolio-1',
+        request: { pageNo: 1, pageSize: 20, traderUid: 'portfolio-1' },
+        response: { code: '00000', data: { rows, nextFlag: false } },
+      },
+    }
+    return terminalClaim()
+  }
+
+  const captured = await captureHistoryAcquisition({
+    source: { id: 7, slug: 'bitget_futures' },
+    traderId: 11,
+    exchangeTraderId: 'portfolio-1',
+    kind: 'position_history',
+    cursor: null,
+    attemptStartedAt,
+    stream: stream(),
+    terminalVerifier,
   })
   return { artifact: captured.artifact, sourceRunId: captured.sourceRunId }
 }
@@ -172,8 +240,9 @@ describe('writePositionHistoryRawArtifact', () => {
     })
   })
 
-  it('stores one canonical event_history object with exact source, trader, and run binding', async () => {
-    const input = await artifactInput()
+  it('stores reviewed evidence with the exact publication metadata and manifest contract', async () => {
+    const sourceRow = reviewedBitgetRaw()
+    const input = await reviewedBitgetArtifactInput([sourceRow])
     const database = databaseHarness()
 
     const receipt = await writePositionHistoryRawArtifact(input, database.runTransaction)
@@ -181,14 +250,14 @@ describe('writePositionHistoryRawArtifact', () => {
     expect(receipt).toEqual({
       id: 41,
       storagePath:
-        `binance_futures/history_trust/position_history/${input.sourceRunId}/` +
+        `bitget_futures/history_trust/position_history/${input.sourceRunId}/` +
         `event_history_${input.sourceRunId}.json.gz`,
       contentHash: input.sourceRunId,
     })
     expect(database.runTransaction).toHaveBeenCalledTimes(1)
     expect(database.pointers).toHaveLength(1)
     expect(database.pointers[0]).toMatchObject({
-      source_id: 1,
+      source_id: 7,
       job_type: POSITION_HISTORY_RAW_JOB_TYPE,
       trader_id: 11,
       timeframe: null,
@@ -198,21 +267,46 @@ describe('writePositionHistoryRawArtifact', () => {
       trust_artifact_role: EVENT_HISTORY_RAW_ARTIFACT_ROLE,
       quarantined: false,
     })
-    expect(database.pointers[0].meta).toMatchObject({
+    const meta = database.pointers[0].meta as Record<string, unknown>
+    expect(Object.keys(meta).sort()).toEqual(POSITION_HISTORY_RAW_META_KEYS)
+    expect(meta).toMatchObject({
       data_contract: input.artifact.contract,
       history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      history_kind: 'position_history',
+      source_slug: 'bitget_futures',
+      source_run_id: input.sourceRunId,
       exchange_trader_id: 'portfolio-1',
       attempt_started_at: attemptStartedAt,
       starting_cursor: null,
       capture_config: { caller_page_cap: null },
       observed_at: fetchedAt,
-      terminal_evidence_state: 'verified',
-      scan_terminal_state: 'exhausted',
+      page_count: 1,
+      parser_contract: 'arena.ingest.position-history-parser.bitget@1',
+      source_contract: 'arena.ingest.position-history-source.bitget_futures@1',
+      verifier_contract: bitgetPositionHistoryTerminalVerifier.contract,
       termination: input.artifact.termination,
       raw_integrity: {
         serialization_contract: 'arena.strict-canonical-json@1',
         hash_scope: 'json_utf8',
       },
+    })
+    const pageManifest = meta.page_manifest as Array<Record<string, unknown>>
+    expect(pageManifest).toHaveLength(1)
+    expect(Object.keys(pageManifest[0]).sort()).toEqual(POSITION_HISTORY_PAGE_MANIFEST_KEYS)
+    expect(pageManifest[0]).toMatchObject({
+      classification: 'canonical_materialized',
+      fetched_at: fetchedAt,
+      ordinal: 1,
+      payload_sha256: input.artifact.pages[0].payload_sha256,
+      segment_id: 'default',
+      stored_page_index: 1,
+    })
+    const sourceRows = pageManifest[0].source_rows as Array<Record<string, unknown>>
+    expect(sourceRows).toHaveLength(1)
+    expect(Object.keys(sourceRows[0]).sort()).toEqual(POSITION_HISTORY_SOURCE_ROW_MANIFEST_KEYS)
+    expect(sourceRows[0]).toEqual({
+      source_row_ordinal: 1,
+      source_row_sha256: strictCanonicalSha256(sourceRow),
     })
     const uploaded = storage.get(receipt.storagePath)
     expect(uploaded).toBeDefined()
@@ -221,7 +315,7 @@ describe('writePositionHistoryRawArtifact', () => {
   })
 
   it('returns the same pointer on an exact retry after verifying existing Storage content', async () => {
-    const input = await artifactInput()
+    const input = await reviewedBitgetArtifactInput()
     const database = databaseHarness()
 
     const first = await writePositionHistoryRawArtifact(input, database.runTransaction)
@@ -238,17 +332,134 @@ describe('writePositionHistoryRawArtifact', () => {
     ).toHaveLength(1)
   })
 
+  it('persists rejected reviewed evidence as a fixed-code nonpublication audit artifact', async () => {
+    const input = await artifactInput()
+    const database = databaseHarness()
+
+    await writePositionHistoryRawArtifact(input, database.runTransaction)
+
+    const meta = database.pointers[0].meta as Record<string, unknown>
+    expect(Object.keys(meta).sort()).toEqual([
+      'attempt_started_at',
+      'audit_reason',
+      'capture_config',
+      'data_contract',
+      'exchange_trader_id',
+      'history_evidence_contract',
+      'history_kind',
+      'observed_at',
+      'page_count',
+      'publication_eligible',
+      'raw_integrity',
+      'source_run_id',
+      'source_slug',
+      'starting_cursor',
+      'surface',
+      'termination',
+    ])
+    expect(meta).toMatchObject({
+      surface: 'position_history_audit',
+      publication_eligible: false,
+      history_evidence_contract: POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
+      audit_reason: 'source_container_invalid',
+      source_run_id: input.sourceRunId,
+      termination: input.artifact.termination,
+    })
+    expect(JSON.stringify(meta)).not.toContain('[reviewed-position-history]')
+    expect(meta).not.toHaveProperty('parser_contract')
+    expect(meta).not.toHaveProperty('page_manifest')
+  })
+
+  it('persists parser-accounting failures and replays their exact audit pointer', async () => {
+    const missingSymbol = reviewedBitgetRaw()
+    delete missingSymbol.symbolDisplayName
+    const input = await reviewedBitgetArtifactInput([missingSymbol])
+    const database = databaseHarness()
+
+    const first = await writePositionHistoryRawArtifact(input, database.runTransaction)
+    const second = await writePositionHistoryRawArtifact(input, database.runTransaction)
+
+    expect(second).toEqual(first)
+    expect(database.pointers).toHaveLength(1)
+    expect(database.pointers[0].meta).toMatchObject({
+      surface: 'position_history_audit',
+      publication_eligible: false,
+      history_evidence_contract: POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
+      audit_reason: 'source_candidate_accounting_failed',
+      termination: input.artifact.termination,
+    })
+    expect(storage.has(first.storagePath)).toBe(true)
+    expect(mockDownload).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists a schema-valid nonreviewed source without granting publication metadata', async () => {
+    const input = await artifactInput({ sourceSlug: 'candidate_exchange' })
+    const database = databaseHarness()
+
+    const receipt = await writePositionHistoryRawArtifact(input, database.runTransaction)
+
+    expect(storage.has(receipt.storagePath)).toBe(true)
+    expect(database.pointers[0].meta).toMatchObject({
+      surface: 'position_history_audit',
+      publication_eligible: false,
+      history_evidence_contract: POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
+      audit_reason: 'source_not_reviewed',
+      source_slug: 'candidate_exchange',
+    })
+  })
+
+  it('replays exact previous publication metadata without upgrading it', async () => {
+    const input = await reviewedBitgetArtifactInput()
+    const database = databaseHarness()
+    const first = await writePositionHistoryRawArtifact(input, database.runTransaction)
+    const inserted = database.pointers[0].meta as Record<string, unknown>
+    const previousMeta: Record<string, unknown> = {
+      surface: 'position_history',
+      data_contract: input.artifact.contract,
+      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      source_run_id: input.sourceRunId,
+      source_slug: input.artifact.source.slug,
+      exchange_trader_id: input.artifact.trader.exchange_trader_id,
+      history_kind: input.artifact.history_kind,
+      attempt_started_at: input.artifact.attempt_started_at,
+      starting_cursor: input.artifact.starting_cursor,
+      capture_config: input.artifact.capture_config,
+      observed_at: fetchedAt,
+      page_count: input.artifact.pages.length,
+      terminal_evidence_state: input.artifact.termination.evidence_state,
+      scan_terminal_state: input.artifact.termination.scan_terminal_state,
+      verifier_contract: input.artifact.termination.verifier_contract,
+      termination: input.artifact.termination,
+      raw_integrity: inserted.raw_integrity,
+    }
+    database.pointers[0].meta = previousMeta
+
+    await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).resolves.toEqual(
+      first
+    )
+    expect(database.pointers[0].meta).toBe(previousMeta)
+    expect(database.pointers[0].meta).not.toHaveProperty('page_manifest')
+  })
+
   it('replays only the exact legacy audit metadata without upgrading it', async () => {
     const input = await artifactInput()
     const database = databaseHarness()
     const first = await writePositionHistoryRawArtifact(input, database.runTransaction)
-    const meta = database.pointers[0].meta as Record<string, unknown>
-    delete meta.history_evidence_contract
-    delete meta.attempt_started_at
-    delete meta.starting_cursor
-    delete meta.capture_config
-    delete meta.observed_at
-    delete meta.termination
+    const inserted = database.pointers[0].meta as Record<string, unknown>
+    const meta: Record<string, unknown> = {
+      surface: 'position_history',
+      data_contract: input.artifact.contract,
+      source_run_id: input.sourceRunId,
+      source_slug: input.artifact.source.slug,
+      exchange_trader_id: input.artifact.trader.exchange_trader_id,
+      history_kind: input.artifact.history_kind,
+      page_count: input.artifact.pages.length,
+      terminal_evidence_state: input.artifact.termination.evidence_state,
+      scan_terminal_state: input.artifact.termination.scan_terminal_state,
+      verifier_contract: input.artifact.termination.verifier_contract,
+      raw_integrity: inserted.raw_integrity,
+    }
+    database.pointers[0].meta = meta
 
     await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).resolves.toEqual(
       first
@@ -401,10 +612,11 @@ describe('writePositionHistoryRawArtifact', () => {
       blocker_reasons: ['upstream_error'],
     })
     expect(database.pointers[0].meta).toMatchObject({
-      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      surface: 'position_history_audit',
+      publication_eligible: false,
+      history_evidence_contract: POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
+      audit_reason: 'terminal_evidence_not_verified',
       observed_at: fetchedAt,
-      terminal_evidence_state: 'upstream_error',
-      scan_terminal_state: 'partial',
       termination: {
         evidence_state: 'upstream_error',
         scan_terminal_state: 'partial',
