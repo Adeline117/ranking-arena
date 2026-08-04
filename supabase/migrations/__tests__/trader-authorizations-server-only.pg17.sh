@@ -67,6 +67,8 @@ CREATE ROLE authenticated NOLOGIN;
 -- Do not grant BYPASSRLS: service CRUD below must work through the explicit
 -- policy installed by the migration.
 CREATE ROLE service_role NOLOGIN NOBYPASSRLS;
+CREATE ROLE manual_authorization_reader NOLOGIN BYPASSRLS;
+CREATE ROLE historical_timestamp_executor NOLOGIN;
 
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid() RETURNS uuid
@@ -130,6 +132,37 @@ CREATE TABLE public.user_exchange_connections (
   CONSTRAINT user_exchange_connections_user_id_exchange_key
     UNIQUE (user_id, exchange)
 );
+
+-- Reproduce the two timestamp functions/triggers installed by historical
+-- migrations. Their legacy owner, public ACL, and mutable body are part of the
+-- replay boundary this cutoff must converge itself.
+CREATE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = pg_catalog.now();
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trigger_user_exchange_connections_updated_at
+  BEFORE UPDATE ON public.user_exchange_connections
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE FUNCTION public.update_trader_authorizations_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = pg_catalog.now();
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trigger_update_trader_authorizations_updated_at
+  BEFORE UPDATE ON public.trader_authorizations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_trader_authorizations_updated_at();
 
 ALTER TABLE public.user_exchange_connections ENABLE ROW LEVEL SECURITY;
 
@@ -396,6 +429,87 @@ CREATE POLICY "Service role manages exchange connections"
   TO service_role
   USING (true)
   WITH CHECK (true);
+SQL
+
+# A custom BYPASSRLS grant on the prerequisite connection registry must stop
+# the migration rather than being ignored as an unknown role.
+psql_cmd -c "
+  GRANT SELECT ON TABLE public.user_exchange_connections
+    TO manual_authorization_reader;
+" >/dev/null
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/custom-connection-acl-preflight.log" 2>&1; then
+  echo "trader authorization migration accepted a custom connection ACL" >&2
+  exit 1
+fi
+if ! grep -q \
+  'must satisfy 20260716112000_exchange_connections_server_only' \
+  "$TMP_ROOT/custom-connection-acl-preflight.log"; then
+  cat "$TMP_ROOT/custom-connection-acl-preflight.log" >&2
+  exit 1
+fi
+psql_cmd -c "
+  REVOKE SELECT ON TABLE public.user_exchange_connections
+    FROM manual_authorization_reader;
+" >/dev/null
+
+# Same-name overloads are unreviewed RPC capabilities and must fail preflight.
+psql_cmd <<'SQL'
+CREATE FUNCTION public.bind_trader_account_connection_v1(text)
+RETURNS uuid LANGUAGE sql AS 'SELECT pg_catalog.gen_random_uuid()';
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/overload-preflight.log" 2>&1; then
+  echo "trader authorization migration accepted an unknown overload" >&2
+  exit 1
+fi
+if ! grep -q 'unexpected trader-authorization function overloads' \
+  "$TMP_ROOT/overload-preflight.log"; then
+  cat "$TMP_ROOT/overload-preflight.log" >&2
+  exit 1
+fi
+psql_cmd -c 'DROP FUNCTION public.bind_trader_account_connection_v1(text)' >/dev/null
+
+# Unknown triggers are never auto-dropped. Even a disabled trigger must stop
+# the migration before quarantine changes data, because its intent is unknown.
+psql_cmd <<'SQL'
+CREATE TRIGGER unexpected_disabled_account_trigger
+  BEFORE UPDATE ON public.trader_authorizations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_trader_authorizations_updated_at();
+ALTER TABLE public.trader_authorizations
+  DISABLE TRIGGER unexpected_disabled_account_trigger;
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/trigger-preflight.log" 2>&1; then
+  echo "trader authorization migration accepted an unknown disabled trigger" >&2
+  exit 1
+fi
+if ! grep -q 'unexpected account triggers must be retired before quarantine DML' \
+  "$TMP_ROOT/trigger-preflight.log"; then
+  cat "$TMP_ROOT/trigger-preflight.log" >&2
+  exit 1
+fi
+UNSWEPT_STATE="$(
+  psql_cmd -Atqc "
+    SELECT
+      (SELECT status FROM public.trader_authorizations
+       WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2') || ':' ||
+      (SELECT is_active::text FROM public.user_exchange_connections
+       WHERE exchange = 'bybit_spot');
+  "
+)"
+if [[ "$UNSWEPT_STATE" != 'active:true' ]]; then
+  echo "unknown-trigger failure changed quarantine data: $UNSWEPT_STATE" >&2
+  exit 1
+fi
+psql_cmd -c \
+  'DROP TRIGGER unexpected_disabled_account_trigger ON public.trader_authorizations' \
+  >/dev/null
+
+psql_cmd <<'SQL'
+GRANT SELECT ON TABLE public.trader_authorizations
+  TO manual_authorization_reader;
+GRANT UPDATE (permissions, read_only_verified_at)
+  ON TABLE public.trader_authorizations
+  TO manual_authorization_reader;
 SQL
 
 # First application closes every historical privilege and policy path.
@@ -927,12 +1041,173 @@ GRANT SELECT (
 CREATE POLICY "Unknown manual authorization drift"
   ON public.trader_authorizations FOR ALL TO public
   USING (true) WITH CHECK (true);
+GRANT SELECT ON TABLE public.trader_authorizations
+  TO manual_authorization_reader;
+GRANT UPDATE (oauth_token_encrypted)
+  ON TABLE public.trader_authorizations
+  TO manual_authorization_reader;
+GRANT EXECUTE ON FUNCTION public.bind_trader_account_connection_v1(
+  uuid, text, text, text, text, text, jsonb, timestamptz, text, text
+), public.revoke_trader_account_connection_v1(uuid, uuid, text)
+  TO manual_authorization_reader;
+
+-- Seed rows that both replay quarantine sweeps must touch, then replace all
+-- three live trigger bodies with sentinel writers. The migration must drop the
+-- old triggers before DML and rebuild their reviewed definitions afterward.
+CREATE TABLE public.account_guard_replay_sentinel (label text NOT NULL);
+GRANT INSERT ON TABLE public.account_guard_replay_sentinel
+  TO manual_authorization_reader;
+ALTER TABLE public.user_exchange_connections
+  DISABLE TRIGGER exchange_connection_v1_mutation_serializer;
+ALTER TABLE public.user_exchange_connections
+  DISABLE TRIGGER exchange_connection_authorization_v1_contract_guard;
+ALTER TABLE public.trader_authorizations
+  DISABLE TRIGGER trader_authorization_v1_contract_guard;
+INSERT INTO public.user_exchange_connections (
+  user_id, exchange, api_key_encrypted, api_secret_encrypted, is_active,
+  verified_uid, last_verified_at, scope_permissions
+) VALUES (
+  '22222222-2222-2222-2222-222222222222', 'mexc',
+  'guard-replay-key', 'guard-replay-secret', true, 'guard-replay-uid',
+  pg_catalog.now(), '["read"]'::jsonb
+);
+INSERT INTO public.trader_authorizations (
+  id, user_id, platform, trader_id, encrypted_api_key,
+  encrypted_api_secret, permissions, status, last_verified_at,
+  read_only_verified_at, last_sync_status
+) VALUES (
+  'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  '22222222-2222-2222-2222-222222222222',
+  'mexc', 'guard-replay-uid', 'guard-replay-key',
+  'guard-replay-secret', '["read"]'::jsonb, 'active',
+  pg_catalog.now(), pg_catalog.now(), 'pending'
+);
+ALTER TABLE public.user_exchange_connections
+  ENABLE TRIGGER exchange_connection_v1_mutation_serializer;
+ALTER TABLE public.user_exchange_connections
+  ENABLE TRIGGER exchange_connection_authorization_v1_contract_guard;
+ALTER TABLE public.trader_authorizations
+  ENABLE TRIGGER trader_authorization_v1_contract_guard;
+
+GRANT CREATE ON SCHEMA public TO manual_authorization_reader;
+ALTER FUNCTION public.bind_trader_account_connection_v1(
+  uuid, text, text, text, text, text, jsonb, timestamptz, text, text
+) OWNER TO manual_authorization_reader;
+ALTER FUNCTION public.revoke_trader_account_connection_v1(uuid, uuid, text)
+  OWNER TO manual_authorization_reader;
+ALTER FUNCTION public.guard_trader_authorization_v1_contract()
+  OWNER TO manual_authorization_reader;
+ALTER FUNCTION public.serialize_exchange_connection_v1_mutation()
+  OWNER TO manual_authorization_reader;
+ALTER FUNCTION public.guard_exchange_connection_authorization_v1_contract()
+  OWNER TO manual_authorization_reader;
+ALTER FUNCTION public.update_updated_at_column()
+  OWNER TO manual_authorization_reader;
+ALTER FUNCTION public.update_trader_authorizations_updated_at()
+  OWNER TO manual_authorization_reader;
+SET ROLE manual_authorization_reader;
+CREATE OR REPLACE FUNCTION public.guard_trader_authorization_v1_contract()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.account_guard_replay_sentinel(label)
+  VALUES ('authorization');
+  RETURN NEW;
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.serialize_exchange_connection_v1_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.account_guard_replay_sentinel(label)
+  VALUES ('serializer');
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.guard_exchange_connection_authorization_v1_contract()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.account_guard_replay_sentinel(label)
+  VALUES ('connection-authorization');
+  RETURN NULL;
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.account_guard_replay_sentinel(label)
+  VALUES ('connection timestamp');
+  RETURN NEW;
+END;
+$hostile$;
+CREATE OR REPLACE FUNCTION public.update_trader_authorizations_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $hostile$
+BEGIN
+  INSERT INTO public.account_guard_replay_sentinel(label)
+  VALUES ('authorization timestamp');
+  RETURN NEW;
+END;
+$hostile$;
+RESET ROLE;
+REVOKE CREATE ON SCHEMA public FROM manual_authorization_reader;
+GRANT EXECUTE ON FUNCTION public.update_updated_at_column(),
+  public.update_trader_authorizations_updated_at()
+  TO historical_timestamp_executor;
 SQL
 
 # Second application proves idempotency and hostile-drift convergence.
 psql_cmd -f "$MIGRATION" >/dev/null
 
 psql_cmd <<'SQL'
+DO $guard_replay_order_proof$
+BEGIN
+  IF EXISTS (
+       SELECT 1 FROM public.account_guard_replay_sentinel
+     ) OR NOT EXISTS (
+       SELECT 1
+       FROM public.user_exchange_connections
+       WHERE user_id = '22222222-2222-2222-2222-222222222222'
+         AND exchange = 'mexc'
+         AND is_active IS FALSE
+     ) OR NOT EXISTS (
+       SELECT 1
+       FROM public.trader_authorizations
+       WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+         AND status = 'revoked'
+     ) THEN
+    RAISE EXCEPTION
+      'hostile account guard executed before replay quarantine convergence';
+  END IF;
+END
+$guard_replay_order_proof$;
+DELETE FROM public.trader_authorizations
+WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+DELETE FROM public.user_exchange_connections
+WHERE user_id = '22222222-2222-2222-2222-222222222222'
+  AND exchange = 'mexc';
+DROP TABLE public.account_guard_replay_sentinel;
+
 CREATE FUNCTION public.assert_insufficient_privilege(
   p_sql text,
   p_label text
@@ -968,6 +1243,27 @@ BEGIN
     WHERE oid = 'public.trader_authorizations'::regclass
   ) THEN
     RAISE EXCEPTION 'RLS is disabled';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid IN (
+      'public.bind_trader_account_connection_v1(uuid,text,text,text,text,text,jsonb,timestamptz,text,text)'::regprocedure,
+      'public.revoke_trader_account_connection_v1(uuid,uuid,text)'::regprocedure,
+      'public.guard_trader_authorization_v1_contract()'::regprocedure,
+      'public.serialize_exchange_connection_v1_mutation()'::regprocedure,
+      'public.guard_exchange_connection_authorization_v1_contract()'::regprocedure,
+      'public.update_updated_at_column()'::regprocedure,
+      'public.update_trader_authorizations_updated_at()'::regprocedure
+    )
+      AND procedure_row.proowner IS DISTINCT FROM (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = 'public.trader_authorizations'::regclass
+      )
+  ) THEN
+    RAISE EXCEPTION 'custom trader-authorization function owner survived replay';
   END IF;
 
   IF (
@@ -1028,6 +1324,35 @@ BEGIN
       END LOOP;
     END LOOP;
   END LOOP;
+
+  IF pg_catalog.has_table_privilege(
+       'manual_authorization_reader',
+       'public.trader_authorizations',
+       'SELECT'
+     ) OR pg_catalog.has_column_privilege(
+       'manual_authorization_reader',
+       'public.trader_authorizations',
+       'oauth_token_encrypted',
+       'UPDATE'
+     ) OR pg_catalog.has_function_privilege(
+       'manual_authorization_reader',
+       'public.bind_trader_account_connection_v1(uuid,text,text,text,text,text,jsonb,timestamptz,text,text)',
+       'EXECUTE'
+     ) OR pg_catalog.has_function_privilege(
+       'manual_authorization_reader',
+       'public.revoke_trader_account_connection_v1(uuid,uuid,text)',
+       'EXECUTE'
+     ) OR pg_catalog.has_function_privilege(
+       'historical_timestamp_executor',
+       'public.update_updated_at_column()',
+       'EXECUTE'
+     ) OR pg_catalog.has_function_privilege(
+       'historical_timestamp_executor',
+       'public.update_trader_authorizations_updated_at()',
+       'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'custom trader-authorization ACL survived replay';
+  END IF;
 
   IF EXISTS (
     SELECT 1

@@ -31,6 +31,7 @@ DECLARE
   );
   v_invalid_columns text[];
   v_missing_roles text[];
+  v_unexpected_overloads text[];
 BEGIN
   IF v_relation IS NULL THEN
     RAISE EXCEPTION
@@ -41,9 +42,9 @@ BEGIN
     SELECT relation.relkind
     FROM pg_catalog.pg_class AS relation
     WHERE relation.oid = v_relation
-  ) NOT IN ('r', 'p') THEN
+  ) IS DISTINCT FROM 'r' THEN
     RAISE EXCEPTION
-      'public.trader_authorizations must be a table or partitioned table';
+      'public.trader_authorizations must be an ordinary table';
   END IF;
 
   SELECT pg_catalog.array_agg(required_role ORDER BY required_role)
@@ -158,9 +159,22 @@ BEGIN
     SELECT relation.relkind
     FROM pg_catalog.pg_class AS relation
     WHERE relation.oid = v_connection_relation
-  ) NOT IN ('r', 'p') THEN
+  ) IS DISTINCT FROM 'r' THEN
     RAISE EXCEPTION
-      'public.user_exchange_connections must be a table or partitioned table';
+      'public.user_exchange_connections must be an ordinary table';
+  END IF;
+
+  IF CURRENT_USER IS DISTINCT FROM (
+       SELECT pg_catalog.pg_get_userbyid(relation.relowner)
+       FROM pg_catalog.pg_class AS relation
+       WHERE relation.oid = v_relation
+     ) OR CURRENT_USER IS DISTINCT FROM (
+       SELECT pg_catalog.pg_get_userbyid(relation.relowner)
+       FROM pg_catalog.pg_class AS relation
+       WHERE relation.oid = v_connection_relation
+     ) THEN
+    RAISE EXCEPTION
+      'migration role must own both account authorization relations';
   END IF;
 
   SELECT pg_catalog.array_agg(
@@ -301,6 +315,47 @@ BEGIN
          AND acl_entry.grantee = 0::oid
      ) OR EXISTS (
        SELECT 1
+       FROM pg_catalog.pg_class AS relation
+       CROSS JOIN LATERAL pg_catalog.aclexplode(
+         COALESCE(
+           relation.relacl,
+           pg_catalog.acldefault('r', relation.relowner)
+         )
+       ) AS acl_entry
+       WHERE relation.oid = v_connection_relation
+         AND acl_entry.grantee <> relation.relowner
+         AND NOT (
+           acl_entry.grantee = (
+             SELECT role_row.oid
+             FROM pg_catalog.pg_roles AS role_row
+             WHERE role_row.rolname = 'service_role'
+           )
+           AND acl_entry.privilege_type = ANY(
+             ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']::text[]
+           )
+           AND NOT acl_entry.is_grantable
+         )
+     ) OR (
+       SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_class AS relation
+       CROSS JOIN LATERAL pg_catalog.aclexplode(
+         COALESCE(
+           relation.relacl,
+           pg_catalog.acldefault('r', relation.relowner)
+         )
+       ) AS acl_entry
+       WHERE relation.oid = v_connection_relation
+         AND acl_entry.grantee = (
+           SELECT role_row.oid
+           FROM pg_catalog.pg_roles AS role_row
+           WHERE role_row.rolname = 'service_role'
+         )
+         AND acl_entry.privilege_type = ANY(
+           ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']::text[]
+         )
+         AND NOT acl_entry.is_grantable
+     ) <> 4 OR EXISTS (
+       SELECT 1
        FROM pg_catalog.pg_attribute AS attribute
        CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
        WHERE attribute.attrelid = v_connection_relation
@@ -312,6 +367,16 @@ BEGIN
            (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'authenticated'),
            (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'service_role')
          )
+     ) OR EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_attribute AS attribute
+       CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+       JOIN pg_catalog.pg_class AS relation
+         ON relation.oid = attribute.attrelid
+       WHERE attribute.attrelid = v_connection_relation
+         AND attribute.attnum > 0
+         AND NOT attribute.attisdropped
+         AND acl_entry.grantee <> relation.relowner
      ) OR EXISTS (
        SELECT 1
        FROM pg_catalog.unnest(
@@ -352,6 +417,65 @@ BEGIN
     RAISE EXCEPTION
       'public.user_exchange_connections must satisfy 20260716112000_exchange_connections_server_only before atomic account binding';
   END IF;
+
+  WITH expected(proname, signature) AS (
+    VALUES
+      (
+        'bind_trader_account_connection_v1'::name,
+        'public.bind_trader_account_connection_v1(uuid,text,text,text,text,text,jsonb,timestamptz,text,text)'::text
+      ),
+      (
+        'revoke_trader_account_connection_v1'::name,
+        'public.revoke_trader_account_connection_v1(uuid,uuid,text)'::text
+      ),
+      (
+        'guard_trader_authorization_v1_contract'::name,
+        'public.guard_trader_authorization_v1_contract()'::text
+      ),
+      (
+        'serialize_exchange_connection_v1_mutation'::name,
+        'public.serialize_exchange_connection_v1_mutation()'::text
+      ),
+      (
+        'guard_exchange_connection_authorization_v1_contract'::name,
+        'public.guard_exchange_connection_authorization_v1_contract()'::text
+      ),
+      (
+        'update_updated_at_column'::name,
+        'public.update_updated_at_column()'::text
+      ),
+      (
+        'update_trader_authorizations_updated_at'::name,
+        'public.update_trader_authorizations_updated_at()'::text
+      )
+  )
+  SELECT pg_catalog.array_agg(
+    pg_catalog.format(
+      '%I(%s)',
+      procedure_row.proname,
+      pg_catalog.pg_get_function_identity_arguments(procedure_row.oid)
+    )
+    ORDER BY procedure_row.proname, procedure_row.oid
+  )
+  INTO v_unexpected_overloads
+  FROM pg_catalog.pg_proc AS procedure_row
+  JOIN pg_catalog.pg_namespace AS namespace_row
+    ON namespace_row.oid = procedure_row.pronamespace
+  WHERE namespace_row.nspname = 'public'
+    AND procedure_row.proname IN (SELECT expected.proname FROM expected)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM expected
+      WHERE expected.proname = procedure_row.proname
+        AND procedure_row.oid IS NOT DISTINCT FROM
+              pg_catalog.to_regprocedure(expected.signature)
+    );
+
+  IF v_unexpected_overloads IS NOT NULL THEN
+    RAISE EXCEPTION
+      'unexpected trader-authorization function overloads must be retired first: %',
+      v_unexpected_overloads;
+  END IF;
 END
 $preflight$;
 
@@ -360,6 +484,92 @@ $preflight$;
 -- cutover while the RPC and ACL boundary are installed.
 LOCK TABLE public.user_exchange_connections IN ACCESS EXCLUSIVE MODE;
 LOCK TABLE public.trader_authorizations IN ACCESS EXCLUSIVE MODE;
+
+DO $pre_dml_trigger_inventory$
+DECLARE
+  v_unexpected_triggers text[];
+BEGIN
+  SELECT pg_catalog.array_agg(
+    pg_catalog.format('%s.%I', trigger_row.tgrelid::regclass, trigger_row.tgname)
+    ORDER BY trigger_row.tgrelid::regclass::text, trigger_row.tgname
+  )
+  INTO v_unexpected_triggers
+  FROM pg_catalog.pg_trigger AS trigger_row
+  WHERE trigger_row.tgrelid IN (
+    'public.user_exchange_connections'::regclass,
+    'public.trader_authorizations'::regclass
+  )
+    AND NOT trigger_row.tgisinternal
+    AND NOT (
+      (
+        trigger_row.tgrelid = 'public.user_exchange_connections'::regclass
+        AND trigger_row.tgname IN (
+          'trigger_user_exchange_connections_updated_at',
+          'exchange_connection_v1_mutation_serializer',
+          'exchange_connection_authorization_v1_contract_guard'
+        )
+      ) OR (
+        trigger_row.tgrelid = 'public.trader_authorizations'::regclass
+        AND trigger_row.tgname IN (
+          'trigger_update_trader_authorizations_updated_at',
+          'trader_authorization_v1_contract_guard'
+        )
+      )
+    );
+
+  IF v_unexpected_triggers IS NOT NULL THEN
+    RAISE EXCEPTION
+      'unexpected account triggers must be retired before quarantine DML: %',
+      v_unexpected_triggers;
+  END IF;
+END
+$pre_dml_trigger_inventory$;
+
+-- A replay may encounter canonical-name triggers whose historical owner has
+-- replaced the function body. Remove every account invariant trigger before
+-- quarantine DML, then rebuild every reviewed trigger from canonical functions.
+DROP TRIGGER IF EXISTS trigger_user_exchange_connections_updated_at
+  ON public.user_exchange_connections;
+DROP TRIGGER IF EXISTS exchange_connection_v1_mutation_serializer
+  ON public.user_exchange_connections;
+DROP TRIGGER IF EXISTS exchange_connection_authorization_v1_contract_guard
+  ON public.user_exchange_connections;
+DROP TRIGGER IF EXISTS trigger_update_trader_authorizations_updated_at
+  ON public.trader_authorizations;
+DROP TRIGGER IF EXISTS trader_authorization_v1_contract_guard
+  ON public.trader_authorizations;
+
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  NEW.updated_at = pg_catalog.now();
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.update_trader_authorizations_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  NEW.updated_at = pg_catalog.now();
+  RETURN NEW;
+END;
+$function$;
+
+ALTER FUNCTION public.update_updated_at_column() OWNER TO CURRENT_USER;
+ALTER FUNCTION public.update_trader_authorizations_updated_at()
+  OWNER TO CURRENT_USER;
+REVOKE ALL ON FUNCTION public.update_updated_at_column()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.update_trader_authorizations_updated_at()
+  FROM PUBLIC, anon, authenticated, service_role;
 
 ALTER TABLE public.trader_authorizations ENABLE ROW LEVEL SECURITY;
 
@@ -513,14 +723,59 @@ ALTER TABLE public.trader_authorizations
 ALTER TABLE public.trader_authorizations
   VALIDATE CONSTRAINT trader_authorizations_no_legacy_wallet_marker;
 
+-- Restore timestamp maintenance only after quarantine has written its explicit
+-- statement timestamps. The canonical invariant triggers remain disabled until
+-- their reviewed bodies are rebuilt below.
+CREATE TRIGGER trigger_user_exchange_connections_updated_at
+  BEFORE UPDATE ON public.user_exchange_connections
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_update_trader_authorizations_updated_at
+  BEFORE UPDATE ON public.trader_authorizations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_trader_authorizations_updated_at();
+
 -- Supabase historically granted broad table privileges to browser roles.
 -- Column ACLs are independent, so remove both forms before rebuilding access.
 REVOKE ALL PRIVILEGES ON TABLE public.trader_authorizations
   FROM PUBLIC, anon, authenticated, service_role;
 
+DO $revoke_non_owner_table_acl$
+DECLARE
+  v_grantee oid;
+  v_role_sql text;
+BEGIN
+  FOR v_grantee IN
+    SELECT DISTINCT acl_entry.grantee
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+    ) AS acl_entry
+    WHERE relation.oid = 'public.trader_authorizations'::regclass
+      AND acl_entry.grantee <> relation.relowner
+  LOOP
+    v_role_sql := CASE
+      WHEN v_grantee = 0::oid THEN 'PUBLIC'
+      ELSE pg_catalog.format(
+        '%I',
+        (SELECT role_row.rolname FROM pg_catalog.pg_roles AS role_row
+         WHERE role_row.oid = v_grantee)
+      )
+    END;
+
+    EXECUTE pg_catalog.format(
+      'REVOKE ALL PRIVILEGES ON TABLE public.trader_authorizations FROM %s',
+      v_role_sql
+    );
+  END LOOP;
+END
+$revoke_non_owner_table_acl$;
+
 DO $revoke_column_privileges$
 DECLARE
   v_column_list text;
+  v_grantee oid;
+  v_role_sql text;
 BEGIN
   SELECT pg_catalog.string_agg(
     pg_catalog.format('%I', attribute.attname),
@@ -543,6 +798,34 @@ BEGIN
       || 'FROM PUBLIC, anon, authenticated, service_role',
     v_column_list
   );
+
+  FOR v_grantee IN
+    SELECT DISTINCT acl_entry.grantee
+    FROM pg_catalog.pg_attribute AS attribute
+    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+    JOIN pg_catalog.pg_class AS relation
+      ON relation.oid = attribute.attrelid
+    WHERE attribute.attrelid = 'public.trader_authorizations'::regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND acl_entry.grantee <> relation.relowner
+  LOOP
+    v_role_sql := CASE
+      WHEN v_grantee = 0::oid THEN 'PUBLIC'
+      ELSE pg_catalog.format(
+        '%I',
+        (SELECT role_row.rolname FROM pg_catalog.pg_roles AS role_row
+         WHERE role_row.oid = v_grantee)
+      )
+    END;
+
+    EXECUTE pg_catalog.format(
+      'REVOKE SELECT (%1$s), INSERT (%1$s), UPDATE (%1$s), REFERENCES (%1$s) '
+        || 'ON TABLE public.trader_authorizations FROM %2$s',
+      v_column_list,
+      v_role_sql
+    );
+  END LOOP;
 END
 $revoke_column_privileges$;
 
@@ -900,6 +1183,19 @@ BEGIN
 END;
 $function$;
 
+ALTER FUNCTION public.bind_trader_account_connection_v1(
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  jsonb,
+  timestamptz,
+  text,
+  text
+) OWNER TO CURRENT_USER;
+
 REVOKE ALL ON FUNCTION public.bind_trader_account_connection_v1(
   uuid,
   text,
@@ -1137,6 +1433,12 @@ BEGIN
 END;
 $function$;
 
+ALTER FUNCTION public.revoke_trader_account_connection_v1(
+  uuid,
+  uuid,
+  text
+) OWNER TO CURRENT_USER;
+
 REVOKE ALL ON FUNCTION public.revoke_trader_account_connection_v1(
   uuid,
   uuid,
@@ -1287,6 +1589,9 @@ BEGIN
 END;
 $function$;
 
+ALTER FUNCTION public.guard_trader_authorization_v1_contract()
+  OWNER TO CURRENT_USER;
+
 DROP TRIGGER IF EXISTS trader_authorization_v1_contract_guard
   ON public.trader_authorizations;
 CREATE TRIGGER trader_authorization_v1_contract_guard
@@ -1354,6 +1659,9 @@ BEGIN
   RETURN NEW;
 END;
 $function$;
+
+ALTER FUNCTION public.serialize_exchange_connection_v1_mutation()
+  OWNER TO CURRENT_USER;
 
 DROP TRIGGER IF EXISTS exchange_connection_v1_mutation_serializer
   ON public.user_exchange_connections;
@@ -1453,6 +1761,9 @@ BEGIN
 END;
 $function$;
 
+ALTER FUNCTION public.guard_exchange_connection_authorization_v1_contract()
+  OWNER TO CURRENT_USER;
+
 DROP TRIGGER IF EXISTS exchange_connection_authorization_v1_contract_guard
   ON public.user_exchange_connections;
 CREATE CONSTRAINT TRIGGER exchange_connection_authorization_v1_contract_guard
@@ -1468,11 +1779,93 @@ REVOKE ALL ON FUNCTION public.serialize_exchange_connection_v1_mutation()
 REVOKE ALL ON FUNCTION public.guard_exchange_connection_authorization_v1_contract()
   FROM PUBLIC, anon, authenticated, service_role;
 
+-- CREATE OR REPLACE preserves historical function ACLs. Revoke every direct
+-- non-owner grant, including custom roles that are not part of Supabase's
+-- standard role set, before rebuilding the two callable service capabilities.
+DO $converge_function_acl$
+DECLARE
+  v_function record;
+  v_grantee oid;
+  v_role_sql text;
+BEGIN
+  FOR v_function IN
+    SELECT
+      procedure_row.oid,
+      procedure_row.proowner,
+      pg_catalog.format(
+        '%I.%I(%s)',
+        namespace_row.nspname,
+        procedure_row.proname,
+        pg_catalog.pg_get_function_identity_arguments(procedure_row.oid)
+      ) AS qualified_signature
+    FROM pg_catalog.pg_proc AS procedure_row
+    JOIN pg_catalog.pg_namespace AS namespace_row
+      ON namespace_row.oid = procedure_row.pronamespace
+    WHERE procedure_row.oid IN (
+      'public.bind_trader_account_connection_v1(uuid,text,text,text,text,text,jsonb,timestamptz,text,text)'::regprocedure,
+      'public.revoke_trader_account_connection_v1(uuid,uuid,text)'::regprocedure,
+      'public.guard_trader_authorization_v1_contract()'::regprocedure,
+      'public.serialize_exchange_connection_v1_mutation()'::regprocedure,
+      'public.guard_exchange_connection_authorization_v1_contract()'::regprocedure,
+      'public.update_updated_at_column()'::regprocedure,
+      'public.update_trader_authorizations_updated_at()'::regprocedure
+    )
+    ORDER BY procedure_row.oid
+  LOOP
+    FOR v_grantee IN
+      SELECT DISTINCT acl_entry.grantee
+      FROM pg_catalog.pg_proc AS acl_procedure
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        COALESCE(
+          acl_procedure.proacl,
+          pg_catalog.acldefault('f', acl_procedure.proowner)
+        )
+      ) AS acl_entry
+      WHERE acl_procedure.oid = v_function.oid
+        AND acl_entry.grantee <> v_function.proowner
+    LOOP
+      v_role_sql := CASE
+        WHEN v_grantee = 0::oid THEN 'PUBLIC'
+        ELSE pg_catalog.format(
+          '%I',
+          (SELECT role_row.rolname FROM pg_catalog.pg_roles AS role_row
+           WHERE role_row.oid = v_grantee)
+        )
+      END;
+
+      EXECUTE pg_catalog.format(
+        'REVOKE ALL PRIVILEGES ON FUNCTION %s FROM %s',
+        v_function.qualified_signature,
+        v_role_sql
+      );
+    END LOOP;
+  END LOOP;
+END
+$converge_function_acl$;
+
+GRANT EXECUTE ON FUNCTION public.bind_trader_account_connection_v1(
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  jsonb,
+  timestamptz,
+  text,
+  text
+) TO service_role;
+GRANT EXECUTE ON FUNCTION public.revoke_trader_account_connection_v1(
+  uuid, uuid, text
+) TO service_role;
+
 -- Fail the transaction if a browser table/column/RPC path remains,
 -- service_role has excess powers, or policy drift did not converge exactly.
 DO $postflight$
 DECLARE
   v_relation regclass := 'public.trader_authorizations'::regclass;
+  v_connection_relation regclass :=
+    'public.user_exchange_connections'::regclass;
   v_binding_function regprocedure := pg_catalog.to_regprocedure(
     'public.bind_trader_account_connection_v1(uuid,text,text,text,text,text,jsonb,timestamp with time zone,text,text)'
   );
@@ -1487,6 +1880,12 @@ DECLARE
   );
   v_connection_serializer regprocedure := pg_catalog.to_regprocedure(
     'public.serialize_exchange_connection_v1_mutation()'
+  );
+  v_shared_timestamp_function regprocedure := pg_catalog.to_regprocedure(
+    'public.update_updated_at_column()'
+  );
+  v_authorization_timestamp_function regprocedure := pg_catalog.to_regprocedure(
+    'public.update_trader_authorizations_updated_at()'
   );
   v_role name;
   v_privilege text;
@@ -1507,8 +1906,79 @@ BEGIN
 
   IF v_authorization_guard IS NULL
      OR v_connection_guard IS NULL
-     OR v_connection_serializer IS NULL THEN
+     OR v_connection_serializer IS NULL
+     OR v_shared_timestamp_function IS NULL
+     OR v_authorization_timestamp_function IS NULL THEN
     RAISE EXCEPTION 'continuous account-authorization guards were not installed';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid IN (
+      v_binding_function,
+      v_revocation_function,
+      v_authorization_guard,
+      v_connection_guard,
+      v_connection_serializer,
+      v_shared_timestamp_function,
+      v_authorization_timestamp_function
+    )
+      AND procedure_row.proowner IS DISTINCT FROM (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = v_relation
+      )
+  ) OR (
+    SELECT relation.relowner
+    FROM pg_catalog.pg_class AS relation
+    WHERE relation.oid = v_connection_relation
+  ) IS DISTINCT FROM (
+    SELECT relation.relowner
+    FROM pg_catalog.pg_class AS relation
+    WHERE relation.oid = v_relation
+  ) THEN
+    RAISE EXCEPTION
+      'account authorization function ownership contract is incorrect';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    WHERE procedure_row.oid IN (
+      v_shared_timestamp_function,
+      v_authorization_timestamp_function
+    )
+      AND NOT (
+        procedure_row.prokind = 'f'
+        AND procedure_row.prorettype = 'trigger'::regtype
+        AND NOT procedure_row.prosecdef
+        AND procedure_row.proconfig =
+            ARRAY['search_path=pg_catalog, pg_temp']::text[]
+        AND procedure_row.prosrc = E'\nBEGIN\n  NEW.updated_at = pg_catalog.now();\n  RETURN NEW;\nEND;\n'
+      )
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = v_connection_relation
+      AND trigger_row.tgname =
+          'trigger_user_exchange_connections_updated_at'
+      AND trigger_row.tgfoid = v_shared_timestamp_function
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgenabled = 'O'
+      AND trigger_row.tgtype = 19
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = v_relation
+      AND trigger_row.tgname =
+          'trigger_update_trader_authorizations_updated_at'
+      AND trigger_row.tgfoid = v_authorization_timestamp_function
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgenabled = 'O'
+      AND trigger_row.tgtype = 19
+  ) THEN
+    RAISE EXCEPTION 'account timestamp trigger boundary is incorrect';
   END IF;
 
   IF NOT EXISTS (
@@ -1646,7 +2116,7 @@ BEGIN
          AND trigger_row.tgname = 'trader_authorization_v1_contract_guard'
          AND trigger_row.tgfoid = v_authorization_guard
          AND NOT trigger_row.tgisinternal
-         AND trigger_row.tgenabled <> 'D'
+         AND trigger_row.tgenabled = 'O'
          AND trigger_row.tgtype = 23
      ) OR NOT EXISTS (
        SELECT 1
@@ -1655,7 +2125,7 @@ BEGIN
          AND trigger_row.tgname = 'exchange_connection_v1_mutation_serializer'
          AND trigger_row.tgfoid = v_connection_serializer
          AND NOT trigger_row.tgisinternal
-         AND trigger_row.tgenabled <> 'D'
+         AND trigger_row.tgenabled = 'O'
          AND trigger_row.tgtype = 31
      ) OR NOT EXISTS (
        SELECT 1
@@ -1665,7 +2135,7 @@ BEGIN
                'exchange_connection_authorization_v1_contract_guard'
          AND trigger_row.tgfoid = v_connection_guard
          AND NOT trigger_row.tgisinternal
-         AND trigger_row.tgenabled <> 'D'
+         AND trigger_row.tgenabled = 'O'
          AND trigger_row.tgtype = 29
          AND trigger_row.tgconstraint <> 0
          AND trigger_row.tgdeferrable
@@ -1884,24 +2354,136 @@ BEGIN
     RAISE EXCEPTION 'PUBLIC privileges remain on public.trader_authorizations';
   END IF;
 
-  -- No application role should retain a direct column ACL. The table-level
+  -- No non-owner role should retain a direct column ACL. The table-level
   -- service grant below is the only intended CRUD authority.
   IF EXISTS (
     SELECT 1
     FROM pg_catalog.pg_attribute AS attribute
     CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl_entry
+    JOIN pg_catalog.pg_class AS relation
+      ON relation.oid = attribute.attrelid
     WHERE attribute.attrelid = v_relation
       AND attribute.attnum > 0
       AND NOT attribute.attisdropped
-      AND acl_entry.grantee IN (
-        0::oid,
-        (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'anon'),
-        (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'authenticated'),
-        v_service_role_oid
+      AND acl_entry.grantee <> relation.relowner
+  ) THEN
+    RAISE EXCEPTION
+      'non-owner column ACL remains on public.trader_authorizations';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+    ) AS acl_entry
+    WHERE relation.oid = v_relation
+      AND acl_entry.grantee <> relation.relowner
+      AND NOT (
+        acl_entry.grantee = v_service_role_oid
+        AND acl_entry.privilege_type = ANY(
+          ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']::text[]
+        )
+        AND NOT acl_entry.is_grantable
+      )
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+    ) AS acl_entry
+    WHERE relation.oid = v_relation
+      AND acl_entry.grantee = v_service_role_oid
+      AND acl_entry.privilege_type = ANY(
+        ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']::text[]
+      )
+      AND NOT acl_entry.is_grantable
+  ) <> 4 THEN
+    RAISE EXCEPTION
+      'trader_authorizations direct table ACL inventory is not exact';
+  END IF;
+
+  IF EXISTS (
+    WITH expected(proname, signature, service_callable) AS (
+      VALUES
+        (
+          'bind_trader_account_connection_v1'::name,
+          'public.bind_trader_account_connection_v1(uuid,text,text,text,text,text,jsonb,timestamptz,text,text)'::text,
+          true
+        ),
+        (
+          'revoke_trader_account_connection_v1'::name,
+          'public.revoke_trader_account_connection_v1(uuid,uuid,text)'::text,
+          true
+        ),
+        (
+          'guard_trader_authorization_v1_contract'::name,
+          'public.guard_trader_authorization_v1_contract()'::text,
+          false
+        ),
+        (
+          'serialize_exchange_connection_v1_mutation'::name,
+          'public.serialize_exchange_connection_v1_mutation()'::text,
+          false
+        ),
+        (
+          'guard_exchange_connection_authorization_v1_contract'::name,
+          'public.guard_exchange_connection_authorization_v1_contract()'::text,
+          false
+        ),
+        (
+          'update_updated_at_column'::name,
+          'public.update_updated_at_column()'::text,
+          false
+        ),
+        (
+          'update_trader_authorizations_updated_at'::name,
+          'public.update_trader_authorizations_updated_at()'::text,
+          false
+        )
+    )
+    SELECT 1
+    FROM expected
+    WHERE pg_catalog.to_regprocedure(expected.signature) IS NULL
+
+    UNION ALL
+
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_row
+    JOIN pg_catalog.pg_namespace AS namespace_row
+      ON namespace_row.oid = procedure_row.pronamespace
+    WHERE namespace_row.nspname = 'public'
+      AND procedure_row.proname IN (SELECT expected.proname FROM expected)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM expected
+        WHERE expected.proname = procedure_row.proname
+          AND procedure_row.oid IS NOT DISTINCT FROM
+                pg_catalog.to_regprocedure(expected.signature)
+      )
+
+    UNION ALL
+
+    SELECT 1
+    FROM expected
+    JOIN pg_catalog.pg_proc AS procedure_row
+      ON procedure_row.oid = pg_catalog.to_regprocedure(expected.signature)
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(
+        procedure_row.proacl,
+        pg_catalog.acldefault('f', procedure_row.proowner)
+      )
+    ) AS acl_entry
+    WHERE acl_entry.grantee <> procedure_row.proowner
+      AND NOT (
+        expected.service_callable
+        AND acl_entry.grantee = v_service_role_oid
+        AND acl_entry.privilege_type = 'EXECUTE'
+        AND NOT acl_entry.is_grantable
       )
   ) THEN
     RAISE EXCEPTION
-      'application-role column ACL remains on public.trader_authorizations';
+      'trader-authorization overload or direct function ACL inventory is not exact';
   END IF;
 
   FOREACH v_privilege IN ARRAY ARRAY[

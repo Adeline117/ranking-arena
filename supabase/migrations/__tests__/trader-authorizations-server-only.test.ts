@@ -172,6 +172,7 @@ describe('trader authorizations server-only migration', () => {
       /REVOKE ALL PRIVILEGES ON TABLE public\.trader_authorizations\s+FROM PUBLIC, anon, authenticated, service_role/
     )
     expect(migration).toContain('DO $revoke_column_privileges$')
+    expect(migration).toContain('DO $revoke_non_owner_table_acl$')
     expect(migration).toContain(
       "'REVOKE SELECT (%1$s), INSERT (%1$s), UPDATE (%1$s), REFERENCES (%1$s) '"
     )
@@ -192,6 +193,20 @@ describe('trader authorizations server-only migration', () => {
   })
 
   it('quarantines noncanonical, OAuth, unattested, and split credential projections', () => {
+    const quarantineStart = migration.indexOf(
+      'UPDATE public.user_exchange_connections AS connection'
+    )
+    expect(
+      migration.indexOf('DROP TRIGGER IF EXISTS exchange_connection_v1_mutation_serializer')
+    ).toBeLessThan(quarantineStart)
+    expect(
+      migration.indexOf(
+        'DROP TRIGGER IF EXISTS exchange_connection_authorization_v1_contract_guard'
+      )
+    ).toBeLessThan(quarantineStart)
+    expect(
+      migration.indexOf('DROP TRIGGER IF EXISTS trader_authorization_v1_contract_guard')
+    ).toBeLessThan(quarantineStart)
     expect(migration).toContain("connection.exchange NOT IN ('binance', 'bybit', 'okx', 'bitget')")
     expect(migration).toContain(
       "pg_catalog.lower(pg_catalog.btrim(connection.api_key_encrypted)) = 'oauth'"
@@ -266,6 +281,14 @@ describe('trader authorizations server-only migration', () => {
     expect(migration).toContain('has_table_privilege')
     expect(migration).toContain('has_column_privilege')
     expect(migration).toContain('pg_catalog.aclexplode')
+    expect(migration).toContain('DO $converge_function_acl$')
+    expect(migration).toContain('migration role must own both account authorization relations')
+    expect(migration).toContain('OWNER TO CURRENT_USER')
+    expect(migration).toContain('account authorization function ownership contract is incorrect')
+    expect(migration).toContain('unexpected trader-authorization function overloads')
+    expect(migration).toContain(
+      'trader-authorization overload or direct function ACL inventory is not exact'
+    )
     expect(migration).toContain('acl_entry.grantee = 0::oid')
     expect(migration).toContain('policy.polroles = ARRAY[v_service_role_oid]::oid[]')
     expect(migration).toContain(') <> 1 OR NOT EXISTS (')
