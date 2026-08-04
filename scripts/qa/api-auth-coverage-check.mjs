@@ -79,6 +79,9 @@ const PUBLIC_API_ROUTES = new Set([
   'v3', // 开发者 API：内部走 API-key 鉴权 + 限流（increment_api_key_usage）
   // 公开社交读（GET only，已核）
   'feed',
+  // GET-only optional-auth feed：匿名返回 audience-filtered hot 候选；有效 bearer
+  // 仅增加当前 viewer 的排序和反应状态，响应始终 private/no-store 且有 public rate limit。
+  'feed/personalized',
   'feed/activities',
   'feed/activities/[id]',
   'groups',
