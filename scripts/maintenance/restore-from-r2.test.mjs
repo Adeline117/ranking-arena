@@ -10,6 +10,7 @@ import {
   ARENA_BACKUP_COMPLETION_CONTRACT,
   arenaBackupCompletionSentinel,
   preparePostgresConnection,
+  unverifiedBackupRecoveryMetadata,
 } from './backup-restore-contract.mjs'
 import { POSTGRES_CONNECTION_ENV_NAMES } from './postgres-cli-env.mjs'
 import {
@@ -285,6 +286,7 @@ test('requires HEAD metadata to prove arena+public completeness before download'
           tables: 'arena,public',
           'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
           'completion-token': ARENA_TOKEN,
+          ...unverifiedBackupRecoveryMetadata('schemas'),
         },
       })
     )

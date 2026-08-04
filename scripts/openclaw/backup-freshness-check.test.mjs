@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   ARENA_BACKUP_COMPLETION_CONTRACT,
   COMPLETE_BACKUP_MIN_BYTES,
+  unverifiedBackupRecoveryMetadata,
 } from '../maintenance/backup-restore-contract.mjs'
 import {
   assertFreshBackupHead,
@@ -31,6 +32,7 @@ function completeMetadata({ backupDate = '2026-08-04T10:00:00.000Z', mode = 'sch
     tables: mode === 'full' ? 'all' : 'arena,public',
     'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
     'completion-token': COMPLETION_TOKEN,
+    ...unverifiedBackupRecoveryMetadata(mode),
   }
 }
 
@@ -281,6 +283,14 @@ test('HEAD contract rejects unsafe size, weak identity, invalid completion, mode
         Metadata: { ...valid.Metadata, 'backup-date': '2026-08-04T10:00:00.001Z' },
       },
       /immutable backup filename and backup-date metadata do not match/,
+    ],
+    [
+      'missing recovery scope proof',
+      {
+        ...valid,
+        Metadata: { ...valid.Metadata, 'recovery-scope': undefined },
+      },
+      /immutable backup recovery metadata is invalid: recovery-scope/,
     ],
   ]
 

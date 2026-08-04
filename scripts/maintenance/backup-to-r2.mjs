@@ -34,6 +34,7 @@ import {
   IMMUTABLE_BACKUP_FILENAME_PATTERN,
   parseCompleteBackupFilename,
   preparePostgresConnection,
+  unverifiedBackupRecoveryMetadata,
 } from './backup-restore-contract.mjs'
 import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
 
@@ -76,6 +77,11 @@ export function normalizeCompleteBackupSchemas(value) {
   ]
   if (schemas.length > 0 && (!schemas.includes('arena') || !schemas.includes('public'))) {
     throw new Error('BACKUP_SCHEMAS complete mode requires both arena and public')
+  }
+  if (schemas.some((schema) => schema !== 'arena' && schema !== 'public')) {
+    throw new Error(
+      'current plain schema backup supports exactly arena,public; managed or extra schemas require a separately verified recovery contract'
+    )
   }
   return schemas
 }
@@ -165,6 +171,7 @@ export function buildBackupMetadata({ now, mode, completionToken }) {
     tables: mode.type === 'schemas' ? schemas.join(',') : 'all',
     'completion-contract': ARENA_BACKUP_COMPLETION_CONTRACT,
     'completion-token': completionToken,
+    ...unverifiedBackupRecoveryMetadata(mode.type),
   }
 }
 

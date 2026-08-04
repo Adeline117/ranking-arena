@@ -85,16 +85,22 @@ async function withProcessEnv(overrides, run) {
 }
 
 test('normalizes complete schema mode and rejects partial schema sets', () => {
-  assert.deepEqual(normalizeCompleteBackupSchemas(' public,arena, public ,extensions '), [
-    'public',
-    'arena',
-    'extensions',
-  ])
+  assert.deepEqual(normalizeCompleteBackupSchemas(' public,arena, public '), ['public', 'arena'])
   assert.deepEqual(normalizeCompleteBackupSchemas(''), [])
   assert.throws(() => normalizeCompleteBackupSchemas('public'), /requires both arena and public/)
   assert.throws(
     () => normalizeCompleteBackupSchemas('arena,extensions'),
     /requires both arena and public/
+  )
+  for (const managedSchema of ['auth', 'storage', 'realtime', 'supabase_migrations']) {
+    assert.throws(
+      () => normalizeCompleteBackupSchemas(`arena,public,${managedSchema}`),
+      /supports exactly arena,public/
+    )
+  }
+  assert.throws(
+    () => normalizeCompleteBackupSchemas('arena,public,extensions'),
+    /supports exactly arena,public/
   )
 })
 
@@ -220,6 +226,20 @@ test('uses managed multipart upload and attests the exact remote object through 
     assert.equal(uploadOptions.params.ContentLength, COMPLETE_BACKUP_MIN_BYTES)
     assert.equal(uploadOptions.params.ContentType, 'application/gzip')
     assert.deepEqual(uploadOptions.params.Metadata, metadata)
+    assert.deepEqual(
+      {
+        recoveryScope: metadata['recovery-scope'],
+        authCoverage: metadata['auth-coverage'],
+        targetModel: metadata['target-model'],
+        recoveryCertified: metadata['recovery-certified'],
+      },
+      {
+        recoveryScope: 'application-data-only',
+        authCoverage: 'none',
+        targetModel: 'unproven',
+        recoveryCertified: 'false',
+      }
+    )
     assert.equal(remote.Size, COMPLETE_BACKUP_MIN_BYTES)
   })
 })
@@ -247,6 +267,10 @@ test('remote upload attestation rejects size, ETag, content-type, and metadata d
     })
 
   assert.doesNotThrow(() => attest(validHead))
+  assert.equal(metadata['recovery-scope'], 'full-database-capture')
+  assert.equal(metadata['auth-coverage'], 'captured-unverified')
+  assert.equal(metadata['target-model'], 'unproven')
+  assert.equal(metadata['recovery-certified'], 'false')
   assert.throws(
     () => attest({ ...validHead, ContentLength: COMPLETE_BACKUP_MIN_BYTES + 1 }),
     /size attestation failed/
