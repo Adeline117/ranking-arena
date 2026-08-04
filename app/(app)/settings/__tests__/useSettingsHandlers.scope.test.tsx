@@ -436,7 +436,11 @@ describe('useSettingsHandlers viewer ownership', () => {
     const blockedId = '00000000-0000-4000-8000-000000000002'
     mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
     mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
-    mockAuthedFetch.mockResolvedValueOnce({ ok: true, status: 200, data: {} })
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { success: true, alreadyBlocked: true },
+    })
     const scope = synchronizeViewerScope(true, 'user-a')
     const auth = authFor('user-a', scope.sessionGeneration)
     const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))

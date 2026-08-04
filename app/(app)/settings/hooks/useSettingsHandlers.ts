@@ -107,6 +107,13 @@ function isExactAccountDeletionAcknowledgement(
   )
 }
 
+function isExactUnblockAcknowledgement(value: unknown): value is { success: true } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const acknowledgement = value as Record<string, unknown>
+  const fields = Object.keys(acknowledgement)
+  return fields.length === 1 && fields[0] === 'success' && acknowledgement.success === true
+}
+
 function settingsScopeMatches(
   left: Pick<SettingsViewerSnapshot, 'sessionGeneration' | 'userId' | 'viewerKey'>,
   right: Pick<SettingsViewerSnapshot, 'sessionGeneration' | 'userId' | 'viewerKey'>
@@ -1672,7 +1679,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         }
       )
       if (!viewerIsCurrent(scope) || result.stale) return
-      if (result.ok && result.data?.success === true) {
+      if (result.ok && isExactUnblockAcknowledgement(result.data)) {
         setBlockedUsers((prev) => prev.filter((u) => u.blockedId !== blockedId))
         showToast(t('unblocked'), 'success')
       } else showToast(t('operationFailed'), 'error')
