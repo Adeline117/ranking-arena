@@ -779,7 +779,6 @@ describe('Tier-C incomplete profile window gate', () => {
         direction: transferRow.direction,
         asset: transferRow.asset,
         amount: transferRow.amount,
-        currency: 'USDC',
       },
     ])
     expect(renderPayload.rows[0]).not.toHaveProperty('dedupeHash')

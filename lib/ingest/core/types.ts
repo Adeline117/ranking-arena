@@ -351,6 +351,7 @@ export interface ParsedTransferRow {
   ts: string
   direction: 'in' | 'out' | null
   asset: string | null
+  /** Asset quantity denominated by `asset`; never the source settlement currency. */
   amount: number | null
   dedupeHash: string
   raw: Record<string, unknown>

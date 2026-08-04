@@ -1,6 +1,6 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import ServingRecordsSection from '../ServingRecordsSection'
+import ServingRecordsSection, { RECORD_COLUMNS } from '../ServingRecordsSection'
 import { useCopierAggregate, useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import type { RecordKind, SourceCapability } from '@/lib/data/serving/types'
 
@@ -59,6 +59,19 @@ describe('ServingRecordsSection selection scope', () => {
       error: null,
       refetch: jest.fn(),
     })
+  })
+
+  it('renders transfer amounts as asset quantities, never settlement-currency money', () => {
+    expect(RECORD_COLUMNS.transfers).toContainEqual({
+      key: 'amount',
+      i18nKey: 'colAmount',
+      format: 'asset_quantity',
+      align: 'right',
+    })
+    expect(RECORD_COLUMNS.transfers).not.toContainEqual(
+      expect.objectContaining({ key: 'amount', format: 'money' })
+    )
+    expect(RECORD_COLUMNS.transfers).not.toContainEqual(expect.objectContaining({ key: 'asset' }))
   })
 
   it('resets the active kind for a new subject and fails closed after capability shrinkage', () => {
