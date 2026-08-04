@@ -17,8 +17,10 @@ import {
   backupDateFromKey,
   buildBackupMetadata,
   buildBackupArtifactIdentity,
+  cleanupBackupWorkspace,
   COMPLETE_BACKUP_MIN_BYTES,
   createBackupWorkspace,
+  DELETE_OBJECTS_BATCH_SIZE,
   IMMUTABLE_BACKUP_FILENAME_PATTERN,
   MULTIPART_PART_SIZE_BYTES,
   MULTIPART_QUEUE_SIZE,
@@ -26,6 +28,7 @@ import {
   parseBackupMode,
   preparePgDumpConnection,
   produceAndCommitBackup,
+  pruneOldBackups,
   runPgDumpPipeline,
   uploadAndAttestBackupArtifact,
   uploadBackupArtifact,
@@ -47,6 +50,29 @@ function unrestrictedLegacyFixture(body = 'SELECT 1;\n') {
     body +
     '--\n-- PostgreSQL database dump complete\n--\n\n'
   )
+}
+
+function retentionFixture({ iso, mode, runId, metadata } = {}) {
+  const now = new Date(iso)
+  const backupMode =
+    mode === 'full'
+      ? { type: 'full', schemas: [] }
+      : { type: 'schemas', schemas: ['arena', 'public'] }
+  const identity = buildBackupArtifactIdentity({ now, mode: backupMode, runId })
+  const completeMetadata = buildBackupMetadata({
+    now,
+    mode: backupMode,
+    completionToken: COMPLETION_TOKEN,
+  })
+  return {
+    listed: { Key: identity.r2Key, Size: 2 },
+    head: {
+      ContentLength: 2,
+      ContentType: 'application/gzip',
+      ETag: `"${runId}"`,
+      Metadata: metadata ?? completeMetadata,
+    },
+  }
 }
 
 function successfulPgDumpShell(prelude = []) {
@@ -142,7 +168,6 @@ test('builds unique timestamped artifact identities without credential-derived n
   const second = buildBackupArtifactIdentity({ now, mode, runId: 'b'.repeat(32) })
 
   assert.equal(first.filename, `arena-backup-20260804T070809123Z-${'a'.repeat(32)}-schemas.sql.gz`)
-  assert.equal(first.localPath, `/tmp/${first.filename}`)
   assert.equal(first.r2Key, `db-backups/2026/08/${first.filename}`)
   assert.deepEqual(first.filename.match(IMMUTABLE_BACKUP_FILENAME_PATTERN)?.slice(1), [
     '20260804T070809123Z',
@@ -150,8 +175,8 @@ test('builds unique timestamped artifact identities without credential-derived n
     'schemas',
   ])
   assert.notEqual(first.filename, second.filename)
-  assert.notEqual(first.localPath, second.localPath)
   assert.notEqual(first.r2Key, second.r2Key)
+  assert.equal('localPath' in first, false)
   assert.equal(backupDateFromKey(first.r2Key), '20260804')
   assert.equal(
     backupDateFromKey('db-backups/2026/07/arena-backup-20260731-schemas.sql.gz'),
@@ -689,6 +714,7 @@ test('creates private per-run workspaces and refuses to clobber an existing arti
     }
     runPgDumpPipeline(options)
     const original = await readFile(workspaces[0].localPath)
+    assert.equal((await stat(workspaces[0].localPath)).mode & 0o777, 0o600)
     assert.throws(() => runPgDumpPipeline(options), /EEXIST/)
     assert.deepEqual(await readFile(workspaces[0].localPath), original)
   } finally {
@@ -696,6 +722,26 @@ test('creates private per-run workspaces and refuses to clobber an existing arti
       workspaces.map(({ directory }) => rm(directory, { force: true, recursive: true }))
     )
   }
+})
+
+test('workspace cleanup removes only the owned artifact and empty private directory', async () => {
+  const filename = `arena-backup-20260803T153000000Z-${'d'.repeat(32)}-full.sql.gz`
+  const workspace = createBackupWorkspace(filename)
+  await writeFile(workspace.localPath, 'private artifact', { mode: 0o600 })
+  cleanupBackupWorkspace(workspace)
+  await assert.rejects(stat(workspace.directory), { code: 'ENOENT' })
+})
+
+test('workspace cleanup rejects arbitrary paths without removing them', async () => {
+  await withTempDir(async (directory) => {
+    const localPath = join(directory, 'owner-file')
+    await writeFile(localPath, 'keep me')
+    assert.throws(
+      () => cleanupBackupWorkspace({ directory, localPath }),
+      /invalid backup workspace/
+    )
+    assert.equal(await readFile(localPath, 'utf8'), 'keep me')
+  })
 })
 
 test('a pathname replacement cannot change the sealed bytes or reach retention', async () => {
@@ -811,6 +857,179 @@ test('a post-upload HEAD mismatch fails before local deletion or retention', asy
     assert.ok((await stat(output)).size > 0)
     assert.equal(prunes, 0)
   })
+})
+
+test('an attested backup remains successful when best-effort retention fails', async () => {
+  await withTempDir(async (directory) => {
+    const pgDump = join(directory, 'fake-pg-dump')
+    const output = join(directory, 'retention-failure.sql.gz')
+    const reported = []
+    await writeExecutable(pgDump, successfulPgDumpShell())
+
+    const size = await produceAndCommitBackup({
+      produce: () =>
+        runPgDumpPipeline({
+          pgDumpPath: pgDump,
+          connectionUrl: 'postgresql://backup@db.example.com/app',
+          password: undefined,
+          pgDumpArgs: [],
+          outputPath: output,
+          completionToken: COMPLETION_TOKEN,
+          timeoutMs: 5_000,
+        }),
+      localPath: output,
+      minimumBytes: 1,
+      completionToken: COMPLETION_TOKEN,
+      upload: async ({ body }) => {
+        for await (const _chunk of body) {
+          // Consume the exact sealed artifact.
+        }
+        return { ETag: '"uploaded-etag"' }
+      },
+      verifyUpload: async () => {},
+      prune: async () => {
+        throw new Error('R2 retention unavailable')
+      },
+      reportPruneFailure: (error) => reported.push(error.message),
+    })
+
+    assert.ok(size > 0)
+    assert.deepEqual(reported, ['R2 retention unavailable'])
+    await assert.rejects(stat(output), { code: 'ENOENT' })
+  })
+})
+
+test('retention paginates, HEAD-verifies, and ignores invalid objects when keeping full backups', async () => {
+  const fixtures = [
+    retentionFixture({
+      iso: '2026-08-01T00:00:00.000Z',
+      mode: 'full',
+      runId: '0'.repeat(32),
+      metadata: {},
+    }),
+    retentionFixture({ iso: '2026-07-31T00:00:00.000Z', mode: 'full', runId: '1'.repeat(32) }),
+    retentionFixture({ iso: '2026-07-30T00:00:00.000Z', mode: 'full', runId: '2'.repeat(32) }),
+    retentionFixture({ iso: '2026-07-29T00:00:00.000Z', mode: 'full', runId: '3'.repeat(32) }),
+    retentionFixture({ iso: '2026-07-28T00:00:00.000Z', mode: 'full', runId: '4'.repeat(32) }),
+    retentionFixture({ iso: '2026-07-27T00:00:00.000Z', mode: 'full', runId: '5'.repeat(32) }),
+    retentionFixture({ iso: '2026-07-01T00:00:00.000Z', mode: 'schemas', runId: '6'.repeat(32) }),
+    retentionFixture({ iso: '2026-07-25T00:00:00.000Z', mode: 'schemas', runId: '7'.repeat(32) }),
+  ]
+  const heads = new Map(fixtures.map(({ listed, head }) => [listed.Key, head]))
+  const deleted = []
+  const listInputs = []
+  const warnings = []
+  const client = {
+    async send(command) {
+      if (command.constructor.name === 'ListObjectsV2Command') {
+        listInputs.push(command.input)
+        return command.input.ContinuationToken
+          ? {
+              Contents: [
+                ...fixtures.slice(4).map(({ listed }) => listed),
+                { Key: 'db-backups/unknown.sql.gz' },
+              ],
+            }
+          : {
+              Contents: fixtures.slice(0, 4).map(({ listed }) => listed),
+              IsTruncated: true,
+              NextContinuationToken: 'page-2',
+            }
+      }
+      if (command.constructor.name === 'HeadObjectCommand') {
+        return heads.get(command.input.Key)
+      }
+      if (command.constructor.name === 'DeleteObjectsCommand') {
+        deleted.push(...command.input.Delete.Objects.map(({ Key }) => Key))
+        return { Deleted: command.input.Delete.Objects }
+      }
+      throw new Error(`unexpected command: ${command.constructor.name}`)
+    },
+  }
+
+  const result = await pruneOldBackups({
+    client,
+    bucket: 'arena-test',
+    now: new Date('2026-08-04T12:00:00.000Z'),
+    minimumBytes: 1,
+    logger: {
+      log() {},
+      warn(message) {
+        warnings.push(message)
+      },
+    },
+  })
+
+  assert.deepEqual(listInputs, [
+    { Bucket: 'arena-test', Prefix: 'db-backups/' },
+    { Bucket: 'arena-test', Prefix: 'db-backups/', ContinuationToken: 'page-2' },
+  ])
+  assert.deepEqual(
+    new Set(deleted),
+    new Set([fixtures[4].listed.Key, fixtures[5].listed.Key, fixtures[6].listed.Key])
+  )
+  assert.equal(deleted.includes(fixtures[0].listed.Key), false)
+  assert.equal(result.verified, 7)
+  assert.equal(result.deleted, 3)
+  assert.equal(warnings.length, 1)
+})
+
+test('retention batches every verified deletion at the R2 1000-object limit', async () => {
+  const fixtures = Array.from({ length: DELETE_OBJECTS_BATCH_SIZE + 2 }, (_, index) =>
+    retentionFixture({
+      iso: '2026-07-01T00:00:00.000Z',
+      mode: 'schemas',
+      runId: index.toString(16).padStart(32, '0'),
+    })
+  )
+  const heads = new Map(fixtures.map(({ listed, head }) => [listed.Key, head]))
+  const batchSizes = []
+  const client = {
+    async send(command) {
+      if (command.constructor.name === 'ListObjectsV2Command') {
+        return { Contents: fixtures.map(({ listed }) => listed) }
+      }
+      if (command.constructor.name === 'HeadObjectCommand') return heads.get(command.input.Key)
+      if (command.constructor.name === 'DeleteObjectsCommand') {
+        batchSizes.push(command.input.Delete.Objects.length)
+        return { Deleted: command.input.Delete.Objects }
+      }
+      throw new Error(`unexpected command: ${command.constructor.name}`)
+    },
+  }
+
+  const result = await pruneOldBackups({
+    client,
+    bucket: 'arena-test',
+    now: new Date('2026-08-04T12:00:00.000Z'),
+    minimumBytes: 1,
+    logger: { log() {}, warn() {} },
+  })
+  assert.deepEqual(batchSizes, [DELETE_OBJECTS_BATCH_SIZE, 2])
+  assert.equal(result.deleted, DELETE_OBJECTS_BATCH_SIZE + 2)
+})
+
+test('retention refuses deletion when a truncated inventory cannot be completed', async () => {
+  let deletes = 0
+  await assert.rejects(
+    pruneOldBackups({
+      client: {
+        async send(command) {
+          if (command.constructor.name === 'ListObjectsV2Command') {
+            return { Contents: [], IsTruncated: true }
+          }
+          deletes += 1
+          return {}
+        },
+      },
+      bucket: 'arena-test',
+      now: new Date('2026-08-04T12:00:00.000Z'),
+      minimumBytes: 1,
+      logger: { log() {}, warn() {} },
+    }),
+    /truncated without a continuation token/
+  )
+  assert.equal(deletes, 0)
 })
 
 test('accepts exact PG17 legacy and Arena completion suffixes in one full gzip pass', async () => {

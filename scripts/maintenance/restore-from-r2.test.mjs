@@ -424,6 +424,69 @@ test('downloads the exact selected bytes before local integrity validation', asy
       minimumBytes: 1,
     })
     assert.deepEqual(await readFile(localPath), artifact)
+    assert.equal((await stat(localPath)).mode & 0o777, 0o600)
+  })
+})
+
+test('removes only its own private partial file when the R2 body fails', async () => {
+  await withTempDir(async (directory) => {
+    const localPath = join(directory, 'partial.sql.gz')
+    const selected = completeSchemasObject({ Size: 20 })
+    const body = Readable.from(
+      (async function* () {
+        yield Buffer.from('partial')
+        throw new Error('simulated R2 stream failure')
+      })()
+    )
+
+    await assert.rejects(
+      downloadBackupObject({
+        s3: {
+          send: async () => ({
+            Body: body,
+            ContentLength: selected.Size,
+            ETag: selected.ETag,
+            Metadata: selected.Metadata,
+          }),
+        },
+        bucket: 'arena-backups',
+        selected,
+        localPath,
+        minimumBytes: 1,
+      }),
+      /simulated R2 stream failure/
+    )
+    assert.equal(body.destroyed, true)
+    await assert.rejects(stat(localPath), { code: 'ENOENT' })
+  })
+})
+
+test('never removes a pre-existing restore pathname when exclusive creation fails', async () => {
+  await withTempDir(async (directory) => {
+    const localPath = join(directory, 'existing.sql.gz')
+    await writeFile(localPath, 'owner data', { mode: 0o600 })
+    const selected = completeSchemasObject({ Size: 10 })
+    const body = Readable.from('remote data')
+
+    await assert.rejects(
+      downloadBackupObject({
+        s3: {
+          send: async () => ({
+            Body: body,
+            ContentLength: selected.Size,
+            ETag: selected.ETag,
+            Metadata: selected.Metadata,
+          }),
+        },
+        bucket: 'arena-backups',
+        selected,
+        localPath,
+        minimumBytes: 1,
+      }),
+      /EEXIST/
+    )
+    assert.equal(body.destroyed, true)
+    assert.equal(await readFile(localPath, 'utf8'), 'owner data')
   })
 })
 

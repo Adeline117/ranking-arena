@@ -15,7 +15,16 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { execFileSync } from 'node:child_process'
-import { createWriteStream } from 'node:fs'
+import {
+  closeSync,
+  constants as fsConstants,
+  createWriteStream,
+  fchmodSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  rmSync,
+} from 'node:fs'
 import { isIP } from 'node:net'
 import { resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
@@ -317,7 +326,77 @@ export async function downloadBackupObject({ s3, bucket, selected, localPath, mi
     )
   }
 
-  await pipeline(response.Body, createWriteStream(localPath, { flags: 'wx' }))
+  const noFollow = fsConstants.O_NOFOLLOW ?? 0
+  let fd
+  let openedIdentity
+  let downloadComplete = false
+  try {
+    fd = openSync(
+      localPath,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow,
+      0o600
+    )
+    fchmodSync(fd, 0o600)
+    openedIdentity = fstatSync(fd, { bigint: true })
+    if (!openedIdentity.isFile() || openedIdentity.nlink !== 1n) {
+      throw new Error('restore artifact must be one exclusively owned regular file')
+    }
+
+    await pipeline(
+      response.Body,
+      createWriteStream('', {
+        fd,
+        autoClose: false,
+      })
+    )
+
+    const descriptor = fstatSync(fd, { bigint: true })
+    const pathname = lstatSync(localPath, { bigint: true })
+    if (
+      !descriptor.isFile() ||
+      !pathname.isFile() ||
+      descriptor.nlink !== 1n ||
+      descriptor.dev !== openedIdentity.dev ||
+      descriptor.ino !== openedIdentity.ino ||
+      pathname.dev !== openedIdentity.dev ||
+      pathname.ino !== openedIdentity.ino
+    ) {
+      throw new Error('restore artifact pathname identity changed during download')
+    }
+    if (descriptor.size !== BigInt(selected.Size)) {
+      throw new Error(
+        `downloaded backup body size changed after selection: ${descriptor.size} != ${selected.Size}`
+      )
+    }
+    if ((descriptor.mode & 0o777n) !== 0o600n) {
+      throw new Error('restore artifact permissions are not owner-only')
+    }
+    downloadComplete = true
+  } catch (error) {
+    abortBody()
+    throw error
+  } finally {
+    let removeOwnedPartial = false
+    if (!downloadComplete && fd !== undefined && openedIdentity) {
+      try {
+        const pathname = lstatSync(localPath, { bigint: true })
+        removeOwnedPartial =
+          pathname.isFile() &&
+          pathname.dev === openedIdentity.dev &&
+          pathname.ino === openedIdentity.ino
+      } catch {
+        removeOwnedPartial = false
+      }
+    }
+    if (fd !== undefined) {
+      try {
+        closeSync(fd)
+      } catch (error) {
+        if (error?.code !== 'EBADF') throw error
+      }
+    }
+    if (removeOwnedPartial) rmSync(localPath, { force: true })
+  }
 }
 
 /** Apply a plain-SQL gzip and preserve both gunzip and psql exit status. */

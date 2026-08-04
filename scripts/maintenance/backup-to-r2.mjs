@@ -16,6 +16,7 @@ import { execFileSync } from 'child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import {
   closeSync,
+  chmodSync,
   constants as fsConstants,
   createReadStream,
   fstatSync,
@@ -24,10 +25,11 @@ import {
   openSync,
   realpathSync,
   rmSync,
+  rmdirSync,
   unlinkSync,
 } from 'fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'url'
 import {
   HeadObjectCommand,
@@ -45,6 +47,7 @@ import {
   COMPLETE_BACKUP_MIN_BYTES,
   IMMUTABLE_BACKUP_FILENAME_PATTERN,
   parseCompleteBackupFilename,
+  parseCompleteBackupKey,
   preparePostgresConnection,
   unverifiedBackupRecoveryMetadata,
 } from './backup-restore-contract.mjs'
@@ -58,6 +61,7 @@ const DAILY_RETENTION_DAYS = 14
 const FULL_BACKUPS_TO_KEEP = 3
 export const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024
 export const MULTIPART_QUEUE_SIZE = 4
+export const DELETE_OBJECTS_BATCH_SIZE = 1000
 
 const DATABASE_URL = process.env.DATABASE_URL
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
@@ -147,7 +151,6 @@ export function buildBackupArtifactIdentity({ now, mode, runId }) {
   const filename = `arena-backup-${compactTimestamp}-${runId}-${mode.type}.sql.gz`
   return {
     filename,
-    localPath: `/tmp/${filename}`,
     r2Key: `db-backups/${isoTimestamp.slice(0, 4)}/${isoTimestamp.slice(5, 7)}/${filename}`,
   }
 }
@@ -439,7 +442,57 @@ export function createBackupWorkspace(filename) {
     throw new Error('backup filename is invalid')
   }
   const directory = mkdtempSync(join(tmpdir(), 'arena-backup-'))
+  try {
+    // mkdtemp already requests owner-only access. Enforce the exact contract in
+    // case the process umask is unusually restrictive or the platform changes.
+    chmodSync(directory, 0o700)
+  } catch (error) {
+    rmdirSync(directory)
+    throw error
+  }
   return { directory, localPath: join(directory, filename) }
+}
+
+export function cleanupBackupWorkspace({ directory, localPath }) {
+  if (
+    typeof directory !== 'string' ||
+    typeof localPath !== 'string' ||
+    dirname(directory) !== tmpdir() ||
+    !basename(directory).startsWith('arena-backup-') ||
+    dirname(localPath) !== directory ||
+    !IMMUTABLE_BACKUP_FILENAME_PATTERN.test(basename(localPath))
+  ) {
+    throw new Error('refusing to clean an invalid backup workspace')
+  }
+  // Never recursively remove a pathname assembled from external state. The
+  // workspace has exactly one owned artifact; an unexpected extra entry makes
+  // rmdir fail closed instead of deleting unrelated data.
+  rmSync(localPath, { force: true })
+  try {
+    rmdirSync(directory)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+}
+
+export function installBackupWorkspaceSignalCleanup(workspace) {
+  const handlers = new Map()
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    const handler = () => {
+      try {
+        cleanupBackupWorkspace(workspace)
+      } catch (error) {
+        console.error(`[backup] Workspace cleanup failed during ${signal}:`, error.message)
+      }
+      process.removeListener(signal, handler)
+      process.kill(process.pid, signal)
+    }
+    handlers.set(signal, handler)
+    process.once(signal, handler)
+  }
+  return () => {
+    for (const [signal, handler] of handlers) process.removeListener(signal, handler)
+  }
 }
 
 /**
@@ -455,6 +508,7 @@ export async function produceAndCommitBackup({
   upload,
   verifyUpload,
   prune,
+  reportPruneFailure = () => {},
 }) {
   await produce()
   const noFollow = fsConstants.O_NOFOLLOW ?? 0
@@ -488,7 +542,18 @@ export async function produceAndCommitBackup({
     await verifyUpload(evidence, uploadResult)
     readSealedFileState(fd, localPath, sealedState)
     unlinkSync(localPath)
-    await prune()
+    try {
+      await prune()
+    } catch (error) {
+      // Retention is best-effort after an immutable object has been uploaded
+      // and authoritatively attested. It must not turn a successful backup into
+      // a false failure signal.
+      try {
+        await reportPruneFailure(error)
+      } catch {
+        // Reporting a secondary retention error is also non-authoritative.
+      }
+    }
     return size
   } finally {
     if (body && !body.destroyed && !body.readableEnded) body.destroy()
@@ -536,6 +601,7 @@ async function run() {
   const { filename, r2Key } = identity
   const workspace = createBackupWorkspace(filename)
   const { localPath } = workspace
+  const removeSignalCleanup = installBackupWorkspaceSignalCleanup(workspace)
 
   try {
     // pg_dump → gzip (PostgreSQL 17 匹配 Supabase 服务器)
@@ -595,73 +661,137 @@ async function run() {
           `[backup] ✓ Uploaded and attested: ${r2Key} (${sizeMB} MB, ETag ${remote.ETag})`
         )
       },
-      prune: pruneOldBackups,
+      prune: () => pruneOldBackups(),
+      reportPruneFailure: (error) =>
+        console.error('[backup] Retention prune failed (backup itself succeeded):', error.message),
     })
   } catch (err) {
     console.error(`[backup] ✗ Failed:`, err.message)
     process.exitCode = 1
   } finally {
-    rmSync(workspace.directory, { force: true, recursive: true })
+    removeSignalCleanup()
+    cleanupBackupWorkspace(workspace)
   }
 }
 
-// Prune objects outside retention. Failures here must never fail the backup
-// run itself — the upload already succeeded.
-async function pruneOldBackups() {
-  try {
-    let token
-    const all = []
-    do {
-      const r = await s3.send(
-        new ListObjectsV2Command({
-          Bucket: R2_BUCKET,
-          Prefix: 'db-backups/',
-          ContinuationToken: token,
-        })
-      )
-      all.push(...(r.Contents || []))
-      token = r.NextContinuationToken
-    } while (token)
+/**
+ * Delete only immutable artifacts whose current HEAD metadata satisfies the
+ * complete-backup contract. List results are inventory hints, never deletion
+ * authority; invalid or unavailable objects neither consume full-backup slots
+ * nor become deletion candidates.
+ */
+export async function pruneOldBackups({
+  client = s3,
+  bucket = R2_BUCKET,
+  now = new Date(),
+  minimumBytes = COMPLETE_BACKUP_MIN_BYTES,
+  logger = console,
+} = {}) {
+  if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
+    throw new Error('retention timestamp is invalid')
+  }
 
-    const isFull = (k) => k.includes('-full')
-    const cutoffDate = new Date(Date.now() - DAILY_RETENTION_DAYS * 86_400_000)
-    const cutoff = cutoffDate.toISOString().slice(0, 10).replace(/-/g, '')
-    const keepFulls = new Set(
-      all
-        .filter((o) => isFull(o.Key))
-        .sort(
-          (a, b) =>
-            backupDateFromKey(b.Key).localeCompare(backupDateFromKey(a.Key)) ||
-            String(b.Key).localeCompare(String(a.Key))
-        )
-        .slice(0, FULL_BACKUPS_TO_KEEP)
-        .map((o) => o.Key)
-    )
-    const toDelete = all.filter((o) =>
-      isFull(o.Key)
-        ? !keepFulls.has(o.Key)
-        : backupDateFromKey(o.Key) !== '' && backupDateFromKey(o.Key) < cutoff
-    )
-    if (toDelete.length === 0) {
-      console.log('[backup] Retention: nothing to prune')
-      return
-    }
-    const freedMB = (toDelete.reduce((s, o) => s + o.Size, 0) / 1048576).toFixed(0)
-    // DeleteObjects caps at 1000 keys per call; retention never approaches that
-    const r = await s3.send(
-      new DeleteObjectsCommand({
-        Bucket: R2_BUCKET,
-        Delete: { Objects: toDelete.map((o) => ({ Key: o.Key })) },
+  let token
+  const seenTokens = new Set()
+  const listed = []
+  do {
+    const page = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: 'db-backups/',
+        ...(token ? { ContinuationToken: token } : {}),
       })
     )
-    const errs = r.Errors || []
-    console.log(
-      `[backup] Retention: pruned ${(r.Deleted || []).length} objects (${freedMB} MB)` +
-        (errs.length ? `, ${errs.length} errors: ${errs.map((e) => e.Key).join(', ')}` : '')
-    )
-  } catch (err) {
-    console.error('[backup] Retention prune failed (backup itself succeeded):', err.message)
+    listed.push(...(page.Contents ?? []))
+
+    const next = page.NextContinuationToken
+    if (page.IsTruncated && !next) {
+      throw new Error('retention inventory was truncated without a continuation token')
+    }
+    if (next && seenTokens.has(next)) {
+      throw new Error('retention inventory repeated a continuation token')
+    }
+    if (next) seenTokens.add(next)
+    token = next
+  } while (token)
+
+  const verified = []
+  const seenKeys = new Set()
+  for (const listedObject of listed) {
+    const identity = parseCompleteBackupKey(listedObject?.Key)
+    if (!identity || identity.format !== 'immutable' || seenKeys.has(listedObject.Key)) continue
+    seenKeys.add(listedObject.Key)
+
+    try {
+      const head = await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: listedObject.Key })
+      )
+      if (head.ContentType !== 'application/gzip') {
+        throw new Error('backup object content type is not application/gzip')
+      }
+      const object = assertCompleteBackupObject(
+        {
+          Key: listedObject.Key,
+          Size: head.ContentLength,
+          ETag: head.ETag,
+          Metadata: head.Metadata,
+        },
+        minimumBytes
+      )
+      verified.push({ ...object, identity })
+    } catch (error) {
+      logger.warn?.(
+        `[backup] Retention skipped unverified object ${String(listedObject?.Key)}: ${error.message}`
+      )
+    }
   }
+
+  const cutoff = new Date(now.getTime() - DAILY_RETENTION_DAYS * 86_400_000)
+    .toISOString()
+    .slice(0, 10)
+    .replace(/-/g, '')
+  const keepFulls = new Set(
+    verified
+      .filter(({ identity }) => identity.mode === 'full')
+      .sort(
+        (left, right) =>
+          right.identity.timestamp.localeCompare(left.identity.timestamp) ||
+          right.Key.localeCompare(left.Key)
+      )
+      .slice(0, FULL_BACKUPS_TO_KEEP)
+      .map(({ Key }) => Key)
+  )
+  const toDelete = verified.filter(({ Key, identity }) =>
+    identity.mode === 'full' ? !keepFulls.has(Key) : identity.date < cutoff
+  )
+
+  if (toDelete.length === 0) {
+    logger.log?.('[backup] Retention: nothing to prune')
+    return { deleted: 0, errors: [], verified: verified.length }
+  }
+
+  const errors = []
+  let deleted = 0
+  for (let offset = 0; offset < toDelete.length; offset += DELETE_OBJECTS_BATCH_SIZE) {
+    const batch = toDelete.slice(offset, offset + DELETE_OBJECTS_BATCH_SIZE)
+    const response = await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: batch.map(({ Key }) => ({ Key })) },
+      })
+    )
+    deleted += response.Deleted?.length ?? 0
+    errors.push(...(response.Errors ?? []))
+  }
+
+  const freedMB = (toDelete.reduce((sum, object) => sum + object.Size, 0) / 1048576).toFixed(0)
+  logger.log?.(
+    `[backup] Retention: requested ${toDelete.length}, deleted ${deleted} objects (${freedMB} MB)` +
+      (errors.length
+        ? `, ${errors.length} errors: ${errors.map((error) => error.Key).join(', ')}`
+        : '')
+  )
+  return { deleted, errors, verified: verified.length }
 }
 
 const isDirectRun =
