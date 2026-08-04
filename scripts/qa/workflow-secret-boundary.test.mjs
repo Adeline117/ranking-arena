@@ -2,13 +2,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { parse } from 'yaml'
+import { hasCredentialExpression } from './workflow-credential-expression.mjs'
 
 const workflowDirectory = '.github/workflows'
 const pushMainOnly = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
 const disabled = '${{ false }}'
 const alwaysPushMainOnly = `always() && ${pushMainOnly}`
-const credentialExpression =
-  /\b(?:secrets\s*(?:\.|\[\s*['"])|github\s*(?:\.token\b|\[\s*['"]token['"]\s*\]))/
 
 function loadWorkflow(name) {
   const source = readFileSync(`${workflowDirectory}/${name}.yml`, 'utf8')
@@ -19,12 +18,28 @@ test('credential matcher rejects dot and bracket GitHub expression syntax', () =
   for (const expression of [
     '${{ secrets.PROD_KEY }}',
     "${{ secrets['PROD_KEY'] }}",
+    '${{ Secrets.PROD_KEY }}',
+    '${{ toJSON(secrets) }}',
     '${{ github.token }}',
+    '${{ github. token }}',
+    '${{ github . token }}',
     '${{ github["token"] }}',
+    "${{ github[format('to{0}', 'ken')] }}",
+    '${{ GitHub.Token }}',
+    '${{ toJSON(github) }}',
+    '${{ github.* }}',
+    '${{ github }}',
+    "${{ format('}}{0}', github.token) }}",
+    "${{ format('{{{0}}}', secrets.PROD) }}",
+    "${{ format('it''s }} {0}', secrets.PROD) }}",
+    '${{ toJSON(github || null) }}',
+    "${{ format('{0}', github || null) }}",
+    '${{ github || null }}',
   ]) {
-    assert.match(expression, credentialExpression)
+    assert.equal(hasCredentialExpression(expression), true)
   }
-  assert.doesNotMatch('ci-build-service-placeholder', credentialExpression)
+  assert.equal(hasCredentialExpression('offline, no secrets'), false)
+  assert.equal(hasCredentialExpression('${{ github.ref }}-${{ github.sha }}'), false)
 })
 
 test('push and schedule workflows expose no arbitrary-ref dispatch', () => {
@@ -125,10 +140,10 @@ test('Lighthouse PR repository commands receive placeholders and no secret expre
   const { source, workflow } = loadWorkflow('lighthouse-ci')
   assert.deepEqual(Object.keys(workflow.on), ['pull_request'])
   assert.equal(workflow.on.pull_request_target, undefined)
-  assert.doesNotMatch(source, credentialExpression)
+  assert.equal(hasCredentialExpression(source), false)
   assert.deepEqual(workflow.permissions, { contents: 'read' })
   assert.equal(workflow.jobs.lighthouse.permissions, undefined)
-  assert.doesNotMatch(JSON.stringify(workflow.env ?? {}), credentialExpression)
+  assert.equal(hasCredentialExpression(workflow.env ?? {}), false)
 
   const checkout = workflow.jobs.lighthouse.steps.find((step) =>
     step.uses?.startsWith('actions/checkout@')
@@ -148,9 +163,9 @@ test('CI pull requests have read-only token handling and no secret-bearing comma
   assert.deepEqual(Object.keys(workflow.on), ['push', 'pull_request'])
   assert.equal(workflow.on.pull_request_target, undefined)
   assert.deepEqual(workflow.permissions, { contents: 'read' })
-  assert.doesNotMatch(
-    JSON.stringify(workflow.env ?? {}),
-    credentialExpression,
+  assert.equal(
+    hasCredentialExpression(workflow.env ?? {}),
+    false,
     'CI workflow-level env exposes a credential to every PR job'
   )
 
@@ -158,7 +173,7 @@ test('CI pull requests have read-only token handling and no secret-bearing comma
     const jobGuard = String(job.if ?? '')
     assert.equal(job.permissions, undefined, `${jobName} overrides the read-only workflow token`)
     const jobWithoutSteps = { ...job, steps: undefined }
-    if (credentialExpression.test(JSON.stringify(jobWithoutSteps))) {
+    if (hasCredentialExpression(jobWithoutSteps)) {
       assert.equal(jobGuard, disabled, `${jobName} exposes job-level secrets while runnable`)
     }
 
@@ -177,7 +192,7 @@ test('CI pull requests have read-only token handling and no secret-bearing comma
       }
 
       const serializedStep = JSON.stringify(step)
-      if (credentialExpression.test(serializedStep)) {
+      if (hasCredentialExpression(serializedStep)) {
         const stepGuard = String(step.if ?? '')
         assert.ok(
           jobGuard === disabled || stepGuard === alwaysPushMainOnly,
