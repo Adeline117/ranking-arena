@@ -16,6 +16,11 @@ env:
   NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-anon-placeholder
   SUPABASE_URL: https://placeholder.supabase.co
   SUPABASE_SERVICE_ROLE_KEY: ci-build-service-placeholder
+  # lib/env validates these in production. They are deliberately inert PR
+  # placeholders, never repository secrets or production credentials.
+  CRON_SECRET: ci-build-placeholder-cron-secret-0000000000
+  UPSTASH_REDIS_REST_URL: http://127.0.0.1:9
+  UPSTASH_REDIS_REST_TOKEN: ci-runtime-token-placeholder
 
 jobs:
   lighthouse:

@@ -43,6 +43,10 @@ test('Lighthouse PR builds receive no repository or production secrets', () => {
   assert.equal(parsed.env.SUPABASE_URL, 'https://placeholder.supabase.co')
   assert.match(parsed.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, /^ci-build-/)
   assert.match(parsed.env.SUPABASE_SERVICE_ROLE_KEY, /^ci-build-/)
+  assert.match(parsed.env.CRON_SECRET, /^ci-build-/)
+  assert.ok(parsed.env.CRON_SECRET.length >= 32)
+  assert.equal(parsed.env.UPSTASH_REDIS_REST_URL, 'http://127.0.0.1:9')
+  assert.match(parsed.env.UPSTASH_REDIS_REST_TOKEN, /^ci-runtime-/)
 })
 
 test('repository commands cannot inherit a persisted, cached, or later write credential', () => {
