@@ -34,6 +34,11 @@ import {
   readPostBookmarkAcknowledgement,
   readPostBookmarkStatusAcknowledgement,
 } from '@/lib/bookmarks/post-bookmark-client-contract'
+import {
+  POST_REPOST_OPERATION,
+  createPostRepostRequestId,
+  readPostRepostAcknowledgement,
+} from '@/lib/reposts/post-repost-client-contract'
 
 export interface Post {
   id: string
@@ -540,6 +545,7 @@ export function useGroupPosts({
     replyMutationLocksRef.current.clear()
     likeRequestLockRef.current.clear()
     bookmarkRequestLockRef.current.clear()
+    repostRequestLockRef.current.clear()
     pinRequestLockRef.current.clear()
     editRequestLockRef.current.clear()
     deleteRequestLockRef.current.clear()
@@ -1033,16 +1039,22 @@ export function useGroupPosts({
         showToast(t('pleaseLoginFirst'), 'warning')
         return
       }
-      const post = posts.find((p) => p.id === postId)
-      if (post?.author_id === userId) {
+      const context = captureMutationContext()
+      if (!context.scope.userId || !mutationContextIsCurrent(context)) return
+      const post = postsRef.current.find((candidate) => candidate.id === postId)
+      if (!post) {
+        showToast(t('repostFailed'), 'error')
+        return
+      }
+      if (post.author_id === context.scope.userId) {
         showToast(t('cannotRepostOwn'), 'warning')
         return
       }
-      if (post?.user_reposted) {
+      if (post.user_reposted) {
         showToast(t('alreadyReposted'), 'warning')
         return
       }
-      const context = captureMutationContext()
+      const requestId = createPostRepostRequestId()
       const requestLockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
       if (repostRequestLockRef.current.has(requestLockKey)) return
       repostRequestLockRef.current.add(requestLockKey)
@@ -1050,20 +1062,45 @@ export function useGroupPosts({
       try {
         const result = await apiCall(
           `/api/posts/${postId}/repost`,
-          { body: { comment } },
+          {
+            body: {
+              operation: POST_REPOST_OPERATION,
+              request_id: requestId,
+              comment: comment ?? '',
+            },
+          },
           context.scope
         )
         if (!mutationContextIsCurrent(context)) return
-        if (result.ok) {
-          const data = result.data as { repost_count: number }
+        const expected = {
+          actorId: context.scope.userId,
+          sourcePostId: postId,
+          rootPostId: postId,
+          requestId,
+        }
+        const acknowledgement =
+          result.ok && result.status === 201
+            ? readPostRepostAcknowledgement(result.data, { ...expected, action: 'created' })
+            : !result.ok && result.status === 409
+              ? readPostRepostAcknowledgement(result.data, {
+                  ...expected,
+                  action: 'already_exists',
+                })
+              : null
+        if (acknowledgement) {
           setPosts((prev) =>
             prev.map((p) =>
-              p.id === postId ? { ...p, user_reposted: true, repost_count: data.repost_count } : p
+              p.id === acknowledgement.rootPostId
+                ? { ...p, user_reposted: true, repost_count: acknowledgement.repostCount }
+                : p
             )
           )
           setShowRepostModal(null)
           setRepostComment('')
-          showToast(t('repostSuccess'), 'success')
+          showToast(
+            acknowledgement.action === 'created' ? t('repostSuccess') : t('alreadyReposted'),
+            acknowledgement.action === 'created' ? 'success' : 'warning'
+          )
         } else {
           showToast(result.error || t('repostFailed'), 'error')
         }
@@ -1079,7 +1116,6 @@ export function useGroupPosts({
       apiCall,
       captureMutationContext,
       mutationContextIsCurrent,
-      posts,
       setPostLoading,
       setPosts,
       setRepostComment,
@@ -1087,7 +1123,6 @@ export function useGroupPosts({
       setShowRepostModal,
       showToast,
       t,
-      userId,
     ]
   )
 

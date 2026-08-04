@@ -32,6 +32,11 @@ const REACTION_OTHER_ACTOR_ID = '66666666-6666-4666-8666-666666666666'
 const REACTION_POST_ID = '77777777-7777-4777-8777-777777777777'
 const REACTION_GROUP_ID = '88888888-8888-4888-8888-888888888888'
 const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
+const REPOST_ACTOR_ID = '99999999-9999-4999-8999-999999999999'
+const REPOST_OTHER_ACTOR_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const REPOST_POST_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const REPOST_GROUP_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const REPOST_ROW_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 
 type Props = {
   userId: string | null
@@ -116,6 +121,20 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
       ...overrides,
     },
     meta: { timestamp: REACTION_TIMESTAMP },
+  }
+}
+
+function repostReceipt(requestId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    actor_id: REPOST_ACTOR_ID,
+    source_post_id: REPOST_POST_ID,
+    root_post_id: REPOST_POST_ID,
+    request_id: requestId,
+    operation: 'create',
+    action: 'created',
+    repost_post_id: REPOST_ROW_ID,
+    repost_count: 6,
+    ...overrides,
   }
 }
 
@@ -1008,5 +1027,114 @@ describe('useGroupPosts comment audience and viewer scope', () => {
       user_liked: true,
       user_reaction: 'up',
     })
+  })
+
+  it('single-flights group repost creation and adopts only its exact absolute receipt', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: REPOST_ACTOR_ID,
+      viewerKey: `user:${REPOST_ACTOR_ID}`,
+      isMember: true,
+    }
+    const request = deferred<unknown>()
+    mockAuthedFetch.mockReturnValue(request.promise)
+    const showToast = jest.fn()
+    const { result } = renderGroupHook(props, undefined, showToast, REPOST_GROUP_ID)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: REPOST_POST_ID,
+          group_id: REPOST_GROUP_ID,
+          author_id: REPOST_OTHER_ACTOR_ID,
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          repost_count: 5,
+          user_reposted: false,
+        },
+      ])
+    })
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.handleRepost(REPOST_POST_ID, 'worth sharing')
+      duplicate = result.current.handleRepost(REPOST_POST_ID, 'worth sharing')
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+    const body = mockAuthedFetch.mock.calls[0]?.[3] as Record<string, unknown>
+    expect(body).toMatchObject({ operation: 'create', comment: 'worth sharing' })
+    expect(body.request_id).toMatch(/^[0-9a-f]{32}$/)
+    expect(result.current.repostLoading[REPOST_POST_ID]).toBe(true)
+
+    await act(async () => {
+      request.resolve({
+        ok: true,
+        status: 201,
+        data: repostReceipt(String(body.request_id)),
+      })
+      await Promise.all([first, duplicate])
+    })
+
+    expect(result.current.posts[0]).toMatchObject({
+      repost_count: 6,
+      user_reposted: true,
+    })
+    expect(result.current.repostLoading[REPOST_POST_ID]).toBe(false)
+    expect(showToast).toHaveBeenCalledWith('repostSuccess', 'success')
+  })
+
+  it('rejects a cross-actor repost receipt, then reconciles an exact 409 without fake success', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: REPOST_ACTOR_ID,
+      viewerKey: `user:${REPOST_ACTOR_ID}`,
+      isMember: true,
+    }
+    const showToast = jest.fn()
+    mockAuthedFetch
+      .mockImplementationOnce(async (...args: unknown[]) => {
+        const body = args[3] as Record<string, unknown>
+        return {
+          ok: true,
+          status: 201,
+          data: repostReceipt(String(body.request_id), { actor_id: REPOST_OTHER_ACTOR_ID }),
+        }
+      })
+      .mockImplementationOnce(async (...args: unknown[]) => {
+        const body = args[3] as Record<string, unknown>
+        return {
+          ok: false,
+          status: 409,
+          data: repostReceipt(String(body.request_id), {
+            action: 'already_exists',
+            repost_count: 8,
+          }),
+        }
+      })
+    const { result } = renderGroupHook(props, undefined, showToast, REPOST_GROUP_ID)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: REPOST_POST_ID,
+          group_id: REPOST_GROUP_ID,
+          author_id: REPOST_OTHER_ACTOR_ID,
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          repost_count: 5,
+          user_reposted: false,
+        },
+      ])
+    })
+
+    await act(async () => result.current.handleRepost(REPOST_POST_ID))
+    expect(result.current.posts[0]).toMatchObject({ repost_count: 5, user_reposted: false })
+    expect(showToast).toHaveBeenCalledWith('repostFailed', 'error')
+
+    await act(async () => result.current.handleRepost(REPOST_POST_ID))
+    expect(result.current.posts[0]).toMatchObject({ repost_count: 8, user_reposted: true })
+    expect(showToast).toHaveBeenLastCalledWith('alreadyReposted', 'warning')
+    expect(showToast).not.toHaveBeenCalledWith('repostSuccess', 'success')
   })
 })
