@@ -251,11 +251,16 @@ Alerts are sent via `lib/alerts/send-alert.ts`. Warnings are buffered for the
 digest path; critical alerts send immediately and use shared cooldown plus
 delivery deduplication.
 
-> **Current incident:** the Vercel Production `TELEGRAM_BOT_TOKEN` record has
-> been removed and the old token returned 401. Telegram alerting is unavailable
-> until the owner obtains a new BotFather token, installs it through the atomic
-> provider procedure below, and proves a real delivery. A test that merely
-> reaches the alert branch is not a successful alert test.
+> **Current incident (2026-08-04):** the token retained in `.env.local` is stale
+> and returns 401; it must not be copied back into any provider. A distinct
+> production bot-token/chat-id pair passed Telegram `getMe` and `getChat` with
+> HTTP 200 and was installed in GitHub repository secrets and Vercel's future
+> Production environment at 19:03Z. No real `sendMessage` delivery has been
+> proved after that rotation. The currently promoted Vercel deployment was
+> built before the environment update, so it does not inherit the new values;
+> do not redeploy solely to test alerts while the release is NO-GO. Alerting is
+> considered restored only after an authorized exact-SHA run delivers a real
+> message. A test that merely reaches the alert branch is not sufficient.
 
 | Alert Level | Action                                                                      |
 | ----------- | --------------------------------------------------------------------------- |
@@ -364,17 +369,23 @@ Sources: `lib/utils/arena-score.ts`,
 > 还会与平台管理的 auth DDL/owner 冲突。因此本节当前是取证与恢复开发 runbook，
 > 不是已验收的灾备按钮。
 >
-> **2026-08-03 incident evidence**：07-27、07-28、07-30、07-31、08-01、
-> 08-02、08-03 共 7 个对象都是 20-byte gzip 空对象。07-26 legacy 候选虽通过
-> 完整 gzip/SQL 流检查（5,112,388,073 bytes），但没有
-> `leaderboard_ranks`/partition COPY 数据，不能通过
-> 当前关键表正数门禁，也尚未证明 exact PG17 legacy restrict/unrestrict 尾。保留
-> 该候选作证据，但不得把它称为可恢复点。它已复制到
-> `incident-hold/2026-08-04/`，copy 与 source 的 ETag 一致；这只证明对象复制身份，
-> 不是恢复认证。Mac mini 的 backup 与 sentinel crontab 已注释暂停。新的恢复演练
-> 应使用至少约 100 GiB
-> 可用空间的 managed scratch 与事故恢复后生成、带当前 completion metadata 的
-> 新备份。
+> **2026-08-04 incident evidence**：07-27、07-28、07-30、07-31、08-01、
+> 08-02、08-03 共 7 个对象都是 20-byte 空 gzip。07-26 legacy 候选
+> `db-backups/2026/07/arena-backup-20260726-schemas.sql.gz` 为
+> 5,112,388,073 bytes；它已按服务端 copy 保全为
+> `incident-hold/2026-08-04/arena-backup-20260726-schemas.sql.gz`，source 与
+> hold 的 size、ETag 一致，原对象未删除。在隔离的 PostgreSQL 17.8 上进行的直接
+> R2 -> SSH -> gunzip -> psql 流式恢复，已实际恢复出
+> `arena.traders=217938`、`arena.trader_stats=552870`、
+> `public.leaderboard_ranks=41760`，并观察到 345 张用户表、153 张非空估算表和
+> 338 个约束。因此先前“该对象没有 leaderboard COPY 数据”的判断已被真实恢复
+> 证伪。恢复运行 880 秒后，部分数据库约 22 GB、目标盘只剩 8.2 GiB；为防止磁盘
+> 耗尽，操作员在 `COPY public.tph_2026_05` 第 14,667,733 行主动终止并删除仅用于
+> 演练的部分数据库。数据阶段未完成，索引尚未创建；完整 gzip CRC/尾标、完整
+> schema/index/RLS/auth 以及应用只读 smoke 均未证明。因此该对象仍只是重要事故
+> 证据，不是认证恢复点。Mac mini 的 backup 与 sentinel crontab 保持暂停；完整
+> 演练必须使用至少约 100 GiB 可用空间的 managed scratch，并优先使用事故恢复后
+> 生成、带当前 completion metadata 的新备份。
 
 **备份是什么**：`backup-to-r2.mjs` 设计为每日 dump `-n arena -n public`（PLAIN SQL，
 `--no-owner --no-privileges`）→ gzip → multipart upload → 条件 HEAD 验证，写入
