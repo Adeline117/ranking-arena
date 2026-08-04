@@ -13,7 +13,7 @@
  * hook only fires when the tab is opened).
  */
 
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -203,7 +203,10 @@ export default function ServingRecordsSection({
     : []
   const selectionScope = JSON.stringify([source, exchangeTraderId, kinds])
   const tabsId = useId()
+  const panelId = `${tabsId}-panel`
+  const tablistRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Map<RecordKind, HTMLButtonElement>>(new Map())
+  const tablistOwnedFocus = useRef(false)
   const [activeSelection, setActiveSelection] = useState<{
     scope: string
     kind: RecordKind
@@ -217,12 +220,41 @@ export default function ServingRecordsSection({
       ? activeSelection.kind
       : defaultKind
 
+  // Remember whether the last explicit focus target belongs to this tablist.
+  // This survives removal of a focused tab during capability shrinkage, while
+  // focus moving to an account switcher or any other control clears ownership.
+  useEffect(() => {
+    const handleFocus = (event: FocusEvent) => {
+      tablistOwnedFocus.current = Boolean(
+        event.target instanceof Node && tablistRef.current?.contains(event.target)
+      )
+    }
+    const handleWindowBlur = () => {
+      tablistOwnedFocus.current = false
+    }
+    document.addEventListener('focusin', handleFocus)
+    window.addEventListener('blur', handleWindowBlur)
+    return () => {
+      document.removeEventListener('focusin', handleFocus)
+      window.removeEventListener('blur', handleWindowBlur)
+    }
+  }, [])
+
+  // If a subject/capability update changes the selected tab while this list
+  // owned focus, move focus to the new roving tab after the DOM is committed.
+  useLayoutEffect(() => {
+    if (tablistOwnedFocus.current && effectiveKind) {
+      tabRefs.current.get(effectiveKind)?.focus()
+    }
+  }, [effectiveKind, selectionScope])
+
   if (kinds.length === 0) return null
 
   return (
     <Box style={{ marginTop: tokens.spacing[6] }}>
       <style>{`@keyframes servingPulse { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
       <Box
+        ref={tablistRef}
         role="tablist"
         aria-label={t('recordsTabs')}
         aria-orientation="horizontal"
@@ -261,7 +293,7 @@ export default function ServingRecordsSection({
               tabRefs.current.get(nextKind)?.focus()
             }}
             aria-selected={effectiveKind === kind}
-            aria-controls={`${tabsId}-panel-${kind}`}
+            aria-controls={panelId}
             tabIndex={effectiveKind === kind ? 0 : -1}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
@@ -291,9 +323,10 @@ export default function ServingRecordsSection({
       {effectiveKind ? (
         <Box
           key={`${source}:${exchangeTraderId}:${effectiveKind}`}
-          id={`${tabsId}-panel-${effectiveKind}`}
+          id={panelId}
           role="tabpanel"
           aria-labelledby={`${tabsId}-tab-${effectiveKind}`}
+          tabIndex={0}
         >
           {effectiveKind === 'copiers' ? (
             <CopiersPanel
