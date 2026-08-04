@@ -1,6 +1,6 @@
 # Post interaction child-table boundary rollout
 
-Date: 2026-08-03  
+Date: 2026-08-03
 Migration: `20260803101000_close_post_interaction_child_direct_writes.sql`
 
 ## Outcome
