@@ -21,6 +21,25 @@ if [ -d "$migrations_dir" ]; then
     printf '%s\n' "Rename conflicting files so every migration version is unique." >&2
     exit 1
   fi
+
+  invalid_new_migrations=$(
+    git diff --cached --diff-filter=A --name-only -- "$migrations_dir" \
+      | while IFS= read -r migration_path; do
+          if [ "${migration_path##*.}" = "sql" ]; then
+            migration_name=${migration_path##*/}
+            if ! printf '%s\n' "$migration_name" | grep -qE '^[0-9]{14}_[a-z0-9_]+\.sql$'; then
+              printf '%s\n' "$migration_path"
+            fi
+          fi
+        done
+  )
+
+  if [ -n "$invalid_new_migrations" ]; then
+    printf '%s\n' 'ERROR: New migrations require a 14-digit timestamp and snake_case name:' >&2
+    printf '%s\n' "$invalid_new_migrations" >&2
+    printf '%s\n' 'Create them with scripts/new-migration.sh <description>.' >&2
+    exit 1
+  fi
 fi
 
 if [ ! -x "node_modules/.bin/lint-staged" ]; then

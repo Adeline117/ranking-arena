@@ -5,7 +5,8 @@
 ### Main branch
 
 - `main` — production branch, deploys to arenafi.org via Vercel
-- Protected: requires 1 review before merge
+- Changes are delivered by pull request. Required-check and review enforcement
+  must be verified in repository settings; do not infer protection from this file.
 
 ### Feature branches
 
@@ -45,7 +46,7 @@ chore/<description>      # Build/config
    gh pr create --title "feat: add ROI filter" --body "..."
    ```
 
-5. After review + approval, squash merge to main.
+5. After required checks and review, squash merge to main.
 
 ## Commit Messages
 
@@ -67,20 +68,23 @@ Examples:
 - `fix(auth): handle expired Supabase session`
 - `perf: lazy load web3 wallet components`
 
-## Pre-Push Checks
+## Local and CI Checks
 
-The pre-push hook automatically runs:
+The repository-managed hooks provide:
 
-1. `eslint` on changed files
-2. `tsc --noEmit` (type-check)
+1. duplicate and newly-added migration-name checks in `pre-commit`;
+2. `lint-staged` on exactly the staged files in `pre-commit`; and
+3. conventional/debug-marker policy in `commit-msg`.
 
-Both must pass before push is allowed.
+There is no tracked pre-push hook. Run type-check, full lint, tests, and build in
+proportion to the change; CI is the merge gate for the full repository checks.
 
 ## PR Checklist
 
 Before opening a PR:
 
 - [ ] `npm run lint` passes
+- [ ] `npm run qa:source-policy` passes
 - [ ] `npm run type-check` passes
 - [ ] `npm test` passes
 - [ ] `npm run build` succeeds
@@ -88,13 +92,9 @@ Before opening a PR:
 
 ## Post-Merge
 
-After merging to main, verify deployment:
-
-```bash
-scripts/post-deploy-check.sh
-```
-
-If any core URL returns 500, rollback immediately via Vercel Dashboard.
+After merging to main, require Deploy Gate's exact-SHA smoke and rollback
+evidence. Use `scripts/post-deploy-check.sh <base-url> <expected-full-sha>` only
+for an authorized manual verification, then follow `docs/RUNBOOK.md` on failure.
 
 ## Concurrent Work
 

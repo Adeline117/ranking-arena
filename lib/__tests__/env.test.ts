@@ -1,6 +1,6 @@
 /**
  * lib/env.ts 环境变量验证测试
- * 
+ *
  * 测试 getEnv, getEnvBool, getEnvNumber 的行为
  * 由于 env.ts 在 import 时立即执行验证，需要使用动态 import + env mock
  */
@@ -72,11 +72,9 @@ describe('env module', () => {
 
   it('should parse boolean env vars', async () => {
     process.env.ENABLE_SMART_SCHEDULER = 'true'
-    process.env.ENABLE_ANOMALY_DETECTION = '1'
 
     const { env } = await import('../env')
     expect(env.ENABLE_SMART_SCHEDULER).toBe(true)
-    expect(env.ENABLE_ANOMALY_DETECTION).toBe(true)
   })
 
   it('should default boolean env vars to false', async () => {
@@ -87,26 +85,24 @@ describe('env module', () => {
   })
 
   it('should parse numeric env vars', async () => {
-    process.env.WORKER_BATCH_SIZE = '25'
-    process.env.WORKER_POLL_INTERVAL = '30000'
+    process.env.SMART_SCHEDULER_HOT_INTERVAL_MINUTES = '25'
 
     const { env } = await import('../env')
-    expect(env.WORKER_BATCH_SIZE).toBe(25)
-    expect(env.WORKER_POLL_INTERVAL).toBe(30000)
+    expect(env.SMART_SCHEDULER_HOT_INTERVAL_MINUTES).toBe(25)
   })
 
   it('should use fallback for invalid numeric env vars', async () => {
-    process.env.WORKER_BATCH_SIZE = 'not-a-number'
+    process.env.SMART_SCHEDULER_HOT_INTERVAL_MINUTES = 'not-a-number'
 
     const { env } = await import('../env')
-    expect(env.WORKER_BATCH_SIZE).toBe(10) // default fallback
+    expect(env.SMART_SCHEDULER_HOT_INTERVAL_MINUTES).toBe(30)
   })
 
   it('should use fallback for missing numeric env vars', async () => {
-    delete process.env.WORKER_BATCH_SIZE
+    delete process.env.SMART_SCHEDULER_HOT_INTERVAL_MINUTES
 
     const { env } = await import('../env')
-    expect(env.WORKER_BATCH_SIZE).toBe(10)
+    expect(env.SMART_SCHEDULER_HOT_INTERVAL_MINUTES).toBe(30)
   })
 
   it('should handle optional server-only vars as undefined when not set', async () => {

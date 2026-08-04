@@ -733,6 +733,11 @@ test('the executable uses the safe pipeline and CI runs the behavioral contract'
   assert.doesNotMatch(source, /PutObjectCommand/)
   assert.match(source, /cleanPostgresConnectionEnv\(/)
   assert.match(source, /parseBackupMode\(/)
+  assert.match(
+    source,
+    /!R2_ACCESS_KEY_ID \|\| !R2_SECRET_ACCESS_KEY \|\| !R2_ACCOUNT_ID \|\| !R2_BUCKET/
+  )
+  assert.doesNotMatch(source, /R2_BUCKET\s*=\s*process\.env\.R2_BUCKET\s*\|\|/)
   assert.doesNotMatch(source, /TRADER_TABLES|trader-tables/)
   assert.doesNotMatch(source, /execSync\(/)
   assert.doesNotMatch(source, /`\$\{pgDumpPath\}/)

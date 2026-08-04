@@ -5,8 +5,8 @@
  * Inspired by grafana/k6 (30.1K★).
  *
  * Usage:
- *   k6 run scripts/load-test.js
- *   k6 run --vus 50 --duration 60s scripts/load-test.js
+ *   k6 run -e BASE_URL=https://preview.example.com k6/api-load-test.js
+ *   k6 run -e BASE_URL=https://preview.example.com --vus 50 --duration 60s k6/api-load-test.js
  *
  * Targets: rankings, search, trader detail, market data
  */
@@ -14,6 +14,7 @@
 import http from 'k6/http'
 import { check, sleep } from 'k6'
 import { Rate, Trend } from 'k6/metrics'
+import { resolveLoadTestBaseUrl } from './config.js'
 
 // Custom metrics
 const errorRate = new Rate('errors')
@@ -21,20 +22,20 @@ const rankingsLatency = new Trend('rankings_latency', true)
 const searchLatency = new Trend('search_latency', true)
 const traderLatency = new Trend('trader_latency', true)
 
-const BASE_URL = __ENV.BASE_URL || 'https://www.arenafi.org'
+const BASE_URL = resolveLoadTestBaseUrl()
 
 export const options = {
   stages: [
-    { duration: '10s', target: 10 },  // Ramp up
-    { duration: '30s', target: 30 },  // Sustained load
-    { duration: '10s', target: 50 },  // Peak
-    { duration: '10s', target: 0 },   // Ramp down
+    { duration: '10s', target: 10 }, // Ramp up
+    { duration: '30s', target: 30 }, // Sustained load
+    { duration: '10s', target: 50 }, // Peak
+    { duration: '10s', target: 0 }, // Ramp down
   ],
   thresholds: {
-    http_req_duration: ['p(95)<3000'],  // 95% of requests under 3s
-    errors: ['rate<0.05'],              // Error rate under 5%
-    rankings_latency: ['p(95)<2000'],   // Rankings under 2s
-    search_latency: ['p(95)<1500'],     // Search under 1.5s
+    http_req_duration: ['p(95)<3000'], // 95% of requests under 3s
+    errors: ['rate<0.05'], // Error rate under 5%
+    rankings_latency: ['p(95)<2000'], // Rankings under 2s
+    search_latency: ['p(95)<1500'], // Search under 1.5s
   },
 }
 
@@ -52,11 +53,14 @@ export default function () {
     const ok = check(res, {
       'rankings: status 200': (r) => r.status === 200,
       'rankings: has traders': (r) => {
-        try { return JSON.parse(r.body).data?.traders?.length > 0 } catch { return false }
+        try {
+          return JSON.parse(r.body).data?.traders?.length > 0
+        } catch {
+          return false
+        }
       },
     })
     errorRate.add(!ok)
-
   } else if (scenario < 0.65) {
     // 25% — Search API
     const query = SEARCH_QUERIES[Math.floor(Math.random() * SEARCH_QUERIES.length)]
@@ -66,14 +70,12 @@ export default function () {
       'search: status 200': (r) => r.status === 200,
     })
     errorRate.add(!ok)
-
   } else if (scenario < 0.85) {
     // 20% — Market data
     const res = http.get(`${BASE_URL}/api/market`)
     check(res, {
       'market: status 200': (r) => r.status === 200,
     })
-
   } else {
     // 15% — Trader suggestions
     const res = http.get(`${BASE_URL}/api/search/suggestions?q=btc`)

@@ -3,20 +3,27 @@
 > 2026-07-02 首版（企业级差距整改 E3）。原则：先少而真，宁可 4 条真执行，
 > 不要 20 条没人看。每条 SLO 必须有：测量方式（现有工具）+ 告警阈值 + 违约动作。
 > 复盘制度见 docs/postmortems/。
+>
+> **2026-08-04 evidence status:** SLO 是目标，不等于当前达标证明。GitHub Actions
+> 目前缺 `CRON_SECRET`、`BACKUP_DATABASE_URL`、`R2_ACCESS_KEY_ID` 和
+> `R2_SECRET_ACCESS_KEY`；health/backup workflows 会 fail-closed，但在轮换补齐前
+> 不能充当有效监控或备份证据。生产 freshness 同时处于真实 degraded 状态。
 
 ## SLO 清单
 
 ### 1. 核心页面可用性 ≥ 99.5%（月）
 
 - **定义**：`/`、`/rankings`、trader 详情、`/login`、`/pricing` 非 5xx 比例
-- **测量**：post-deploy-smoke.yml（每次部署）+ health-monitor.yml（30min 轮询）
+- **测量**：post-deploy smoke（每次 Deploy Gate）+ health-monitor（目标 30min；
+  当前因 GitHub 缺 `CRON_SECRET` 暂停有效探测）
 - **告警**：任一 URL 500 → Telegram 立即（现有）；月累计 downtime > 3.6h → 复盘
 - **违约动作**：立即回滚 + 24h 内写 postmortem
 
 ### 2. API 健康端点 p95 < 200ms，错误率 < 1%（周）
 
 - **定义**：`/api/health`（edge，设计目标 <200ms）为代表的 API 层健康
-- **测量**：health-monitor 记录响应时间；Sentry 错误率
+- **测量**：health-monitor 做可用性探测，Sentry 提供错误证据；当前没有可审计的
+  周 p95 时序聚合，因此 p95 目标仍是观测缺口，不能仅凭单次 curl 宣称达标
 - **告警**：health 端点连续 3 次 >1s 或不可达 → Telegram
 - **违约动作**：查 Vercel region/Supabase pool/Redis，参照 RUNBOOK
 
@@ -41,6 +48,8 @@
   count-check-PASSED snapshot，再完成一次无错误排名发布。不得手改
   `source_as_of`，也不得用 `computed_at` 或 `now()` 回填来制造假新鲜；
   数据不可信时宁可显示 stale 标记也不静默喂旧数据。
+- **2026-08-04 状态**：生产 `/api/health` 报告 32 个受管来源中 4 fresh、13 stale、
+  15 critical；本 SLO 当前违约，必须恢复 worker/source ownership，禁止放宽阈值。
 
 ### 4. 应用数据备份新鲜度 ≤ 26h；完整恢复尚未达标
 
@@ -50,8 +59,13 @@
 - **测量**：备份新鲜度哨兵（`scripts/openclaw/backup-freshness-check.mjs`，
   随 health monitor cron 跑）。最新候选的 HEAD 契约失败必须报红，不得回退旧对象报绿。
 - **告警**：无合格对象、HEAD 契约失败或 >26h → Telegram；告警发送非 2xx 也算检查失败。
-- **违约动作**：查 GitHub `backup-db` 与 Mac Mini `backup:r2` 日程；连续 2 天失败 = SEV2，
-  手动跑 `BACKUP_SCHEMAS=arena,public npm run backup:r2` 补一份应用数据备份。
+- **违约动作**：查 GitHub `backup-db` 与 Mac Mini `backup:r2` 日程；连续 2 天失败 =
+  SEV2。先由授权 operator 轮换/补齐只读 `BACKUP_DATABASE_URL`、最小权限 R2
+  credentials 和显式 `R2_BUCKET`，完成不输出端点/凭据的连通性验证，再从最新
+  reviewed `main` dispatch。成功任务会写入并按 retention 删除 R2 对象，不能把
+  本地命令当成无副作用诊断。
+- **2026-08-04 状态**：GitHub 日备已连续失败且所需连接/写凭据不完整；在下一次
+  通过 artifact + HEAD + freshness attestation 前，本 SLO 无当前达标证据。
 - **恢复状态**：本 SLO 的“完整恢复”门当前**未通过**。`arena+public` 不含托管
   `auth`，plain dump 在 fresh PostgreSQL/managed Supabase 的既有 `public/auth`
   catalog 上也有冲突。只有应用 dump、同一一致性点的 auth data-only sidecar、配对

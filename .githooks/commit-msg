@@ -1,0 +1,28 @@
+#!/bin/sh
+# Managed by scripts/install-git-hooks.mjs.
+# Reject throwaway debug, redeploy-trigger, and marker commits.
+
+set -eu
+
+message_file="$1"
+first_line=$(head -n 1 "$message_file")
+
+if printf '%s\n' "$first_line" | grep -qE '^Merge '; then
+  exit 0
+fi
+
+if printf '%s\n' "$first_line" | grep -qiE '^debug:'; then
+  printf '%s\n' "commit-msg hook: 'debug:' commits are not allowed." >&2
+  printf '%s\n' "Route debugging through a preview deployment." >&2
+  exit 1
+fi
+
+if printf '%s\n' "$first_line" | grep -qiE '^chore: *(force|trigger) +redeploy'; then
+  printf '%s\n' 'commit-msg hook: redeploy-trigger commits are not allowed.' >&2
+  exit 1
+fi
+
+if printf '%s\n' "$first_line" | grep -qiE '^chore:.*marker'; then
+  printf '%s\n' 'commit-msg hook: marker/no-op commits are not allowed.' >&2
+  exit 1
+fi

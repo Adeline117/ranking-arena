@@ -20,8 +20,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 
 export const RUNTIME_BASELINES = Object.freeze({
-  bareSupabaseClient: 83,
-  dbAny: 15,
+  bareSupabaseClient: 67,
+  dbAny: 12,
   rpcNever: 0,
 })
 

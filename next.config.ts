@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { getOptionalWalletPeerWarningRules } from './lib/config/webpack-warning-policy.mjs'
 // withSentryConfig REMOVED — it injects ~194KB Sentry SDK into every page's
 // initial bundle, blocking LCP. Sentry is now loaded entirely via
 // instrumentation-client.ts (requestIdleCallback + dynamic import).
@@ -21,7 +22,7 @@ const nextConfig = {
   reactCompiler: true,
 
   // ESLint config removed — deprecated in Next.js 16 (invalid config warning).
-  // CI runs lint separately via pre-push hook.
+  // The CI workflow runs lint as an explicit merge-gate step.
 
   // Turbopack 配置 (Next.js 16 默认) - 处理服务端专用模块在客户端的导入
   turbopack: {
@@ -37,8 +38,6 @@ const nextConfig = {
       '@gemini-wallet/core': './lib/stubs/empty.js',
       porto: './lib/stubs/empty.js',
       'porto/internal': './lib/stubs/empty.js',
-      // ClickHouse client is optional — only used when env vars are set
-      '@clickhouse/client': './lib/stubs/empty.js',
       // Farcaster SDK — optional Privy peer dep, removed from package.json to save 45MB
       '@farcaster/mini-app-solana': './lib/stubs/empty.js',
       '@farcaster/miniapp-sdk': './lib/stubs/empty.js',
@@ -48,9 +47,8 @@ const nextConfig = {
       '@solana-program/system': './lib/stubs/empty.js',
       '@solana-program/memo': './lib/stubs/empty.js',
       '@solana-program/token': './lib/stubs/empty.js',
-      // stripe SDK 的可选 crypto provider —— 仅 Deno/edge 的 SubtleCryptoProvider
-      // 用到；Node 运行时走内置 crypto，从不 import 它。serverExternalPackages 拦不住
-      // 它（stripe 包内部引用，非我们源码的 require），故 stub 成空，与上面可选 peer 同理。
+      // Privy Stripe fiat-onramp 的可选客户端 SDK；Arena 当前不暴露
+      // onramp 入口。Turbopack 仍需显式 stub 才能构建未启用的可选分支。
       '@stripe/crypto': './lib/stubs/empty.js',
     },
   },
@@ -96,9 +94,13 @@ const nextConfig = {
     config.plugins.push(
       new webpack.IgnorePlugin({
         resourceRegExp:
-          /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
+          /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
     )
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      ...getOptionalWalletPeerWarningRules(),
+    ]
     // Production deliberately uses webpack: Turbopack/SWC has emitted invalid
     // Math.pow(base, BigInt(exponent)) for noble-curves, breaking Privy at runtime.
     return config
@@ -399,6 +401,7 @@ const nextConfig = {
   // @aws-sdk/* 虽然只在 scripts 里 import，但保险起见也列出来，防止
   // 某些 route 意外引入后把 ~3MB 的 AWS SDK 打进 client bundle
   serverExternalPackages: [
+    '@clickhouse/client', // Server-only analytics client; loaded lazily when configured.
     'ccxt',
     'pg',
     'redis',
@@ -414,7 +417,7 @@ const nextConfig = {
     // 找不到模块直接 build 失败。externalize 后留给运行时 require，缺失即走 catch。
     'undici', // lib/search/meilisearch.ts — 自签 TLS 的 undici Agent
     '@mathieuc/tradingview', // lib/utils/tradingview-ws.ts — TradingView WS（依赖 ws）
-    '@stripe/crypto', // stripe SDK 的可选 crypto provider（无源码直接 import）
+    '@stripe/crypto', // Privy 可选 fiat-onramp SDK；Arena 当前不暴露该流程
   ],
 
   // 实验性功能

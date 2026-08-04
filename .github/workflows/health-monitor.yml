@@ -18,6 +18,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Validate health monitor configuration
+        id: preflight
+        shell: bash
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "${CRON_SECRET:-}" ]; then
+            printf 'configured=false\n' >> "$GITHUB_OUTPUT"
+            echo '::error title=Health monitor configuration invalid::Missing required secret name: CRON_SECRET'
+            {
+              echo '### Health monitor configuration invalid'
+              echo
+              echo 'Missing required secret name: `CRON_SECRET`.'
+              echo 'Production checks and incident notifications were skipped.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          printf 'configured=true\n' >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -34,6 +54,7 @@ jobs:
 
       - name: Check pipeline health
         id: health
+        if: steps.preflight.outputs.configured == 'true'
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           HEALTH_URL: https://www.arenafi.org/api/health/pipeline
@@ -47,9 +68,15 @@ jobs:
             --header "Authorization: Bearer $CRON_SECRET" \
             "$HEALTH_URL") || CURL_EXIT=$?
 
-          if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP" != "200" ]; then
+          if [ "$CURL_EXIT" -ne 0 ]; then
             STATUS="down"
-            MESSAGE="Health endpoint transport failure (curl=$CURL_EXIT HTTP=${HTTP:-000})"
+            MESSAGE="Health endpoint transport failure (curl=$CURL_EXIT)"
+          elif [[ "$HTTP" = "401" || "$HTTP" = "403" ]]; then
+            STATUS="configuration_error"
+            MESSAGE="Health monitor authentication configuration error (HTTP=$HTTP)"
+          elif [ "$HTTP" != "200" ]; then
+            STATUS="down"
+            MESSAGE="Health endpoint HTTP failure (HTTP=${HTTP:-000})"
           elif ! jq -e 'type == "object"' /tmp/pipeline-health.json >/dev/null 2>&1; then
             STATUS="down"
             MESSAGE="Health endpoint returned malformed JSON"
@@ -80,6 +107,7 @@ jobs:
 
       - name: Verify production main ancestry
         id: release
+        if: steps.preflight.outputs.configured == 'true'
         env:
           RELEASE_URL: https://www.arenafi.org/api/health
           HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
@@ -124,13 +152,13 @@ jobs:
 
       - name: Aggregate health result
         id: aggregate
-        if: always()
+        if: always() && steps.preflight.outputs.configured == 'true'
         env:
           PIPELINE_STATUS: ${{ steps.health.outputs.status }}
           RELEASE_STATUS: ${{ steps.release.outputs.status }}
         run: |
           case "$PIPELINE_STATUS" in
-            healthy|degraded|critical|down) ;;
+            healthy|degraded|critical|down|configuration_error) ;;
             *) PIPELINE_STATUS="down" ;;
           esac
           case "$RELEASE_STATUS" in
@@ -148,7 +176,7 @@ jobs:
 
       - name: Send Telegram alert on failure (2h dedup)
         id: telegram
-        if: always() && steps.aggregate.outputs.status != 'healthy'
+        if: always() && steps.preflight.outputs.configured == 'true' && steps.aggregate.outputs.status != 'healthy'
         env:
           HEALTH_STATUS: ${{ steps.aggregate.outputs.status }}
           HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
@@ -216,7 +244,7 @@ jobs:
           key: hm-alert-marker-v2-${{ github.run_id }}
 
       - name: Open independent issue when Telegram delivery fails
-        if: always() && steps.aggregate.outputs.status != 'healthy' && steps.telegram.outputs.outcome != 'delivered' && steps.telegram.outputs.outcome != 'deduplicated'
+        if: always() && steps.preflight.outputs.configured == 'true' && steps.aggregate.outputs.status != 'healthy' && steps.aggregate.outputs.status != 'configuration_error' && steps.telegram.outputs.outcome != 'delivered' && steps.telegram.outputs.outcome != 'deduplicated'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -250,7 +278,7 @@ jobs:
           fi
 
       - name: Close independent issue after health recovery
-        if: always() && steps.aggregate.outputs.status == 'healthy'
+        if: always() && steps.preflight.outputs.configured == 'true' && steps.aggregate.outputs.status == 'healthy'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -276,7 +304,7 @@ jobs:
           fi
 
       - name: Fail unhealthy health-monitor run
-        if: always() && steps.aggregate.outputs.status != 'healthy'
+        if: always() && steps.preflight.outputs.configured == 'true' && steps.aggregate.outputs.status != 'healthy'
         env:
           HEALTH_STATUS: ${{ steps.aggregate.outputs.status }}
         run: |

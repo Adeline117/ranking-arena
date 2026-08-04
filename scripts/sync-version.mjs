@@ -59,16 +59,10 @@ async function syncAndroidVersion(version) {
     const versionCode = versionToCode(version)
 
     // Update versionCode
-    content = content.replace(
-      /versionCode\s+\d+/,
-      `versionCode ${versionCode}`
-    )
+    content = content.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`)
 
     // Update versionName
-    content = content.replace(
-      /versionName\s+"[^"]+"/,
-      `versionName "${version}"`
-    )
+    content = content.replace(/versionName\s+"[^"]+"/, `versionName "${version}"`)
 
     await fs.writeFile(buildGradlePath, content)
     console.log(`  Android: versionCode=${versionCode}, versionName=${version}`)
@@ -87,10 +81,7 @@ async function synciOSVersion(version) {
     const buildNumber = versionToCode(version)
 
     // Update MARKETING_VERSION (display version)
-    content = content.replace(
-      /MARKETING_VERSION = [^;]+;/g,
-      `MARKETING_VERSION = ${version};`
-    )
+    content = content.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${version};`)
 
     // Update CURRENT_PROJECT_VERSION (build number)
     content = content.replace(
@@ -136,12 +127,15 @@ async function main() {
 
   console.log('\n✅ Version sync complete!')
   console.log(`\nNext steps:`)
-  console.log(`  1. Commit the version changes`)
-  console.log(`  2. Create a git tag: git tag v${version}`)
-  console.log(`  3. Push with tags: git push origin main --tags`)
+  console.log(`  1. Commit the version changes on the release branch`)
+  console.log(`  2. Push the branch, open a PR, and require CI/review`)
+  console.log(
+    `  3. After merge, tag the exact main commit: git tag -a v${version} -m "v${version}"`
+  )
+  console.log(`  4. Push only the reviewed tag: git push origin v${version}`)
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error('\n❌ Error:', error.message)
   process.exit(1)
 })

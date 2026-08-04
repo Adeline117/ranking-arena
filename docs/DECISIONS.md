@@ -52,6 +52,10 @@
 
 ## ADR-005：多会话编排纪律（共享工作树的并发安全）
 
+> 2026-08-04：其中依赖 machine-local `pre-push` 的执行方式已被
+> [ADR-025](#adr-025-repository-controls-must-be-tracked-and-reproducible) 取代；隔离
+> worktree、单一 schema 通道和有界检查原则继续有效。
+
 - **背景**：最多 7 个 claude 会话 + cron + worker 共用一个仓库目录。血泪：
   共享工作树改 database.types/eslint/tsconfig 当场污染所有会话的 tsc/lint；
   pre-push 塞无界操作拖垮所有会话推送；并发 fork 顶爆 macOS syspolicyd。
@@ -68,6 +72,10 @@
 - **后果**：删除一致；schema 设计时必须想清 FK 级联。
 
 ## ADR-007：模态框/付费墙/通知走强制共享基建
+
+> 2026-08-04：共享基建决策继续有效；下述 `pre-push` 硬门描述已被
+> [ADR-025](#adr-025-repository-controls-must-be-tracked-and-reproducible) 的 tracked
+> CI changed-source policy 取代。
 
 - **背景**：手写 backdrop/scroll-lock/escape、手写 `isPro ? ...` upsell、
   裸 `notifications.insert` 各自出过 a11y/泄露/阻塞 bug。
@@ -91,6 +99,10 @@
 - **后果**：无 WS 泄露；每个订阅 hook 要写守卫样板。
 
 ## ADR-010：每修即 commit+push + 部署后必验证
+
+> 2026-08-04：原子提交与部署后验证原则继续有效；直接/立即 push 和每次手工
+> smoke 的交付方式已被 [ADR-025](#adr-025-repository-controls-must-be-tracked-and-reproducible)
+> 的 feature branch → PR → CI → Deploy Gate 流程取代。
 
 - **背景（2026-04-22 事故）**：629 个 commit 无人验证，交易员详情页 500 持续数天。
 - **决策**：一问题一 commit 立即 push（`scripts/git-commit-safe.sh`）；每次 push 后
@@ -173,7 +185,7 @@ Use `(source, source_trader_id)` as composite unique key in `trader_sources`.
 ## ADR-015: Vercel Cron for Data Pipeline
 
 **Date:** 2024-02
-**Status:** Accepted
+**Status:** [Superseded by ADR-024](#adr-024-retire-the-legacy-connector-and-refresh-job-runtime) for exchange acquisition (2026-08-03)
 
 ### Context
 
@@ -182,6 +194,13 @@ Need scheduled jobs to fetch and process trader data from 27+ exchanges.
 ### Decision
 
 Use Vercel Cron (serverless) with batch groups (a-f) for rate limit management.
+
+### Supersession
+
+ADR-024 moved first-party exchange acquisition to the registry-driven BullMQ
+ingest worker. Vercel Cron remains authorized only for bounded derived,
+monitoring, and application jobs explicitly registered in `vercel.json`; it is
+not an exchange-acquisition owner.
 
 ### Consequences
 
@@ -195,7 +214,7 @@ Use Vercel Cron (serverless) with batch groups (a-f) for rate limit management.
 ## ADR-016: Cloudflare Worker for Geo-Blocked APIs
 
 **Date:** 2024-02
-**Status:** Accepted
+**Status:** Deprecated; retained for external-traffic audit (2026-08-04)
 
 ### Context
 
@@ -204,6 +223,14 @@ Binance/OKX APIs geo-blocked in some regions. Vercel (hnd1) sometimes blocked.
 ### Decision
 
 Deploy Cloudflare Worker as proxy fallback. Connector auto-switches on failure.
+
+### Current scope
+
+The legacy connector fallback no longer exists, and no application or ingest
+runtime consumes the Cloudflare proxy environment contract. Registry-driven
+ingest uses an explicitly selected worker region and reviewed transport. The
+artifact remains quarantined until an authorized Cloudflare traffic audit proves
+whether any external caller still depends on it; it is not an active deployable.
 
 ### Consequences
 
@@ -434,6 +461,46 @@ advanced since 2026-06-12.
   schema migration proves that no external integration still depends on it.
 - ⚠️ Reintroducing user-triggered refresh requires a canonical Tier-C product
   contract rather than restoring the retired path.
+
+---
+
+## ADR-025: Repository controls must be tracked and reproducible
+
+**Date:** 2026-08-04
+**Status:** Accepted; supersedes the pre-push enforcement clauses in ADR-005,
+ADR-007, and ADR-010
+
+### Context
+
+The repository described a large `pre-push` hook as a hard gate, but that hook
+existed only in one machine's shared Git directory. Fresh clones did not install
+it, it referenced retired files, and the service-layer script received an empty
+`git diff HEAD` in clean CI checkouts. Custom commit/push wrappers also preserved
+the former shared-index/direct-main workflow after isolated worktrees and PRs
+became the supported delivery model.
+
+### Decision
+
+- Only tracked hooks installed by `scripts/install-git-hooks.mjs` count as local
+  repository controls: bounded `pre-commit` staged checks and `commit-msg` policy.
+- Heavy checks and cross-file source policies run as explicit package commands
+  and CI jobs. The source-policy gate scans the complete owned source boundary,
+  so a clean CI checkout cannot turn the control into a no-op.
+- Contributors use isolated worktrees, standard Git commands, owned feature
+  branches, pull requests, review, and the exact-SHA Deploy Gate. Machine-local
+  hooks and personal wrappers are not release evidence.
+- Current documentation must distinguish a platform-enforced control from a
+  process target or machine-local convenience.
+
+### Consequences
+
+- ✅ A fresh clone and GitHub Actions enforce the same reviewed policies.
+- ✅ Source-policy checks cannot silently pass because CI has a clean worktree.
+- ✅ Delivery no longer depends on direct-main serialization or shared-index
+  repair scripts.
+- ⚠️ The current private GitHub plan still cannot enforce the documented target
+  ruleset; CODEOWNERS and required review remain process controls until upgraded
+  and verified through the API.
 
 ---
 

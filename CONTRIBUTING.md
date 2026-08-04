@@ -3,9 +3,10 @@
 ## Getting Started
 
 1. Fork and clone the repo
-2. `npm install`
-3. Copy `.env.example` to `.env.local` and fill in values
-4. `npm run dev`
+2. `nvm use` (Node version from `.nvmrc`)
+3. `npm ci`
+4. Copy `.env.example` to `.env.local` and fill in values
+5. `npm run dev`
 
 ## Code Style
 
@@ -35,6 +36,7 @@ i18n:     Internationalization
 ```
 
 Examples:
+
 - `feat(rankings): add ROI filter for 90D period`
 - `fix(auth): handle expired Supabase session`
 - `perf: lazy load web3 wallet components`

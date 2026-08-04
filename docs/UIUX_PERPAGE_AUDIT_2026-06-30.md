@@ -18,7 +18,7 @@
 - **i18n 回归**:Wave C + 并行波已清(ApiKeysSection/funding/OI 复核已修);**T8 口径**已落地 —
   四语言统一为「160K+/160,000+ 已收录 · 20+ 交易所」(生产实测 167,742 traders / 23 exchanges)。
 - **转化/激活**:pricing/success、tip/success、pricing 余项(Wave D);auth/callback(Wave A)。
-- **实体/详情**:bot/[id]、/u/[handle](Wave E);**/compare 四项**本轮完成(搜索恢复+从榜单加入/
+- **实体/详情**:bot/[id]、`/u/[handle]` (Wave E);**/compare 四项**本轮完成(搜索恢复+从榜单加入/
   雷达→分组条+RadarChart 删除/矩阵语义表/👑 sr-only);**composer 守卫**本轮完成(useUnsavedChangesGuard
   × 4 编辑器);**/trader/authorize** 本轮改服务端 redirect(灭 2s 空跳);exchange/[slug] token 化(B4)。
 - **市场/事件**:funding APR/OI/热力图/搜索、market 全局态条、flash-news(并行波);**competitions

@@ -167,7 +167,6 @@ npm run check:platforms  # Platform status overview
 ```bash
 node scripts/pipeline-health-check.mjs          # Full health check
 node scripts/pipeline-health-check.mjs --quick   # Quick freshness check
-node scripts/pipeline-health-check.mjs --fix     # Generate fix script
 ```
 
 ---
@@ -277,15 +276,15 @@ For the full git workflow details, see [GIT_WORKFLOW.md](./GIT_WORKFLOW.md).
 
 ## 9. Common Gotchas
 
-| Problem                        | Solution                                                                                                                                                         |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dev server runs out of memory  | Already handled — npm scripts set `--max-old-space-size=3584`                                                                                                    |
-| Binance/OKX API returns 403    | Geo-blocked. Use VPS proxy or Cloudflare Worker (see [SCRAPER.md](./SCRAPER.md))                                                                                 |
-| Push rejected by pre-push hook | The hook runs lint + type-check. Fix all errors before pushing                                                                                                   |
-| Database migration naming      | **Must** use `scripts/new-migration.sh <description>` — prevents timestamp collisions                                                                            |
-| Modal scroll leak              | **Never** write `document.body.style.overflow = 'hidden'`. Use `<ModalOverlay>` or `useModalA11y`. The pre-push hook blocks this pattern                         |
-| Notifications in API routes    | **Never** use raw `supabase.from('notifications').insert()`. Use `sendNotification()` from `lib/data/notifications.ts`. The pre-push hook blocks the raw pattern |
-| First `npm run build` is slow  | Normal. Use `npm run dev` for daily work                                                                                                                         |
+| Problem                       | Solution                                                                                                                                            |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dev server runs out of memory | Already handled — npm scripts set `--max-old-space-size=3584`                                                                                       |
+| Binance/OKX API returns 403   | Verify the registry-selected worker region and reviewed VPS/browser transport (see [SCRAPER.md](./SCRAPER.md))                                      |
+| CI rejects a PR               | Run the failing package command locally, fix the root cause, and push the same commit path again                                                    |
+| Database migration naming     | **Must** use `scripts/new-migration.sh <description>` — prevents timestamp collisions                                                               |
+| Modal scroll leak             | **Never** write `document.body.style.overflow = 'hidden'`. Use `<ModalOverlay>` or `useModalA11y`; `qa:source-policy` enforces the repository rule  |
+| Notifications in API routes   | **Never** use raw `supabase.from('notifications').insert()`. Use the notification data layer; `qa:source-policy` enforces the non-cron API boundary |
+| First `npm run build` is slow | Normal. Use `npm run dev` for daily work                                                                                                            |
 
 For production emergencies, see [RUNBOOK.md](./RUNBOOK.md).
 

@@ -40,7 +40,7 @@ app/                    # Next.js App Router pages
     groups/             # Social groups feature
     hot/                # Hot/trending content page
   api/                  # 100+ API route groups
-    cron/               # Scheduled jobs (Vercel Cron)
+    cron/               # Cron/worker handlers; vercel.json owns Vercel schedules
   components/           # Shared UI components
 
 lib/                    # Core business logic
@@ -61,7 +61,7 @@ scripts/                # CLI tools and maintenance
 
 supabase/migrations/    # SQL migration files
 worker/                 # Background job runner
-cloudflare-worker/      # CF Worker for geo-blocked APIs
+cloudflare-worker/      # Quarantined proxy artifact; not an active deployable
 ```
 
 ## Key Commands
@@ -203,7 +203,7 @@ useModalA11y({ open, onClose, modalRef }) // + focus trap + auto-focus
 
 **NEVER do**:
 
-- `document.body.style.overflow = 'hidden'` (pre-push hook blocks this)
+- `document.body.style.overflow = 'hidden'` (the CI changed-source policy blocks this)
 - `import { useScrollLock }` directly (internal to useModalA11y)
 - Hand-write escape key listeners for modals
 - Hand-write focus trap logic
@@ -292,7 +292,9 @@ sendNotification(
 
 These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same actor+type+reference within 1h skipped), (3) error isolation (failures don't affect main flow). Only cron batch jobs may use direct insert.
 
-**Enforced by**: pre-push hook greps `app/api/` files (excluding `cron/`) for `.from('notifications').insert` and **blocks the push**. This is the hard gate — not just a convention.
+**Enforced by**: `npm run qa:source-policy` scans all owned non-cron API routes,
+including multiline calls, and CI blocks the PR on direct notification inserts.
+Reviewed batch writers require the narrow `notification-batch` exemption.
 
 ### Database
 
@@ -311,9 +313,10 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
    _生产_ 存在** —— 用 Supabase MCP（`execute_sql` / `list_tables`）或
    `curl $SUPABASE_URL/rest/v1/<table>?select=<col>&limit=0`（42703=列不存在，
    PGRST205=表不存在，PGRST202=函数不存在）。**绝不凭训练先验假设 schema。**
-2. **新迁移写完必须 `apply_migration` 到生产，并 `npm run qa:schema` 确认契约
-   仍绿** —— "迁移文件进了仓库"不等于"生产有这张表"。绝不用字母后缀命名
-   （`20260319h_*` 无法进 ledger）；只用 `scripts/new-migration.sh`（纯时间戳）。
+2. **新迁移必须走 reviewed 单文件通道。** 只用 `scripts/new-migration.sh`（纯时间戳），
+   绝不用字母后缀命名。合并/生产应用由获授权的单一 operator 按 ADR-023 执行
+   `apply_migration`，核对 exact ledger name/live definition，再跑 `npm run qa:schema`；
+   普通编码会话不得把“写完迁移”理解为已获生产变更授权。
 3. **禁止 `as any` / `as SupabaseClient` 绕过生成类型** —— `database.types.ts`
    由生产 schema 生成，是编译时接地；cast 绕过它 = 自废 tsc 这道最早的防线。
 4. **catch / safeQuery 里的 DB 错误必须 log，不许静默吞** —— 静默失败让漂移
@@ -323,8 +326,8 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
 
 ### 多会话编排纪律 — MANDATORY（漂移与卡死的元层根源）
 
-Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓库目录**。
-2026-06 血泪教训(全部活生生发生过):
+Arena 历史上曾让最多 7 个 claude 会话 + cron + worker **共用一个工作树**；当前
+策略要求每个交互会话使用独立 worktree 和 owned branch。2026-06 的事故教训：
 
 1. **schema 变更走单一通道,串行化。** 多个会话各自手工 SQL-editor/MCP 应用
    迁移、用任意名字 → 仓库↔ledger 失配、幻影表、~200 迁移漂移。规则:迁移
@@ -333,12 +336,12 @@ Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓�
    完全可对应，禁止裸跑 `supabase db push`**；只有 `db push --dry-run` 明确只列出
    目标文件时才可继续。应用后按目标 name 核对 ledger，再跑 `npm run qa:schema`。
    `migration repair --status reverted` 只改账本、不回滚 schema，绝不能当回滚。
-2. **绝不往 pre-push 关键路径塞无界操作。** 钩子在每次推送跑、共用于全部会话、
-   只有 120s 看门狗。任何无界 git/网络/lint 操作在高负载下卡住 → **拖垮所有
-   会话的推送**(本会话一个加了无界 `git diff` 的守卫干过这事)。钩子里的检查
-   必须**快、有界(timeout)、fail-open**;重活交给 CI。
+2. **仓库 hook 必须快且确定。** tracked `pre-commit` 只做重复 migration version
+   检查和 `lint-staged`，tracked `commit-msg` 拒绝调试/空 marker commit；仓库没有
+   自动 `pre-push` hook。类型检查、全量 lint、测试、构建和网络检查交给显式本地
+   验证与 CI，不能把不存在的 hook 当成安全网。
 3. **共享工作树 = 改 `database.types.ts`/eslint.config/tsconfig 等核心文件会
-   立刻影响所有会话**(它们的 pre-push tsc/lint 当场用你改的版本)。高风险
+   立刻影响所有会话**(它们的本地验证会立即使用你改的版本)。高风险
    核心文件的改动先在隔离 worktree 验证(`git worktree` 或 Agent isolation),
    tsc/lint 干净再落共享树。
 4. **机器是生产 worker。** 并发会话 fork 风暴会把 macOS `syspolicyd`(Gatekeeper)
@@ -346,14 +349,15 @@ Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓�
    (诊断信号:bash 挂但 MCP 秒回 = syspolicyd 饱和)。解药:`sudo killall
 syspolicyd`(launchd 重启)+ 减少并发会话。
 5. **交互会话用独立 worktree(强烈推荐,根治规则 3 的共享工作树之痛)。** 起新会话用
-   `scripts/new-session-worktree.sh <name>` → 在 `~/arena-worktrees/<name>` 自己的
-   `session/<name>` 分支干活(env + node_modules 已 symlink),经 push-lock 合 main。
+   `scripts/new-session-worktree.sh <name>` → 在可配置的 sibling worktree root 中使用
+   自己的 `session/<name>` 分支。依赖和凭据不与主工作树 symlink，共享只限 Git
+   object store；通过 PR 集成。
    别人改 lock/核心文件/暂存区不再当场污染你的 tsc/lint/commit。(2026-06-30 血泪:
    并发会话改 lock 害 SG 部署 npm-ci 崩溃循环;另一会话的过期 premium 测试卡死所有人推送。)
 6. **并发会话上限 2–4,不是 7。** 研究 + 实测:超过 ~4 个并行,协调/合并/syspolicyd
    fork 风暴成本盖过收益。conductor.json 的 review_phase(5 个)分两批跑,别一次 10 个全开。
 7. **worker 部署走单一通道(仿 schema 单一通道)。** 一次一个会话部署,优先经 CI
-   产物流水线;**绝不多会话各自手工 `deploy-ingest-sg.sh` 并发跑、绝不在 SG box 上
+   产物流水线;**绝不多会话各自手工 `worker/deploy-ingest-sg.sh` 并发跑、绝不在 SG box 上
    `npm ci`**(非并发安全、丢 .js → 崩溃循环)。dep 无变的改动走 `--code-only`;
    手工脚本仅作 CI 不可用时的逃生口(默认已拒绝 npm ci,见脚本头)。
 
@@ -379,7 +383,7 @@ This prevents WebSocket leaks when components unmount during async subscribe.
 
 ### Components
 
-- Use `lib/i18n.ts` for all user-facing strings (zh/en)
+- Use `lib/i18n/` for all user-facing strings (en/zh/ja/ko)
 - Prefer server components, use `'use client'` only when needed
 - Design tokens in `lib/design-tokens.ts`
 
@@ -403,36 +407,22 @@ STRIPE_SECRET_KEY
 
 ## Known Issues / Caveats
 
-1. **Geo-blocking**: Binance/OKX APIs blocked in some regions. Use cloudflare-worker proxy or VPS.
+1. **Geo-blocking**: Use the source registry's selected worker region and reviewed VPS/browser transport. The Cloudflare artifact is quarantined.
 2. **Memory**: Dev server needs `--max-old-space-size=3584` (configured in npm scripts)
 3. **Build time**: Full build takes significant time; use Turbopack in dev
-4. **Concurrent push races**: Arena runs up to 7 `claude` sessions + openclaw cron
-   jobs simultaneously, all pushing to main with the same git identity. **Two
-   distinct locks** (not one, and the push lock is NOT `flock` — macOS has no
-   `flock(1)`):
-   - **Push**: an atomic `mkdir` lock DIR at `/tmp/arena-git-push.lock.d` (60s
-     deadline, steals a stale lock if the holder PID is dead). The pre-push hook
-     (`.git/hooks/pre-push`) acquires it + auto-rebases on divergence; raw `git
-push origin main` is safe. `scripts/git-push-safe.sh` is the standalone
-     wrapper and sets `ARENA_PUSH_LOCK_OWNER=$$` so the hook skips re-acquiring
-     (avoids self-deadlock).
-   - **Commit/index**: real `flock -w 120` on `/tmp/arena-git-index.lock`, used by
-     `scripts/git-commit-safe.sh` (a separate lock from push — see issue #5).
-5. **Stale staged files leaking into commits**: when a commit fails (pre-commit
-   hook OR `git reset --soft HEAD^`) the previously-staged files REMAIN in the
-   index. The next `git add foo && git commit` then bundles those leftover
-   files into the new commit. Use `scripts/git-commit-safe.sh` for guaranteed
-   clean staging — it always `git reset HEAD` first, then stages only the
-   explicitly-listed files, then restores any pre-existing staged state after
-   the commit completes. Pattern:
+4. **Concurrent changes**: each session uses an isolated worktree and owned
+   feature branch. Never coordinate by concurrently pushing directly to `main`,
+   and never assume an untracked machine-local hook will rebase or serialize a
+   push. Rebase the owned branch explicitly, push it, and integrate through a PR.
+5. **Review the index before every commit.** A failed pre-commit or a soft reset
+   leaves files staged. Isolated worktrees prevent another session from sharing
+   that index, but they do not replace an explicit staged-file review. Use
+   standard Git and verify the exact paths before committing:
 
    ```bash
-   scripts/git-commit-safe.sh "$(cat <<'EOF'
-   commit subject
-
-   body paragraph
-   EOF
-   )" path/to/file1 path/to/file2
+   git add -- path/to/file1 path/to/file2
+   git diff --cached --name-status
+   git commit -m "type(scope): subject"
    ```
 
 ## Claude Code Resources
@@ -477,16 +467,15 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 
 ## Agent Work Rules (MUST FOLLOW)
 
-### Git Commit Rule (MANDATORY — 铁律)
+### Git Delivery Rule (MANDATORY — 铁律)
 
-**每修一个问题立即 git commit + git push origin main。绝不攒多个修改一起提交。**
-
-- No asking "should I commit?" - just do it
-- After ANY file edit: `git add → git commit → git push origin main` immediately
-- One fix = one commit. Never batch multiple fixes into one commit.
-- Commit message 必须写清楚修了什么（中英文均可）
-- Small, atomic commits preferred — 宁可多 commit 也不要少 commit
-- **记住所有终端输出** — 每个命令的结果都要记住，不要丢失上下文
+- Use an isolated worktree and a feature/fix/refactor/docs branch from current
+  `origin/main`.
+- Keep commits reviewable and atomic; one cohesive fix may include its tests and
+  documentation.
+- Push only the owned branch, open/update a PR, and let CI validate it. Never
+  push directly to `main` as an implementation shortcut.
+- Preserve user changes and stage only files belonging to the current task.
 
 ### Checkpoint Protocol
 
@@ -495,22 +484,18 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 3. **Sprint scope only** - Focus on current sprint tasks (see docs/TASKS.md)
 4. **Test before done** - Run `npm run type-check && npm run test` before claiming complete
 
-### Post-Push Verification (MANDATORY — 铁律)
+### Release Verification (MANDATORY — 铁律)
 
-**每次 git push 后必须运行 `scripts/post-deploy-check.sh`。**
-等 Vercel 部署完成后（通常 5-8 分钟），验证线上 5 个核心 URL 全部非 500。
-如果任何一个返回 500，立即回滚（Vercel Dashboard → 上一个绿色部署 → Promote）。
+A feature-branch push changes no production state: require PR CI, preview checks,
+and review. After an approved merge, Deploy Gate validates the exact `main` SHA,
+promotes it, and owns the automatic smoke/rollback evidence.
 
 **为什么**：2026-04-22 事件——629 个 commit 无人验证，累积 3 个 BLOCKER + 8 个 HIGH。
 所有交易员详情页 500 崩溃持续数天无人发现。根因：改了代码没人看线上。
 
-```bash
-# 部署后验证（等 Vercel 部署完成后运行）
-scripts/post-deploy-check.sh
-
-# 如果失败，立即回滚
-# Vercel Dashboard → Deployments → 上一个 ✅ → ⋯ → Promote to Production
-```
+For explicitly authorized break-glass verification, run
+`scripts/post-deploy-check.sh <base-url> <expected-full-sha>` and follow
+`docs/RUNBOOK.md`. Never infer a successful rollout from a READY deployment alone.
 
 ### Failure Prevention
 
@@ -539,9 +524,6 @@ node scripts/pipeline-health-check.mjs
 
 # 快速检查（仅数据新鲜度）
 node scripts/pipeline-health-check.mjs --quick
-
-# 生成修复脚本
-node scripts/pipeline-health-check.mjs --fix
 ```
 
 ### Schema 契约检查（防迁移漂移 — 每周必跑 / 任何迁移后必跑）
@@ -562,7 +544,9 @@ npm run qa:buttons   # 全站按钮/交互运行时扫描（--lang-sweep 四语�
 `.claude/settings.json` 配置了自动验证：
 
 - **PreToolUse**: 写入 `supabase/migrations/` 时自动拦截，需确认
-- **Pre-push** (git hook): lint 变更文件 + `tsc --noEmit`（推送前兜底）
+- **Pre-commit** (managed hook): duplicate migration version check + `lint-staged`
+- **Commit-msg** (managed hook): rejects debug/redeploy-marker commits
+- **CI**: type-check、全量 lint、测试、build 和边界契约
 
 ### Spec-Driven Development
 
@@ -645,4 +629,5 @@ try {
 
 1. **Vercel Dashboard** → Deployments → find last good deploy → "Promote to Production"
 2. **Database**: Migrations are forward-only. If a schema change breaks prod, write a compensating migration via `scripts/new-migration.sh rollback-<description>`.
-3. **Feature flags**: Toggle in Redis via `/admin/monitoring` or `lib/features.ts`
+3. **Social surface**: Set `NEXT_PUBLIC_FEATURE_SOCIAL=false` and redeploy. There
+   is no general Redis-backed or repository-wide read-only switch.

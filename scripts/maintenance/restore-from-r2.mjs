@@ -453,10 +453,10 @@ export async function runRestoreCli({ argv = process.argv.slice(2), env = proces
     const accountId = env.R2_ACCOUNT_ID
     const accessKeyId = env.R2_ACCESS_KEY_ID
     const secretAccessKey = env.R2_SECRET_ACCESS_KEY
-    const bucket = env.R2_BUCKET || 'arena-backups'
-    if (!accountId || !accessKeyId || !secretAccessKey) {
+    const bucket = env.R2_BUCKET
+    if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
       throw new Error(
-        'Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)'
+        'Missing R2 configuration (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET)'
       )
     }
     const s3 = new S3Client({

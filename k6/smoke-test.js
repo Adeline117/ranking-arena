@@ -4,13 +4,14 @@
  * 场景: 1-2 个用户，持续 1 分钟
  * 商业意义: 验证基本功能在最小负载下是否正常
  *
- * 运行: k6 run k6/smoke-test.js
- * 云端: k6 cloud k6/smoke-test.js
+ * 运行: k6 run -e BASE_URL=https://preview.example.com k6/smoke-test.js
+ * 云端: k6 cloud -e BASE_URL=https://preview.example.com k6/smoke-test.js
  */
 
 import http from 'k6/http'
 import { check, sleep } from 'k6'
 import { Rate } from 'k6/metrics'
+import { resolveLoadTestBaseUrl } from './config.js'
 
 const errorRate = new Rate('errors')
 
@@ -27,9 +28,7 @@ export const options = {
   },
 }
 
-// Override with `-e BASE_URL=https://<preview>.vercel.app` for preview runs.
-// Default is production (stale `ranking-arena.vercel.app` corrected to the live host).
-const BASE_URL = __ENV.BASE_URL || 'https://www.arenafi.org'
+const BASE_URL = resolveLoadTestBaseUrl()
 
 export default function main() {
   // 1. 首页

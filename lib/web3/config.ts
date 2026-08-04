@@ -13,6 +13,7 @@ import { http } from 'wagmi'
 import { base, baseSepolia, arbitrum, optimism, polygon } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { baseChain } from './contracts'
+import { browserWallet, walletConnectWallet } from './wallet-factories'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -24,8 +25,8 @@ export const targetChain = baseChain
  * Base is primary; others are included for future multi-chain support.
  */
 export const supportedChains = isProduction
-  ? [base, arbitrum, optimism, polygon] as const
-  : [baseSepolia, base] as const
+  ? ([base, arbitrum, optimism, polygon] as const)
+  : ([baseSepolia, base] as const)
 
 /**
  * Wagmi + RainbowKit unified config.
@@ -37,23 +38,25 @@ export const supportedChains = isProduction
 export const wagmiConfig = getDefaultConfig({
   appName: 'Arena',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'placeholder',
+  // Security-reviewed allowlist. Browser extensions (including MetaMask) use
+  // the generic injected connector; mobile wallets use WalletConnect. Do not
+  // restore RainbowKit's implicit Safe/Base/specialized MetaMask connectors
+  // without a dependency audit and connector-level tests.
+  wallets: [
+    {
+      groupName: 'Supported',
+      wallets: [browserWallet, walletConnectWallet],
+    },
+  ],
   chains: supportedChains,
   transports: {
-    [base.id]: http(
-      process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'
-    ),
+    [base.id]: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'),
     [baseSepolia.id]: http(
       process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'
     ),
-    [arbitrum.id]: http(
-      process.env.ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc'
-    ),
-    [optimism.id]: http(
-      process.env.OPTIMISM_RPC_URL || 'https://mainnet.optimism.io'
-    ),
-    [polygon.id]: http(
-      process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com'
-    ),
+    [arbitrum.id]: http(process.env.ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc'),
+    [optimism.id]: http(process.env.OPTIMISM_RPC_URL || 'https://mainnet.optimism.io'),
+    [polygon.id]: http(process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com'),
   },
   ssr: true,
 })

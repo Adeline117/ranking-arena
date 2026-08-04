@@ -2,6 +2,9 @@
 
 Emergency operations manual for the Arena crypto trader ranking platform.
 
+**Owner:** Production on-call (repository CODEOWNERS fallback)
+**Last verified:** 2026-08-04
+
 ## Table of Contents
 
 - [Pipeline Failure Troubleshooting](#pipeline-failure-troubleshooting)
@@ -10,9 +13,13 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 - [Manual Ingest Canary](#manual-ingest-canary)
 - [Manual Leaderboard Recompute](#manual-leaderboard-recompute)
 - [Arena Score Recalculation](#arena-score-recalculation)
+- [Restore from R2 backup](#restore-from-r2-backup-灾难恢复)
 - [Deployment Rollback](#deployment-rollback)
 - [Database Emergency Operations](#database-emergency-operations)
 - [Common Errors and Solutions](#common-errors-and-solutions)
+- [Supabase Outage](#supabase-outage)
+- [Redis (Upstash) Outage](#redis-upstash-outage)
+- [Stripe Webhook Outage / Backup](#stripe-webhook-outage--backup)
 - [Key Infrastructure](#key-infrastructure)
 
 ---
@@ -29,10 +36,10 @@ Emergency operations manual for the Arena crypto trader ranking platform.
    node scripts/pipeline-health-check.mjs --quick
    ```
 
-2. **Check pipeline logs** for the failing job:
+2. **Read the authoritative pipeline report and recent job summary**:
 
    ```bash
-   npx tsx scripts/pipeline-report.ts
+   node scripts/openclaw/daily-pipeline-report.mjs
    ```
 
 3. **Check Vercel function logs** for errors:
@@ -51,11 +58,6 @@ Emergency operations manual for the Arena crypto trader ranking platform.
    | Geo-blocked               | Verify the registry-selected region and its configured transport        |
    | Timeout (524/504)         | Inspect source lease/attempt deadlines before changing bounded budgets  |
    | Publish gate rejected     | Inspect completeness, metric parity, and staging rejection evidence     |
-
-5. **Generate automated fix script**:
-   ```bash
-   node scripts/pipeline-health-check.mjs --fix
-   ```
 
 ### Symptom: Cron job stuck in "running" status
 
@@ -330,6 +332,12 @@ Sources: `lib/utils/arena-score.ts`,
 > `CREATE SCHEMA public`，fresh PostgreSQL/Supabase 已有 `public`；直接加入 `-n auth`
 > 还会与平台管理的 auth DDL/owner 冲突。因此本节当前是取证与恢复开发 runbook，
 > 不是已验收的灾备按钮。
+>
+> **2026-08-04 运行证据**：GitHub 日备已连续失败，仓库级 secrets 当前缺
+> `BACKUP_DATABASE_URL`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。workflow
+> 已改为在安装依赖前 fail-closed，并要求显式 `R2_BUCKET`；补齐并轮换最小权限
+> 凭据前不要重跑旧 SHA。下一次成功的 latest-main dispatch 及其 HEAD/freshness
+> attestation 才能恢复“当前备份有效”的证据。
 
 **备份是什么**:`backup-to-r2.mjs` 每日 dump `-n arena -n public`(PLAIN SQL,
 `--no-owner --no-privileges`)→ gzip → multipart upload → 条件 HEAD 验证，写入
@@ -340,6 +348,8 @@ Supabase 托管 PITR，R2 没有已验证的独立恢复副本。
 **列出对象清单**（只读，只验证凭据；清单出现不等于对象可恢复）：
 
 ```bash
+# Requires explicit R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
+# R2_SECRET_ACCESS_KEY, and R2_BUCKET in the operator environment.
 node scripts/maintenance/restore-from-r2.mjs --list
 ```
 
@@ -629,12 +639,16 @@ vercel rollback <deployment-url>
 
 ### Emergency: disable a cron job
 
-If a cron job is causing issues, remove or comment it out in `vercel.json` and redeploy:
+If a cron job is causing issues, remove it from `vercel.json` on an isolated
+hotfix branch, open a PR, and use the normal gate. If waiting for review is not
+safe, follow the explicitly authorized break-glass deployment procedure instead
+of silently pushing to `main`:
 
 ```bash
 # Edit vercel.json, remove the problematic cron entry
 git commit -am "disable broken cron: <job-name>"
-git push origin main
+git push -u origin hotfix/disable-<job-name>
+gh pr create --fill
 ```
 
 ---
@@ -685,16 +699,16 @@ VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 
 ## Common Errors and Solutions
 
-| Error                 | Cause                                            | Solution                                                      |
-| --------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
-| `42P10` in upsert     | Missing unique constraint on ON CONFLICT columns | Add the constraint via migration                              |
-| `PGRST301`            | JWT expired or invalid                           | Check Supabase keys in env vars                               |
-| `524` from Cloudflare | Request took > 100s                              | Reduce batch size, use inline calls instead of HTTP sub-calls |
-| `401` from VERCEL_URL | Deployment protection blocking internal calls    | Use inline (in-process) calls, never HTTP sub-calls in crons  |
-| `429` from exchange   | Rate limited                                     | Increase backoff, use VPS proxy                               |
-| `CircuitOpenError`    | Too many consecutive failures                    | Wait for circuit breaker reset (60s default)                  |
-| Redis `WRONGTYPE`     | Key type mismatch from old data                  | Delete the key: `await redis.del(key)`                        |
-| Build OOM             | Not enough memory                                | Set `--max-old-space-size=3584` (already in npm scripts)      |
+| Error                 | Cause                                            | Solution                                                                                                             |
+| --------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `42P10` in upsert     | Missing unique constraint on ON CONFLICT columns | Add the constraint via migration                                                                                     |
+| `PGRST301`            | JWT expired or invalid                           | Check Supabase keys in env vars                                                                                      |
+| `524` from Cloudflare | Request took > 100s                              | Reduce batch size, use inline calls instead of HTTP sub-calls                                                        |
+| `401` from VERCEL_URL | Deployment protection blocking internal calls    | Use inline (in-process) calls, never HTTP sub-calls in crons                                                         |
+| `429` from exchange   | Rate limited                                     | Increase backoff, use VPS proxy                                                                                      |
+| `CircuitOpenError`    | Too many consecutive failures                    | Wait for circuit breaker reset (60s default)                                                                         |
+| Redis `WRONGTYPE`     | Key type mismatch or ownership drift             | Capture `TYPE`/`PTTL`, identify the owning producer, and use a reviewed key-specific repair; never delete by pattern |
+| Build OOM             | Not enough memory                                | Set `--max-old-space-size=3584` (already in npm scripts)                                                             |
 
 ---
 
@@ -704,23 +718,26 @@ VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 
 ### What breaks
 
-| Feature               | Impact                                   | Fallback                                                                     |
-| --------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
-| Auth (GoTrue)         | Login/signup fails, JWT refresh fails    | Users with unexpired JWTs can still browse public pages                      |
-| Database (PostgreSQL) | All API routes returning DB data fail    | Redis cache serves stale data for cached endpoints (rankings, trader detail) |
-| Realtime              | Live chat, live leaderboard updates stop | App remains functional, just not live                                        |
-| Storage               | Avatar/image uploads fail                | Existing images served from CDN cache                                        |
+| Feature               | Impact                                        | Fallback                                                                                  |
+| --------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Auth (GoTrue)         | Login/signup fails, JWT refresh fails         | Existing unexpired sessions may continue until another auth operation                     |
+| Database (PostgreSQL) | Database-backed APIs and pipeline writes fail | Some already-cached reads may survive briefly; do not treat cache as a recovery guarantee |
+| Realtime              | Live chat, live leaderboard updates stop      | Static or previously loaded views may remain usable                                       |
+| Storage               | Avatar/image uploads fail                     | Existing public objects may remain available through the storage CDN                      |
 
 ### Response steps
 
 1. Confirm outage on https://status.supabase.com or Supabase Dashboard > Project Health
 2. If total outage (DB unreachable):
-   - The app auto-degrades: Redis-cached endpoints continue serving stale data
-   - Cron jobs will fail and log errors — this is expected, no manual intervention needed
-   - Monitor `pipeline_logs` for mass failures once DB recovers
+   - Declare a production data incident and stop manual retries that can amplify load.
+   - Expect database-backed APIs, scheduled writes, and ingest publication to fail closed.
+   - Cached responses are opportunistic only; verify each customer-facing surface rather than assuming availability.
+   - Preserve Vercel, worker, Sentry, and provider evidence for the incident timeline.
 3. If prolonged (>1 hour):
-   - Consider enabling read-only mode via feature flag: set `FEATURE_READ_ONLY=true` in Vercel env
-   - This disables write operations (posts, comments, follows) while keeping rankings browsable
+   - There is no repository-wide read-only environment control. Do not set undocumented environment variables.
+   - To disable the social product surface, set the implemented build-time flag
+     `NEXT_PUBLIC_FEATURE_SOCIAL=false` and deploy through the normal gate. For a broader write freeze,
+     promote a known-good deployment or ship an explicitly reviewed route-level guard.
 4. PITR restore (nuclear option):
    - Supabase Dashboard > Project Settings > Database > Point in Time Recovery
    - Select a timestamp before the incident
@@ -732,23 +749,36 @@ VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 
 **Dashboard**: https://console.upstash.com
 
-### Fail-open behavior
+### Failure boundary
 
-Redis is non-critical — all Redis consumers fail-open:
+Redis is load-bearing in production. The web runtime uses Upstash REST for
+cache, rate limits, and distributed coordination. Ingest workers use native
+`REDIS_URL` connectivity for BullMQ queues, source leases, worker ownership, and
+heartbeats. Some isolated caches may miss through, but the pipeline must fence
+or stop when queue or ownership authority is unavailable.
 
-| Feature                | Without Redis                                                            |
-| ---------------------- | ------------------------------------------------------------------------ |
-| Cron distributed locks | Disabled — concurrent cron execution possible (harmless, idempotent)     |
-| API cache              | Cache miss → direct DB query (higher latency, more Supabase load)        |
-| Rate limiting          | Falls back to in-memory Map (per-instance, less accurate but functional) |
-| Alert rate limiting    | Falls back to in-memory Map                                              |
+| Surface                 | Expected impact                                                        |
+| ----------------------- | ---------------------------------------------------------------------- |
+| BullMQ ingest           | Scheduling and consumption stop; ranking freshness degrades            |
+| Ownership/source leases | Workers fail closed or self-fence to prevent duplicate publication     |
+| Worker heartbeat        | Fleet readiness becomes unhealthy; deployment convergence is unproved  |
+| API cache               | Some endpoints query the database directly, increasing database load   |
+| Rate limiting           | Per-instance fallback, where implemented, is weaker and not equivalent |
+| Alert rate limiting     | Duplicate alerts may occur                                             |
 
 ### Response steps
 
 1. Verify status: Upstash Dashboard > your database > Metrics tab
-2. No immediate action needed — the app auto-degrades
-3. Monitor Supabase connection count (`SELECT count(*) FROM pg_stat_activity`) — without cache, DB load increases
-4. If DB connection count exceeds 80% of pool: consider adding `Cache-Control: stale-while-revalidate` headers to high-traffic API routes temporarily
+2. Declare a pipeline incident. Freeze worker deploys, manual producers, and
+   Redis key mutation until ownership state is understood.
+3. Check `/api/health/pipeline`, both PM2 worker logs, queue connectivity, and
+   ownership/heartbeat evidence for the `local` and `vps_sg` regions.
+4. Monitor Supabase connection pressure because cache misses can increase direct
+   database traffic. Roll back the latest application deployment if it caused a
+   connection surge; do not improvise cache headers during the incident.
+5. After Redis recovers, require fresh heartbeats and exactly one owner per
+   required region before declaring pipeline recovery. Do not replay a backlog
+   until leases and queue cardinality are proven healthy.
 
 ---
 
@@ -785,8 +815,8 @@ Redis is non-critical — all Redis consumers fail-open:
 | -------------------- | ---------------------------------------------------- |
 | **Supabase Project** | `iknktzifjdyujdccyhsv`                               |
 | **Vercel Region**    | `hnd1` (Tokyo)                                       |
-| **VPS Singapore**    | `45.76.152.169` (scraper port 3456, proxy port 3001) |
-| **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
+| **VPS Singapore**    | `45.76.152.169` (scraper port 3457, proxy port 3456) |
+| **VPS Japan**        | `149.28.27.242` (proxy port 3456)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
 | **Cron Schedule**    | 48 endpoints / 40 Vercel schedules, staggered        |

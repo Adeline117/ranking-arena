@@ -17,7 +17,6 @@ const trackedFiles = execFileSync('git', ['ls-files', '-z'], {
 const runtimeCredentialFiles = new Set([
   'infra/vps-playwright/ecosystem.config.js',
   'infra/vps-playwright/ecosystem-jp.config.js',
-  'scripts/archive/test-vps-scrapers.ts',
   'scripts/vps-deploy/arena-proxy.mjs',
   'scripts/vps-deploy/proxy-key-auth.cjs',
   'scripts/vps-deploy/scraper-v16-parallel.js',
