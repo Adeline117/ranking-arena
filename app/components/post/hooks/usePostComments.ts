@@ -244,6 +244,9 @@ type CommentReactionIntent = {
   revision: number
   requestId: string
   projection: CommentReactionTruth
+  // Scope-wide on purpose: any concurrent tree mutation makes a stale ACK
+  // reconcile instead of relying on projection equality (which has ABA cases).
+  visibleStateRevision: number
 }
 
 type CommentReactionTruth = {
@@ -725,6 +728,7 @@ export function usePostComments({
         revision: ++commentReactionRevisionRef.current,
         requestId: createCommentReactionRequestId(),
         projection: getCommentReactionTruth(projectedComment),
+        visibleStateRevision: -1,
       }
       commentReactionIntentRef.current.set(laneKey, intent)
 
@@ -739,6 +743,8 @@ export function usePostComments({
           return projected
         })
       )
+      intent.visibleStateRevision =
+        stateRevisionRef.current.get(commentViewerScopeKey(capturedScope)) || 0
 
       const sendCommand = async (
         command: CommentReactionIntent,
@@ -822,31 +828,47 @@ export function usePostComments({
             // An older ACK cannot overwrite a newer opposite intent. When the
             // latest intent converges to the same state, one ACK closes the lane.
             if (latestIntent?.desired === acknowledgement.reaction) {
+              const acknowledgementCanReplaceVisibleState =
+                latestIntent.visibleStateRevision ===
+                (stateRevisionRef.current.get(commentViewerScopeKey(capturedScope)) || 0)
               commentReactionIntentRef.current.delete(laneKey)
-              setComments((previous) =>
-                updateComment(previous, commentId, (comment) =>
-                  commentMatchesReactionTruth(comment, latestIntent.projection)
-                    ? applyCommentReactionTruth(comment, knownTruth)
-                    : comment
+              if (acknowledgementCanReplaceVisibleState) {
+                setComments((previous) =>
+                  updateComment(previous, commentId, (comment) =>
+                    commentMatchesReactionTruth(comment, latestIntent.projection)
+                      ? applyCommentReactionTruth(comment, knownTruth)
+                      : comment
+                  )
                 )
-              )
+              } else {
+                await reconcileCanonicalComments(postId, 'best', capturedScope)
+              }
               return
             }
 
             if (latestIntent) {
               // Rebase the pending projection on the absolute counters returned
               // by the older command, but only if no external truth replaced it.
-              setComments((previous) =>
-                updateComment(previous, commentId, (comment) => {
-                  if (!commentMatchesReactionTruth(comment, latestIntent.projection)) return comment
-                  const rebased = applyDesiredCommentReaction(
-                    applyCommentReactionTruth(comment, knownTruth),
-                    latestIntent.desired
-                  )
-                  latestIntent.projection = getCommentReactionTruth(rebased)
-                  return rebased
-                })
-              )
+              if (
+                latestIntent.visibleStateRevision ===
+                (stateRevisionRef.current.get(commentViewerScopeKey(capturedScope)) || 0)
+              ) {
+                setComments((previous) =>
+                  updateComment(previous, commentId, (comment) => {
+                    if (!commentMatchesReactionTruth(comment, latestIntent.projection)) {
+                      return comment
+                    }
+                    const rebased = applyDesiredCommentReaction(
+                      applyCommentReactionTruth(comment, knownTruth),
+                      latestIntent.desired
+                    )
+                    latestIntent.projection = getCommentReactionTruth(rebased)
+                    return rebased
+                  })
+                )
+                latestIntent.visibleStateRevision =
+                  stateRevisionRef.current.get(commentViewerScopeKey(capturedScope)) || 0
+              }
             }
             continue
           }
@@ -854,7 +876,11 @@ export function usePostComments({
           if (outcome.kind === 'definitive-rejection') {
             if (latestIntent?.revision === command.revision) {
               commentReactionIntentRef.current.delete(laneKey)
-              if (knownTruthIsCertain) {
+              if (
+                knownTruthIsCertain &&
+                command.visibleStateRevision ===
+                  (stateRevisionRef.current.get(commentViewerScopeKey(capturedScope)) || 0)
+              ) {
                 setComments((previous) =>
                   updateComment(previous, commentId, (comment) =>
                     commentMatchesReactionTruth(comment, command.projection)
@@ -924,6 +950,7 @@ export function usePostComments({
       } catch {
         if (!scopeIsCurrent(capturedScope)) return
         commentReactionIntentRef.current.delete(laneKey)
+        setCommentLikeLoading((previous) => ({ ...previous, [commentId]: false }))
         showToast(t('networkError'), 'error')
       }
     },

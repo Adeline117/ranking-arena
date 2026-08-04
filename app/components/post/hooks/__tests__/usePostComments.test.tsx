@@ -205,6 +205,35 @@ describe('usePostComments reactions', () => {
     })
   })
 
+  it('does not roll back a Realtime truth that exactly matches the optimistic projection', async () => {
+    let resolveRequest!: (value: unknown) => void
+    mockAuthedFetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRequest = resolve
+          })
+      )
+      .mockResolvedValueOnce({ ok: false, status: 503, data: null })
+    const { result } = renderReactionHook()
+    act(() => result.current.setComments([makeReactionComment()]))
+
+    let request!: Promise<void>
+    act(() => {
+      request = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+    const realtimeTruth = makeReactionComment({ user_liked: true, like_count: 3 })
+    act(() => result.current.setComments([realtimeTruth]))
+
+    await act(async () => {
+      resolveRequest(failedResult(409))
+      await request
+    })
+
+    expect(result.current.comments).toEqual([realtimeTruth])
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps the latest projection when both retries and canonical read are uncertain', async () => {
     mockAuthedFetch.mockRejectedValue(new Error('offline'))
     const { result, showToast } = renderReactionHook()
@@ -482,13 +511,22 @@ describe('usePostComments reactions', () => {
     await act(async () => result.current.loadComments(REACTION_POST_ID))
 
     let resolveMutation!: (value: unknown) => void
+    let mutationCommitted = false
     mockAuthedFetch.mockImplementation((url: string) => {
       if (url.endsWith('/comments/like')) {
         return new Promise((resolve) => {
           resolveMutation = resolve
         })
       }
-      return Promise.resolve(commentsPage([serverA, serverB], 2))
+      return Promise.resolve(
+        commentsPage(
+          [
+            mutationCommitted ? makeReactionComment({ user_liked: true, like_count: 6 }) : serverA,
+            serverB,
+          ],
+          2
+        )
+      )
     })
 
     let reactionRequest!: Promise<void>
@@ -501,6 +539,7 @@ describe('usePostComments reactions', () => {
     expect(result.current.comments[1]).toMatchObject({ content: 'updated sibling', like_count: 9 })
 
     await act(async () => {
+      mutationCommitted = true
       resolveMutation({
         ok: true,
         status: 200,
@@ -509,6 +548,44 @@ describe('usePostComments reactions', () => {
       await reactionRequest
     })
     expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 6 })
+  })
+
+  it('does not let an older ACK replace newer same-comment canonical counters', async () => {
+    const initial = makeReactionComment()
+    const canonicalTruth = makeReactionComment({ user_liked: true, like_count: 10 })
+    mockAuthedFetch.mockResolvedValueOnce(commentsPage([initial], 1))
+    const { result } = renderReactionHook()
+    await act(async () => result.current.loadComments(REACTION_POST_ID))
+
+    let resolveMutation!: (value: unknown) => void
+    mockAuthedFetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveMutation = resolve
+          })
+      )
+      .mockResolvedValueOnce(commentsPage([canonicalTruth], 1))
+      .mockResolvedValueOnce(commentsPage([canonicalTruth], 1))
+
+    let reactionRequest!: Promise<void>
+    act(() => {
+      reactionRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+    await act(async () => result.current.loadComments(REACTION_POST_ID))
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 10 })
+
+    await act(async () => {
+      resolveMutation({
+        ok: true,
+        status: 200,
+        data: reactionReceipt({ like_count: 3 }),
+      })
+      await reactionRequest
+    })
+
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 10 })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(4)
   })
 
   it('does not roll a newer authoritative state back when it matches the optimistic reaction', async () => {
