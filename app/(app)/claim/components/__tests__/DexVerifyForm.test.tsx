@@ -190,6 +190,65 @@ describe('DexVerifyForm proof submission', () => {
     ).toBe(false)
   })
 
+  it('single-flights same-frame wallet verification attempts', async () => {
+    const accounts = deferred<string[]>()
+    const request = jest.fn(({ method }: { method: string }) => {
+      if (method === 'eth_requestAccounts') return accounts.promise
+      if (method === 'personal_sign') return Promise.resolve('0xsigned-proof')
+      return Promise.reject(new Error(`Unexpected wallet method: ${method}`))
+    })
+    Object.defineProperty(window, 'ethereum', {
+      configurable: true,
+      value: { request },
+    })
+    mockAuthedFetch.mockResolvedValueOnce(
+      response({
+        success: true,
+        data: {
+          claim: {
+            user_id: VIEWER_A,
+            trader_id: checksumWallet.toLowerCase(),
+            source: 'hyperliquid',
+            status: 'reviewing',
+            verification_method: 'signature',
+          },
+          auto_approved: false,
+        },
+      })
+    )
+    const onSuccess = jest.fn()
+
+    render(
+      <DexVerifyForm
+        trader={{
+          handle: 'Wallet Trader',
+          source: 'hyperliquid',
+          source_trader_id: checksumWallet.toLowerCase(),
+        }}
+        onSuccess={onSuccess}
+      />
+    )
+
+    const button = screen.getByRole('button', { name: 'claimWalletSignMessage' })
+    const timeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(() => 0 as never)
+    act(() => {
+      button.click()
+      button.click()
+    })
+    timeoutSpy.mockRestore()
+
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledWith({ method: 'eth_requestAccounts' })
+
+    await act(async () => {
+      accounts.resolve([checksumWallet])
+      await accounts.promise
+    })
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+  })
+
   it('returns an expired claim to the exact wallet verification flow', async () => {
     mockAuthedFetch.mockResolvedValueOnce(response({ error: 'Unauthorized' }, 401))
 

@@ -143,7 +143,9 @@ function ViewerScopedDexVerifyForm({
   }
 
   const handleWalletVerify = async () => {
-    if (loading) return
+    // State updates render asynchronously; close the same-frame double-click
+    // window before a second wallet prompt or proof operation can start.
+    if (loading || operationRef.current) return
     const operationViewer = viewerRef.current
     if (!operationViewer || !isSettingsViewerCurrent(operationViewer, authRef.current)) {
       if (authRef.current.authChecked && !authRef.current.loading && !authRef.current.userId) {
