@@ -116,6 +116,7 @@ export class PipelineLogger {
     'backfill-avatars',
     'link-entities',
     'batch-5min',
+    'repair-post-interaction-counts',
 
     // Market data
     'fetch-market-data',

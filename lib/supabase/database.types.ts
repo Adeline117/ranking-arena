@@ -13416,6 +13416,10 @@ export type Database = {
           target_handle: string | null
         }[]
       }
+      repair_post_interaction_counts_atomic: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       set_group_member_role_atomic: {
         Args: {
           p_actor_id: string

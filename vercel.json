@@ -36,6 +36,10 @@
       "schedule": "3,18,33,48 * * * *"
     },
     {
+      "path": "/api/cron/repair-post-interaction-counts",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/warm-cache",
       "schedule": "4,34 * * * *"
     },

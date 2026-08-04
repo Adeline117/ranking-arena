@@ -34,6 +34,7 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'backfill-avatars': 1440,
   'link-entities': 1440,
   'batch-5min': 10,
+  'repair-post-interaction-counts': 10,
 
   // Market data
   'fetch-market-data': 120,
