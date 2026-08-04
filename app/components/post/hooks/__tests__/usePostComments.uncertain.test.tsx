@@ -8,7 +8,9 @@ const mockUpdatePostCommentCount = jest.fn()
 const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const REACTION_POST_ID = '22222222-2222-4222-8222-222222222222'
 const REACTION_COMMENT_ID = '33333333-3333-4333-8333-333333333333'
+const REACTION_REQUEST_ID = '0123456789abcdef0123456789abcdef'
 const REACTION_TIMESTAMP = '2026-08-03T21:30:00.000Z'
+const mockCreateCommentReactionRequestId = jest.fn()
 
 jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
@@ -30,6 +32,13 @@ jest.mock('@/lib/hooks/useLoginModal', () => ({
 }))
 
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
+jest.mock('@/lib/comments/comment-reaction-client-contract', () => {
+  const actual = jest.requireActual('@/lib/comments/comment-reaction-client-contract')
+  return {
+    ...actual,
+    createCommentReactionRequestId: () => mockCreateCommentReactionRequestId(),
+  }
+})
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
 }))
@@ -120,8 +129,9 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
       actor_id: REACTION_ACTOR_ID,
       post_id: REACTION_POST_ID,
       comment_id: REACTION_COMMENT_ID,
-      operation: 'toggle',
-      requested_reaction: 'like',
+      request_id: REACTION_REQUEST_ID,
+      operation: 'set_reaction',
+      desired_reaction: 'like',
       action: 'added',
       reaction: 'like',
       liked: true,
@@ -148,6 +158,7 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.clear()
+    mockCreateCommentReactionRequestId.mockReturnValue(REACTION_REQUEST_ID)
   })
 
   it('does not undo a committed comment when Realtime arrives before the response is lost', async () => {
@@ -233,6 +244,7 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
       })
     )
     mockAuthedFetch.mockResolvedValueOnce(unavailable())
+    mockAuthedFetch.mockResolvedValueOnce(unavailable())
 
     let request: Promise<void>
     act(() => {
@@ -259,6 +271,7 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
       status: 200,
       data: { success: true, data: { like_count: 1 } },
     })
+    mockAuthedFetch.mockResolvedValueOnce(unavailable())
     mockAuthedFetch.mockResolvedValueOnce(canonical([canonicalReaction], 1))
 
     await act(async () => result.current.toggleCommentLike(REACTION_POST_ID, initial.id))

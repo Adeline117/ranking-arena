@@ -391,7 +391,7 @@ export function CommentThread({
                 e.stopPropagation()
                 onToggleCommentLike(postId, comment.id)
               }}
-              disabled={commentLikeLoading[comment.id]}
+              aria-busy={commentLikeLoading[comment.id] || undefined}
               style={{
                 ...commentStyles.actionButton,
                 display: 'flex',
@@ -414,7 +414,7 @@ export function CommentThread({
                 e.stopPropagation()
                 onToggleCommentDislike?.(postId, comment.id)
               }}
-              disabled={commentLikeLoading[comment.id]}
+              aria-busy={commentLikeLoading[comment.id] || undefined}
               style={{
                 ...commentStyles.actionButton,
                 display: 'flex',

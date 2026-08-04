@@ -44,6 +44,9 @@ jest.mock('next/server', () => {
 const mockRpc = jest.fn()
 let mockAuthenticated = true
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111'
+const POST_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
+const COMMENT_ID = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
+const REQUEST_ID = '0123456789abcdef0123456789abcdef'
 const RESPONSE_TIMESTAMP = '2026-08-03T21:30:00.000Z'
 const mockUser = { id: ACTOR_ID, email: 'test@test.com' }
 
@@ -80,8 +83,12 @@ jest.mock('@/lib/features', () => ({
 import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
-const POST_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
-const COMMENT_ID = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
+const LIKE_REQUEST = {
+  operation: 'set_reaction',
+  request_id: REQUEST_ID,
+  comment_id: COMMENT_ID,
+  desired_reaction: 'like',
+} as const
 
 function request(body: unknown, postId = POST_ID) {
   return new NextRequest(`http://localhost/api/posts/${postId}/comments/like`, {
@@ -90,55 +97,59 @@ function request(body: unknown, postId = POST_ID) {
   })
 }
 
-describe('POST /api/posts/[id]/comments/like canonical contract', () => {
+function result(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'added',
+    action: 'added',
+    liked: true,
+    disliked: false,
+    like_count: 3,
+    dislike_count: 1,
+    reaction: 'like',
+    ...overrides,
+  }
+}
+
+describe('POST /api/posts/[id]/comments/like desired-state contract', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockAuthenticated = true
     mockUser.id = ACTOR_ID
-    mockRpc.mockResolvedValue({
-      data: {
-        action: 'added',
-        liked: true,
-        disliked: false,
-        like_count: 3,
-        dislike_count: 1,
-        reaction: 'like',
-      },
-      error: null,
-    })
+    mockRpc.mockResolvedValue({ data: result(), error: null })
   })
 
   it('requires authentication through the shared write middleware', async () => {
     mockAuthenticated = false
 
-    const response = await POST(request({ comment_id: COMMENT_ID, type: 'like' }))
+    const response = await POST(request(LIKE_REQUEST))
 
     expect(response.status).toBe(401)
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('calls the atomic RPC exactly once and preserves its strict result', async () => {
+  it('calls the desired-state RPC once and returns an identity-bound receipt', async () => {
     mockRpc.mockResolvedValue({
-      data: {
+      data: result({
+        status: 'changed',
         action: 'changed',
         liked: false,
         disliked: true,
         like_count: 2,
         dislike_count: 2,
         reaction: 'dislike',
-      },
+      }),
       error: null,
     })
 
-    const response = await POST(request({ comment_id: COMMENT_ID, type: 'dislike' }))
+    const response = await POST(request({ ...LIKE_REQUEST, desired_reaction: 'dislike' as const }))
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenCalledTimes(1)
-    expect(mockRpc).toHaveBeenCalledWith('toggle_comment_reaction', {
+    expect(mockRpc).toHaveBeenCalledWith('set_comment_reaction_desired_state_atomic', {
+      p_actor_id: ACTOR_ID,
       p_post_id: POST_ID,
       p_comment_id: COMMENT_ID,
-      p_user_id: mockUser.id,
-      p_reaction_type: 'dislike',
+      p_desired_reaction: 'dislike',
     })
     expect(await response.json()).toEqual({
       success: true,
@@ -146,8 +157,9 @@ describe('POST /api/posts/[id]/comments/like canonical contract', () => {
         actor_id: ACTOR_ID,
         post_id: POST_ID,
         comment_id: COMMENT_ID,
-        operation: 'toggle',
-        requested_reaction: 'dislike',
+        request_id: REQUEST_ID,
+        operation: 'set_reaction',
+        desired_reaction: 'dislike',
         action: 'changed',
         reaction: 'dislike',
         liked: false,
@@ -163,11 +175,60 @@ describe('POST /api/posts/[id]/comments/like canonical contract', () => {
   })
 
   it.each([
-    ['invalid post ID', { comment_id: COMMENT_ID, type: 'like' }, 'not-a-uuid'],
-    ['invalid comment ID', { comment_id: 'not-a-uuid', type: 'like' }, POST_ID],
-    ['missing reaction type', { comment_id: COMMENT_ID }, POST_ID],
-    ['unknown reaction type', { comment_id: COMMENT_ID, type: 'love' }, POST_ID],
-    ['unexpected body field', { comment_id: COMMENT_ID, type: 'like', admin: true }, POST_ID],
+    [
+      'removes an existing reaction',
+      result({
+        status: 'removed',
+        action: 'removed',
+        liked: false,
+        reaction: null,
+        like_count: 2,
+      }),
+      'removed',
+    ],
+    [
+      'replays an absent state without toggling',
+      result({
+        status: 'unchanged',
+        action: 'unchanged',
+        liked: false,
+        reaction: null,
+        like_count: 2,
+      }),
+      'unchanged',
+    ],
+  ])('%s', async (_name, rpcResult, action) => {
+    mockRpc.mockResolvedValue({ data: rpcResult, error: null })
+
+    const response = await POST(request({ ...LIKE_REQUEST, desired_reaction: null }))
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledWith(
+      'set_comment_reaction_desired_state_atomic',
+      expect.objectContaining({ p_desired_reaction: null })
+    )
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          request_id: REQUEST_ID,
+          desired_reaction: null,
+          action,
+          reaction: null,
+        }),
+      })
+    )
+  })
+
+  it.each([
+    ['invalid post ID', LIKE_REQUEST, 'not-a-uuid'],
+    ['invalid comment ID', { ...LIKE_REQUEST, comment_id: 'not-a-uuid' }, POST_ID],
+    ['missing operation', { ...LIKE_REQUEST, operation: undefined }, POST_ID],
+    ['legacy toggle body', { comment_id: COMMENT_ID, type: 'like' }, POST_ID],
+    ['missing desired state', { ...LIKE_REQUEST, desired_reaction: undefined }, POST_ID],
+    ['unknown desired state', { ...LIKE_REQUEST, desired_reaction: 'love' }, POST_ID],
+    ['invalid request identity', { ...LIKE_REQUEST, request_id: 'bad' }, POST_ID],
+    ['uppercase request identity', { ...LIKE_REQUEST, request_id: 'A'.repeat(32) }, POST_ID],
+    ['unexpected body field', { ...LIKE_REQUEST, admin: true }, POST_ID],
     ['non-object body', ['not', 'an', 'object'], POST_ID],
   ])('rejects %s without invoking the RPC', async (_label, body, postId) => {
     const response = await POST(request(body, postId))
@@ -197,7 +258,7 @@ describe('POST /api/posts/[id]/comments/like canonical contract', () => {
   ])('maps database error %s to HTTP %i without direct-write fallback', async (code, status) => {
     mockRpc.mockResolvedValue({ data: null, error: { code, message: 'private detail' } })
 
-    const response = await POST(request({ comment_id: COMMENT_ID, type: 'like' }))
+    const response = await POST(request(LIKE_REQUEST))
 
     expect(response.status).toBe(status)
     expect(mockRpc).toHaveBeenCalledTimes(1)
@@ -205,59 +266,32 @@ describe('POST /api/posts/[id]/comments/like canonical contract', () => {
   })
 
   it.each([
+    ['not_found', 404],
+    ['invalid', 400],
+  ])('maps exact %s sentinel to HTTP %i', async (status, expectedStatus) => {
+    mockRpc.mockResolvedValue({ data: { status }, error: null })
+
+    const response = await POST(request(LIKE_REQUEST))
+
+    expect(response.status).toBe(expectedStatus)
+  })
+
+  it.each([
+    result({ status: 'changed' }),
     { action: 'added', liked: true },
-    {
-      action: 'added',
-      liked: true,
-      disliked: true,
-      like_count: 3,
-      dislike_count: 1,
-      reaction: 'like',
-    },
-    {
-      action: 'removed',
-      liked: true,
-      disliked: false,
-      like_count: 3,
-      dislike_count: 1,
-      reaction: null,
-    },
-    {
-      action: 'added',
-      liked: false,
-      disliked: true,
-      like_count: 2,
-      dislike_count: 2,
-      reaction: 'dislike',
-    },
-    {
-      action: 'added',
-      liked: true,
-      disliked: false,
-      like_count: 3,
-      dislike_count: 1,
-    },
-    {
-      action: 'removed',
-      liked: false,
-      disliked: false,
-      like_count: 2,
-      dislike_count: 1,
-      reaction: 'like',
-    },
-    {
-      action: 'added',
-      liked: true,
-      disliked: false,
-      like_count: 3,
-      dislike_count: 1,
-      reaction: 'like',
-      invented: true,
-    },
+    result({ liked: true, disliked: true }),
+    result({ action: 'removed', status: 'removed', reaction: 'like' }),
+    result({ action: 'added', status: 'added', reaction: null, liked: false }),
+    result({ action: 'added', status: 'added', reaction: 'dislike' }),
+    result({ like_count: -1 }),
+    result({ dislike_count: 1.5 }),
+    result({ like_count: 0 }),
+    { status: 'not_found', invented: true },
+    result({ invented: true }),
   ])('fails closed for malformed or contradictory RPC result %#', async (data) => {
     mockRpc.mockResolvedValue({ data, error: null })
 
-    const response = await POST(request({ comment_id: COMMENT_ID, type: 'like' }))
+    const response = await POST(request(LIKE_REQUEST))
 
     expect(response.status).toBe(500)
   })
@@ -265,7 +299,7 @@ describe('POST /api/posts/[id]/comments/like canonical contract', () => {
   it('rejects a malformed authenticated actor before invoking the RPC', async () => {
     mockUser.id = 'not-a-user-id'
 
-    const response = await POST(request({ comment_id: COMMENT_ID, type: 'like' }))
+    const response = await POST(request(LIKE_REQUEST))
 
     expect(response.status).toBe(401)
     expect(mockRpc).not.toHaveBeenCalled()

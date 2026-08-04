@@ -9,7 +9,12 @@ const mockOpenLoginModal = jest.fn()
 const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const REACTION_POST_ID = '22222222-2222-4222-8222-222222222222'
 const REACTION_COMMENT_ID = '33333333-3333-4333-8333-333333333333'
+const REACTION_COMMENT_ID_2 = '44444444-4444-4444-8444-444444444444'
+const REACTION_REQUEST_ID = '0123456789abcdef0123456789abcdef'
+const REACTION_REQUEST_ID_2 = 'fedcba9876543210fedcba9876543210'
+const REACTION_REQUEST_ID_3 = '11111111111111111111111111111111'
 const REACTION_TIMESTAMP = '2026-08-03T21:30:00.000Z'
+const mockCreateCommentReactionRequestId = jest.fn()
 
 jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
@@ -31,6 +36,13 @@ jest.mock('@/lib/hooks/useLoginModal', () => ({
 }))
 
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
+jest.mock('@/lib/comments/comment-reaction-client-contract', () => {
+  const actual = jest.requireActual('@/lib/comments/comment-reaction-client-contract')
+  return {
+    ...actual,
+    createCommentReactionRequestId: () => mockCreateCommentReactionRequestId(),
+  }
+})
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
 }))
@@ -96,8 +108,9 @@ function reactionReceipt(overrides: Record<string, unknown> = {}) {
       actor_id: REACTION_ACTOR_ID,
       post_id: REACTION_POST_ID,
       comment_id: REACTION_COMMENT_ID,
-      operation: 'toggle',
-      requested_reaction: 'like',
+      request_id: REACTION_REQUEST_ID,
+      operation: 'set_reaction',
+      desired_reaction: 'like',
       action: 'added',
       reaction: 'like',
       liked: true,
@@ -118,10 +131,22 @@ function failedResult(status = 500) {
   })
 }
 
+function commentsPage(comments: Comment[], commentCount = comments.length) {
+  return {
+    ok: true,
+    status: 200,
+    data: {
+      success: true,
+      data: { comments, post: { comment_count: commentCount } },
+    },
+  }
+}
+
 describe('usePostComments reactions', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.clear()
+    mockCreateCommentReactionRequestId.mockReturnValue(REACTION_REQUEST_ID)
   })
 
   it('reads the latest loaded comment state instead of a stale callback closure', async () => {
@@ -142,7 +167,7 @@ describe('usePostComments reactions', () => {
     })
   })
 
-  it('rolls a rejected neutral-to-like toggle back to the exact neutral state', async () => {
+  it('rolls a rejected neutral-to-like command back to the exact neutral state', async () => {
     mockAuthedFetch.mockImplementation(() => failedResult(409))
     const { result } = renderReactionHook()
     act(() => result.current.setComments([makeReactionComment()]))
@@ -180,7 +205,7 @@ describe('usePostComments reactions', () => {
     })
   })
 
-  it('restores last-good state when the network and canonical read both fail', async () => {
+  it('keeps the latest projection when both retries and canonical read are uncertain', async () => {
     mockAuthedFetch.mockRejectedValue(new Error('offline'))
     const { result, showToast } = renderReactionHook()
     act(() => result.current.setComments([makeReactionComment()]))
@@ -191,20 +216,20 @@ describe('usePostComments reactions', () => {
 
     expect(result.current.comments[0]).toMatchObject({
       user_liked: false,
-      user_disliked: false,
+      user_disliked: true,
       like_count: 2,
-      dislike_count: 1,
+      dislike_count: 2,
     })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
     expect(showToast).toHaveBeenCalledWith('networkError', 'error')
   })
 
-  it('locks same-frame duplicate reaction requests synchronously', async () => {
-    let resolveRequest: ((value: unknown) => void) | undefined
-    mockAuthedFetch.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRequest = resolve
-      })
-    )
+  it('drains same-frame like then cancel intents in order without dropping the second click', async () => {
+    mockCreateCommentReactionRequestId
+      .mockReturnValueOnce(REACTION_REQUEST_ID)
+      .mockReturnValueOnce(REACTION_REQUEST_ID_2)
+    const resolvers: Array<(value: unknown) => void> = []
+    mockAuthedFetch.mockImplementation(() => new Promise((resolve) => void resolvers.push(resolve)))
     const { result } = renderReactionHook()
     act(() => result.current.setComments([makeReactionComment()]))
 
@@ -216,17 +241,274 @@ describe('usePostComments reactions', () => {
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(result.current.comments[0]).toMatchObject({
+      user_liked: false,
+      like_count: 2,
+    })
 
     await act(async () => {
-      resolveRequest?.({
+      resolvers[0]?.({
         ok: true,
         status: 200,
-        data: {
-          ...reactionReceipt(),
-        },
+        data: reactionReceipt(),
+      })
+      await Promise.resolve()
+    })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      resolvers[1]?.({
+        ok: true,
+        status: 200,
+        data: reactionReceipt({
+          request_id: REACTION_REQUEST_ID_2,
+          desired_reaction: null,
+          action: 'removed',
+          reaction: null,
+          liked: false,
+          like_count: 2,
+        }),
       })
       await Promise.all([firstRequest!, duplicateRequest!])
     })
+
+    const bodies = mockAuthedFetch.mock.calls.map((call) => call[3])
+    expect(bodies).toEqual([
+      expect.objectContaining({ request_id: REACTION_REQUEST_ID, desired_reaction: 'like' }),
+      expect.objectContaining({ request_id: REACTION_REQUEST_ID_2, desired_reaction: null }),
+    ])
+    expect(result.current.comments[0]).toMatchObject({
+      user_liked: false,
+      user_disliked: false,
+      like_count: 2,
+      dislike_count: 1,
+    })
+  })
+
+  it('coalesces three same-frame like clicks when the latest desired state matches the first ACK', async () => {
+    mockCreateCommentReactionRequestId
+      .mockReturnValueOnce(REACTION_REQUEST_ID)
+      .mockReturnValueOnce(REACTION_REQUEST_ID_2)
+      .mockReturnValueOnce(REACTION_REQUEST_ID_3)
+    const resolvers: Array<(value: unknown) => void> = []
+    mockAuthedFetch.mockImplementation(() => new Promise((resolve) => void resolvers.push(resolve)))
+    const { result } = renderReactionHook()
+    act(() => result.current.setComments([makeReactionComment()]))
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    let third!: Promise<void>
+    act(() => {
+      first = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+      second = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+      third = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(mockCreateCommentReactionRequestId).toHaveBeenCalledTimes(3)
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 3 })
+
+    await act(async () => {
+      resolvers[0]?.({ ok: true, status: 200, data: reactionReceipt() })
+      await Promise.all([first, second, third])
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(result.current.comments[0]).toMatchObject({
+      user_liked: true,
+      user_disliked: false,
+      like_count: 3,
+      dislike_count: 1,
+    })
+  })
+
+  it('keeps a newer dislike projection while an older like ACK drains first', async () => {
+    mockCreateCommentReactionRequestId
+      .mockReturnValueOnce(REACTION_REQUEST_ID)
+      .mockReturnValueOnce(REACTION_REQUEST_ID_2)
+    const resolvers: Array<(value: unknown) => void> = []
+    mockAuthedFetch.mockImplementation(() => new Promise((resolve) => void resolvers.push(resolve)))
+    const { result } = renderReactionHook()
+    act(() => result.current.setComments([makeReactionComment()]))
+
+    let likeRequest!: Promise<void>
+    let dislikeRequest!: Promise<void>
+    act(() => {
+      likeRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+      dislikeRequest = result.current.toggleCommentDislike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+    expect(result.current.comments[0]).toMatchObject({
+      user_liked: false,
+      user_disliked: true,
+      like_count: 2,
+      dislike_count: 2,
+    })
+
+    await act(async () => {
+      resolvers[0]?.({ ok: true, status: 200, data: reactionReceipt() })
+      await Promise.resolve()
+    })
+    expect(result.current.comments[0]).toMatchObject({
+      user_liked: false,
+      user_disliked: true,
+    })
+
+    await act(async () => {
+      resolvers[1]?.({
+        ok: true,
+        status: 200,
+        data: reactionReceipt({
+          request_id: REACTION_REQUEST_ID_2,
+          desired_reaction: 'dislike',
+          action: 'changed',
+          reaction: 'dislike',
+          liked: false,
+          disliked: true,
+          like_count: 2,
+          dislike_count: 2,
+        }),
+      })
+      await Promise.all([likeRequest, dislikeRequest])
+    })
+
+    expect(result.current.comments[0]).toMatchObject({
+      user_liked: false,
+      user_disliked: true,
+      like_count: 2,
+      dislike_count: 2,
+    })
+  })
+
+  it('retries one desired intent with the same request identity', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce({ ok: false, status: 503, data: null })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: reactionReceipt() })
+    const { result } = renderReactionHook()
+    act(() => result.current.setComments([makeReactionComment()]))
+
+    await act(async () => {
+      await result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(mockAuthedFetch.mock.calls[0]?.[3]).toEqual(mockAuthedFetch.mock.calls[1]?.[3])
+    expect(mockAuthedFetch.mock.calls[0]?.[3]).toEqual(
+      expect.objectContaining({
+        request_id: REACTION_REQUEST_ID,
+        desired_reaction: 'like',
+      })
+    )
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 3 })
+  })
+
+  it('runs different comment lanes concurrently and accepts out-of-order ACKs independently', async () => {
+    mockCreateCommentReactionRequestId
+      .mockReturnValueOnce(REACTION_REQUEST_ID)
+      .mockReturnValueOnce(REACTION_REQUEST_ID_2)
+    const pending = new Map<
+      string,
+      { body: Record<string, unknown>; resolve: (value: unknown) => void }
+    >()
+    mockAuthedFetch.mockImplementation(
+      (_url: string, _method: string, _token: string, body: Record<string, unknown>) =>
+        new Promise((resolve) => {
+          pending.set(String(body.comment_id), { body, resolve })
+        })
+    )
+    const { result } = renderReactionHook()
+    act(() =>
+      result.current.setComments([
+        makeReactionComment(),
+        makeReactionComment({ id: REACTION_COMMENT_ID_2 }),
+      ])
+    )
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+      second = result.current.toggleCommentDislike(REACTION_POST_ID, REACTION_COMMENT_ID_2)
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      pending.get(REACTION_COMMENT_ID_2)?.resolve({
+        ok: true,
+        status: 200,
+        data: reactionReceipt({
+          comment_id: REACTION_COMMENT_ID_2,
+          request_id: REACTION_REQUEST_ID_2,
+          desired_reaction: 'dislike',
+          reaction: 'dislike',
+          liked: false,
+          disliked: true,
+          like_count: 2,
+          dislike_count: 2,
+        }),
+      })
+      await second
+    })
+    expect(result.current.comments[1]).toMatchObject({
+      user_disliked: true,
+      dislike_count: 2,
+    })
+
+    await act(async () => {
+      pending.get(REACTION_COMMENT_ID)?.resolve({
+        ok: true,
+        status: 200,
+        data: reactionReceipt(),
+      })
+      await first
+    })
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 3 })
+    expect(result.current.comments[1]).toMatchObject({
+      user_liked: false,
+      user_disliked: true,
+      like_count: 2,
+      dislike_count: 2,
+    })
+  })
+
+  it('overlays an active reaction intent on a same-post canonical tree refresh', async () => {
+    const serverA = makeReactionComment({ like_count: 5 })
+    const serverB = makeReactionComment({
+      id: REACTION_COMMENT_ID_2,
+      content: 'updated sibling',
+      like_count: 9,
+    })
+    mockAuthedFetch.mockResolvedValueOnce(commentsPage([serverA, serverB], 2))
+    const { result } = renderReactionHook()
+    await act(async () => result.current.loadComments(REACTION_POST_ID))
+
+    let resolveMutation!: (value: unknown) => void
+    mockAuthedFetch.mockImplementation((url: string) => {
+      if (url.endsWith('/comments/like')) {
+        return new Promise((resolve) => {
+          resolveMutation = resolve
+        })
+      }
+      return Promise.resolve(commentsPage([serverA, serverB], 2))
+    })
+
+    let reactionRequest!: Promise<void>
+    act(() => {
+      reactionRequest = result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
+    })
+    await act(async () => result.current.loadComments(REACTION_POST_ID))
+
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 6 })
+    expect(result.current.comments[1]).toMatchObject({ content: 'updated sibling', like_count: 9 })
+
+    await act(async () => {
+      resolveMutation({
+        ok: true,
+        status: 200,
+        data: reactionReceipt({ like_count: 6 }),
+      })
+      await reactionRequest
+    })
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 6 })
   })
 
   it('does not roll a newer authoritative state back when it matches the optimistic reaction', async () => {
@@ -272,7 +554,7 @@ describe('usePostComments reactions', () => {
       ok: true,
       status: 200,
       data: reactionReceipt({
-        requested_reaction: 'dislike',
+        desired_reaction: 'dislike',
         reaction: 'dislike',
         liked: false,
         disliked: true,
@@ -295,12 +577,13 @@ describe('usePostComments reactions', () => {
     })
   })
 
-  it('treats the RPC result as toggle truth instead of a desired-state acknowledgement', async () => {
+  it('accepts an absolute remove acknowledgement without toggling it back on', async () => {
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
       data: reactionReceipt({
         action: 'removed',
+        desired_reaction: null,
         reaction: null,
         liked: false,
         disliked: false,
@@ -308,7 +591,9 @@ describe('usePostComments reactions', () => {
       }),
     })
     const { result } = renderReactionHook()
-    act(() => result.current.setComments([makeReactionComment()]))
+    act(() =>
+      result.current.setComments([makeReactionComment({ user_liked: true, like_count: 2 })])
+    )
 
     await act(async () => {
       await result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
@@ -326,7 +611,7 @@ describe('usePostComments reactions', () => {
     ['another actor', reactionReceipt({ actor_id: '44444444-4444-4444-8444-444444444444' })],
     ['another post', reactionReceipt({ post_id: '44444444-4444-4444-8444-444444444444' })],
     ['another comment', reactionReceipt({ comment_id: '44444444-4444-4444-8444-444444444444' })],
-    ['another requested reaction', reactionReceipt({ requested_reaction: 'dislike' })],
+    ['another desired reaction', reactionReceipt({ desired_reaction: 'dislike' })],
     [
       'an extra receipt field',
       {
@@ -340,6 +625,7 @@ describe('usePostComments reactions', () => {
     mockAuthedFetch
       .mockResolvedValueOnce({ ok: true, status: 200, data: candidate })
       .mockResolvedValueOnce({ ok: false, status: 503, data: null })
+      .mockResolvedValueOnce({ ok: false, status: 503, data: null })
     const { result } = renderReactionHook()
     act(() => result.current.setComments([makeReactionComment()]))
 
@@ -347,11 +633,11 @@ describe('usePostComments reactions', () => {
       await result.current.toggleCommentLike(REACTION_POST_ID, REACTION_COMMENT_ID)
     })
 
-    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
     expect(result.current.comments[0]).toMatchObject({
-      user_liked: false,
+      user_liked: true,
       user_disliked: false,
-      like_count: 2,
+      like_count: 3,
       dislike_count: 1,
     })
   })
@@ -359,6 +645,7 @@ describe('usePostComments reactions', () => {
   it('requires exact 200 and forwards a bounded, viewer-scoped abort signal', async () => {
     mockAuthedFetch
       .mockResolvedValueOnce({ ok: true, status: 201, data: reactionReceipt() })
+      .mockResolvedValueOnce({ ok: false, status: 503, data: null })
       .mockResolvedValueOnce({ ok: false, status: 503, data: null })
     const { result } = renderReactionHook()
     act(() => result.current.setComments([makeReactionComment()]))
@@ -372,7 +659,12 @@ describe('usePostComments reactions', () => {
       `/api/posts/${REACTION_POST_ID}/comments/like`,
       'POST',
       'token',
-      { comment_id: REACTION_COMMENT_ID, type: 'like' },
+      {
+        operation: 'set_reaction',
+        request_id: REACTION_REQUEST_ID,
+        comment_id: REACTION_COMMENT_ID,
+        desired_reaction: 'like',
+      },
       15_000,
       {
         expectedUserId: REACTION_ACTOR_ID,
@@ -380,7 +672,8 @@ describe('usePostComments reactions', () => {
         signal: expect.any(AbortSignal),
       }
     )
-    expect(result.current.comments[0]).toMatchObject({ user_liked: false, like_count: 2 })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
+    expect(result.current.comments[0]).toMatchObject({ user_liked: true, like_count: 3 })
   })
 
   it('aborts an in-flight reaction when the viewer scope changes', async () => {

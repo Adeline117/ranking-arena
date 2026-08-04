@@ -13,9 +13,15 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 import {
+  COMMENT_REACTION_OPERATION,
   COMMENT_REACTION_REQUEST_TIMEOUT_MS,
+  commentReactionCountDelta,
+  createCommentReactionRequestId,
+  isDefinitiveCommentReactionRejection,
+  nextCommentReactionState,
   readCommentReactionAcknowledgement,
   type CommentReaction,
+  type CommentReactionAcknowledgement,
 } from '@/lib/comments/comment-reaction-client-contract'
 
 export type Comment = {
@@ -144,6 +150,65 @@ function getCommentReaction(comment: Comment): CommentReaction | null {
   return null
 }
 
+function getCommentReactionTruth(comment: Comment): CommentReactionTruth {
+  return {
+    reaction: getCommentReaction(comment),
+    likeCount: Math.max(0, comment.like_count || 0),
+    dislikeCount: Math.max(0, comment.dislike_count || 0),
+  }
+}
+
+function applyDesiredCommentReaction(comment: Comment, desired: CommentReaction | null): Comment {
+  const current = getCommentReaction(comment)
+  const delta = commentReactionCountDelta(current, desired)
+  return {
+    ...comment,
+    user_liked: desired === 'like',
+    user_disliked: desired === 'dislike',
+    like_count: Math.max(0, (comment.like_count || 0) + delta.likeCount),
+    dislike_count: Math.max(0, (comment.dislike_count || 0) + delta.dislikeCount),
+  }
+}
+
+function applyCommentReactionTruth(comment: Comment, truth: CommentReactionTruth): Comment {
+  return {
+    ...comment,
+    user_liked: truth.reaction === 'like',
+    user_disliked: truth.reaction === 'dislike',
+    like_count: truth.likeCount,
+    dislike_count: truth.dislikeCount,
+  }
+}
+
+function commentMatchesReactionTruth(comment: Comment, truth: CommentReactionTruth): boolean {
+  return (
+    getCommentReaction(comment) === truth.reaction &&
+    Math.max(0, comment.like_count || 0) === truth.likeCount &&
+    Math.max(0, comment.dislike_count || 0) === truth.dislikeCount
+  )
+}
+
+function overlayPendingCommentReactionProjections(
+  comments: Comment[],
+  intentFor: (commentId: string) => CommentReactionIntent | undefined
+): Comment[] {
+  return comments.map((comment) => {
+    const intent = intentFor(comment.id)
+    const projected = intent ? applyDesiredCommentReaction(comment, intent.desired) : comment
+    if (intent) intent.projection = getCommentReactionTruth(projected)
+    const replies = projected.replies
+      ? overlayPendingCommentReactionProjections(projected.replies, intentFor)
+      : projected.replies
+    return replies === projected.replies ? projected : { ...projected, replies }
+  })
+}
+
+function commentReactionError(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const error = (value as Record<string, unknown>).error
+  return typeof error === 'string' ? error : null
+}
+
 function isDeleteCommentResponse(value: unknown): value is DeleteCommentResponse {
   if (!value || typeof value !== 'object') return false
   const data = value as Partial<DeleteCommentResponse>
@@ -174,17 +239,38 @@ type CommentViewerScope = {
   userId: string | null
 }
 
+type CommentReactionIntent = {
+  desired: CommentReaction | null
+  revision: number
+  requestId: string
+  projection: CommentReactionTruth
+}
+
+type CommentReactionTruth = {
+  reaction: CommentReaction | null
+  likeCount: number
+  dislikeCount: number
+}
+
+type CommentReactionCommandOutcome =
+  | { kind: 'acknowledged'; acknowledgement: CommentReactionAcknowledgement }
+  | { kind: 'definitive-rejection'; error: string | null; status: number }
+  | { kind: 'uncertain'; error: unknown }
+
 type PendingCommentReaction = {
   controller: AbortController
-  operation: symbol
 }
 
 function commentViewerScopeKey(scope: Pick<CommentViewerScope, 'viewerKey' | 'sessionGeneration'>) {
   return `${scope.viewerKey}\u0000${scope.sessionGeneration}`
 }
 
-function commentReactionLockKey(postId: string, commentId: string) {
-  return `${postId}\u0000${commentId}`
+function commentReactionLaneKey(
+  scope: Pick<CommentViewerScope, 'viewerKey' | 'sessionGeneration'>,
+  postId: string,
+  commentId: string
+) {
+  return `${commentViewerScopeKey(scope)}\u0000${postId}\u0000${commentId}`
 }
 
 // Convert Comment to CommentData for store compatibility
@@ -281,6 +367,9 @@ export function usePostComments({
   const submittingCommentRef = useRef<symbol | null>(null)
   const submittingReplyRef = useRef<symbol | null>(null)
   const pendingReactionOperationsRef = useRef(new Map<string, PendingCommentReaction>())
+  const commentReactionIntentRef = useRef(new Map<string, CommentReactionIntent>())
+  const commentReactionWorkerRef = useRef(new Map<string, Promise<void>>())
+  const commentReactionRevisionRef = useRef(0)
   const pendingDeleteIdsRef = useRef(new Map<string, symbol>())
   // Resource binding is deliberately separate from draft persistence. It guards
   // every async response from mutating a newly opened post.
@@ -302,6 +391,9 @@ export function usePostComments({
       pending.controller.abort()
     }
     pendingReactionOperationsRef.current.clear()
+    commentReactionIntentRef.current.clear()
+    commentReactionWorkerRef.current.clear()
+    commentReactionRevisionRef.current = 0
   }, [])
 
   useEffect(
@@ -415,8 +507,18 @@ export function usePostComments({
             : null
         }
 
+        // A canonical tree read may overlap a reaction lane on this or another
+        // comment. Refresh structural fields from the server while retaining
+        // every still-active per-comment desired-state projection.
+        const visibleComments = overlayPendingCommentReactionProjections(
+          page.comments,
+          (commentId) =>
+            commentReactionIntentRef.current.get(
+              commentReactionLaneKey(capturedScope, postId, commentId)
+            )
+        )
         const store = usePostStore.getState()
-        store.setComments(postId, page.comments.map(toCommentData))
+        store.setComments(postId, visibleComments.map(toCommentData))
         store.updatePostCommentCount(postId, page.commentCount)
         onCommentCountChange?.(postId, 0, page.commentCount)
 
@@ -424,9 +526,9 @@ export function usePostComments({
           scopeIsCurrent(capturedScope) &&
           (currentPostIdRef.current === null || currentPostIdRef.current === postId)
         ) {
-          setComments(page.comments)
+          setComments(visibleComments)
         }
-        return page.comments
+        return visibleComments
       } catch {
         return null
       } finally {
@@ -603,159 +705,226 @@ export function usePostComments({
   )
 
   const toggleCommentReaction = useCallback(
-    async (
-      postId: string,
-      commentId: string,
-      requestedReaction: CommentReaction
-    ): Promise<void> => {
-      const lockKey = commentReactionLockKey(postId, commentId)
-      if (!requireAuth() || pendingReactionOperationsRef.current.has(lockKey)) return
-      const operation = Symbol('comment-reaction')
+    async (postId: string, commentId: string, selectedReaction: CommentReaction): Promise<void> => {
       const capturedScope = activeScopeRef.current
-      const controller = new AbortController()
+      if (!requireAuth() || !capturedScope.userId || !scopeIsCurrent(capturedScope)) return
+      const actorId = capturedScope.userId
+      if (currentPostIdRef.current !== null && currentPostIdRef.current !== postId) return
 
       const targetComment = findComment(commentsRef.current, commentId)
       if (!targetComment) return
-
-      pendingReactionOperationsRef.current.set(lockKey, { controller, operation })
-      setCommentLikeLoading((previous) => ({ ...previous, [commentId]: true }))
-
-      const previousReaction = getCommentReaction(targetComment)
-      const nextReaction = previousReaction === requestedReaction ? null : requestedReaction
-      const previousLikeCount = Math.max(0, targetComment.like_count || 0)
-      const previousDislikeCount = Math.max(0, targetComment.dislike_count || 0)
-      const likeDelta = Number(nextReaction === 'like') - Number(previousReaction === 'like')
-      const dislikeDelta =
-        Number(nextReaction === 'dislike') - Number(previousReaction === 'dislike')
-      const optimisticLikeCount = Math.max(0, previousLikeCount + likeDelta)
-      const optimisticDislikeCount = Math.max(0, previousDislikeCount + dislikeDelta)
-
-      setComments((previous) =>
-        updateComment(previous, commentId, (comment) => ({
-          ...comment,
-          user_liked: nextReaction === 'like',
-          user_disliked: nextReaction === 'dislike',
-          like_count: optimisticLikeCount,
-          dislike_count: optimisticDislikeCount,
-        }))
+      const laneKey = commentReactionLaneKey(capturedScope, postId, commentId)
+      const queuedIntent = commentReactionIntentRef.current.get(laneKey)
+      const desiredReaction = nextCommentReactionState(
+        queuedIntent?.desired ?? getCommentReaction(targetComment),
+        selectedReaction
       )
-      const revisionKey = commentViewerScopeKey(capturedScope)
-      const optimisticRevision = stateRevisionRef.current.get(revisionKey) || 0
+      const projectedComment = applyDesiredCommentReaction(targetComment, desiredReaction)
+      const intent: CommentReactionIntent = {
+        desired: desiredReaction,
+        revision: ++commentReactionRevisionRef.current,
+        requestId: createCommentReactionRequestId(),
+        projection: getCommentReactionTruth(projectedComment),
+      }
+      commentReactionIntentRef.current.set(laneKey, intent)
 
-      const rollback = () => {
-        if (
-          !scopeIsCurrent(capturedScope) ||
-          (stateRevisionRef.current.get(revisionKey) || 0) !== optimisticRevision
-        )
-          return
-        if (currentPostIdRef.current !== null && currentPostIdRef.current !== postId) return
-        setComments((previous) =>
-          updateComment(previous, commentId, (comment) => {
-            // A refresh or another authoritative update may have replaced this optimistic
-            // state while the request was in flight. Never overwrite that newer state.
-            if (
-              getCommentReaction(comment) !== nextReaction ||
-              comment.like_count !== optimisticLikeCount ||
-              comment.dislike_count !== optimisticDislikeCount
-            ) {
-              return comment
+      setCommentLikeLoading((previous) => ({ ...previous, [commentId]: true }))
+      setComments((previous) =>
+        updateComment(previous, commentId, (comment) => {
+          const projected = applyDesiredCommentReaction(comment, desiredReaction)
+          const latest = commentReactionIntentRef.current.get(laneKey)
+          if (latest?.revision === intent.revision) {
+            latest.projection = getCommentReactionTruth(projected)
+          }
+          return projected
+        })
+      )
+
+      const sendCommand = async (
+        command: CommentReactionIntent,
+        signal: AbortSignal
+      ): Promise<CommentReactionCommandOutcome> => {
+        let lastError: unknown = new Error('Comment reaction acknowledgement unavailable')
+
+        // An absolute desired state is safe to retry. Reuse the exact request
+        // identity so a lost response cannot be confused with a newer click.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          if (signal.aborted || !scopeIsCurrent(capturedScope)) {
+            return { kind: 'uncertain', error: signal.reason ?? lastError }
+          }
+          try {
+            const result = await authedFetch<unknown>(
+              `/api/posts/${postId}/comments/like`,
+              'POST',
+              accessToken,
+              {
+                operation: COMMENT_REACTION_OPERATION,
+                request_id: command.requestId,
+                comment_id: commentId,
+                desired_reaction: command.desired,
+              },
+              COMMENT_REACTION_REQUEST_TIMEOUT_MS,
+              {
+                expectedUserId: capturedScope.userId,
+                expectedSessionGeneration: capturedScope.sessionGeneration,
+                signal,
+              }
+            )
+            if (signal.aborted || !scopeIsCurrent(capturedScope) || result.stale) {
+              return { kind: 'uncertain', error: signal.reason ?? lastError }
             }
-            return {
-              ...comment,
-              user_liked: previousReaction === 'like',
-              user_disliked: previousReaction === 'dislike',
-              like_count: previousLikeCount,
-              dislike_count: previousDislikeCount,
+
+            const acknowledgement =
+              result.ok && result.status === 200
+                ? readCommentReactionAcknowledgement(result.data, {
+                    actorId,
+                    postId,
+                    commentId,
+                    requestId: command.requestId,
+                    desiredReaction: command.desired,
+                  })
+                : null
+            if (acknowledgement) return { kind: 'acknowledged', acknowledgement }
+
+            const error = commentReactionError(result.data)
+            if (isDefinitiveCommentReactionRejection(result.status)) {
+              return { kind: 'definitive-rejection', error, status: result.status }
             }
-          })
-        )
+            lastError = error ? new Error(error) : lastError
+          } catch (error) {
+            lastError = error
+          }
+        }
+
+        return { kind: 'uncertain', error: lastError }
+      }
+
+      const drainIntents = async (signal: AbortSignal): Promise<void> => {
+        let knownTruth = getCommentReactionTruth(targetComment)
+        let knownTruthIsCertain = true
+
+        while (!signal.aborted && scopeIsCurrent(capturedScope)) {
+          const command = commentReactionIntentRef.current.get(laneKey)
+          if (!command) return
+          const outcome = await sendCommand(command, signal)
+          if (signal.aborted || !scopeIsCurrent(capturedScope)) return
+          const latestIntent = commentReactionIntentRef.current.get(laneKey)
+
+          if (outcome.kind === 'acknowledged') {
+            const acknowledgement = outcome.acknowledgement
+            knownTruth = {
+              reaction: acknowledgement.reaction,
+              likeCount: acknowledgement.likeCount,
+              dislikeCount: acknowledgement.dislikeCount,
+            }
+            knownTruthIsCertain = true
+
+            // An older ACK cannot overwrite a newer opposite intent. When the
+            // latest intent converges to the same state, one ACK closes the lane.
+            if (latestIntent?.desired === acknowledgement.reaction) {
+              commentReactionIntentRef.current.delete(laneKey)
+              setComments((previous) =>
+                updateComment(previous, commentId, (comment) =>
+                  commentMatchesReactionTruth(comment, latestIntent.projection)
+                    ? applyCommentReactionTruth(comment, knownTruth)
+                    : comment
+                )
+              )
+              return
+            }
+
+            if (latestIntent) {
+              // Rebase the pending projection on the absolute counters returned
+              // by the older command, but only if no external truth replaced it.
+              setComments((previous) =>
+                updateComment(previous, commentId, (comment) => {
+                  if (!commentMatchesReactionTruth(comment, latestIntent.projection)) return comment
+                  const rebased = applyDesiredCommentReaction(
+                    applyCommentReactionTruth(comment, knownTruth),
+                    latestIntent.desired
+                  )
+                  latestIntent.projection = getCommentReactionTruth(rebased)
+                  return rebased
+                })
+              )
+            }
+            continue
+          }
+
+          if (outcome.kind === 'definitive-rejection') {
+            if (latestIntent?.revision === command.revision) {
+              commentReactionIntentRef.current.delete(laneKey)
+              if (knownTruthIsCertain) {
+                setComments((previous) =>
+                  updateComment(previous, commentId, (comment) =>
+                    commentMatchesReactionTruth(comment, command.projection)
+                      ? applyCommentReactionTruth(comment, knownTruth)
+                      : comment
+                  )
+                )
+              } else {
+                await reconcileCanonicalComments(postId, 'best', capturedScope)
+              }
+              if (scopeIsCurrent(capturedScope)) {
+                showToast(
+                  getHttpErrorMessage(outcome.status, outcome.error ?? t('operationFailed')),
+                  outcome.status === 429 ? 'warning' : 'error'
+                )
+              }
+              return
+            }
+            continue
+          }
+
+          // Both attempts are uncertain. Never invert a command that may have
+          // committed. A newer absolute intent can still converge safely.
+          knownTruthIsCertain = false
+          if (latestIntent?.revision === command.revision) {
+            commentReactionIntentRef.current.delete(laneKey)
+            const reconciled = await reconcileCanonicalComments(postId, 'best', capturedScope)
+            if (!reconciled && scopeIsCurrent(capturedScope)) {
+              showToast(t('networkError'), 'error')
+            }
+            return
+          }
+        }
+      }
+
+      const startWorker = (): Promise<void> => {
+        const running = commentReactionWorkerRef.current.get(laneKey)
+        if (running) return running
+
+        const controller = new AbortController()
+        pendingReactionOperationsRef.current.set(laneKey, { controller })
+        const worker = drainIntents(controller.signal).finally(() => {
+          if (commentReactionWorkerRef.current.get(laneKey) === worker) {
+            commentReactionWorkerRef.current.delete(laneKey)
+          }
+          if (pendingReactionOperationsRef.current.get(laneKey)?.controller === controller) {
+            pendingReactionOperationsRef.current.delete(laneKey)
+          }
+          if (
+            !commentReactionIntentRef.current.has(laneKey) &&
+            scopeIsCurrent(capturedScope) &&
+            (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+          ) {
+            setCommentLikeLoading((previous) => ({ ...previous, [commentId]: false }))
+          }
+        })
+        commentReactionWorkerRef.current.set(laneKey, worker)
+        return worker
       }
 
       try {
-        const result = await authedFetch<unknown>(
-          `/api/posts/${postId}/comments/like`,
-          'POST',
-          accessToken,
-          {
-            comment_id: commentId,
-            type: requestedReaction,
-          },
-          COMMENT_REACTION_REQUEST_TIMEOUT_MS,
-          {
-            expectedUserId: capturedScope.userId,
-            expectedSessionGeneration: capturedScope.sessionGeneration,
-            signal: controller.signal,
-          }
-        )
-
-        if (controller.signal.aborted || !scopeIsCurrent(capturedScope) || result.stale) return
-
-        const acknowledgement = capturedScope.userId
-          ? readCommentReactionAcknowledgement(result.data, {
-              actorId: capturedScope.userId,
-              postId,
-              commentId,
-              requestedReaction,
-            })
-          : null
-
-        if (result.ok && result.status === 200 && acknowledgement) {
-          if (
-            (stateRevisionRef.current.get(revisionKey) || 0) === optimisticRevision &&
-            (currentPostIdRef.current === null || currentPostIdRef.current === postId)
-          ) {
-            setComments((previous) =>
-              updateComment(previous, commentId, (comment) => {
-                // A valid ACK can still be older than a Realtime event or a
-                // canonical refresh. Apply it only to the exact optimistic state.
-                if (
-                  getCommentReaction(comment) !== nextReaction ||
-                  comment.like_count !== optimisticLikeCount ||
-                  comment.dislike_count !== optimisticDislikeCount
-                ) {
-                  return comment
-                }
-                return {
-                  ...comment,
-                  like_count: acknowledgement.likeCount,
-                  dislike_count: acknowledgement.dislikeCount,
-                  user_liked: acknowledgement.liked,
-                  user_disliked: acknowledgement.disliked,
-                }
-              })
-            )
-          } else await reconcileCanonicalComments(postId, 'best', capturedScope)
-        } else if (isDefinitiveMutationRejection(result)) {
-          rollback()
-          if (scopeIsCurrent(capturedScope)) {
-            showToast(
-              getHttpErrorMessage(result.status, t('operationFailed')),
-              result.status === 429 ? 'warning' : 'error'
-            )
-          }
-        } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
-          rollback()
-          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
+        // Recheck after every worker completion so an intent queued in its final
+        // microtask cannot be stranded without a drain.
+        while (scopeIsCurrent(capturedScope) && commentReactionIntentRef.current.has(laneKey)) {
+          await startWorker()
         }
       } catch {
-        if (controller.signal.aborted) return
-        if (
-          scopeIsCurrent(capturedScope) &&
-          !(await reconcileCanonicalComments(postId, 'best', capturedScope))
-        ) {
-          rollback()
-          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
-        }
-      } finally {
-        if (pendingReactionOperationsRef.current.get(lockKey)?.operation === operation) {
-          pendingReactionOperationsRef.current.delete(lockKey)
-        }
-        if (
-          scopeIsCurrent(capturedScope) &&
-          (currentPostIdRef.current === null || currentPostIdRef.current === postId)
-        ) {
-          setCommentLikeLoading((previous) => ({ ...previous, [commentId]: false }))
-        }
+        if (!scopeIsCurrent(capturedScope)) return
+        commentReactionIntentRef.current.delete(laneKey)
+        showToast(t('networkError'), 'error')
       }
     },
     [
