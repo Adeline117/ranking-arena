@@ -398,7 +398,6 @@ export async function getTraderDetail(
     allAssetBreakdownResult,
     statsDetailResult,
     portfolioResult,
-    positionHistoryResult,
     trackedSinceResult,
     similarTradersResult,
     positionSummaryResult,
@@ -450,21 +449,6 @@ export async function getTraderDetail(
           .eq(ENRICH.source_trader_id, traderKey)
           .order('captured_at', { ascending: false })
           .limit(50)
-          .abortSignal(phase2Signal)
-      ),
-      // Position history — enrichment tables use v1 naming
-      // Filter to last 90 days to avoid scanning thousands of rows on 11GB table
-      safeQuery(() =>
-        supabase
-          .from('trader_position_history')
-          .select(
-            'symbol, direction, open_time, close_time, entry_price, exit_price, pnl_usd, pnl_pct, status'
-          )
-          .in(ENRICH.source, sourceAliases)
-          .eq(ENRICH.source_trader_id, traderKey)
-          .gte('open_time', new Date(Date.now() - 90 * 86400000).toISOString())
-          .order('open_time', { ascending: false })
-          .limit(100)
           .abortSignal(phase2Signal)
       ),
       // Tracked since — migrated off retiring trader_snapshots_v2 to
@@ -594,31 +578,10 @@ export async function getTraderDetail(
     status: 'open',
   }))
 
-  // Map position history
-  type PosRow = {
-    symbol: string
-    direction: string
-    open_time: string | null
-    close_time: string | null
-    entry_price: number | null
-    exit_price: number | null
-    pnl_usd: number | null
-    pnl_pct: number | null
-    status: string | null
-  }
-  const positionHistory: TraderPosition[] = ((unwrap(positionHistoryResult) || []) as PosRow[]).map(
-    (r) => ({
-      symbol: r.symbol || '',
-      direction: r.direction || null,
-      openTime: r.open_time,
-      closeTime: r.close_time,
-      entryPrice: r.entry_price,
-      exitPrice: r.exit_price,
-      pnlUsd: r.pnl_usd,
-      pnlPct: r.pnl_pct,
-      status: r.status || 'closed',
-    })
-  )
+  // Legacy closed-position rows have no terminal acquisition evidence bound to
+  // them. They stay quarantined until the arena.position_history authority can
+  // prove completeness, price trust, and cost basis for the requested window.
+  const positionHistory: TraderPosition[] = []
 
   // Tracked since
   const trackedSince =

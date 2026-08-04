@@ -236,17 +236,14 @@ describe('集合映射', () => {
     ])
   })
 
-  it('portfolio/positionHistory 方向缺失 → long 兜底', () => {
+  it('keeps portfolio fallback but quarantines legacy position history', () => {
     const d = detail({
       portfolio: [{ symbol: 'BTCUSDT', direction: null, pnlUsd: 100, entryPrice: null }],
       positionHistory: [{ symbol: 'ETHUSDT', direction: null, pnlUsd: null, pnlPct: null }],
     })
     const out = toTraderPageData(d)
     expect((out.portfolio as Array<{ direction: string }>)[0].direction).toBe('long')
-    expect((out.positionHistory as Array<{ direction: string; status: string }>)[0]).toMatchObject({
-      direction: 'long',
-      status: 'closed',
-    })
+    expect(out.positionHistory).toEqual([])
   })
 
   it('stats 为 null → 输出 stats null(不伪造)', () => {
