@@ -1,8 +1,9 @@
 /**
- * Tier B deep-profile crawl (spec §2.3-B): only the top
+ * Tier B deep-profile / record-history crawl (spec §2.3-B): only the top
  * sources.deep_profile_topn per board, every 12-24h. These hot traders
  * stay cache-warm so the most-viewed profiles never trigger a live fetch.
- * Long-tail traders are NEVER crawled on a timer — that's Tier C.
+ * Record-only adapters use the same bounded cohort and cadence. Long-tail
+ * traders are NEVER crawled on a timer — that's Tier C.
  */
 
 import type { Job } from 'bullmq'
@@ -37,9 +38,10 @@ import {
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
- * deep-profiled since `stalerThan` are returned. The marker is a dedicated
+ * processed by Tier B since `stalerThan` are returned. The marker is a dedicated
  * arena.ingest_cursors row (kind 'tierb_profiled') written after each trader
- * whose requested timeframes reached a terminal success/quality-reject state.
+ * whose requested profile timeframes reached a terminal state, or whose
+ * record-only surfaces all returned an upstream response page successfully.
  * trader_stats.as_of is NOT usable here because the
  * tier-A board upsert refreshes it every 2-5h, which would make everyone
  * look "fresh" and starve the deep crawl entirely.
@@ -47,7 +49,7 @@ import {
  * native PASSED top-N membership; derived boards must never feed Tier-B back
  * into themselves.
  */
-/** Compatibility marker recording a terminal deep-profile attempt. */
+/** Compatibility marker recording a terminal Tier-B profile/record attempt. */
 const PROFILED_CURSOR_KIND = 'tierb_profiled'
 
 async function markProfileAttempted(traderId: number): Promise<void> {
@@ -114,7 +116,8 @@ async function crawlTraderHistories(
   session: FetchSession,
   adapter: SourceAdapter,
   src: SourceRow,
-  trader: NativeCohortTrader
+  trader: NativeCohortTrader,
+  requireResponsePage: boolean
 ): Promise<TraderHistoryCrawlResult> {
   const failures: Error[] = []
   let rowsWritten = 0
@@ -123,6 +126,7 @@ async function crawlTraderHistories(
       if (kind === 'position_history' && canPublishVerifiedPositionHistory(src)) {
         const published = await captureAndPublishVerifiedPositionHistory({
           adapter,
+          ...(requireResponsePage ? { requireResponsePage: true } : {}),
           session,
           source: src,
           trader,
@@ -131,7 +135,14 @@ async function crawlTraderHistories(
         // Ambiguous-commit reconciliation returns replayed=true/factsAdded=0.
         rowsWritten += published.receipt.factsAdded
       } else {
-        await captureTierBHistoryRawOnly({ adapter, kind, session, source: src, trader })
+        await captureTierBHistoryRawOnly({
+          adapter,
+          kind,
+          ...(requireResponsePage ? { requireResponsePage: true } : {}),
+          session,
+          source: src,
+          trader,
+        })
       }
     } catch (cause) {
       failures.push(cause instanceof Error ? cause : new Error(String(cause)))
@@ -167,7 +178,9 @@ export async function processTierB(
   if (src.status !== 'active') return empty
 
   const adapter = getAdapter(src.adapter_slug)
-  if (!supportsSourceSurface(adapter, src, 'profile')) return empty
+  const supportsProfile = supportsSourceSurface(adapter, src, 'profile')
+  const scheduledHistoryKinds = historyKinds(adapter, src)
+  if (!supportsProfile && scheduledHistoryKinds.length === 0) return empty
 
   // Deadline chunking (2026-07-03 slot-monopoly root fix): a full top-300
   // deep-profile pass ran 3-4h per source and, phase-locked across sources,
@@ -206,7 +219,7 @@ export async function processTierB(
 
   // native ∪ derived: derived 30/90 boards are synthesized from these
   // profile stats (spec §1.1-C), so Tier-B must crawl their TFs too.
-  const timeframes = profileTimeframes(src)
+  const timeframes = supportsProfile ? profileTimeframes(src) : []
   // Tier A intentionally keeps the legacy unsuffixed profile (warm cookies).
   // Tier B owns a stable lane so a long profile crawl cannot collide with it.
   const session = await openSession(src, {
@@ -364,14 +377,14 @@ export async function processTierB(
         }
       }
       const allTimeframesTerminal =
-        timeframes.length > 0 && terminalTimeframes === timeframes.length
+        !supportsProfile || (timeframes.length > 0 && terminalTimeframes === timeframes.length)
       const allTimeframesSuccessful =
         allTimeframesTerminal &&
         !traderHadQualityReject &&
         !traderHadOperationalError &&
-        successfulTimeframes === timeframes.length
+        (!supportsProfile || successfulTimeframes === timeframes.length)
 
-      if (allTimeframesTerminal && !traderHadOperationalError) {
+      if (supportsProfile && allTimeframesTerminal && !traderHadOperationalError) {
         // Quality rejects are terminal for this pass: throttle the next attempt
         // so continuation jobs cannot hot-loop on a permanently bad upstream
         // payload. The compatibility cursor kind remains `tierb_profiled`.
@@ -379,10 +392,19 @@ export async function processTierB(
       }
 
       if (allTimeframesSuccessful) {
-        result.tradersCrawled += 1
+        // Profile work remains successful even when an optional history kind
+        // fails. A record-only source is successful only after every declared
+        // history kind proves an upstream response and freshness is durable.
+        if (supportsProfile) result.tradersCrawled += 1
         // Histories ride the same session right after the profile. Each kind
         // remains isolated, so one failure cannot suppress the others.
-        const histories = await crawlTraderHistories(session, adapter, src, trader)
+        const histories = await crawlTraderHistories(
+          session,
+          adapter,
+          src,
+          trader,
+          !supportsProfile
+        )
         result.historyRowsWritten += histories.rowsWritten
         if (histories.failure !== null) {
           result.errors += 1
@@ -390,6 +412,17 @@ export async function processTierB(
             `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} histories failed:`,
             histories.failure.message
           )
+        } else if (!supportsProfile) {
+          try {
+            await markProfileAttempted(trader.id)
+            result.tradersCrawled += 1
+          } catch (cause) {
+            result.errors += 1
+            console.warn(
+              `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} freshness failed:`,
+              cause instanceof Error ? cause.message : cause
+            )
+          }
         }
       }
     }

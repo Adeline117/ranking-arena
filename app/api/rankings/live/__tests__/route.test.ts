@@ -200,7 +200,7 @@ describe('GET /api/rankings/live publication authority', () => {
     expect(body.totalCount).toBe(2)
     expect(JSON.stringify(body)).not.toMatch(/retired-slot|quarantined-slot|unranked-slot/)
     expect(mockTieredSet).toHaveBeenCalledWith(
-      'public-rank-policy-v6:rankings:live:90D:2:0',
+      'public-rank-policy-v7:rankings:live:90D:2:0',
       expect.objectContaining({
         traders: expect.arrayContaining([
           expect.objectContaining({ id: 'safe-one', source: 'binance_futures' }),
@@ -208,7 +208,7 @@ describe('GET /api/rankings/live publication authority', () => {
         ]),
       }),
       'hot',
-      ['rankings:public-rank-policy-v6', 'live:90D'],
+      ['rankings:public-rank-policy-v7', 'live:90D'],
       {
         skipMemory: true,
         writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
@@ -258,7 +258,7 @@ describe('GET /api/rankings/live publication authority', () => {
     const body = await response.json()
 
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v6:rankings:live:90D:2:0',
+      'public-rank-policy-v7:rankings:live:90D:2:0',
       'hot',
       {
         skipMemory: true,

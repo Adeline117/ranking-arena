@@ -139,6 +139,18 @@ async function* historyStream(options: { failAfterPage?: boolean; omitClaim?: bo
   }
 }
 
+async function* noHistoryEvidenceStream() {
+  return undefined
+}
+
+const recordOnlySource = {
+  ...src,
+  id: 21,
+  slug: 'bingx_futures',
+  adapter_slug: 'bingx',
+}
+const recordOnlyJob = { data: { sourceSlug: 'bingx_futures' } } as Job<TierJobData>
+
 describe('Tier-B profile coverage accounting', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -230,6 +242,117 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockGetLatestPassedNativeCohort).not.toHaveBeenCalled()
     expect(mockOpenSession).not.toHaveBeenCalled()
     expect(mockWriteRawObject).not.toHaveBeenCalled()
+  })
+
+  it('skips sources with neither profiles nor scheduled history surfaces', async () => {
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positionHistory: false,
+        orders: false,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+    })
+
+    await expect(processTierB(job)).resolves.toEqual({
+      tradersCrawled: 0,
+      surfacesFetched: 0,
+      historyRowsWritten: 0,
+      rejects: 0,
+      errors: 0,
+      crossCheckFails: 0,
+      remaining: 0,
+    })
+
+    expect(mockGetLatestPassedNativeCohort).not.toHaveBeenCalled()
+    expect(mockProfileTimeframes).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+  })
+
+  it('schedules RAW-only histories and marks freshness after upstream response evidence', async () => {
+    mockGetSourceBySlug.mockResolvedValue(recordOnlySource)
+    mockGetHistory.mockImplementation(() => historyStream())
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+    })
+
+    await expect(processTierB(recordOnlyJob)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      surfacesFetched: 0,
+      historyRowsWritten: 0,
+      errors: 0,
+    })
+
+    expect(mockProfileTimeframes).not.toHaveBeenCalled()
+    expect(mockGetProfile).not.toHaveBeenCalled()
+    expect(mockGetHistory).toHaveBeenCalledWith(
+      expect.anything(),
+      recordOnlySource,
+      '0x0000000000000000000000000000000000000001',
+      'orders',
+      null,
+      null
+    )
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: { history_kind: 'orders', pages: [expect.any(Object)] },
+    })
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('keeps a record-only trader stale when no upstream response page exists', async () => {
+    mockGetSourceBySlug.mockResolvedValue(recordOnlySource)
+    mockGetHistory.mockImplementation(() => noHistoryEvidenceStream())
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: false,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+    })
+
+    await expect(processTierB(recordOnlyJob)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 0,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockGetProfile).not.toHaveBeenCalled()
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: { history_kind: 'orders', pages: [] },
+    })
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(false)
   })
 
   it('does not mark a trader fresh when one timeframe is unproven', async () => {

@@ -59,8 +59,8 @@ describe('canonical public ranking resilience', () => {
 
   it('uses one canonical key pair independent of requested limit or page', () => {
     expect(keys).toEqual({
-      liveKey: 'public-rank-policy-v6:canonical:v1:api:rankings:90d:all:live',
-      lkgKey: 'public-rank-policy-v6:canonical:v1:api:rankings:90d:all:lkg',
+      liveKey: 'public-rank-policy-v7:canonical:v1:api:rankings:90d:all:live',
+      lkgKey: 'public-rank-policy-v7:canonical:v1:api:rankings:90d:all:lkg',
     })
   })
 
@@ -131,7 +131,7 @@ describe('canonical public ranking resilience', () => {
       payload,
       expect.objectContaining({
         ttl: 300,
-        tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         writeFence: fence,
         writeLock: expect.objectContaining({ ownerToken: 'request-owner' }),
       })

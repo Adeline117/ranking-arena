@@ -457,7 +457,7 @@ describe('GET /api/rankings', () => {
       expect(rankingQuery?.not).toHaveBeenCalledWith(
         'source',
         'in',
-        '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+        '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
       )
       expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
       expect(rankingQuery?.order.mock.calls.slice(0, 2)).toEqual([
@@ -467,7 +467,7 @@ describe('GET /api/rankings', () => {
       expect(freshnessQuery?.not).toHaveBeenCalledWith(
         'source',
         'in',
-        '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+        '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
       )
       expect(rankingQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
       expect(freshnessQuery?.in).toHaveBeenCalledWith('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
@@ -566,7 +566,7 @@ describe('GET /api/rankings', () => {
 
     expect(res.status).toBe(200)
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v6:precomputed:composite:all:v2',
+      'public-rank-policy-v7:precomputed:composite:all:v2',
       'hot',
       {
         skipMemory: true,
@@ -602,7 +602,7 @@ describe('GET /api/rankings', () => {
     const data = body.data ?? body
 
     expect(mockTieredGet).toHaveBeenCalledWith(
-      'public-rank-policy-v6:precomputed:composite:all:v2',
+      'public-rank-policy-v7:precomputed:composite:all:v2',
       'hot',
       {
         skipMemory: true,
@@ -705,8 +705,8 @@ describe('GET /api/rankings', () => {
     expect(mockGetCanonicalPublicRanking).toHaveBeenCalledWith(
       expect.objectContaining({
         keys: {
-          liveKey: 'public-rank-policy-v6:canonical:v1:api:rankings:90d:all:live',
-          lkgKey: 'public-rank-policy-v6:canonical:v1:api:rankings:90d:all:lkg',
+          liveKey: 'public-rank-policy-v7:canonical:v1:api:rankings:90d:all:live',
+          lkgKey: 'public-rank-policy-v7:canonical:v1:api:rankings:90d:all:lkg',
         },
       })
     )

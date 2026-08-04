@@ -289,7 +289,7 @@ describe('SSR public ranking source quarantine', () => {
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(rankingQuery?.range).toHaveBeenCalledWith(2, 3)
     expect((rankingQuery?.in as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
@@ -299,7 +299,7 @@ describe('SSR public ranking source quarantine', () => {
     expect(freshnessQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
   })
 
@@ -401,7 +401,7 @@ describe('SSR public ranking source quarantine', () => {
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(rankingQuery?.range).toHaveBeenCalledWith(0, 2)
     expect((rankingQuery?.in as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
@@ -495,7 +495,7 @@ describe('SSR public ranking source quarantine', () => {
     const result = await getInitialTraders('90D', 3, 1)
 
     expect(mockCacheGet).toHaveBeenCalledWith(
-      'public-rank-policy-v6:home-initial-traders-v4:90D:p1',
+      'public-rank-policy-v7:home-initial-traders-v4:90D:p1',
       { skipMemory: true }
     )
     expect(result.traders).toEqual([first, last])
@@ -509,8 +509,8 @@ describe('SSR public ranking source quarantine', () => {
 
   it('never reads transformed Copin data from v3 and uses v4 for normal cache writes and reads', async () => {
     const oldV3Key = 'public-rank-policy-v3:home-initial-traders-v4:90D:p1'
-    const newV4Key = 'public-rank-policy-v6:home-initial-traders-v4:90D:p1'
-    const newV4FallbackKey = 'public-rank-policy-v6:home-initial-traders-fallback-v4:90D:p1'
+    const newV4Key = 'public-rank-policy-v7:home-initial-traders-v4:90D:p1'
+    const newV4FallbackKey = 'public-rank-policy-v7:home-initial-traders-fallback-v4:90D:p1'
     const transformedCopin = {
       traders: [
         {
@@ -573,13 +573,13 @@ describe('SSR public ranking source quarantine', () => {
     expect(mockCacheGet).toHaveBeenNthCalledWith(2, newV4FallbackKey, { skipMemory: true })
     expect(mockCacheSet).toHaveBeenCalledWith(newV4Key, first, {
       ttl: 7200,
-      tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+      tags: ['rankings:public-rank-policy-v7', 'season:90D'],
       skipMemory: true,
       writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
     })
     expect(mockCacheSet).toHaveBeenCalledWith(newV4FallbackKey, first, {
       ttl: 14400,
-      tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+      tags: ['rankings:public-rank-policy-v7', 'season:90D'],
       skipMemory: true,
       writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
     })
@@ -611,12 +611,12 @@ describe('SSR public ranking source quarantine', () => {
 
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       1,
-      'public-rank-policy-v6:home-initial-traders-v4:90D:p0',
+      'public-rank-policy-v7:home-initial-traders-v4:90D:p0',
       { skipMemory: true }
     )
     expect(mockCacheGet).toHaveBeenNthCalledWith(
       2,
-      'public-rank-policy-v6:home-initial-traders-fallback-v4:90D:p0',
+      'public-rank-policy-v7:home-initial-traders-fallback-v4:90D:p0',
       { skipMemory: true }
     )
     expect(result).toEqual({ ...fallback, isStale: true })

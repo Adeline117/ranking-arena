@@ -43,4 +43,16 @@ describe('history completeness disclosure copy', () => {
       expect(dictionary.historyPreviewEmptyDescription).toContain(noHistoryClaim)
     }
   )
+
+  it.each([
+    ['en', en, 'More records in Stats → Records'],
+    ['zh', zh, '更多记录见 统计 → 交易记录'],
+    ['ja', ja, 'その他の記録は 統計 → 取引記録 へ'],
+    ['ko', ko, '더 많은 기록은 통계 → 거래 기록에서'],
+  ])(
+    'does not claim the recent-activity preview is full history in %s',
+    (_language, dictionary, copy) => {
+      expect(dictionary.recentActivityViewAll).toBe(copy)
+    }
+  )
 })

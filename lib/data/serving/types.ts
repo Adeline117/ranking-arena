@@ -105,7 +105,12 @@ export type RecordKind = 'positions' | 'position_history' | 'orders' | 'transfer
 /** Public signal that a keyset snapshot changed and pagination must restart. */
 export const RECORDS_CURSOR_INVALIDATED_CODE = 'records_cursor_invalidated' as const
 
-/** Evidence state attached to an exact history response. */
+/**
+ * Trust state for append-only record history. `complete` is deliberately
+ * narrow: callers may only emit it after binding terminal acquisition evidence
+ * to the served page or aggregate. Preview/on-demand reads stay `partial`;
+ * legacy warm reads whose evidence is not yet joined stay `unknown`.
+ */
 export type HistoryCompletenessState = 'complete' | 'partial' | 'unknown'
 
 export type HistoryCompletenessReason =
@@ -145,7 +150,7 @@ export interface RecordsPage<T = Record<string, unknown>> {
   nextCursor: string | null
   provenance: RecordProvenance
   cacheState: CoreCacheState
-  /** Present only when the response has an explicit history-evidence verdict. */
+  /** Present for position_history/orders/transfers; omitted for current positions. */
   completeness?: HistoryCompleteness
 }
 
@@ -157,6 +162,8 @@ export interface CopierAggregate {
   pnlDistribution: Array<{ bucket: string; count: number }>
   depth: 'full' | 'top10' | 'top3_preview' | 'none'
   provenance: RecordProvenance
+  /** Collection/history evidence, distinct from the source's advertised depth. */
+  completeness?: HistoryCompleteness
 }
 
 /** Capability matrix — data, not code (spec §6): derived from the sources

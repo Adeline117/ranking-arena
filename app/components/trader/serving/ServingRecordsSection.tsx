@@ -13,7 +13,7 @@
  * hook only fires when the tab is opened).
  */
 
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -65,8 +65,7 @@ export const RECORD_COLUMNS: Record<Exclude<RecordKind, 'copiers'>, RecordColumn
   transfers: [
     { key: 'ts', i18nKey: 'colTime', format: 'datetime' },
     { key: 'direction', i18nKey: 'colDirection' },
-    { key: 'asset', i18nKey: 'colAsset' },
-    { key: 'amount', i18nKey: 'colAmount', format: 'money', align: 'right' },
+    { key: 'amount', i18nKey: 'colAmount', format: 'asset_quantity', align: 'right' },
   ],
 }
 
@@ -86,6 +85,11 @@ const AUTO_SELECT_ORDER: RecordKind[] = [
   'transfers',
   'copiers',
 ]
+
+const UNBOUND_HISTORY = {
+  state: 'unknown' as const,
+  reason: 'history_evidence_not_bound' as const,
+}
 
 function ModuleSkeleton({ height }: { height: number }) {
   return (
@@ -118,25 +122,24 @@ function RecordKindPanel({
 }) {
   const records = useTraderRecords({ source, exchangeTraderId, kind, tf, enabled: true })
   if (records.isLoading) return <ModuleSkeleton height={160} />
-  if (records.error) return <ModuleDegraded onRetry={() => records.refetch()} />
+  if (records.isInitialError) return <ModuleDegraded onRetry={() => records.refetch()} />
   if (records.isPendingUpstream && records.rows.length === 0) {
     return <ModuleDegraded onRetry={() => records.refetch()} />
   }
   return (
     <Box>
-      {kind === 'position_history' && (
-        <HistoryCompletenessNotice completeness={records.completeness} />
-      )}
+      <HistoryCompletenessNotice
+        completeness={kind === 'positions' ? null : (records.completeness ?? UNBOUND_HISTORY)}
+      />
       <RecordsTable
         columns={RECORD_COLUMNS[kind]}
         rows={records.rows}
         hasNextPage={records.hasNextPage}
         isFetchingNextPage={records.isFetchingNextPage}
-        onLoadMore={() => records.fetchNextPage()}
+        hasLoadMoreError={records.isFetchNextPageError}
+        onLoadMore={() => void records.fetchNextPage()}
         emptyKey={
-          kind === 'position_history' &&
-          records.completeness &&
-          records.completeness.state !== 'complete'
+          kind !== 'positions' && records.completeness?.state !== 'complete'
             ? 'historyPreviewEmptyTitle'
             : undefined
         }
@@ -204,6 +207,8 @@ export default function ServingRecordsSection({
       )
     : []
   const selectionScope = JSON.stringify([source, exchangeTraderId, kinds])
+  const tabsId = useId()
+  const tabRefs = useRef<Map<RecordKind, HTMLButtonElement>>(new Map())
   const [activeSelection, setActiveSelection] = useState<{
     scope: string
     kind: RecordKind
@@ -223,6 +228,9 @@ export default function ServingRecordsSection({
     <Box style={{ marginTop: tokens.spacing[6] }}>
       <style>{`@keyframes servingPulse { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
       <Box
+        role="tablist"
+        aria-label={t('recordsTabs')}
+        aria-orientation="horizontal"
         style={{
           display: 'flex',
           gap: tokens.spacing[1],
@@ -234,21 +242,48 @@ export default function ServingRecordsSection({
         {kinds.map((kind) => (
           <button
             key={kind}
+            ref={(element) => {
+              if (element) tabRefs.current.set(kind, element)
+              else tabRefs.current.delete(kind)
+            }}
             type="button"
+            id={`${tabsId}-tab-${kind}`}
+            role="tab"
             onClick={() => setActiveSelection({ scope: selectionScope, kind })}
-            aria-pressed={effectiveKind === kind}
+            onKeyDown={(event) => {
+              const currentIndex = kinds.indexOf(kind)
+              let nextIndex: number | null = null
+              if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % kinds.length
+              else if (event.key === 'ArrowLeft') {
+                nextIndex = (currentIndex - 1 + kinds.length) % kinds.length
+              } else if (event.key === 'Home') nextIndex = 0
+              else if (event.key === 'End') nextIndex = kinds.length - 1
+              if (nextIndex === null) return
+
+              event.preventDefault()
+              const nextKind = kinds[nextIndex]
+              setActiveSelection({ scope: selectionScope, kind: nextKind })
+              tabRefs.current.get(nextKind)?.focus()
+            }}
+            aria-selected={effectiveKind === kind}
+            aria-controls={`${tabsId}-panel-${kind}`}
+            tabIndex={effectiveKind === kind ? 0 : -1}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              minHeight: tokens.touchTarget.min,
               border: 'none',
               background: 'transparent',
               borderBottom:
                 effectiveKind === kind
-                  ? '2px solid var(--color-accent-primary, #6366f1)'
+                  ? `2px solid ${tokens.colors.accent.primary}`
                   : '2px solid transparent',
               color:
                 effectiveKind === kind ? tokens.colors.text.primary : tokens.colors.text.secondary,
-              fontSize: 13,
-              fontWeight: effectiveKind === kind ? 600 : 400,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight:
+                effectiveKind === kind
+                  ? tokens.typography.fontWeight.semibold
+                  : tokens.typography.fontWeight.normal,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
@@ -258,22 +293,29 @@ export default function ServingRecordsSection({
         ))}
       </Box>
 
-      {effectiveKind === 'copiers' ? (
-        <CopiersPanel
-          key={`${source}:${exchangeTraderId}:copiers`}
-          source={source}
-          exchangeTraderId={exchangeTraderId}
-          exchangeName={exchangeName}
-        />
-      ) : effectiveKind ? (
-        <RecordKindPanel
+      {effectiveKind ? (
+        <Box
           key={`${source}:${exchangeTraderId}:${effectiveKind}`}
-          source={source}
-          exchangeTraderId={exchangeTraderId}
-          kind={effectiveKind}
-          tf={tf}
-          exchangeName={exchangeName}
-        />
+          id={`${tabsId}-panel-${effectiveKind}`}
+          role="tabpanel"
+          aria-labelledby={`${tabsId}-tab-${effectiveKind}`}
+        >
+          {effectiveKind === 'copiers' ? (
+            <CopiersPanel
+              source={source}
+              exchangeTraderId={exchangeTraderId}
+              exchangeName={exchangeName}
+            />
+          ) : (
+            <RecordKindPanel
+              source={source}
+              exchangeTraderId={exchangeTraderId}
+              kind={effectiveKind}
+              tf={tf}
+              exchangeName={exchangeName}
+            />
+          )}
+        </Box>
       ) : (
         <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
           {t('recordsEmpty')}

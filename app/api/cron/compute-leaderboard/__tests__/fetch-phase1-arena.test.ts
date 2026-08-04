@@ -22,7 +22,7 @@ const TEST_SOURCES = [
   'kucoin',
   'phemex',
   'htx_futures',
-  'bingx',
+  'gateio',
 ] as const
 
 function rpcRow(index = 0): Record<string, unknown> {
@@ -202,6 +202,31 @@ describe('fetchPhase1FromArena board watermark boundary', () => {
 
     expect(addToTraderMap).toHaveBeenCalledTimes(3_000)
     expect(addToTraderMap.mock.calls.some(([row]) => row.source === 'gmx')).toBe(false)
+  })
+
+  it('excludes quarantined BingX rows before source coverage and map mutation', async () => {
+    const healthyRows = Array.from({ length: 3_000 }, (_, index) => rpcRow(index))
+    const bingxRows = Array.from({ length: 300 }, (_, index) => ({
+      ...rpcRow(3_000 + index),
+      platform: index % 2 === 0 ? 'bingx' : 'bingx_spot',
+      trader_key: `bingx_${index}`,
+    }))
+    const addToTraderMap = jest.fn()
+
+    await expect(
+      fetchPhase1FromArena(
+        supabaseReturning([...healthyRows, ...bingxRows]) as never,
+        '30D',
+        addToTraderMap
+      )
+    ).resolves.toEqual(new Map(TEST_SOURCES.map((source) => [source, 300])))
+
+    expect(addToTraderMap).toHaveBeenCalledTimes(3_000)
+    expect(
+      addToTraderMap.mock.calls.some(
+        ([row]) => row.source === 'bingx' || row.source === 'bingx_spot'
+      )
+    ).toBe(false)
   })
 
   it.each([

@@ -81,7 +81,7 @@ function combinedHistoryCompleteness(
   kind: Exclude<RecordKind, 'copiers'>,
   pages: RecordsPage[]
 ): HistoryCompleteness | null {
-  if (kind !== 'position_history' || pages.length === 0) return null
+  if (kind === 'positions' || pages.length === 0) return null
 
   const pageCompleteness = pages.map(
     (page) =>
@@ -205,6 +205,10 @@ export function useTraderRecords({
     /** First page is still cold-fetching upstream (Tier-C pending). */
     isPendingUpstream: pages.length === 1 && pages[0].cacheState === 'pending',
     isLoading: query.isLoading || cursorInvalidated,
+    /** No cached page exists, so the module has nothing truthful to preserve. */
+    isInitialError: !cursorInvalidated && query.isLoadingError,
+    /** A later page failed; keep the successful pages visible and retry in place. */
+    isFetchNextPageError: !cursorInvalidated && query.isFetchNextPageError,
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
@@ -234,7 +238,14 @@ export function useCopierAggregate(opts: {
 
   const data = query.data
   const aggregate: CopierAggregate | null =
-    data && 'copierCount' in data ? (data as CopierAggregate) : null
+    data && 'copierCount' in data
+      ? {
+          ...data,
+          // Old cached responses predate the completeness field. They must
+          // fail closed instead of silently presenting an aggregate as whole.
+          completeness: data.completeness ?? UNBOUND_HISTORY,
+        }
+      : null
 
   return {
     aggregate,

@@ -152,8 +152,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260803170000_atomic_verified_trader_profile_revision.sql'
   const hashtagReadAuthorityMigration = '20260803180000_hashtag_read_authority.sql'
   const postInteractionReadPrivacyMigration = '20260803183000_post_interaction_read_privacy.sql'
+  const bingxRankQuarantineMigration = '20260804051000_quarantine_bingx_rank_authority.sql'
 
-  assert.equal(predeploy.length, 128)
+  assert.equal(predeploy.length, 129)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -254,6 +255,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           verifiedTraderProfileRevisionMigration,
           hashtagReadAuthorityMigration,
           postInteractionReadPrivacyMigration,
+          bingxRankQuarantineMigration,
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -272,7 +274,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 143)
+  assert.equal(new Set(all).size, 144)
   assert.equal(predeploy.filter((migration) => migration === additiveApiTierMigration).length, 1)
   assert.equal(
     postdeploy.filter((migration) => migration === legacyApiTierCleanupMigration).length,
@@ -325,8 +327,18 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!recovery.includes(legacyApiTierCleanupMigration))
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
+  assert.equal(
+    predeploy.filter((migration) => migration === bingxRankQuarantineMigration).length,
+    1
+  )
+  assert.ok(!postdeploy.includes(bingxRankQuarantineMigration))
+  assert.ok(!recoveryPrerequisites.includes(bingxRankQuarantineMigration))
+  assert.ok(!concurrentRecovery.includes(bingxRankQuarantineMigration))
+  assert.ok(!recovery.includes(bingxRankQuarantineMigration))
+  assert.ok(!quarantined.includes(bingxRankQuarantineMigration))
+  assert.ok(!superseded.includes(bingxRankQuarantineMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-87), [
+  assert.deepEqual(predeploy.slice(-88), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -414,6 +426,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     verifiedTraderProfileRevisionMigration,
     hashtagReadAuthorityMigration,
     postInteractionReadPrivacyMigration,
+    bingxRankQuarantineMigration,
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -505,7 +518,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes(verifiedTraderProfileRevisionMigration))
   assert.ok(predeploy.includes(hashtagReadAuthorityMigration))
   assert.ok(predeploy.includes(postInteractionReadPrivacyMigration))
-  assert.deepEqual(predeploy.slice(-8), [
+  assert.deepEqual(predeploy.slice(-9), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
@@ -514,6 +527,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     verifiedTraderProfileRevisionMigration,
     hashtagReadAuthorityMigration,
     postInteractionReadPrivacyMigration,
+    bingxRankQuarantineMigration,
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
   assert.ok(
@@ -523,6 +537,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!recoveryPrerequisites.includes('20260729230000_token_ranking_generation_barrier.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729062000_atomic_trader_follow_limit.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260729062500_close_trader_follow_direct_writes.sql'))
+  assert.ok(!recoveryPrerequisites.includes(bingxRankQuarantineMigration))
   assert.ok(
     predeploy.includes('20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql')
   )
@@ -725,7 +740,11 @@ test('runner records exact file bodies and hashes in the same transaction', () =
 
 test('transactional body stripping survives documentation after COMMIT', () => {
   assert.ok(source.includes('s/(^|\\n)COMMIT;(?:\\n|\\z)/$1/'))
-  assert.ok(source.includes('s/(^|\\n)SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;\\n/$1/'))
+  assert.ok(
+    source.includes(
+      's/(^|\\n)SET TRANSACTION ISOLATION LEVEL (?:REPEATABLE READ|READ COMMITTED);\\n/$1/'
+    )
+  )
 
   for (const migration of [
     ...migrationArray('PREDEPLOY_MIGRATIONS'),
@@ -735,11 +754,11 @@ test('transactional body stripping survives documentation after COMMIT', () => {
     const body = readFileSync(resolve(ROOT, 'supabase/migrations', migration), 'utf8')
     const stripped = body
       .replace(/(^|\n)BEGIN;\n/, '$1')
-      .replace(/(^|\n)SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;\n/, '$1')
+      .replace(/(^|\n)SET TRANSACTION ISOLATION LEVEL (?:REPEATABLE READ|READ COMMITTED);\n/, '$1')
       .replace(/(^|\n)COMMIT;(?:\n|$)/, '$1')
     assert.doesNotMatch(
       stripped,
-      /^BEGIN;$|^COMMIT;$|^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$/m,
+      /^BEGIN;$|^COMMIT;$|^SET TRANSACTION ISOLATION LEVEL (?:REPEATABLE READ|READ COMMITTED);$/m,
       migration
     )
   }
@@ -751,12 +770,24 @@ test('repeatable-read migrations promote isolation to the outer transaction', ()
 
   assert.match(shadowBody, /^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$/m)
   assert.match(source, /transaction_begin_for_migrations/)
-  assert.match(source, /BEGIN ISOLATION LEVEL REPEATABLE READ;/)
+  assert.match(source, /isolation_level='REPEATABLE READ'/)
+  assert.match(source, /begin_statement="BEGIN ISOLATION LEVEL \$isolation_level;"/)
   assert.match(source, /migration has an unsupported transaction mode/)
+  assert.match(source, /migration batch mixes incompatible transaction isolation levels/)
   assert.match(
     source,
     /emit_all_dry_run[\s\S]*transaction_begin_for_migrations[\s\S]*PREDEPLOY_MIGRATIONS/
   )
+})
+
+test('read-committed migrations pin isolation on the outer transaction', () => {
+  const migration = '20260804051000_quarantine_bingx_rank_authority.sql'
+  const body = readFileSync(resolve(ROOT, 'supabase/migrations', migration), 'utf8')
+
+  assert.match(body, /^SET TRANSACTION ISOLATION LEVEL READ COMMITTED;$/m)
+  assert.match(source, /begin_statement="BEGIN ISOLATION LEVEL \$isolation_level;"/)
+  assert.match(source, /isolation_level='READ COMMITTED'/)
+  assert.match(source, /read_committed_count/)
 })
 
 test('disposable diagnostic emitters retain exact-ledger drift checks', () => {

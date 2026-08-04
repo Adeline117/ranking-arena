@@ -29,7 +29,13 @@ import {
   IncompleteProfileWindowError,
 } from '@/lib/ingest/core/profile-coverage'
 import type { ProfileQualityReject } from '@/lib/ingest/core/profile-quality'
-import type { HistoryKind, ParseCtx, ParsedHistoryRow } from '@/lib/ingest/core/types'
+import type {
+  Currency,
+  HistoryKind,
+  ParseCtx,
+  ParsedHistoryRow,
+  ParsedPosition,
+} from '@/lib/ingest/core/types'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
@@ -209,32 +215,72 @@ export async function processTierC(
   }
 }
 
+function positionRowsForRender(
+  parsed: ParsedPosition[],
+  currency: Currency
+): Record<string, unknown>[] {
+  return parsed.map((row) => ({
+    symbol: row.symbol,
+    side: row.side,
+    leverage: row.leverage,
+    size: row.size,
+    entry_price: row.entryPrice,
+    mark_price: row.markPrice,
+    unrealized_pnl: row.unrealizedPnl,
+    currency,
+  }))
+}
+
 function historyRowsForRender(
   parsed: ParsedHistoryRow[],
-  kind: HistoryKind
+  kind: HistoryKind,
+  currency: Currency
 ): Record<string, unknown>[] {
+  if (parsed.some((row) => row.kind !== kind)) {
+    throw new Error(`[tier-c] history row kind does not match ${kind}`)
+  }
+
+  // An individual copier row remains identifying even without its label.
+  // Copier details therefore stay solely in the private RAW artifact.
+  if (kind === 'copiers') return []
+
+  // Keep the interactive result aligned with arena_records_page. Parser
+  // internals, source identities, evidence claims, and RAW values stay private.
   return parsed.map((row) => {
-    if (row.kind !== kind) throw new Error(`[tier-c] history row kind does not match ${kind}`)
-    if (row.kind === 'copiers') {
-      const { copierLabel: _pii, raw: _raw, ...rest } = row
-      return rest
-    }
     if (row.kind === 'position_history') {
-      // Verifier/parser provenance is an internal claim substrate, not part of
-      // the Tier-C render contract or the receipt-bound records projection.
-      const {
-        raw: _raw,
-        sourceFactId: _sourceFactId,
-        sourceLifecycleMarker: _sourceLifecycleMarker,
-        sourceReturn: _sourceReturn,
-        fieldSources: _fieldSources,
-        limitations: _limitations,
-        ...rest
-      } = row
-      return rest
+      return {
+        symbol: row.symbol,
+        side: row.side,
+        leverage: row.leverage,
+        size: row.size,
+        entry_price: row.entryPrice,
+        exit_price: row.exitPrice,
+        realized_pnl: row.realizedPnl,
+        opened_at: row.openedAt,
+        closed_at: row.closedAt,
+        currency,
+      }
     }
-    const { raw: _raw, ...rest } = row
-    return rest
+    if (row.kind === 'orders') {
+      return {
+        ts: row.ts,
+        kind: row.orderKind,
+        symbol: row.symbol,
+        side: row.side,
+        price: row.price,
+        qty: row.qty,
+        currency,
+      }
+    }
+    if (row.kind === 'transfers') {
+      return {
+        ts: row.ts,
+        direction: row.direction,
+        asset: row.asset,
+        amount: row.amount,
+      }
+    }
+    throw new Error('[tier-c] copier row reached the public render mapper')
   })
 }
 
@@ -245,9 +291,9 @@ function historyRowsForRender(
  * result. They never enter typed history tables, legacy cursors, or
  * profile_cache. Positions retain their evidence-bound persistence path.
  *
- * Copier PII rule (spec §6): copierLabel never leaves the worker — the
- * Redis preview rows are stripped before publish and this preview-only lane
- * does not write the full row into any typed history table.
+ * Copier PII rule (spec §6): no individual copier row leaves the worker.
+ * Full rows, including label, PnL, investment, duration, and identity, remain
+ * only in the immutable private RAW artifact.
  */
 async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Promise<unknown> {
   const { sourceSlug, exchangeTraderId, timeframe, surface } = job.data
@@ -321,7 +367,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         throw new Error('[tier-c] positions capture has no valid observation clock')
       }
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
-      rows = positions.map((p) => ({ ...p, currency: src.currency }))
+      rows = positionRowsForRender(positions, src.currency)
 
       const configuredDelayHours = src.meta.positions_delay_hours
       const sourceAsOf =
@@ -392,7 +438,7 @@ async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Pr
         const parsed = acquisition.pages.flatMap((page) =>
           adapter.parseHistory(page.payload, kind, ctx)
         )
-        rows = historyRowsForRender(parsed, kind)
+        rows = historyRowsForRender(parsed, kind, src.currency)
         await redis.set(resultKey, JSON.stringify(renderPayload()), 'EX', 120)
         return receipt
       }

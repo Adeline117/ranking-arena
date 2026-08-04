@@ -4,17 +4,21 @@ import RecentActivityCard from '../RecentActivityCard'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
 
-jest.mock('@/app/components/Providers/LanguageProvider', () => ({
-  useLanguage: () => ({ t: (key: string) => key, language: 'en' }),
-}))
+jest.mock('@/lib/hooks/useTraderRecords', () => ({ useTraderRecords: jest.fn() }))
 jest.mock('@/lib/i18n', () => ({
   t: (key: string) => key,
   getLanguage: () => 'en',
 }))
-jest.mock('@/lib/hooks/useTraderRecords', () => ({
-  useTraderRecords: jest.fn(),
+jest.mock('@/app/components/Providers/LanguageProvider', () => ({
+  useLanguage: () => ({ t: (key: string) => key, language: 'en' }),
 }))
 jest.mock('@/app/components/ui/Metric', () => () => null)
+
+const props = {
+  source: 'gmx',
+  exchangeTraderId: 'trader-a',
+  enabled: true,
+}
 
 function recordsResult(completeness: HistoryCompleteness | null, rows: object[] = []) {
   return {
@@ -23,6 +27,8 @@ function recordsResult(completeness: HistoryCompleteness | null, rows: object[] 
     provenance: null,
     isPendingUpstream: false,
     isLoading: false,
+    isInitialError: false,
+    isFetchNextPageError: false,
     isFetchingNextPage: false,
     hasNextPage: false,
     fetchNextPage: jest.fn(),
@@ -65,7 +71,7 @@ describe('RecentActivityCard history disclosure', () => {
         ])
       )
 
-      render(<RecentActivityCard source="gmx" exchangeTraderId="trader-a" enabled />)
+      render(<RecentActivityCard {...props} />)
 
       expect(screen.getByRole('status', { name: title })).toHaveAttribute(
         'data-history-completeness',
@@ -76,12 +82,26 @@ describe('RecentActivityCard history disclosure', () => {
     }
   )
 
+  it('fails closed for legacy rows without completeness metadata', () => {
+    ;(useTraderRecords as jest.Mock).mockReturnValue(
+      recordsResult(null, [{ symbol: 'BTC', side: 'buy' }])
+    )
+
+    render(<RecentActivityCard {...props} />)
+
+    expect(screen.getByRole('status', { name: 'historyCompletenessUnknownTitle' })).toHaveAttribute(
+      'data-history-completeness',
+      'unknown'
+    )
+    expect(screen.getByText('recentActivityViewAll')).toBeInTheDocument()
+  })
+
   it('keeps an empty incomplete preview visible without claiming there is no history', () => {
     ;(useTraderRecords as jest.Mock).mockReturnValue(
       recordsResult({ state: 'partial', reason: 'interactive_preview' })
     )
 
-    render(<RecentActivityCard source="gmx" exchangeTraderId="trader-a" enabled />)
+    render(<RecentActivityCard {...props} />)
 
     expect(
       screen.getByRole('status', { name: 'historyCompletenessPartialTitle' })
@@ -106,8 +126,28 @@ describe('RecentActivityCard history disclosure', () => {
   ])('preserves null-collapse for an empty %s trust result', (_label, completeness) => {
     ;(useTraderRecords as jest.Mock).mockReturnValue(recordsResult(completeness))
 
-    const view = render(<RecentActivityCard source="gmx" exchangeTraderId="trader-a" enabled />)
+    const view = render(<RecentActivityCard {...props} />)
 
     expect(view.container).toBeEmptyDOMElement()
+  })
+
+  it('suppresses the warning only for complete non-empty history', () => {
+    ;(useTraderRecords as jest.Mock).mockReturnValue(
+      recordsResult(
+        {
+          state: 'complete',
+          reason: 'verified_terminal_history',
+          evidenceState: 'verified',
+          scanTerminalState: 'exhausted',
+          blockerReasons: [],
+        },
+        [{ symbol: 'BTC', side: 'buy' }]
+      )
+    )
+
+    render(<RecentActivityCard {...props} />)
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByText('recentActivityViewAll')).toBeInTheDocument()
   })
 })

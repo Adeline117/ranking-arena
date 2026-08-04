@@ -33,6 +33,10 @@ interface OrderRow {
 }
 
 const ROWS_SHOWN = 5
+const UNBOUND_HISTORY = {
+  state: 'unknown' as const,
+  reason: 'history_evidence_not_bound' as const,
+}
 
 export const RecentActivityCard = memo(function RecentActivityCard({
   source,
@@ -67,7 +71,7 @@ export const RecentActivityCard = memo(function RecentActivityCard({
       >
         {i18nT('recentActivityTitle')}
       </Text>
-      <HistoryCompletenessNotice completeness={completeness} />
+      <HistoryCompletenessNotice completeness={completeness ?? UNBOUND_HISTORY} />
       {recent.length === 0 ? (
         <Box style={{ padding: tokens.spacing[2], textAlign: 'center' }}>
           <Text size="sm" weight="semibold" color="secondary" style={{ display: 'block' }}>

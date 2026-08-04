@@ -60,6 +60,7 @@ jest.mock('@/lib/ingest/verified-position-history', () => ({
 import {
   canPublishVerifiedPositionHistory,
   captureAndPublishVerifiedPositionHistory,
+  captureTierBHistoryRawOnly,
   persistHistoryRawArtifactFirst,
   publishPreparedVerifiedPositionHistory,
   readVerifiedPositionHistoryHead,
@@ -553,6 +554,105 @@ describe('verified Tier-B position-history publisher', () => {
         runtime
       )
     ).rejects.toBe(upstreamError)
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockBuildReviewedEvidence).not.toHaveBeenCalled()
+    expect(mockPreparePublication).not.toHaveBeenCalled()
+  })
+
+  it('persists RAW before a strict verified capture rejects a missing response page', async () => {
+    const artifact = Object.freeze({
+      source: { id: 7, slug: 'bitget_futures' },
+      pages: Object.freeze([]),
+    })
+    const rawObject = Object.freeze({
+      id: 501,
+      storagePath:
+        `bitget_futures/history_trust/position_history/${sourceRunId}/` +
+        `event_history_${sourceRunId}.json.gz`,
+      contentHash: sourceRunId,
+    })
+    mockPoolQuery.mockResolvedValueOnce({ rows: [] })
+    mockCaptureHistoryAcquisition.mockResolvedValue({
+      artifact,
+      sourceRunId,
+      pages: [],
+      error: null,
+    })
+    mockWriteHistoryRawArtifact.mockResolvedValue(rawObject)
+    const source = { id: 7, slug: 'bitget_futures', adapter_slug: 'bitget' } as SourceRow
+    const adapter = {
+      getHistory: jest.fn(() => ({ [Symbol.asyncIterator]: jest.fn() })),
+      historyTerminalVerifier: jest.fn(() => null),
+    } as SourceAdapter
+    const runtime: VerifiedPositionHistoryPublisherRuntime = {
+      database: { query: (...args) => mockPoolQuery(...args) } as IngestQueryExecutor,
+      runTransaction: jest.fn(),
+      writeRawArtifact: mockWriteHistoryRawArtifact,
+    }
+
+    await expect(
+      captureAndPublishVerifiedPositionHistory(
+        {
+          adapter,
+          requireResponsePage: true,
+          session: {} as FetchSession,
+          source,
+          trader: { id: 41, exchange_trader_id: 'leader-1', meta: null },
+        },
+        runtime
+      )
+    ).rejects.toThrow(
+      '[verified-position-history-publisher] bitget_futures position_history returned no upstream response page'
+    )
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockBuildReviewedEvidence).not.toHaveBeenCalled()
+    expect(mockPreparePublication).not.toHaveBeenCalled()
+    expect(mockPrepareRpcCall).not.toHaveBeenCalled()
+  })
+
+  it('persists RAW before a strict RAW-only capture rejects a missing response page', async () => {
+    const artifact = Object.freeze({
+      source: { id: 34, slug: 'bingx_futures' },
+      pages: Object.freeze([]),
+    })
+    const rawObject = Object.freeze({
+      id: 502,
+      storagePath: `bingx_futures/history_trust/orders/${sourceRunId}.json.gz`,
+      contentHash: sourceRunId,
+    })
+    mockCaptureHistoryAcquisition.mockResolvedValue({
+      artifact,
+      sourceRunId,
+      pages: [],
+      error: null,
+    })
+    mockWriteHistoryRawArtifact.mockResolvedValue(rawObject)
+    const source = { id: 34, slug: 'bingx_futures', adapter_slug: 'bingx' } as SourceRow
+    const adapter = {
+      getHistory: jest.fn(() => ({ [Symbol.asyncIterator]: jest.fn() })),
+      historyTerminalVerifier: jest.fn(() => null),
+    } as SourceAdapter
+    const runtime: VerifiedPositionHistoryPublisherRuntime = {
+      database: { query: (...args) => mockPoolQuery(...args) } as IngestQueryExecutor,
+      runTransaction: jest.fn(),
+      writeRawArtifact: mockWriteHistoryRawArtifact,
+    }
+
+    await expect(
+      captureTierBHistoryRawOnly(
+        {
+          adapter,
+          kind: 'orders',
+          requireResponsePage: true,
+          session: {} as FetchSession,
+          source,
+          trader: { id: 41, exchange_trader_id: 'leader-1', meta: null },
+        },
+        runtime
+      )
+    ).rejects.toThrow(
+      '[verified-position-history-publisher] bingx_futures orders returned no upstream response page'
+    )
     expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockBuildReviewedEvidence).not.toHaveBeenCalled()
     expect(mockPreparePublication).not.toHaveBeenCalled()

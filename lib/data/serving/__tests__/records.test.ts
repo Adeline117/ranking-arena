@@ -17,6 +17,59 @@ function rpcClient(data: unknown, error: unknown = null): SupabaseClient {
   return { rpc: jest.fn().mockResolvedValue({ data, error }) } as unknown as SupabaseClient
 }
 
+const EMPTY_ORDER_ROW = {
+  ts: null,
+  kind: null,
+  symbol: null,
+  side: null,
+  price: null,
+  qty: null,
+  notional: null,
+  realized_pnl: null,
+  currency: null,
+}
+
+const EMPTY_POSITION_ROW = {
+  symbol: null,
+  side: null,
+  margin_mode: null,
+  leverage: null,
+  size: null,
+  entry_price: null,
+  mark_price: null,
+  notional: null,
+  margin: null,
+  unrealized_pnl: null,
+  roe: null,
+  currency: null,
+  as_of: null,
+}
+
+const EMPTY_POSITION_HISTORY_ROW = {
+  symbol: null,
+  side: null,
+  margin_mode: null,
+  leverage: null,
+  size: null,
+  entry_price: null,
+  exit_price: null,
+  max_open_interest: null,
+  realized_pnl: null,
+  roi: null,
+  source_return: null,
+  closing_value: null,
+  opened_at: null,
+  closed_at: null,
+  currency: null,
+}
+
+const EMPTY_TRANSFER_ROW = {
+  ts: null,
+  direction: null,
+  asset: null,
+  amount: null,
+}
+
 describe('copier PII rule (spec §6)', () => {
   it('the records RPC SQL hard-blocks the copiers kind and never selects copier_label', () => {
     const sql = readFileSync(
@@ -31,9 +84,9 @@ describe('copier PII rule (spec §6)', () => {
     expect(codeLines).toEqual([])
   })
 
-  it('sanitizeRecordRow strips identifier-ish keys (defense in depth)', () => {
+  it('sanitizeRecordRow allowlists order fields and strips identifier-ish keys', () => {
     const row = JSON.parse(
-      '{"symbol":"BTCUSDT","realized_pnl":12,"copier_label":"ku****j@***.com",' +
+      '{"ts":"2026-08-03T12:00:00.000Z","symbol":"BTCUSDT","realized_pnl":12,"copier_label":"ku****j@***.com",' +
         '"copierLabel":"x","email":"a@b.c","user_id":"123",' +
         '"sourceFactId":"internal-id","source_fact_id":"internal-id",' +
         '"sourceLifecycleMarker":"closed","source_lifecycle_marker":"closed",' +
@@ -42,16 +95,52 @@ describe('copier PII rule (spec §6)', () => {
         '"raw":{"email":"nested@secret.invalid"},"__proto__":{"polluted":true},' +
         '"prototype":{"polluted":true},"constructor":{"polluted":true}}'
     ) as Record<string, unknown>
+    const sanitized = sanitizeRecordRow('orders', row)
 
-    expect(sanitizeRecordRow(row)).toEqual({
+    expect(sanitized).toEqual({
+      ...EMPTY_ORDER_ROW,
+      ts: '2026-08-03T12:00:00.000Z',
       symbol: 'BTCUSDT',
       realized_pnl: 12,
-      sourceReturn: 0.12,
-      source_return: 0.12,
     })
+    expect(Object.getPrototypeOf(sanitized)).toBe(Object.prototype)
     expect(({} as { polluted?: boolean }).polluted).toBeUndefined()
   })
 
+  it('sanitizeRecordRow strips claim-substrate provenance the DB path never projects', () => {
+    // okx/bitget/binance position-history parsers attach these to every row.
+    // arena_records_page builds an explicit column list and omits them, so the
+    // Tier-C preview must not advertise a wider row contract than Tier-B.
+    const row = JSON.parse(
+      '{"symbol":"BTCUSDT","realized_pnl":12,' +
+        '"sourceFactId":"[\\"trader\\",\\"row\\"]","source_fact_id":"x",' +
+        '"sourceLifecycleMarker":"1730000000000","source_lifecycle_marker":"x",' +
+        '"sourceReturn":0.42,"source_return":0.42,' +
+        '"fieldSources":{"symbol":"data[].instId"},"field_sources":{},' +
+        '"limitations":["source_return_missing"]}'
+    ) as Record<string, unknown>
+
+    expect(sanitizeRecordRow('position_history', row)).toEqual({
+      ...EMPTY_POSITION_HISTORY_ROW,
+      symbol: 'BTCUSDT',
+      realized_pnl: 12,
+      source_return: 0.42,
+    })
+  })
+
+  it('rejects missing record identity and never mistakes the parser discriminator for order type', () => {
+    expect(sanitizeRecordRow('positions', { side: 'long' })).toBeNull()
+    expect(sanitizeRecordRow('orders', { ts: '2026-08', kind: 'limit' })).toBeNull()
+    expect(
+      sanitizeRecordRow('orders', {
+        ts: '2026-08-03T12:00:00Z',
+        kind: 'orders',
+      })
+    ).toEqual({
+      ...EMPTY_ORDER_ROW,
+      ts: '2026-08-03T12:00:00.000Z',
+    })
+  })
   it('filters malformed copier distribution entries and non-finite aggregate values', async () => {
     const aggregate = await getCopierAggregate(
       rpcClient({
@@ -78,6 +167,7 @@ describe('copier PII rule (spec §6)', () => {
       copierCountMax: null,
       totalCopierPnl: null,
       pnlDistribution: [{ bucket: 'valid', count: 2 }],
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
   })
 
@@ -115,10 +205,31 @@ describe('copier PII rule (spec §6)', () => {
         observedAt: '2026-06-10T12:00:00Z',
         publishedAt: '2026-06-10T12:01:00Z',
       },
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
     // The serialized aggregate must contain no copier identifiers anywhere.
     expect(JSON.stringify(aggregate)).not.toMatch(/copier_label|copierLabel|email/)
   })
+
+  it.each([undefined, 'BTC', 'usdt'])(
+    'does not invent a copier PnL unit for %s currency',
+    async (currency) => {
+      const aggregate = await getCopierAggregate(
+        rpcClient({
+          copierCount: 2,
+          totalCopierPnl: 12,
+          currency,
+          depth: 'full',
+          pnlDistribution: [{ bucket: '0~1000', count: 2 }],
+        }),
+        'bitget_futures',
+        'abc'
+      )
+
+      expect(aggregate?.totalCopierPnl).toBeNull()
+      expect(aggregate?.pnlDistribution).toEqual([])
+    }
+  )
 })
 
 describe('getRecordsPage', () => {
@@ -160,8 +271,13 @@ describe('getRecordsPage', () => {
     )
     expect(page).not.toBeNull()
     expect(page!.rows).toEqual([
-      { symbol: 'BTCUSDT', realized_pnl: 10, source_return: 0.1 },
-      { symbol: 'ETHUSDT', realized_pnl: -3 },
+      {
+        ...EMPTY_POSITION_HISTORY_ROW,
+        symbol: 'BTCUSDT',
+        realized_pnl: 10,
+        source_return: 0.1,
+      },
+      { ...EMPTY_POSITION_HISTORY_ROW, symbol: 'ETHUSDT', realized_pnl: -3 },
     ])
     expect(page!.nextCursor).toBe('2026-06-01 00:00:00+00|abc')
     expect(page!.cacheState).toBe('warm')
@@ -185,6 +301,7 @@ describe('getRecordsPage', () => {
       rpcClient({
         rows: [{ symbol: 'must-not-serve', realized_pnl: 99 }],
         nextCursor: 'legacy-cursor',
+
         asOf: '2026-06-10T12:00:00Z',
       }),
       'bitget_futures',
@@ -200,21 +317,86 @@ describe('getRecordsPage', () => {
     })
   })
 
-  it.each(['orders', 'transfers'] as const)(
-    'does not attach position-history completeness to %s',
-    async (kind) => {
-      const page = await getRecordsPage(
-        rpcClient({ rows: [{ id: 1 }], nextCursor: 'next' }),
-        'bitget_futures',
-        'abc',
-        kind,
-        null
-      )
-      expect(page?.rows).toEqual([{ id: 1 }])
-      expect(page?.nextCursor).toBe('next')
-      expect(page?.completeness).toBeUndefined()
-    }
-  )
+  it('preserves warm order rows but marks their unbound history unknown', async () => {
+    const page = await getRecordsPage(
+      rpcClient({
+        rows: [
+          {
+            ts: '2026-06-10T11:00:00Z',
+            kind: 'limit',
+            symbol: 'BTCUSDT',
+            side: 'buy',
+            price: 100,
+            qty: 2,
+            currency: 'USDT',
+            order_id: 'must-not-escape',
+          },
+        ],
+        nextCursor: 'orders-next',
+        asOf: '2026-06-10T12:00:00Z',
+      }),
+      'bitget_futures',
+      'abc',
+      'orders',
+      null
+    )
+
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-06-10T11:00:00.000Z',
+        kind: 'limit',
+        symbol: 'BTCUSDT',
+        side: 'buy',
+        price: 100,
+        qty: 2,
+        currency: 'USDT',
+      },
+    ])
+    expect(page!.nextCursor).toBe('orders-next')
+    expect(page!.completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
+  })
+
+  it('preserves warm transfer rows in asset units and marks their completeness unknown', async () => {
+    const page = await getRecordsPage(
+      rpcClient({
+        rows: [
+          {
+            ts: '2026-06-10T11:00:00Z',
+            direction: 'in',
+            asset: 'BTC',
+            amount: 0.5,
+            currency: 'USDC',
+            transfer_id: 'must-not-escape',
+          },
+        ],
+        nextCursor: 'transfers-next',
+      }),
+      'bitget_futures',
+      'abc',
+      'transfers',
+      null
+    )
+
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_TRANSFER_ROW,
+        ts: '2026-06-10T11:00:00.000Z',
+        direction: 'in',
+        asset: 'BTC',
+        amount: 0.5,
+      },
+    ])
+    expect(page!.rows[0]).not.toHaveProperty('currency')
+    expect(page!.nextCursor).toBe('transfers-next')
+    expect(page!.completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
+  })
 
   it('accepts a complete empty position-history page only with an exact publication identity', async () => {
     const sourceRunId = 'a'.repeat(64)
@@ -261,7 +443,23 @@ describe('getRecordsPage', () => {
   it.each([
     ['mismatched state', { stateId: 41 }],
     ['missing source run', { sourceRunId: null }],
+    ['malformed source-run SHA', { sourceRunId: 'A'.repeat(64) }],
+    ['sentinel zero source-run SHA', { sourceRunId: '0'.repeat(64) }],
     ['missing publication clock', { publishedAt: null }],
+    [
+      'mismatched verdict publication',
+      {
+        completeness: {
+          blockerReasons: [],
+          contract: 'arena.position-history-completeness@2',
+          evidenceState: 'verified',
+          publicationId: 41,
+          reason: 'verified_terminal_history',
+          scanTerminalState: 'exhausted',
+          state: 'complete',
+        },
+      },
+    ],
   ])('keeps a forged complete verdict unknown when it has %s', async (_label, drift) => {
     const response = {
       rows: [{ symbol: 'forged-row' }],
@@ -330,6 +528,7 @@ describe('getRecordsPage', () => {
       observedAt: '2026-06-10T12:00:00Z',
       publishedAt: '2026-06-10T12:01:00Z',
     })
+    expect(page!.completeness).toBeUndefined()
   })
 
   it('does not synthesize request time for missing, legacy, or invalid clocks', async () => {
@@ -375,8 +574,13 @@ describe('getRecordsPage', () => {
           'not-a-row',
           42,
           new Date('2026-06-10T12:00:00Z'),
-          { symbol: 'BTCUSDT', raw: { email: 'secret@example.com' } },
-          nullPrototype,
+          { ts: 'not-a-time', symbol: 'INVALID' },
+          {
+            ts: '2026-06-10T12:00:00Z',
+            symbol: 'BTCUSDT',
+            raw: { email: 'secret@example.com' },
+          },
+          Object.assign(nullPrototype, { ts: '2026-06-10T11:00:00Z' }),
         ],
       }),
       'bitget_futures',
@@ -385,7 +589,18 @@ describe('getRecordsPage', () => {
       null
     )
 
-    expect(page?.rows).toEqual([{ symbol: 'BTCUSDT' }, { symbol: 'ETHUSDT' }])
+    expect(page?.rows).toEqual([
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-06-10T12:00:00.000Z',
+        symbol: 'BTCUSDT',
+      },
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-06-10T11:00:00.000Z',
+        symbol: 'ETHUSDT',
+      },
+    ])
   })
 })
 
@@ -408,9 +623,15 @@ describe('recordsPageFromTierC', () => {
         },
       })
 
+      expect(page).not.toBeNull()
+      expect(page!.rows).toEqual([
+        {
+          ...EMPTY_POSITION_HISTORY_ROW,
+          symbol: 'BTCUSDT',
+        },
+      ])
       expect(page).toMatchObject({
         cacheState: 'cold-fetched',
-        rows: [{ symbol: 'BTCUSDT' }],
         nextCursor: null,
         provenance: {
           source: 'bitget_futures',
@@ -481,32 +702,101 @@ describe('recordsPageFromTierC', () => {
     })
   })
 
-  it('keeps current-position pagination and ignores history metadata', () => {
-    const page = recordsPageFromTierC('bitget_futures', 'positions', {
+  it('does not accept a complete verdict on a Tier-C append-only preview', () => {
+    const page = recordsPageFromTierC('bitget_futures', 'orders', {
       rows: [],
-      nextCursor: 'positions-next',
       completeness: {
-        state: 'partial',
-        reason: 'interactive_preview',
+        state: 'complete',
+        reason: 'verified_terminal_history',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
       },
     })
 
-    expect(page?.nextCursor).toBe('positions-next')
-    expect(page?.completeness).toBeUndefined()
+    expect(page?.completeness).toEqual({
+      state: 'partial',
+      reason: 'interactive_preview',
+    })
   })
 
   it.each(['orders', 'transfers'] as const)(
-    'keeps %s pagination and ignores position-history metadata',
+    'maps Tier-C %s as a non-pageable partial preview',
     (kind) => {
       const page = recordsPageFromTierC('bitget_futures', kind, {
-        rows: [{ id: 1 }],
-        nextCursor: `${kind}-next`,
-        completeness: { state: 'partial', reason: 'interactive_preview' },
+        rows: [],
+        nextCursor: 'orders-next',
+        completeness: {
+          state: 'partial',
+          reason: 'interactive_preview',
+        },
       })
-      expect(page?.nextCursor).toBe(`${kind}-next`)
-      expect(page?.completeness).toBeUndefined()
+
+      expect(page!.nextCursor).toBeNull()
+      expect(page!.completeness).toEqual({
+        state: 'partial',
+        reason: 'interactive_preview',
+      })
     }
   )
+
+  it('keeps current positions pageable without attaching history completeness', () => {
+    const page = recordsPageFromTierC('bitget_futures', 'positions', {
+      rows: [
+        {
+          symbol: 'BTCUSDT',
+          side: 'long',
+          entryPrice: 100,
+          markPrice: 110,
+          unrealizedPnl: 10,
+          currency: 'USDT',
+          raw: { account: 'private' },
+          debug: true,
+        },
+      ],
+      nextCursor: 'positions-next',
+      completeness: { state: 'partial', reason: 'interactive_preview' },
+    })
+
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_POSITION_ROW,
+        symbol: 'BTCUSDT',
+        side: 'long',
+        entry_price: 100,
+        mark_price: 110,
+        unrealized_pnl: 10,
+        currency: 'USDT',
+      },
+    ])
+    expect(page!.nextCursor).toBe('positions-next')
+    expect(page!.completeness).toBeUndefined()
+  })
+
+  it('serves transfer amounts only in their asset unit', () => {
+    const page = recordsPageFromTierC('gtrade', 'transfers', {
+      rows: [
+        {
+          ts: '2026-08-03T12:00:00Z',
+          direction: 'in',
+          asset: 'BTC',
+          amount: 0.5,
+          currency: 'USDC',
+        },
+      ],
+    })
+
+    expect(page!.rows).toEqual([
+      {
+        ...EMPTY_TRANSFER_ROW,
+        ts: '2026-08-03T12:00:00.000Z',
+        direction: 'in',
+        asset: 'BTC',
+        amount: 0.5,
+      },
+    ])
+    expect(page!.rows[0]).not.toHaveProperty('currency')
+  })
 
   it('returns null when the payload has no rows array', () => {
     expect(recordsPageFromTierC('s', 'position_history', { stats: [] })).toBeNull()
@@ -519,14 +809,29 @@ describe('recordsPageFromTierC', () => {
         null,
         ['not', 'a', 'row'],
         true,
-        { symbol: 'BTCUSDT', raw: { user_id: 'private' }, constructor: 'blocked' },
+        {
+          ts: '2026-08-03T12:00:00Z',
+          kind: 'orders',
+          orderKind: 'limit',
+          symbol: 'BTCUSDT',
+          raw: { user_id: 'private' },
+          constructor: 'blocked',
+          debug: 'must-not-escape',
+        },
       ],
     })
 
-    expect(page?.rows).toEqual([{ symbol: 'BTCUSDT' }])
+    expect(page?.rows).toEqual([
+      {
+        ...EMPTY_ORDER_ROW,
+        ts: '2026-08-03T12:00:00.000Z',
+        kind: 'limit',
+        symbol: 'BTCUSDT',
+      },
+    ])
   })
 
-  it('strips position claim metadata but retains verified economic return fields', () => {
+  it('strips position claim metadata but retains canonical source_return', () => {
     const page = recordsPageFromTierC('bitget_futures', 'position_history', {
       rows: [
         {
@@ -540,6 +845,12 @@ describe('recordsPageFromTierC', () => {
         },
       ],
     })
-    expect(page?.rows).toEqual([{ symbol: 'BTCUSDT', sourceReturn: 0.4, source_return: 0.4 }])
+    expect(page?.rows).toEqual([
+      {
+        ...EMPTY_POSITION_HISTORY_ROW,
+        symbol: 'BTCUSDT',
+        source_return: 0.4,
+      },
+    ])
   })
 })

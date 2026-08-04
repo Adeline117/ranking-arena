@@ -191,8 +191,8 @@ function parsedHistoryRow(kind: 'position_history' | 'orders' | 'transfers' | 'c
       kind,
       ts: '2026-07-15T12:00:00.000Z',
       direction: 'in' as const,
-      asset: 'USDC',
-      amount: 10,
+      asset: 'BTC',
+      amount: 0.5,
       dedupeHash: 'transfer-1',
       raw,
     }
@@ -200,13 +200,53 @@ function parsedHistoryRow(kind: 'position_history' | 'orders' | 'transfers' | 'c
   return {
     kind,
     ts: '2026-07-15T12:00:00.000Z',
-    copierLabel: 'private-user',
+    copierLabel: 'private-user@example.com',
     copierPnl: 10,
     copierInvested: 100,
     copyDurationDays: 3,
     dedupeHash: 'copier-1',
     raw,
   }
+}
+
+function expectedHistoryRenderRow(
+  kind: 'position_history' | 'orders' | 'transfers' | 'copiers'
+): Record<string, unknown> | null {
+  const row = parsedHistoryRow(kind)
+  if (row.kind === 'position_history') {
+    return {
+      symbol: row.symbol,
+      side: row.side,
+      leverage: row.leverage,
+      size: row.size,
+      entry_price: row.entryPrice,
+      exit_price: row.exitPrice,
+      realized_pnl: row.realizedPnl,
+      opened_at: row.openedAt,
+      closed_at: row.closedAt,
+      currency: 'USDC',
+    }
+  }
+  if (row.kind === 'orders') {
+    return {
+      ts: row.ts,
+      kind: row.orderKind,
+      symbol: row.symbol,
+      side: row.side,
+      price: row.price,
+      qty: row.qty,
+      currency: 'USDC',
+    }
+  }
+  if (row.kind === 'transfers') {
+    return {
+      ts: row.ts,
+      direction: row.direction,
+      asset: row.asset,
+      amount: row.amount,
+    }
+  }
+  return null
 }
 
 function historyAdapter() {
@@ -576,6 +616,20 @@ describe('Tier-C incomplete profile window gate', () => {
       observedAt: '2026-07-15T12:00:00.000Z',
       publishedAt: null,
     })
+    expect(renderPayload.rows).toEqual([
+      {
+        symbol: 'BTCUSDT',
+        side: 'long',
+        leverage: 2,
+        size: 1,
+        entry_price: 100,
+        mark_price: 110,
+        unrealized_pnl: 10,
+        currency: 'USDC',
+      },
+    ])
+    expect(renderPayload.rows[0]).not.toHaveProperty('entryPrice')
+    expect(renderPayload.rows[0]).not.toHaveProperty('raw')
     expect(renderPayload).not.toHaveProperty('asOf')
     expect(mockPublishPositions).toHaveBeenCalledWith(
       expect.objectContaining({ slug: src.slug }),
@@ -624,11 +678,13 @@ describe('Tier-C incomplete profile window gate', () => {
       mockParseHistory.mockImplementation((_payload: unknown, kind: typeof surface) => [
         parsedHistoryRow(kind),
       ])
+      const expectedRow = expectedHistoryRenderRow(surface)
+      const expectedRows = expectedRow === null ? [] : [expectedRow, expectedRow]
 
       await expect(processTierC(historyJob(surface), 'local')).resolves.toMatchObject({
         traderId: 42,
         surface,
-        rows: 2,
+        rows: expectedRows.length,
         completeness: {
           state: 'partial',
           reason: 'interactive_preview',
@@ -676,10 +732,7 @@ describe('Tier-C incomplete profile window gate', () => {
       expect(mockRedisSet).toHaveBeenCalledWith('tier-c:result', expect.any(String), 'EX', 120)
       const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
       expect(renderPayload).toMatchObject({
-        rows: [
-          expect.objectContaining({ kind: surface }),
-          expect.objectContaining({ kind: surface }),
-        ],
+        rows: expectedRows,
         nextCursor: null,
         sourceAsOf: null,
         observedAt: expect.any(String),
@@ -692,10 +745,17 @@ describe('Tier-C incomplete profile window gate', () => {
           blockerReasons: ['caller_limit'],
         },
       })
+      expect(renderPayload.rows).toEqual(expectedRows)
+      if (surface === 'transfers') {
+        expect(renderPayload.rows[0]).not.toHaveProperty('currency')
+      }
       expect(renderPayload).not.toHaveProperty('asOf')
+      expect(JSON.stringify(renderPayload.rows)).not.toContain('private-user@example.com')
       for (const row of renderPayload.rows) {
         expect(row.raw).toBeUndefined()
         expect(row.copierLabel).toBeUndefined()
+        expect(row.copierPnl).toBeUndefined()
+        expect(row.copierInvested).toBeUndefined()
         expect(row.sourceFactId).toBeUndefined()
         expect(row.sourceLifecycleMarker).toBeUndefined()
         expect(row.sourceReturn).toBeUndefined()

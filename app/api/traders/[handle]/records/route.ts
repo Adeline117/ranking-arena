@@ -99,6 +99,8 @@ export async function GET(
         return apiSuccess({ cacheState: 'pending' as const }, 200, { 'Cache-Control': 'no-store' })
       }
 
+      const isAppendOnlyHistory = kind !== 'positions'
+
       // ── row records: warm keyset page ──
       const page = await getRecordsPage(
         supabase,
@@ -135,13 +137,19 @@ export async function GET(
         })
       }
 
-      const payload = await requestTierC({
-        sourceSlug: resolved.source,
-        fetchRegion: resolved.fetchRegion,
-        exchangeTraderId: resolved.exchangeTraderId,
-        timeframe: tfToInt(tf),
-        surface: kind,
-      })
+      // Tier-C append-only history is a bounded, non-pageable preview. A stale
+      // client may still send a legacy cursor; never turn that into a duplicate
+      // first-page preview.
+      const payload =
+        isAppendOnlyHistory && cursor
+          ? null
+          : await requestTierC({
+              sourceSlug: resolved.source,
+              fetchRegion: resolved.fetchRegion,
+              exchangeTraderId: resolved.exchangeTraderId,
+              timeframe: tfToInt(tf),
+              surface: kind,
+            })
       if (payload) {
         const fetched = recordsPageFromTierC(resolved.source, kind, payload)
         if (fetched) {
@@ -159,7 +167,7 @@ export async function GET(
           publishedAt: null,
         },
         cacheState: 'pending',
-        ...(kind === 'position_history'
+        ...(isAppendOnlyHistory
           ? {
               completeness: page?.completeness ?? {
                 state: 'unknown' as const,

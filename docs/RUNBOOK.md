@@ -527,7 +527,7 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 
 旧的 2026-08-04 `READ ONLY` production 审计早于 `20260804045000_verified_position_history_raw_prerequisites.sql` 与 `20260804050000_verified_position_history_publication_authority.sql`，其 predeploy/postdeploy 总数、gap 数、missing/live 结论和函数状态只能作为历史线索。当前 production 状态统一为 **PENDING RE-AUDIT**：先冻结当前完整 ordered manifest、ledger、函数 overload、ACL、trigger、relation OID 与 live catalog，再逐项记录 `exact / missing / drift`；新审计完成前不得写总数或批准 DDL。transaction pooler 只用于只读取证，不是 migration writer；`5432 + verify-full` session 通道仍须另证。
 
-以下十四个 2026-08 migration 是当前仓库 inventory；production apply 状态待重新只读复核。这不是 apply 授权，最终 pass 必须绑定同一个 exact candidate SHA：
+以下十五个 2026-08 migration 是当前仓库 inventory；production apply 状态待重新只读复核。这不是 apply 授权，最终 pass 必须绑定同一个 exact candidate SHA：
 
 1. `20260803090000_record_provenance_clocks.sql`
 2. `20260803100000_record_surface_publication_substrate.sql`
@@ -543,6 +543,7 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 12. `20260804044000_freeze_legacy_position_history_relations.sql`
 13. `20260804045000_verified_position_history_raw_prerequisites.sql`
 14. `20260804050000_verified_position_history_publication_authority.sql`
+15. `20260804051000_quarantine_bingx_rank_authority.sql`
 
 必须使用以下有序流程：
 
@@ -553,17 +554,17 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
 4. 完整 predeploy/ranking baseline 与所有 drift 经独立审查闭合后，在受保护 staging 按 `20260803090000` → `20260803100000` → `20260803101000` 逐文件建立 record/publication 基础链。逐项证明 provenance/observation/publication clocks、private immutable publication chain、legacy verified writer、checkpoint/chain-health RPC 与原子 receipt。后续 retirement/reopen 由步骤 7 按真实顺序处理；任何 preflight、ACL、链完整性、artifact 版本混用或 ledger/live drift 都停止。
 5. 在受保护 staging 单文件通道应用 activation migration，证明 epoch 行、v2 RPC、`service_role` 只读指标契约和旧事件解析兼容。
 6. 在 authorization、Portfolio retirement 与 Claim Phase A 尚未应用时，通过受保护发布管线部署候选 exact bridge SHA。证明旧 connect、bind、sync 与 OAuth 入口无条件固定 410；两个 auth-first tombstone `/api/exchange/verify-ownership` 和 `/api/traders/claim/verify-wallet` 必须分别为匿名 401、已登录 410，且没有凭据读取、proof consumption 或 direct-table fallback。另证明新的 authorize POST/Claim 写路径因 RPC 缺失而 fail closed，旧 Portfolio 四入口固定 410，snapshot cron 为认证 no-op 且未调度；Portfolio export RPC 尚不存在时，已认证 export 必须返回 500。保留的 EVM address portfolio/suggestions 不属于旧凭据面。还必须证明 app/worker 不调用 legacy position-history publisher/cursor/maintenance；legacy、漂移或自报 complete 的 history 在 data/API/warm-cache/UI 边界继续 quarantine。Tier-C 仅可提供无 cursor、限页、partial 的 RAW-backed preview，不能写 typed history 或作为排名证据。保持两台 writer 停止，排空 legacy publisher、reader、maintenance、partition creator、queue 与在途事务；记录 exact SHA，到 Phase B 后验证结束不得换包。
-7. 保持该 exact bridge SHA 和 writer 停止，严格按当前文件顺序单文件执行 `040410` → `040420` → `040430` → `040440` → `040450` → `040500`。其中 `040430` 只验收步骤 3 的独立 token-ranking retirement，不属于 position-history 依赖链，但也不得跳位或提前。`040410` 保留 legacy writer OID/audit/checkpoint chain 但撤销 application execute；`040420` 在过渡阶段把 legacy page 固定为 exact empty/unknown；`040440` 保留旧 relation OID/数据供取证，但撤销 runtime DML/DDL、启用 guard、退役 partition creator，并要求只读 postflight `legacy_history_frozen=true`；`040450` 证明 immutable RAW pointer、source run、artifact/version 与 publication prerequisites；`040500` 仅允许 reviewed 四参数 publisher，以 HMAC cursor 和完整 `arena.position-history-completeness@2` contract 前向重开 verified page。必须分别 smoke：无 publication 首屏 empty/unknown、旧 cursor 无 publication 返回 reset 冲突、合法首屏/续页稳定、legacy overload 与漂移/自报 payload 不可服务、Tier-C 始终 partial 且无 cursor。不要用真实 production 写入试探；任一排空、preflight、ACL、hash、ledger/live、PostgREST reload 或 completeness 证明失败都停止。
+7. 保持该 exact bridge SHA 和 writer 停止，严格按当前文件顺序单文件执行 `040410` → `040420` → `040430` → `040440` → `040450` → `040500` → `040510`。其中 `040430` 只验收步骤 3 的独立 token-ranking retirement，不属于 position-history 依赖链，但也不得跳位或提前。`040410` 保留 legacy writer OID/audit/checkpoint chain 但撤销 application execute；`040420` 在过渡阶段把 legacy page 固定为 exact empty/unknown；`040440` 保留旧 relation OID/数据供取证，但撤销 runtime DML/DDL、启用 guard、退役 partition creator，并要求只读 postflight `legacy_history_frozen=true`；`040450` 证明 immutable RAW pointer、source run、artifact/version 与 publication prerequisites；`040500` 仅允许 reviewed 四参数 publisher，以 HMAC cursor 和完整 `arena.position-history-completeness@2` contract 前向重开 verified page；随后 `040510` 才归档并清空 BingX public rank/freshness/count surface，把两个物理来源保持为 active/shadow，并安装四个 validated fail-close guards。必须分别 smoke：无 publication 首屏 empty/unknown、旧 cursor 无 publication 返回 reset 冲突、合法首屏/续页稳定、legacy overload 与漂移/自报 payload 不可服务、Tier-C 始终 partial 且无 cursor，以及 BingX 直接请求返回不可缓存的受控空结果、非 BingX 公榜不含其 row/metadata。不要用真实 production 写入试探；任一排空、preflight、ACL、hash、ledger/live、PostgREST reload、completeness、archive、guard 或 HTTP 证明失败都停止。
 8. 继续保持 writer 停止，证明所有 legacy Tier-A worker/queue 已排空且完整 predeploy manifest exact，再重新只读审计 `20260729061000_tier_a_execution_claim_enforcement.sql`。仅当它确认为 missing 且 live catalog 与 preflight 兼容时，才通过 ADR-023 单文件应用并核对 exact ledger、live marker、触发器、ACL、旧 unclaimed RPC 拒绝和 claimed worker 契约。任何残留 writer/queue 或 catalog drift 都停止。
 9. 保持该 bridge SHA，再应用 authorization migration。它的 preflight 必须拒绝未满足上述 exchange-connection ACL 的环境；迁移必须隔离 active legacy alias、OAuth 或缺少 attestation 的 connection，并撤销没有同用户、同 exact canonical exchange 与同 verified UID 的 active connection 支撑的 authorization。这些账户必须由用户显式 rebind，不得自动提升旧记录。随后证明两张凭据表对 browser roles/PUBLIC 均无 table/column 路径，bind/revoke 两个原子 RPC 均无 browser/PUBLIC execute 路径且仅 service role 可调用。在 disposable fixture 依次证明公开选择器只有 Binance、Bybit、Bitget；首次绑定同时写入两张投影；同一 canonical exchange 重绑撤销旧 active authorization；两种 revoke selector 都同时停用 connection 并撤销全部匹配 authorization；绑定或撤销任一投影失败时整条 RPC 原子回滚。最后运行只读反连接，结果必须为零：每条 active authorization 都必须有同用户、同 exact canonical exchange、同 verified UID 的 active connection。这个顺序有意不按文件时间排序。
 10. 单独应用 Portfolio retirement。核对三表/cascade FK exact shape；browser/PUBLIC 零 table/column 权限；service 无直接 DML、无密文/positions/snapshots direct SELECT，仅有五个 metadata 列 SELECT；唯一 policy 为 service metadata read；`export_legacy_portfolio_data_v1(uuid)` 与 delete RPC 仅 service 可执行。行级 fixture 只在 staging 建立：证明 authenticated RPC deny、HTTP export 固定传认证 user id、迁移后返回 200，`account.legacy_portfolios` 与 manifest 完整包含 portfolios/positions/snapshots 三项及 fixture owner rows，字段精确白名单、无 user id/密文且 child 不越出 owner portfolio set；任一组超过 250,000 行必须返回 413，而不是截断或返回部分成功。同时覆盖跨 owner delete false、parent/child cascade、故障回滚、重放，以及迁移不删除 owner 行、不改写密文。production inventory 若仍为零，只验证 ACL/RPC 与完整空 manifest，不创建 disposable 行；若非零，才导出 owner/交易所 metadata 清单并要求 owner 下载、交易所侧 revoke/rotate 和 Arena 清理裁决。
 11. Claim Phase A 前只读证明 migration role exact 拥有 `trader_claims`，再应用 Phase A。核对 typed submit/reject/cancel、guard、ledger/reload，并证明 legacy activation 与 Arena claimed helper 均不可执行。Phase A 没有批准能力，不是“可批准的向后兼容层”。
 12. 使用同一 exact bridge SHA 完成 authorization 和 Hyperliquid/GMX challenge → submit → `reviewing` → reject/cancel smoke；legacy 与 V2 approval 此时都须 fail closed。所有 CEX claim 均 unsupported，CEX API key 不得创建 claim/badge。
 13. Phase B 前只读证明 migration role exact 拥有 migration preflight 列出的全部 relation。只在同一 SHA 成功 smoke 后单独应用 Phase B，证明 legacy submit/direct DML fail closed、canonical `activate_trader_claim_v2` 管理员批准成功并原子更新 badge/link/profile/Arena，且 unlink 仅 service 可执行、任一步失败全部回滚。Phase A/B 不得批量连续应用。
-14. staging 通过后 production 按当前 ordered manifest 严格重复：维持 token surface HTTP containment；完成 ranking authority prerequisites 与 record provenance/publication/legacy writer 基础链；部署并验证同一 exact bridge；再按 `040410` retirement → `040420` quarantine → `040430` 独立 token-ranking retirement → `040440` freeze → `040450` RAW prerequisites → `040500` verified `@2` authority执行，之后完成 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Claim Phase B。每个文件单独提交并核对 exact ledger/live catalog/ACL/RPC/reload；不得用 `db push`、历史批量重放或仅停 writer 替代。
+14. staging 通过后 production 按当前 ordered manifest 严格重复：维持 token surface HTTP containment；完成 ranking authority prerequisites 与 record provenance/publication/legacy writer 基础链；部署并验证同一 exact bridge；再按 `040410` retirement → `040420` quarantine → `040430` 独立 token-ranking retirement → `040440` freeze → `040450` RAW prerequisites → `040500` verified `@2` authority → `040510` BingX rank quarantine 执行，之后完成 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Claim Phase B。每个文件单独提交并核对 exact ledger/live catalog/ACL/RPC/reload；不得用 `db push`、历史批量重放或仅停 writer 替代。
 15. production 未获准时不创建 disposable claim 或 portfolio。Phase B 后 legacy application 不是有效回滚目标。
-16. 只有五个额外 ACL 前置、Tier-A postdeploy 当前状态裁决、当前 production manifest 的全部 exact proof、token-ranking、完整 position-history verified `@2` authority、authorization、Portfolio 和 Claim 全生命周期 smoke 闭合后，才能从 production 运行 `npm run gen:types`。
-17. 运行 migration history shape、前置与 2026-07 suites；`npm run qa:public-rank-authority-pg17` 必须覆盖 token-ranking retirement 的在途 refresh 回滚/排空重试、generation-zero head、reader/writer/MV ACL fail-closed、OID/MV 内容保持、cron identity 保持和 byte-stable replay。再运行 record/publication 基础、legacy writer retirement、records quarantine、relation freeze、`040450` RAW prerequisites 和 `040500` verified publication authority 的全部静态/PG17 suites，以及 activation、authorization、legacy-portfolio-retirement、claim-cutover suites。任何证据不完整即 NO-GO。
+16. 只有五个额外 ACL 前置、Tier-A postdeploy 当前状态裁决、当前 production manifest 的全部 exact proof、token-ranking、完整 position-history verified `@2` authority、BingX rank quarantine、authorization、Portfolio 和 Claim 全生命周期 smoke 闭合后，才能从 production 运行 `npm run gen:types`。
+17. 运行 migration history shape、前置与 2026-07 suites；`npm run qa:public-rank-authority-pg17` 必须覆盖 token-ranking retirement 的在途 refresh 回滚/排空重试、generation-zero head、reader/writer/MV ACL fail-closed、OID/MV 内容保持、cron identity 保持和 byte-stable replay。再运行 record/publication 基础、legacy writer retirement、records quarantine、relation freeze、`040450` RAW prerequisites、`040500` verified publication authority 和 `npm run qa:bingx-rank-quarantine-pg17` 的全部静态/PG17 suites，以及 activation、authorization、legacy-portfolio-retirement、claim-cutover suites。任何证据不完整即 NO-GO。
 18. Phase B 后重新 inventory 历史 verified rows 与 legacy Portfolio key；零行记录 `zero / N/A`，只对非零行逐项审计身份投影或完成 revoke/rotate、联系与归属裁决。
 19. 从 exact bridge 停止所有旧公开 first-party writer 起等待至少 48 小时，并只读证明没有 fresh `provenance='first_party'` 排名输入后，才可重算或开放 Beta。
 
@@ -605,12 +606,258 @@ count 为 `0`。在 protected source/reviewer 能力不可用期间必须保持�
    同一 `READ ONLY` catalog 证明必须记录 `legacy_token_rpcs_closed=true` 与 `legacy_token_mvs_closed=true`。任一 prerequisite、overload、hash、ACL、OID、MV 内容、cron identity 或 replay 不符都停止。
 
 5. `040430` 提交后的公开 smoke 必须在所有域名上保持 detail/popular API 为 HTTP 503、`TOKEN_RANKING_NOT_PUBLISHED`、`private, no-store`，Token 页面不渲染旧榜；不得重新打开前置 edge/hotfix containment。Token 榜只能由后续单独评审的 authority-snapshot migration 重新开放；新发布器必须从 `arena.token_trade_fact_authority_shadow` 的 `rank_eligible=true` frozen cohort 构建，绑定非 NULL source watermark，并证明 history、price、cost basis 与 FX 全部可信。
-6. `040430` retirement exact proof 完成后，保持 token HTTP containment，并按 ordered manifest 继续 `040440` relation freeze → `040450` RAW prerequisites → `040500` verified `@2` publication authority。随后必须完成 verified 首屏/续页/reset/quarantine smoke 和 Tier-C partial/no-cursor 负向证明，再继续 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Phase B；不得回到旧的 freeze → writer retirement → records quarantine 顺序。
+6. `040430` retirement exact proof 完成后，保持 token HTTP containment，并按 ordered manifest 继续 `040440` relation freeze → `040450` RAW prerequisites → `040500` verified `@2` publication authority → `040510` BingX rank quarantine。随后必须完成 verified 首屏/续页/reset/quarantine smoke 和 Tier-C partial/no-cursor 负向证明，再继续 Tier-A 单文件门禁、authorization、Portfolio retirement、Claim Phase A、同 SHA smoke 与 Phase B；不得回到旧的 freeze → writer retirement → records quarantine 顺序，也不得把 `040510` 提前到 `040500` 之前。
    第二个迁移会在同一事务中切换 legacy rerank wrapper、重排三个 season 并重建
    rank-derived count；第三个迁移是 token 榜 `token_rank` 应用契约的数据库先行
    条件；第四个迁移是跨页 generation read barrier；第五个核心 ranking migration
    将未绑定 authority snapshot 的旧 token publication 整体 fail closed。不得少应用
    其中任一迁移后发布应用。
+7. `20260804051000_quarantine_bingx_rank_authority.sql` exact ledger、live catalog 与 PostgREST reload 闭合后，通过同一获准数据库通道执行以下只读核验。结果必须全部为 `true`：
+
+   ```sql
+   BEGIN TRANSACTION READ ONLY;
+
+   SELECT count(*) = 1 AND bool_and(NOT active) AS token_cron_retired
+   FROM cron.job
+   WHERE jobname = 'refresh-mv-popular-tokens';
+
+   SELECT
+     has_function_privilege(
+       'service_role',
+       'public.get_token_ranking_publication_head()',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.get_token_trader_rankings(text,integer,integer,integer)',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.get_popular_tokens_v2(integer,integer,bigint)',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.refresh_popular_tokens_mv()',
+       'EXECUTE'
+     ) AS legacy_token_rpcs_closed;
+
+   SELECT
+     NOT has_table_privilege(
+       'service_role', 'public.mv_token_trader_daily_90d', 'SELECT'
+     )
+     AND NOT has_table_privilege(
+       'service_role', 'public.mv_popular_tokens_90d', 'SELECT'
+     ) AS legacy_token_mvs_closed;
+
+   WITH RECURSIVE named_root(relation_oid) AS (
+     SELECT relation.oid
+     FROM pg_catalog.pg_class AS relation
+     JOIN pg_catalog.pg_namespace AS namespace_row
+       ON namespace_row.oid = relation.relnamespace
+     WHERE namespace_row.nspname = 'public'
+       AND relation.relname IN (
+         'trader_position_history',
+         'trader_position_history_partitioned',
+         'trader_position_history_old'
+       )
+       AND relation.relkind IN ('r', 'p')
+   ), relation_tree(relation_oid) AS (
+     SELECT relation_oid FROM named_root
+     UNION
+     SELECT inheritance.inhrelid
+     FROM relation_tree
+     JOIN pg_catalog.pg_inherits AS inheritance
+       ON inheritance.inhparent = relation_tree.relation_oid
+   ), guarded_relation(relation_oid) AS (
+     SELECT relation_oid FROM relation_tree
+     UNION
+     SELECT relation.oid
+     FROM pg_catalog.pg_class AS relation
+     JOIN pg_catalog.pg_namespace AS namespace_row
+       ON namespace_row.oid = relation.relnamespace
+     WHERE namespace_row.nspname = 'public'
+       AND relation.relname LIKE 'tph\_%' ESCAPE '\'
+       AND relation.relkind IN ('r', 'p')
+   )
+   SELECT count(*) > 0 AND bool_and(
+     relation.relowner = 'postgres'::regrole
+     AND relation.relrowsecurity
+     AND relation.relforcerowsecurity
+     AND has_table_privilege('service_role', relation.oid, 'SELECT')
+     AND NOT has_table_privilege(
+       'service_role', relation.oid,
+       'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+     )
+     AND NOT has_table_privilege(
+       'anon', relation.oid,
+       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+     )
+     AND NOT has_table_privilege(
+       'authenticated', relation.oid,
+       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+     )
+     AND (
+       SELECT count(*) = 2
+       FROM pg_catalog.pg_trigger AS trigger_row
+       WHERE trigger_row.tgrelid = relation.oid
+         AND trigger_row.tgname IN (
+           'reject_legacy_position_history_before_write',
+           'reject_legacy_position_history_before_truncate'
+         )
+         AND trigger_row.tgenabled = 'O'
+     )
+   ) AS legacy_history_frozen
+   FROM guarded_relation
+   JOIN pg_catalog.pg_class AS relation ON relation.oid = guarded_relation.relation_oid;
+
+   SELECT count(*) = 2 AND bool_and(
+     source.status = 'active'
+     AND source.serving_mode = 'shadow'
+     AND source.meta->>'rank_visibility_contract' = 'bingx-ranking-quarantine@1'
+   ) AS bingx_collection_active_but_rank_shadowed
+   FROM arena.sources AS source
+   WHERE source.slug IN ('bingx_futures', 'bingx_spot');
+
+   SELECT
+     NOT EXISTS (
+       SELECT 1 FROM public.leaderboard_ranks
+       WHERE source IN ('bingx', 'bingx_futures', 'bingx_spot')
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM public.leaderboard_source_freshness
+       WHERE source IN ('bingx', 'bingx_futures', 'bingx_spot')
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM public.leaderboard_count_cache
+       WHERE source IN (
+         'bingx', 'bingx_futures', 'bingx_spot',
+         'bingx_gt0', 'bingx_futures_gt0', 'bingx_spot_gt0'
+       )
+     ) AS bingx_public_rank_surfaces_empty;
+
+   SELECT count(*) = 4 AND bool_and(convalidated) AS bingx_guards_validated
+   FROM pg_catalog.pg_constraint AS guard
+   WHERE guard.contype = 'c'
+     AND (
+       (guard.conrelid = 'arena.sources'::regclass
+        AND guard.conname = 'sources_block_unverified_bingx_serving')
+       OR (guard.conrelid = 'public.leaderboard_ranks'::regclass
+           AND guard.conname = 'leaderboard_ranks_block_unverified_bingx')
+       OR (guard.conrelid = 'public.leaderboard_source_freshness'::regclass
+           AND guard.conname = 'leaderboard_freshness_block_unverified_bingx')
+       OR (guard.conrelid = 'public.leaderboard_count_cache'::regclass
+           AND guard.conname = 'leaderboard_count_cache_block_unverified_bingx')
+     );
+
+   SELECT count(*) = 1 AND bool_and(
+     batch.contract = 'bingx-ranking-quarantine@1'
+     AND batch.state = 'COMPLETE'
+     AND length(batch.source_rows_before_sha256) = 64
+     AND length(batch.archived_rank_sha256) = 64
+     AND batch.archived_rank_count = (
+       SELECT count(*)
+       FROM arena.bingx_rank_quarantine_rows AS archive
+       WHERE archive.batch_id = batch.batch_id
+     )
+   ) AS bingx_archive_complete
+   FROM arena.bingx_rank_quarantine_batches AS batch
+   WHERE batch.batch_id = '20260804_bingx_rank_authority_quarantine';
+
+   WITH archive(relation_oid) AS (
+     VALUES
+       ('arena.bingx_rank_quarantine_batches'::regclass),
+       ('arena.bingx_rank_quarantine_rows'::regclass)
+   )
+   SELECT count(*) = 2 AND bool_and(
+     relation.relowner = 'postgres'::regrole
+     AND relation.relrowsecurity
+     AND has_table_privilege('service_role', relation.oid, 'SELECT')
+     AND NOT has_table_privilege(
+       'service_role', relation.oid,
+       'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+     )
+     AND NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_policy AS policy
+       WHERE policy.polrelid = relation.oid
+     )
+     AND NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_attribute AS attribute
+       WHERE attribute.attrelid = relation.oid
+         AND attribute.attnum > 0
+         AND NOT attribute.attisdropped
+         AND attribute.attacl IS NOT NULL
+     )
+     AND NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.aclexplode(
+         COALESCE(
+           relation.relacl,
+           pg_catalog.acldefault('r', relation.relowner)
+         )
+       ) AS privilege
+       WHERE privilege.grantee <> relation.relowner
+         AND (
+           privilege.grantee <> 'service_role'::regrole
+           OR privilege.privilege_type <> 'SELECT'
+           OR privilege.is_grantable
+         )
+     )
+   ) AS bingx_private_archive_acl_exact
+   FROM archive
+   JOIN pg_catalog.pg_class AS relation ON relation.oid = archive.relation_oid;
+
+   ROLLBACK;
+   ```
+
+   `service_role` 对两个 BingX archive 的 SELECT 只用于受控备份/取证，不代表排名
+   资格；browser/PUBLIC 必须没有 table、column、policy 或 delegated ACL 路径。
+   `bingx_guards_validated=true` 仍不是单独充分证明：同时保存四项
+   `pg_get_constraintdef`，逐字比对 `040510` reviewed guard body，防止同名 `CHECK
+(true)` 冒充门禁。不要在 production 用真实 `INSERT`、`UPDATE`、`DELETE` 或
+   `TRUNCATE` 试探 guard；使用 disposable PG17 fixture 的 delayed-writer、constraint
+   tamper、rollback 与 replay 证明。
+
+8. `040510` 后对 `bingx` 与 `bingx_spot` 分别执行 HTTP smoke。`/api/rankings`、
+   `/api/traders` 和 `/api/v2/rankings` 的直接 source 请求必须返回受控空集合、所有
+   count 为 0、`ranking_visibility=partial`、
+   `ranking_visibility_reason=publication_policy_filtered`、
+   `ranking_visibility_reasons` 包含 `quarantined_source_requested`，并发送
+   `Cache-Control: private, no-store, max-age=0, must-revalidate`。请求 trace 必须证明在
+   quarantine short-circuit 后没有 leaderboard、freshness、count-cache 或 Redis 读取；
+   `bingx_futures` 物理别名不得成为可请求的 public canonical source。无 source 的公榜
+   响应、`availableSources`、`source_freshness`、SSR/sidebars/OG/share/realtime 与 cache
+   payload 均不得包含三个 BingX public alias，所有新 cache/tag 必须位于
+   `public-rank-policy-v7` epoch；发现旧 v6 命中即失败，不得把旧 payload 重新写入 v7。
+
+9. BingX 隔离是 fail-close 门禁，不是停止采集。不得把 `bingx_futures` 或
+   `bingx_spot` 从 active/shadow 提升为 serving，不得直接回填或刷新其 public rank、
+   freshness、count/cache surface，不得删除、重命名或放宽四个 guard，不得改写/扩展
+   COMPLETE archive ledger，不得给 browser/PUBLIC 或任意非获准 role 增加 archive
+   权限，也不得以 fallback、旧 cache、手工 rerank 或临时 ACL 恢复排名。任何 exact
+   ledger、archive digest/reconstruction、ACL、guard body、active-shadow、空 surface、
+   PostgREST reload、HTTP zero-backend、PG17 replay/rollback 证据失败，立即维持 NO-GO；
+   保留 canonical observation、RAW 与采集证据，等待独立 authority review，禁止就地
+   “修复”生产数据。
+
+10. Token 侧仍必须固定 `/api/rankings/by-token` 为
+    `TOKEN_RANKING_NOT_PUBLISHED`、HTTP 503 和 `private, no-store`，Token 页面不渲染
+    旧榜或 unknown 指标。禁止手动调用 `refresh_popular_tokens_mv()`、直接刷新两个旧
+    MV、重新启用 `refresh-mv-popular-tokens`、给旧 RPC/MV 补授权，或恢复对
+    `public.trader_position_history` 的应用读写。Token 榜只能由后续单独评审的
+    authority-snapshot migration 重新开放；新发布器必须从
+    `arena.token_trade_fact_authority_shadow` 的 `rank_eligible=true` frozen cohort 构建，
+    绑定非 NULL 来源水位，并证明 history、price、cost basis 与 FX 状态全部可信。
+    重新开放不得解冻或读取旧 `public.trader_position_history` 档案；未满足这些条件时，
+    “保持未发布”本身就是正确的上线结果。
 
 ### Vercel instant rollback
 
@@ -722,8 +969,9 @@ or ranking.
    the current file order: `040410` retires legacy application execute, `040420`
    establishes the transitional exact empty/unknown response, `040430` independently
    retires token ranking, `040440` freezes legacy relations and the partition creator,
-   `040450` installs immutable RAW/source-run prerequisites, and `040500` forward-reopens
-   only the reviewed four-argument verified `@2` authority. Prove HMAC first/next-page
+   `040450` installs immutable RAW/source-run prerequisites, `040500` forward-reopens
+   only the reviewed four-argument verified `@2` authority, and `040510` then quarantines
+   BingX public-rank authority while preserving active/shadow collection. Prove HMAC first/next-page
    behavior, no-publication empty/unknown, reset-required legacy cursors, and quarantine
    of legacy/drifted/self-asserted payloads. Only after this chain is exact, drain every
    legacy Tier-A queue and re-audit

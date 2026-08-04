@@ -144,6 +144,8 @@ export interface VerifiedPositionHistoryPublisherRuntime {
 
 export interface CaptureAndPublishVerifiedPositionHistoryInput {
   readonly adapter: SourceAdapter
+  /** Fail closed when a scheduled record-only crawl yielded no response page. */
+  readonly requireResponsePage?: boolean
   readonly session: FetchSession
   readonly source: SourceRow
   readonly trader: Readonly<{
@@ -556,6 +558,9 @@ export async function captureAndPublishVerifiedPositionHistory(
   // Upstream/verifier failures remain durable audit evidence and cannot reach
   // preparation or the database authority.
   if (acquisition.error !== null) throw acquisition.error
+  if (input.requireResponsePage === true && acquisition.artifact.pages.length === 0) {
+    throw publisherError(`${input.source.slug} position_history returned no upstream response page`)
+  }
 
   // Rebuild only after Storage + RAW pointer durability. This avoids retaining
   // the potentially large canonical row set across the upload boundary.
@@ -604,5 +609,8 @@ export async function captureTierBHistoryRawOnly(
     runtime
   )
   if (acquisition.error !== null) throw acquisition.error
+  if (input.requireResponsePage === true && acquisition.artifact.pages.length === 0) {
+    throw publisherError(`${input.source.slug} ${input.kind} returned no upstream response page`)
+  }
   return rawObject
 }

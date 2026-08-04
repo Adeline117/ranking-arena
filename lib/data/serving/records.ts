@@ -50,10 +50,6 @@ const VERIFIED_POSITION_HISTORY_COMPLETENESS_CONTRACT =
   'arena.position-history-completeness@2' as const
 const SOURCE_RUN_SHA256 = /^[0-9a-f]{64}$/
 
-function asCurrency(v: unknown): ServingCurrency {
-  return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : 'USDT'
-}
-
 function validTimestampOrNull(value: unknown): string | null {
   return typeof value === 'string' &&
     value.length > 0 &&
@@ -87,52 +83,129 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
   )
 }
 
-function isHistoryRecordKind(kind: Exclude<RecordKind, 'copiers'>): boolean {
-  return kind === 'position_history'
+function isAppendOnlyHistory(kind: Exclude<RecordKind, 'copiers'>): boolean {
+  return kind !== 'positions'
 }
 
-/** Copier-PII guard (spec §6): these keys never leave the API layer. */
-const BANNED_ROW_KEYS: ReadonlySet<string> = new Set([
-  'copier_label',
-  'copierLabel',
-  'copier_name',
-  'copierName',
-  'email',
-  'user_id',
-  'userId',
-  // RAW is an internal audit substrate, never a serving field.
-  'raw',
-  // Parser-conservation claims identify upstream rows and field paths. They
-  // are publication evidence, not part of the public record contract.
-  'sourceFactId',
-  'source_fact_id',
-  'sourceLifecycleMarker',
-  'source_lifecycle_marker',
-  'fieldSources',
-  'field_sources',
-  'limitations',
-  // `sourceReturn` / `source_return` are intentionally not stripped: the
-  // verified @2 projection exposes that economic value alongside normalized
-  // ROI, while the claim-only identity/path fields above remain internal.
-  // Never assign prototype-affecting keys from an untrusted payload.
-  '__proto__',
-  'prototype',
-  'constructor',
-])
-
-export function sanitizeRecordRow(row: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(row)) {
-    if (!BANNED_ROW_KEYS.has(key)) out[key] = value
+function ownValue(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key]
   }
-  return out
+  return null
 }
 
-function sanitizeRecordRows(value: unknown): Record<string, unknown>[] {
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value.trim() === value ? value : null
+}
+
+function currencyOrNull(value: unknown): ServingCurrency | null {
+  return typeof value === 'string' && CURRENCIES.has(value) ? (value as ServingCurrency) : null
+}
+
+function recordTimestampOrNull(value: unknown): string | null {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.trim() !== value ||
+    !/T.*(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(value)
+  ) {
+    return null
+  }
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null
+}
+
+/**
+ * Exact public row decoder for both RPC and Redis boundaries. This is an
+ * allowlist, not a blacklist: unknown fields, RAW, natural identities, claim
+ * evidence, and copier attributes cannot escape when an upstream contract
+ * grows or drifts. Camel-case aliases only bridge short-lived Tier-C caches
+ * from workers deployed before the canonical snake-case writer.
+ */
+export function sanitizeRecordRow(
+  kind: Exclude<RecordKind, 'copiers'>,
+  row: Record<string, unknown>
+): Record<string, unknown> | null {
+  if (kind === 'positions') {
+    const symbol = stringOrNull(ownValue(row, 'symbol'))
+    if (symbol === null) return null
+    return {
+      symbol,
+      side: stringOrNull(ownValue(row, 'side')),
+      margin_mode: stringOrNull(ownValue(row, 'margin_mode', 'marginMode')),
+      leverage: finiteNumberOrNull(ownValue(row, 'leverage')),
+      size: finiteNumberOrNull(ownValue(row, 'size')),
+      entry_price: finiteNumberOrNull(ownValue(row, 'entry_price', 'entryPrice')),
+      mark_price: finiteNumberOrNull(ownValue(row, 'mark_price', 'markPrice')),
+      notional: finiteNumberOrNull(ownValue(row, 'notional')),
+      margin: finiteNumberOrNull(ownValue(row, 'margin')),
+      unrealized_pnl: finiteNumberOrNull(ownValue(row, 'unrealized_pnl', 'unrealizedPnl')),
+      roe: finiteNumberOrNull(ownValue(row, 'roe')),
+      currency: currencyOrNull(ownValue(row, 'currency')),
+      as_of: recordTimestampOrNull(ownValue(row, 'as_of', 'asOf')),
+    }
+  }
+
+  if (kind === 'position_history') {
+    const symbol = stringOrNull(ownValue(row, 'symbol'))
+    if (symbol === null) return null
+    return {
+      symbol,
+      side: stringOrNull(ownValue(row, 'side')),
+      margin_mode: stringOrNull(ownValue(row, 'margin_mode', 'marginMode')),
+      leverage: finiteNumberOrNull(ownValue(row, 'leverage')),
+      size: finiteNumberOrNull(ownValue(row, 'size')),
+      entry_price: finiteNumberOrNull(ownValue(row, 'entry_price', 'entryPrice')),
+      exit_price: finiteNumberOrNull(ownValue(row, 'exit_price', 'exitPrice')),
+      max_open_interest: finiteNumberOrNull(ownValue(row, 'max_open_interest', 'maxOpenInterest')),
+      realized_pnl: finiteNumberOrNull(ownValue(row, 'realized_pnl', 'realizedPnl')),
+      roi: finiteNumberOrNull(ownValue(row, 'roi')),
+      source_return: finiteNumberOrNull(ownValue(row, 'source_return', 'sourceReturn')),
+      closing_value: finiteNumberOrNull(ownValue(row, 'closing_value', 'closingValue')),
+      opened_at: recordTimestampOrNull(ownValue(row, 'opened_at', 'openedAt')),
+      closed_at: recordTimestampOrNull(ownValue(row, 'closed_at', 'closedAt')),
+      currency: currencyOrNull(ownValue(row, 'currency')),
+    }
+  }
+
+  if (kind === 'orders') {
+    const timestamp = recordTimestampOrNull(ownValue(row, 'ts'))
+    if (timestamp === null) return null
+    const orderKind = stringOrNull(ownValue(row, 'order_kind', 'orderKind', 'kind'))
+    return {
+      ts: timestamp,
+      kind: orderKind === 'orders' ? null : orderKind,
+      symbol: stringOrNull(ownValue(row, 'symbol')),
+      side: stringOrNull(ownValue(row, 'side')),
+      price: finiteNumberOrNull(ownValue(row, 'price')),
+      qty: finiteNumberOrNull(ownValue(row, 'qty')),
+      notional: finiteNumberOrNull(ownValue(row, 'notional')),
+      realized_pnl: finiteNumberOrNull(ownValue(row, 'realized_pnl', 'realizedPnl')),
+      currency: currencyOrNull(ownValue(row, 'currency')),
+    }
+  }
+
+  const timestamp = recordTimestampOrNull(ownValue(row, 'ts'))
+  if (timestamp === null) return null
+  const direction = ownValue(row, 'direction')
+  return {
+    ts: timestamp,
+    direction: direction === 'in' || direction === 'out' ? direction : null,
+    asset: stringOrNull(ownValue(row, 'asset')),
+    amount: finiteNumberOrNull(ownValue(row, 'amount')),
+  }
+}
+
+function sanitizeRecordRows(
+  kind: Exclude<RecordKind, 'copiers'>,
+  value: unknown
+): Record<string, unknown>[] {
   if (!Array.isArray(value)) return []
   const rows: Record<string, unknown>[] = []
   for (const candidate of value) {
-    if (isPlainRecord(candidate)) rows.push(sanitizeRecordRow(candidate))
+    if (!isPlainRecord(candidate)) continue
+    const row = sanitizeRecordRow(kind, candidate)
+    if (row !== null) rows.push(row)
   }
   return rows
 }
@@ -292,6 +365,7 @@ export async function getRecordsPage(
   logRpcError('arena_records_page', error)
   if (error || !isPlainRecord(data)) return null
   const d = data
+  const appendOnlyHistory = isAppendOnlyHistory(kind)
   const verifiedCompleteness =
     kind === 'position_history' ? verifiedPositionHistoryCompleteness(d) : null
   const quarantineUnverifiedHistory = kind === 'position_history' && verifiedCompleteness === null
@@ -299,12 +373,17 @@ export async function getRecordsPage(
     // A legacy/drifted RPC may still return typed rows and a legacy cursor.
     // Neither is public truth unless this exact response carries the @2
     // publication binding validated above.
-    rows: quarantineUnverifiedHistory ? [] : sanitizeRecordRows(d.rows),
+    rows: quarantineUnverifiedHistory ? [] : sanitizeRecordRows(kind, d.rows),
     nextCursor: quarantineUnverifiedHistory ? null : opaqueCursorOrNull(d.nextCursor),
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
-    ...(kind === 'position_history'
-      ? { completeness: verifiedCompleteness ?? unknownHistoryCompleteness() }
+    ...(appendOnlyHistory
+      ? {
+          completeness:
+            kind === 'position_history'
+              ? (verifiedCompleteness ?? unknownHistoryCompleteness())
+              : unknownHistoryCompleteness(),
+        }
       : {}),
   }
 }
@@ -334,16 +413,22 @@ export async function getCopierAggregate(
   }
 
   const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
+  const currency = currencyOrNull(d.currency)
   const depth =
     d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
 
   return {
     copierCount: nonNegativeSafeIntegerOrNull(d.copierCount),
     copierCountMax: nonNegativeSafeIntegerOrNull(d.copierCountMax),
-    totalCopierPnl: totalPnl === null ? null : money(totalPnl, asCurrency(d.currency)),
-    pnlDistribution: distribution,
+    totalCopierPnl: totalPnl === null || currency === null ? null : money(totalPnl, currency),
+    // Bucket labels/thresholds share the aggregate's money unit. Without a
+    // validated unit they are not safe to interpret either.
+    pnlDistribution: currency === null ? [] : distribution,
     depth,
     provenance: recordProvenance(source, d),
+    // `depth=full` describes the upstream product surface, not proof that the
+    // aggregate is bound to a terminal collection receipt.
+    completeness: unknownHistoryCompleteness(),
   }
 }
 
@@ -354,22 +439,22 @@ export function recordsPageFromTierC(
   payload: unknown
 ): RecordsPage | null {
   if (!isPlainRecord(payload) || !Array.isArray(payload.rows)) return null
-  const historyPreview = isHistoryRecordKind(kind)
-  const diagnostics = historyPreview
+  const appendOnlyHistory = isAppendOnlyHistory(kind)
+  const diagnostics = appendOnlyHistory
     ? parseInteractivePreviewDiagnostics(payload.completeness)
     : null
   return {
-    rows: sanitizeRecordRows(payload.rows),
+    rows: sanitizeRecordRows(kind, payload.rows),
     // A bounded preview is not a durable page and must never advertise an
     // upstream or legacy cursor supplied by an old/malformed worker.
-    nextCursor: historyPreview
+    nextCursor: appendOnlyHistory
       ? null
       : typeof payload.nextCursor === 'string'
         ? payload.nextCursor
         : null,
     provenance: recordProvenance(source, payload),
     cacheState: 'cold-fetched',
-    ...(historyPreview
+    ...(appendOnlyHistory
       ? {
           completeness: {
             state: 'partial' as const,

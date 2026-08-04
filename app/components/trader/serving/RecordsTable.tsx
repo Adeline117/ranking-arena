@@ -13,7 +13,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatMoney } from '@/lib/utils/money'
 import type { ServingCurrency } from '@/lib/data/serving/types'
 
-export type RecordColumnFormat = 'money' | 'number' | 'pct' | 'datetime' | 'text'
+export type RecordColumnFormat = 'money' | 'number' | 'asset_quantity' | 'pct' | 'datetime' | 'text'
 
 export interface RecordColumn {
   key: string
@@ -30,6 +30,7 @@ export interface RecordsTableProps {
   isLoading?: boolean
   hasNextPage?: boolean
   isFetchingNextPage?: boolean
+  hasLoadMoreError?: boolean
   onLoadMore?: () => void
   /** i18n key for the empty state. */
   emptyKey?: string
@@ -40,13 +41,14 @@ const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 function formatCell(
   value: unknown,
   format: RecordColumnFormat | undefined,
-  rowCurrency: ServingCurrency
+  rowCurrency: ServingCurrency | null,
+  row: Record<string, unknown>
 ): string {
   if (value === null || value === undefined || value === '') return '—'
   switch (format) {
     case 'money': {
       const n = Number(value)
-      if (!Number.isFinite(n)) return String(value)
+      if (!Number.isFinite(n) || rowCurrency === null) return '—'
       return formatMoney({ value: n, currency: rowCurrency }, { compact: true, signed: true })
     }
     case 'pct': {
@@ -56,6 +58,15 @@ function formatCell(
     case 'number': {
       const n = Number(value)
       return Number.isFinite(n) ? n.toLocaleString() : String(value)
+    }
+    case 'asset_quantity': {
+      const n = Number(value)
+      const asset = typeof row.asset === 'string' ? row.asset.trim() : ''
+      if (!Number.isFinite(n) || asset.length === 0) return '—'
+      const normalized = Object.is(n, -0) ? 0 : n
+      return `${normalized.toLocaleString(undefined, {
+        maximumSignificantDigits: 12,
+      })} ${asset}`
     }
     case 'datetime': {
       const d = new Date(String(value))
@@ -77,10 +88,11 @@ function cellColor(value: unknown, format: RecordColumnFormat | undefined): stri
 export default function RecordsTable({
   columns,
   rows,
-  currencyFallback = 'USDT',
+  currencyFallback,
   isLoading,
   hasNextPage,
   isFetchingNextPage,
+  hasLoadMoreError,
   onLoadMore,
   emptyKey = 'recordsEmpty',
 }: RecordsTableProps) {
@@ -98,18 +110,25 @@ export default function RecordsTable({
 
   return (
     <Box style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <table
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: tokens.typography.fontSize.sm,
+        }}
+      >
         <thead>
           <tr>
             {columns.map((col) => (
               <th
                 key={col.key}
+                scope="col"
                 style={{
                   textAlign: col.align ?? 'left',
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                   borderBottom: '1px solid ' + tokens.colors.border.primary,
                   color: tokens.colors.text.tertiary,
-                  fontWeight: 500,
+                  fontWeight: tokens.typography.fontWeight.medium,
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -123,7 +142,7 @@ export default function RecordsTable({
             const rowCurrency =
               typeof row.currency === 'string' && CURRENCIES.has(row.currency)
                 ? (row.currency as ServingCurrency)
-                : currencyFallback
+                : (currencyFallback ?? null)
             return (
               <tr key={i}>
                 {columns.map((col) => (
@@ -138,7 +157,7 @@ export default function RecordsTable({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {formatCell(row[col.key], col.format, rowCurrency)}
+                    {formatCell(row[col.key], col.format, rowCurrency, row)}
                   </td>
                 ))}
               </tr>
@@ -146,9 +165,33 @@ export default function RecordsTable({
           })}
         </tbody>
       </table>
-      {hasNextPage && onLoadMore && (
-        <Box style={{ textAlign: 'center', padding: tokens.spacing[3] }}>
+      {(hasNextPage || hasLoadMoreError) && onLoadMore && (
+        <Box
+          aria-busy={isFetchingNextPage || undefined}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            padding: tokens.spacing[3],
+          }}
+        >
+          {hasLoadMoreError && (
+            <Text
+              key="load-more-error"
+              as="div"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              size="sm"
+              style={{ color: tokens.colors.accent.error, textAlign: 'center' }}
+            >
+              {t('loadMoreFailed')}
+            </Text>
+          )}
           <button
+            key="load-more-action"
+            type="button"
             onClick={onLoadMore}
             disabled={isFetchingNextPage}
             style={{
@@ -157,12 +200,17 @@ export default function RecordsTable({
               border: '1px solid ' + tokens.colors.border.primary,
               background: tokens.colors.bg.tertiary,
               color: tokens.colors.text.primary,
-              fontSize: 13,
+              fontSize: tokens.typography.fontSize.sm,
+              minHeight: 44,
               cursor: isFetchingNextPage ? 'wait' : 'pointer',
               opacity: isFetchingNextPage ? 0.6 : 1,
             }}
           >
-            {isFetchingNextPage ? t('loading') : t('recordsLoadMore')}
+            {isFetchingNextPage
+              ? t('loading')
+              : hasLoadMoreError
+                ? t('moduleRetry')
+                : t('recordsLoadMore')}
           </button>
         </Box>
       )}

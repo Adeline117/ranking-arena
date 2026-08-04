@@ -303,13 +303,13 @@ describe('GET /api/traders source freshness', () => {
     expect(rankingQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(freshnessQuery?.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(rankingQuery?.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal))
     expect(freshnessQuery?.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal))
@@ -398,8 +398,8 @@ describe('GET /api/traders source freshness', () => {
     expect(mockGetCanonicalPublicRanking).toHaveBeenCalledWith(
       expect.objectContaining({
         keys: {
-          liveKey: 'public-rank-policy-v6:canonical:v1:api:traders:90D:live',
-          lkgKey: 'public-rank-policy-v6:canonical:v1:api:traders:90D:lkg',
+          liveKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
+          lkgKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
         },
       })
     )
@@ -494,14 +494,14 @@ describe('GET /api/traders source freshness', () => {
     ).resolves.toBe(1)
     expect(mockCacheSet).toHaveBeenNthCalledWith(
       1,
-      'public-rank-policy-v6:canonical:v1:api:traders:90D:live',
+      'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
       expect.objectContaining({
         traders: [expect.objectContaining({ id: 'rank-one', rank: 1 })],
         totalCount: 1,
       }),
       {
         ttl: 300,
-        tags: ['rankings:public-rank-policy-v6', 'season:90D'],
+        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         skipMemory: true,
         writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
         writeLock: undefined,
@@ -509,7 +509,7 @@ describe('GET /api/traders source freshness', () => {
     )
     expect(mockCacheSet).toHaveBeenNthCalledWith(
       2,
-      'public-rank-policy-v6:canonical:v1:api:traders:90D:lkg',
+      'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
       expect.objectContaining({
         schema: 'public-ranking-canonical-v1',
         publicationToken: '7',
@@ -517,7 +517,7 @@ describe('GET /api/traders source freshness', () => {
       }),
       expect.objectContaining({
         ttl: 86_400,
-        tags: ['rankings-lkg:rankings:public-rank-policy-v6:v1'],
+        tags: ['rankings-lkg:rankings:public-rank-policy-v7:v1'],
         skipMemory: true,
         writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
       })
@@ -614,12 +614,12 @@ describe('GET /api/traders source freshness', () => {
     const requestedKeys = mockGetCanonicalPublicRanking.mock.calls.map(([options]) => options.keys)
     expect(requestedKeys).toEqual([
       {
-        liveKey: 'public-rank-policy-v6:canonical:v1:api:traders:90D:live',
-        lkgKey: 'public-rank-policy-v6:canonical:v1:api:traders:90D:lkg',
+        liveKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
+        lkgKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
       },
       {
-        liveKey: 'public-rank-policy-v6:canonical:v1:api:traders:90D:live',
-        lkgKey: 'public-rank-policy-v6:canonical:v1:api:traders:90D:lkg',
+        liveKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:live',
+        lkgKey: 'public-rank-policy-v7:canonical:v1:api:traders:90D:lkg',
       },
     ])
   })
