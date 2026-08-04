@@ -19,54 +19,16 @@ import {
   isSettingsViewerCurrent,
   type SettingsViewerSnapshot,
 } from '@/app/(app)/settings/hooks/settings-viewer-scope'
-
-interface ReferralData {
-  referral_code: string
-  referral_count: number
-  referral_link: string
-}
+import {
+  readReferralCodeCreation,
+  readReferralSnapshot,
+  type ReferralSnapshot,
+} from '@/lib/referral/reward-contract'
 
 type ReferralOperation = {
   controller: AbortController
   id: number
   viewer: SettingsViewerSnapshot
-}
-
-function readReferralData(value: unknown): ReferralData | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as Partial<ReferralData>
-  if (
-    typeof candidate.referral_code !== 'string' ||
-    typeof candidate.referral_link !== 'string' ||
-    typeof candidate.referral_count !== 'number' ||
-    !Number.isFinite(candidate.referral_count)
-  ) {
-    return null
-  }
-  return {
-    referral_code: candidate.referral_code,
-    referral_count: Math.max(0, candidate.referral_count),
-    referral_link: candidate.referral_link,
-  }
-}
-
-function readGeneratedReferral(
-  value: unknown
-): Pick<ReferralData, 'referral_code' | 'referral_link'> | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as Partial<ReferralData>
-  if (
-    typeof candidate.referral_code !== 'string' ||
-    !candidate.referral_code ||
-    typeof candidate.referral_link !== 'string' ||
-    !candidate.referral_link
-  ) {
-    return null
-  }
-  return {
-    referral_code: candidate.referral_code,
-    referral_link: candidate.referral_link,
-  }
 }
 
 export default function ReferralClient() {
@@ -95,12 +57,15 @@ function ViewerScopedReferralClient({
   const serverOperationRef = useRef<ReferralOperation | null>(null)
   const copyOperationRef = useRef<ReferralOperation | null>(null)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [referral, setReferral] = useState<ReferralData | null>(null)
+  const [referral, setReferral] = useState<ReferralSnapshot | null>(null)
   const referralRef = useRef(referral)
   referralRef.current = referral
   const authPending = !viewer && (!auth.authChecked || auth.loading || Boolean(auth.userId))
   const isAuthenticated: boolean | null = viewer ? true : authPending ? null : false
   const [loading, setLoading] = useState(isAuthenticated !== false)
+  const [loadError, setLoadError] = useState(false)
+  const [mutationError, setMutationError] = useState(false)
+  const [reloadNonce, setReloadNonce] = useState(0)
   const [copied, setCopied] = useState(false)
   const [generating, setGenerating] = useState(false)
 
@@ -136,8 +101,9 @@ function ViewerScopedReferralClient({
       viewer: operationViewer,
     }
     serverOperationRef.current = operation
-    setReferral(null)
     setLoading(true)
+    setLoadError(false)
+    setMutationError(false)
     setGenerating(false)
 
     void (async () => {
@@ -155,10 +121,14 @@ function ViewerScopedReferralClient({
           }
         )
         if (!operationIsCurrent(operation, serverOperationRef) || result.stale) return
-        const nextReferral = result.ok ? readReferralData(result.data) : null
-        if (nextReferral) setReferral(nextReferral)
+        const nextReferral =
+          result.ok && result.status === 200
+            ? readReferralSnapshot(result.data, { ownerId: operation.viewer.userId })
+            : null
+        if (!nextReferral) throw new Error('Invalid referral acknowledgement')
+        setReferral(nextReferral)
       } catch {
-        // Referral data is best-effort; the scoped loading barrier still settles.
+        if (operationIsCurrent(operation, serverOperationRef)) setLoadError(true)
       } finally {
         if (operationIsCurrent(operation, serverOperationRef)) {
           serverOperationRef.current = null
@@ -171,12 +141,12 @@ function ViewerScopedReferralClient({
       operation.controller.abort()
       if (serverOperationRef.current?.id === operation.id) serverOperationRef.current = null
     }
-  }, [scopeKey])
+  }, [reloadNonce, scopeKey])
 
   const handleCopy = async () => {
     const operationViewer = captureSettingsViewer(authRef.current)
-    const referralLink = referralRef.current?.referral_link
-    if (!operationViewer || !referralLink) return
+    const referralLink = referralRef.current?.referralLink
+    if (!operationViewer || !referralLink || copyOperationRef.current) return
     const operation: ReferralOperation = {
       controller: new AbortController(),
       id: ++nextOperationIdRef.current,
@@ -216,7 +186,16 @@ function ViewerScopedReferralClient({
 
   const handleGenerate = async () => {
     const operationViewer = captureSettingsViewer(authRef.current)
-    if (!operationViewer || generating || serverOperationRef.current) return
+    const currentReferral = referralRef.current
+    if (
+      !operationViewer ||
+      !currentReferral ||
+      currentReferral.codeSource === 'custom' ||
+      generating ||
+      serverOperationRef.current
+    ) {
+      return
+    }
     const operation: ReferralOperation = {
       controller: new AbortController(),
       id: ++nextOperationIdRef.current,
@@ -224,12 +203,13 @@ function ViewerScopedReferralClient({
     }
     serverOperationRef.current = operation
     setGenerating(true)
+    setMutationError(false)
     try {
       const result = await authedFetch<unknown>(
         '/api/referral',
         'POST',
         operation.viewer.accessToken,
-        undefined,
+        { action: 'create' },
         15_000,
         {
           expectedUserId: operation.viewer.userId,
@@ -237,19 +217,31 @@ function ViewerScopedReferralClient({
           signal: operation.controller.signal,
         }
       )
-      if (!operationIsCurrent(operation, serverOperationRef) || result.stale || !result.ok) {
+      if (!operationIsCurrent(operation, serverOperationRef) || result.stale) {
         return
       }
-      const nextReferral = readGeneratedReferral(result.data)
-      if (nextReferral) {
-        setReferral((prev) => ({
-          referral_code: nextReferral.referral_code,
-          referral_link: nextReferral.referral_link,
-          referral_count: prev?.referral_count ?? 0,
-        }))
-      }
+      const nextReferral =
+        result.ok && result.status === 201
+          ? readReferralCodeCreation(result.data, { ownerId: operation.viewer.userId })
+          : null
+      if (!nextReferral) throw new Error('Invalid referral creation acknowledgement')
+      setReferral((previous) =>
+        previous?.ownerId === operation.viewer.userId
+          ? {
+              ...previous,
+              referralCode: nextReferral.referralCode,
+              referralLink: nextReferral.referralLink,
+              codeSource: nextReferral.codeSource,
+            }
+          : previous
+      )
     } catch {
-      // Keep the existing referral visible; the user can retry.
+      if (operationIsCurrent(operation, serverOperationRef)) {
+        setMutationError(true)
+        // Another tab may already have created the one permanent code. Re-read
+        // owner authority instead of leaving a mutation that can only 409.
+        setReloadNonce((value) => value + 1)
+      }
     } finally {
       if (operationIsCurrent(operation, serverOperationRef)) {
         serverOperationRef.current = null
@@ -258,12 +250,28 @@ function ViewerScopedReferralClient({
     }
   }
 
-  const shareUrl = referral?.referral_link || ''
+  const shareUrl = referral?.referralLink || ''
   const shareText = t('referralShareText')
 
-  const referralCount = referral?.referral_count ?? 0
+  const referralCount = referral?.qualifiedReferralCount ?? 0
   const progress = Math.min(referralCount / REFERRAL_REWARD_THRESHOLD, 1)
-  const rewardEarned = referralCount >= REFERRAL_REWARD_THRESHOLD
+  const rewardStatus = referral?.advocateReward.status ?? 'not_granted'
+  const rewardActive = rewardStatus === 'active'
+  const rewardStatusLabel = rewardActive
+    ? t('referralRewardUnlocked')
+    : rewardStatus === 'pending'
+      ? t('processing')
+      : rewardStatus === 'scheduled'
+        ? `${t('processing')} · ${new Intl.DateTimeFormat().format(
+            new Date(referral?.advocateReward.entitlementStartsAt ?? 0)
+          )}`
+        : rewardStatus === 'expired'
+          ? `${t('complete')} · ${new Intl.DateTimeFormat().format(
+              new Date(referral?.advocateReward.entitlementExpiresAt ?? 0)
+            )}`
+          : rewardStatus === 'revoked'
+            ? t('apiKeyRevokedSection')
+            : `${referralCount}/${REFERRAL_REWARD_THRESHOLD}`
 
   const rewardTitle = t('referralRewardBannerTitle')
     .replace('{count}', String(REFERRAL_REWARD_THRESHOLD))
@@ -451,7 +459,9 @@ function ViewerScopedReferralClient({
             <Link
               href="/login"
               style={{
-                display: 'inline-block',
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 44,
                 padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
                 background: 'var(--color-accent-primary)',
                 color: tokens.colors.white,
@@ -467,11 +477,79 @@ function ViewerScopedReferralClient({
         )}
 
         {/* Loading */}
-        {loading && isAuthenticated !== false && <LoadingSkeleton variant="card" count={2} />}
+        {loading && !referral && isAuthenticated !== false && (
+          <LoadingSkeleton variant="card" count={2} />
+        )}
+
+        {!loading && isAuthenticated && !referral && loadError && (
+          <div
+            role="alert"
+            style={{
+              padding: tokens.spacing[6],
+              textAlign: 'center',
+              background: tokens.glass.bg.secondary,
+              borderRadius: tokens.radius.lg,
+              border: tokens.glass.border.light,
+            }}
+          >
+            <p style={{ margin: `0 0 ${tokens.spacing[4]}`, color: tokens.colors.text.secondary }}>
+              {t('loadFailedRetryShort')}
+            </p>
+            <button
+              type="button"
+              onClick={() => setReloadNonce((value) => value + 1)}
+              style={{
+                minHeight: 44,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.md,
+                border: tokens.glass.border.light,
+                background: tokens.colors.bg.secondary,
+                color: tokens.colors.text.primary,
+                cursor: 'pointer',
+              }}
+            >
+              {t('retry')}
+            </button>
+          </div>
+        )}
 
         {/* Referral content */}
-        {!loading && isAuthenticated && (
+        {isAuthenticated && referral && (
           <>
+            {loadError && (
+              <div
+                role="alert"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: tokens.spacing[3],
+                  padding: tokens.spacing[3],
+                  marginBottom: tokens.spacing[4],
+                  border: tokens.glass.border.light,
+                  borderRadius: tokens.radius.md,
+                  color: tokens.colors.text.secondary,
+                }}
+              >
+                <span>{t('loadFailedRetryShort')}</span>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => setReloadNonce((value) => value + 1)}
+                  style={{
+                    minHeight: 44,
+                    padding: `0 ${tokens.spacing[4]}`,
+                    borderRadius: tokens.radius.md,
+                    border: tokens.glass.border.light,
+                    background: 'transparent',
+                    color: tokens.colors.text.primary,
+                    cursor: loading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {t('retry')}
+                </button>
+              </div>
+            )}
             {/* Progress toward reward — single accurate stat (the old two
                 cards showed the same number). */}
             <div
@@ -516,17 +594,15 @@ function ViewerScopedReferralClient({
                 <span
                   style={{
                     fontSize: tokens.typography.fontSize.sm,
-                    fontWeight: rewardEarned
+                    fontWeight: rewardActive
                       ? tokens.typography.fontWeight.semibold
                       : tokens.typography.fontWeight.normal,
-                    color: rewardEarned
+                    color: rewardActive
                       ? tokens.colors.accent.success
                       : tokens.colors.text.tertiary,
                   }}
                 >
-                  {rewardEarned
-                    ? t('referralRewardUnlocked')
-                    : `${referralCount}/${REFERRAL_REWARD_THRESHOLD}`}
+                  {rewardStatusLabel}
                 </span>
               </div>
               {/* Progress bar */}
@@ -543,7 +619,7 @@ function ViewerScopedReferralClient({
                     height: '100%',
                     width: `${progress * 100}%`,
                     borderRadius: tokens.radius.full,
-                    background: rewardEarned
+                    background: rewardActive
                       ? tokens.colors.accent.success
                       : 'var(--color-accent-primary)',
                     transition: 'width 0.3s ease',
@@ -571,7 +647,7 @@ function ViewerScopedReferralClient({
               >
                 {t('referralYourLink')}
               </h3>
-              {referral?.referral_code ? (
+              {referral.referralCode ? (
                 <>
                   <div
                     style={{
@@ -594,11 +670,13 @@ function ViewerScopedReferralClient({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {referral.referral_link}
+                      {referral.referralLink}
                     </div>
                     <button
+                      type="button"
                       onClick={handleCopy}
                       style={{
+                        minHeight: 44,
                         padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                         borderRadius: tokens.radius.md,
                         border: 'none',
@@ -617,29 +695,34 @@ function ViewerScopedReferralClient({
                     </button>
                   </div>
 
-                  {/* Regenerate */}
-                  <button
-                    onClick={handleGenerate}
-                    disabled={generating}
-                    style={{
-                      marginTop: tokens.spacing[3],
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                      borderRadius: tokens.radius.sm,
-                      border: tokens.glass.border.light,
-                      background: 'transparent',
-                      color: tokens.colors.text.tertiary,
-                      fontSize: tokens.typography.fontSize.xs,
-                      cursor: generating ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {generating ? t('referralGenerating') : t('referralRegenerate')}
-                  </button>
+                  {referral.codeSource !== 'custom' && (
+                    <button
+                      type="button"
+                      onClick={handleGenerate}
+                      disabled={generating}
+                      style={{
+                        minHeight: 44,
+                        marginTop: tokens.spacing[3],
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                        borderRadius: tokens.radius.sm,
+                        border: tokens.glass.border.light,
+                        background: 'transparent',
+                        color: tokens.colors.text.tertiary,
+                        fontSize: tokens.typography.fontSize.xs,
+                        cursor: generating ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {generating ? t('referralGenerating') : t('referralGenerate')}
+                    </button>
+                  )}
                 </>
               ) : (
                 <button
+                  type="button"
                   onClick={handleGenerate}
                   disabled={generating}
                   style={{
+                    minHeight: 44,
                     padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
                     borderRadius: tokens.radius.md,
                     border: 'none',
@@ -653,10 +736,22 @@ function ViewerScopedReferralClient({
                   {generating ? t('referralGenerating') : t('referralGenerate')}
                 </button>
               )}
+              {mutationError && (
+                <p
+                  role="alert"
+                  style={{
+                    margin: `${tokens.spacing[3]} 0 0`,
+                    color: tokens.colors.accent.error,
+                    fontSize: tokens.typography.fontSize.sm,
+                  }}
+                >
+                  {t('actionFailedRetry')}
+                </p>
+              )}
             </div>
 
             {/* Share buttons */}
-            {referral?.referral_link && (
+            {referral.referralLink && (
               <div
                 style={{
                   padding: tokens.spacing[6],
@@ -729,6 +824,7 @@ function ViewerScopedReferralClient({
 const shareBtnStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
+  minHeight: 44,
   gap: tokens.spacing[2],
   padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
   borderRadius: tokens.radius.md,

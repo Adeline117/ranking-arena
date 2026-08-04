@@ -104,6 +104,90 @@ jest.mock('next/link', () => ({
 }))
 
 import ReferralClient from '../ReferralClient'
+import { BASE_URL } from '@/lib/constants/urls'
+
+const CODE_A = `ra_${'a'.repeat(32)}`
+const CODE_B = `ra_${'b'.repeat(32)}`
+const CREATED_AT = '2026-08-03T12:00:00.000Z'
+
+function referralSnapshot(
+  ownerId: string,
+  options: {
+    code?: string | null
+    codeSource?: 'none' | 'handle' | 'custom'
+    count?: number
+    rewardStatus?: 'not_granted' | 'pending' | 'scheduled' | 'active' | 'expired' | 'revoked'
+  } = {}
+) {
+  const code = options.code === undefined ? (ownerId === VIEWER_A ? CODE_A : CODE_B) : options.code
+  const rewardStatus = options.rewardStatus ?? 'not_granted'
+  return {
+    success: true,
+    data: {
+      referral: {
+        owner_id: ownerId,
+        referral_code: code,
+        referral_link: code ? `${BASE_URL}/?ref=${code}` : null,
+        code_source: options.codeSource ?? (code ? 'custom' : 'none'),
+        qualified_referral_count: options.count ?? 2,
+        advocate_reward:
+          rewardStatus === 'not_granted'
+            ? {
+                reward_id: null,
+                status: 'not_granted',
+                granted_days: null,
+                entitlement_granted_at: null,
+                entitlement_starts_at: null,
+                entitlement_expires_at: null,
+                entitlement_revoked_at: null,
+              }
+            : rewardStatus === 'pending'
+              ? {
+                  reward_id: '33333333-3333-4333-8333-333333333333',
+                  status: 'pending',
+                  granted_days: 30,
+                  entitlement_granted_at: null,
+                  entitlement_starts_at: null,
+                  entitlement_expires_at: null,
+                  entitlement_revoked_at: null,
+                }
+              : {
+                  reward_id: '33333333-3333-4333-8333-333333333333',
+                  status: rewardStatus,
+                  granted_days: 30,
+                  entitlement_granted_at: CREATED_AT,
+                  entitlement_starts_at:
+                    rewardStatus === 'scheduled'
+                      ? '2098-01-01T00:00:00.000Z'
+                      : '2020-01-01T00:00:00.000Z',
+                  entitlement_expires_at:
+                    rewardStatus === 'expired'
+                      ? '2020-02-01T00:00:00.000Z'
+                      : '2099-01-01T00:00:00.000Z',
+                  entitlement_revoked_at:
+                    rewardStatus === 'revoked' ? '2026-08-03T13:00:00.000Z' : null,
+                },
+      },
+    },
+    meta: { timestamp: CREATED_AT },
+  }
+}
+
+function codeCreation(ownerId: string, code: string) {
+  return {
+    success: true,
+    data: {
+      mutation: {
+        action: 'create',
+        owner_id: ownerId,
+        referral_code: code,
+        referral_link: `${BASE_URL}/?ref=${code}`,
+        code_source: 'custom',
+      },
+    },
+    meta: { timestamp: CREATED_AT },
+  }
+}
 
 function response(data: unknown, status = 200) {
   return {
@@ -131,13 +215,9 @@ describe('ReferralClient viewer scope', () => {
 
   it('never displays a late referral response from the previous viewer', async () => {
     const firstLoad = deferred<MockFetchResult>()
-    mockAuthedFetch.mockReturnValueOnce(firstLoad.promise).mockResolvedValueOnce(
-      response({
-        referral_code: 'B-CODE',
-        referral_count: 2,
-        referral_link: 'https://arena.example/?ref=B-CODE',
-      })
-    )
+    mockAuthedFetch
+      .mockReturnValueOnce(firstLoad.promise)
+      .mockResolvedValueOnce(response(referralSnapshot(VIEWER_B)))
     const view = render(<ReferralClient />)
     await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
     expect(mockAuthedFetch).toHaveBeenNthCalledWith(
@@ -156,41 +236,25 @@ describe('ReferralClient viewer scope', () => {
 
     mockAuth = signedIn(VIEWER_B, 'access-token-b', 2)
     view.rerender(<ReferralClient />)
-    expect(await screen.findByText('https://arena.example/?ref=B-CODE')).toBeInTheDocument()
+    expect(await screen.findByText(`${BASE_URL}/?ref=${CODE_B}`)).toBeInTheDocument()
 
     await act(async () => {
-      firstLoad.resolve(
-        response({
-          referral_code: 'A-CODE',
-          referral_count: 99,
-          referral_link: 'https://arena.example/?ref=A-CODE',
-        })
-      )
+      firstLoad.resolve(response(referralSnapshot(VIEWER_A, { count: 99 })))
       await firstLoad.promise
     })
 
-    expect(screen.queryByText('https://arena.example/?ref=A-CODE')).not.toBeInTheDocument()
-    expect(screen.getByText('https://arena.example/?ref=B-CODE')).toBeInTheDocument()
+    expect(screen.queryByText(`${BASE_URL}/?ref=${CODE_A}`)).not.toBeInTheDocument()
+    expect(screen.getByText(`${BASE_URL}/?ref=${CODE_B}`)).toBeInTheDocument()
   })
 
   it('does not apply an old generate response after an account switch', async () => {
     const oldGenerate = deferred<MockFetchResult>()
     mockAuthedFetch
       .mockResolvedValueOnce(
-        response({
-          referral_code: '',
-          referral_count: 0,
-          referral_link: '',
-        })
+        response(referralSnapshot(VIEWER_A, { code: null, codeSource: 'none', count: 0 }))
       )
       .mockReturnValueOnce(oldGenerate.promise)
-      .mockResolvedValueOnce(
-        response({
-          referral_code: 'B-CODE',
-          referral_count: 4,
-          referral_link: 'https://arena.example/?ref=B-CODE',
-        })
-      )
+      .mockResolvedValueOnce(response(referralSnapshot(VIEWER_B, { count: 4 })))
     const view = render(<ReferralClient />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'referralGenerate' }))
@@ -200,7 +264,7 @@ describe('ReferralClient viewer scope', () => {
       '/api/referral',
       'POST',
       'access-token-a',
-      undefined,
+      { action: 'create' },
       15_000,
       expect.objectContaining({
         expectedUserId: VIEWER_A,
@@ -211,21 +275,16 @@ describe('ReferralClient viewer scope', () => {
 
     mockAuth = signedIn(VIEWER_B, 'access-token-b', 2)
     view.rerender(<ReferralClient />)
-    expect(await screen.findByText('https://arena.example/?ref=B-CODE')).toBeInTheDocument()
+    expect(await screen.findByText(`${BASE_URL}/?ref=${CODE_B}`)).toBeInTheDocument()
 
     await act(async () => {
-      oldGenerate.resolve(
-        response({
-          referral_code: 'A-NEW',
-          referral_link: 'https://arena.example/?ref=A-NEW',
-        })
-      )
+      oldGenerate.resolve(response(codeCreation(VIEWER_A, CODE_A), 201))
       await oldGenerate.promise
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
-    expect(screen.queryByText('https://arena.example/?ref=A-NEW')).not.toBeInTheDocument()
-    expect(screen.getByText('https://arena.example/?ref=B-CODE')).toBeInTheDocument()
+    expect(screen.queryByText(`${BASE_URL}/?ref=${CODE_A}`)).not.toBeInTheDocument()
+    expect(screen.getByText(`${BASE_URL}/?ref=${CODE_B}`)).toBeInTheDocument()
   })
 
   it('shows the sign-in gate without issuing a viewer-bound request', () => {
@@ -234,5 +293,90 @@ describe('ReferralClient viewer scope', () => {
 
     expect(screen.getByText('referralSignInGateTitle')).toBeInTheDocument()
     expect(mockAuthedFetch).not.toHaveBeenCalled()
+  })
+
+  it('fails closed on an expanded acknowledgement and retries in the same viewer scope', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(response({ ...referralSnapshot(VIEWER_A), extra: true }))
+      .mockResolvedValueOnce(response(referralSnapshot(VIEWER_A)))
+
+    render(<ReferralClient />)
+
+    expect(await screen.findByText('loadFailedRetryShort')).toBeInTheDocument()
+    expect(screen.queryByText(`${BASE_URL}/?ref=${CODE_A}`)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'retry' }))
+
+    expect(await screen.findByText(`${BASE_URL}/?ref=${CODE_A}`)).toBeInTheDocument()
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('never infers an active Pro reward from a threshold-sized qualified count', async () => {
+    mockAuthedFetch.mockResolvedValueOnce(
+      response(referralSnapshot(VIEWER_A, { count: 99, rewardStatus: 'not_granted' }))
+    )
+
+    render(<ReferralClient />)
+
+    expect(await screen.findByText('99/3')).toBeInTheDocument()
+    expect(screen.queryByText('referralRewardUnlocked')).not.toBeInTheDocument()
+  })
+
+  it('shows unlocked only when the entitlement authority says the reward is active', async () => {
+    mockAuthedFetch.mockResolvedValueOnce(
+      response(referralSnapshot(VIEWER_A, { count: 1, rewardStatus: 'active' }))
+    )
+
+    render(<ReferralClient />)
+
+    expect(await screen.findByText('referralRewardUnlocked')).toBeInTheDocument()
+    expect(screen.queryByText('1/3')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['pending', 'processing'],
+    ['scheduled', /processing · /],
+    ['expired', /complete · /],
+    ['revoked', 'apiKeyRevokedSection'],
+  ] as const)(
+    'labels a %s reward without claiming current Pro is unlocked',
+    async (status, label) => {
+      mockAuthedFetch.mockResolvedValueOnce(
+        response(referralSnapshot(VIEWER_A, { count: 3, rewardStatus: status }))
+      )
+
+      render(<ReferralClient />)
+
+      expect(await screen.findByText(label)).toBeInTheDocument()
+      expect(screen.queryByText('referralRewardUnlocked')).not.toBeInTheDocument()
+    }
+  )
+
+  it('keeps the last-good handle link when code creation returns a malformed receipt', async () => {
+    const handle = 'owner_handle'
+    mockAuthedFetch
+      .mockResolvedValueOnce(
+        response(referralSnapshot(VIEWER_A, { code: handle, codeSource: 'handle', count: 1 }))
+      )
+      .mockResolvedValueOnce(response({ ...codeCreation(VIEWER_A, CODE_A), extra: true }, 201))
+      .mockResolvedValueOnce(
+        response(referralSnapshot(VIEWER_A, { code: handle, codeSource: 'handle', count: 1 }))
+      )
+
+    render(<ReferralClient />)
+    expect(await screen.findByText(`${BASE_URL}/?ref=${handle}`)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'referralGenerate' }))
+
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+    expect(screen.getByText(`${BASE_URL}/?ref=${handle}`)).toBeInTheDocument()
+    expect(screen.queryByText(`${BASE_URL}/?ref=${CODE_A}`)).not.toBeInTheDocument()
+  })
+
+  it('does not offer destructive regeneration for a permanent custom code', async () => {
+    mockAuthedFetch.mockResolvedValueOnce(response(referralSnapshot(VIEWER_A)))
+    render(<ReferralClient />)
+
+    expect(await screen.findByText(`${BASE_URL}/?ref=${CODE_A}`)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'referralRegenerate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'referralGenerate' })).not.toBeInTheDocument()
   })
 })
