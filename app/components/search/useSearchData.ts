@@ -10,6 +10,7 @@ import {
   clearHistory,
 } from '@/lib/services/search-history'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { jwtSubject } from '@/lib/auth/token-subject'
 import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
 import { logger } from '@/lib/logger'
 import { features } from '@/lib/features'
@@ -54,6 +55,7 @@ type SearchTranslationScope = {
 
 type ActiveSearchTranslation = {
   key: string
+  accessToken: string
   sequence: number
   controller: AbortController
   promise: Promise<void>
@@ -140,6 +142,7 @@ export function useSearchData(open: boolean, query: string) {
     isLoggedIn &&
     typeof userId === 'string' &&
     viewerKey === `user:${userId}` &&
+    jwtSubject(accessToken)?.toLowerCase() === userId.toLowerCase() &&
     Number.isSafeInteger(sessionGeneration) &&
     sessionGeneration >= 0 &&
     typeof accessToken === 'string' &&
@@ -153,7 +156,6 @@ export function useSearchData(open: boolean, query: string) {
             viewerKey,
             sessionGeneration,
             userId,
-            accessToken,
             language,
             query,
             resultIdentity,
@@ -178,7 +180,7 @@ export function useSearchData(open: boolean, query: string) {
   useEffect(() => {
     committedTranslationScopeRef.current = translationScope
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [translationScopeKey])
+  }, [accessToken, translationScopeKey])
 
   // Flatten results for keyboard navigation
   const flatResults: UnifiedSearchResult[] = useMemo(
@@ -395,7 +397,7 @@ export function useSearchData(open: boolean, query: string) {
     }
 
     const existing = activeTranslationRef.current
-    if (existing?.key === scope.key) return
+    if (existing?.key === scope.key && existing.accessToken === scope.accessToken) return
     if (existing && !existing.controller.signal.aborted) {
       existing.controller.abort(new DOMException('Search translation superseded', 'AbortError'))
     }
@@ -455,7 +457,13 @@ export function useSearchData(open: boolean, query: string) {
       }
     })()
 
-    activeTranslationRef.current = { key: scope.key, sequence, controller, promise }
+    activeTranslationRef.current = {
+      key: scope.key,
+      accessToken: scope.accessToken,
+      sequence,
+      controller,
+      promise,
+    }
 
     return () => {
       const active = activeTranslationRef.current
@@ -466,7 +474,7 @@ export function useSearchData(open: boolean, query: string) {
         activeTranslationRef.current = null
       }
     }
-  }, [translationScopeKey])
+  }, [accessToken, translationScopeKey])
 
   // Unified search with debounce
   useEffect(() => {

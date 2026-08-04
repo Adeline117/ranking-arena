@@ -54,8 +54,13 @@ type TranslationRequest = {
 
 const USER_A = '11111111-1111-4111-8111-111111111111'
 const USER_B = '22222222-2222-4222-8222-222222222222'
+const accessTokenFor = (subject: string, revision: string) =>
+  `header.${Buffer.from(JSON.stringify({ sub: subject })).toString('base64url')}.signature-${revision}`
+const TOKEN_A = accessTokenFor(USER_A, 'a')
+const TOKEN_B = accessTokenFor(USER_A, 'b')
+const TOKEN_B_VIEWER = accessTokenFor(USER_B, 'c')
 
-function authenticatedSession(accessToken = 'token-a', sessionGeneration = 1, userId = USER_A) {
+function authenticatedSession(accessToken = TOKEN_A, sessionGeneration = 1, userId = USER_A) {
   return {
     userId,
     isLoggedIn: true,
@@ -205,7 +210,7 @@ describe('useSearchData translation truth', () => {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer token-a',
+          Authorization: `Bearer ${TOKEN_A}`,
           'x-csrf-token': 'csrf-search',
         },
       })
@@ -238,6 +243,54 @@ describe('useSearchData translation truth', () => {
     expect(translationCalls).toBe(0)
     expect(result.current.translating).toBe(false)
     expect(result.current.translatedTitles).toEqual({})
+  })
+
+  it('fails closed when the bearer subject does not match the rendered user', async () => {
+    mockUseAuthSession.mockReturnValue(authenticatedSession(TOKEN_B_VIEWER, 1, USER_A))
+    let translationCalls = 0
+    installFetch(
+      () => [rawPost()],
+      async () => {
+        translationCalls += 1
+        return response(
+          batchEnvelope({ 'post-1': { translatedText: 'must not publish', cached: false } })
+        )
+      }
+    )
+
+    const { result } = renderHook(() => useSearchData(true, ''))
+    await waitFor(() => expect(result.current.hotPosts).toHaveLength(1))
+
+    expect(translationCalls).toBe(0)
+    expect(result.current.translating).toBe(false)
+    expect(result.current.translatedTitles).toEqual({})
+  })
+
+  it('reuses exact same-user translation cache after a token refresh', async () => {
+    let auth = authenticatedSession()
+    mockUseAuthSession.mockImplementation(() => auth)
+    let translationCalls = 0
+    installFetch(
+      () => [rawPost()],
+      async () => {
+        translationCalls += 1
+        return response(
+          batchEnvelope({ 'post-1': { translatedText: 'cached translation', cached: false } })
+        )
+      }
+    )
+
+    const { result, rerender } = renderHook(() => useSearchData(true, ''))
+    await waitFor(() =>
+      expect(result.current.translatedTitles['ja:post-1']).toBe('cached translation')
+    )
+
+    auth = authenticatedSession(TOKEN_B)
+    rerender()
+
+    await waitFor(() => expect(result.current.translating).toBe(false))
+    expect(translationCalls).toBe(1)
+    expect(result.current.translatedTitles['ja:post-1']).toBe('cached translation')
   })
 
   it('aborts old hot-post loads and ignores their data and finally after reopen', async () => {
@@ -425,17 +478,17 @@ describe('useSearchData translation truth', () => {
     rerender({ query: '' })
     expect(requests).toHaveLength(1)
 
-    mockUseAuthSession.mockReturnValue(authenticatedSession('token-b'))
+    mockUseAuthSession.mockReturnValue(authenticatedSession(TOKEN_B))
     rerender({ query: '' })
     await waitFor(() => expect(requests).toHaveLength(2))
     expect(requests[0].options.signal?.aborted).toBe(true)
 
-    mockUseAuthSession.mockReturnValue(authenticatedSession('token-b', 2))
+    mockUseAuthSession.mockReturnValue(authenticatedSession(TOKEN_B, 2))
     rerender({ query: '' })
     await waitFor(() => expect(requests).toHaveLength(3))
     expect(requests[1].options.signal?.aborted).toBe(true)
 
-    mockUseAuthSession.mockReturnValue(authenticatedSession('token-c', 3, USER_B))
+    mockUseAuthSession.mockReturnValue(authenticatedSession(TOKEN_B_VIEWER, 3, USER_B))
     rerender({ query: '' })
     await waitFor(() => expect(requests).toHaveLength(4))
     expect(requests[2].options.signal?.aborted).toBe(true)
@@ -470,7 +523,9 @@ describe('useSearchData translation truth', () => {
     )
     await waitFor(() => expect(result.current.translatedTitles['ko:post-1']).toBe('최종 번역'))
     expect(requests[5].body.targetLang).toBe('ko')
-    expect(requests[5].options.headers).toMatchObject({ Authorization: 'Bearer token-c' })
+    expect(requests[5].options.headers).toMatchObject({
+      Authorization: `Bearer ${TOKEN_B_VIEWER}`,
+    })
     expect(result.current.translating).toBe(false)
   })
 
