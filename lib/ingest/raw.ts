@@ -1232,6 +1232,24 @@ function positionHistoryArtifactMeta(
   )
 }
 
+/** Exact page-manifest evidence emitted by the previous @1 contract. */
+function previousManifestPositionHistoryArtifactMeta(
+  artifact: PreparedPositionHistoryRawArtifact
+): Record<string, unknown> | null {
+  if (artifact.publicationMetaBase === null) return null
+  const current = positionHistoryArtifactMeta(artifact)
+  return {
+    ...current,
+    history_evidence_contract: PREVIOUS_POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+    page_manifest: artifact.publicationMetaBase.page_manifest.map((page) => ({
+      ...page,
+      source_rows: page.source_rows.map(({ classification: _classification, ...sourceRow }) =>
+        Object.freeze(sourceRow)
+      ),
+    })),
+  }
+}
+
 /** Exact publication metadata emitted before the shared page-manifest contract. */
 function previousPositionHistoryArtifactMeta(
   input: NormalizedPositionHistoryRawArtifactInput,
@@ -1241,7 +1259,7 @@ function previousPositionHistoryArtifactMeta(
     {
       surface: 'position_history',
       data_contract: input.artifact.contract,
-      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      history_evidence_contract: PREVIOUS_POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
       source_run_id: input.sourceRunId,
       source_slug: input.sourceSlug,
       exchange_trader_id: input.exchangeTraderId,
@@ -1327,18 +1345,19 @@ export function prepareHistoryRawArtifactReconciliationExpectation(
     normalizedInput.artifact.history_kind === 'position_history' &&
     !normalizedInput.exchangeTraderId.includes('\0')
   ) {
-    metaCandidates.push(
-      previousPositionHistoryArtifactMeta(normalizedInput, artifact),
-      legacyPositionHistoryArtifactMeta(normalizedInput, artifact)
-    )
+    const previousManifestMeta = previousManifestPositionHistoryArtifactMeta(artifact)
+    if (previousManifestMeta !== null) metaCandidates.push(previousManifestMeta)
+    metaCandidates.push(previousPositionHistoryArtifactMeta(normalizedInput, artifact))
+    metaCandidates.push(legacyPositionHistoryArtifactMeta(normalizedInput, artifact))
   }
+  const canonicalMetaCandidates = [
+    ...new Set(metaCandidates.map((meta) => strictCanonicalJson(meta))),
+  ]
   return Object.freeze({
     bytes: artifact.durableCompressedBytes,
     contentHash: artifact.contentHash,
     fetchedAt: normalizedInput.fetchedAt,
-    metaCandidatesCanonicalJson: Object.freeze(
-      metaCandidates.map((meta) => strictCanonicalJson(meta))
-    ),
+    metaCandidatesCanonicalJson: Object.freeze(canonicalMetaCandidates),
     storagePath: artifact.storagePath,
   })
 }
@@ -1376,11 +1395,15 @@ function validatePositionHistoryTrustPointer(
   let metaMatches = false
   try {
     const storedMeta = strictCanonicalJson(row.meta)
+    const previousManifestMeta = previousManifestPositionHistoryArtifactMeta(artifact)
     metaMatches =
       storedMeta === strictCanonicalJson(positionHistoryArtifactMeta(artifact)) ||
       (input.artifact.history_kind === 'position_history' &&
         !input.exchangeTraderId.includes('\0') &&
-        (storedMeta === strictCanonicalJson(previousPositionHistoryArtifactMeta(input, artifact)) ||
+        ((previousManifestMeta !== null &&
+          storedMeta === strictCanonicalJson(previousManifestMeta)) ||
+          storedMeta ===
+            strictCanonicalJson(previousPositionHistoryArtifactMeta(input, artifact)) ||
           storedMeta === strictCanonicalJson(legacyPositionHistoryArtifactMeta(input, artifact))))
   } catch {
     metaMatches = false

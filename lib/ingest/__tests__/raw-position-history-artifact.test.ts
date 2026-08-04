@@ -547,7 +547,7 @@ describe('writePositionHistoryRawArtifact', () => {
     const previousMeta: Record<string, unknown> = {
       surface: 'position_history',
       data_contract: input.artifact.contract,
-      history_evidence_contract: POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+      history_evidence_contract: 'arena.position-history-publication-evidence@1',
       source_run_id: input.sourceRunId,
       source_slug: input.artifact.source.slug,
       exchange_trader_id: input.artifact.trader.exchange_trader_id,
@@ -573,6 +573,35 @@ describe('writePositionHistoryRawArtifact', () => {
     expect(
       prepareHistoryRawArtifactReconciliationExpectation(input).metaCandidatesCanonicalJson
     ).toContain(strictCanonicalJson(previousMeta))
+  })
+
+  it('replays the exact @1 page manifest without relabeling it as @2', async () => {
+    const input = await reviewedBitgetArtifactInput()
+    const database = databaseHarness()
+    const first = await writePositionHistoryRawArtifact(input, database.runTransaction)
+    const inserted = database.pointers[0].meta as Record<string, unknown>
+    const currentPages = inserted.page_manifest as Array<Record<string, unknown>>
+    const previousMeta = {
+      ...inserted,
+      history_evidence_contract: 'arena.position-history-publication-evidence@1',
+      page_manifest: currentPages.map((page) => ({
+        ...page,
+        source_rows: (page.source_rows as Array<Record<string, unknown>>).map(
+          ({ classification: _classification, ...sourceRow }) => sourceRow
+        ),
+      })),
+    }
+    database.pointers[0].meta = previousMeta
+
+    await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).resolves.toEqual(
+      first
+    )
+    const candidates =
+      prepareHistoryRawArtifactReconciliationExpectation(input).metaCandidatesCanonicalJson
+    expect(candidates).toHaveLength(4)
+    expect(candidates).toContain(strictCanonicalJson(previousMeta))
+    expect(previousMeta).not.toEqual(inserted)
+    expect(previousMeta.page_manifest).not.toEqual(inserted.page_manifest)
   })
 
   it('replays only the exact legacy audit metadata without upgrading it', async () => {
