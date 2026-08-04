@@ -11,6 +11,8 @@ import dynamic from 'next/dynamic'
 import PortfolioTableHeader from './PortfolioTableHeader'
 import PortfolioCurrentView from './PortfolioCurrentView'
 import PositionHistoryView from './PositionHistoryView'
+import HistoryCompletenessNotice from './serving/HistoryCompletenessNotice'
+import type { HistoryCompleteness } from '@/lib/data/serving/types'
 
 // Lazy load: drawer only opens when user clicks a market row
 const MarketDetailDrawer = dynamic(() => import('./MarketDetailDrawer'), { ssr: false })
@@ -18,6 +20,7 @@ const MarketDetailDrawer = dynamic(() => import('./MarketDetailDrawer'), { ssr: 
 interface PortfolioTableProps {
   items: PortfolioItem[]
   history?: (PositionHistoryItem | ExtendedPositionHistoryItem)[]
+  historyCompleteness?: HistoryCompleteness | null
   isPro?: boolean
   onUnlock?: () => void
 }
@@ -31,6 +34,7 @@ type ViewMode = 'current' | 'history'
 export default function PortfolioTable({
   items,
   history = [],
+  historyCompleteness = null,
   isPro = true,
   onUnlock: _onUnlock,
 }: PortfolioTableProps) {
@@ -72,6 +76,8 @@ export default function PortfolioTable({
   const hasExtendedFields = history.some(
     (item) => 'positionType' in item || 'maxPositionSize' in item || 'pnlUsd' in item
   )
+  const hasHistoryLimitation =
+    historyCompleteness !== null && historyCompleteness.state !== 'complete'
 
   // Empty state when no current positions and no history
   if (items.length === 0 && history.length === 0) {
@@ -90,6 +96,11 @@ export default function PortfolioTable({
           gap: tokens.spacing[3],
         }}
       >
+        {hasHistoryLimitation && (
+          <Box style={{ width: '100%', textAlign: 'left' }}>
+            <HistoryCompletenessNotice completeness={historyCompleteness} />
+          </Box>
+        )}
         <svg
           width="40"
           height="40"
@@ -106,10 +117,10 @@ export default function PortfolioTable({
           <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
         </svg>
         <Text size="sm" weight="bold" color="secondary">
-          {t('noOpenPositions')}
+          {t(hasHistoryLimitation ? 'historyPreviewEmptyTitle' : 'noOpenPositions')}
         </Text>
         <Text size="xs" color="tertiary">
-          {t('noPositionHistoryDesc')}
+          {t(hasHistoryLimitation ? 'historyPreviewEmptyDescription' : 'noPositionHistoryDesc')}
         </Text>
       </Box>
     )
@@ -179,7 +190,12 @@ export default function PortfolioTable({
 
         {/* Content — current holdings are free; only position history is
             Pro-gated (handled inside portfolioContent above) */}
-        <Box style={{ padding: tokens.spacing[5] }}>{portfolioContent}</Box>
+        <Box style={{ padding: tokens.spacing[5] }}>
+          {viewMode === 'history' && (
+            <HistoryCompletenessNotice completeness={historyCompleteness} />
+          )}
+          {portfolioContent}
+        </Box>
       </Box>
 
       {/* Market Detail Drawer */}

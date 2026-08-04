@@ -18,6 +18,8 @@ import { BreakdownSection } from './components/BreakdownSection'
 // real-data wiring.
 import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
 import { PnlCalendarHeatmap } from '../charts/PnlCalendarHeatmap'
+import HistoryCompletenessNotice from '../serving/HistoryCompletenessNotice'
+import type { HistoryCompleteness } from '@/lib/data/serving/types'
 
 // 扩展类型以支持新数据
 interface AssetBreakdownData {
@@ -54,6 +56,7 @@ interface ExtendedStatsPageProps {
   assetBreakdown?: AssetBreakdownData
   equityCurve?: EquityCurveData
   positionHistory?: PositionHistoryItem[]
+  historyCompleteness?: HistoryCompleteness | null
   isPro?: boolean
   onUnlock?: () => void
 }
@@ -64,6 +67,7 @@ export default function StatsPage({
   assetBreakdown,
   equityCurve,
   positionHistory = [],
+  historyCompleteness = null,
   isPro = true,
   onUnlock: _onUnlock, // ProGate handles the upgrade CTA itself
 }: ExtendedStatsPageProps) {
@@ -176,6 +180,8 @@ export default function StatsPage({
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
+      <HistoryCompletenessNotice completeness={historyCompleteness} />
+
       {/* Pro gate — blurred preview + unified upsell card (Wave-3 ProGate) */}
       {isPro ? (
         statsContent
