@@ -1,135 +1,67 @@
-import type { ReactElement } from 'react'
+import { render, screen } from '@testing-library/react'
 
-const mockGetPopularTokenRankingSnapshot = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
+const mockTieredGetOrSet = jest.fn()
+const mockCheckRateLimit = jest.fn()
+
+jest.mock('@/lib/i18n/server', () => ({
+  getServerTranslation: async () => ({
+    lang: 'en',
+    t: (key: string) =>
+      ({
+        tokenRankingsContainmentLabel: 'Verification hold',
+        tokenRankingsContainmentTitle: 'Token rankings are temporarily withheld',
+        tokenRankingsContainmentDescription: 'No token ranking is published.',
+        tokenRankingsContainmentBack: 'Return to trader rankings',
+      })[key] ?? key,
+  }),
+}))
 
 jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: () => mockGetSupabaseAdmin(),
+  getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
 }))
 
-jest.mock('@/lib/rankings/token-ranking-snapshot', () => {
-  const actual = jest.requireActual('@/lib/rankings/token-ranking-snapshot')
-  return {
-    ...actual,
-    getPopularTokenRankingSnapshot: (...args: unknown[]) =>
-      mockGetPopularTokenRankingSnapshot(...args),
-  }
-})
-
-jest.mock('../TokensIndexClient', () => ({
-  __esModule: true,
-  default: () => null,
+jest.mock('@/lib/cache/redis-layer', () => ({
+  tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
 }))
 
-import TokensPage, { loadPopularTokensSSR, metadata } from '../page'
-import { TokenRankingReadError } from '@/lib/rankings/token-ranking-snapshot'
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}))
 
-const supabase = { rpc: jest.fn() }
-const snapshot = {
-  contract: 'popular-token-page@1',
-  generation: '7',
-  publishedAt: '2026-07-29T20:00:00.123Z',
-  publishedAtEpochMs: Date.parse('2026-07-29T20:00:00.123Z'),
-  windowThroughDate: '2026-07-29',
-  sourceAsOf: null,
-  sourceThroughDate: '2026-07-29',
-  dailyRowCount: 123,
-  popularRowCount: 0,
-  lookbackDays: 90,
-  limit: 50,
-  total: 0,
-  tokens: [],
-}
+import TokensPage, { metadata } from '../page'
+import TokenRankingContainment from '../TokenRankingContainment'
 
-type TokensPageProps = {
-  initialSnapshot: unknown
-  initialStatus: 'success' | 'unpublished' | 'error'
-}
+const originalFetch = global.fetch
 
-describe('token rankings index SSR publication state', () => {
+describe('token rankings index containment', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockGetSupabaseAdmin.mockReturnValue(supabase)
+    global.fetch = jest.fn()
   })
 
-  it('keeps the verification route out of search indexes without best-trader claims', () => {
-    expect(metadata.robots).toEqual({ index: false, follow: true })
-    expect(JSON.stringify(metadata)).not.toMatch(/\bbest\b|\bdiscover\b/i)
+  afterAll(() => {
+    global.fetch = originalFetch
   })
 
-  it('uses the generation-coordinated v2 snapshot service and passes its full publication', async () => {
-    mockGetPopularTokenRankingSnapshot.mockResolvedValue(snapshot)
+  it('is noindex and renders the server-only publication hold', async () => {
+    expect(metadata.robots).toEqual({ index: false, follow: false, nocache: true })
+    expect(TokensPage().type).toBe(TokenRankingContainment)
 
-    await expect(loadPopularTokensSSR()).resolves.toBe(snapshot)
-    expect(mockGetPopularTokenRankingSnapshot).toHaveBeenCalledWith(
-      supabase,
-      { limit: 50 },
-      undefined
-    )
+    render(await TokenRankingContainment())
 
-    const element = (await TokensPage()) as ReactElement<TokensPageProps>
-    expect(element.props).toMatchObject({
-      initialSnapshot: snapshot,
-      initialStatus: 'success',
-    })
+    expect(screen.getByRole('heading')).toHaveTextContent('Token rankings are temporarily withheld')
+    expect(screen.getByRole('status')).toHaveTextContent('No token ranking is published.')
+    expect(screen.getByText('TOKEN_RANKING_NOT_PUBLISHED')).toBeInTheDocument()
   })
 
-  it('marks an upstream failure as failed without fabricating an empty generation', async () => {
-    mockGetPopularTokenRankingSnapshot.mockRejectedValue(new Error('database unavailable'))
+  it('does not call Supabase, Redis, rate limiting, or fetch', async () => {
+    TokensPage()
+    await TokenRankingContainment()
 
-    await expect(loadPopularTokensSSR()).rejects.toThrow('database unavailable')
-
-    const element = (await TokensPage()) as ReactElement<TokensPageProps>
-    expect(element.props).toMatchObject({
-      initialSnapshot: null,
-      initialStatus: 'error',
-    })
-  })
-
-  it('preserves the intentional unpublished state without issuing a fake empty snapshot', async () => {
-    mockGetPopularTokenRankingSnapshot.mockRejectedValue(
-      new TokenRankingReadError('not_published', 'authority snapshot required')
-    )
-
-    const element = (await TokensPage()) as ReactElement<TokensPageProps>
-    expect(element.props).toMatchObject({
-      initialSnapshot: null,
-      initialStatus: 'unpublished',
-    })
-  })
-
-  it('keeps a legitimate empty published generation distinct from failure', async () => {
-    mockGetPopularTokenRankingSnapshot.mockResolvedValue(snapshot)
-
-    const element = (await TokensPage()) as ReactElement<TokensPageProps>
-    expect(element.props).toMatchObject({
-      initialSnapshot: snapshot,
-      initialStatus: 'success',
-    })
-  })
-
-  it('aborts and marks an SSR timeout as failure instead of an empty success', async () => {
-    jest.useFakeTimers()
-    try {
-      let receivedSignal: AbortSignal | undefined
-      mockGetPopularTokenRankingSnapshot.mockImplementation(
-        (_client: unknown, _input: unknown, options: { signal?: AbortSignal } | undefined) => {
-          receivedSignal = options?.signal
-          return new Promise(() => undefined)
-        }
-      )
-      const page = TokensPage()
-
-      await jest.advanceTimersByTimeAsync(4_000)
-
-      const element = (await page) as ReactElement<TokensPageProps>
-      expect(element.props).toMatchObject({
-        initialSnapshot: null,
-        initialStatus: 'error',
-      })
-      expect(receivedSignal?.aborted).toBe(true)
-    } finally {
-      jest.useRealTimers()
-    }
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })

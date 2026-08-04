@@ -44,10 +44,12 @@ deployment, worker start, migration, production database write, or backup run.
    two-network/cache evidence, and phased Claim/Portfolio sequence. Extend its
    ordered database gate with latest-main `040440` through `040540` migrations
    and their read-only SQL proofs. No runbook text grants production execution.
-8. Token containment is not present in the V1 candidate commit. The combined
-   branch must include the independent production-exact containment change
-   before it can be considered a future deployment candidate; otherwise a V1
-   deployment would reopen the retired token surface.
+8. Token containment is not present in the V1 candidate commit, so the
+   independent production-exact containment change is forward-included. Its
+   API, pages, navigation, sitemap, containment module, checker, and tests are
+   byte-identical to `5ed4718b6`; only the four i18n dictionaries also retain
+   newer main/V1 translations. This prevents a future V1 deployment from
+   reopening the retired token surface.
 
 ## Verification boundary
 

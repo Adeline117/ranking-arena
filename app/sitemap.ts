@@ -250,12 +250,6 @@ export default async function sitemap({
       { url: `${BASE_URL}/hot`, lastModified: now, changeFrequency: 'hourly', priority: 0.9 },
       { url: `${BASE_URL}/groups`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
       {
-        url: `${BASE_URL}/rankings/tokens`,
-        lastModified: now,
-        changeFrequency: 'daily',
-        priority: 0.8,
-      },
-      {
         url: `${BASE_URL}/rankings/exchanges`,
         lastModified: now,
         changeFrequency: 'daily',
