@@ -159,52 +159,110 @@ describe('Chat Settings API', () => {
 
     it('returns 403 for non-member access', async () => {
       mockGetAuthUser.mockResolvedValue({
-        id: 'user-999',
+        id: '33333333-3333-4333-8333-333333333333',
       } as unknown as import('@supabase/supabase-js').User)
 
       // Mock conversation exists but user is not a member
       mockMaybeSingle.mockResolvedValueOnce({
-        data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
+        data: { id: CONVERSATION_ID, user1_id: ACTOR_ID, user2_id: TARGET_ID },
         error: null,
       })
 
       const { GET } = await import('../[conversationId]/settings/route')
-      const request = createRequest('/api/chat/conv-123/settings')
-      const response = await GET(request, { params: { conversationId: 'conv-123' } })
+      const request = createRequest(`/api/chat/${CONVERSATION_ID}/settings`)
+      const response = await GET(request, { params: { conversationId: CONVERSATION_ID } })
 
       expect(response.status).toBe(403)
     })
 
     it('returns default settings when no member record exists', async () => {
       mockGetAuthUser.mockResolvedValue({
-        id: 'user-1',
+        id: ACTOR_ID,
       } as unknown as import('@supabase/supabase-js').User)
 
       // Mock conversation exists and user is a member
       mockMaybeSingle
         .mockResolvedValueOnce({
-          data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
+          data: { id: CONVERSATION_ID, user1_id: ACTOR_ID, user2_id: TARGET_ID },
           error: null,
         })
         // No member settings record
         .mockResolvedValueOnce({ data: null, error: null })
 
       const { GET } = await import('../[conversationId]/settings/route')
-      const request = createRequest('/api/chat/conv-123/settings', {
+      const request = createRequest(`/api/chat/${CONVERSATION_ID}/settings`, {
         headers: { Authorization: 'Bearer valid-token' },
       })
-      const response = await GET(request, { params: { conversationId: 'conv-123' } })
+      const response = await GET(request, { params: { conversationId: CONVERSATION_ID } })
 
       expect(response.status).toBe(200)
       const data = await response.json()
-      expect(data.settings).toEqual({
-        remark: null,
-        is_muted: false,
-        is_pinned: false,
-        is_blocked: false,
-        cleared_before: null,
-        updated_at: null,
+      expect(data).toEqual({
+        actor_id: ACTOR_ID,
+        target_id: TARGET_ID,
+        conversation_id: CONVERSATION_ID,
+        settings: {
+          remark: null,
+          is_muted: false,
+          is_pinned: false,
+          is_blocked: false,
+          cleared_before: null,
+          updated_at: null,
+        },
       })
+      expect(response.headers.get('cache-control')).toContain('no-store')
+    })
+
+    it('rejects an invalid conversation identity before table reads', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: ACTOR_ID } as never)
+
+      const { GET } = await import('../[conversationId]/settings/route')
+      const response = await GET(createRequest('/api/chat/not-a-uuid/settings'), {
+        params: { conversationId: 'not-a-uuid' },
+      })
+
+      expect(response.status).toBe(400)
+      expect(mockFrom).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        user1_id: ACTOR_ID,
+        user2_id: TARGET_ID,
+      },
+      { id: CONVERSATION_ID, user1_id: ACTOR_ID, user2_id: ACTOR_ID },
+      { id: CONVERSATION_ID, user1_id: ACTOR_ID, user2_id: TARGET_ID, extra: true },
+    ])('fails closed on mismatched membership evidence %#', async (conversation) => {
+      mockGetAuthUser.mockResolvedValue({ id: ACTOR_ID } as never)
+      mockMaybeSingle.mockResolvedValueOnce({ data: conversation, error: null })
+
+      const { GET } = await import('../[conversationId]/settings/route')
+      const response = await GET(createRequest(`/api/chat/${CONVERSATION_ID}/settings`), {
+        params: { conversationId: CONVERSATION_ID },
+      })
+
+      expect(response.status).toBe(500)
+    })
+
+    it('fails closed on a settings read error or malformed row', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: ACTOR_ID } as never)
+      mockMaybeSingle
+        .mockResolvedValueOnce({
+          data: { id: CONVERSATION_ID, user1_id: ACTOR_ID, user2_id: TARGET_ID },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: { remark: 7 },
+          error: null,
+        })
+
+      const { GET } = await import('../[conversationId]/settings/route')
+      const response = await GET(createRequest(`/api/chat/${CONVERSATION_ID}/settings`), {
+        params: { conversationId: CONVERSATION_ID },
+      })
+
+      expect(response.status).toBe(500)
     })
   })
 
@@ -286,8 +344,14 @@ describe('Chat Settings API', () => {
 
       expect(response.status).toBe(200)
       const data = await response.json()
-      expect(data.settings.remark).toBe('Café')
-      expect(data.settings.is_pinned).toBe(true)
+      expect(data).toMatchObject({
+        actor_id: ACTOR_ID,
+        target_id: TARGET_ID,
+        conversation_id: CONVERSATION_ID,
+        applied_fields: ['remark', 'is_pinned'],
+        block_status: null,
+        settings: { remark: 'Café', is_pinned: true },
+      })
       expect(mockRpc).toHaveBeenCalledTimes(1)
       expect(mockRpc).toHaveBeenCalledWith('mutate_direct_message_conversation_settings_atomic', {
         p_conversation_id: CONVERSATION_ID,
@@ -331,6 +395,28 @@ describe('Chat Settings API', () => {
         'mutate_direct_message_conversation_settings_atomic',
         expect.objectContaining({ p_clear_history: true })
       )
+    })
+
+    it('rejects clear-history evidence not bound to the acknowledged database revision', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: ACTOR_ID } as never)
+      mockRpc.mockResolvedValueOnce({
+        data: settingsAcknowledgement(['clear_history'], {
+          cleared_before: '2026-07-29T23:59:59.000Z',
+          updated_at: UPDATED_AT,
+        }),
+        error: null,
+      })
+
+      const { PATCH } = await import('../[conversationId]/settings/route')
+      const response = await PATCH(
+        createRequest(`/api/chat/${CONVERSATION_ID}/settings`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clear_history: true }),
+        })
+      )
+
+      expect(response.status).toBe(500)
     })
 
     it('binds the chat block button to the canonical block result and invalidates both users', async () => {

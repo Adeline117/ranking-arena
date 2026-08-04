@@ -12,22 +12,18 @@ import dynamic from 'next/dynamic'
 const ReportModal = dynamic(() => import('@/app/components/ui/ReportModal'), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
-
-type ChatSettings = {
-  remark: string | null
-  is_muted: boolean
-  is_pinned: boolean
-  is_blocked: boolean
-  cleared_before: string | null
-}
-
-type ChatSettingsPatch = {
-  remark?: string | null
-  is_muted?: boolean
-  is_pinned?: boolean
-  is_blocked?: boolean
-  clear_history?: true
-}
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import {
+  readChatSettingsLoadAcknowledgement,
+  readChatSettingsMutationAcknowledgement,
+  type ChatSettings,
+  type ChatSettingsPatch,
+} from './chat-settings-contract'
 
 type OtherUser = {
   id: string
@@ -46,6 +42,31 @@ type ChatSettingsDrawerProps = {
   onSearchOpen: () => void
 }
 
+const DEFAULT_SETTINGS: ChatSettings = {
+  remark: null,
+  is_muted: false,
+  is_pinned: false,
+  is_blocked: false,
+  cleared_before: null,
+  updated_at: null,
+}
+
+type DrawerOperationScope = {
+  actorId: string
+  targetId: string
+  conversationId: string
+  viewer: SettingsViewerSnapshot
+  generation: number
+  scopeKey: string
+}
+
+type SettingsMutationOperation = {
+  id: number
+  scope: DrawerOperationScope
+  updates: ChatSettingsPatch
+  controller: AbortController
+}
+
 export default function ChatSettingsDrawer({
   isOpen,
   onClose,
@@ -57,121 +78,302 @@ export default function ChatSettingsDrawer({
 }: ChatSettingsDrawerProps) {
   const { showToast } = useToast()
   const { t } = useLanguage()
-  const [settings, setSettings] = useState<ChatSettings>({
-    remark: null,
-    is_muted: false,
-    is_pinned: false,
-    is_blocked: false,
-    cleared_before: null,
-  })
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const [settings, setSettings] = useState<ChatSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [hasSettings, setHasSettings] = useState(false)
   const [editingRemark, setEditingRemark] = useState(false)
   const [remarkInput, setRemarkInput] = useState('')
   const [saving, setSaving] = useState(false)
-  const mutationInFlightRef = useRef(false)
   const [reportModalOpen, setReportModalOpen] = useState(false)
+  const mountedRef = useRef(false)
+  const isOpenRef = useRef(isOpen)
+  const conversationIdRef = useRef(conversationId)
+  const targetIdRef = useRef(otherUser.id)
+  const accessTokenRef = useRef(accessToken)
+  const ownerUserIdRef = useRef<string | null>(null)
+  const drawerGenerationRef = useRef(0)
+  const stateScopeKeyRef = useRef<string | null>(null)
+  const loadOperationRef = useRef<{
+    scope: DrawerOperationScope
+    controller: AbortController
+  } | null>(null)
+  const mutationOperationRef = useRef<SettingsMutationOperation | null>(null)
+  const nextMutationIdRef = useRef(0)
 
-  const loadSettings = useCallback(async () => {
-    try {
-      setLoading(true)
-      const res = await fetch(`/api/chat/${conversationId}/settings`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setSettings(data.settings)
-        setRemarkInput(data.settings.remark || '')
-      }
-    } catch (error) {
-      logger.error('Failed to load settings:', error)
-    } finally {
-      setLoading(false)
+  isOpenRef.current = isOpen
+  conversationIdRef.current = conversationId
+  targetIdRef.current = otherUser.id
+  accessTokenRef.current = accessToken
+
+  const renderedViewer = captureSettingsViewer(auth)
+  if (ownerUserIdRef.current === null && renderedViewer) {
+    ownerUserIdRef.current = renderedViewer.userId
+  }
+
+  const scopeIsCurrent = useCallback((scope: DrawerOperationScope) => {
+    return (
+      mountedRef.current &&
+      isOpenRef.current &&
+      drawerGenerationRef.current === scope.generation &&
+      conversationIdRef.current === scope.conversationId &&
+      targetIdRef.current === scope.targetId &&
+      ownerUserIdRef.current === scope.actorId &&
+      isSettingsViewerCurrent(scope.viewer, authRef.current)
+    )
+  }, [])
+
+  const captureScope = useCallback((): DrawerOperationScope | null => {
+    const viewer = captureSettingsViewer(authRef.current)
+    if (
+      !mountedRef.current ||
+      !isOpenRef.current ||
+      !viewer ||
+      viewer.userId !== ownerUserIdRef.current ||
+      viewer.accessToken !== accessTokenRef.current ||
+      !conversationIdRef.current ||
+      !targetIdRef.current
+    ) {
+      return null
     }
-  }, [conversationId, accessToken])
+    const scopeKey = `${viewer.viewerKey}\u0000${viewer.sessionGeneration}\u0000${conversationIdRef.current}\u0000${targetIdRef.current}`
+    return {
+      actorId: viewer.userId,
+      targetId: targetIdRef.current,
+      conversationId: conversationIdRef.current,
+      viewer,
+      generation: drawerGenerationRef.current,
+      scopeKey,
+    }
+  }, [])
+
+  const loadSettings = useCallback(
+    async (expectedScope?: DrawerOperationScope) => {
+      const scope = expectedScope ?? captureScope()
+      if (!scope || loadOperationRef.current || mutationOperationRef.current) return
+      const controller = new AbortController()
+      const operation = { scope, controller }
+      loadOperationRef.current = operation
+      try {
+        setLoading(true)
+        setLoadError(false)
+        const res = await fetch(`/api/chat/${scope.conversationId}/settings`, {
+          headers: { Authorization: `Bearer ${scope.viewer.accessToken}` },
+          signal: controller.signal,
+        })
+        const data: unknown = await res.json().catch(() => null)
+        if (!scopeIsCurrent(scope)) return
+        const nextSettings = readChatSettingsLoadAcknowledgement(data, scope)
+        if (!res.ok || !nextSettings) throw new Error('Invalid settings acknowledgement')
+        setSettings(nextSettings)
+        setRemarkInput(nextSettings.remark || '')
+        stateScopeKeyRef.current = scope.scopeKey
+        setHasSettings(true)
+      } catch (error) {
+        if (!scopeIsCurrent(scope) || controller.signal.aborted) return
+        logger.error('Failed to load settings:', error)
+        setLoadError(true)
+      } finally {
+        if (loadOperationRef.current === operation) {
+          loadOperationRef.current = null
+          if (scopeIsCurrent(scope)) setLoading(false)
+        }
+      }
+    },
+    [captureScope, scopeIsCurrent]
+  )
 
   useEffect(() => {
-    if (isOpen) {
-      loadSettings()
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadOperationRef.current?.controller.abort()
+      mutationOperationRef.current?.controller.abort()
+      loadOperationRef.current = null
+      mutationOperationRef.current = null
     }
-  }, [isOpen, loadSettings])
+  }, [])
 
-  const updateSetting = async (updates: ChatSettingsPatch): Promise<boolean> => {
-    if (mutationInFlightRef.current) return false
-    mutationInFlightRef.current = true
+  useEffect(() => {
+    drawerGenerationRef.current += 1
+    loadOperationRef.current?.controller.abort()
+    mutationOperationRef.current?.controller.abort()
+    loadOperationRef.current = null
+    mutationOperationRef.current = null
+    setSaving(false)
+    setEditingRemark(false)
+    setReportModalOpen(false)
+    if (!isOpen) {
+      setLoading(false)
+      setLoadError(false)
+      return
+    }
+
+    const scope = captureScope()
+    if (!scope) {
+      stateScopeKeyRef.current = null
+      setSettings(DEFAULT_SETTINGS)
+      setRemarkInput('')
+      setHasSettings(false)
+      setLoading(false)
+      setLoadError(true)
+      return
+    }
+    if (stateScopeKeyRef.current !== scope.scopeKey) {
+      stateScopeKeyRef.current = null
+      setSettings(DEFAULT_SETTINGS)
+      setRemarkInput('')
+      setHasSettings(false)
+    }
+    void loadSettings(scope)
+  }, [
+    accessToken,
+    auth.authChecked,
+    auth.loading,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    captureScope,
+    conversationId,
+    isOpen,
+    loadSettings,
+    otherUser.id,
+  ])
+
+  const beginMutation = (updates: ChatSettingsPatch): SettingsMutationOperation | null => {
+    if (mutationOperationRef.current) return null
+    const scope = captureScope()
+    if (!scope || stateScopeKeyRef.current !== scope.scopeKey || !hasSettings) return null
+    loadOperationRef.current?.controller.abort()
+    loadOperationRef.current = null
+    setLoading(false)
+    const operation = {
+      id: ++nextMutationIdRef.current,
+      scope,
+      updates,
+      controller: new AbortController(),
+    }
+    mutationOperationRef.current = operation
     setSaving(true)
+    return operation
+  }
+
+  const mutationIsCurrent = (operation: SettingsMutationOperation) =>
+    mutationOperationRef.current?.id === operation.id && scopeIsCurrent(operation.scope)
+
+  const finishMutation = (operation: SettingsMutationOperation) => {
+    if (mutationOperationRef.current?.id !== operation.id) return
+    mutationOperationRef.current = null
+    if (scopeIsCurrent(operation.scope)) setSaving(false)
+  }
+
+  const executeMutation = async (operation: SettingsMutationOperation): Promise<boolean> => {
+    if (!mutationIsCurrent(operation)) return false
     try {
-      const res = await fetch(`/api/chat/${conversationId}/settings`, {
+      const res = await fetch(`/api/chat/${operation.scope.conversationId}/settings`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${operation.scope.viewer.accessToken}`,
           ...getCsrfHeaders(),
         },
-        body: JSON.stringify(updates),
+        body: JSON.stringify(operation.updates),
+        signal: operation.controller.signal,
       })
 
+      const data: unknown = await res.json().catch(() => null)
+      if (!mutationIsCurrent(operation)) return false
       if (!res.ok) {
-        const data = await res.json()
-        showToast(data.error || t('updateFailed'), 'error')
+        const error =
+          data &&
+          typeof data === 'object' &&
+          !Array.isArray(data) &&
+          typeof (data as Record<string, unknown>).error === 'string'
+            ? ((data as Record<string, unknown>).error as string)
+            : t('updateFailed')
+        showToast(error, 'error')
         return false
       }
 
-      const data = await res.json()
-      setSettings(data.settings)
-      onSettingsChange(data.settings)
+      const nextSettings = readChatSettingsMutationAcknowledgement(
+        data,
+        operation.scope,
+        operation.updates
+      )
+      if (!nextSettings) throw new Error('Invalid settings acknowledgement')
+      setSettings(nextSettings)
+      setRemarkInput(nextSettings.remark || '')
+      onSettingsChange(nextSettings)
 
-      if ('is_muted' in updates) {
-        showToast(updates.is_muted ? t('muted') : t('unmuted'), 'success')
-      } else if ('is_pinned' in updates) {
-        showToast(updates.is_pinned ? t('pinnedChat') : t('unpinnedChat'), 'success')
-      } else if ('is_blocked' in updates) {
-        showToast(updates.is_blocked ? t('blocked') : t('unblocked'), 'success')
-      } else if ('remark' in updates) {
+      if ('is_muted' in operation.updates) {
+        showToast(operation.updates.is_muted ? t('muted') : t('unmuted'), 'success')
+      } else if ('is_pinned' in operation.updates) {
+        showToast(operation.updates.is_pinned ? t('pinnedChat') : t('unpinnedChat'), 'success')
+      } else if ('is_blocked' in operation.updates) {
+        showToast(operation.updates.is_blocked ? t('blocked') : t('unblocked'), 'success')
+      } else if ('remark' in operation.updates) {
         showToast(t('remarkUpdated'), 'success')
       }
       return true
     } catch (error) {
+      if (!mutationIsCurrent(operation) || operation.controller.signal.aborted) return false
       logger.error('Failed to update setting:', error)
       showToast(t('updateFailed'), 'error')
       return false
     } finally {
-      mutationInFlightRef.current = false
-      setSaving(false)
+      finishMutation(operation)
     }
   }
 
-  const handleRemarkSave = () => {
-    if (mutationInFlightRef.current) return
-    const trimmed = remarkInput.trim()
-    if (trimmed.length > 50) {
+  const updateSetting = async (updates: ChatSettingsPatch): Promise<boolean> => {
+    const operation = beginMutation(updates)
+    return operation ? executeMutation(operation) : false
+  }
+
+  const handleRemarkSave = async () => {
+    const trimmed = remarkInput.normalize('NFC').trim()
+    if (Array.from(trimmed).length > 50) {
       showToast(t('remarkMaxLength'), 'warning')
       return
     }
-    void updateSetting({ remark: trimmed || null })
-    setEditingRemark(false)
+    if (await updateSetting({ remark: trimmed || null })) setEditingRemark(false)
   }
 
   const handleClearHistory = async () => {
-    if (mutationInFlightRef.current) return
+    const operation = beginMutation({ clear_history: true })
+    if (!operation) return
     if (!confirm(t('confirmClearChat'))) {
+      finishMutation(operation)
       return
     }
 
-    if (await updateSetting({ clear_history: true })) {
+    if (await executeMutation(operation)) {
       showToast(t('chatHistoryCleared'), 'success')
     }
   }
 
   const handleBlock = async () => {
-    if (mutationInFlightRef.current) return
-    if (settings.is_blocked) {
-      await updateSetting({ is_blocked: false })
-    } else {
-      if (!confirm(t('confirmBlockMessage'))) {
-        return
-      }
-      await updateSetting({ is_blocked: true })
+    const desired = !settings.is_blocked
+    const operation = beginMutation({ is_blocked: desired })
+    if (!operation) return
+    if (desired && !confirm(t('confirmBlockMessage'))) {
+      finishMutation(operation)
+      return
     }
+    await executeMutation(operation)
+  }
+
+  const handleClose = () => {
+    drawerGenerationRef.current += 1
+    loadOperationRef.current?.controller.abort()
+    mutationOperationRef.current?.controller.abort()
+    loadOperationRef.current = null
+    mutationOperationRef.current = null
+    setSaving(false)
+    onClose()
   }
 
   const profileUrl = getProfileUrl(otherUser)
@@ -184,7 +386,7 @@ export default function ChatSettingsDrawer({
     <>
       {/* Overlay */}
       <Box
-        onClick={onClose}
+        onClick={handleClose}
         aria-label="Close settings"
         style={{
           position: 'fixed',
@@ -226,7 +428,7 @@ export default function ChatSettingsDrawer({
             {t('chatSettings')}
           </Text>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               width: 36,
               height: 36,
@@ -257,14 +459,42 @@ export default function ChatSettingsDrawer({
           </button>
         </Box>
 
-        {loading ? (
+        {loading && !hasSettings ? (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
             <Text size="sm" color="tertiary">
               {t('loading')}
             </Text>
           </Box>
+        ) : loadError && !hasSettings ? (
+          <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
+            <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+              {t('loadFailed')}
+            </Text>
+            <button type="button" onClick={() => void loadSettings()}>
+              {t('retry')}
+            </button>
+          </Box>
         ) : (
           <Box style={{ flex: 1, overflow: 'auto' }}>
+            {loadError && (
+              <Box
+                role="alert"
+                style={{
+                  padding: tokens.spacing[3],
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: tokens.colors.bg.secondary,
+                }}
+              >
+                <Text size="xs" color="tertiary">
+                  {t('loadFailed')}
+                </Text>
+                <button type="button" onClick={() => void loadSettings()}>
+                  {t('retry')}
+                </button>
+              </Box>
+            )}
             {/* User Info Section */}
             <Box
               style={{
@@ -333,7 +563,7 @@ export default function ChatSettingsDrawer({
                       border: `1px solid ${tokens.colors.border.primary}`,
                       background: 'transparent',
                       color: tokens.colors.text.secondary,
-                      fontSize: 12,
+                      fontSize: tokens.typography.fontSize.xs,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
@@ -352,7 +582,7 @@ export default function ChatSettingsDrawer({
                     aria-label={t('enterRemarkName')}
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleRemarkSave()
+                      if (e.key === 'Enter') void handleRemarkSave()
                       if (e.key === 'Escape') setEditingRemark(false)
                     }}
                     style={{
@@ -362,7 +592,7 @@ export default function ChatSettingsDrawer({
                       border: `1px solid ${tokens.colors.border.primary}`,
                       background: tokens.colors.bg.secondary,
                       color: tokens.colors.text.primary,
-                      fontSize: 14,
+                      fontSize: tokens.typography.fontSize.base,
                       outline: 'none',
                     }}
                   />
@@ -375,8 +605,8 @@ export default function ChatSettingsDrawer({
                       border: 'none',
                       background: `linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)`,
                       color: tokens.colors.white,
-                      fontSize: 13,
-                      fontWeight: 600,
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.semibold,
                       cursor: saving ? 'not-allowed' : 'pointer',
                       opacity: saving ? 0.6 : 1,
                     }}
@@ -391,7 +621,7 @@ export default function ChatSettingsDrawer({
                       border: `1px solid ${tokens.colors.border.primary}`,
                       background: 'transparent',
                       color: tokens.colors.text.secondary,
-                      fontSize: 13,
+                      fontSize: tokens.typography.fontSize.sm,
                       cursor: 'pointer',
                     }}
                   >
@@ -427,7 +657,7 @@ export default function ChatSettingsDrawer({
                 label={t('searchChatHistory')}
                 onClick={() => {
                   onSearchOpen()
-                  onClose()
+                  handleClose()
                 }}
               />
 
@@ -633,7 +863,7 @@ function SettingsButton({
         border: 'none',
         background: 'transparent',
         color: textColor,
-        fontSize: 14,
+        fontSize: tokens.typography.fontSize.base,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.6 : 1,
         transition: 'background 0.2s',
@@ -692,7 +922,7 @@ function SettingsToggle({
         border: 'none',
         background: 'transparent',
         color: tokens.colors.text.primary,
-        fontSize: 14,
+        fontSize: tokens.typography.fontSize.base,
         cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'background 0.2s',
         textAlign: 'left',

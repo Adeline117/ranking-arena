@@ -65,6 +65,27 @@ const ConversationSettingsSchema = z
     updated_at: z.string().datetime({ offset: true }),
   })
   .strict()
+const ConversationSettingsReadSchema = z
+  .object({
+    remark: z
+      .string()
+      .max(200)
+      .refine((value) => Array.from(value).length <= 50)
+      .nullable(),
+    is_muted: z.boolean(),
+    is_pinned: z.boolean(),
+    is_blocked: z.boolean(),
+    cleared_before: z.string().datetime({ offset: true }).nullable(),
+    updated_at: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict()
+const ConversationMembershipSchema = z
+  .object({
+    id: CanonicalUuidSchema,
+    user1_id: CanonicalUuidSchema,
+    user2_id: CanonicalUuidSchema,
+  })
+  .strict()
 const SettingsSuccessSchema = z
   .object({
     success: z.literal(true),
@@ -151,7 +172,13 @@ function acknowledgementMatches(
   } else if (result.block_status !== null) {
     return false
   }
-  if (input.clear_history && result.settings.cleared_before === null) return false
+  if (
+    input.clear_history &&
+    (result.settings.cleared_before === null ||
+      result.settings.cleared_before !== result.settings.updated_at)
+  ) {
+    return false
+  }
 
   return true
 }
@@ -170,8 +197,7 @@ function failureResponse(result: SettingsFailure) {
 
 async function verifyMembership(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  conversationId: string,
-  userId: string
+  conversationId: string
 ) {
   const { data: conversation, error } = await supabase
     .from('conversations')
@@ -179,12 +205,11 @@ async function verifyMembership(
     .eq('id', conversationId)
     .maybeSingle()
 
-  if (error || !conversation) {
-    return { valid: false, status: 404, message: 'Conversation not found' }
+  if (error) {
+    return { valid: false, status: 500, message: 'Failed to load settings' }
   }
-
-  if (conversation.user1_id !== userId && conversation.user2_id !== userId) {
-    return { valid: false, status: 403, message: 'No permission to access this conversation' }
+  if (!conversation) {
+    return { valid: false, status: 404, message: 'Conversation not found' }
   }
 
   return { valid: true, conversation }
@@ -197,39 +222,83 @@ export async function GET(
   try {
     const user = await getAuthUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return privateJson({ error: 'Unauthorized' }, 401)
     }
 
+    const parsedActorId = CanonicalUuidSchema.safeParse(user.id)
     const resolvedParams = params instanceof Promise ? await params : params
-    const conversationId = resolvedParams.conversationId
+    const parsedConversationId = CanonicalUuidSchema.safeParse(resolvedParams.conversationId)
+    if (!parsedActorId.success || !parsedConversationId.success) {
+      return privateJson({ error: 'Invalid conversation id' }, 400)
+    }
+    const actorId = parsedActorId.data
+    const conversationId = parsedConversationId.data
     const supabase = getSupabaseAdmin()
 
-    const membership = await verifyMembership(supabase, conversationId, user.id)
+    const membership = await verifyMembership(supabase, conversationId)
     if (!membership.valid) {
-      return NextResponse.json({ error: membership.message }, { status: membership.status })
+      return privateJson({ error: membership.message }, membership.status)
     }
+    const parsedMembership = ConversationMembershipSchema.safeParse(membership.conversation)
+    if (
+      !parsedMembership.success ||
+      parsedMembership.data.id !== conversationId ||
+      parsedMembership.data.user1_id === parsedMembership.data.user2_id
+    ) {
+      logger.error('Direct-message settings read returned invalid membership evidence', {
+        actorId,
+        conversationId,
+      })
+      return privateJson({ error: 'Failed to load settings' }, 500)
+    }
+    if (parsedMembership.data.user1_id !== actorId && parsedMembership.data.user2_id !== actorId) {
+      return privateJson({ error: 'No permission to access this conversation' }, 403)
+    }
+    const targetId =
+      parsedMembership.data.user1_id === actorId
+        ? parsedMembership.data.user2_id
+        : parsedMembership.data.user1_id
 
     // Get or create member settings
-    const { data: settings } = await supabase
+    const { data: settings, error: settingsError } = await supabase
       .from('conversation_members')
       .select('remark, is_muted, is_pinned, is_blocked, cleared_before, updated_at')
       .eq('conversation_id', conversationId)
-      .eq('user_id', user.id)
+      .eq('user_id', actorId)
       .maybeSingle()
 
-    return NextResponse.json({
-      settings: settings || {
-        remark: null,
-        is_muted: false,
-        is_pinned: false,
-        is_blocked: false,
-        cleared_before: null,
-        updated_at: null,
-      },
+    if (settingsError) {
+      logger.error('Direct-message settings read failed', { actorId, conversationId })
+      return privateJson({ error: 'Failed to load settings' }, 500)
+    }
+    const parsedSettings =
+      settings === null
+        ? ConversationSettingsReadSchema.safeParse({
+            remark: null,
+            is_muted: false,
+            is_pinned: false,
+            is_blocked: false,
+            cleared_before: null,
+            updated_at: null,
+          })
+        : ConversationSettingsSchema.safeParse(settings)
+    if (!parsedSettings.success) {
+      logger.error('Direct-message settings read returned invalid settings evidence', {
+        actorId,
+        conversationId,
+      })
+      return privateJson({ error: 'Failed to load settings' }, 500)
+    }
+
+    return privateJson({
+      actor_id: actorId,
+      target_id: targetId,
+      conversation_id: conversationId,
+      settings: parsedSettings.data,
     })
   } catch (error: unknown) {
     logger.apiError('/api/chat/[conversationId]/settings', error, { method: 'GET' })
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    return privateJson({ error: 'Server error' }, 500)
   }
 }
 
@@ -312,7 +381,14 @@ export const PATCH = withAuth(
       )
     }
 
-    return privateJson({ settings: result.settings })
+    return privateJson({
+      actor_id: result.actor_id,
+      target_id: result.target_id,
+      conversation_id: result.conversation_id,
+      applied_fields: result.applied_fields,
+      block_status: result.block_status,
+      settings: result.settings,
+    })
   },
   { name: 'chat-conversation-settings', rateLimit: 'write' }
 )
