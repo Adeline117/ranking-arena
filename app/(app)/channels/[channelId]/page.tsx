@@ -15,6 +15,7 @@ import { usePresence, formatLastSeen } from '@/lib/hooks/usePresence'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+import { readChatUploadAcknowledgement } from '@/lib/chat/upload-contract'
 import {
   applyReactionDelta,
   DM_REACTION_EMOJIS,
@@ -45,6 +46,8 @@ type ChannelMemberMutationScope = {
   viewerKey: string
   sessionGeneration: number
 }
+
+type ChannelUploadOperation = ChannelMemberMutationScope & { controller: AbortController }
 
 export default function ChannelPage({ params }: { params: Promise<{ channelId: string }> }) {
   const router = useRouter()
@@ -117,6 +120,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   const loadChannelRequestGenerationRef = useRef(0)
   const loadChannelAbortRef = useRef<AbortController | null>(null)
   const loadOlderInFlightRef = useRef<Set<string>>(new Set())
+  const uploadOperationRef = useRef<ChannelUploadOperation | null>(null)
   const messagesRef = useRef(messages)
   const userIdRef = useRef(userId)
   const channelIdRef = useRef(channelId)
@@ -177,6 +181,8 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     return () => {
       mountedRef.current = false
       loadChannelAbortRef.current?.abort()
+      uploadOperationRef.current?.controller.abort()
+      uploadOperationRef.current = null
     }
   }, [])
 
@@ -206,6 +212,8 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     // channel's pending state disable the new viewer/channel composer.
     loadChannelRequestGenerationRef.current += 1
     loadChannelAbortRef.current?.abort()
+    uploadOperationRef.current?.controller.abort()
+    uploadOperationRef.current = null
     setSending(false)
     memberMutationInFlightRef.current.clear()
     loadOlderInFlightRef.current.clear()
@@ -680,38 +688,76 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !userId || !channelId) return
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (!file || !userId || !channelId || !accessToken || uploadOperationRef.current) return
+    const operation: ChannelUploadOperation = {
+      actorId: userId,
+      channelId,
+      accessToken,
+      viewerKey,
+      sessionGeneration,
+      controller: new AbortController(),
+    }
+    uploadOperationRef.current = operation
+    const isCurrent = () =>
+      mountedRef.current &&
+      uploadOperationRef.current === operation &&
+      !operation.controller.signal.aborted &&
+      userIdRef.current === operation.actorId &&
+      channelIdRef.current === operation.channelId &&
+      viewerKeyRef.current === operation.viewerKey &&
+      sessionGenerationRef.current === operation.sessionGeneration
     setUploading(true)
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('conversationId', channelId)
+      formData.append('conversationId', operation.channelId)
       formData.append('scopeType', 'channel')
-      // /api/chat/upload is withAuth (Bearer header only) — 401'd without the token
       const res = await globalThis.fetch('/api/chat/upload', {
         method: 'POST',
         headers: {
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          Authorization: `Bearer ${operation.accessToken}`,
           ...getCsrfHeaders(),
         },
         body: formData,
+        signal: operation.controller.signal,
       })
-      const data = await res.json()
-      if (res.ok) {
+      const data: unknown = await res.json().catch(() => null)
+      if (!isCurrent()) return
+      const acknowledgement = res.ok
+        ? readChatUploadAcknowledgement(data, {
+            scopeId: operation.channelId,
+            originalName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            storageBaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+          })
+        : null
+      if (acknowledgement) {
         setPendingAttachment({
-          url: data.url,
-          type: data.category,
-          originalName: data.originalName,
-          fileSize: data.fileSize,
+          url: acknowledgement.url,
+          type: acknowledgement.category,
+          originalName: acknowledgement.originalName,
+          fileSize: acknowledgement.fileSize,
         })
       } else {
-        showToast(data.error || t('uploadFailed'), 'error')
+        showToast(t('uploadFailed'), 'error')
       }
-    } catch {
-      showToast(t('uploadFailed'), 'error')
+    } catch (error) {
+      if (isCurrent() && !(error instanceof DOMException && error.name === 'AbortError')) {
+        showToast(t('uploadFailed'), 'error')
+      }
     } finally {
-      setUploading(false)
+      if (uploadOperationRef.current === operation) uploadOperationRef.current = null
+      if (
+        mountedRef.current &&
+        userIdRef.current === operation.actorId &&
+        channelIdRef.current === operation.channelId &&
+        viewerKeyRef.current === operation.viewerKey &&
+        sessionGenerationRef.current === operation.sessionGeneration
+      ) {
+        setUploading(false)
+      }
     }
   }
 

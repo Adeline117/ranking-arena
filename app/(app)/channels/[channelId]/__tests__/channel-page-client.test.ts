@@ -110,4 +110,15 @@ describe('channel page client snapshot', () => {
       /const data: unknown = await res\.json\(\)\.catch\(\(\) => null\)[\s\S]{0,100}if \(!isCurrent\(\)\) return/
     )
   })
+
+  it('binds one attachment upload to the active viewer and exact storage receipt', () => {
+    const page = readFileSync(join(__dirname, '../page.tsx'), 'utf8')
+
+    expect(page).toContain('!accessToken || uploadOperationRef.current')
+    expect(page).toContain('uploadOperationRef.current = operation')
+    expect(page).toContain('signal: operation.controller.signal')
+    expect(page).toContain('readChatUploadAcknowledgement(data, {')
+    expect(page).toContain("storageBaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''")
+    expect(page).toContain('uploadOperationRef.current?.controller.abort()')
+  })
 })
