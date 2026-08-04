@@ -1,8 +1,8 @@
 name: Lighthouse CI
 
 on:
+  # Stacked PRs must retain the same preview-build contract as main-bound PRs.
   pull_request:
-    branches: [main]
 
 env:
   # Pull-request code must never receive production database credentials.

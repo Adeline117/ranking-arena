@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  # Validate stacked and release-branch PRs as rigorously as main-bound PRs.
   pull_request:
-    branches: [main]
 
 # Per-SHA group, no cancel: 7 个并发会话高频直推 main，per-ref cancel-in-progress
 # 会让每个 run 都被下一次 push 取消——CI 在忙碌时段永远跑不完（2026-07-02 差距

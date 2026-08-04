@@ -5,6 +5,14 @@ import test from 'node:test'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/lighthouse-ci.yml'), 'utf8')
+const ciWorkflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
+
+test('CI validates pull requests targeting stacked branches', () => {
+  for (const source of [ciWorkflow, workflow]) {
+    assert.match(source, /\n  pull_request:\n/)
+    assert.doesNotMatch(source, /pull_request:\n\s+branches:/)
+  }
+})
 
 test('Lighthouse builds pull requests without production credentials', () => {
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL: https:\/\/placeholder\.supabase\.co/)
