@@ -57,6 +57,12 @@ export default function RankingControls({
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [lastDataTime, setLastDataTime] = useState<string>('')
 
+  const clearNavTimer = useCallback(() => {
+    if (!navTimerRef.current) return
+    clearTimeout(navTimerRef.current)
+    navTimerRef.current = null
+  }, [])
+
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage))
 
   // Format only after hydration because the browser timezone can differ from
@@ -85,11 +91,10 @@ export default function RankingControls({
 
   // Clear nav error when transition completes successfully
   useEffect(() => {
-    if (!isPending && navTimerRef.current) {
-      clearTimeout(navTimerRef.current)
-      navTimerRef.current = null
-    }
-  }, [isPending])
+    if (!isPending) clearNavTimer()
+  }, [clearNavTimer, isPending])
+
+  useEffect(() => clearNavTimer, [clearNavTimer])
 
   // Track the navigation target so the user can retry the same action
   // after a transient error instead of having to re-click.
@@ -103,6 +108,7 @@ export default function RankingControls({
       }
       setNavError(false)
       lastNavRef.current = { range, pg }
+      clearNavTimer()
 
       const params = new URLSearchParams()
       if (range !== '90D') params.set('range', range)
@@ -121,7 +127,7 @@ export default function RankingControls({
         router.push(qs ? `/?${qs}` : '/', { scroll: false })
       })
     },
-    [isOffline, router, startTransition]
+    [clearNavTimer, isOffline, router, startTransition]
   )
 
   const retryLastNav = useCallback(() => {
@@ -130,7 +136,11 @@ export default function RankingControls({
   }, [navigate])
 
   return (
-    <div className="ssr-controls" data-pending={isPending ? 'true' : undefined}>
+    <div
+      className="ssr-controls"
+      data-pending={isPending ? 'true' : undefined}
+      aria-busy={isPending}
+    >
       {/* Data freshness timestamp — always visible so users know data age */}
       {lastDataTime && !isOffline && !navError && (
         <div
@@ -179,7 +189,6 @@ export default function RankingControls({
             <button
               type="button"
               onClick={retryLastNav}
-              disabled={isPending}
               style={{
                 background: 'rgba(251, 146, 60, 0.3)',
                 border: '1px solid rgba(251, 146, 60, 0.5)',
@@ -189,8 +198,7 @@ export default function RankingControls({
                 // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
                 fontSize: 11,
                 fontWeight: tokens.typography.fontWeight.semibold,
-                cursor: isPending ? 'not-allowed' : 'pointer',
-                opacity: isPending ? 0.6 : 1,
+                cursor: 'pointer',
               }}
             >
               {t('rankingControlsRetry')}
@@ -203,9 +211,9 @@ export default function RankingControls({
         {RANGES.map((r) => (
           <button
             key={r}
+            type="button"
             className={`ssr-range-btn${r === activeRange ? ' ssr-range-active' : ''}`}
             onClick={() => navigate(r, 0)}
-            disabled={isPending}
             aria-pressed={r === activeRange}
             aria-label={`Show ${r} rankings`}
           >
@@ -219,7 +227,7 @@ export default function RankingControls({
           <button
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, 0)}
-            disabled={page <= 0 || isPending}
+            disabled={page <= 0}
             aria-label="First page"
           >
             «
@@ -227,7 +235,7 @@ export default function RankingControls({
           <button
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, page - 1)}
-            disabled={page <= 0 || isPending}
+            disabled={page <= 0}
             aria-label="Previous page"
           >
             ‹ {t('rankingControlsPrev')}
@@ -238,7 +246,7 @@ export default function RankingControls({
           <button
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, page + 1)}
-            disabled={page >= totalPages - 1 || isPending}
+            disabled={page >= totalPages - 1}
             aria-label="Next page"
           >
             {t('rankingControlsNext')} ›
@@ -246,7 +254,7 @@ export default function RankingControls({
           <button
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, totalPages - 1)}
-            disabled={page >= totalPages - 1 || isPending}
+            disabled={page >= totalPages - 1}
             aria-label="Last page"
           >
             »
