@@ -28,13 +28,7 @@ import {
 } from '@/lib/ingest/raw'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
-import {
-  getHistoryCursor,
-  getPositionHistoryPublicationCheckpoint,
-  publishHistoryRows,
-  publishProfile,
-  type PositionHistoryPublicationCheckpoint,
-} from '@/lib/ingest/serving/publish'
+import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
@@ -143,10 +137,13 @@ async function persistPositionHistory(
   session: FetchSession,
   adapter: SourceAdapter,
   src: SourceRow,
-  trader: NativeCohortTrader,
-  checkpoint: PositionHistoryPublicationCheckpoint
+  trader: NativeCohortTrader
 ): Promise<number> {
-  const cursor = checkpoint.cursor
+  // The retained @1 publication checkpoint was derived from typed rows whose
+  // parser/source-fact conservation was never proved. It cannot seed the @2
+  // evidence chain: the first trusted acquisition must be cursorless and
+  // exhaustive so facts omitted by the old parser remain recoverable.
+  const cursor = null
   const acquisition = await captureHistoryAcquisition({
     source: src,
     traderId: trader.id,
@@ -174,26 +171,33 @@ async function persistPositionHistory(
   let evidenceInput: Parameters<typeof writePositionHistoryRawArtifact>[0] = rawInput
   let evidenceFailure: string | null = null
   if (acquisition.artifact.termination.evidence_state === 'verified') {
-    const verifiedEvidence = buildPositionHistoryAcquisitionArtifactV2({
-      acquisition: acquisition.artifact,
-      expectedAcquisition: {
-        sourceRunId: acquisition.sourceRunId,
-        sourceId: src.id,
-        sourceSlug: src.slug,
-        traderId: trader.id,
-        exchangeTraderId: trader.exchange_trader_id,
-      },
-    })
-    if (verifiedEvidence.state === 'verified') {
-      // @2 proves terminal acquisition plus framework-enumerated source facts,
-      // but not parser projection or ranking eligibility. Persist only its RAW
-      // pointer; the legacy @1 publication RPC must remain unreachable here.
-      evidenceInput = {
-        artifact: verifiedEvidence.artifact,
-        sourceRunId: verifiedEvidence.sourceRunId,
-      }
+    if (acquisition.artifact.termination.scan_terminal_state !== 'exhausted') {
+      // A cursorless genesis cannot terminate by overlap: there is no trusted
+      // prior boundary for the overlap to prove. Keep the RAW audit artifact,
+      // but never promote it into the @2 trusted acquisition chain.
+      evidenceFailure = 'cursorless_genesis_not_exhausted'
     } else {
-      evidenceFailure = verifiedEvidence.reason
+      const verifiedEvidence = buildPositionHistoryAcquisitionArtifactV2({
+        acquisition: acquisition.artifact,
+        expectedAcquisition: {
+          sourceRunId: acquisition.sourceRunId,
+          sourceId: src.id,
+          sourceSlug: src.slug,
+          traderId: trader.id,
+          exchangeTraderId: trader.exchange_trader_id,
+        },
+      })
+      if (verifiedEvidence.state === 'verified') {
+        // @2 proves terminal acquisition plus framework-enumerated source facts,
+        // but not parser projection or ranking eligibility. Persist only its RAW
+        // pointer; the legacy @1 publication RPC must remain unreachable here.
+        evidenceInput = {
+          artifact: verifiedEvidence.artifact,
+          sourceRunId: verifiedEvidence.sourceRunId,
+        }
+      } else {
+        evidenceFailure = verifiedEvidence.reason
+      }
     }
   }
 
@@ -221,8 +225,7 @@ async function crawlTraderHistories(
   let written = 0
   for (const kind of historyKinds(adapter, src)) {
     if (kind === 'position_history') {
-      const checkpoint = await getPositionHistoryPublicationCheckpoint(src.id, trader.id)
-      written += await persistPositionHistory(session, adapter, src, trader, checkpoint)
+      written += await persistPositionHistory(session, adapter, src, trader)
       continue
     }
     const cursor = await getHistoryCursor(trader.id, kind)

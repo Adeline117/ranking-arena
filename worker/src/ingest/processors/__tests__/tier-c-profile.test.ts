@@ -20,7 +20,7 @@ const mockResolveTraderId = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockGetHistoryCursor = jest.fn()
 const mockNextHistoryCursor = jest.fn()
-const mockPublishHistoryRowsInTransaction = jest.fn()
+const mockPublishHistoryRows = jest.fn()
 const mockDbQuery = jest.fn()
 const mockIngestClientQuery = jest.fn()
 const mockIngestClientRelease = jest.fn()
@@ -50,9 +50,7 @@ jest.mock('@/lib/ingest/staging/rejects', () => ({
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
   getHistoryCursor: (...args: unknown[]) => mockGetHistoryCursor(...args),
-  publishHistoryRows: jest.fn(),
-  publishHistoryRowsInTransaction: (...args: unknown[]) =>
-    mockPublishHistoryRowsInTransaction(...args),
+  publishHistoryRows: (...args: unknown[]) => mockPublishHistoryRows(...args),
   publishPositions: jest.fn(),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
   resolveTraderId: (...args: unknown[]) => mockResolveTraderId(...args),
@@ -139,6 +137,13 @@ const positionHistoryJob = {
   },
 } as Job<TierCJobData>
 
+const ordersJob = {
+  data: {
+    ...job.data,
+    surface: 'orders',
+  },
+} as Job<TierCJobData>
+
 function positionRow(id: number): ParsedHistoryRow {
   return {
     kind: 'position_history',
@@ -154,6 +159,18 @@ function positionRow(id: number): ParsedHistoryRow {
     dedupeHash: `position-${id}`,
     raw: { id },
   }
+}
+
+const orderRow: ParsedHistoryRow = {
+  kind: 'orders',
+  ts: '2026-07-15T11:00:00.000Z',
+  orderKind: 'close_long',
+  symbol: 'BTCUSDT',
+  side: 'long',
+  price: 110,
+  qty: 1,
+  dedupeHash: 'order-1',
+  raw: { id: 'order-1' },
 }
 
 function positionHistoryStream(
@@ -204,6 +221,21 @@ function positionHistoryAdapter(withVerifier = true) {
           }),
         }
       : {}),
+  }
+}
+
+function ordersAdapter() {
+  return {
+    capabilities: {
+      profile: true,
+      positions: true,
+      positionHistory: false,
+      orders: true,
+      transfers: false,
+      copiers: false,
+    },
+    getHistory: mockGetHistory,
+    parseHistory: mockParseHistory,
   }
 }
 
@@ -274,7 +306,7 @@ describe('Tier-C incomplete profile window gate', () => {
     mockSessionClose.mockResolvedValue(undefined)
     mockGetHistoryCursor.mockResolvedValue('2026-07-01T00:00:00.000Z')
     mockNextHistoryCursor.mockReturnValue('2026-07-15T11:00:00.000Z')
-    mockPublishHistoryRowsInTransaction.mockResolvedValue(1)
+    mockPublishHistoryRows.mockResolvedValue(1)
     mockIngestClientQuery.mockResolvedValue({ rows: [], rowCount: 0 })
     mockIngestClientRelease.mockReturnValue(undefined)
   })
@@ -508,7 +540,7 @@ describe('Tier-C incomplete profile window gate', () => {
       },
     })
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(renderPayload.rows).toEqual([
       expect.not.objectContaining({ raw: expect.anything() }),
@@ -557,7 +589,7 @@ describe('Tier-C incomplete profile window gate', () => {
       },
     })
     expect(mockNextHistoryCursor).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(renderPayload).toMatchObject({
       sourceAsOf: null,
@@ -594,7 +626,7 @@ describe('Tier-C incomplete profile window gate', () => {
     })
     expect(mockParseHistory).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
     ).toBe(false)
@@ -613,8 +645,30 @@ describe('Tier-C incomplete profile window gate', () => {
 
     expect(mockWritePositionHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockRedisSet).not.toHaveBeenCalled()
-    expect(mockPublishHistoryRowsInTransaction).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+  })
+
+  it('keeps non-position Tier-C history on the compatibility publisher', async () => {
+    mockGetAdapter.mockReturnValue(ordersAdapter())
+    mockGetHistory.mockImplementation(() => positionHistoryStream(1))
+    mockParseHistory.mockReturnValue([orderRow])
+
+    await expect(processTierC(ordersJob, 'local')).resolves.toMatchObject({
+      traderId: 42,
+      surface: 'orders',
+      rows: 1,
+    })
+
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockWritePositionHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockPublishHistoryRows).toHaveBeenCalledWith(
+      src,
+      42,
+      'orders',
+      [orderRow],
+      '2026-07-15T11:00:00.000Z'
+    )
   })
 
   it('keeps position source freshness distinct from the capture clock', async () => {

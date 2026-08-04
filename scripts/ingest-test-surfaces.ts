@@ -152,10 +152,11 @@ async function main() {
         console.log(`[positions] ${trader.exchange_trader_id}: ${positions.length} open`)
       }
 
-      // histories (capability-gated, like Tier-B)
-      for (const kind of ['position_history', 'copiers'] as const) {
-        if (kind === 'position_history' && !adapter.capabilities.positionHistory) continue
-        if (kind === 'copiers' && !adapter.capabilities.copiers) continue
+      // Compatibility histories only. Position history requires the immutable
+      // @2 acquisition + parser-conservation receipt path; this manual smoke
+      // script must never publish its bounded three-page sample as typed data.
+      for (const kind of ['copiers'] as const) {
+        if (!adapter.capabilities.copiers) continue
         const cursor = await getHistoryCursor(trader.id, kind)
         const rows: import('@/lib/ingest/core/types').ParsedHistoryRow[] = []
         let pages = 0
@@ -173,7 +174,8 @@ async function main() {
         }
         let newest: string | null = null
         for (const row of rows) {
-          const ts = row.kind === 'position_history' ? row.closedAt : row.ts
+          if (row.kind !== kind) throw new Error(`history row kind does not match ${kind}`)
+          const ts = row.ts
           if (ts && (newest === null || ts > newest)) newest = ts
         }
         const written = await publishHistoryRows(src, trader.id, kind, rows, newest)
