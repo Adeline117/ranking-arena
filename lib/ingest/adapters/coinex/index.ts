@@ -263,8 +263,11 @@ const coinexAdapter: SourceAdapter = {
       }).candidates.length
       if (candidateCount === 0) return
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      const hasNext = Boolean((payload as { data?: { has_next?: unknown } })?.data?.has_next)
-      if (!hasNext || candidateCount < limit) return
+      const hasNext = (payload as { data?: { has_next?: unknown } })?.data?.has_next
+      if (typeof hasNext !== 'boolean') {
+        throw new Error('[coinex] copiers returned an invalid has_next terminal marker')
+      }
+      if (!hasNext) return
     }
   },
 

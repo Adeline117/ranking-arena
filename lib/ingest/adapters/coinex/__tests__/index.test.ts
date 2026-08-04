@@ -117,8 +117,15 @@ describe('CoinEx copier pagination', () => {
     expect(requests).toHaveBeenCalledTimes(2)
   })
 
-  it('stops on a genuinely short RAW candidate page even when has_next is true', async () => {
+  it('continues a short RAW candidate page when has_next is explicitly true', async () => {
     const { fetchSession, requests } = session([payload(9, true), payload(1, false)])
+
+    expect(await copiers(fetchSession)).toHaveLength(2)
+    expect(requests).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops on an explicit has_next=false marker', async () => {
+    const { fetchSession, requests } = session([payload(10, false), payload(1, false)])
 
     expect(await copiers(fetchSession)).toHaveLength(1)
     expect(requests).toHaveBeenCalledTimes(1)

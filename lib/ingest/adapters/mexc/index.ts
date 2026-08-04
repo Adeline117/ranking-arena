@@ -334,7 +334,10 @@ const mexcAdapter: SourceAdapter = {
       if (candidateCount === 0) return
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       const totalPage = Number((payload as { data?: { totalPage?: unknown } })?.data?.totalPage)
-      if (Number.isFinite(totalPage) && totalPage > 0 && pageIndex >= totalPage) return
+      if (Number.isSafeInteger(totalPage) && totalPage > 0) {
+        if (pageIndex >= totalPage) return
+        continue
+      }
       if (candidateCount < limit) return
     }
   },
