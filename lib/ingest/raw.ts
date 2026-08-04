@@ -50,6 +50,7 @@ import {
 } from './strict-canonical-json'
 import {
   copierSnapshotSourceRunId,
+  copierSnapshotStoragePath,
   COPIER_SNAPSHOT_RAW_ARTIFACT_ROLE,
   revalidateCopierSnapshotArtifact,
   type CopierSnapshotArtifact,
@@ -1452,15 +1453,12 @@ function normalizeCopierSnapshotRawArtifactInput(
 ): NormalizedCopierSnapshotRawArtifactInput {
   const artifact = revalidateCopierSnapshotArtifact(input.artifact)
   const sourceRunId = copierSnapshotSourceRunId(artifact)
-  const observedEpochMs = Date.parse(artifact.observed_at)
   const jobType = artifact.lane === 'tier_b' ? 'history:copiers' : 'tier_c'
   return {
     artifact,
     sourceRunId,
     jobType,
-    storagePath:
-      `${artifact.source.slug}/copier_snapshot/${artifact.lane}/` +
-      `${observedEpochMs}_${sourceRunId}.json.gz`,
+    storagePath: copierSnapshotStoragePath(artifact),
   }
 }
 
