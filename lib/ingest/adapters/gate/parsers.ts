@@ -489,7 +489,7 @@ export function parseGateTransfers(raw: unknown, _ctx: ParseCtx): ParsedHistoryR
 }
 
 /**
- * Copiers — futures: GET .../trader/follow_user (top-10 only, spec §11.10);
+ * Copiers — futures: GET .../trader/follow_user (reported-total pagination);
  * CFD: GET /apiw/v2/copy_tradfi/leader/public/followers → data.list.
  * Labels stored for dedupe only — NEVER rendered (spec §6 PII).
  */
@@ -503,11 +503,13 @@ export function parseGateCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[
       // futures shape
       out.push({
         kind: 'copiers',
-        ts: isoSecs(item.create_time) ?? ctx.scrapedAt,
+        // create_time is when the follow relationship began, not this
+        // snapshot's observation clock. Keep one job-scoped parser clock.
+        ts: ctx.scrapedAt,
         copierLabel: String(item.follow_id),
         copierPnl: num(item.profit),
         copierInvested: num(item.follow_money),
-        copyDurationDays: null,
+        copyDurationDays: int(item.follow_day),
         dedupeHash: dedupeHash('gate_cp', item.follow_id, item.create_time),
         raw: item,
       })

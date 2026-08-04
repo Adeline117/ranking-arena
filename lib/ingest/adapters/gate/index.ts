@@ -11,7 +11,7 @@
  *     + trader/position_composition?data_type={tok}
  *   futures surfaces: leader/position, leader/close_position,
  *     leader/history_order_list, leader/transfer_records,
- *     trader/follow_user (top-10 only, spec §11.10)
+ *     trader/follow_user (reported-total numeric pagination)
  *   cfd (tradfi family, USDx): copy_tradfi/leader/list?cycle={7|30|90},
  *     trade/info + lead/info + yield (profile), positions/history,
  *     public/followers. copy_tradfi positions + transfer_records are
@@ -37,6 +37,16 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import {
+  GATE_COPIER_HISTORY_URL,
+  gateCopierHistoryUrl,
+  gateCopierSnapshotVerifier,
+  validateGateCopierPage,
+} from './copier-snapshot'
+import {
   parseGateHistory,
   parseGateLeaderboardPage,
   parseGatePositions,
@@ -56,6 +66,34 @@ function boardKey(src: SourceRow): 'futures' | 'cfd' {
   return src.meta.boardKey === 'cfd' ? 'cfd' : 'futures'
 }
 
+function isCanonicalGateFuturesCopierSource(src: SourceRow): boolean {
+  return (
+    src.slug === 'gate_futures' &&
+    src.status === 'active' &&
+    src.serving_mode === 'serving' &&
+    src.adapter_slug === 'gate' &&
+    src.product_type === 'futures' &&
+    src.trader_kind_scope === 'human' &&
+    src.currency === 'USDT' &&
+    src.copier_table_depth === 'full' &&
+    src.meta.boardKey === 'futures' &&
+    endpoint(src, 'copiers', GATE_COPIER_HISTORY_URL) === GATE_COPIER_HISTORY_URL
+  )
+}
+
+function copierMaxPages(src: SourceRow): number {
+  const value = src.meta.copier_max_pages ?? 100
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    Object.is(value, -0)
+  ) {
+    throw new TypeError('[gate] copier_max_pages must be a positive safe integer')
+  }
+  return value
+}
+
 /** One warm page load per session establishes Akamai cookies; everything
  *  after is same-origin JSON replay (spec §2.2). */
 const warmedSessions = new WeakSet<FetchSession>()
@@ -65,9 +103,11 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   const page = await session.page()
   const url = src.leaderboard_url ?? `${B}/zh/copytrading`
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
+  } catch {
     // best-effort — a busy page still yields valid cookies
-  })
+  }
   warmedSessions.add(session)
 }
 
@@ -121,7 +161,11 @@ const gateAdapter: SourceAdapter = {
     positionHistory: true,
     orders: true, // futures 成交记录; cfd yields nothing
     transfers: true, // futures 划转记录; cfd auth-gated → yields nothing
-    copiers: true, // futures top-10 only; cfd public/followers
+    copiers: true, // futures reported-total pages; cfd public/followers
+  },
+
+  verifyCopierSnapshot(src) {
+    return isCanonicalGateFuturesCopierSource(src) ? gateCopierSnapshotVerifier : null
   },
 
   async *listLeaderboard(
@@ -292,12 +336,69 @@ const gateAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     const board = boardKey(src)
     // CFD: orders + transfers are auth-gated — yield nothing (caller skips).
     if (board === 'cfd' && (kind === 'orders' || kind === 'transfers')) return
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
+
+    if (board === 'futures' && kind === 'copiers') {
+      const maxPages = copierMaxPages(src)
+      let stableTotal: number | null = null
+      let stableTotalPages: number | null = null
+      let rowsSeen = 0
+      const identities = new Set<string>()
+
+      for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+        const url = gateCopierHistoryUrl(exchangeTraderId, pageIndex)
+        const payload = await replayJson(session, fetcher, {
+          url,
+          method: 'GET',
+          headers: HEADERS,
+        })
+        yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
+
+        const page = validateGateCopierPage(payload, pageIndex, exchangeTraderId)
+        if (page === null) {
+          throw new Error('[gate] copiers returned a malformed exact page envelope')
+        }
+        if (stableTotal === null) stableTotal = page.total
+        else if (page.total !== stableTotal) {
+          throw new Error('[gate] copiers changed totalcount during pagination')
+        }
+        if (stableTotalPages === null) stableTotalPages = page.totalPages
+        else if (page.totalPages !== stableTotalPages) {
+          throw new Error('[gate] copiers changed pagecount during pagination')
+        }
+
+        for (const row of page.rows) {
+          const identity = String(row.follow_id)
+          if (identities.has(identity)) {
+            throw new Error('[gate] copiers returned a duplicate follow identity')
+          }
+          identities.add(identity)
+        }
+        rowsSeen += page.rows.length
+
+        if (
+          rowsSeen === stableTotal &&
+          pageIndex === Math.max(1, stableTotalPages) &&
+          identities.size === stableTotal
+        ) {
+          return {
+            contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+            observations: [
+              { segment_id: 'default', reason: 'reported_end', page_ordinal: pageIndex },
+            ],
+          }
+        }
+      }
+      throw new Error(
+        `[gate] copiers reached page cap ${maxPages} before reported total ${String(stableTotal)}`
+      )
+    }
+
     const pageSize = 10
     const maxPages = Number(src.meta.history_max_pages ?? 25) || 25
     const cursorMs = cursor ? Date.parse(cursor) : NaN
@@ -326,12 +427,6 @@ const gateAdapter: SourceAdapter = {
             endpoint(src, 'transfers', `${B}/apiw/v2/copy/leader/transfer_records`) +
             `?sub_website_id=0&leader_id=${exchangeTraderId}&page=${pageNo}&page_size=${pageSize}`
           )
-        case 'copiers':
-          // top-10 only (spec §11.10) — single page covers the surface
-          return (
-            endpoint(src, 'copiers', `${B}/api/copytrade/copy_trading/trader/follow_user`) +
-            `?sub_website_id=0&leader_id=${exchangeTraderId}&page_size=${pageSize}&page=${pageNo}&status=running`
-          )
         default:
           throw new Error(`[gate] history surface ${kind} not supported`)
       }
@@ -351,8 +446,6 @@ const gateAdapter: SourceAdapter = {
       yield { pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() }
 
       if (rows.length < pageSize) break
-      // Futures copiers surface is top-10 only — never paginate past page 1.
-      if (board === 'futures' && kind === 'copiers') break
       if (kind === 'position_history' && Number.isFinite(cursorMs)) {
         const closeKey = board === 'cfd' ? 'close_time' : 'create_time'
         const closeTimes = rows
