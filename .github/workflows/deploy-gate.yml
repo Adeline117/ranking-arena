@@ -14,6 +14,11 @@ name: Deploy Gate (CI-green production deploy)
 #
 # 部署后内嵌 smoke + 自动回滚（CLI 部署不产生 deployment_status 事件，
 # post-deploy-smoke.yml 只覆盖 [deploy-force] 的 git 直接部署路径）。
+# SECURITY SUSPENDED (V1 NO-GO): keep the workflow_run evidence shape for audit,
+# but provision no runner and expose no Vercel/database secret. Restore only
+# after Preview is isolated, all credentials are rotated into a reviewer-gated
+# production environment, main is protected, and the incident release gate is
+# explicitly reopened.
 
 on:
   workflow_run:
@@ -34,7 +39,7 @@ permissions:
 
 jobs:
   deploy:
-    if: github.event.workflow_run.event == 'push'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

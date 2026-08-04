@@ -1,7 +1,10 @@
 name: Payment Path Canary (Staging)
 
+# SECURITY SUSPENDED (V1 NO-GO): restore only after every PAYMENT_CANARY_* and
+# alert secret is environment-only in arena-staging-payment-canary, with a
+# required reviewer and a deployment policy limited to protected main.
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       confirm_rollback_only_staging:
         description: 'Run only against the protected disposable staging fixture'
@@ -18,7 +21,9 @@ concurrency:
 
 jobs:
   payment-path-canary:
-    if: github.ref == 'refs/heads/main' && inputs.confirm_rollback_only_staging
+    # Resume condition after the external controls above exist:
+    # github.ref == 'refs/heads/main' && inputs.confirm_rollback_only_staging
+    if: ${{ false }}
     runs-on: ubuntu-latest
     environment: arena-staging-payment-canary
     timeout-minutes: 6

@@ -5,8 +5,15 @@
 # 全部用现有 GH secrets，零新凭据。抓取类脚本(住宅 IP 反封锁)不在此——必须留本地。
 #
 # 各哨兵自行发送 Telegram；硬失败也必须让 job 变红。pipeline-health 的三个
-# 独立探针会全部执行，再由末尾聚合步骤统一传播失败；手动 workflow_dispatch 跑全部。
+# 独立探针会全部执行，再由末尾聚合步骤统一传播失败。
 # 脚本内 dotenv 读 ../../.env 在 CI 无该文件时静默 no-op，改用下方 env: 注入。
+#
+# SECURITY SUSPENDED (V1 NO-GO): main currently has no enforceable protection,
+# so scheduled default-branch repository code is not a safe trust boundary for
+# production credentials. Every job is fixed false below. Restore only after the
+# secrets are environment-only, that environment has a required reviewer, and
+# main is protected against direct writes. Script-level fail-closed checks do not
+# substitute for that source-trust boundary.
 
 name: OpenClaw Sentinels
 
@@ -20,10 +27,12 @@ on:
     - cron: '40 8 * * *' # backup-freshness 每日 08:40 UTC（R2 备份 >26h 告警）
     - cron: '0 10 * * 1' # sentry-convergence 周一 10:00 UTC（Sentry 错误聚合）
     - cron: '50 5 * * *' # sweep-lang 四语言点击哨兵 每日 05:50 UTC（playwright 打生产）
-  workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 concurrency:
-  group: openclaw-sentinels-${{ github.event.schedule || 'manual' }}
+  group: openclaw-sentinels-${{ github.event.schedule || 'scheduled' }}
   cancel-in-progress: false
 
 env:
@@ -31,13 +40,17 @@ env:
 
 jobs:
   pipeline-health:
-    # 30min 错峰 或 手动
-    if: github.event.schedule == '10,40 * * * *' || github.event_name == 'workflow_dispatch'
+    # 30min 错峰
+    # Resume condition: github.event.schedule == '10,40 * * * *'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -85,12 +98,16 @@ jobs:
           fi
 
   weekly-metrics:
-    if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
+    # Resume condition: github.event.schedule == '0 9 * * 1'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -105,12 +122,16 @@ jobs:
         run: node scripts/openclaw/weekly-metrics.mjs
 
   schema-canary:
-    if: github.event.schedule == '30 6 * * *' || github.event_name == 'workflow_dispatch'
+    # Resume condition: github.event.schedule == '30 6 * * *'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -127,12 +148,16 @@ jobs:
         run: node scripts/openclaw/schema-canary-sentinel.mjs
 
   daily-pipeline-report:
-    if: github.event.schedule == '0 8 * * *' || github.event_name == 'workflow_dispatch'
+    # Resume condition: github.event.schedule == '0 8 * * *'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -145,12 +170,16 @@ jobs:
         run: node scripts/openclaw/daily-pipeline-report.mjs
 
   ux-patrol:
-    if: github.event.schedule == '20 7 * * *' || github.event_name == 'workflow_dispatch'
+    # Resume condition: github.event.schedule == '20 7 * * *'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -163,12 +192,16 @@ jobs:
 
   backup-freshness:
     # R2 备份新鲜度哨兵——冗余 Mac Mini 的 09:00 crontab（R2 读凭据）
-    if: github.event.schedule == '40 8 * * *' || github.event_name == 'workflow_dispatch'
+    # Resume condition: github.event.schedule == '40 8 * * *'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -184,12 +217,16 @@ jobs:
         run: node scripts/openclaw/backup-freshness-check.mjs
 
   sentry-convergence:
-    if: github.event.schedule == '0 10 * * 1' || github.event_name == 'workflow_dispatch'
+    # Resume condition: github.event.schedule == '0 10 * * 1'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -207,7 +244,8 @@ jobs:
     # 四语言点击哨兵（A-4/A-5）：playwright 打生产，机判死按钮/i18n-leak/对比度/5xx/
     # error-boundary。matrix 4 语言并行；硬发现→Telegram 告警，软发现→artifact 供人工
     # 审回归 diff。取代手工全站重扫。GH Actions runner 无 Mac Mini 的 syspolicyd/内存单点。
-    if: github.event.schedule == '50 5 * * *' || github.event_name == 'workflow_dispatch'
+    # Resume condition: github.event.schedule == '50 5 * * *'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -215,8 +253,11 @@ jobs:
       matrix:
         lang: [en, zh, ja, ko]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -232,7 +273,7 @@ jobs:
         run: node scripts/openclaw/lang-sweep-sentinel.mjs
       - name: Upload sweep ledger
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: lang-sweep-ledger-${{ matrix.lang }}
           path: /tmp/lang-sweep-${{ matrix.lang }}.jsonl

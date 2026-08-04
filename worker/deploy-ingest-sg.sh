@@ -15,6 +15,7 @@
 #   bash worker/deploy-ingest-sg.sh --target-sha=<40hex> \
 #     --from-artifact=arena-ingest-deps.tgz \
 #     --artifact-manifest=arena-ingest-deps.manifest
+#   bash worker/deploy-ingest-sg.sh --target-sha=<40hex> --recover-from-stopped
 #
 # `--force-npm-ci` is an emergency-only fallback. It runs in the isolated
 # candidate tree, never in the live worker directory, and the candidate must
@@ -38,6 +39,11 @@ SG_ROSTER_READY_TOKEN="[sg-heartbeat-proof] exact fresh Redis roster identity re
 # (180s), and one renewal/jitter interval (30s), with an additional 60s margin.
 AUTHORITY_HANDOFF_TIMEOUT_SECONDS=300
 DEPLOY_LOCK_DIR="$REMOTE_DIR.deploy-lock"
+# Host-owned incident marker. Unlike the transactional recovery guard below,
+# this is an operator release gate and survives every immutable code release.
+# A mutating deployment must never remove it automatically.
+DEPLOY_INCIDENT_HOLD="$REMOTE_DIR.deploy-hold"
+RECOVERY_GO_FILE="$REMOTE_DIR.recover-from-stopped.go"
 # Manual removal is safe only after proving either (a) PM2 jlist plus both
 # dump.pm2 files contain no untrusted SG owner, or (b) the current owner has
 # exact SHA, release, PM2-process, and fresh Redis-roster evidence.
@@ -46,6 +52,7 @@ DEPLOY_LOCK_STALE_SECONDS=900
 DEPLOY_LOCK_MAX_HEARTBEAT_AGE_SECONDS=120
 
 MODE="full"
+RECOVER_FROM_STOPPED=0
 FORCE_NPM_CI=0
 FROM_ARTIFACT=""
 ARTIFACT_MANIFEST=""
@@ -59,9 +66,14 @@ for arg in "$@"; do
     --from-artifact=*) FROM_ARTIFACT="${arg#*=}"; MODE="artifact"; MODE_ARGUMENTS=$((MODE_ARGUMENTS + 1)) ;;
     --artifact-manifest=*) ARTIFACT_MANIFEST="${arg#*=}" ;;
     --target-sha=*) TARGET_SHA="${arg#*=}" ;;
+    --recover-from-stopped) RECOVER_FROM_STOPPED=1 ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+if [ "$RECOVER_FROM_STOPPED" = 1 ] && [ "$MODE" = "dry-run" ]; then
+  echo "✗ --dry-run and --recover-from-stopped are mutually exclusive" >&2
+  exit 2
+fi
 if [ "$MODE_ARGUMENTS" -gt 1 ]; then
   echo "✗ choose exactly one of --dry-run, --code-only, or --from-artifact" >&2
   exit 2
@@ -109,11 +121,18 @@ FAILED_DIR="$REMOTE_DIR.failed-$TS"
 REMOTE_ARTIFACT="/tmp/arena-ingest-deps-$DEPLOY_LOCK_TOKEN.tgz"
 DEPLOY_LOCK_HELD=0
 DEPLOY_LOCK_RENEW_PID=""
+RECOVERY_GO_CONSUMED="$DEPLOY_LOCK_DIR/recover-from-stopped.go"
 DEPLOY_SOURCE_DIR=""
 RECOVERY_REQUIRED=0
 CUTOVER_STARTED=0
 DEPLOY_SUCCEEDED=0
 ROLLBACK_COMMITTED=0
+STOPPED_RECOVERY_SESSION=0
+STOPPED_RECOVERY_CUTOVER=0
+STOPPED_RECOVERY_QUARANTINED=0
+RECOVERY_OLD_SHA=""
+RECOVERY_OLD_RELEASE=""
+RECOVERY_ENV_SHA256=""
 
 CODE_PATHS=(.npmrc lib worker package.json package-lock.json tsconfig.json)
 FULL_PATHS=("${CODE_PATHS[@]}")
@@ -247,7 +266,7 @@ ssh_sg() {
     -o ServerAliveInterval=20 -o ServerAliveCountMax=15 "$VPS_HOST" "$@"
 }
 
-assert_deploy_lock() {
+assert_raw_deploy_lock() {
   if [ -z "$DEPLOY_LOCK_RENEW_PID" ] || ! kill -0 "$DEPLOY_LOCK_RENEW_PID" 2>/dev/null; then
     echo "✗ lost the SG deploy lease renewer; refusing further remote mutation" >&2
     return 1
@@ -265,8 +284,50 @@ assert_deploy_lock() {
   }
 }
 
+assert_cleanup_deploy_lock() {
+  ssh_sg "set -eu
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    now=\$(date +%s)
+    heartbeat=\$(stat -c %Y '$DEPLOY_LOCK_DIR/heartbeat' 2>/dev/null || echo 0)
+    age=\$((now - heartbeat))
+    test \"\$heartbeat\" -gt 0
+    test \"\$age\" -ge 0
+    test \"\$age\" -lt '$DEPLOY_LOCK_STALE_SECONDS'
+    touch '$DEPLOY_LOCK_DIR/heartbeat'
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'" || {
+    echo "✗ lost or stale SG cleanup lease; stopped quarantine cannot mutate safely" >&2
+    return 1
+  }
+}
+
+assert_deploy_lock() {
+  if [ -z "$DEPLOY_LOCK_RENEW_PID" ] || ! kill -0 "$DEPLOY_LOCK_RENEW_PID" 2>/dev/null; then
+    echo "✗ lost the SG deploy lease renewer; refusing further remote mutation" >&2
+    return 1
+  fi
+  ssh_sg "set -eu
+    if [ -e '$DEPLOY_INCIDENT_HOLD' ] || [ -L '$DEPLOY_INCIDENT_HOLD' ]; then
+      printf 'BLOCKED: SG incident hold is armed: %s\n' '$DEPLOY_INCIDENT_HOLD' >&2
+      exit 78
+    fi
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    now=\$(date +%s)
+    heartbeat=\$(stat -c %Y '$DEPLOY_LOCK_DIR/heartbeat' 2>/dev/null || echo 0)
+    age=\$((now - heartbeat))
+    test \"\$heartbeat\" -gt 0
+    test \"\$age\" -ge 0
+    test \"\$age\" -le '$DEPLOY_LOCK_MAX_HEARTBEAT_AGE_SECONDS'" || {
+    echo "✗ SG incident hold, or lost or stale SG deploy lease, forbids further forward mutation" >&2
+    return 1
+  }
+}
+
 arm_recovery_guard() {
-  assert_deploy_lock || return 1
+  if [ "$RECOVER_FROM_STOPPED" = 1 ] && [ "$STOPPED_RECOVERY_CUTOVER" = 0 ]; then
+    assert_raw_deploy_lock || return 1
+  else
+    assert_deploy_lock || return 1
+  fi
   ssh_sg "set -eu
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
     printf '%s\n' '$SHA' > '$DEPLOY_RECOVERY_GUARD.tmp-$DEPLOY_LOCK_TOKEN'
@@ -300,6 +361,14 @@ wait_for_candidate_log_evidence() {
   [[ "$expected_pid" =~ ^[1-9][0-9]*$ ]] || return 1
   ssh_sg "for i in \$(seq 1 $AUTHORITY_HANDOFF_TIMEOUT_SECONDS); do
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN' || exit 1
+    test ! -e '$DEPLOY_INCIDENT_HOLD' || exit 1
+    test ! -L '$DEPLOY_INCIDENT_HOLD' || exit 1
+    now=\$(date +%s)
+    heartbeat=\$(stat -c %Y '$DEPLOY_LOCK_DIR/heartbeat' 2>/dev/null || echo 0)
+    age=\$((now - heartbeat))
+    test \"\$heartbeat\" -gt 0 || exit 1
+    test \"\$age\" -ge 0 || exit 1
+    test \"\$age\" -le '$DEPLOY_LOCK_MAX_HEARTBEAT_AGE_SECONDS' || exit 1
     awk -v marker='$marker' -v node='$SG_WORKER_NODE_ID' \
       -v region='vps_sg' \
       -v sha='$expected_sha' -v release='$expected_release' -v pid='$expected_pid' \
@@ -312,7 +381,7 @@ wait_for_candidate_log_evidence() {
 
 exact_pm2_pid() {
   local pid
-  pid="$(ssh_sg "pm2 jlist | node -e '
+  pid="$(ssh_sg "set -o pipefail; pm2 jlist | node -e '
     let raw=\"\"; process.stdin.on(\"data\", c => raw += c); process.stdin.on(\"end\", () => {
       const apps = JSON.parse(raw).filter(a => a.name === process.argv[1]);
       const pid = apps[0]?.pid;
@@ -330,7 +399,7 @@ exact_pm2_pid() {
 assert_exact_pm2_process() {
   local expected_pid="$1"
   [[ "$expected_pid" =~ ^[1-9][0-9]*$ ]] || return 1
-  ssh_sg "pm2 jlist | node -e '
+  ssh_sg "set -o pipefail; pm2 jlist | node -e '
     let raw=\"\"; process.stdin.on(\"data\", c => raw += c); process.stdin.on(\"end\", () => {
       const apps = JSON.parse(raw).filter(a => a.name === process.argv[1]);
       if (apps.length !== 1 || apps[0].pm2_env?.status !== \"online\" ||
@@ -345,8 +414,10 @@ prove_exact_pm2_stability() {
   local expected_pid="$1"
   [[ "$expected_pid" =~ ^[1-9][0-9]*$ ]] || return 1
   ssh_sg "set -eu
+    set -o pipefail
     for sample in \$(seq 1 11); do
       test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+      test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
       pm2 jlist | node -e '
         let raw=\"\"; process.stdin.on(\"data\", c => raw += c); process.stdin.on(\"end\", () => {
           const apps = JSON.parse(raw).filter(a => a.name === process.argv[1]);
@@ -375,12 +446,14 @@ verify_sg_roster() {
 
   ssh_sg "set -eu
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
     cd '$REMOTE_DIR'
     test -f '$proof_root/node_modules/tsx/dist/cli.mjs'
     test -f '$proof_root/worker/verify-sg-heartbeat.ts'
     node '$proof_root/node_modules/tsx/dist/cli.mjs' \
       '$proof_root/worker/verify-sg-heartbeat.ts' \
       '$mode' '$expected_sha' '$expected_release' '$not_before_ms' '$pm2_pid'
+    test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'" |
     awk -v token="$SG_ROSTER_READY_TOKEN" '
       $0 == token { count += 1 }
@@ -390,7 +463,9 @@ verify_sg_roster() {
 
 start_exact_pm2() {
   ssh_sg "set -eu
+    set -o pipefail
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
     pm2 delete '$PM2_APP' >/dev/null 2>&1 || true
     pm2 start '$REMOTE_DIR/worker/ecosystem.sg.config.cjs' --only '$PM2_APP'
     pm2 jlist | node -e '
@@ -401,6 +476,7 @@ start_exact_pm2() {
           process.exit(1);
       });
     ' '$PM2_APP' '$REMOTE_DIR'
+    test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'"
 }
 
@@ -408,7 +484,9 @@ commit_exact_pm2() {
   local expected_pid="$1"
   [[ "$expected_pid" =~ ^[1-9][0-9]*$ ]] || return 1
   ssh_sg "set -eu
+    set -o pipefail
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
     pm2 jlist | node -e '
       let raw=\"\"; process.stdin.on(\"data\", c => raw += c); process.stdin.on(\"end\", () => {
         const apps = JSON.parse(raw).filter(a => a.name === process.argv[1]);
@@ -419,6 +497,7 @@ commit_exact_pm2() {
       });
     ' '$PM2_APP' '$REMOTE_DIR' '$expected_pid'
     pm2 save >/dev/null
+    test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
     pm2 jlist | node -e '
       let raw=\"\"; process.stdin.on(\"data\", c => raw += c); process.stdin.on(\"end\", () => {
@@ -433,6 +512,7 @@ commit_exact_pm2() {
 
 clear_saved_pm2_owner() {
   ssh_sg "set -eu
+    set -o pipefail
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
     pm2 delete '$PM2_APP' >/dev/null 2>&1 || true
     # PM2 intentionally returns success without replacing a non-empty dump when
@@ -586,13 +666,17 @@ release_deploy_lock() {
   local status=$?
   trap - EXIT INT TERM
   set +e
-  if [ "$status" -ne 0 ] && [ "$RECOVERY_REQUIRED" = 1 ] && [ "$DEPLOY_SUCCEEDED" = 0 ]; then
-    if ! recover_previous_release; then
-      status=1
-      if [ "$ROLLBACK_COMMITTED" = 0 ]; then
-        quarantine_uncommitted_pm2_owner || {
-          echo "✗✗ automatic SG quarantine failed; manual intervention required" >&2
-        }
+  if [ "$status" -ne 0 ] && [ "$DEPLOY_SUCCEEDED" = 0 ]; then
+    if [ "$STOPPED_RECOVERY_SESSION" = 1 ] || sg_incident_hold_is_armed; then
+      quarantine_stopped_sg_recovery || status=1
+    elif [ "$RECOVERY_REQUIRED" = 1 ]; then
+      if ! recover_previous_release; then
+        status=1
+        if [ "$ROLLBACK_COMMITTED" = 0 ]; then
+          quarantine_uncommitted_pm2_owner || {
+            echo "✗✗ automatic SG quarantine failed; manual intervention required" >&2
+          }
+        fi
       fi
     fi
   fi
@@ -612,13 +696,57 @@ release_deploy_lock() {
 acquire_deploy_lock() {
   local output
   if ! output="$(ssh_sg "set -eu
-    lock_dir='$DEPLOY_LOCK_DIR'; guard='$DEPLOY_RECOVERY_GUARD'
+    lock_dir='$DEPLOY_LOCK_DIR'; hold='$DEPLOY_INCIDENT_HOLD'; guard='$DEPLOY_RECOVERY_GUARD'
+    go='$RECOVERY_GO_FILE'; consumed='$RECOVERY_GO_CONSUMED'
     token='$DEPLOY_LOCK_TOKEN'; stale_after='$DEPLOY_LOCK_STALE_SECONDS'
-    if [ -e \"\$guard\" ]; then
-      printf 'BLOCKED: SG recovery guard requires manual inspection: %s\n' \"\$guard\" >&2
-      exit 76
+    recover='$RECOVER_FROM_STOPPED'
+    created=0
+    cleanup_failed_acquire() {
+      status=\$?
+      trap - EXIT HUP INT TERM
+      if [ \"\$status\" -ne 0 ] && [ \"\$created\" -eq 1 ]; then
+        current=\$(cat \"\$lock_dir/owner\" 2>/dev/null || true)
+        if [ ! -e \"\$lock_dir/owner\" ] || [ \"\$current\" = \"\$token\" ]; then
+          rm -f \"\$consumed\"
+          rm -rf \"\$lock_dir\"
+        fi
+      fi
+      exit \"\$status\"
+    }
+    trap cleanup_failed_acquire EXIT
+    trap 'exit 82' HUP INT TERM
+    if [ \"\$recover\" = 1 ]; then
+      if { [ ! -e \"\$hold\" ] && [ ! -L \"\$hold\" ]; } ||
+         { [ ! -e \"\$guard\" ] && [ ! -L \"\$guard\" ]; }; then
+        printf 'BLOCKED: stopped recovery requires both SG incident holds armed\n' >&2
+        exit 79
+      fi
+      if [ ! -f \"\$go\" ] || [ -L \"\$go\" ]; then
+        printf 'BLOCKED: stopped recovery requires a fresh owner-only mode-0600 confirmation: %s\n' \"\$go\" >&2
+        exit 80
+      fi
+      test \"\$(stat -c %a \"\$go\")\" = 600
+      test \"\$(stat -c %u \"\$go\")\" = \"\$(id -u)\"
+      test \"\$(wc -c < \"\$go\")\" -le 1024
+      test \"\$(awk 'END { print NR }' \"\$go\")\" = 4
+      test \"\$(sed -n '1p' \"\$go\")\" = 'arena.ingest-recover-from-stopped@1'
+      test \"\$(sed -n '2p' \"\$go\")\" = 'target_sha=$SHA'
+      expires=\$(sed -n '3s/^expires_epoch=//p' \"\$go\")
+      case \"\$expires\" in ''|*[!0-9]*) exit 80 ;; esac
+      grep -Eq '^nonce=[0-9a-f]{64}\$' \"\$go\"
+      now=\$(date +%s)
+      test \"\$expires\" -ge \"\$now\"; test \"\$expires\" -le \"\$((now + 900))\"
+    else
+      if [ -e \"\$hold\" ] || [ -L \"\$hold\" ]; then
+        printf 'BLOCKED: SG incident hold is armed: %s\n' \"\$hold\" >&2
+        exit 78
+      fi
+      if [ -e \"\$guard\" ] || [ -L \"\$guard\" ]; then
+        printf 'BLOCKED: SG recovery guard requires manual inspection: %s\n' \"\$guard\" >&2
+        exit 76
+      fi
     fi
-    now=\$(date +%s); created=0
+    now=\$(date +%s)
     if mkdir \"\$lock_dir\" 2>/dev/null; then
       created=1
     else
@@ -635,7 +763,13 @@ acquire_deploy_lock() {
       owner=\$(cat \"\$lock_dir/owner\" 2>/dev/null || echo unknown)
       printf 'BUSY: SG ingest deploy lease is held by %s\n' \"\$owner\" >&2; exit 75
     fi
-    printf '%s\n' \"\$token\" > \"\$lock_dir/owner\"; touch \"\$lock_dir/heartbeat\"; printf 'LOCKED\n'")"; then
+    printf '%s\n' \"\$token\" > \"\$lock_dir/owner\"; touch \"\$lock_dir/heartbeat\"
+    if [ \"\$recover\" = 1 ]; then
+      mv \"\$go\" \"\$consumed\"
+      test -f \"\$consumed\"; test ! -L \"\$consumed\"; test \"\$(stat -c %a \"\$consumed\")\" = 600
+    fi
+    printf 'LOCKED\n'
+    trap - EXIT HUP INT TERM")"; then
     printf '%s\n' "$output" >&2
     return 1
   fi
@@ -654,6 +788,346 @@ acquire_deploy_lock() {
   DEPLOY_LOCK_RENEW_PID=$!
 }
 
+validate_consumed_stopped_recovery_go() {
+  assert_raw_deploy_lock || return 1
+  ssh_sg "set -eu
+    go='$RECOVERY_GO_CONSUMED'
+    test -f \"\$go\"; test ! -L \"\$go\"
+    test \"\$(stat -c %a \"\$go\")\" = 600
+    test \"\$(stat -c %u \"\$go\")\" = \"\$(id -u)\"
+    test \"\$(wc -c < \"\$go\")\" -le 1024
+    test \"\$(awk 'END { print NR }' \"\$go\")\" = 4
+    test \"\$(sed -n '1p' \"\$go\")\" = 'arena.ingest-recover-from-stopped@1'
+    test \"\$(sed -n '2p' \"\$go\")\" = 'target_sha=$SHA'
+    expires=\$(sed -n '3s/^expires_epoch=//p' \"\$go\")
+    case \"\$expires\" in ''|*[!0-9]*) exit 80 ;; esac
+    grep -Eq '^nonce=[0-9a-f]{64}\$' \"\$go\"
+    now=\$(date +%s)
+    test \"\$expires\" -ge \"\$now\"; test \"\$expires\" -le \"\$((now + 900))\"" || {
+    echo '✗ consumed SG stopped-recovery confirmation is missing, expired, or changed' >&2
+    return 1
+  }
+}
+
+assert_stopped_recovery_prep_authority() {
+  validate_consumed_stopped_recovery_go || return 1
+  ssh_sg "test \( -e '$DEPLOY_INCIDENT_HOLD' -o -L '$DEPLOY_INCIDENT_HOLD' \) &&
+    test \( -e '$DEPLOY_RECOVERY_GUARD' -o -L '$DEPLOY_RECOVERY_GUARD' \)" || {
+    echo '✗ SG stopped-recovery holds changed during candidate preparation' >&2
+    return 1
+  }
+}
+
+assert_candidate_preparation_authority() {
+  if [ "$RECOVER_FROM_STOPPED" = 1 ] && [ "$STOPPED_RECOVERY_CUTOVER" = 0 ]; then
+    assert_stopped_recovery_prep_authority
+  else
+    assert_deploy_lock
+  fi
+}
+
+prove_stopped_sg_baseline() {
+  local proof marker old_sha old_release env_sha extra
+  assert_stopped_recovery_prep_authority || return 1
+  proof="$(ssh_sg "set -eu
+    set -o pipefail
+    umask 077
+    process_snapshot=''
+    cleanup_process_snapshot() {
+      if [ -n \"\$process_snapshot\" ]; then rm -f \"\$process_snapshot\"; fi
+    }
+    trap cleanup_process_snapshot EXIT
+    trap 'exit 62' HUP INT TERM
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test -d '$REMOTE_DIR'; test ! -L '$REMOTE_DIR'
+    cd '$REMOTE_DIR'
+    test -f worker/.env; test ! -L worker/.env; test \"\$(stat -c %a worker/.env)\" = 600
+    test -f DEPLOYED_SHA; test ! -L DEPLOYED_SHA
+    if [ -e WORKER_RELEASE_ID ] || [ -L WORKER_RELEASE_ID ]; then
+      test -f WORKER_RELEASE_ID; test ! -L WORKER_RELEASE_ID
+    fi
+    pm2 jlist | node -e '
+      const appName = process.argv[1], cwd = process.argv[2]
+      let raw = \"\"
+      process.stdin.on(\"data\", (chunk) => { raw += chunk })
+      process.stdin.on(\"end\", () => {
+        const isIngest = (app) => app?.name === appName ||
+          JSON.stringify([app?.pm2_env?.pm_exec_path, app?.pm2_env?.args,
+            app?.pm_exec_path, app?.script, app?.args]).includes(\"ingest-worker.ts\")
+        const apps = JSON.parse(raw).filter(isIngest)
+        if (apps.length > 1) process.exit(41)
+        if (apps.length === 1 && (apps[0].name !== appName ||
+            apps[0].pm2_env?.status !== \"stopped\" ||
+            apps[0].pm2_env?.pm_cwd !== cwd || Number(apps[0].pid || 0) !== 0)) process.exit(42)
+      })
+    ' '$PM2_APP' '$REMOTE_DIR'
+    process_snapshot='$DEPLOY_LOCK_DIR/process-snapshot-$DEPLOY_LOCK_TOKEN'
+    ps -eo pid=,args= > \"\$process_snapshot\"
+    while read -r pid command; do
+      test \"\$pid\" = \"\$\$\" && continue
+      case \"\$command\" in
+        *'/worker/src/'*'ingest-worker.ts'*|*'tsx worker/src/'*'ingest-worker.ts'*)
+          rm -f \"\$process_snapshot\"; exit 43 ;;
+      esac
+    done < \"\$process_snapshot\"
+    rm -f \"\$process_snapshot\"
+    process_snapshot=''
+    if command -v docker >/dev/null 2>&1; then
+      containers=\$(docker ps --format '{{.Names}}|{{.Label \"com.arenafi.role\"}}')
+      if printf '%s\n' \"\$containers\" | awk -F '|' '\$1 ~ /^arena-ingest-worker-sg([_-].*)?\$/ || \$2 == \"ingest-worker\" { found=1 } END { exit !found }'; then
+        exit 44
+      fi
+    fi
+    pm2 save --force >/dev/null; pm2 save --force >/dev/null
+    node -e '
+      const fs = require(\"node:fs\"), os = require(\"node:os\"), path = require(\"node:path\")
+      const [appName, cwd] = process.argv.slice(1)
+      const home = process.env.PM2_HOME || path.join(os.homedir(), \".pm2\")
+      for (const name of [\"dump.pm2\", \"dump.pm2.bak\"]) {
+        const apps = JSON.parse(fs.readFileSync(path.join(home, name), \"utf8\"))
+        const matches = apps.filter((app) => app?.name === appName ||
+          JSON.stringify([app?.pm_exec_path, app?.args, app?.script]).includes(\"ingest-worker.ts\"))
+        if (matches.length > 1 || matches.some((app) => app.name !== appName ||
+            app.status !== \"stopped\" || app.pm_cwd !== cwd))
+          process.exit(45)
+      }
+    ' '$PM2_APP' '$REMOTE_DIR'
+    node -e '
+      require(\"dotenv\").config({ path: \"worker/.env\", override: true, quiet: true })
+      const Redis = require(\"ioredis\"), url = process.env.REDIS_URL
+      if (!url) process.exit(46)
+      const redis = new Redis(url, { maxRetriesPerRequest: 1, enableReadyCheck: false,
+        connectTimeout: 5000, commandTimeout: 5000, tls: url.startsWith(\"rediss://\") ? {} : undefined })
+      redis.on(\"error\", () => {})
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(\"timeout\")), 5000))
+      Promise.race([redis.hgetall(\"arena:worker:roster\"), timeout]).then((roster) => {
+        const now = Date.now()
+        for (const raw of Object.values(roster)) {
+          let value
+          try { value = JSON.parse(raw) } catch { process.exitCode = 47; return }
+          if (!value || typeof value !== \"object\" || !Array.isArray(value.regions) || !Number.isSafeInteger(value.ts)) {
+            process.exitCode = 47; return
+          }
+          if (value.regions.includes(\"vps_sg\") && value.ts >= now - 120000) {
+            process.exitCode = 48; return
+          }
+        }
+      }).catch(() => { process.exitCode = 49 }).finally(() => redis.disconnect(false))
+    ' >/dev/null 2>&1
+    old_sha=\$(cat DEPLOYED_SHA); old_release=\$(cat WORKER_RELEASE_ID 2>/dev/null || true)
+    env_sha=\$(sha256sum worker/.env | awk '{print \$1}')
+    case \"\$old_sha\" in *[!0-9a-f]*|'') exit 50 ;; esac; test \"\${#old_sha}\" = 40
+    if test -n \"\$old_release\"; then case \"\$old_release\" in *[!0-9a-f]*) exit 51 ;; esac; test \"\${#old_release}\" = 64; else old_release=unknown; fi
+    case \"\$env_sha\" in *[!0-9a-f]*|'') exit 52 ;; esac; test \"\${#env_sha}\" = 64
+    pm2 jlist | node -e '
+      const appName = process.argv[1], cwd = process.argv[2]
+      let raw = \"\"
+      process.stdin.on(\"data\", (chunk) => { raw += chunk })
+      process.stdin.on(\"end\", () => {
+        const isIngest = (app) => app?.name === appName ||
+          JSON.stringify([app?.pm2_env?.pm_exec_path, app?.pm2_env?.args,
+            app?.pm_exec_path, app?.script, app?.args]).includes(\"ingest-worker.ts\")
+        const apps = JSON.parse(raw).filter(isIngest)
+        if (apps.length > 1) process.exit(56)
+        if (apps.length === 1 && (apps[0].name !== appName ||
+            apps[0].pm2_env?.status !== \"stopped\" ||
+            apps[0].pm2_env?.pm_cwd !== cwd || Number(apps[0].pid || 0) !== 0)) process.exit(57)
+      })
+    ' '$PM2_APP' '$REMOTE_DIR'
+    process_snapshot='$DEPLOY_LOCK_DIR/final-process-snapshot-$DEPLOY_LOCK_TOKEN'
+    ps -eo pid=,args= > \"\$process_snapshot\"
+    while read -r pid command; do
+      test \"\$pid\" = \"\$\$\" && continue
+      case \"\$command\" in
+        *'/worker/src/'*'ingest-worker.ts'*|*'tsx worker/src/'*'ingest-worker.ts'*)
+          rm -f \"\$process_snapshot\"; exit 58 ;;
+      esac
+    done < \"\$process_snapshot\"
+    rm -f \"\$process_snapshot\"
+    process_snapshot=''
+    if command -v docker >/dev/null 2>&1; then
+      containers=\$(docker ps --format '{{.Names}}|{{.Label \"com.arenafi.role\"}}')
+      if printf '%s\n' \"\$containers\" | awk -F '|' '\$1 ~ /^arena-ingest-worker-sg([_-].*)?\$/ || \$2 == \"ingest-worker\" { found=1 } END { exit !found }'; then
+        exit 59
+      fi
+    fi
+    node -e '
+      const fs = require(\"node:fs\"), os = require(\"node:os\"), path = require(\"node:path\")
+      const [appName, cwd] = process.argv.slice(1)
+      const home = process.env.PM2_HOME || path.join(os.homedir(), \".pm2\")
+      for (const name of [\"dump.pm2\", \"dump.pm2.bak\"]) {
+        const apps = JSON.parse(fs.readFileSync(path.join(home, name), \"utf8\"))
+        const matches = apps.filter((app) => app?.name === appName ||
+          JSON.stringify([app?.pm_exec_path, app?.args, app?.script]).includes(\"ingest-worker.ts\"))
+        if (matches.length > 1 || matches.some((app) => app.name !== appName ||
+            app.status !== \"stopped\" || app.pm_cwd !== cwd))
+          process.exit(60)
+      }
+    ' '$PM2_APP' '$REMOTE_DIR'
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test \( -e '$DEPLOY_INCIDENT_HOLD' -o -L '$DEPLOY_INCIDENT_HOLD' \)
+    test \( -e '$DEPLOY_RECOVERY_GUARD' -o -L '$DEPLOY_RECOVERY_GUARD' \)
+    printf 'ARENA_SG_STOPPED_BASELINE\t%s\t%s\t%s\n' \"\$old_sha\" \"\$old_release\" \"\$env_sha\"
+  ")" || {
+    echo '✗ SG stopped baseline lacks exact zero-owner PM2/dump/process/Docker/Redis proof' >&2
+    return 1
+  }
+  IFS=$'\t' read -r marker old_sha old_release env_sha extra <<<"$proof"
+  [ "$marker" = ARENA_SG_STOPPED_BASELINE ] && [ -z "$extra" ] || return 1
+  [[ "$old_sha" =~ ^[0-9a-f]{40}$ ]] || return 1
+  [[ "$old_release" = unknown || "$old_release" =~ ^[0-9a-f]{64}$ ]] || return 1
+  [[ "$env_sha" =~ ^[0-9a-f]{64}$ ]] || return 1
+  if [ -n "${RECOVERY_OLD_SHA:-}" ]; then
+    [ "$old_sha" = "$RECOVERY_OLD_SHA" ] && [ "$old_release" = "$RECOVERY_OLD_RELEASE" ] && \
+      [ "$env_sha" = "$RECOVERY_ENV_SHA256" ] || return 1
+  else
+    RECOVERY_OLD_SHA="$old_sha"
+    RECOVERY_OLD_RELEASE="$old_release"
+    RECOVERY_ENV_SHA256="$env_sha"
+  fi
+}
+
+arm_sg_incident_holds() {
+  if [ "$#" -gt 0 ] && [ "$1" = cleanup ]; then
+    assert_cleanup_deploy_lock || return 1
+  else
+    assert_raw_deploy_lock || return 1
+  fi
+  ssh_sg "set -eu; umask 077
+    hold_tmp='$DEPLOY_INCIDENT_HOLD.tmp-$DEPLOY_LOCK_TOKEN'
+    guard_tmp='$DEPLOY_RECOVERY_GUARD.tmp-$DEPLOY_LOCK_TOKEN'
+    printf '%s\n' 'arena.ingest-incident-hold@1' > \"\$hold_tmp\"
+    printf '%s\n%s\n' 'arena.sg-ingest-recovery-block@1' 'target_sha=$SHA' > \"\$guard_tmp\"
+    mv \"\$hold_tmp\" '$DEPLOY_INCIDENT_HOLD'
+    mv \"\$guard_tmp\" '$DEPLOY_RECOVERY_GUARD'
+    chmod 600 '$DEPLOY_INCIDENT_HOLD' '$DEPLOY_RECOVERY_GUARD'
+    test -f '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'
+    test -f '$DEPLOY_RECOVERY_GUARD'; test ! -L '$DEPLOY_RECOVERY_GUARD'
+    test \"\$(stat -c %a '$DEPLOY_INCIDENT_HOLD')\" = 600
+    test \"\$(stat -c %a '$DEPLOY_RECOVERY_GUARD')\" = 600
+    test \"\$(sed -n '1p' '$DEPLOY_INCIDENT_HOLD')\" = 'arena.ingest-incident-hold@1'
+    test \"\$(sed -n '1p' '$DEPLOY_RECOVERY_GUARD')\" = 'arena.sg-ingest-recovery-block@1'
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'"
+}
+
+authorize_stopped_sg_cutover() {
+  prove_stopped_sg_baseline || return 1
+  arm_recovery_guard || return 1
+  assert_stopped_recovery_prep_authority || return 1
+  ssh_sg "set -eu
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test -d '$STAGING_DIR'; test ! -L '$STAGING_DIR'
+    test -f '$STAGING_DIR/worker/.env'; test ! -L '$STAGING_DIR/worker/.env'
+    test \"\$(stat -c %a '$STAGING_DIR/worker/.env')\" = 600
+    test \"\$(sha256sum '$STAGING_DIR/worker/.env' | awk '{print \$1}')\" = '$RECOVERY_ENV_SHA256'
+    test \"\$(cat '$STAGING_DIR/DEPLOYED_SHA')\" = '$SHA'
+    test \"\$(cat '$STAGING_DIR/WORKER_RELEASE_ID')\" = '$WORKER_RELEASE_ID'
+    rm -f '$DEPLOY_INCIDENT_HOLD'
+    test ! -e '$DEPLOY_INCIDENT_HOLD'; test ! -L '$DEPLOY_INCIDENT_HOLD'" || return 1
+  STOPPED_RECOVERY_CUTOVER=1
+  assert_deploy_lock
+}
+
+sg_incident_hold_is_armed() {
+  local state
+  state="$(ssh_sg "if [ -e '$DEPLOY_INCIDENT_HOLD' ] || [ -L '$DEPLOY_INCIDENT_HOLD' ]; then printf 'ARMED\\n'; else printf 'CLEAR\\n'; fi" 2>/dev/null || true)"
+  [ "$state" = ARMED ]
+}
+
+quarantine_stopped_sg_recovery() {
+  local ok=1
+  assert_cleanup_deploy_lock || return 1
+  if ! ssh_sg "set -eu
+    set -o pipefail
+    umask 077
+    process_snapshot=''
+    cleanup_process_snapshot() {
+      if [ -n \"\$process_snapshot\" ]; then rm -f \"\$process_snapshot\"; fi
+    }
+    trap cleanup_process_snapshot EXIT
+    trap 'exit 63' HUP INT TERM
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    pm2 stop '$PM2_APP' >/dev/null 2>&1 || true
+    pm2 delete '$PM2_APP' >/dev/null 2>&1 || true
+    if [ '$CUTOVER_STARTED' = 1 ] && [ -d '$BACKUP_DIR' ]; then
+      test -n '$RECOVERY_OLD_SHA'; test -n '$RECOVERY_OLD_RELEASE'; test -n '$RECOVERY_ENV_SHA256'
+      test ! -L '$BACKUP_DIR'
+      test \"\$(cat '$BACKUP_DIR/DEPLOYED_SHA')\" = '$RECOVERY_OLD_SHA'
+      backup_release=\$(cat '$BACKUP_DIR/WORKER_RELEASE_ID' 2>/dev/null || true)
+      test -n \"\$backup_release\" || backup_release=unknown
+      test \"\$backup_release\" = '$RECOVERY_OLD_RELEASE'
+      test -f '$BACKUP_DIR/worker/.env'; test ! -L '$BACKUP_DIR/worker/.env'
+      test \"\$(sha256sum '$BACKUP_DIR/worker/.env' | awk '{print \$1}')\" = '$RECOVERY_ENV_SHA256'
+      rm -rf '$FAILED_DIR'
+      if [ -e '$REMOTE_DIR' ]; then mv '$REMOTE_DIR' '$FAILED_DIR'; fi
+      mv '$BACKUP_DIR' '$REMOTE_DIR'
+    fi
+    pm2 save --force >/dev/null; pm2 save --force >/dev/null
+    pm2 jlist | node -e '
+      let raw = \"\"
+      process.stdin.on(\"data\", (chunk) => { raw += chunk })
+      process.stdin.on(\"end\", () => {
+        const appName = process.argv[1]
+        const apps = JSON.parse(raw).filter((app) => app?.name === appName ||
+          JSON.stringify([app?.pm2_env?.pm_exec_path, app?.pm2_env?.args,
+            app?.pm_exec_path, app?.script, app?.args]).includes(\"ingest-worker.ts\"))
+        if (apps.length !== 0) process.exit(55)
+      })
+    ' '$PM2_APP'
+    node -e '
+      const fs = require(\"node:fs\"), os = require(\"node:os\"), path = require(\"node:path\")
+      const appName = process.argv[1]
+      const home = process.env.PM2_HOME || path.join(os.homedir(), \".pm2\")
+      for (const name of [\"dump.pm2\", \"dump.pm2.bak\"]) {
+        const apps = JSON.parse(fs.readFileSync(path.join(home, name), \"utf8\"))
+        if (apps.some((app) => app?.name === appName ||
+            JSON.stringify([app?.pm_exec_path, app?.args, app?.script]).includes(\"ingest-worker.ts\")))
+          process.exit(53)
+      }
+    ' '$PM2_APP'
+    cd '$REMOTE_DIR'
+    test -n '$RECOVERY_OLD_SHA'; test -n '$RECOVERY_OLD_RELEASE'; test -n '$RECOVERY_ENV_SHA256'
+    test \"\$(cat DEPLOYED_SHA)\" = '$RECOVERY_OLD_SHA'
+    old_release=\$(cat WORKER_RELEASE_ID 2>/dev/null || true)
+    test -n \"\$old_release\" || old_release=unknown
+    test \"\$old_release\" = '$RECOVERY_OLD_RELEASE'
+    test \"\$(sha256sum worker/.env | awk '{print \$1}')\" = '$RECOVERY_ENV_SHA256'
+    process_snapshot='$DEPLOY_LOCK_DIR/quarantine-process-snapshot-$DEPLOY_LOCK_TOKEN'
+    ps -eo pid=,args= > \"\$process_snapshot\"
+    while read -r pid command; do
+      test \"\$pid\" = \"\$\$\" && continue
+      case \"\$command\" in
+        *'/worker/src/'*'ingest-worker.ts'*|*'tsx worker/src/'*'ingest-worker.ts'*)
+          rm -f \"\$process_snapshot\"; exit 54 ;;
+      esac
+    done < \"\$process_snapshot\"
+    rm -f \"\$process_snapshot\"
+    process_snapshot=''
+    if command -v docker >/dev/null 2>&1; then
+      containers=\$(docker ps --format '{{.Names}}|{{.Label \"com.arenafi.role\"}}')
+      if printf '%s\n' \"\$containers\" | awk -F '|' '\$1 ~ /^arena-ingest-worker-sg([_-].*)?\$/ || \$2 == \"ingest-worker\" { found=1 } END { exit !found }'; then
+        exit 61
+      fi
+    fi
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'"; then
+    ok=0
+  fi
+  arm_sg_incident_holds cleanup || ok=0
+  ssh_sg "set -eu
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    rm -f '$RECOVERY_GO_CONSUMED'
+    test ! -e '$RECOVERY_GO_CONSUMED'; test ! -L '$RECOVERY_GO_CONSUMED'
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'" \
+    >/dev/null 2>&1 || ok=0
+  if [ "$ok" = 1 ]; then
+    STOPPED_RECOVERY_QUARANTINED=1
+    echo '✗ SG stopped-recovery candidate quarantined; worker remains stopped and both holds remain armed' >&2
+    return 0
+  fi
+  echo '✗✗ SG stopped-recovery quarantine is incomplete; both holds were re-armed where possible' >&2
+  return 1
+}
+
 echo "=== SG ingest candidate $SHA release=$WORKER_RELEASE_ID mode=$MODE ==="
 
 if [ "$MODE" = "dry-run" ]; then
@@ -666,7 +1140,12 @@ fi
 
 echo "0/7 acquiring token-fenced SG deploy lease"
 acquire_deploy_lock
-assert_deploy_lock
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  STOPPED_RECOVERY_SESSION=1
+  prove_stopped_sg_baseline || exit 1
+else
+  assert_deploy_lock
+fi
 
 # All remote inspection is inside the lease. Otherwise a Docker cutover or a
 # second deploy could race between the check and our first mutation.
@@ -689,16 +1168,18 @@ if [ -n "$RUNNING_INGEST_CONTAINERS" ]; then
   exit 1
 fi
 
-ssh_sg "pm2 jlist | node -e '
-  let raw=\"\"; process.stdin.on(\"data\", c => raw += c); process.stdin.on(\"end\", () => {
-    const apps = JSON.parse(raw).filter(a => a.name === process.argv[1]);
-    if (apps.length !== 1 || apps[0].pm2_env?.status !== \"online\" ||
-        apps[0].pm2_env?.pm_cwd !== process.argv[2]) process.exit(1);
-  });
-' '$PM2_APP' '$REMOTE_DIR'" || {
-  echo "✗ SG must have exactly one online PM2 owner in $REMOTE_DIR before deployment" >&2
-  exit 1
-}
+if [ "$RECOVER_FROM_STOPPED" = 0 ]; then
+  ssh_sg "set -o pipefail; pm2 jlist | node -e '
+    let raw=\"\"; process.stdin.on(\"data\", c => raw += c); process.stdin.on(\"end\", () => {
+      const apps = JSON.parse(raw).filter(a => a.name === process.argv[1]);
+      if (apps.length !== 1 || apps[0].pm2_env?.status !== \"online\" ||
+          apps[0].pm2_env?.pm_cwd !== process.argv[2]) process.exit(1);
+    });
+  ' '$PM2_APP' '$REMOTE_DIR'" || {
+    echo "✗ SG must have exactly one online PM2 owner in $REMOTE_DIR before deployment" >&2
+    exit 1
+  }
+fi
 
 REMOTE_RUNTIME="$(ssh_sg "node -p \"process.versions.node.split('.')[0] + ' ' + process.arch\"")"
 if [ "$MODE" = "artifact" ]; then
@@ -730,21 +1211,21 @@ if [ "$MODE" = "full" ] && [ "$DEP_INPUTS_CHANGED" = 1 ] && [ "$FORCE_NPM_CI" = 
 fi
 
 echo "1/7 cloning live tree into an isolated candidate"
-assert_deploy_lock
+assert_candidate_preparation_authority
 ssh_sg "set -eu; test -d '$REMOTE_DIR'; rm -rf '$STAGING_DIR'; cp -a '$REMOTE_DIR' '$STAGING_DIR'"
 
 echo "2/7 syncing exact committed source into the candidate"
 SOURCE_PATHS=()
 for path in "${FULL_PATHS[@]}"; do SOURCE_PATHS+=("$DEPLOY_SOURCE_DIR/$path"); done
-assert_deploy_lock
+assert_candidate_preparation_authority
 rsync -az --delete "${RSYNC_EXCLUDES[@]}" "${SOURCE_PATHS[@]}" "$VPS_HOST:$STAGING_DIR/"
 
 echo "3/7 preparing candidate dependencies"
-assert_deploy_lock
+assert_candidate_preparation_authority
 if [ "$MODE" = "artifact" ]; then
   scp -q -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
     "$FROM_ARTIFACT" "$VPS_HOST:$REMOTE_ARTIFACT"
-  assert_deploy_lock
+  assert_candidate_preparation_authority
   ssh_sg "set -eu
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner')\" = '$DEPLOY_LOCK_TOKEN'
     test \"\$(sha256sum '$REMOTE_ARTIFACT' | awk '{print \$1}')\" = '$MF_TARBALL_HASH'
@@ -756,7 +1237,7 @@ elif [ "$MODE" = "full" ] && [ "$DEP_INPUTS_CHANGED" = 1 ] && [ "$FORCE_NPM_CI" 
 fi
 
 echo "4/7 loading every critical module from the isolated candidate"
-assert_deploy_lock
+assert_candidate_preparation_authority
 ssh_sg "set -eu; cd '$STAGING_DIR'
   for m in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt playwright tsx dotenv esbuild; do
     node -e \"require.resolve(process.argv[1])\" \"\$m\"
@@ -771,7 +1252,7 @@ ssh_sg "set -eu; cd '$STAGING_DIR'
   node node_modules/tsx/dist/cli.mjs worker/preflight-sg-runtime.ts"
 
 echo "5/7 stamping candidate and rechecking exact main"
-assert_deploy_lock
+assert_candidate_preparation_authority
 ssh_sg "set -eu
   printf '%s\n' '$SHA' > '$STAGING_DIR/.DEPLOYED_SHA.tmp'
   printf '%s\n' '$WORKER_RELEASE_ID' > '$STAGING_DIR/.WORKER_RELEASE_ID.tmp'
@@ -779,7 +1260,7 @@ ssh_sg "set -eu
   mv '$STAGING_DIR/.WORKER_RELEASE_ID.tmp' '$STAGING_DIR/WORKER_RELEASE_ID'"
 require_exact_main
 
-assert_deploy_lock
+assert_candidate_preparation_authority
 CANDIDATE_NOT_BEFORE_MS="$(remote_now_ms)"
 READY_MARKER="arena-deploy-$DEPLOY_LOCK_TOKEN"
 ssh_sg "set -eu
@@ -788,19 +1269,24 @@ ssh_sg "set -eu
   printf '%s\n' '$READY_MARKER' >> '$STAGING_DIR/worker/logs/ingest-out.log'"
 
 echo "6/7 stopping the sole PM2 owner and atomically switching directories"
-assert_deploy_lock
-arm_recovery_guard
-RECOVERY_REQUIRED=1
-ssh_sg "set -eu
-  test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
-  pm2 stop '$PM2_APP' >/dev/null
-  for i in \$(seq 1 30); do
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  authorize_stopped_sg_cutover || exit 1
+  RECOVERY_REQUIRED=1
+else
+  assert_deploy_lock
+  arm_recovery_guard
+  RECOVERY_REQUIRED=1
+  ssh_sg "set -eu
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
-    pid=\$(pm2 pid '$PM2_APP' | tr -d '[:space:]')
-    [ \"\$pid\" = 0 ] && exit 0
-    sleep 1
-  done
-  exit 1"
+    pm2 stop '$PM2_APP' >/dev/null
+    for i in \$(seq 1 30); do
+      test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+      pid=\$(pm2 pid '$PM2_APP' | tr -d '[:space:]')
+      [ \"\$pid\" = 0 ] && exit 0
+      sleep 1
+    done
+    exit 1"
+fi
 assert_deploy_lock
 clear_saved_pm2_owner || {
   echo "✗ could not remove the unproven SG owner from saved PM2 state" >&2
@@ -811,11 +1297,28 @@ CUTOVER_STARTED=1
 ssh_sg "set -eu
   test \"\$(cat '$DEPLOY_LOCK_DIR/owner')\" = '$DEPLOY_LOCK_TOKEN'
   test ! -e '$BACKUP_DIR'
+  if [ '$RECOVER_FROM_STOPPED' = 1 ]; then
+    test -d '$REMOTE_DIR'; test ! -L '$REMOTE_DIR'
+    test \"\$(cat '$REMOTE_DIR/DEPLOYED_SHA')\" = '$RECOVERY_OLD_SHA'
+    old_release=\$(cat '$REMOTE_DIR/WORKER_RELEASE_ID' 2>/dev/null || true)
+    test -n \"\$old_release\" || old_release=unknown
+    test \"\$old_release\" = '$RECOVERY_OLD_RELEASE'
+    test -f '$REMOTE_DIR/worker/.env'; test ! -L '$REMOTE_DIR/worker/.env'
+    test \"\$(sha256sum '$REMOTE_DIR/worker/.env' | awk '{print \$1}')\" = '$RECOVERY_ENV_SHA256'
+    test -d '$STAGING_DIR'; test ! -L '$STAGING_DIR'
+    test -f '$STAGING_DIR/worker/.env'; test ! -L '$STAGING_DIR/worker/.env'
+    test \"\$(stat -c %a '$STAGING_DIR/worker/.env')\" = 600
+    test \"\$(sha256sum '$STAGING_DIR/worker/.env' | awk '{print \$1}')\" = '$RECOVERY_ENV_SHA256'
+    test \"\$(cat '$STAGING_DIR/DEPLOYED_SHA')\" = '$SHA'
+    test \"\$(cat '$STAGING_DIR/WORKER_RELEASE_ID')\" = '$WORKER_RELEASE_ID'
+  fi
   mv '$REMOTE_DIR' '$BACKUP_DIR'
   mv '$STAGING_DIR' '$REMOTE_DIR'"
 
 echo "7/7 starting and proving the exact fresh release"
+assert_deploy_lock
 start_exact_pm2
+assert_deploy_lock
 CANDIDATE_PM2_PID="$(exact_pm2_pid)" || {
   echo "✗ candidate has no exact live PM2 PID" >&2
   exit 1
@@ -872,6 +1375,16 @@ RECOVERY_REQUIRED=0
 if ! clear_recovery_guard; then
   echo "✗ candidate is safely committed, but recovery-guard cleanup is uncertain; inspect '$DEPLOY_RECOVERY_GUARD' manually" >&2
   exit 1
+fi
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  if ! ssh_sg "set -eu
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    rm -f '$RECOVERY_GO_CONSUMED'
+    test ! -e '$RECOVERY_GO_CONSUMED'; test ! -L '$RECOVERY_GO_CONSUMED'
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'"; then
+    echo '✗ unable to destroy the consumed SG stopped-recovery confirmation' >&2
+    exit 1
+  fi
 fi
 if ! ssh_sg "set -eu
   test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'

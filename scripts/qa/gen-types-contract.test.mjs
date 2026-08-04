@@ -738,7 +738,8 @@ test('CI keeps type contracts secret-scoped, push-main only, and deployment-bloc
   assert.doesNotMatch(contractJob, /DATABASE_URL|SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/)
 
   assert.match(liveJob, /Types live drift check \(push main only\)/)
-  assert.match(liveJob, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/)
+  assert.match(workflow, /SECURITY SUSPENDED \(V1 NO-GO\)/)
+  assert.match(liveJob, /if: \$\{\{ false \}\}/)
   assert.match(liveJob, /^\s{4}timeout-minutes: 15$/m)
   assert.doesNotMatch(liveJob, /seed-supabase-typegen-image|docker/i)
   assert.match(genTypes, /POSTGRES_META_VERSION="0\.96\.6"/)
@@ -797,7 +798,8 @@ test('CI keeps type contracts secret-scoped, push-main only, and deployment-bloc
   ]) {
     assert.ok(deployGate.includes(`"${gateJob}"`), `${gateJob} is missing from deploy gate`)
   }
-  assert.match(deployGate, /workflow_run\.event == 'push'/)
+  assert.match(deployGate, /SECURITY SUSPENDED \(V1 NO-GO\)/)
+  assert.match(deployGate, /deploy:\n    if: \$\{\{ false \}\}/)
   assert.match(deployGate, /jobs\?per_page=100/)
   assert.match(deployGate, /\[ "\$C" = "success" \] \|\| PASS=false/)
   assert.equal(

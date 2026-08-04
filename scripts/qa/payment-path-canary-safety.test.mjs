@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
+import { parse } from 'yaml'
 
 import {
   TARGET_ATTESTATION,
@@ -179,25 +180,24 @@ test('payment canary source uses current authority, no hard-coded fixture UUID, 
   assert.doesNotMatch(source, /\bCOMMIT\b/)
 })
 
-test('payment canary is absent from schedules and requires explicit workflow input', async () => {
+test('payment canary is suspended with its protected input contract intact', async () => {
   const workflow = await readFile(
     new URL('../../.github/workflows/payment-path-canary.yml', import.meta.url),
     'utf8'
   )
+  const parsedWorkflow = parse(workflow)
   const sentinelsWorkflow = await readFile(
     new URL('../../.github/workflows/openclaw-sentinels.yml', import.meta.url),
     'utf8'
   )
 
-  assert.doesNotMatch(workflow, /schedule:/)
+  assert.deepEqual(Object.keys(parsedWorkflow.on), ['workflow_call'])
+  assert.equal(parsedWorkflow.on.workflow_call.secrets, undefined)
+  assert.equal(parsedWorkflow.jobs['payment-path-canary'].if, '${{ false }}')
   assert.match(workflow, /confirm_rollback_only_staging:/)
   assert.match(workflow, /environment: arena-staging-payment-canary/)
   assert.match(workflow, /secrets\.PAYMENT_CANARY_STAGING_DATABASE_URL/)
   assert.match(workflow, /secrets\.PAYMENT_CANARY_STAGING_PROJECT_REF/)
   assert.doesNotMatch(workflow, /DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}/)
-  assert.match(
-    workflow,
-    /if: github\.ref == 'refs\/heads\/main' && inputs\.confirm_rollback_only_staging/
-  )
   assert.doesNotMatch(sentinelsWorkflow, /payment-path-canary/)
 })

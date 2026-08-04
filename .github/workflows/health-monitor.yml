@@ -7,7 +7,6 @@ name: Health Monitor
 on:
   schedule:
     - cron: '15,45 * * * *' # Every 30 min, offset from OpenClaw (0,30)
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,15 +17,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # Restore explicitly, then save explicitly only after a confirmed
       # Telegram 2xx. The job intentionally fails when health is bad, so the
       # combined cache action's post-step is not a reliable persistence point.
       - name: Restore alert-dedup marker
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .hm-alert-marker
           key: hm-alert-marker-v2-${{ github.run_id }}
@@ -210,7 +210,7 @@ jobs:
 
       - name: Save alert-dedup marker after confirmed delivery
         if: steps.telegram.outputs.delivered == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .hm-alert-marker
           key: hm-alert-marker-v2-${{ github.run_id }}
