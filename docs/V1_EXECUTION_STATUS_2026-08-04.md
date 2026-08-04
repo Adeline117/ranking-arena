@@ -20,9 +20,15 @@
   cache probe 全部为 MISS 且行为一致。
 - 当前 `/api/health` 返回 HTTP 202/degraded；数据库与 Redis 探针通过，但 freshness
   仅 `4/32 fresh`、`13 stale`、`15 critical`。这不是 GO 信号。
+- `2026-08-04T20:32Z` 再次从公网只读检查：health 仍是同一 202/degraded 状态；
+  token containment checker 的 4 个 API、2 个页面、2 个 sitemap 检查全部通过。
 - 未来 GitHub Actions 与 Vercel Production 的 Telegram token/chat-id 已于 19:03Z
   更新，且 provider API 身份检查返回 200；当前 Vercel deployment 早于该更新，
   更新后也尚无真实消息投递证明，因此告警恢复仍为待验证。
+- Supabase 于 20:00Z 将 Management API 事故标记 resolved，但
+  [官方状态页](https://status.supabase.com/)仍显示 Database degraded，
+  [Project Upgrade Delays](https://status.supabase.com/incidents/2vt3m1qjsf29)仍在修复和
+  测试中；provider 门禁没有解除。
 
 ## 备份与恢复证据
 
@@ -61,20 +67,44 @@ migration QA 另有 101 个仓库文件名未出现在 live ledger。它们包�
 已存在的候选，不能按数量批量补跑；必须逐项对 frozen catalogue，再在 disposable
 PostgreSQL 17 验证。当前没有任何生产迁移授权。
 
-## 联合候选
+## 联合候选与离线验证
 
-联合分支 `codex/v1-combined-20260804` 进入本报告前的 checkpoint 为
-`459b0a69fdd7bdca8b63473621ceb0109abfa160`。它整合了 migration/NFT blocker、
-backup hardening、V1 candidate、线上 token containment，并已包含
-`brace-expansion` 5.0.9 高危修复。此前应用/worker typecheck、聚焦测试、98 项
-backup/writer/migration/token 测试、两组 PG17 共 8 项和 lint 均通过；仍需在干净
-Node 22 安装上完成精确依赖检查、全量 Jest、所有相关 PG17 gate 与 production-like
-build。最终候选 SHA 只能在文件冻结后由 Git 记录，不能在提交内容中自引用。
+联合分支 `codex/v1-combined-20260804` 整合了 migration/NFT blocker、backup
+hardening、V1 candidate、线上 token containment 和 `brace-expansion` 5.0.9
+修复。验证树在文档更新前的 Git checkpoint 为
+`be7f784c53187a1e02424053acb0c168a159eb21`；最终 PR SHA 由 Git/GitHub 记录，
+不在提交内容中自引用。
+
+- 第二台 Mac mini 使用 Node `22.23.2` 完成 lockfile clean install；
+  `package-lock.json` SHA-256 为
+  `c60a9fddee366d056b6b60525867c356c9f241846575396fe7595261700db609`。
+  `@lhci/cli=0.15.1` 与修复后的 `tmp=0.2.7` 均为精确版本。
+- `npm audit --audit-level=high` 通过：0 high、0 critical；仍有 2 low、23 moderate，
+  未运行会产生未审查依赖漂移的 `npm audit fix`。
+- 最终离线 QA sweep 为 278/278；危险 migration scanner 的 19 项 lexer、PR/push
+  range、root push、non-fast-forward、rename、symlink 和 committed-blob 测试全过。
+  scanner 会拒绝未闭合 SQL，并修复了 quoted/dollar-quoted 默认值内分号导致的
+  `SET NOT NULL` 漏报。
+- PostgreSQL 17 的全部 18 组 schema/RLS/RPC/迁移门禁通过；这只证明 disposable
+  数据库行为，不代表已获准在生产执行迁移。
+- 全量 Jest coverage 在 Redis 7.4.9 下以已写入 CI 的 `--maxWorkers=2` 完成：
+  1084 suites passed、2 skipped；12334 tests passed、17 skipped。
+- 同一应用源码树完成 Next.js 16.2.11 production-like build、161 个静态页面和
+  1094 个浏览器 chunk 的 BigInt postbuild 检查。之后的变更仅限 CI/QA、文档和
+  Lighthouse dev dependency；最终精确提交仍须由 PR Build 复验。
+- 私有、无 secret 的 Lighthouse 门禁在显式 `127.0.0.1` 回环端口对 `/`、
+  `/methodology`、`/about` 各运行 3 次，共 9 次全部通过且没有公开上传报告。每页
+  最低 performance 分别为 0.84、0.98、0.96；最低 accessibility 为
+  0.96、0.99、0.96；最低 best-practices 均为 0.96；HTTP audit 均为 1.0。
+- GitHub artifact API 仍保留 1979 条记录、名义 88.20 GB，但 1727 条已 expired；
+  真正未过期的 252 条合计约 266.7 MB。combined PR 路径不上传 coverage、`.next`
+  或 Lighthouse artifact，因此 quota 不阻断 PR CI；本次未删除任何审计或发布证据。
 
 ## 剩余门禁（严格顺序）
 
-1. 在干净 Node 22 + PostgreSQL 17 环境完成联合候选全量验证，推送新的统一 PR；
-   旧 PR #253 仅在新 PR 建立后标记 superseded。
+1. 推送已完成离线验证的联合候选并建立新的统一 PR；以该精确提交的 GitHub CI、
+   Build、Lighthouse 全绿作为合并门禁。新 PR 建立后再把冲突的旧 PR #253 标记
+   superseded；不得因为仓库当前无 required-check 保护而跳过人工门禁。
 2. 等待 Supabase 官方事故恢复；获取受控的非 pooler backup/restore 通道，在至少
    约 100 GiB 的 managed scratch 完成全量恢复、CRC/tail、索引、RLS/auth、关键表
    及应用只读 smoke。
