@@ -196,7 +196,7 @@ export async function checkBackupFreshness({
   if (ageHours > maxAgeHours) {
     throw freshnessViolation(
       `backup is stale: ${selected.Key} is ${ageHours.toFixed(1)}h old > ${maxAgeHours}h`,
-      `🚨 *备份过期*（SLO #4 违约）\n最新契约备份 \`${selected.Key}\`（${sizeMB.toFixed(1)}MB）已 ${ageHours.toFixed(1)}h（阈值 ${maxAgeHours}h）\n查 Mac Mini local-cron-backup；手动补：\`BACKUP_SCHEMAS=arena,public npm run backup:r2\``
+      `🚨 *备份过期*（SLO #4 违约）\n最新契约备份 \`${selected.Key}\`（${sizeMB.toFixed(1)}MB）已 ${ageHours.toFixed(1)}h（阈值 ${maxAgeHours}h）\n查 GH backup-db / Mac backup:r2 日程；手动补：\`BACKUP_SCHEMAS=arena,public npm run backup:r2\``
     )
   }
 
