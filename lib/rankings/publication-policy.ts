@@ -10,10 +10,10 @@
 
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 
-// v6: publication-fenced writes and shared-only reads. Rotate every ranking
-// key so orphaned v5 payloads whose legacy tag TTL expired cannot bypass the
+// v7: BingX ranking quarantine. Rotate every ranking key so orphaned v6
+// payloads whose legacy tag TTL expired cannot bypass the
 // new atomic generation invalidation contract.
-export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v6'
+export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v7'
 /**
  * Redis tag index for the current public ranking epoch. This must rotate with
  * the key epoch so an older rolling-deploy writer cannot shorten or recreate
@@ -46,6 +46,19 @@ export const PUBLIC_RANKING_SOURCE_QUARANTINES = [
     contract: 'bitget-bot-cumulative-rank-quarantine@1',
     reason: 'inception_cumulative_metrics_are_not_window_rank_authority',
     reviewedAt: '2026-07-28',
+  },
+  {
+    // Public alias for the ingest source bingx_futures.
+    source: 'bingx',
+    contract: 'bingx-ranking-quarantine@1',
+    reason: 'population_window_and_history_authority_unverified',
+    reviewedAt: '2026-08-03',
+  },
+  {
+    source: 'bingx_spot',
+    contract: 'bingx-ranking-quarantine@1',
+    reason: 'population_window_and_history_authority_unverified',
+    reviewedAt: '2026-08-03',
   },
 ] as const
 

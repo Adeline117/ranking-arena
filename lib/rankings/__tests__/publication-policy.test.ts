@@ -37,8 +37,8 @@ function eligibleRow(overrides: Record<string, unknown> = {}) {
 
 describe('public ranking publication policy', () => {
   it('binds the cache epoch to the current ranking-authority contract', () => {
-    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v6')
-    expect(PUBLIC_RANKING_REDIS_TAG).toBe('rankings:public-rank-policy-v6')
+    expect(PUBLIC_RANKING_CACHE_EPOCH).toBe('public-rank-policy-v7')
+    expect(PUBLIC_RANKING_REDIS_TAG).toBe('rankings:public-rank-policy-v7')
     expect(PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toBe(48 * 60 * 60 * 1000)
     expect(PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toBe(5 * 60 * 1000)
     expect(PUBLIC_RANKING_SOURCE_QUARANTINES).toEqual([
@@ -60,14 +60,28 @@ describe('public ranking publication policy', () => {
         reason: 'inception_cumulative_metrics_are_not_window_rank_authority',
         reviewedAt: '2026-07-28',
       },
+      {
+        source: 'bingx',
+        contract: 'bingx-ranking-quarantine@1',
+        reason: 'population_window_and_history_authority_unverified',
+        reviewedAt: '2026-08-03',
+      },
+      {
+        source: 'bingx_spot',
+        contract: 'bingx-ranking-quarantine@1',
+        reason: 'population_window_and_history_authority_unverified',
+        reviewedAt: '2026-08-03',
+      },
     ])
     expect(PUBLIC_RANKING_QUARANTINED_SOURCES).toEqual([
       'okx_web3_solana',
       'bitget_bots_futures',
       'bitget_bots_spot',
+      'bingx',
+      'bingx_spot',
     ])
     expect(PUBLIC_RANKING_POSTGREST_EXCLUSION).toBe(
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(hasActivePublicRankingQuarantine()).toBe(true)
   })
@@ -76,7 +90,11 @@ describe('public ranking publication policy', () => {
     expect(isPublicRankingSourceQuarantined(' OKX_WEB3_SOLANA ')).toBe(true)
     expect(isPublicRankingSourceQuarantined(' BITGET_BOTS_FUTURES ')).toBe(true)
     expect(isPublicRankingSourceQuarantined('bitget_bots_spot')).toBe(true)
+    expect(isPublicRankingSourceQuarantined(' BINGX ')).toBe(true)
+    expect(isPublicRankingSourceQuarantined('bingx_spot')).toBe(true)
     expect(isPublicRankingSourceAllowed('okx_web3_solana')).toBe(false)
+    expect(isPublicRankingSourceAllowed('bingx')).toBe(false)
+    expect(isPublicRankingSourceAllowed('bingx_spot')).toBe(false)
     expect(isPublicRankingSourceAllowed('binance_futures')).toBe(true)
     expect(isPublicRankingSourceAllowed(' BINANCE_FUTURES ')).toBe(false)
     expect(isPublicRankingSourceAllowed('BINANCE_FUTURES')).toBe(false)
@@ -94,6 +112,8 @@ describe('public ranking publication policy', () => {
         { source: 'hyperliquid', id: 3 },
         { source: 'bitget_bots_futures', id: 4 },
         { source: 'bitget_bots_spot', id: 5 },
+        { source: 'bingx', id: 6 },
+        { source: 'bingx_spot', id: 7 },
       ],
       (row) => row.source
     )
@@ -103,6 +123,8 @@ describe('public ranking publication policy', () => {
         'okx_web3_solana',
         'bitget_bots_futures',
         'bitget_bots_spot',
+        'bingx',
+        'bingx_spot',
         'hyperliquid',
         'binance_futures',
         'hyperliquid',
@@ -309,7 +331,7 @@ describe('public ranking publication policy', () => {
 
   it('epochs ordinary public ranking cache keys', () => {
     expect(publicRankingCacheKey('leaderboard:v3:90D')).toBe(
-      'public-rank-policy-v6:leaderboard:v3:90D'
+      'public-rank-policy-v7:leaderboard:v3:90D'
     )
   })
 

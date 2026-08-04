@@ -185,7 +185,7 @@ describe('getLeaderboard source exclusion', () => {
     expect(leaderboardQuery.not).toHaveBeenCalledWith(
       'source',
       'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot)'
+      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
     expect(leaderboardQuery.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'binance_futures')
