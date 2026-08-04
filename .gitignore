@@ -134,6 +134,7 @@ backups/
 debug_*.png
 lighthouse-report.*
 .lighthouse-report.json
+.lighthouseci/
 docs/lighthouse-results-*.json
 screenshots/
 .archived/
