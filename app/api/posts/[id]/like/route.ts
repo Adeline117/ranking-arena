@@ -5,11 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import { validateEnum, success } from '@/lib/api'
+import { success } from '@/lib/api'
 import { togglePostReaction, getPostById, PostInteractionMutationError } from '@/lib/data/posts'
 import { sendNotification } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
@@ -18,22 +17,33 @@ import { z } from 'zod'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
+const uuidSchema = z.string().uuid()
+const reactionRequestSchema = z.object({ reaction_type: z.enum(['up', 'down']) }).strict()
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
+
+function privateNoStore(response: NextResponse): NextResponse {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
+
 export async function POST(request: NextRequest, context: RouteContext) {
   const guard = socialFeatureGuard()
-  if (guard) return guard
-
-  // Rate limit: prevent like-bombing
-  const rl = await checkRateLimit(request, RateLimitPresets.write)
-  if (rl) return rl
+  if (guard) return privateNoStore(guard)
 
   const { id } = await context.params
-  const parsedPostId = z.string().uuid().safeParse(id)
-  if (!parsedPostId.success) {
-    return NextResponse.json({ success: false, error: 'Invalid post ID' }, { status: 400 })
-  }
-
   const handler = withAuth(
     async ({ user, supabase, request: req }) => {
+      const parsedPostId = uuidSchema.safeParse(id)
+      if (!parsedPostId.success) {
+        return NextResponse.json({ success: false, error: 'Invalid post ID' }, { status: 400 })
+      }
+
       let body: Record<string, unknown>
       try {
         body = await req.json()
@@ -41,15 +51,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
       }
 
-      const reactionType =
-        validateEnum(body.reaction_type || 'up', ['up', 'down'] as const, {
-          fieldName: 'reaction_type',
-        }) ?? 'up'
+      const parsedBody = reactionRequestSchema.safeParse(body)
+      if (!parsedBody.success) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid reaction request' },
+          { status: 400 }
+        )
+      }
+      const parsedActorId = uuidSchema.safeParse(user.id)
+      if (!parsedActorId.success) {
+        return NextResponse.json(
+          { success: false, error: 'Authentication failed' },
+          { status: 401 }
+        )
+      }
+
+      const reactionType = parsedBody.data.reaction_type
+      const actorId = parsedActorId.data.toLowerCase()
+      const postId = parsedPostId.data.toLowerCase()
 
       // 执行点赞/踩操作
       let result
       try {
-        result = await togglePostReaction(supabase, parsedPostId.data, user.id, reactionType)
+        result = await togglePostReaction(supabase, postId, actorId, reactionType)
       } catch (error) {
         if (error instanceof PostInteractionMutationError) {
           if (error.kind === 'not_found') {
@@ -74,7 +98,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       if (result.action === 'added' && reactionType === 'up') {
         try {
-          post = await getPostById(supabase, parsedPostId.data, user.id)
+          post = await getPostById(supabase, postId, actorId)
         } catch (fetchError) {
           logger.warn('[posts/[id]/like] Failed to fetch notification post:', fetchError)
         }
@@ -97,8 +121,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 title: `${userHandle} liked your post`,
                 message: (post!.title || '').slice(0, 100) || 'your post',
                 actor_id: user.id,
-                link: `/post/${parsedPostId.data}`,
-                reference_id: parsedPostId.data,
+                link: `/post/${postId}`,
+                reference_id: postId,
                 read: false,
               },
               'Like notification'
@@ -108,15 +132,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
         )
       }
 
-      return success({
-        action: result.action,
-        reaction: result.reaction,
-        like_count: result.like_count,
-        dislike_count: result.dislike_count,
-      })
+      return success(
+        {
+          actor_id: actorId,
+          post_id: postId,
+          requested_reaction: reactionType,
+          action: result.action,
+          reaction: result.reaction,
+          like_count: result.like_count,
+          dislike_count: result.dislike_count,
+        },
+        200,
+        PRIVATE_NO_STORE_HEADERS
+      )
     },
     { name: 'posts-like', rateLimit: 'write' }
   )
 
-  return handler(request)
+  return privateNoStore(await handler(request))
 }

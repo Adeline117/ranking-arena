@@ -749,11 +749,15 @@ export async function togglePostReaction(
   if (result.status === 'invalid') throw new PostInteractionMutationError('invalid')
   const action = result.action
   const reaction = result.reaction
+  const resultKeys = Object.keys(result).sort()
+  const expectedResultKeys = ['action', 'dislike_count', 'like_count', 'reaction', 'status'].sort()
   const validAction = action === 'added' || action === 'removed' || action === 'changed'
   const validReaction =
     (action === 'removed' && reaction === null) ||
     ((action === 'added' || action === 'changed') && reaction === reactionType)
   if (
+    resultKeys.length !== expectedResultKeys.length ||
+    !resultKeys.every((key, index) => key === expectedResultKeys[index]) ||
     result.status !== action ||
     !validAction ||
     !validReaction ||

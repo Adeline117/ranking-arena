@@ -9,6 +9,9 @@ const mockUpdatePostReaction = jest.fn()
 const mockRouterPush = jest.fn()
 const mockShowToast = jest.fn()
 const mockSavePostToBookmarkFolder = jest.fn()
+const REACTION_ACTOR_ID = '11111111-1111-4111-8111-111111111111'
+const REACTION_POST_ID = '22222222-2222-4222-8222-222222222222'
+const REACTION_TIMESTAMP = '2026-08-03T20:30:00.000Z'
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -63,6 +66,13 @@ const viewerA: ViewerProps = {
   sessionGeneration: 1,
 }
 
+const reactionViewer: ViewerProps = {
+  accessToken: 'reaction-token-a',
+  currentUserId: REACTION_ACTOR_ID,
+  viewerKey: `user:${REACTION_ACTOR_ID}`,
+  sessionGeneration: 7,
+}
+
 function useAliasedPostActions(viewer: ViewerProps = viewerA) {
   const [post, setPost] = useState(initialPost)
   const setPosts = useCallback<React.Dispatch<React.SetStateAction<PostWithUserState[]>>>(
@@ -95,6 +105,23 @@ function useAliasedPostActions(viewer: ViewerProps = viewerA) {
 
 function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500): Response {
   return { ok, status, json: async () => body } as Response
+}
+
+function reactionReceipt(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    data: {
+      actor_id: REACTION_ACTOR_ID,
+      post_id: REACTION_POST_ID,
+      requested_reaction: 'up',
+      action: 'added',
+      reaction: 'up',
+      like_count: 12,
+      dislike_count: 3,
+      ...overrides,
+    },
+    meta: { timestamp: REACTION_TIMESTAMP },
+  }
 }
 
 function deferred<T>() {
@@ -243,29 +270,37 @@ describe('usePostActions aliased detail state', () => {
     expect(mockShowToast).toHaveBeenCalledWith('deleted', 'success')
   })
 
-  it('updates the detail post once and preserves optimistic counts when ACK counts are null', async () => {
-    ;(global.fetch as jest.Mock).mockResolvedValue(
-      jsonResponse({
-        success: true,
-        data: { reaction: 'up', like_count: null, dislike_count: null },
-      })
-    )
-    const { result } = renderHook(() => useAliasedPostActions())
+  it('adopts only the exact actor- and post-bound reaction receipt', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(jsonResponse(reactionReceipt()))
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
 
     await act(async () => {
-      await result.current.actions.toggleReaction('post-1', 'up')
+      await result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
     })
 
     expect(result.current.post).toMatchObject({
-      like_count: 11,
-      dislike_count: 2,
+      like_count: 12,
+      dislike_count: 3,
       user_reaction: 'up',
     })
     expect(mockSetOpenPost).not.toHaveBeenCalled()
-    expect(mockUpdatePostReaction).toHaveBeenCalledWith('post-1', {
-      like_count: 11,
-      dislike_count: 2,
+    expect(mockUpdatePostReaction).toHaveBeenCalledWith(REACTION_POST_ID, {
+      like_count: 12,
+      dislike_count: 3,
       reaction: 'up',
+    })
+    expect(global.fetch).toHaveBeenCalledWith(`/api/posts/${REACTION_POST_ID}/like`, {
+      method: 'POST',
+      headers: expect.objectContaining({
+        Authorization: `Bearer ${reactionViewer.accessToken}`,
+        'Content-Type': 'application/json',
+      }),
+      body: JSON.stringify({ reaction_type: 'up' }),
+      cache: 'no-store',
+      signal: expect.any(AbortSignal),
     })
   })
 
@@ -425,6 +460,180 @@ describe('usePostActions aliased detail state', () => {
       user_reaction: null,
     })
     expect(mockSetOpenPost).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['another actor', reactionReceipt({ actor_id: '33333333-3333-4333-8333-333333333333' }), 200],
+    ['another post', reactionReceipt({ post_id: '33333333-3333-4333-8333-333333333333' }), 200],
+    ['another requested reaction', reactionReceipt({ requested_reaction: 'down' }), 200],
+    ['an extra receipt field', reactionReceipt({ invented: true }), 200],
+    ['an exact body with a non-200 status', reactionReceipt(), 201],
+  ])('rolls back a 2xx reaction response bound to %s', async (_name, body, status) => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(jsonResponse(body, true, status))
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+
+    await act(async () => {
+      await result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+    })
+
+    expect(result.current.post).toMatchObject({
+      like_count: 10,
+      dislike_count: 2,
+      user_reaction: null,
+    })
+    expect(mockUpdatePostReaction).not.toHaveBeenCalled()
+    expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error')
+  })
+
+  it('rolls back a non-JSON 200 reaction response', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('not json')
+      },
+    } as Response)
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+
+    await act(async () => {
+      await result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+    })
+
+    expect(result.current.post).toMatchObject({
+      like_count: 10,
+      dislike_count: 2,
+      user_reaction: null,
+    })
+    expect(mockUpdatePostReaction).not.toHaveBeenCalled()
+  })
+
+  it('single-flights two reaction clicks for one viewer, session and post', async () => {
+    const response = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
+    const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      duplicate = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      response.resolve(jsonResponse(reactionReceipt()))
+      await Promise.all([first, duplicate])
+    })
+
+    expect(result.current.post).toMatchObject({
+      like_count: 12,
+      dislike_count: 3,
+      user_reaction: 'up',
+    })
+    expect(mockUpdatePostReaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('bounds a transport that ignores AbortSignal, rolls back and releases its lock', async () => {
+    jest.useFakeTimers()
+    try {
+      const lateResponse = deferred<Response>()
+      ;(global.fetch as jest.Mock).mockReturnValueOnce(lateResponse.promise)
+      const { result } = renderHook(() => useAliasedPostActions(reactionViewer))
+      act(() => {
+        result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+      })
+
+      let timedRequest!: Promise<void>
+      act(() => {
+        timedRequest = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      })
+      const firstSignal = (global.fetch as jest.Mock).mock.calls[0][1].signal as AbortSignal
+      expect(result.current.post.like_count).toBe(11)
+
+      await act(async () => {
+        jest.advanceTimersByTime(15_000)
+        await timedRequest
+      })
+
+      expect(firstSignal.aborted).toBe(true)
+      expect(result.current.post).toMatchObject({
+        like_count: 10,
+        dislike_count: 2,
+        user_reaction: null,
+      })
+      expect(mockShowToast).toHaveBeenCalledWith('requestTimeout', 'error')
+      await act(async () => {
+        lateResponse.resolve(jsonResponse(reactionReceipt({ like_count: 99 })))
+        await Promise.resolve()
+      })
+      expect(result.current.post).toMatchObject({
+        like_count: 10,
+        dislike_count: 2,
+        user_reaction: null,
+      })
+      expect(mockUpdatePostReaction).not.toHaveBeenCalled()
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce(jsonResponse(reactionReceipt()))
+      await act(async () => {
+        await result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+      })
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(result.current.post.user_reaction).toBe('up')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('drops an exact late receipt after the viewer session changes', async () => {
+    const response = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValue(response.promise)
+    const viewerB: ViewerProps = {
+      accessToken: 'reaction-token-b',
+      currentUserId: '33333333-3333-4333-8333-333333333333',
+      viewerKey: 'user:33333333-3333-4333-8333-333333333333',
+      sessionGeneration: 8,
+    }
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: reactionViewer }
+    )
+    act(() => {
+      result.current.setPost((post) => ({ ...post, id: REACTION_POST_ID }))
+    })
+    let request!: Promise<void>
+    act(() => {
+      request = result.current.actions.toggleReaction(REACTION_POST_ID, 'up')
+    })
+
+    rerender(viewerB)
+    act(() => {
+      result.current.setPost((post) => ({
+        ...post,
+        id: REACTION_POST_ID,
+        like_count: 10,
+        dislike_count: 2,
+        user_reaction: null,
+      }))
+    })
+    await act(async () => {
+      response.resolve(jsonResponse(reactionReceipt({ like_count: 99 })))
+      await request
+    })
+
+    expect(result.current.post).toMatchObject({
+      like_count: 10,
+      dislike_count: 2,
+      user_reaction: null,
+    })
+    expect(mockUpdatePostReaction).not.toHaveBeenCalled()
   })
 
   it('reconciles the canonical repost count returned by the server', async () => {

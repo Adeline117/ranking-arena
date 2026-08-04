@@ -25,11 +25,47 @@ import {
   readPostDeleteAcknowledgement,
   readPostDeleteError,
 } from '@/lib/posts/post-delete-contract'
+import {
+  POST_REACTION_REQUEST_TIMEOUT_MS,
+  readPostReactionAcknowledgement,
+} from '@/lib/posts/post-reaction-client-contract'
 
 type Post = PostWithUserState
 
 const EMPTY_BOOKMARK_FLAGS: Record<string, boolean> = {}
 const EMPTY_BOOKMARK_COUNTS: Record<string, number> = {}
+
+function consumePromise(work: Promise<unknown>): void {
+  void work.then(
+    () => undefined,
+    () => undefined
+  )
+}
+
+function waitWithinAbortSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    consumePromise(work)
+    return Promise.reject(
+      signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+    )
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () =>
+      reject(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    work.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      }
+    )
+  })
+}
 
 interface CustomPollState {
   customPoll: {
@@ -342,6 +378,7 @@ export function usePostActions({
         if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
+      if (!capturedScope.userId) return
       const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000react-${postId}`
       if (lockRef.current.has(key)) return
       lockRef.current.add(key)
@@ -399,84 +436,7 @@ export function usePostActions({
       }
       haptic('light')
 
-      try {
-        const response = await fetch(`/api/posts/${postId}/like`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ reaction_type: reactionType }),
-        })
-        const json = await response.json()
-        if (!scopeIsCurrent(capturedScope)) return
-        if (response.ok && json.success) {
-          // Reconcile with server truth (overwrites optimistic)
-          const result = json.data
-          // The route intentionally returns null counts when its post-count
-          // read fails after the reaction transaction commits. Preserve the
-          // optimistic counts in that case; only the reaction ACK is required.
-          const reconcileServer = (post: Post): Post => ({
-            ...post,
-            ...(typeof result.like_count === 'number' ? { like_count: result.like_count } : {}),
-            ...(typeof result.dislike_count === 'number'
-              ? { dislike_count: result.dislike_count }
-              : {}),
-            user_reaction: result.reaction,
-          })
-          setPosts((prev) => prev.map((p) => (p.id === postId ? reconcileServer(p) : p)))
-          const resolvedLikeCount =
-            typeof result.like_count === 'number'
-              ? result.like_count
-              : currentPost.like_count + likeDelta
-          const resolvedDislikeCount =
-            typeof result.dislike_count === 'number'
-              ? result.dislike_count
-              : currentPost.dislike_count + dislikeDelta
-          usePostStore.getState().updatePostReaction(postId, {
-            like_count: resolvedLikeCount,
-            dislike_count: resolvedDislikeCount,
-            reaction: result.reaction,
-          })
-          {
-            const op = openPostRef.current
-            if (!openPostAliasesPosts && op?.id === postId) setOpenPost(reconcileServer(op))
-          }
-          // Analytics: only count a NEW reaction, not an un-react (result.reaction null)
-          if (result.reaction) {
-            trackEvent('post_reaction', { post_id: postId, reaction: result.reaction })
-          }
-        } else {
-          // Rollback — reverse the delta from CURRENT state (not a stale snapshot)
-          setPosts((prev) =>
-            prev.map((p) =>
-              p.id === postId
-                ? {
-                    ...p,
-                    like_count: p.like_count - likeDelta,
-                    dislike_count: p.dislike_count - dislikeDelta,
-                    user_reaction: currentReaction,
-                  }
-                : p
-            )
-          )
-          {
-            const op = openPostRef.current
-            if (!openPostAliasesPosts && op?.id === postId) {
-              setOpenPost({
-                ...op,
-                like_count: op.like_count - likeDelta,
-                dislike_count: op.dislike_count - dislikeDelta,
-                user_reaction: currentReaction,
-              } as Post)
-            }
-          }
-          showToast(json.error || json.message || t('operationFailed'), 'error')
-        }
-      } catch (err) {
-        if (!scopeIsCurrent(capturedScope)) return
-        // Rollback — reverse delta from current state
+      const rollback = () => {
         setPosts((prev) =>
           prev.map((p) =>
             p.id === postId
@@ -489,20 +449,88 @@ export function usePostActions({
               : p
           )
         )
-        {
-          const op = openPostRef.current
-          if (!openPostAliasesPosts && op?.id === postId) {
-            setOpenPost({
-              ...op,
-              like_count: op.like_count - likeDelta,
-              dislike_count: op.dislike_count - dislikeDelta,
-              user_reaction: currentReaction,
-            } as Post)
-          }
+        const op = openPostRef.current
+        if (!openPostAliasesPosts && op?.id === postId) {
+          setOpenPost({
+            ...op,
+            like_count: op.like_count - likeDelta,
+            dislike_count: op.dislike_count - dislikeDelta,
+            user_reaction: currentReaction,
+          } as Post)
         }
+      }
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(new DOMException('Post reaction request timed out', 'AbortError')),
+        POST_REACTION_REQUEST_TIMEOUT_MS
+      )
+
+      try {
+        const response = await waitWithinAbortSignal(
+          fetch(`/api/posts/${postId}/like`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              ...getCsrfHeaders(),
+            },
+            body: JSON.stringify({ reaction_type: reactionType }),
+            cache: 'no-store',
+            signal: controller.signal,
+          }),
+          controller.signal
+        )
+        const json: unknown = await waitWithinAbortSignal(response.json(), controller.signal)
+        if (!scopeIsCurrent(capturedScope)) return
+        const acknowledgement =
+          response.ok && response.status === 200
+            ? readPostReactionAcknowledgement(json, {
+                actorId: capturedScope.userId,
+                postId,
+                requestedReaction: reactionType,
+              })
+            : null
+        if (acknowledgement) {
+          // Reconcile with server truth (overwrites optimistic)
+          const reconcileServer = (post: Post): Post => ({
+            ...post,
+            like_count: acknowledgement.likeCount,
+            dislike_count: acknowledgement.dislikeCount,
+            user_reaction: acknowledgement.reaction,
+          })
+          setPosts((prev) => prev.map((p) => (p.id === postId ? reconcileServer(p) : p)))
+          usePostStore.getState().updatePostReaction(postId, {
+            like_count: acknowledgement.likeCount,
+            dislike_count: acknowledgement.dislikeCount,
+            reaction: acknowledgement.reaction,
+          })
+          {
+            const op = openPostRef.current
+            if (!openPostAliasesPosts && op?.id === postId) setOpenPost(reconcileServer(op))
+          }
+          // Analytics: only count a NEW reaction, not an un-react.
+          if (acknowledgement.reaction) {
+            trackEvent('post_reaction', {
+              post_id: acknowledgement.postId,
+              reaction: acknowledgement.reaction,
+            })
+          }
+        } else {
+          rollback()
+          const errorMessage =
+            json !== null && typeof json === 'object' && !Array.isArray(json)
+              ? (json as Record<string, unknown>).error
+              : null
+          showToast(typeof errorMessage === 'string' ? errorMessage : t('operationFailed'), 'error')
+        }
+      } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
+        rollback()
         logger.error('[PostFeed] toggleReaction error:', err)
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
+        clearTimeout(timeoutId)
         lockRef.current.delete(key)
       }
     },

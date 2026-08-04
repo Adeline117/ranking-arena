@@ -420,6 +420,14 @@ describe('togglePostReaction', () => {
     { status: 'unexpected' },
     { status: 'added', action: 'added', reaction: 'down', like_count: 1, dislike_count: 0 },
     { status: 'added', action: 'added', reaction: 'up', like_count: -1, dislike_count: 0 },
+    {
+      status: 'added',
+      action: 'added',
+      reaction: 'up',
+      like_count: 1,
+      dislike_count: 0,
+      actor_id: 'user1',
+    },
   ])('fails closed for malformed reaction acknowledgement %#', async (data) => {
     const mockSupabase = createMockSupabase()
     mockSupabase.rpc.mockResolvedValueOnce({ data, error: null })
