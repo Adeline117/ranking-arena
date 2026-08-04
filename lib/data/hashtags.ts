@@ -7,7 +7,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
-import { filterServiceReadablePostRows } from './service-post-audience'
+import { filterServiceReadablePostRowsStrict } from './service-post-audience'
 
 // Unicode-aware: \w 是 ASCII-only,会把 #比特币 这类 CJK 标签静默丢掉
 // (2026-07-03 修复,与 lib/utils/content.ts 的 linkify regex 保持同步)。
@@ -152,9 +152,26 @@ export async function getTrendingHashtags(
 export async function getPostsByHashtag(
   supabase: SupabaseClient,
   tag: string,
-  options: { limit?: number; offset?: number; sort_by?: 'hot_score' | 'created_at' } = {}
-): Promise<{ posts: unknown[]; total: number }> {
-  const { limit = 20, offset = 0, sort_by = 'created_at' } = options
+  options: {
+    limit?: number
+    offset?: number
+    sort_by?: 'hot_score' | 'created_at'
+    viewer_id?: string | null
+  } = {}
+): Promise<{
+  posts: Array<Record<string, unknown> & { id: string }>
+  total: number | null
+  has_more: boolean
+}> {
+  const { limit = 20, offset = 0, sort_by = 'created_at', viewer_id = null } = options
+
+  // The route caps offset at 10k. Keep the data layer bounded as well so a
+  // direct caller cannot turn audience filtering into an unbounded service
+  // scan. Reaching the bound without establishing the requested page is an
+  // authority/read failure, not an empty result.
+  const maxCandidateBatchSize = 100
+  const minCandidateBatchSize = 32
+  const maxRawCandidates = 10_400
 
   // First find the hashtag
   const { data: hashtag, error: hashtagError } = await supabase
@@ -162,64 +179,129 @@ export async function getPostsByHashtag(
     .select('id')
     .eq('tag', tag.toLowerCase())
     .maybeSingle()
-  if (hashtagError)
-    logger.warn('[getPostsByHashtag] hashtags query error (drift?):', hashtagError.message)
+  if (hashtagError) throw hashtagError
 
-  if (!hashtag) return { posts: [], total: 0 }
+  if (!hashtag) return { posts: [], total: 0, has_more: false }
+  if (
+    typeof hashtag !== 'object' ||
+    Array.isArray(hashtag) ||
+    typeof (hashtag as { id?: unknown }).id !== 'string'
+  ) {
+    throw new Error('Hashtag query returned invalid data')
+  }
+  const hashtagId = (hashtag as { id: string }).id
 
-  // Get post IDs from join table
-  // KEEP 'exact' — powers pagination for the /tag/:name posts listing.
-  // Scoped to a single hashtag via (hashtag_id) index → cheap.
-  const {
-    data: joinRows,
-    count,
-    error: joinRowsError,
-  } = await supabase
-    .from('post_hashtags')
-    .select('post_id', { count: 'exact' })
-    .eq('hashtag_id', hashtag.id)
-  if (joinRowsError)
-    logger.warn('[getPostsByHashtag] post_hashtags query error (drift?):', joinRowsError.message)
+  // The service client bypasses posts RLS. Page offsets therefore have to be
+  // applied after canonical audience authorization, not to raw candidates.
+  // Query posts through the canonical join FK in deterministic order, then
+  // scan until we have one authorized look-ahead row or exhaust the source.
+  const readableRows: Array<Record<string, unknown> & { id: string }> = []
+  const seenPostIds = new Set<string>()
+  const wantedReadableRows = offset + limit + 1
+  let rawOffset = 0
+  let sourceExhausted = false
 
-  if (!joinRows || joinRows.length === 0) return { posts: [], total: 0 }
+  while (readableRows.length < wantedReadableRows && rawOffset < maxRawCandidates) {
+    const remainingReadableRows = wantedReadableRows - readableRows.length
+    const candidateBatchSize = Math.min(
+      maxCandidateBatchSize,
+      Math.max(minCandidateBatchSize, remainingReadableRows),
+      maxRawCandidates - rawOffset
+    )
+    const { data: candidates, error: candidatesError } = await supabase
+      .from('posts')
+      .select('*, post_hashtags!inner(hashtag_id)')
+      .eq('post_hashtags.hashtag_id', hashtagId)
+      .order(sort_by, { ascending: false })
+      .order('id', { ascending: false })
+      .range(rawOffset, rawOffset + candidateBatchSize - 1)
 
-  const postIds = joinRows.map((r: { post_id: string }) => r.post_id)
+    if (candidatesError) throw candidatesError
+    if (!Array.isArray(candidates)) {
+      throw new Error('Hashtag posts query returned invalid data')
+    }
 
-  // Fetch posts. posts.author_id has no FK in prod, so the
-  // users!posts_author_id_fkey embed fails with PGRST200 (and the users table
-  // has no handle/display_name/avatar_url columns anyway) — two-step lookup
-  // via user_profiles instead, keeping the `author` response key shape.
-  const query = supabase
-    .from('posts')
-    .select('*')
-    .in('id', postIds)
-    .order(sort_by, { ascending: false })
-    .range(offset, offset + limit - 1)
+    const candidateRows = candidates.map((candidate) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        throw new Error('Hashtag posts query returned invalid data')
+      }
+      const row = candidate as Record<string, unknown>
+      const postId = row.id
+      const joins = row.post_hashtags
+      if (
+        typeof postId !== 'string' ||
+        seenPostIds.has(postId) ||
+        !Array.isArray(joins) ||
+        joins.length === 0 ||
+        !joins.every(
+          (join) =>
+            join !== null &&
+            typeof join === 'object' &&
+            !Array.isArray(join) &&
+            (join as { hashtag_id?: unknown }).hashtag_id === hashtagId
+        )
+      ) {
+        throw new Error('Hashtag posts query returned invalid data')
+      }
+      seenPostIds.add(postId)
+      const { post_hashtags: _postHashtags, ...post } = row
+      return post as Record<string, unknown> & { id: string }
+    })
 
-  const { data: posts, error } = await query
+    const authorizedRows = await filterServiceReadablePostRowsStrict(
+      supabase,
+      candidateRows,
+      viewer_id
+    )
+    readableRows.push(...authorizedRows)
+    rawOffset += candidateRows.length
 
-  if (error) {
-    logger.error('[hashtags] posts query error:', error)
-    return { posts: [], total: 0 }
+    if (candidateRows.length < candidateBatchSize) {
+      sourceExhausted = true
+      break
+    }
   }
 
-  const candidateRows = (posts || []).filter(
-    (post): post is Record<string, unknown> & { id: string } => typeof post.id === 'string'
-  )
-  const rows = await filterServiceReadablePostRows(supabase, candidateRows, null)
-  const authorIds = [...new Set(rows.map((p) => p.author_id as string).filter(Boolean))]
+  if (!sourceExhausted && readableRows.length < wantedReadableRows) {
+    throw new Error('Hashtag audience scan exceeded the bounded read window')
+  }
+
+  const has_more = readableRows.length > offset + limit
+  const rows = readableRows.slice(offset, offset + limit)
+  const total = sourceExhausted ? readableRows.length : null
+
+  // posts.author_id has no usable profile FK in production, so keep the
+  // response's `author` shape via a strict second read of user_profiles.
+  const authorIds = [
+    ...new Set(
+      rows
+        .map((post) => post.author_id)
+        .filter((authorId): authorId is string => typeof authorId === 'string')
+    ),
+  ]
   const { data: profiles, error: profilesError } = authorIds.length
     ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
-    : { data: null, error: null }
-  if (profilesError)
-    logger.warn('[getPostsByHashtag] user_profiles query error (drift?):', profilesError.message)
-  const profileById = new Map(
-    (profiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
-  )
+    : { data: [], error: null }
+  if (profilesError) throw profilesError
+  if (!Array.isArray(profiles)) {
+    throw new Error('Hashtag profile query returned invalid data')
+  }
+  const profileById = new Map<string, Record<string, unknown>>()
+  const requestedAuthorIds = new Set(authorIds)
+  for (const profile of profiles) {
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+      throw new Error('Hashtag profile query returned invalid data')
+    }
+    const row = profile as Record<string, unknown>
+    if (typeof row.id !== 'string' || !requestedAuthorIds.has(row.id) || profileById.has(row.id)) {
+      throw new Error('Hashtag profile query returned invalid data')
+    }
+    profileById.set(row.id, row)
+  }
   const withAuthors = rows.map((p) => ({
     ...p,
     author: profileById.get(p.author_id as string) ?? null,
   }))
 
-  return { posts: withAuthors, total: count || 0 }
+  return { posts: withAuthors, total, has_more }
 }
