@@ -452,6 +452,7 @@ describe('useTraderRecords cursor generation reset', () => {
     )
 
     await waitFor(() => expect(view.result.current.rows).toEqual([{ id: 'legacy-1' }]))
+    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('records_contract=vph3'))
     await act(async () => {
       await view.result.current.fetchNextPage()
     })
@@ -463,6 +464,11 @@ describe('useTraderRecords cursor generation reset', () => {
         String(url).includes('cursor=legacy-cursor')
       )
     ).toHaveLength(1)
+    expect(
+      (fetcher as jest.Mock).mock.calls.every(([url]) =>
+        String(url).includes('records_contract=vph3')
+      )
+    ).toBe(true)
 
     await act(async () => {
       await view.result.current.fetchNextPage()

@@ -9,7 +9,7 @@
  * a plain query, never paginated rows.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
@@ -23,6 +23,8 @@ import {
   type ServingTimeframe,
 } from '@/lib/data/serving/types'
 import type { ApiSuccessResponse } from '@/lib/types/index'
+
+const POSITION_HISTORY_RECORDS_CONTRACT = 'vph3' as const
 
 export interface UseTraderRecordsOptions {
   source: string
@@ -41,6 +43,12 @@ function recordsUrl(
   cursor?: string
 ): string {
   const params = new URLSearchParams({ kind, source, tf: String(tf) })
+  // This stable generation marker changes the CDN/browser cache key at the
+  // legacy -> verified rollout boundary. Older cacheable first pages cannot
+  // be replayed into the new cursor-reset protocol.
+  if (kind === 'position_history') {
+    params.set('records_contract', POSITION_HISTORY_RECORDS_CONTRACT)
+  }
   if (cursor) params.set('cursor', cursor)
   return `/api/traders/${encodeURIComponent(exchangeTraderId)}/records?${params.toString()}`
 }
@@ -130,7 +138,18 @@ export function useTraderRecords({
   enabled = false,
 }: UseTraderRecordsOptions) {
   const queryClient = useQueryClient()
-  const queryKey = ['trader-records', source, exchangeTraderId, kind, tf] as const
+  const queryKey = useMemo(
+    () =>
+      [
+        'trader-records',
+        source,
+        exchangeTraderId,
+        kind,
+        tf,
+        kind === 'position_history' ? POSITION_HISTORY_RECORDS_CONTRACT : null,
+      ] as const,
+    [exchangeTraderId, kind, source, tf]
+  )
   const query = useInfiniteQuery<RecordsPage>({
     queryKey,
     queryFn: async ({ pageParam }) => {
@@ -153,10 +172,10 @@ export function useTraderRecords({
     // resetQueries discards every old page/pageParam before refetching page 1;
     // retrying only the rejected cursor would preserve a mixed generation.
     void queryClient.resetQueries({
-      queryKey: ['trader-records', source, exchangeTraderId, kind, tf],
+      queryKey,
       exact: true,
     })
-  }, [cursorInvalidated, exchangeTraderId, kind, queryClient, source, tf])
+  }, [cursorInvalidated, queryClient, queryKey])
 
   const pages = query.data?.pages ?? []
   const rows = pages.flatMap((p) => p.rows)
