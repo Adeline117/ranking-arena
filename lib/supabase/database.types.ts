@@ -13424,6 +13424,15 @@ export type Database = {
         Args: { p_limit?: number }
         Returns: Json
       }
+      set_comment_reaction_desired_state_atomic: {
+        Args: {
+          p_actor_id: string
+          p_comment_id: string
+          p_desired_reaction: string | null
+          p_post_id: string
+        }
+        Returns: Json
+      }
       set_group_member_role_atomic: {
         Args: {
           p_actor_id: string
