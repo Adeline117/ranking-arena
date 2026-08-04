@@ -187,6 +187,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260803104000_durable_post_interaction_count_repair.sql'
   const closeHotScoreBatchPublicExecuteMigration =
     '20260803104500_close_hot_score_batch_public_execute.sql'
+  const bookmarkCountConsistencyMigration = '20260803105000_bind_bookmark_count_consistency.sql'
+  const durableCommentReactionCountRepairMigration =
+    '20260803106000_durable_comment_reaction_count_repair.sql'
   const accountHardDeleteRecoveryBarrierMigration =
     '20260729075300_account_hard_delete_recovery_barrier.sql'
   const verifiedAuthProfileEmailMigration = '20260729075400_verified_auth_profile_email.sql'
@@ -259,11 +262,13 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     postVoteDesiredStateMigration,
     durablePostInteractionCountRepairMigration,
     closeHotScoreBatchPublicExecuteMigration,
+    bookmarkCountConsistencyMigration,
+    durableCommentReactionCountRepairMigration,
   ]
   const inactiveAuthSubjectMutationBarrierMigration =
     '20260729154500_inactive_auth_subject_mutation_barrier.sql'
 
-  assert.equal(predeploy.length, 194)
+  assert.equal(predeploy.length, 196)
   assert.ok(predeploy.includes(accountHardDeleteRecoveryBarrierMigration))
   assert.ok(predeploy.includes(verifiedAuthProfileEmailMigration))
   assert.ok(predeploy.includes(accountRecoveryAuthEmailMigration))
@@ -410,7 +415,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 220)
+  assert.equal(new Set(all).size, 222)
   assert.equal(
     postdeploy.filter((migration) => migration === postCreateDirectWriteClosureMigration).length,
     1
@@ -595,7 +600,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-153), [
+  assert.deepEqual(predeploy.slice(-155), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -813,6 +818,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     postVoteDesiredStateMigration,
     durablePostInteractionCountRepairMigration,
     closeHotScoreBatchPublicExecuteMigration,
+    bookmarkCountConsistencyMigration,
+    durableCommentReactionCountRepairMigration,
   ]) {
     assert.equal(predeploy.filter((candidate) => candidate === migration).length, 1)
     assert.ok(!postdeploy.includes(migration))
@@ -846,8 +853,16 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.indexOf(closeHotScoreBatchPublicExecuteMigration),
     predeploy.indexOf(durablePostInteractionCountRepairMigration) + 1
   )
-  assert.equal(predeploy.at(-1), closeHotScoreBatchPublicExecuteMigration)
-  assert.deepEqual(predeploy.slice(-82), [
+  assert.equal(
+    predeploy.indexOf(bookmarkCountConsistencyMigration),
+    predeploy.indexOf(closeHotScoreBatchPublicExecuteMigration) + 1
+  )
+  assert.equal(
+    predeploy.indexOf(durableCommentReactionCountRepairMigration),
+    predeploy.indexOf(bookmarkCountConsistencyMigration) + 1
+  )
+  assert.equal(predeploy.at(-1), durableCommentReactionCountRepairMigration)
+  assert.deepEqual(predeploy.slice(-84), [
     '20260729059000_atomic_referral_attribution.sql',
     '20260729060000_retryable_referral_qualification.sql',
     '20260729061000_source_legacy_platform_alias_contract.sql',
