@@ -19,19 +19,21 @@ const mockSupabase = {
 jest.mock('next/server', () => {
   class MockNextResponse {
     status: number
+    headers: Headers
 
     constructor(
       private readonly body: unknown,
-      init: { status?: number } = {}
+      init: { status?: number; headers?: HeadersInit } = {}
     ) {
       this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
     }
 
     async json() {
       return this.body
     }
 
-    static json(body: unknown, init?: { status?: number }) {
+    static json(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
       return new MockNextResponse(body, init)
     }
   }
@@ -123,9 +125,17 @@ describe('POST /api/referral/apply atomic attribution boundary', () => {
     })
     await expect(response.json()).resolves.toEqual({
       success: true,
+      status: 'applied',
+      referred_id: mockUser.id,
+      referrer_id: REFERRER_ID,
+      attribution_id: ATTRIBUTION_ID,
+      created: true,
+      code: 'alice-code',
       referrer_handle: 'alice',
-      pending: true,
     })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
   })
 
   it('treats an exact retry as idempotent success', async () => {
@@ -134,25 +144,44 @@ describe('POST /api/referral/apply atomic attribution boundary', () => {
     const response = await POST(request() as never)
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ success: true, pending: true })
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      status: 'already_applied',
+      referred_id: mockUser.id,
+      referrer_id: REFERRER_ID,
+      attribution_id: ATTRIBUTION_ID,
+      created: false,
+      code: 'alice-code',
+      referrer_handle: 'alice',
+    })
   })
 
-  it('does not call the authority for an invalid, non-string, missing, or self referral', async () => {
+  it('does not call the authority for a strict-invalid, missing, or self referral', async () => {
     const invalid = await POST(request({ code: 'bad.code' }) as never)
     expect(invalid.status).toBe(400)
+    await expect(invalid.json()).resolves.toEqual({
+      success: false,
+      code: 'REFERRAL_INVALID_CODE',
+      error: 'Invalid referral code',
+    })
 
     const nonString = await POST(request({ code: 42 }) as never)
     expect(nonString.status).toBe(400)
 
+    const expanded = await POST(request({ code: 'alice-code', unexpected: true }) as never)
+    expect(expanded.status).toBe(400)
+
     mockFrom.mockReturnValueOnce(referrerQuery({ data: [], error: null }))
     const missing = await POST(request() as never)
     expect(missing.status).toBe(404)
+    await expect(missing.json()).resolves.toMatchObject({ code: 'REFERRAL_CODE_NOT_FOUND' })
 
     mockFrom.mockReturnValueOnce(
       referrerQuery({ data: [{ ...referrer, id: mockUser.id }], error: null })
     )
     const self = await POST(request() as never)
     expect(self.status).toBe(400)
+    await expect(self.json()).resolves.toMatchObject({ code: 'REFERRAL_SELF_REFERRAL' })
 
     expect(mockRpc).not.toHaveBeenCalled()
   })
@@ -164,7 +193,10 @@ describe('POST /api/referral/apply atomic attribution boundary', () => {
 
     const response = await POST(request() as never)
 
-    expect(response.status).toBe(500)
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'REFERRAL_AUTHORITY_UNAVAILABLE',
+    })
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
@@ -195,6 +227,7 @@ describe('POST /api/referral/apply atomic attribution boundary', () => {
     const response = await POST(request() as never)
 
     expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({ code: 'REFERRAL_CODE_AMBIGUOUS' })
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
@@ -231,8 +264,8 @@ describe('POST /api/referral/apply atomic attribution boundary', () => {
   })
 
   it.each([
-    ['conflict', 400],
-    ['not_found', 404],
+    ['conflict', 409],
+    ['not_found', 503],
     ['invalid', 500],
     ['inconsistent', 500],
   ] as const)('maps the exact %s authority status', async (status, expectedStatus) => {
@@ -241,6 +274,19 @@ describe('POST /api/referral/apply atomic attribution boundary', () => {
     const response = await POST(request() as never)
 
     expect(response.status).toBe(expectedStatus)
+  })
+
+  it('keeps the atomic not_found result retryable because actor provisioning can lag auth', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'not_found' }, error: null })
+
+    const response = await POST(request() as never)
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      success: false,
+      code: 'REFERRAL_AUTHORITY_UNAVAILABLE',
+      error: 'Failed to apply referral code',
+    })
   })
 
   it('contains no direct profile or attribution mutation fallback', () => {

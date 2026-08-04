@@ -2,6 +2,7 @@ import {
   capturePendingReferral,
   peekPendingReferral,
   consumePendingReferral,
+  consumePendingReferralIfMatches,
   PENDING_REF_KEY,
 } from '../pending'
 
@@ -105,6 +106,25 @@ describe('pending referral capture/apply', () => {
       jest.advanceTimersByTime(31 * 24 * 60 * 60 * 1000)
       expect(consumePendingReferral()).toBeNull()
       expect(window.localStorage.getItem(PENDING_REF_KEY)).toBeNull()
+    })
+
+    it('compare-and-consume 只删除同一个 captured code', () => {
+      capturePendingReferral('?ref=old_code')
+
+      expect(consumePendingReferralIfMatches('new_code')).toBe(false)
+      expect(peekPendingReferral()).toBe('old_code')
+      expect(consumePendingReferralIfMatches('old_code')).toBe(true)
+      expect(peekPendingReferral()).toBeNull()
+    })
+
+    it('compare-and-consume 对非法或过期 expected code fail closed', () => {
+      capturePendingReferral('?ref=expired_x')
+      expect(consumePendingReferralIfMatches('bad.code')).toBe(false)
+      expect(peekPendingReferral()).toBe('expired_x')
+
+      jest.advanceTimersByTime(31 * 24 * 60 * 60 * 1000)
+      expect(consumePendingReferralIfMatches('expired_x')).toBe(false)
+      expect(window.localStorage.getItem(PENDING_REF_KEY)).not.toBeNull()
     })
   })
 })

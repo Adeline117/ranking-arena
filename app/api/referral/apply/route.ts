@@ -1,10 +1,42 @@
 import { NextResponse } from 'next/server'
 import { createHash } from 'crypto'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { getIdentifier } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('referral-apply')
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
+const CONTROL_PATTERN = /[\u0000-\u001f\u007f]/
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+export const dynamic = 'force-dynamic'
+
+const referralCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_-]{2,64}$/)
+const applyReferralBodySchema = z.object({ code: referralCodeSchema }).strict()
+
+type ReferralErrorCode =
+  | 'REFERRAL_INVALID_CODE'
+  | 'REFERRAL_CODE_NOT_FOUND'
+  | 'REFERRAL_CODE_AMBIGUOUS'
+  | 'REFERRAL_SELF_REFERRAL'
+  | 'REFERRAL_ALREADY_ATTRIBUTED'
+  | 'REFERRAL_AUTHORITY_UNAVAILABLE'
+
+function json(body: unknown, status = 200): NextResponse {
+  return NextResponse.json(body, { status, headers: NO_STORE_HEADERS })
+}
+
+function referralError(code: ReferralErrorCode, error: string, status: number): NextResponse {
+  return json({ success: false, code, error }, status)
+}
 
 type ReferralAttributionAck =
   | {
@@ -40,6 +72,9 @@ function parseAttributionAck(value: unknown): ReferralAttributionAck | null {
     typeof result.referred_id !== 'string' ||
     typeof result.referrer_id !== 'string' ||
     typeof result.attribution_id !== 'string' ||
+    !UUID_PATTERN.test(result.referred_id) ||
+    !UUID_PATTERN.test(result.referrer_id) ||
+    !UUID_PATTERN.test(result.attribution_id) ||
     typeof result.created !== 'boolean' ||
     (result.status === 'applied' && result.created !== true) ||
     (result.status === 'already_applied' && result.created !== false)
@@ -68,22 +103,22 @@ function parseAttributionAck(value: unknown): ReferralAttributionAck | null {
  */
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    let body: Record<string, unknown> | null
+    let body: unknown
     try {
       body = await request.json()
     } catch {
       body = null
     }
 
-    const rawCode = body?.code
-    const code = typeof rawCode === 'string' ? rawCode.trim() : ''
-
-    // Strict server-side allowlist (client validation is not a security boundary
-    // — a direct API caller bypasses it). referral_code + handle are both drawn
-    // from this charset, so this also makes the PostgREST .or() filter below
-    // injection-safe without relying on a fragile character blocklist.
-    if (!code || !/^[A-Za-z0-9_-]{2,64}$/.test(code)) {
-      return NextResponse.json({ error: 'Invalid referral code' }, { status: 400 })
+    const parsedBody = applyReferralBodySchema.safeParse(body)
+    if (!parsedBody.success) {
+      return referralError('REFERRAL_INVALID_CODE', 'Invalid referral code', 400)
+    }
+    const code = parsedBody.data.code
+    const referredId = typeof user.id === 'string' ? user.id : ''
+    if (!UUID_PATTERN.test(referredId)) {
+      logger.error('Authenticated referral actor has a malformed identity')
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 500)
     }
 
     // Find the referrer by referral_code or handle
@@ -100,33 +135,44 @@ export const POST = withAuth(
     if (referrerErr) {
       // Don't misclassify a DB fault as "code not found".
       logger.error('Failed to look up referrer:', referrerErr.message)
-      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 503)
     }
 
     if (!Array.isArray(referrers)) {
       logger.error('Referral lookup returned a null or non-array result')
-      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 500)
     }
     if (referrers.length === 0) {
-      return NextResponse.json({ error: 'Referral code not found' }, { status: 404 })
+      return referralError('REFERRAL_CODE_NOT_FOUND', 'Referral code not found', 404)
     }
     if (referrers.length !== 1) {
       logger.error('Referral code matched multiple profile identities', { code })
-      return NextResponse.json({ error: 'Referral code is ambiguous' }, { status: 409 })
+      return referralError('REFERRAL_CODE_AMBIGUOUS', 'Referral code is ambiguous', 409)
     }
     const referrer = referrers[0]
     if (
       !referrer ||
       typeof referrer.id !== 'string' ||
-      (referrer.handle !== null && typeof referrer.handle !== 'string')
+      !UUID_PATTERN.test(referrer.id) ||
+      typeof referrer.handle !== 'string' ||
+      referrer.handle.length < 1 ||
+      Array.from(referrer.handle).length > 64 ||
+      referrer.handle !== referrer.handle.trim() ||
+      referrer.handle !== referrer.handle.normalize('NFC') ||
+      CONTROL_PATTERN.test(referrer.handle) ||
+      (referrer.referral_code !== null &&
+        (typeof referrer.referral_code !== 'string' ||
+          !/^[A-Za-z0-9_-]{2,64}$/.test(referrer.referral_code))) ||
+      (referrer.referral_code !== code && referrer.handle !== code)
     ) {
       logger.error('Referral lookup returned a malformed profile identity', { code })
-      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 500)
     }
+    const referrerId = referrer.id
 
     // Cannot refer yourself
-    if (referrer.id === user.id) {
-      return NextResponse.json({ error: 'Cannot use your own referral code' }, { status: 400 })
+    if (referrerId === referredId) {
+      return referralError('REFERRAL_SELF_REFERRAL', 'Cannot use your own referral code', 400)
     }
 
     // Anti-farming: record this attribution with a hashed device fingerprint
@@ -154,8 +200,8 @@ export const POST = withAuth(
     const { data: rawAck, error: attributionError } = await supabase.rpc(
       'apply_referral_attribution_atomic',
       {
-        p_referred_id: user.id,
-        p_referrer_id: referrer.id,
+        p_referred_id: referredId,
+        p_referrer_id: referrerId,
         p_provider: provider,
         p_signup_ip_hash: signupIpHash,
       }
@@ -164,49 +210,57 @@ export const POST = withAuth(
     if (attributionError || !ack) {
       logger.error('Atomic referral attribution failed', {
         code: attributionError?.code,
-        referredId: user.id,
-        referrerId: referrer.id,
+        referredId,
+        referrerId,
       })
-      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 500)
     }
     if (ack.status === 'conflict') {
-      return NextResponse.json({ error: 'Referral code already applied' }, { status: 400 })
+      return referralError('REFERRAL_ALREADY_ATTRIBUTED', 'Referral code already applied', 409)
     }
     if (ack.status === 'not_found') {
-      return NextResponse.json({ error: 'Referral code not found' }, { status: 404 })
+      // The lookup already proved the code existed. Here `not_found` can mean
+      // the newly authenticated user's profile is not provisioned yet, so it
+      // is retryable and must not consume the pending code.
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 503)
     }
     if (ack.status === 'invalid' || ack.status === 'inconsistent') {
       logger.error('Atomic referral attribution rejected server-owned identity', {
-        referredId: user.id,
-        referrerId: referrer.id,
+        referredId,
+        referrerId,
         status: ack.status,
       })
-      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 500)
     }
     if (ack.status !== 'applied' && ack.status !== 'already_applied') {
       logger.error('Atomic referral attribution returned an unhandled status', {
-        referredId: user.id,
-        referrerId: referrer.id,
+        referredId,
+        referrerId,
       })
-      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 500)
     }
     if (
       ack.referredId !== user.id ||
       ack.referrerId !== referrer.id ||
-      ack.attributionId.length === 0
+      !UUID_PATTERN.test(ack.attributionId)
     ) {
       logger.error('Atomic referral attribution ACK contradicted the request', {
         attributionId: ack.attributionId,
-        referredId: user.id,
-        referrerId: referrer.id,
+        referredId,
+        referrerId,
       })
-      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+      return referralError('REFERRAL_AUTHORITY_UNAVAILABLE', 'Failed to apply referral code', 500)
     }
 
-    return NextResponse.json({
+    return json({
       success: true,
+      status: ack.status,
+      referred_id: referredId,
+      referrer_id: referrerId,
+      attribution_id: ack.attributionId,
+      created: ack.created,
+      code,
       referrer_handle: referrer.handle,
-      pending: true,
     })
   },
   { name: 'referral/apply', rateLimit: 'write' }

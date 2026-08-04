@@ -100,3 +100,22 @@ export function consumePendingReferral(): string | null {
   }
   return pending?.code ?? null
 }
+
+/**
+ * Delete the pending referral only when it is still the exact code captured by
+ * the caller. A referral request can finish after another navigation has
+ * installed a newer code; that older response must never consume the newer
+ * attribution intent.
+ */
+export function consumePendingReferralIfMatches(expectedCode: string): boolean {
+  if (!isValidCode(expectedCode)) return false
+  const pending = readPending()
+  if (!pending || pending.code !== expectedCode || typeof window === 'undefined') return false
+
+  try {
+    window.localStorage.removeItem(PENDING_REF_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
