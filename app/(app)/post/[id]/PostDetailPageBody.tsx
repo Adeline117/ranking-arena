@@ -13,6 +13,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { usePostComments } from '@/app/components/post/hooks/usePostComments'
 import { usePostActions } from '@/app/components/post/hooks/usePostActions'
 import { usePostTranslation } from '@/app/components/post/hooks/usePostTranslation'
+import { useCommentsRealtime } from '@/lib/hooks/useRealtime'
 import { PostDetailView } from '@/app/components/post/components'
 import { RepostModal } from '@/app/components/post/Modals'
 import { DynamicBookmarkModal as BookmarkModal } from '@/app/components/ui/Dynamic'
@@ -170,6 +171,68 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
     t,
   })
   const { comments, loadComments } = commentsHook
+
+  // Treat raw comment rows only as invalidation signals. Reactions update the
+  // cached counters on `comments`, so UPDATE must reconcile just like
+  // INSERT/DELETE. A dirty bit guarantees an event arriving during a canonical
+  // read gets one follow-up read instead of being dropped.
+  const realtimeScopeKey = `${encodeURIComponent(auth.viewerKey)}:${auth.sessionGeneration}`
+  const capturedRealtimeViewerKey = auth.viewerKey
+  const capturedRealtimeSessionGeneration = auth.sessionGeneration
+  const isCapturedRealtimeScopeCurrent = useCallback(() => {
+    const current = authScopeRef.current
+    return (
+      current.viewerKey === capturedRealtimeViewerKey &&
+      current.sessionGeneration === capturedRealtimeSessionGeneration
+    )
+  }, [capturedRealtimeSessionGeneration, capturedRealtimeViewerKey])
+  const realtimeCommentReconcileRef = useRef<{
+    key: string
+    dirty: boolean
+    promise: Promise<void>
+  } | null>(null)
+  const reconcileRealtimeComments = useCallback(() => {
+    if (!isCapturedRealtimeScopeCurrent()) return
+    const postId = initialPost.id
+    const key = `${realtimeScopeKey}\u0000${postId}`
+    const activeLane = realtimeCommentReconcileRef.current
+    if (activeLane?.key === key) {
+      activeLane.dirty = true
+      return
+    }
+
+    const lane = {
+      key,
+      dirty: false,
+      promise: Promise.resolve(),
+    }
+    realtimeCommentReconcileRef.current = lane
+    const drain = async () => {
+      do {
+        lane.dirty = false
+        await loadComments(postId)
+      } while (
+        lane.dirty &&
+        realtimeCommentReconcileRef.current === lane &&
+        isCapturedRealtimeScopeCurrent()
+      )
+    }
+    lane.promise = drain().finally(() => {
+      if (realtimeCommentReconcileRef.current === lane) {
+        realtimeCommentReconcileRef.current = null
+      }
+    })
+  }, [initialPost.id, isCapturedRealtimeScopeCurrent, loadComments, realtimeScopeKey])
+
+  useCommentsRealtime(
+    initialPost.id,
+    {
+      onInsert: reconcileRealtimeComments,
+      onUpdate: reconcileRealtimeComments,
+      onDelete: reconcileRealtimeComments,
+    },
+    { scopeKey: realtimeScopeKey, enabled: auth.authChecked }
+  )
 
   // Translation hook (single post)
   const translation = usePostTranslation({

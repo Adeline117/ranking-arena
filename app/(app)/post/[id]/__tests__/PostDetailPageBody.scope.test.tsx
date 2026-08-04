@@ -4,6 +4,7 @@ import { usePostComments } from '@/app/components/post/hooks/usePostComments'
 import { usePostActions } from '@/app/components/post/hooks/usePostActions'
 import { usePostTranslation } from '@/app/components/post/hooks/usePostTranslation'
 import { authedFetch } from '@/lib/api/client'
+import { useCommentsRealtime } from '@/lib/hooks/useRealtime'
 import PostDetailPageBody from '../PostDetailPageBody'
 
 const mockRouter = { push: jest.fn() }
@@ -13,6 +14,7 @@ const mockTranslateContent = jest.fn()
 const mockTranslateComments = jest.fn()
 const mockCancelContentTranslation = jest.fn()
 const mockCancelActivePostTranslations = jest.fn()
+const mockLoadComments = jest.fn()
 
 jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }))
 jest.mock('next/link', () => ({
@@ -26,6 +28,7 @@ jest.mock('@/app/components/post/hooks/usePostTranslation', () => ({
   usePostTranslation: jest.fn(),
 }))
 jest.mock('@/lib/api/client', () => ({ authedFetch: jest.fn() }))
+jest.mock('@/lib/hooks/useRealtime', () => ({ useCommentsRealtime: jest.fn() }))
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key, language: 'en' }),
 }))
@@ -56,6 +59,7 @@ const mockUsePostComments = usePostComments as jest.Mock
 const mockUsePostActions = usePostActions as jest.Mock
 const mockUsePostTranslation = usePostTranslation as jest.Mock
 const mockAuthedFetch = authedFetch as jest.Mock
+const mockUseCommentsRealtime = useCommentsRealtime as jest.Mock
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -89,6 +93,7 @@ describe('PostDetailPageBody scoped hydration', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockRenderedReactions.length = 0
+    mockLoadComments.mockResolvedValue(undefined)
     mockUseAuthSession.mockReturnValue({
       accessToken: 'token-a',
       userId: 'user-a',
@@ -101,7 +106,7 @@ describe('PostDetailPageBody scoped hydration', () => {
       commentOptions = options
       return {
         comments: [],
-        loadComments: jest.fn(),
+        loadComments: mockLoadComments,
         loadingComments: false,
         submittingComment: false,
         submitComment: jest.fn(),
@@ -215,6 +220,38 @@ describe('PostDetailPageBody scoped hydration', () => {
       expect(mockTranslateContent).toHaveBeenCalledWith('post-1', 'Body', 'en')
       expect(mockTranslateComments).toHaveBeenCalledWith([], 'en')
     })
+  })
+
+  it('subscribes to comment updates and drains an in-flight invalidation', async () => {
+    mockAuthedFetch.mockResolvedValue({ ok: false, status: 404, data: null })
+    render(<PostDetailPageBody post={initialPost as never} />)
+
+    await waitFor(() => expect(mockLoadComments).toHaveBeenCalled())
+    expect(mockUseCommentsRealtime.mock.calls.at(-1)?.[0]).toBe('post-1')
+    expect(mockUseCommentsRealtime.mock.calls.at(-1)?.[2]).toEqual({
+      scopeKey: 'user%3Auser-a:1',
+      enabled: true,
+    })
+
+    mockLoadComments.mockClear()
+    const firstRead = deferred<void>()
+    mockLoadComments.mockReturnValueOnce(firstRead.promise).mockResolvedValue(undefined)
+    const callbacks = mockUseCommentsRealtime.mock.calls.at(-1)?.[1]
+
+    act(() => {
+      callbacks.onUpdate({
+        old: { id: 'comment-1', like_count: 0 },
+        new: { id: 'comment-1', like_count: 1 },
+      })
+      callbacks.onDelete({ id: 'comment-2', post_id: 'post-1' })
+    })
+    expect(mockLoadComments).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      firstRead.resolve(undefined)
+      await firstRead.promise
+    })
+    await waitFor(() => expect(mockLoadComments).toHaveBeenCalledTimes(2))
   })
 
   it('restarts exact detail translation after authentication restoration', async () => {

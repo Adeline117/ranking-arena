@@ -583,6 +583,7 @@ export function useCommentsRealtime(
   postId: string | undefined,
   callbacks?: {
     onInsert?: (comment: Record<string, unknown>) => void
+    onUpdate?: (payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void
     onDelete?: (comment: Record<string, unknown>) => void
   },
   options?: { scopeKey?: string; enabled?: boolean }
@@ -592,6 +593,7 @@ export function useCommentsRealtime(
     event: '*',
     filter: postId ? `post_id=eq.${postId}` : undefined,
     onInsert: callbacks?.onInsert,
+    onUpdate: callbacks?.onUpdate,
     onDelete: callbacks?.onDelete,
     scopeKey: options?.scopeKey,
     enabled: !!postId && (options?.enabled ?? true),

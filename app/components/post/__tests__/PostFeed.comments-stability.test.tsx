@@ -432,7 +432,7 @@ describe('PostFeed comment loading stability', () => {
     })
   })
 
-  it('treats raw reply/blocked-looking events as one canonical invalidation', async () => {
+  it('drains a dirty canonical read after insert/update/delete events arrive in flight', async () => {
     render(<PostFeed initialPostId="post-1" initialPosts={[post]} />)
     await waitFor(() => expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(1))
     const canonicalRead = deferred<{
@@ -442,7 +442,9 @@ describe('PostFeed comment loading stability', () => {
       hasMore: boolean
     }>()
     mockFetchPostCommentsPage.mockReset()
-    mockFetchPostCommentsPage.mockReturnValue(canonicalRead.promise)
+    mockFetchPostCommentsPage
+      .mockReturnValueOnce(canonicalRead.promise)
+      .mockResolvedValue({ ok: true, comments: [], commentCount: 0, hasMore: false })
     const callbacks = mockUseCommentsRealtime.mock.calls.at(-1)?.[1]
 
     act(() => {
@@ -451,6 +453,10 @@ describe('PostFeed comment loading stability', () => {
         post_id: 'post-1',
         parent_id: 'parent',
         content: 'must not render directly',
+      })
+      callbacks.onUpdate({
+        old: { id: 'raw-blocked-author', like_count: 0 },
+        new: { id: 'raw-blocked-author', like_count: 1 },
       })
       callbacks.onInsert({
         id: 'raw-blocked-author',
@@ -469,6 +475,7 @@ describe('PostFeed comment loading stability', () => {
       canonicalRead.resolve({ ok: true, comments: [], commentCount: 0, hasMore: false })
       await canonicalRead.promise
     })
+    await waitFor(() => expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(2))
     expect(mockPostDetailView.mock.calls.at(-1)?.[0].comments).toEqual([])
   })
 

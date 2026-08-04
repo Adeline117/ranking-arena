@@ -101,6 +101,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   accessTokenRef.current = accessToken
   const [sortType, setSortType] = useState<SortType>('time')
   const [openPost, setOpenPost] = useViewerOwnedState<Post | null>(null, () => null, feedScopeKey)
+  const openPostIdRef = useRef<string | null>(openPost?.id ?? null)
+  openPostIdRef.current = openPost?.id ?? null
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [mobileViewMode, setMobileViewMode] = useState<'list' | 'masonry'>('list')
   const [refreshing, setRefreshing] = useState(false)
@@ -440,24 +442,48 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // burst into a viewer/resource-bound canonical read.
   const realtimeCommentReconcileRef = useRef<{
     key: string
+    dirty: boolean
     promise: Promise<void>
   } | null>(null)
   const reconcileRealtimeComments = useCallback(() => {
     if (!isCapturedRealtimeScopeCurrent() || !openPost?.id) return
-    const key = `${realtimeScopeKey}\u0000${openPost.id}`
-    if (realtimeCommentReconcileRef.current?.key === key) return
-    const promise = loadComments(openPost.id).finally(() => {
-      if (realtimeCommentReconcileRef.current?.promise === promise) {
+    const postId = openPost.id
+    const key = `${realtimeScopeKey}\u0000${postId}`
+    const activeLane = realtimeCommentReconcileRef.current
+    if (activeLane?.key === key) {
+      activeLane.dirty = true
+      return
+    }
+
+    const lane = {
+      key,
+      dirty: false,
+      promise: Promise.resolve(),
+    }
+    realtimeCommentReconcileRef.current = lane
+    const drain = async () => {
+      do {
+        lane.dirty = false
+        await loadComments(postId)
+      } while (
+        lane.dirty &&
+        realtimeCommentReconcileRef.current === lane &&
+        isCapturedRealtimeScopeCurrent() &&
+        openPostIdRef.current === postId
+      )
+    }
+    lane.promise = drain().finally(() => {
+      if (realtimeCommentReconcileRef.current === lane) {
         realtimeCommentReconcileRef.current = null
       }
     })
-    realtimeCommentReconcileRef.current = { key, promise }
   }, [isCapturedRealtimeScopeCurrent, loadComments, openPost?.id, realtimeScopeKey])
 
   useCommentsRealtime(
     openPost?.id,
     {
       onInsert: reconcileRealtimeComments,
+      onUpdate: reconcileRealtimeComments,
       onDelete: reconcileRealtimeComments,
     },
     { scopeKey: realtimeScopeKey, enabled: authInitialized }
