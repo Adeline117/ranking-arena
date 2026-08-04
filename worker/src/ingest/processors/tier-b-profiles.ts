@@ -112,23 +112,42 @@ async function crawlTraderHistories(
   src: SourceRow,
   trader: NativeCohortTrader
 ): Promise<number> {
+  const failures: Error[] = []
   for (const kind of historyKinds(adapter, src)) {
-    const acquisition = await captureHistoryAcquisition({
-      source: src,
-      traderId: trader.id,
-      exchangeTraderId: trader.exchange_trader_id,
-      kind,
-      cursor: null,
-      attemptStartedAt: new Date().toISOString(),
-      stream: adapter.getHistory(session, src, trader.exchange_trader_id, kind, null, trader.meta),
-      terminalVerifier: adapter.historyTerminalVerifier?.(src, kind) ?? undefined,
-    })
-    await writeHistoryRawArtifact(
-      { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId },
-      runHistoryTransaction
-    )
+    try {
+      const acquisition = await captureHistoryAcquisition({
+        source: src,
+        traderId: trader.id,
+        exchangeTraderId: trader.exchange_trader_id,
+        kind,
+        cursor: null,
+        attemptStartedAt: new Date().toISOString(),
+        stream: adapter.getHistory(
+          session,
+          src,
+          trader.exchange_trader_id,
+          kind,
+          null,
+          trader.meta
+        ),
+        terminalVerifier: adapter.historyTerminalVerifier?.(src, kind) ?? undefined,
+      })
+      await writeHistoryRawArtifact(
+        { artifact: acquisition.artifact, sourceRunId: acquisition.sourceRunId },
+        runHistoryTransaction
+      )
 
-    if (acquisition.error !== null) throw acquisition.error
+      if (acquisition.error !== null) throw acquisition.error
+    } catch (cause) {
+      failures.push(cause instanceof Error ? cause : new Error(String(cause)))
+    }
+  }
+  if (failures.length === 1) throw failures[0]
+  if (failures.length > 1) {
+    throw new AggregateError(
+      failures,
+      `[tier-b] ${src.slug} captured ${failures.length} independent history failures`
+    )
   }
   return 0
 }

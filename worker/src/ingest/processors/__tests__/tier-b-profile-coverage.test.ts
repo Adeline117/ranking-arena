@@ -420,6 +420,59 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockParseHistory).not.toHaveBeenCalled()
   })
 
+  it('continues capturing other history kinds after one kind fails', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation((_session, _source, _trader, kind: string) =>
+      historyStream({ failAfterPage: kind === 'position_history' })
+    )
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: true,
+        orders: true,
+        transfers: true,
+        copiers: true,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+      historyTerminalVerifier: (_source: SourceRow, kind: string) =>
+        kind === 'position_history'
+          ? {
+              contract: 'arena.ingest.history-terminal-verifier.test.position_history@1',
+              verify: () => ({ verified: true, scanTerminalState: 'exhausted' as const }),
+            }
+          : null,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+
+    expect(mockGetHistory.mock.calls.map((call) => call[3])).toEqual([
+      'position_history',
+      'orders',
+      'transfers',
+      'copiers',
+    ])
+    expect(
+      mockWriteHistoryRawArtifact.mock.calls.map(([input]) => ({
+        kind: input.artifact.history_kind,
+        state: input.artifact.termination.evidence_state,
+      }))
+    ).toEqual([
+      { kind: 'position_history', state: 'upstream_error' },
+      { kind: 'orders', state: 'verifier_missing' },
+      { kind: 'transfers', state: 'verifier_missing' },
+      { kind: 'copiers', state: 'verifier_missing' },
+    ])
+  })
+
   it('audits a bundle-wide quality reject before any validation or publication', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockGetProfile.mockResolvedValue({
