@@ -12,7 +12,7 @@
  * timeout the route answers 200 {cacheState:'pending'} — never 5xx.
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
@@ -25,12 +25,35 @@ import {
   recordsPageFromTierC,
 } from '@/lib/data/serving/records'
 import { requestTierC } from '@/lib/data/serving/tier-c'
-import type { RecordsPage, ServingTimeframe } from '@/lib/data/serving/types'
+import {
+  RECORDS_CURSOR_INVALIDATED_CODE,
+  type RecordsPage,
+  type ServingTimeframe,
+} from '@/lib/data/serving/types'
 
 const handleSchema = z.string().min(1).max(255)
 const kindSchema = z.enum(['positions', 'position_history', 'orders', 'transfers', 'copiers'])
 const tfSchema = z.enum(['7', '30', '90', 'inception']).default('90')
-const cursorSchema = z.string().max(200).optional()
+const cursorSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .refine((value) => value === value.trim(), 'Cursor must not have edge whitespace')
+  .optional()
+
+function cursorInvalidatedResponse() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: RECORDS_CURSOR_INVALIDATED_CODE,
+        message: 'Record pagination changed; restart from the first page',
+        resetRequired: true,
+      },
+    },
+    { status: 409, headers: { 'Cache-Control': 'no-store' } }
+  )
+}
 
 export async function GET(
   request: NextRequest,
@@ -84,9 +107,20 @@ export async function GET(
         kind,
         cursor
       )
+      // A cursor is bound to one warm keyset snapshot. If the RPC rejects it
+      // (including the expand-first legacy -> verified transition), never
+      // substitute a Tier-C first-page preview as the next page. Tell the
+      // client to rebuild the whole chain instead.
+      if (cursor !== null && page === null) return cursorInvalidatedResponse()
+
       // Cursor pages, non-empty first pages, and an explicitly verified empty
       // history are warm truth. Only an unbound empty first page may be cold.
       if (page && (page.rows.length > 0 || cursor || page.completeness?.state === 'complete')) {
+        if (kind === 'position_history' && page.completeness?.state !== 'complete') {
+          // During expand-first, caching a legacy page can make a cursor reset
+          // loop back into the old generation after the first verified publish.
+          return apiSuccess<RecordsPage>(page, 200, { 'Cache-Control': 'no-store' })
+        }
         return withCache(apiSuccess<RecordsPage>(page), {
           maxAge: 30,
           staleWhileRevalidate: 120,

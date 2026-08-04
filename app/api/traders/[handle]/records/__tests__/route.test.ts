@@ -1,7 +1,11 @@
 /** @jest-environment node */
 
 import type { NextRequest } from 'next/server'
-import type { RecordKind, RecordsPage } from '@/lib/data/serving/types'
+import {
+  RECORDS_CURSOR_INVALIDATED_CODE,
+  type RecordKind,
+  type RecordsPage,
+} from '@/lib/data/serving/types'
 
 const mockSupabase = { marker: 'records-route' }
 const mockResolveServingTrader = jest.fn()
@@ -73,15 +77,16 @@ const resolvedTrader = {
   exchangeTraderId: 'trader-1',
 }
 
-function request(kind: Exclude<RecordKind, 'copiers'>): NextRequest {
+function request(kind: Exclude<RecordKind, 'copiers'>, cursor?: string): NextRequest {
   const url = new URL(
     `https://arena.example/api/traders/trader-1/records?kind=${kind}&source=bitget_futures&tf=30`
   )
+  if (cursor !== undefined) url.searchParams.set('cursor', cursor)
   return { nextUrl: url } as NextRequest
 }
 
-async function callRoute(kind: Exclude<RecordKind, 'copiers'>) {
-  return GET(request(kind), { params: Promise.resolve({ handle: 'trader-1' }) })
+async function callRoute(kind: Exclude<RecordKind, 'copiers'>, cursor?: string) {
+  return GET(request(kind, cursor), { params: Promise.resolve({ handle: 'trader-1' }) })
 }
 
 describe('records route history trust boundary', () => {
@@ -186,6 +191,77 @@ describe('records route history trust boundary', () => {
     const body = await response.json()
 
     expect(body.data).toEqual(completeEmpty)
+    expect(mockRequestTierC).not.toHaveBeenCalled()
+  })
+
+  it.each(['positions', 'position_history', 'orders', 'transfers'] as const)(
+    'never substitutes a Tier-C first page for an invalid %s cursor',
+    async (kind) => {
+      const response = await callRoute(kind, 'stale-cursor')
+      const body = await response.json()
+
+      expect(response.status).toBe(409)
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+      expect(body).toEqual({
+        success: false,
+        error: {
+          code: RECORDS_CURSOR_INVALIDATED_CODE,
+          message: 'Record pagination changed; restart from the first page',
+          resetRequired: true,
+        },
+      })
+      expect(mockRequestTierC).not.toHaveBeenCalled()
+      expect(mockRecordsPageFromTierC).not.toHaveBeenCalled()
+    }
+  )
+
+  it('returns an empty warm cursor page without a Tier-C request', async () => {
+    const warmEmpty = {
+      rows: [],
+      nextCursor: null,
+      provenance: {
+        source: 'bitget_futures',
+        sourceAsOf: null,
+        observedAt: null,
+        publishedAt: null,
+      },
+      cacheState: 'warm',
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    } satisfies RecordsPage
+    mockGetRecordsPage.mockResolvedValue(warmEmpty)
+
+    const response = await callRoute('position_history', 'valid-cursor')
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(body.data).toEqual(warmEmpty)
+    expect(mockRequestTierC).not.toHaveBeenCalled()
+  })
+
+  it('does not cache an unverified legacy history first page during expand-first', async () => {
+    mockGetRecordsPage.mockResolvedValue({
+      rows: [{ symbol: 'BTCUSDT' }],
+      nextCursor: 'legacy-cursor',
+      provenance: {
+        source: 'bitget_futures',
+        sourceAsOf: null,
+        observedAt: null,
+        publishedAt: null,
+      },
+      cacheState: 'warm',
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    } satisfies RecordsPage)
+
+    const response = await callRoute('position_history')
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it.each(['', '  '] as const)('rejects a non-canonical cursor %j', async (cursor) => {
+    await expect(callRoute('orders', cursor)).rejects.toMatchObject({ statusCode: 400 })
+    expect(mockGetRecordsPage).not.toHaveBeenCalled()
     expect(mockRequestTierC).not.toHaveBeenCalled()
   })
 })

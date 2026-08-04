@@ -102,6 +102,9 @@ export type TraderCoreResponse =
 
 export type RecordKind = 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
 
+/** Public signal that a keyset snapshot changed and pagination must restart. */
+export const RECORDS_CURSOR_INVALIDATED_CODE = 'records_cursor_invalidated' as const
+
 /** Evidence state attached to an exact history response. */
 export type HistoryCompletenessState = 'complete' | 'partial' | 'unknown'
 

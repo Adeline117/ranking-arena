@@ -389,3 +389,90 @@ describe('useTraderRecords provenance aggregation', () => {
     client.clear()
   })
 })
+
+describe('useTraderRecords cursor generation reset', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('rebuilds the full chain once when a legacy cursor is invalidated', async () => {
+    let firstPageReads = 0
+    ;(fetcher as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('cursor=legacy-cursor')) {
+        const error = Object.assign(new Error('request failed'), {
+          status: 409,
+          info: {
+            success: false,
+            error: {
+              code: 'records_cursor_invalidated',
+              resetRequired: true,
+            },
+          },
+        })
+        return Promise.reject(error)
+      }
+      if (url.includes('cursor=verified-cursor')) {
+        return Promise.resolve(
+          recordsResponse(
+            recordsPage({
+              rows: [{ id: 'verified-2' }],
+              completeness: {
+                state: 'complete',
+                reason: 'verified_terminal_history',
+              },
+            })
+          )
+        )
+      }
+
+      firstPageReads += 1
+      return Promise.resolve(
+        recordsResponse(
+          firstPageReads === 1
+            ? recordsPage({ rows: [{ id: 'legacy-1' }], nextCursor: 'legacy-cursor' })
+            : recordsPage({
+                rows: [{ id: 'verified-1' }],
+                nextCursor: 'verified-cursor',
+                completeness: {
+                  state: 'complete',
+                  reason: 'verified_terminal_history',
+                },
+              })
+        )
+      )
+    })
+    const client = queryClient()
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'position_history',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    await waitFor(() => expect(view.result.current.rows).toEqual([{ id: 'legacy-1' }]))
+    await act(async () => {
+      await view.result.current.fetchNextPage()
+    })
+
+    await waitFor(() => expect(view.result.current.rows).toEqual([{ id: 'verified-1' }]))
+    expect(view.result.current.error).toBeNull()
+    expect(
+      (fetcher as jest.Mock).mock.calls.filter(([url]) =>
+        String(url).includes('cursor=legacy-cursor')
+      )
+    ).toHaveLength(1)
+
+    await act(async () => {
+      await view.result.current.fetchNextPage()
+    })
+    await waitFor(() =>
+      expect(view.result.current.rows).toEqual([{ id: 'verified-1' }, { id: 'verified-2' }])
+    )
+    expect(view.result.current.rows).not.toContainEqual({ id: 'legacy-1' })
+
+    view.unmount()
+    client.clear()
+  })
+})

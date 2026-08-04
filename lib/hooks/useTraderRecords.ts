@@ -9,16 +9,18 @@
  * a plain query, never paginated rows.
  */
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
-import type {
-  CopierAggregate,
-  HistoryCompleteness,
-  RecordKind,
-  RecordProvenance,
-  RecordsPage,
-  ServingTimeframe,
+import {
+  RECORDS_CURSOR_INVALIDATED_CODE,
+  type CopierAggregate,
+  type HistoryCompleteness,
+  type RecordKind,
+  type RecordProvenance,
+  type RecordsPage,
+  type ServingTimeframe,
 } from '@/lib/data/serving/types'
 import type { ApiSuccessResponse } from '@/lib/types/index'
 
@@ -51,6 +53,20 @@ const UNBOUND_HISTORY: HistoryCompleteness = {
 const LEGACY_TIER_C_PREVIEW: HistoryCompleteness = {
   state: 'partial',
   reason: 'interactive_preview',
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function isRecordsCursorInvalidated(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') return false
+  const candidate = error as { status?: unknown; info?: unknown }
+  if (candidate.status !== 409 || !isPlainRecord(candidate.info)) return false
+  const detail = candidate.info.error
+  return isPlainRecord(detail) && detail.code === RECORDS_CURSOR_INVALIDATED_CODE
 }
 
 function combinedHistoryCompleteness(
@@ -113,8 +129,10 @@ export function useTraderRecords({
   tf = 90,
   enabled = false,
 }: UseTraderRecordsOptions) {
+  const queryClient = useQueryClient()
+  const queryKey = ['trader-records', source, exchangeTraderId, kind, tf] as const
   const query = useInfiniteQuery<RecordsPage>({
-    queryKey: ['trader-records', source, exchangeTraderId, kind, tf],
+    queryKey,
     queryFn: async ({ pageParam }) => {
       const res = await fetcher<ApiSuccessResponse<RecordsPage>>(
         recordsUrl(exchangeTraderId, source, kind, tf, pageParam as string | undefined)
@@ -126,8 +144,19 @@ export function useTraderRecords({
     enabled: enabled && Boolean(source) && Boolean(exchangeTraderId),
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
-    retry: 2,
+    retry: (failureCount, error) => !isRecordsCursorInvalidated(error) && failureCount < 2,
   })
+
+  const cursorInvalidated = isRecordsCursorInvalidated(query.error)
+  useEffect(() => {
+    if (!cursorInvalidated) return
+    // resetQueries discards every old page/pageParam before refetching page 1;
+    // retrying only the rejected cursor would preserve a mixed generation.
+    void queryClient.resetQueries({
+      queryKey: ['trader-records', source, exchangeTraderId, kind, tf],
+      exact: true,
+    })
+  }, [cursorInvalidated, exchangeTraderId, kind, queryClient, source, tf])
 
   const pages = query.data?.pages ?? []
   const rows = pages.flatMap((p) => p.rows)
@@ -140,11 +169,11 @@ export function useTraderRecords({
     completeness,
     /** First page is still cold-fetching upstream (Tier-C pending). */
     isPendingUpstream: pages.length === 1 && pages[0].cacheState === 'pending',
-    isLoading: query.isLoading,
+    isLoading: query.isLoading || cursorInvalidated,
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
-    error: query.error,
+    error: cursorInvalidated ? null : query.error,
     refetch: query.refetch,
   }
 }
