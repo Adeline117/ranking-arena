@@ -23,11 +23,29 @@ export const dynamic = 'force-dynamic'
 
 const MIN_SERVING_SOURCES = 3
 const LEADER_LIMIT = 50
+export const WEEKLY_SSR_TIMEOUT_MS = 15_000
 const getCachedWeeklyLeaders = unstable_cache(
   () => getWeeklyLeaders(getReadReplica(), LEADER_LIMIT),
   ['rankings-weekly-leaders-v1'],
   { revalidate: 1800, tags: ['rankings', 'weekly-leaders'] }
 )
+
+async function withWeeklySsrTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Weekly rankings SSR timed out')),
+          WEEKLY_SSR_TIMEOUT_MS
+        )
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
 
 export const metadata: Metadata = {
   title: 'Weekly Cross-Exchange ROI Arena — This Week’s Top Traders',
@@ -67,7 +85,10 @@ export const metadata: Metadata = {
 }
 
 export default async function WeeklyArenaPage() {
-  const data = await getCachedWeeklyLeaders()
+  // Streaming may paint the route skeleton before this server read settles.
+  // Bound the cache miss so a wedged upstream cannot leave that skeleton on
+  // screen forever; the route error boundary provides the explicit Retry UI.
+  const data = await withWeeklySsrTimeout(getCachedWeeklyLeaders())
 
   // Same gate as /rankings/exchanges: below 3 serving sources a
   // cross-exchange weekly competition is noise, not signal. A transient
