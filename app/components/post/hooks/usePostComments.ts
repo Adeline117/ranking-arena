@@ -26,6 +26,7 @@ import {
   type CommentReaction,
   type CommentReactionAcknowledgement,
 } from '@/lib/comments/comment-reaction-client-contract'
+import { withCommentReactionReservationLock } from '@/lib/comments/comment-reaction-reservation-lock'
 
 export type Comment = {
   id: string
@@ -757,67 +758,82 @@ export function usePostComments({
       ): Promise<CommentReactionCommandOutcome> => {
         let lastError: unknown = new Error('Comment reaction acknowledgement unavailable')
 
-        // Reserve the actor/comment sequence before applying the state. Both
-        // phases reuse the same request identity, so a lost reserve response
-        // cannot allocate a second ticket and a delayed apply cannot overtake
-        // a newer ticket reserved by another tab or application instance.
-        for (let attempt = 0; !command.intentSequence && attempt < 2; attempt += 1) {
-          if (signal.aborted || !scopeIsCurrent(capturedScope)) {
-            return { kind: 'uncertain', error: signal.reason ?? lastError }
-          }
+        // Reserve the actor/comment sequence before applying the state. Web
+        // Locks preserve request order across same-browser tabs; the database
+        // remains authoritative for every client and application instance.
+        if (!command.intentSequence) {
           try {
-            const result = await authedFetch<unknown>(
-              `/api/posts/${postId}/comments/like/intents`,
-              'POST',
-              accessToken,
-              {
-                operation: COMMENT_REACTION_INTENT_OPERATION,
-                request_id: command.requestId,
-                comment_id: commentId,
-                desired_reaction: command.desired,
-              },
-              COMMENT_REACTION_REQUEST_TIMEOUT_MS,
-              {
-                expectedUserId: capturedScope.userId,
-                expectedSessionGeneration: capturedScope.sessionGeneration,
+            const reservationOutcome =
+              await withCommentReactionReservationLock<CommentReactionCommandOutcome | null>(
+                { actorId, postId, commentId },
                 signal,
-              }
-            )
-            if (signal.aborted || !scopeIsCurrent(capturedScope) || result.stale) {
-              return { kind: 'uncertain', error: signal.reason ?? lastError }
-            }
+                async () => {
+                  for (let attempt = 0; !command.intentSequence && attempt < 2; attempt += 1) {
+                    if (signal.aborted || !scopeIsCurrent(capturedScope)) {
+                      return { kind: 'uncertain', error: signal.reason ?? lastError }
+                    }
+                    try {
+                      const result = await authedFetch<unknown>(
+                        `/api/posts/${postId}/comments/like/intents`,
+                        'POST',
+                        accessToken,
+                        {
+                          operation: COMMENT_REACTION_INTENT_OPERATION,
+                          request_id: command.requestId,
+                          comment_id: commentId,
+                          desired_reaction: command.desired,
+                        },
+                        COMMENT_REACTION_REQUEST_TIMEOUT_MS,
+                        {
+                          expectedUserId: capturedScope.userId,
+                          expectedSessionGeneration: capturedScope.sessionGeneration,
+                          signal,
+                        }
+                      )
+                      if (signal.aborted || !scopeIsCurrent(capturedScope) || result.stale) {
+                        return { kind: 'uncertain', error: signal.reason ?? lastError }
+                      }
 
-            const acknowledgement =
-              result.ok && result.status === 200
-                ? readCommentReactionIntentAcknowledgement(result.data, {
-                    actorId,
-                    postId,
-                    commentId,
-                    requestId: command.requestId,
-                    desiredReaction: command.desired,
-                  })
-                : null
-            if (acknowledgement) {
-              command.intentSequence = acknowledgement.intentSequence
-              break
-            }
+                      const acknowledgement =
+                        result.ok && result.status === 200
+                          ? readCommentReactionIntentAcknowledgement(result.data, {
+                              actorId,
+                              postId,
+                              commentId,
+                              requestId: command.requestId,
+                              desiredReaction: command.desired,
+                            })
+                          : null
+                      if (acknowledgement) {
+                        command.intentSequence = acknowledgement.intentSequence
+                        break
+                      }
 
-            const failure = readCommentReactionFailure(result.data, result.status)
-            const error = commentReactionError(result.data)
-            if (
-              failure &&
-              (failure.kind === 'stale' ||
-                failure.kind === 'expired' ||
-                failure.kind === 'unknown_ticket')
-            ) {
-              return { kind: 'superseded', error }
-            }
-            if (isDefinitiveCommentReactionRejection(result.status)) {
-              return { kind: 'definitive-rejection', error, status: result.status }
-            }
-            lastError = error ? new Error(error) : lastError
+                      const failure = readCommentReactionFailure(result.data, result.status)
+                      const error = commentReactionError(result.data)
+                      if (
+                        failure &&
+                        (failure.kind === 'stale' ||
+                          failure.kind === 'expired' ||
+                          failure.kind === 'unknown_ticket')
+                      ) {
+                        return { kind: 'superseded', error }
+                      }
+                      if (isDefinitiveCommentReactionRejection(result.status)) {
+                        return { kind: 'definitive-rejection', error, status: result.status }
+                      }
+                      lastError = error ? new Error(error) : lastError
+                    } catch (error) {
+                      lastError = error
+                    }
+                  }
+
+                  return command.intentSequence ? null : { kind: 'uncertain', error: lastError }
+                }
+              )
+            if (reservationOutcome) return reservationOutcome
           } catch (error) {
-            lastError = error
+            return { kind: 'uncertain', error }
           }
         }
 
