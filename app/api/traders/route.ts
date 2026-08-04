@@ -15,7 +15,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
-import { getOrSetWithLock, readSharedCacheWriteFence, set as setCache } from '@/lib/cache'
+import { readSharedCacheWriteFence } from '@/lib/cache'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
 import type { Period } from '@/lib/utils/arena-score'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
@@ -28,7 +29,11 @@ import {
   currentScoredSources,
   type LeaderboardCountCacheRow,
 } from '@/lib/data/leaderboard-count-cache'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import {
+  PUBLIC_ACTIVE_RANKING_SOURCES,
+  SOURCE_TYPE_MAP,
+  parsePublicActiveRankingSource,
+} from '@/lib/constants/exchanges'
 import {
   sourceFreshnessStatusMap,
   summarizeSourceFreshness,
@@ -37,13 +42,19 @@ import {
 import {
   PUBLIC_RANKING_POSTGREST_EXCLUSION,
   PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_REDIS_TAG,
   filterPublicRankingSources,
   isPublicRankingSourceQuarantined,
-  publicRankingCacheKey,
   publicRankingCountFromCache,
   sanitizePublicRankingSourcePayload,
 } from '@/lib/rankings/publication-policy'
+import {
+  PUBLIC_RANKING_CANONICAL_LIMIT,
+  canonicalPublicRankingCacheKeys,
+  createPublicRankingRequestDeadline,
+  getCanonicalPublicRanking,
+  publishCanonicalPublicRankingPayload,
+  raceWithPublicRankingSignal,
+} from '@/lib/rankings/canonical-public-cache'
 
 const logger = createLogger('traders-api')
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
@@ -84,23 +95,50 @@ interface TradersCacheKeyParams {
   limit: number
   useLegacyPaging: boolean
   page: number
+  requireCountAuthority?: boolean
 }
 
-function tradersResponseCacheKey(params: TradersCacheKeyParams): string {
-  const {
-    timeRange,
-    exchangeFilter,
-    categoryFilter,
-    sortBy,
-    order,
-    cursor,
+type CanonicalTradersPayload = Record<string, unknown> & {
+  traders?: Array<Record<string, unknown>>
+  totalCount?: number
+}
+
+function canonicalTradersTotal(payload: CanonicalTradersPayload, visibleRows: number): number {
+  return typeof payload.totalCount === 'number' &&
+    Number.isFinite(payload.totalCount) &&
+    payload.totalCount >= visibleRows
+    ? payload.totalCount
+    : visibleRows
+}
+
+export function sliceCanonicalTradersPayload(
+  payload: CanonicalTradersPayload,
+  offset: number,
+  limit: number,
+  useLegacyPaging: boolean,
+  page: number,
+  staleFallback: boolean
+): CanonicalTradersPayload {
+  const safe = sanitizePublicRankingSourcePayload(payload)
+  const canonicalRows = Array.isArray(safe.traders) ? safe.traders : []
+  const traders = canonicalRows.slice(offset, offset + limit)
+  const totalCount = canonicalTradersTotal(safe, canonicalRows.length)
+  const lastTrader = traders[traders.length - 1]
+  const nextCursor =
+    lastTrader && typeof lastTrader.rank === 'number' && Number.isFinite(lastTrader.rank)
+      ? lastTrader.rank
+      : null
+
+  return {
+    ...safe,
+    traders,
+    totalCount,
+    nextCursor,
+    hasMore: offset + traders.length < totalCount,
+    page: useLegacyPaging ? page : undefined,
     limit,
-    useLegacyPaging,
-    page,
-  } = params
-  return publicRankingCacheKey(
-    `leaderboard:v3:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${sortBy}:${order}:${cursor ?? 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
-  )
+    ...(staleFallback ? { isStale: true, stale_reason: 'dependency_unavailable' } : undefined),
+  }
 }
 
 export const GET = withPublic(
@@ -114,18 +152,29 @@ export const GET = withPublic(
 
     const {
       timeRange: timeRangeStr,
-      exchange: exchangeFilter,
+      exchange: requestedExchangeFilter,
       category: categoryFilter,
       sortBy,
       order,
       limit,
     } = parsed.data
     const timeRange = timeRangeStr as Period
+    const exchangeFilter = requestedExchangeFilter
+      ? parsePublicActiveRankingSource(requestedExchangeFilter)
+      : null
+    if (requestedExchangeFilter && !exchangeFilter) {
+      return badRequest('Invalid exchange')
+    }
     const cursor = parsed.data.cursor != null ? String(parsed.data.cursor) : null
     const page = parsed.data.page ?? NaN
     const useLegacyPaging = !isNaN(page) && !cursor
 
     const effectiveSortBy = sortBy || 'arena_score'
+    if (cursor && (effectiveSortBy !== 'arena_score' || order !== 'desc')) {
+      // A rank cursor is a continuation only for the persisted Arena-score
+      // order. Ignoring it for another metric silently returns page one again.
+      return badRequest('Cursor pagination supports only arena_score descending order; use page')
+    }
 
     if (isPublicRankingSourceQuarantined(exchangeFilter)) {
       return NextResponse.json(
@@ -151,7 +200,7 @@ export const GET = withPublic(
       )
     }
 
-    // Cache key
+    const normalizedPage = useLegacyPaging ? Math.max(0, page) : 0
     const cacheParams: TradersCacheKeyParams = {
       timeRange,
       exchangeFilter: exchangeFilter ?? null,
@@ -161,24 +210,72 @@ export const GET = withPublic(
       cursor: cursor ? safeParseInt(cursor, 0) : null,
       limit,
       useLegacyPaging,
-      page: useLegacyPaging ? Math.max(0, page) : 0,
+      page: normalizedPage,
     }
-    const cacheKey = tradersResponseCacheKey(cacheParams)
+    const canonicalOffset = useLegacyPaging ? normalizedPage * limit : 0
+    const canonicalEligible =
+      !exchangeFilter &&
+      !categoryFilter &&
+      effectiveSortBy === 'arena_score' &&
+      order === 'desc' &&
+      !cursor &&
+      canonicalOffset + limit <= PUBLIC_RANKING_CANONICAL_LIMIT
 
-    const cachedData = sanitizePublicRankingSourcePayload(
-      await getOrSetWithLock(
-        cacheKey,
-        async () =>
-          sanitizePublicRankingSourcePayload(await fetchFromLeaderboard(supabase, cacheParams)),
-        {
-          ttl: 300,
-          lockTtl: 10,
-          tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
-          skipMemory: true,
-          writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-        }
+    const deadline = createPublicRankingRequestDeadline(request.signal)
+    let cachedData: CanonicalTradersPayload
+    try {
+      if (canonicalEligible) {
+        const canonical = await getCanonicalPublicRanking<CanonicalTradersPayload>({
+          keys: canonicalPublicRankingCacheKeys(`api:traders:${timeRange}`),
+          signal: deadline.signal,
+          sanitize: sanitizePublicRankingSourcePayload,
+          tags: [`season:${timeRange}`],
+          load: ({ signal }) =>
+            fetchFromLeaderboard(
+              supabase,
+              {
+                timeRange,
+                exchangeFilter: null,
+                categoryFilter: null,
+                sortBy: 'arena_score',
+                order: 'desc',
+                cursor: null,
+                limit: PUBLIC_RANKING_CANONICAL_LIMIT,
+                useLegacyPaging: false,
+                page: 0,
+                requireCountAuthority: true,
+              },
+              signal
+            ),
+        })
+        cachedData = sliceCanonicalTradersPayload(
+          canonical.payload,
+          canonicalOffset,
+          limit,
+          useLegacyPaging,
+          normalizedPage,
+          canonical.source === 'lkg'
+        )
+      } else {
+        cachedData = sanitizePublicRankingSourcePayload(
+          await raceWithPublicRankingSignal(
+            fetchFromLeaderboard(supabase, cacheParams, deadline.signal),
+            deadline.signal
+          )
+        )
+      }
+    } catch (error) {
+      logger.warn(
+        'Trader ranking dependencies unavailable:',
+        error instanceof Error ? error.message : String(error)
       )
-    )
+      throw new ApiError('Trader ranking data is temporarily unavailable', {
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        cause: error instanceof Error ? error : undefined,
+      })
+    } finally {
+      deadline.dispose()
+    }
 
     // Dev-only: validate output shape to catch response drift early (no-op in prod)
     validateTradersResponse(cachedData, logger)
@@ -213,44 +310,60 @@ const SORT_COLUMN: Record<string, string> = {
 }
 
 /**
- * Warm the exact default `/api/traders` Redis response consumed by clients.
- * Publication callers use skipMemory so a process-local write can never count
- * as a fleet-visible warmup.
+ * Warm the canonical `/api/traders` live page and durable LKG together.
+ * Publication callers use fenced shared writes so a process-local write can
+ * never count as a fleet-visible warmup.
  */
 export async function warmDefaultPublicTradersCache(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
   timeRange: Period,
-  limit = 50
+  _limit = 50
 ): Promise<number> {
-  const writeFence = await readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
-  if (!writeFence) {
-    throw new Error(`[${timeRange}] public traders cache write fence was not available`)
+  const deadline = createPublicRankingRequestDeadline()
+  try {
+    const writeFence = await raceWithPublicRankingSignal(
+      readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY),
+      deadline.signal
+    )
+    if (!writeFence) {
+      throw new Error(`[${timeRange}] public traders cache write fence was not available`)
+    }
+    const params: TradersCacheKeyParams = {
+      timeRange,
+      exchangeFilter: null,
+      categoryFilter: null,
+      sortBy: 'arena_score',
+      order: 'desc',
+      cursor: null,
+      limit: PUBLIC_RANKING_CANONICAL_LIMIT,
+      useLegacyPaging: false,
+      page: 0,
+      requireCountAuthority: true,
+    }
+    const result = sanitizePublicRankingSourcePayload(
+      await raceWithPublicRankingSignal(
+        fetchFromLeaderboard(supabase, params, deadline.signal),
+        deadline.signal
+      )
+    )
+    if (!result.traders.length) {
+      throw new Error(`[${timeRange}] public traders cache warmup returned no ranked rows`)
+    }
+    const written = await publishCanonicalPublicRankingPayload({
+      keys: canonicalPublicRankingCacheKeys(`api:traders:${timeRange}`),
+      payload: result,
+      sanitize: sanitizePublicRankingSourcePayload,
+      writeFence,
+      tags: [`season:${timeRange}`],
+      signal: deadline.signal,
+    })
+    if (!written.liveWritten || !written.lkgWritten) {
+      throw new Error(`[${timeRange}] public traders Redis cache write was not confirmed`)
+    }
+    return result.traders.length
+  } finally {
+    deadline.dispose()
   }
-  const params: TradersCacheKeyParams = {
-    timeRange,
-    exchangeFilter: null,
-    categoryFilter: null,
-    sortBy: 'arena_score',
-    order: 'desc',
-    cursor: null,
-    limit,
-    useLegacyPaging: false,
-    page: 0,
-  }
-  const result = sanitizePublicRankingSourcePayload(await fetchFromLeaderboard(supabase, params))
-  if (!result.traders.length) {
-    throw new Error(`[${timeRange}] public traders cache warmup returned no ranked rows`)
-  }
-  const written = await setCache(tradersResponseCacheKey(params), result, {
-    ttl: 300,
-    tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
-    skipMemory: true,
-    writeFence,
-  })
-  if (!written) {
-    throw new Error(`[${timeRange}] public traders Redis cache write was not confirmed`)
-  }
-  return result.traders.length
 }
 
 async function fetchFromLeaderboard(
@@ -265,7 +378,9 @@ async function fetchFromLeaderboard(
     limit: number
     useLegacyPaging: boolean
     page: number
-  }
+    requireCountAuthority?: boolean
+  },
+  signal?: AbortSignal
 ) {
   const {
     timeRange,
@@ -277,6 +392,7 @@ async function fetchFromLeaderboard(
     limit,
     useLegacyPaging,
     page,
+    requireCountAuthority = false,
   } = params
 
   // Build query — select only needed columns (avoid SELECT *)
@@ -296,6 +412,8 @@ async function fetchFromLeaderboard(
 
   if (exchangeFilter) {
     query = query.eq('source', exchangeFilter)
+  } else {
+    query = query.in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
   }
 
   // Category filter: map frontend category to source_type in DB
@@ -351,11 +469,28 @@ async function fetchFromLeaderboard(
     query = query.limit(fetchLimit)
   }
 
-  const { data, error } = await query
+  let countQuery = supabase
+    .from('leaderboard_count_cache')
+    .select('source,total_count,updated_at')
+    .eq('season_id', timeRange)
+    .like('source', '%_gt0')
+  if (signal) {
+    query = query.abortSignal(signal)
+    countQuery = countQuery.abortSignal(signal)
+  }
+  const [rankingResult, countResult, verifiedKeys] = await Promise.all([
+    query,
+    countQuery,
+    getVerifiedTraderKeys(supabase, signal),
+  ])
+  const { data, error } = rankingResult
 
   if (error) {
     logger.error('leaderboard_ranks query error:', error)
     throw new Error(`leaderboard_ranks query failed: ${error.message}`)
+  }
+  if (requireCountAuthority && countResult.error) {
+    throw new Error(`leaderboard count authority failed: ${countResult.error.message}`)
   }
 
   // Read totalCount from pre-computed cache (instant) instead of count: 'exact' (47s)
@@ -363,11 +498,7 @@ async function fetchFromLeaderboard(
   // Read the `_gt0` count variant to match the serving query's `arena_score>0`
   // filter. The plain key counts arena_score<=0 rows too → under-counts the
   // served set and makes `hasMore` truncate the board early (see rankings/route).
-  const { data: cacheRows } = await supabase
-    .from('leaderboard_count_cache')
-    .select('source,total_count,updated_at')
-    .eq('season_id', timeRange)
-    .like('source', '%_gt0')
+  const cacheRows = countResult.data
   const countRows = (cacheRows || []) as LeaderboardCountCacheRow[]
   const publicSources = filterPublicRankingSources(currentScoredSources(countRows))
   const categorySourceType =
@@ -381,15 +512,14 @@ async function fetchFromLeaderboard(
     countRows,
     exchangeFilter ? { source: exchangeFilter } : categoryFilter ? { sources: categorySources } : {}
   )
+  if (requireCountAuthority && cachedTotal === null) {
+    throw new Error('leaderboard count authority generation is missing')
+  }
   const pageStart = useLegacyPaging ? page * limit : 0
   const rankedRows = ((data || []) as Array<Record<string, unknown>>).filter(
     (row) => row.rank != null
   )
   const totalCount = cachedTotal ?? pageStart + rankedRows.length
-
-  // Verified-data set (A1): traders with an active read-only API-key
-  // authorization → ✓ Verified badge (vs scraped "Tracked"). Cached, O(1) lookup.
-  const verifiedKeys = await getVerifiedTraderKeys(supabase)
 
   // Map to trader response format (compatible with existing frontend)
   const traders = rankedRows.map((row) => ({
@@ -457,15 +587,15 @@ async function fetchFromLeaderboard(
 
   // Prefer our own CDN avatar mirror over the exchange-CDN proxy (no 429 cold-burst).
   // Fail-open + cached (getOrSetWithLock ttl 300) → one indexed RPC per cache fill.
-  dedupedTraders = await attachAvatarMirrors(supabase, dedupedTraders)
+  dedupedTraders = await attachAvatarMirrors(supabase, dedupedTraders, signal)
 
   // Verified (claimed) badge (P3-P3, 2026-07-09): verified_traders is tiny
   // (manual owner review), so one full fetch per request marks the page's
   // rows. Fail-open — a query error just means no badges this response.
   try {
-    const { data: verifiedRows } = await supabase
-      .from('verified_traders')
-      .select('trader_id, source')
+    let verifiedQuery = supabase.from('verified_traders').select('trader_id, source')
+    if (signal) verifiedQuery = verifiedQuery.abortSignal(signal)
+    const { data: verifiedRows } = await verifiedQuery
     if (verifiedRows?.length) {
       const verifiedKeys = new Set(verifiedRows.map((v) => `${v.source}|${v.trader_id}`))
       dedupedTraders = dedupedTraders.map((t) =>
@@ -502,9 +632,11 @@ async function fetchFromLeaderboard(
     .from('leaderboard_source_freshness')
     .select('source,source_as_of')
     .eq('season_id', timeRange)
+    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
   if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
     freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
   }
+  if (signal) freshnessQuery = freshnessQuery.abortSignal(signal)
   const { data: sourceWatermarks } = await freshnessQuery
   const freshnessSummary = summarizeSourceFreshness(
     (sourceWatermarks || []) as SourceFreshnessRow[],

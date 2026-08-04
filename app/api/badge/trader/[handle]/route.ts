@@ -57,14 +57,10 @@ async function fetchRank(handle: string) {
   const srcName = source.source as string
   const srcTraderId = source.source_trader_id as string
   if (!isPublicRankingSourceAllowed(srcName)) return null
-  // A1 data-authenticity: an ACTIVE trader_authorizations row = read-only API
-  // key connected → numbers are API-verified, not scraped. Mirrors
-  // lib/data/verified-traders.ts. Fail-open (null → Tracked).
-  const authRow = await restSelect(
-    'trader_authorizations',
-    `select=trader_id&status=eq.active&platform=eq.${enc(srcName)}&trader_id=eq.${enc(srcTraderId)}`
-  )
-  const verified = authRow != null
+  // V1 CEX connections are private and never mint a public data badge. Legacy
+  // authorization-derived rows remain quarantined during the 48-hour drain and
+  // are deliberately ignored here.
+  const verified = false
 
   for (const season of ['90D', '30D', '7D']) {
     const data = await restSelect(

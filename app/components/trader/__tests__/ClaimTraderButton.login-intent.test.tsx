@@ -55,7 +55,7 @@ describe('ClaimTraderButton login intent', () => {
     mockShowConfirm.mockResolvedValue(true)
   })
 
-  it('does not send a signed-out CEX claimant back to the trader page or homepage', async () => {
+  it('disables unsupported CEX claims without opening a login flow', async () => {
     render(
       <ClaimTraderButton
         traderId="account/42"
@@ -65,14 +65,9 @@ describe('ClaimTraderButton login intent', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'claimTrader' }))
-
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith(
-        '/login?returnUrl=%2Fclaim%3Ftrader%3Daccount%252F42%26source%3Dbinance%26handle%3DAlice%2BTrader%26step%3Dverify'
-      )
-    )
-    expect(mockShowToast).toHaveBeenCalledWith('pleaseLoginFirst', 'warning')
+    expect(screen.getByRole('button', { name: 'claimSourceUnsupportedTitle' })).toBeDisabled()
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
   })
 
   it('uses the same exact login handoff for a signed-out wallet claim', async () => {

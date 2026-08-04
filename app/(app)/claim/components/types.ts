@@ -1,5 +1,5 @@
-import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
-import { SOLANA_WALLET_PLATFORMS } from '@/lib/constants/wallet-platforms'
+import { WALLET_CLAIM_PLATFORMS } from '@/lib/constants/wallet-platforms'
+import { claimMethodForSource } from '@/lib/constants/trader-claim-platforms'
 import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 
 export interface SearchResult {
@@ -30,41 +30,10 @@ export interface LinkedTrader {
   } | null
 }
 
-// Derive CEX platforms from EXCHANGE_CONFIG so adding a new exchange with
-// requiresPassphrase: true automatically shows the passphrase field in the claim form.
-export const CEX_PLATFORMS = (
-  Object.entries(EXCHANGE_CONFIG) as [
-    string,
-    (typeof EXCHANGE_CONFIG)[keyof typeof EXCHANGE_CONFIG],
-  ][]
-)
-  .filter(([, config]) => config.sourceType === 'futures' || config.sourceType === 'spot')
-  .map(([value, config]) => ({
-    value,
-    label: config.name,
-    requiresPassphrase: config.requiresPassphrase ?? false,
-  }))
-
-export const DEX_PLATFORMS = [
-  'hyperliquid',
-  'gmx',
-  'gains',
-  'aevo',
-  'kwenta',
-  'vertex',
-  'dydx',
-  'jupiter_perps',
-  'drift',
-]
-
-export const SOLANA_PLATFORMS = [...SOLANA_WALLET_PLATFORMS]
+export const DEX_PLATFORMS = [...WALLET_CLAIM_PLATFORMS]
 
 export function isDex(source: string): boolean {
-  return DEX_PLATFORMS.some((p) => source.toLowerCase() === p)
-}
-
-export function isSolanaDex(source: string): boolean {
-  return SOLANA_PLATFORMS.some((p) => source.toLowerCase() === p)
+  return claimMethodForSource(source) === 'signature'
 }
 
 export function walletMatchesTrader(

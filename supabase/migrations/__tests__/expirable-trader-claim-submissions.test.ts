@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { EVM_WALLET_PLATFORMS, SOLANA_WALLET_PLATFORMS } from '@/lib/constants/wallet-platforms'
 
 const migration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260716113000_expirable_trader_claim_submissions.sql'),
@@ -101,8 +100,10 @@ describe('expirable trader-claim submission migration', () => {
     const parseSqlList = (value: string | undefined) =>
       Array.from(value?.matchAll(/'([^']+)'/g) ?? [], (match) => match[1])
 
-    expect(parseSqlList(solanaList)).toEqual([...SOLANA_WALLET_PLATFORMS])
-    expect(parseSqlList(evmList)).toEqual([...EVM_WALLET_PLATFORMS])
+    // Historical contract at this migration point. A later V1 restriction
+    // migration narrows the live database boundary to hyperliquid + gmx.
+    expect(parseSqlList(solanaList)).toEqual(['jupiter_perps', 'drift'])
+    expect(parseSqlList(evmList)).toEqual(['hyperliquid', 'gmx', 'gains', 'aevo', 'dydx'])
   })
 
   it('fails stale or terminal approval closed at the final status boundary', () => {

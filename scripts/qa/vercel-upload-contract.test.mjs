@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
+import { parse } from 'yaml'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const ignoreRules = fs.readFileSync(path.join(root, '.vercelignore'), 'utf8')
@@ -12,6 +13,7 @@ const releaseControl = fs.readFileSync(
   path.join(root, '.github/workflows/vercel-release-control.yml'),
   'utf8'
 )
+const parsedReleaseControl = parse(releaseControl)
 const releaseControlScript = fs.readFileSync(
   path.join(root, 'scripts/ci/enforce-vercel-release-control.mjs'),
   'utf8'
@@ -128,8 +130,9 @@ test('keeps Vercel candidate failures reproducible and diagnosable', () => {
 })
 
 test('keeps Deploy Gate as the only writer of production domains', () => {
-  assert.match(releaseControl, /push:\n    branches: \[main\]/)
-  assert.match(releaseControl, /workflow_dispatch:/)
+  assert.deepEqual(Object.keys(parsedReleaseControl.on), ['workflow_call'])
+  assert.equal(parsedReleaseControl.on.workflow_call.secrets, undefined)
+  assert.equal(parsedReleaseControl.jobs['enforce-single-production-writer'].if, '${{ false }}')
   assert.match(releaseControl, /cancel-in-progress: false/)
   assert.match(releaseControl, /uses: actions\/checkout@v4/)
   assert.match(releaseControl, /run: node scripts\/ci\/enforce-vercel-release-control\.mjs/)

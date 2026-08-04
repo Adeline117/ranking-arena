@@ -67,14 +67,36 @@ describe('DexVerifyForm proof submission', () => {
   })
 
   it('submits a signed proof exactly once through the atomic claim endpoint', async () => {
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        success: true,
-        data: { claim: { status: 'reviewing' }, auto_approved: false },
-      }),
-    })
+    const serverMessage = [
+      'Arena Trader Claim',
+      'Domain: www.arenafi.org',
+      'User ID: user-1',
+      'Source: hyperliquid',
+      `Trader ID: ${checksumWallet.toLowerCase()}`,
+      `Nonce: ${'a'.repeat(64)}`,
+    ].join('\n')
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: {
+            challenge_id: 'a'.repeat(64),
+            message: serverMessage,
+            expires_at: '2026-08-03T12:05:00.000Z',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: { claim: { status: 'reviewing' }, auto_approved: false },
+        }),
+      })
     global.fetch = fetchMock as typeof fetch
     const onSuccess = jest.fn()
 
@@ -94,8 +116,20 @@ describe('DexVerifyForm proof submission', () => {
     timeoutSpy.mockRestore()
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1))
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/traders/claim/wallet-challenge',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer access-token',
+          'x-csrf-token': 'csrf-token',
+        }),
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
       '/api/traders/claim',
       expect.objectContaining({
         method: 'POST',
@@ -106,7 +140,7 @@ describe('DexVerifyForm proof submission', () => {
       })
     )
 
-    const request = fetchMock.mock.calls[0][1] as RequestInit
+    const request = fetchMock.mock.calls[1][1] as RequestInit
     expect(JSON.parse(String(request.body))).toMatchObject({
       trader_id: checksumWallet.toLowerCase(),
       source: 'hyperliquid',
@@ -114,7 +148,12 @@ describe('DexVerifyForm proof submission', () => {
       verification_data: {
         wallet_address: checksumWallet,
         signature: '0xsigned-proof',
+        challenge_id: 'a'.repeat(64),
       },
+    })
+    expect(window.ethereum?.request).toHaveBeenCalledWith({
+      method: 'personal_sign',
+      params: [serverMessage, checksumWallet],
     })
     expect(mockShowToast).toHaveBeenCalledWith('claimSubmitted', 'success')
     expect(mockTrackEvent).toHaveBeenCalledWith('claim_trader', { method: 'dex_wallet' })

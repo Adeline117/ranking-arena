@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import Providers from '../Providers'
+import PresenceHeartbeat from '../presence/PresenceHeartbeat'
 import HomePage from './HomePage'
 import WelcomeBanner from './WelcomeBanner'
 import type { HomePageLoaderProps } from './HomePageLoader'
@@ -28,6 +29,7 @@ const SpeedInsights = dynamic(
 export default function HomeInteractiveRoot(props: HomePageLoaderProps) {
   return (
     <Providers>
+      <PresenceHeartbeat />
       <WelcomeBanner />
       <HomePage {...props} />
       <CompareFloatingBar />

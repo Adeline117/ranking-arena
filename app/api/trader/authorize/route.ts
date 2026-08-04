@@ -1,17 +1,15 @@
 /**
  * POST /api/trader/authorize
  *
- * Authorize trader to display real trading data
- * Validates API key and stores encrypted credentials
+ * Save a private, read-only exchange account connection.
+ * This endpoint does not claim or publish a public leaderboard profile.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { encryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
-import { validateExchangeApiKey } from '@/lib/validators/api-key-validator'
+import { bindApiKey, revokeApiKey } from '@/lib/services/api-key-binder'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +20,43 @@ interface AuthorizeRequest {
   passphrase?: string
   label?: string
   syncFrequency?: 'realtime' | '5min' | '15min' | '1hour'
+}
+
+const V1_PUBLIC_ACCOUNT_BINDING_PLATFORMS = new Set(['binance', 'bybit', 'bitget'])
+const AUTHORIZE_FIELDS = new Set([
+  'platform',
+  'apiKey',
+  'apiSecret',
+  'passphrase',
+  'label',
+  'syncFrequency',
+])
+const SYNC_FREQUENCIES = new Set<NonNullable<AuthorizeRequest['syncFrequency']>>([
+  'realtime',
+  '5min',
+  '15min',
+  '1hour',
+])
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
+
+function privateJson(body: unknown, init?: { status?: number }) {
+  return withPrivateNoStore(NextResponse.json(body, init))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 async function getStrictUser(request: NextRequest) {
@@ -36,173 +71,120 @@ async function getStrictUser(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
+  if (rateLimitResp) return withPrivateNoStore(rateLimitResp)
 
   try {
     const auth = await getStrictUser(request)
     if (!auth) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return privateJson({ error: 'Unauthorized' }, { status: 401 })
     }
     const user = auth
 
-    // Parse request body
-    const body: AuthorizeRequest = await request.json()
-    const { platform, apiKey, apiSecret, passphrase, label, syncFrequency } = body
+    let rawBody: unknown
+    try {
+      rawBody = await request.json()
+    } catch {
+      return privateJson({ error: 'Request body must be valid JSON' }, { status: 400 })
+    }
+    if (!isRecord(rawBody)) {
+      return privateJson({ error: 'Request body must be an object' }, { status: 400 })
+    }
+    if (Object.keys(rawBody).some((field) => !AUTHORIZE_FIELDS.has(field))) {
+      return privateJson({ error: 'Unknown authorization request fields' }, { status: 400 })
+    }
+
+    const { platform, apiKey, apiSecret, passphrase, label, syncFrequency } = rawBody
 
     // Validate required fields
-    if (!platform || !apiKey || !apiSecret) {
-      return NextResponse.json(
+    if (
+      typeof platform !== 'string' ||
+      typeof apiKey !== 'string' ||
+      typeof apiSecret !== 'string' ||
+      !platform.trim() ||
+      !apiKey.trim() ||
+      !apiSecret.trim() ||
+      platform.length > 64 ||
+      apiKey.length > 1024 ||
+      apiSecret.length > 4096
+    ) {
+      return privateJson(
         { error: 'Missing required fields: platform, apiKey, apiSecret' },
         { status: 400 }
       )
     }
-
-    // Validate platform
-    const validPlatforms = [
-      'binance',
-      'binance_futures',
-      'binance_spot',
-      'bybit',
-      'bybit_spot',
-      'okx',
-      'okx_futures',
-      'bitget',
-      'bitget_futures',
-      'bitget_spot',
-    ]
-
-    if (!validPlatforms.includes(platform.toLowerCase())) {
-      return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 })
+    const normalizedPlatform = platform.trim().toLowerCase()
+    if (!V1_PUBLIC_ACCOUNT_BINDING_PLATFORMS.has(normalizedPlatform)) {
+      return privateJson({ error: 'Unsupported V1 account-connection platform' }, { status: 400 })
+    }
+    if (
+      passphrase !== undefined &&
+      (typeof passphrase !== 'string' || !passphrase.trim() || passphrase.length > 1024)
+    ) {
+      return privateJson({ error: 'Invalid passphrase' }, { status: 400 })
+    }
+    if (label !== undefined && (typeof label !== 'string' || !label.trim() || label.length > 120)) {
+      return privateJson({ error: 'Invalid label' }, { status: 400 })
+    }
+    if (
+      syncFrequency !== undefined &&
+      (typeof syncFrequency !== 'string' ||
+        !SYNC_FREQUENCIES.has(syncFrequency as NonNullable<AuthorizeRequest['syncFrequency']>))
+    ) {
+      return privateJson({ error: 'Invalid sync frequency' }, { status: 400 })
     }
 
-    // Validate API key with exchange
-    const validationResult = await validateExchangeApiKey(platform, {
-      apiKey,
-      apiSecret,
-      passphrase,
+    // This is the only live public account-binding endpoint. The retired
+    // /api/exchange/connect route returns 410 so no legacy direct table writer
+    // can create partial connection/authorization state.
+    const result = await bindApiKey(getSupabaseAdmin(), user.id, {
+      platform: normalizedPlatform,
+      apiKey: apiKey.trim(),
+      apiSecret: apiSecret.trim(),
+      passphrase: typeof passphrase === 'string' ? passphrase.trim() : undefined,
+      label: typeof label === 'string' ? label.trim() : undefined,
+      syncFrequency: syncFrequency as AuthorizeRequest['syncFrequency'],
     })
 
-    if (!validationResult.isValid) {
-      logger.warn('[Authorize] API key validation failed', {
-        platform,
+    if (!result.success) {
+      const storageFailure = result.errorCode === 'storage_failed'
+      logger.warn('[Authorize] API key binding failed', {
+        platform: normalizedPlatform,
         userId: user.id,
-        error: validationResult.error,
+        errorCode: result.errorCode,
       })
 
-      return NextResponse.json(
+      return privateJson(
         {
-          error: 'API key validation failed',
-          details: validationResult.error,
+          error: storageFailure ? 'Failed to store authorization' : 'API key validation failed',
+          details: storageFailure ? undefined : result.error,
         },
-        { status: 400 }
+        { status: storageFailure ? 500 : 400 }
       )
     }
 
-    // Encrypt credentials
-    const encryptedApiKey = encryptAuthorizationCredential(apiKey)
-    const encryptedApiSecret = encryptAuthorizationCredential(apiSecret)
-    const encryptedPassphrase = passphrase ? encryptAuthorizationCredential(passphrase) : null
-    const now = new Date().toISOString()
-
-    // Use service role client for database write
-    const supabaseService = getSupabaseAdmin()
-
-    // Check if authorization already exists
-    const { data: existing } = await supabaseService
-      .from('trader_authorizations')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('platform', platform)
-      .eq('trader_id', validationResult.traderId!)
-      .single()
-
-    let authorizationId: string
-
-    if (existing) {
-      // Update existing authorization
-      const { data: updated, error: updateError } = await supabaseService
-        .from('trader_authorizations')
-        .update({
-          encrypted_api_key: encryptedApiKey,
-          encrypted_api_secret: encryptedApiSecret,
-          encrypted_passphrase: encryptedPassphrase,
-          permissions: validationResult.permissions || [],
-          read_only_verified_at: now,
-          status: 'active',
-          last_verified_at: now,
-          last_sync_at: null,
-          last_sync_status: 'pending',
-          consecutive_failures: 0,
-          verification_error: null,
-          label,
-          sync_frequency: syncFrequency || 'realtime',
-          updated_at: now,
-        })
-        .eq('id', existing.id)
-        .select('id')
-        .single()
-
-      if (updateError) {
-        logger.dbError('update-authorization', updateError, {
-          userId: user.id,
-          platform,
-        })
-        return NextResponse.json({ error: 'Failed to update authorization' }, { status: 500 })
-      }
-
-      authorizationId = updated!.id
-    } else {
-      // Create new authorization
-      const { data: created, error: createError } = await supabaseService
-        .from('trader_authorizations')
-        .insert({
-          user_id: user.id,
-          platform,
-          trader_id: validationResult.traderId!,
-          encrypted_api_key: encryptedApiKey,
-          encrypted_api_secret: encryptedApiSecret,
-          encrypted_passphrase: encryptedPassphrase,
-          permissions: validationResult.permissions || [],
-          read_only_verified_at: now,
-          status: 'active',
-          last_verified_at: now,
-          last_sync_status: 'pending',
-          label,
-          sync_frequency: syncFrequency || 'realtime',
-        })
-        .select('id')
-        .single()
-
-      if (createError) {
-        logger.dbError('create-authorization', createError, {
-          userId: user.id,
-          platform,
-        })
-        return NextResponse.json({ error: 'Failed to create authorization' }, { status: 500 })
-      }
-
-      authorizationId = created!.id
+    if (!result.authorizationId) {
+      logger.error('[Authorize] Atomic binder returned success without an authorization id', {
+        userId: user.id,
+        platform: normalizedPlatform,
+      })
+      return privateJson({ error: 'Failed to store authorization' }, { status: 500 })
     }
 
-    // Queue the canonical worker pipeline. The periodic worker scheduler is the
-    // durability fallback, but a successful bind should not wait for its next pass.
-    const initialSyncQueued = await enqueueFirstPartySync(authorizationId)
-
-    return NextResponse.json({
+    return privateJson({
       success: true,
-      authorizationId,
-      traderId: validationResult.traderId,
-      nickname: validationResult.nickname,
-      permissions: validationResult.permissions,
-      initialSyncQueued,
-      message: initialSyncQueued
-        ? 'Authorization successful! Your live trading data is queued for verification.'
-        : 'Authorization saved. The background scheduler will verify it shortly.',
+      authorizationId: result.authorizationId,
+      traderId: result.traderId,
+      nickname: result.nickname,
+      permissions: result.permissions,
+      initialSyncQueued: false,
+      publicProfilePublishing: false,
+      message:
+        'Read-only account connection saved. It is not linked to or publishing a public leaderboard profile.',
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
     // SECURITY: Do not leak internal error details to client
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return privateJson({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -212,10 +194,13 @@ export async function POST(request: NextRequest) {
  * List user's authorizations
  */
 export async function GET(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.read)
+  if (rateLimitResp) return withPrivateNoStore(rateLimitResp)
+
   try {
     const auth = await getStrictUser(request)
     if (!auth) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return privateJson({ error: 'Unauthorized' }, { status: 401 })
     }
     const user = auth
     const supabase = getSupabaseAdmin()
@@ -233,15 +218,15 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       logger.dbError('fetch-authorizations', error, { userId: user.id })
-      return NextResponse.json({ error: 'Failed to fetch authorizations' }, { status: 500 })
+      return privateJson({ error: 'Failed to fetch authorizations' }, { status: 500 })
     }
 
-    return NextResponse.json({
+    return privateJson({
       authorizations: authorizations || [],
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return privateJson({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -252,12 +237,12 @@ export async function GET(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
+  if (rateLimitResp) return withPrivateNoStore(rateLimitResp)
 
   try {
     const auth = await getStrictUser(request)
     if (!auth) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return privateJson({ error: 'Unauthorized' }, { status: 401 })
     }
     const user = auth
 
@@ -266,42 +251,30 @@ export async function DELETE(request: NextRequest) {
     const authorizationId = searchParams.get('id')
 
     if (!authorizationId) {
-      return NextResponse.json({ error: 'Missing authorization ID' }, { status: 400 })
+      return privateJson({ error: 'Missing authorization ID' }, { status: 400 })
     }
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authorizationId)) {
-      return NextResponse.json({ error: 'Invalid authorization ID' }, { status: 400 })
+      return privateJson({ error: 'Invalid authorization ID' }, { status: 400 })
     }
 
-    // The service client bypasses RLS, so both identifiers are mandatory. The
-    // returned row proves that this caller actually owned the target.
-    const { data: revoked, error } = await getSupabaseAdmin()
-      .from('trader_authorizations')
-      .update({
-        status: 'revoked',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', authorizationId)
-      .eq('user_id', user.id)
-      .select('id')
-      .maybeSingle()
-
-    if (error) {
-      logger.dbError('revoke-authorization', error, {
+    const revoked = await revokeApiKey(getSupabaseAdmin(), user.id, authorizationId)
+    if (!revoked.success) {
+      if (revoked.errorCode === 'not_found') {
+        return privateJson({ error: 'Authorization not found' }, { status: 404 })
+      }
+      logger.error('[Authorize] Atomic authorization revocation failed', {
         userId: user.id,
         authorizationId,
       })
-      return NextResponse.json({ error: 'Failed to revoke authorization' }, { status: 500 })
-    }
-    if (!revoked) {
-      return NextResponse.json({ error: 'Authorization not found' }, { status: 404 })
+      return privateJson({ error: 'Failed to revoke authorization' }, { status: 500 })
     }
 
-    return NextResponse.json({
+    return privateJson({
       success: true,
       message: 'Authorization revoked',
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return privateJson({ error: 'Internal server error' }, { status: 500 })
   }
 }

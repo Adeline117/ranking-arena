@@ -87,8 +87,8 @@ describe('ClaimTraderButton claim identity scope', () => {
 
     renderClaimButton('trader-a', 'binance')
 
-    const button = await screen.findByRole('button', { name: 'linkToProfile' })
-    expect(button).toBeEnabled()
+    const button = await screen.findByRole('button', { name: 'claimSourceUnsupportedTitle' })
+    expect(button).toBeDisabled()
     expect(fetchMock).toHaveBeenCalledWith('/api/traders/claim?trader_id=trader-a&source=binance', {
       headers: { Authorization: 'Bearer access-token' },
     })
@@ -134,6 +134,6 @@ describe('ClaimTraderButton claim identity scope', () => {
 
     renderClaimButton(solanaTrader, 'drift')
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
-    expect(screen.getByRole('button', { name: 'claimTrader' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'claimSourceUnsupportedTitle' })).toBeDisabled()
   })
 })

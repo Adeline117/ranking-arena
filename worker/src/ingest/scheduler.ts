@@ -194,37 +194,11 @@ export async function reconcileSchedulers(): Promise<void> {
     await localQueue.upsertJobScheduler(s.id, { every: s.everyMs }, { name: s.name, data: {} })
   }
 
-  // First-party sync schedulers (认领交易员 P1, 2026-07-09): one per ACTIVE
-  // trader_authorizations row, every 15 min, on the local bulk queue —
-  // geo-blocked exchanges go through the HTTP proxy (node-agnostic). Revoked/
-  // error rows fall out of `wanted` and the cleanup pass below removes their
-  // schedulers. Fail-soft: a query error here must not abort the reconcile.
-  try {
-    const { rows: fpAuths } = await (await import('@/lib/ingest/db'))
-      .getIngestPool()
-      .query<{ id: string }>(
-        `SELECT id FROM public.trader_authorizations
-          WHERE status = 'active' AND read_only_verified_at IS NOT NULL`
-      )
-    for (const a of fpAuths) {
-      const key = `fp:${a.id}`
-      wanted.set(key, regionQueueName('local'))
-      await localQueue.upsertJobScheduler(
-        key,
-        { every: 15 * 60_000 },
-        {
-          name: INGEST_JOB.FIRST_PARTY,
-          data: { authorizationId: a.id },
-          opts: { priority: 4 },
-        }
-      )
-    }
-  } catch (err) {
-    console.warn(
-      '[ingest-scheduler] first-party scheduler pass failed (non-fatal):',
-      err instanceof Error ? err.message : err
-    )
-  }
+  // V1 CEX API keys are account connections, not public-profile proof. Do not
+  // create authorization-wide FIRST_PARTY schedulers. Any stale `fp:*` entry
+  // is absent from `wanted` and the cleanup pass below removes it. The processor
+  // independently requires an exact reviewed identity mapping so a queued job
+  // from an immutable older deployment also fails closed.
 
   // Remove stale schedulers + REVIVE stuck ones across every region queue.
   //
