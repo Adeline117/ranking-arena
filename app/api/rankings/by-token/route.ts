@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { RateLimitPresets, checkRateLimit } from '@/lib/utils/rate-limit'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
+import { TOKEN_RANKING_NOT_PUBLISHED_CODE } from '@/lib/rankings/token-ranking-api-contract'
 import {
   TOKEN_RANKING_MAX_GENERATION,
   TOKEN_RANKING_MAX_OFFSET,
@@ -26,6 +27,7 @@ export const runtime = 'nodejs'
 const NO_STORE_HEADERS = {
   'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
 } as const
+const UNPUBLISHED_RETRY_AFTER_SECONDS = 60 * 60
 const SUPPORTED_QUERY_KEYS = new Set(['action', 'generation', 'limit', 'offset', 'period', 'token'])
 const POPULAR_QUERY_KEYS = new Set(['action', 'generation'])
 
@@ -135,11 +137,11 @@ function errorResponse(error: unknown): NextResponse {
       logger.warn('[by-token] token ranking is not published', logContext)
       return jsonResponse(
         {
-          error: 'Token rankings have not been published yet',
-          code: 'TOKEN_RANKING_NOT_PUBLISHED',
+          error: 'Token rankings are withheld while verified authority snapshots are rebuilt',
+          code: TOKEN_RANKING_NOT_PUBLISHED_CODE,
         },
         503,
-        { 'Retry-After': '1' }
+        { 'Retry-After': String(UNPUBLISHED_RETRY_AFTER_SECONDS) }
       )
     case 'publication_busy':
       logger.warn('[by-token] token ranking publication moved repeatedly', logContext)

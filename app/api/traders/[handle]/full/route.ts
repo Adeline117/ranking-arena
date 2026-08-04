@@ -22,6 +22,7 @@ import { getOrSetWithLock } from '@/lib/cache'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
 import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import { quarantineLegacyFullPositions } from '@/lib/data/trader/history-quarantine'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,12 +41,14 @@ export async function GET(
     }
 
     const cacheKey = publicRankingCacheKey(`trader:full:${handle}`)
-    const data = await getOrSetWithLock(
-      cacheKey,
-      async () => {
-        return await fetchTraderFull(handle)
-      },
-      { ttl: 60, lockTtl: 10 }
+    const data = quarantineLegacyFullPositions(
+      await getOrSetWithLock(
+        cacheKey,
+        async () => {
+          return await fetchTraderFull(handle)
+        },
+        { ttl: 60, lockTtl: 10 }
+      )
     )
 
     if (!data) {

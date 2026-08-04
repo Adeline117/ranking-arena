@@ -44,7 +44,7 @@ describe('history partition guard', () => {
     )
   })
 
-  it('keeps position history on its managed default-partition path', async () => {
+  it('does not provision partitions for retired typed position history', async () => {
     const query = jest.fn()
     const position: ParsedHistoryRow = {
       kind: 'position_history',

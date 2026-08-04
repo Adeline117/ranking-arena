@@ -13,8 +13,9 @@ export interface HistoryPartitionRequest {
 }
 
 /**
- * Position history has a deliberately managed DEFAULT partition. The remaining
- * history tables do not: every source month must exist before their INSERT.
+ * Typed position history is retired from generic publication, so this helper
+ * must never provision its legacy hierarchy. Every source month for the three
+ * remaining writable compatibility tables must exist before their INSERT.
  */
 export function historyPartitionRequest(
   kind: HistoryKind,

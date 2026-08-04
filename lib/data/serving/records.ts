@@ -88,7 +88,7 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
 }
 
 function isHistoryRecordKind(kind: Exclude<RecordKind, 'copiers'>): boolean {
-  return kind !== 'positions'
+  return kind === 'position_history'
 }
 
 /** Copier-PII guard (spec §6): these keys never leave the API layer. */
@@ -102,6 +102,18 @@ const BANNED_ROW_KEYS: ReadonlySet<string> = new Set([
   'userId',
   // RAW is an internal audit substrate, never a serving field.
   'raw',
+  // Parser-conservation claims identify upstream rows and field paths. They
+  // are publication evidence, not part of the public record contract.
+  'sourceFactId',
+  'source_fact_id',
+  'sourceLifecycleMarker',
+  'source_lifecycle_marker',
+  'fieldSources',
+  'field_sources',
+  'limitations',
+  // `sourceReturn` / `source_return` are intentionally not stripped: the
+  // verified @2 projection exposes that economic value alongside normalized
+  // ROI, while the claim-only identity/path fields above remain internal.
   // Never assign prototype-affecting keys from an untrusted payload.
   '__proto__',
   'prototype',
@@ -280,18 +292,20 @@ export async function getRecordsPage(
   logRpcError('arena_records_page', error)
   if (error || !isPlainRecord(data)) return null
   const d = data
-  const historyCompleteness =
-    kind === 'position_history'
-      ? (verifiedPositionHistoryCompleteness(d) ?? unknownHistoryCompleteness())
-      : isHistoryRecordKind(kind)
-        ? unknownHistoryCompleteness()
-        : undefined
+  const verifiedCompleteness =
+    kind === 'position_history' ? verifiedPositionHistoryCompleteness(d) : null
+  const quarantineUnverifiedHistory = kind === 'position_history' && verifiedCompleteness === null
   return {
-    rows: sanitizeRecordRows(d.rows),
-    nextCursor: opaqueCursorOrNull(d.nextCursor),
+    // A legacy/drifted RPC may still return typed rows and a legacy cursor.
+    // Neither is public truth unless this exact response carries the @2
+    // publication binding validated above.
+    rows: quarantineUnverifiedHistory ? [] : sanitizeRecordRows(d.rows),
+    nextCursor: quarantineUnverifiedHistory ? null : opaqueCursorOrNull(d.nextCursor),
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
-    ...(historyCompleteness ? { completeness: historyCompleteness } : {}),
+    ...(kind === 'position_history'
+      ? { completeness: verifiedCompleteness ?? unknownHistoryCompleteness() }
+      : {}),
   }
 }
 

@@ -1,22 +1,15 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
-const migrationsDir = join(process.cwd(), 'supabase/migrations')
-const migrationNames = readdirSync(migrationsDir)
-  .filter((name) => name.endsWith('.sql'))
-  .sort()
-
-const latestTokenRankingMigration = [...migrationNames].reverse().find((name) => {
-  const sql = readFileSync(join(migrationsDir, name), 'utf8')
-  return /CREATE OR REPLACE FUNCTION public\.get_token_trader_rankings\s*\(/i.test(sql)
-})
-
-if (!latestTokenRankingMigration) {
-  throw new Error('Missing get_token_trader_rankings migration')
-}
-
-const sql = readFileSync(join(migrationsDir, latestTokenRankingMigration), 'utf8')
+const authorityMigration = '20260729225000_token_trader_rank_authority.sql'
+const retirementMigration = '20260804043000_retire_legacy_token_rankings.sql'
+const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations', authorityMigration), 'utf8')
 const normalized = sql.replace(/\s+/g, ' ').toLowerCase()
+const retirement = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations', retirementMigration),
+  'utf8'
+)
+const normalizedRetirement = retirement.replace(/\s+/g, ' ').toLowerCase()
 const runner = readFileSync(
   resolve(process.cwd(), 'scripts/maintenance/apply-launch-migrations.sh'),
   'utf8'
@@ -39,17 +32,22 @@ describe('get_token_trader_rankings SQL authority', () => {
     expect(normalized).toMatch(/order by (?:ranked\.)?token_rank(?: asc)?/)
   })
 
-  it('is database-first, reloads PostgREST, and has a live return-contract probe', () => {
+  it('keeps the historical database-first contract but documents its fail-closed retirement', () => {
     const predeployStart = runner.indexOf('PREDEPLOY_MIGRATIONS=(')
     const quarantineStart = runner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
-    const tokenMigration = '20260729225000_token_trader_rank_authority.sql'
-    const tokenMigrationIndex = runner.indexOf(tokenMigration, predeployStart)
+    const tokenMigrationIndex = runner.indexOf(authorityMigration, predeployStart)
 
     expect(tokenMigrationIndex).toBeGreaterThan(predeployStart)
     expect(tokenMigrationIndex).toBeLessThan(quarantineStart)
     expect(normalized).toContain("notify pgrst, 'reload schema'")
-    expect(normalized).toContain('token ranking function authority postflight failed')
-    expect(runbook).toContain('/rest/v1/rpc/get_token_trader_rankings')
-    expect(runbook).toContain('.[0].token_rank')
+    expect(normalized).toContain('token trader ranking return contract postflight failed')
+    expect(normalized).toContain('token trader ranking acl postflight failed')
+    expect(normalizedRetirement).toContain(
+      'legacy token rankings are retired; authority snapshot required'
+    )
+    expect(runbook).toContain(retirementMigration)
+    expect(runbook).toContain('/rest/v1/rpc/get_token_ranking_publication_head')
+    expect(runbook).toContain('legacy_token_rpcs_closed')
+    expect(runbook).not.toContain('.[0].token_rank')
   })
 })

@@ -1,10 +1,12 @@
-import { getTokenTraderRankingCacheKey, mergeTokenRankingsWithProfiles } from './token-traders'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { mergeTokenRankingsWithProfiles } from './token-traders'
 
-describe('getTokenTraderRankingCacheKey', () => {
-  test('uses the aggregate-backed cache namespace', () => {
-    expect(getTokenTraderRankingCacheKey('BTC', '90D', 25, 0)).toBe(
-      'rankings:by-token:v3:BTC:90D:25:0'
-    )
+describe('retired token-ranking reader boundary', () => {
+  test('does not restore the retired v1 RPC reader', () => {
+    const source = readFileSync(join(process.cwd(), 'lib/rankings/token-traders.ts'), 'utf8')
+
+    expect(source).not.toMatch(/\.rpc\(\s*['"]get_token_trader_rankings['"]/)
   })
 })
 

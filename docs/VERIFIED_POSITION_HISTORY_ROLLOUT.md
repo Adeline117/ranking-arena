@@ -1,9 +1,11 @@
 # Verified Position-History Staged Rollout
 
 This runbook releases the reviewed `@2` position-history path for
-`binance_futures`, `bitget_futures`, and `okx_futures`. It is an expand-first
-change: existing 2C history stays readable until each trader identity has its
-first verified publication. Follow [ADR-023](./DECISIONS.md#adr-023-production-migrations-require-a-proven-single-file-channel)
+`binance_futures`, `bitget_futures`, and `okx_futures`. It is a forward reopen
+after the legacy publisher, typed rows, direct browser reads, and public history
+projection have all been quarantined. Until an identity has its first exact
+`@2` publication, 2C history remains empty/unknown rather than falling back to
+unverified rows. Follow [ADR-023](./DECISIONS.md#adr-023-production-migrations-require-a-proven-single-file-channel)
 and the normal [application](./DEPLOYMENT.md) and
 [ingest-worker](./INGEST_WORKER_DEPLOY.md) release controls.
 
@@ -42,8 +44,8 @@ CANDIDATE_SHA="$(git rev-parse HEAD)"
 test "$CANDIDATE_SHA" = "$(git rev-parse refs/remotes/origin/main)"
 printf '%s\n' "$CANDIDATE_SHA"
 shasum -a 256 \
-  supabase/migrations/20260803195000_verified_position_history_raw_prerequisites.sql \
-  supabase/migrations/20260803200000_verified_position_history_publication_authority.sql
+  supabase/migrations/20260804045000_verified_position_history_raw_prerequisites.sql \
+  supabase/migrations/20260804050000_verified_position_history_publication_authority.sql
 npm run qa:verified-position-history-pg17
 npm run type-check
 npm run type-check:ingest-worker
@@ -53,9 +55,10 @@ Immediately before every later mutating phase, fetch `origin/main` again and
 require it still equals `CANDIDATE_SHA`. If it advanced, stop the rollout; do not
 substitute the newer commit or deploy a mixed release under the old review.
 
-The PG17 proof must apply the prerequisite and authority migrations in order and
-cover runtime attacks, concurrency, privileges, triggers, gradual legacy
-serving, verified publication, and cursor invalidation. A shell syntax check or
+The PG17 proof must start from the retired/quarantined main-line state, then
+apply the prerequisite and authority migrations in order. It must cover runtime
+attacks, concurrency, privileges, triggers, zero legacy serving, verified
+publication, and cursor invalidation. A shell syntax check or
 the static migration test is useful, but neither substitutes for this proof.
 
 For each migration, pass the complete reviewed file bytes to one MCP
@@ -85,8 +88,19 @@ live catalog before any retry. Never retry merely because the client timed out.
 
 ## 1. Apply the RAW prerequisite
 
-Apply only
-`20260803195000_verified_position_history_raw_prerequisites.sql` with migration
+First prove that these predecessor migrations already have their exact reviewed
+ledger bodies and live postconditions, in this order:
+
+1. `20260803090000_record_provenance_clocks.sql`
+2. `20260803100000_record_surface_publication_substrate.sql`
+3. `20260803101000_verified_position_history_publication_writer.sql`
+4. `20260804041000_retire_legacy_position_history_publisher.sql`
+5. `20260804042000_fail_closed_position_history_records_page.sql`
+6. `20260804044000_freeze_legacy_position_history_relations.sql`
+
+Do not apply the `@2` pair if the six-file chain is missing, reordered, or its
+retired writer/read/ACL postconditions drift. Then apply only
+`20260804045000_verified_position_history_raw_prerequisites.sql` with migration
 name `verified_position_history_raw_prerequisites`, then run the exact ledger
 check above and `npm run qa:schema`. Treat the global `qa:migrations` result as
 advisory, per ADR-023; it cannot replace the exact row/body proof.
@@ -96,12 +110,13 @@ Independently confirm that `arena.position_history_raw_admissions` is owned by
 `postgres`, has enabled and forced RLS, and grants no table access to `anon`,
 `authenticated`, or `service_role`. Confirm every new RAW/source/trader guard is
 present with `pg_trigger.tgenabled = 'A'` (`ENABLE ALWAYS`) and its expected
-`tgfoid`. The original eleven-column `arena.raw_objects` shape must be unchanged.
+`tgfoid`. The migration must not alter the eleven original
+`arena.raw_objects` columns or the newer provenance columns.
 
 This phase is additive and does not backfill or scan the large RAW table. An
 eligible `@2` insert creates one immutable admission in the same transaction;
-the currently serving worker emits no eligible `@2` artifact, and legacy RAW
-remains outside this admission path. Before any reviewed worker deployment,
+the currently serving quarantined worker emits no eligible `@2` artifact, and
+legacy RAW remains outside this admission path. Before any reviewed worker deployment,
 require the new ledger to be exactly empty:
 
 ```sql
@@ -119,7 +134,7 @@ rollout canary.
 
 Keep the previously proven application and both previously proven workers in
 production. Apply only
-`20260803200000_verified_position_history_publication_authority.sql` with name
+`20260804050000_verified_position_history_publication_authority.sql` with name
 `verified_position_history_publication_authority`. Repeat the exact ledger hash
 check and `npm run qa:schema`. Require one exact ledger row for each of the two
 migration names.
@@ -138,18 +153,22 @@ privileges. In particular:
   versions; and
 - there is no unvalidated constraint or partially installed authority object.
 
+Also require that the retired six-argument `@1` publisher still has its audited
+fail-closed body and no application-role execute grant, `anon` and
+`authenticated` have no direct `SELECT` on `arena.position_history`, and the
+new records RPC contains no query against that legacy typed table.
+
 Do not replay either migration as a postflight check: both are intentionally
 fail-closed when their objects already exist.
 
-This is the expand-compatible window. The old workers never emit the reviewed
-`@2` envelope, so they continue their legacy path without touching the new
-authority. The replaced `arena_records_page` keeps legacy position history
-readable until an identity has a verified publication. Before deploying either
-worker, use a reviewed trader with known legacy rows and prove through an API
-role that the internal RPC returns those rows with null publication identity and
-`unknown/history_evidence_not_bound`. An old application may not expose all new
-completeness fields, so its bounded 2C proof is HTTP 200 and no legacy row loss;
-do not mislabel that response as verified complete.
+This is a fail-closed compatibility window. The old workers never emit the
+reviewed `@2` envelope and cannot call the retired `@1` publisher. Before
+deploying either worker, use a reviewed trader with known legacy rows and prove
+through an API role that the internal RPC returns `rows=[]`, `nextCursor=null`,
+null publication identity, and exact
+`unknown/history_evidence_not_bound`. Any legacy row in that response is a
+No-Go. Supplying any preserved pre-cutover history cursor must produce the
+documented reset-required conflict rather than a legacy page.
 
 Do not replay or manually invoke the owner-only publication function. Re-run the
 zero-admission query from phase 1 immediately before the first worker deployment

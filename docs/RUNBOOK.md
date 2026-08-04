@@ -396,73 +396,34 @@ Preview/PR 分支构建不受影响。
   `POST https://api.vercel.com/v10/projects/{projectId}/promote/{deploymentId}`
   （旧 `/v6/deployments/{id}/promote` 是 404，2026-07-02 实测修正）。
 
-### 排名权威数据库先行门禁（待执行）
+### 排名权威停发与旧历史冻结门禁（待执行）
 
-以下步骤是发布门禁，不是生产执行记录。截至 2026-07-29，仓库只完成迁移、
-清单与离线 PG17 证明；不得据此声称四个迁移已经在生产应用。
+以下是发布门禁，不是生产执行记录。截至 2026-08-03，仓库已完成迁移和离线
+PG17 敌对证明，但没有生产应用证据。任何历史不完整、价格不可信、成本基础未知或
+FX 证据缺失的数据必须标记为 `partial/unknown`，不得进入任何排名。
 
-1. 在应用候选版本发布前，按 ADR-023 仅通过获准的 Supabase MCP
-   `apply_migration` 生产通道，严格连续应用以下四个文件；每次只提交一个完整文件，
+1. 按 ADR-023 仅通过获准的 Supabase MCP `apply_migration` 生产通道核对远端
+   migration ledger，并按顺序逐个应用所有缺失文件。每次只能提交一个完整文件，
    不得使用本地 `db push` 或脚本中已禁用的 psql 写命令：
    1. `20260729223000_rerank_public_eligible_rows_only.sql`
    2. `20260729224000_rank_eligible_leaderboard_count_cache.sql`
    3. `20260729225000_token_trader_rank_authority.sql`
    4. `20260729230000_token_ranking_generation_barrier.sql`
-2. 第四个迁移提交后，等待迁移内的 `NOTIFY pgrst, 'reload schema'` 生效；若需
-   重发 reload，也必须走同一获准生产通道。然后通过生产 PostgREST 执行两个
-   无副作用的非法参数探针（只接受精确 SQLSTATE `22023`），以及旧版 token-rank
-   返回契约探针：
+   5. `20260804043000_retire_legacy_token_rankings.sql`
+   6. `20260804044000_freeze_legacy_position_history_relations.sql`
+   7. `20260804045000_verified_position_history_raw_prerequisites.sql`
+   8. `20260804050000_verified_position_history_publication_authority.sql`
 
-   ```bash
-   curl -sS -X POST \
-     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/rerank_public_eligible_leaderboard" \
-     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-     -H 'Content-Type: application/json' \
-     -d '{"p_season_id":"__contract_probe__"}' | jq -e '.code == "22023"'
+   第五个迁移必须把旧 Token 排名固定为未发布；第六个迁移必须把所有 ledger、
+   手工 cutover、分区和保留的 `tph_*` 关系收敛为只读取证档案。任一迁移失败、
+   第七和第八个迁移只能在旧 history 发布器、RPC 与浏览器直读均已封闭后，按顺序
+   建立 `@2` RAW admission 与 receipt-bound 唯一公开权威；没有 verified publication
+   的身份必须继续返回 empty/unknown，严禁回退旧行。任一迁移失败、超时、版本缺失
+   或出现对象/权限漂移，立即 No-Go，不得跳过或手工放宽 ACL。
 
-   curl -sS -X POST \
-     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/refresh_public_rank_count_cache_for_seasons" \
-     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-     -H 'Content-Type: application/json' \
-     -d '{"p_season_ids":[]}' | jq -e '.code == "22023"'
-
-   curl -sS -X POST \
-     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/get_token_trader_rankings" \
-     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-     -H 'Content-Type: application/json' \
-     -d '{"token_symbol":"BTC","lookback_days":90,"max_traders":1,"row_offset":0}' \
-     | jq -e 'type == "array" and length == 1 and (.[0].token_rank | type) == "number" and .[0].token_rank >= 1 and .[0].total_count >= .[0].token_rank'
-   ```
-
-   前两个探针出现 `PGRST202`、`42883`、权限错误、超时或任何非 `22023` 结果，
-   都表示 schema/RPC 契约尚未就绪，必须停止发布；token 探针为空、缺少
-   `token_rank` 或名次越过 `total_count` 同样必须停止。以上探针都不改变排名数据。
-
-3. 第四个迁移只建立诚实的 bootstrap head：`generation_seq=0` 且
-   `published_at=NULL`，不把迁移或渲染时间伪装成 MV 刷新时间。等待下一次既有
-   `refresh-mv-popular-tokens` pg_cron 受控刷新完成。迁移前必须读取最近至少 10 次该
-   cron 的运行记录，确认均成功且最大耗时低于 25 分钟；还必须确认
-   `cron.use_background_workers=off`，且唯一 active job 的 database/username 分别是当前
-   数据库与 `postgres`。第四个迁移会把 job command 固定为先执行
-   `SET statement_timeout = '25min'`，再执行 refresh `SELECT`；只有 libpq cron 模式才会
-   在后一条语句开始前正确启动计时。任一条件不符时迁移会失败，必须停止发布并完成
-   容量或 pg_cron 模式评估。
-
-   如 owner 批准手动触发，必须通过获准生产通道提交以下完整事务；函数内部设置
-   timeout 无法限制已经开始的顶层 `SELECT`：
-
-   ```sql
-   BEGIN;
-   SET LOCAL statement_timeout = '25min';
-   SELECT public.refresh_popular_tokens_mv();
-   COMMIT;
-   ```
-
-   严禁绕过 generation head 直接刷新任一 MV。刷新完成后执行以下只读 generation、
-   两个 v2 page 与 stale-generation 探针：
+2. 等待两个迁移内的 `NOTIFY pgrst, 'reload schema'` 生效。生产 PostgREST 的唯一
+   合法 Token head 是固定的 generation zero；它不能带任何伪造的发布时间或来源
+   水位：
 
    ```bash
    TOKEN_HEAD_JSON="$(curl -fsS -X POST \
@@ -472,106 +433,145 @@ Preview/PR 分支构建不受影响。
      -H 'Content-Type: application/json' \
      -d '{}')"
 
-   TOKEN_GENERATION="$(jq -er '
-     if type == "array" and length == 1
-        and (.[0].generation_seq | type) == "number"
-        and .[0].generation_seq >= 1
-        and (.[0].published_at | type) == "string"
-        and (.[0].published_at | length) > 0
-        and (.[0].published_at_epoch_ms | type) == "number"
-        and .[0].published_at_epoch_ms > 0
-        and .[0].published_at_epoch_ms <= 9007199254740991
-        and (.[0].window_through_date | type) == "string"
-        and (.[0].window_through_date | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))
-        and .[0].source_as_of == null
-     then .[0].generation_seq
-     else error("token generation is not publishable")
-     end
-   ' <<<"$TOKEN_HEAD_JSON")"
-   TOKEN_PUBLISHED_AT_EPOCH_MS="$(jq -er '.[0].published_at_epoch_ms' <<<"$TOKEN_HEAD_JSON")"
-   TOKEN_WINDOW_DATE="$(jq -er '.[0].window_through_date' <<<"$TOKEN_HEAD_JSON")"
-
-   TOKEN_PAGE_JSON="$(curl -fsS -X POST \
-     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/get_token_trader_rankings_v2" \
-     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-     -H 'Content-Type: application/json' \
-     -d "{\"token_symbol\":\"BTC\",\"lookback_days\":90,\"max_traders\":1,\"row_offset\":0,\"expected_generation\":$TOKEN_GENERATION}")"
-   jq -e \
-     --arg generation "$TOKEN_GENERATION" \
-     --argjson published_at_epoch_ms "$TOKEN_PUBLISHED_AT_EPOCH_MS" \
-     --arg window_date "$TOKEN_WINDOW_DATE" '
-     .contract == "token-ranking-page@1"
-     and .generation == $generation
-     and .published_at_epoch_ms == $published_at_epoch_ms
-     and .window_through_date == $window_date
-     and .token == "BTC"
-     and .offset == 0
-     and .limit == 1
-     and (.total | type) == "number"
-     and (.traders | type) == "array"
-     and (.traders | length) == 1
-     and .traders[0].token_rank >= 1
-     and .traders[0].token_rank <= .total
-   ' <<<"$TOKEN_PAGE_JSON"
-
-   POPULAR_TOKEN_JSON="$(curl -fsS -X POST \
-     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/get_popular_tokens_v2" \
-     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-     -H 'Content-Type: application/json' \
-     -d "{\"lookback_days\":90,\"max_tokens\":1,\"expected_generation\":$TOKEN_GENERATION}")"
-   jq -e \
-     --arg generation "$TOKEN_GENERATION" \
-     --argjson published_at_epoch_ms "$TOKEN_PUBLISHED_AT_EPOCH_MS" \
-     --arg window_date "$TOKEN_WINDOW_DATE" '
-     .contract == "popular-token-page@1"
-     and .generation == $generation
-     and .published_at_epoch_ms == $published_at_epoch_ms
-     and .window_through_date == $window_date
-     and .lookback_days == 90
-     and .limit == 1
-     and (.total | type) == "number"
-     and .total >= 1
-     and (.tokens | type) == "array"
-     and (.tokens | length) == 1
-     and (.tokens[0].token | test("^[A-Z0-9]{1,10}$"))
-   ' <<<"$POPULAR_TOKEN_JSON"
-
-   STALE_TOKEN_JSON="$(curl -sS -X POST \
-     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/get_token_trader_rankings_v2" \
-     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-     -H 'Content-Type: application/json' \
-     -d '{"token_symbol":"BTC","lookback_days":90,"max_traders":1,"row_offset":0,"expected_generation":0}')"
-   jq -e --arg generation "$TOKEN_GENERATION" '
-     .code == "40001" and .details == $generation
-   ' <<<"$STALE_TOKEN_JSON"
-
-   STALE_POPULAR_JSON="$(curl -sS -X POST \
-     "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/get_popular_tokens_v2" \
-     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-     -H 'Content-Type: application/json' \
-     -d '{"lookback_days":90,"max_tokens":1,"expected_generation":0}')"
-   jq -e --arg generation "$TOKEN_GENERATION" '
-     .code == "40001" and .details == $generation
-   ' <<<"$STALE_POPULAR_JSON"
+   jq -e '
+     type == "array" and length == 1
+     and .[0].generation_seq == 0
+     and .[0].published_at == null
+     and .[0].published_at_epoch_ms == null
+     and .[0].window_through_date == null
+     and .[0].source_as_of == null
+     and .[0].source_through_date == null
+     and .[0].daily_row_count == 0
+     and .[0].popular_row_count == 0
+   ' <<<"$TOKEN_HEAD_JSON"
    ```
 
-   `generation_seq=0`、NULL `published_at/window_through_date`、缺失或不一致的
-   `published_at_epoch_ms`、`PGRST202`、任一 v2
-   契约/请求/同代时间绑定不符，或 stale generation 未返回精确 SQLSTATE `40001`
-   及当前 generation detail，都必须停止应用发布。当前 MV
-   只保留 `close_time::date`，无法证明精确 `source_as_of`，因此该字段必须继续为
-   NULL/unknown；`published_at` 只表示两个 MV 的原子发布时间。
+   非零 `generation_seq`、任一非 NULL 时间字段、任一非零计数，或 head 不可读取都
+   是阻断错误。不得把旧 MV 的行数、迁移时间或页面渲染时间补写成可信水位。
 
-4. 只有以上所有探针均通过后，才允许发布 application generation-aware 候选版本并
-   执行标准生产 smoke。
-   第二个迁移会在同一事务中切换 legacy rerank wrapper、重排三个 season 并重建
-   rank-derived count；第三个迁移是 token 榜 `token_rank` 应用契约的数据库先行
-   条件；第四个迁移是跨页 generation read barrier。不得少应用其中任一迁移后发布
-   应用。
+3. 通过同一获准数据库通道执行以下只读核验。结果必须全部为 `true`：
+
+   ```sql
+   BEGIN TRANSACTION READ ONLY;
+
+   SELECT count(*) = 1 AND bool_and(NOT active) AS token_cron_retired
+   FROM cron.job
+   WHERE jobname = 'refresh-mv-popular-tokens';
+
+   SELECT
+     has_function_privilege(
+       'service_role',
+       'public.get_token_ranking_publication_head()',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.get_token_trader_rankings(text,integer,integer,integer)',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.get_token_trader_rankings_v2(text,integer,integer,integer,bigint)',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.get_popular_tokens_v2(integer,integer,bigint)',
+       'EXECUTE'
+     )
+     AND NOT has_function_privilege(
+       'service_role',
+       'public.refresh_popular_tokens_mv()',
+       'EXECUTE'
+     ) AS legacy_token_rpcs_closed;
+
+   SELECT
+     NOT has_table_privilege(
+       'service_role', 'public.mv_token_trader_daily_90d', 'SELECT'
+     )
+     AND NOT has_table_privilege(
+       'service_role', 'public.mv_popular_tokens_90d', 'SELECT'
+     ) AS legacy_token_mvs_closed;
+
+   WITH RECURSIVE named_root(relation_oid) AS (
+     SELECT relation.oid
+     FROM pg_catalog.pg_class AS relation
+     JOIN pg_catalog.pg_namespace AS namespace_row
+       ON namespace_row.oid = relation.relnamespace
+     WHERE namespace_row.nspname = 'public'
+       AND relation.relname IN (
+         'trader_position_history',
+         'trader_position_history_partitioned',
+         'trader_position_history_old'
+       )
+       AND relation.relkind IN ('r', 'p')
+   ), relation_tree(relation_oid) AS (
+     SELECT relation_oid FROM named_root
+     UNION
+     SELECT inheritance.inhrelid
+     FROM relation_tree
+     JOIN pg_catalog.pg_inherits AS inheritance
+       ON inheritance.inhparent = relation_tree.relation_oid
+   ), guarded_relation(relation_oid) AS (
+     SELECT relation_oid FROM relation_tree
+     UNION
+     SELECT relation.oid
+     FROM pg_catalog.pg_class AS relation
+     JOIN pg_catalog.pg_namespace AS namespace_row
+       ON namespace_row.oid = relation.relnamespace
+     WHERE namespace_row.nspname = 'public'
+       AND relation.relname LIKE 'tph\_%' ESCAPE '\'
+       AND relation.relkind IN ('r', 'p')
+   )
+   SELECT count(*) > 0 AND bool_and(
+     relation.relowner = 'postgres'::regrole
+     AND relation.relrowsecurity
+     AND relation.relforcerowsecurity
+     AND has_table_privilege('service_role', relation.oid, 'SELECT')
+     AND NOT has_table_privilege(
+       'service_role', relation.oid,
+       'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+     )
+     AND NOT has_table_privilege(
+       'anon', relation.oid,
+       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+     )
+     AND NOT has_table_privilege(
+       'authenticated', relation.oid,
+       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+     )
+     AND (
+       SELECT count(*) = 2
+       FROM pg_catalog.pg_trigger AS trigger_row
+       WHERE trigger_row.tgrelid = relation.oid
+         AND trigger_row.tgname IN (
+           'reject_legacy_position_history_before_write',
+           'reject_legacy_position_history_before_truncate'
+         )
+         AND trigger_row.tgenabled = 'O'
+     )
+   ) AS legacy_history_frozen
+   FROM guarded_relation
+   JOIN pg_catalog.pg_class AS relation ON relation.oid = guarded_relation.relation_oid;
+
+   ROLLBACK;
+   ```
+
+   `service_role` 的 SELECT 只用于受控备份/取证，不代表排名资格；浏览器角色没有
+   访问权。不要在生产用真实 `INSERT`、`DELETE` 或 `TRUNCATE` 试探触发器。
+
+4. 应用 smoke 必须确认 `/api/rankings/by-token` 返回稳定的
+   `TOKEN_RANKING_NOT_PUBLISHED`、HTTP 503 和 `private, no-store`，Token 页面不渲染
+   旧榜或 unknown 指标。以下行为一律禁止：手动调用
+   `refresh_popular_tokens_mv()`、直接刷新两个旧 MV、重新启用
+   `refresh-mv-popular-tokens`、给旧 RPC/MV 补授权，或恢复对
+   `public.trader_position_history` 的应用读写。
+
+5. Token 榜只能由后续单独评审的 authority-snapshot 迁移重新开放。新发布器必须从
+   `arena.token_trade_fact_authority_shadow` 的 `rank_eligible=true` 冻结 cohort 构建，
+   绑定非 NULL 来源水位，并证明 history、price、cost basis 与 FX 状态全部可信。
+   重新开放不得解冻或读取旧 `public.trader_position_history` 档案；未满足这些条件时，
+   “保持未发布”本身就是正确的上线结果。
 
 ### Vercel instant rollback
 
@@ -751,5 +751,5 @@ Redis is non-critical — all Redis consumers fail-open:
 | **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 53 endpoints / 44 Vercel schedules, staggered        |
+| **Cron Schedule**    | 55 endpoints / 46 Vercel schedules, staggered        |
 | **Scraper PM2 name** | `arena-scraper`                                      |

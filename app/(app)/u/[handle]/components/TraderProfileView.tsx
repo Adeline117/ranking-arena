@@ -19,12 +19,15 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import { trackEvent } from '@/lib/analytics/track'
+import { LEGACY_HISTORY_COMPLETENESS_UNKNOWN } from '@/lib/data/trader/history-quarantine'
 import OverviewPerformanceCard, {
   type ExtendedPerformance,
 } from '@/app/components/trader/OverviewPerformanceCard'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
 import { profileStyles } from './profileStyles'
+
+const EMPTY_LEGACY_POSITION_HISTORY: NonNullable<TraderPageData['positionHistory']> = []
 
 const EquityCurveSection = dynamic(
   () =>
@@ -77,7 +80,7 @@ export default function TraderProfileView({
   const traderPerformance = traderData?.performance ?? null
   const traderStats = traderData?.stats ?? null
   const traderPortfolio = traderData?.portfolio ?? []
-  const traderPositionHistory = traderData?.positionHistory ?? []
+  const traderPositionHistory = EMPTY_LEGACY_POSITION_HISTORY
   const traderEquityCurve = traderData?.equityCurve
   const traderAssetBreakdown = traderData?.assetBreakdown
   const _traderFeed = traderData?.feed ?? []
@@ -223,6 +226,7 @@ export default function TraderProfileView({
                   assetBreakdown={traderAssetBreakdown}
                   equityCurve={traderEquityCurve}
                   positionHistory={traderPositionHistory}
+                  historyCompleteness={LEGACY_HISTORY_COMPLETENESS_UNKNOWN}
                   isPro={canView}
                   onUnlock={() => router.push('/pricing')}
                 />
@@ -246,6 +250,7 @@ export default function TraderProfileView({
               <PortfolioTable
                 items={traderPortfolio}
                 history={traderPositionHistory}
+                historyCompleteness={LEGACY_HISTORY_COMPLETENESS_UNKNOWN}
                 isPro={canView}
                 onUnlock={() => router.push('/pricing')}
               />

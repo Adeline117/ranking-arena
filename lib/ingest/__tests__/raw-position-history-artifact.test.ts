@@ -31,6 +31,7 @@ import {
   type SelectedHistoryTerminalVerifier,
 } from '@/lib/ingest/history-acquisition'
 import {
+  EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   historyRawJobType,
   POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT,
@@ -61,6 +62,8 @@ interface PointerRow {
   content_hash: string
   quarantined: boolean
   meta: unknown
+  source_run_id: string | null
+  trust_artifact_role: string | null
 }
 
 const attemptStartedAt = '2026-08-03T10:00:00.000Z'
@@ -177,7 +180,12 @@ function databaseHarness(initialRows: PointerRow[] = []) {
     if (sql.includes('pg_advisory_xact_lock')) return { rows: [] }
     if (sql.startsWith('SELECT id, source_id')) {
       return {
-        rows: pointers.filter((pointer) => pointer.storage_path === params[0]),
+        rows: pointers.filter(
+          (pointer) =>
+            pointer.storage_path === params[0] ||
+            (pointer.source_run_id === params[1] &&
+              pointer.trust_artifact_role === EVENT_HISTORY_RAW_ARTIFACT_ROLE)
+        ),
       }
     }
     if (sql.startsWith('INSERT INTO arena.raw_objects')) {
@@ -195,6 +203,8 @@ function databaseHarness(initialRows: PointerRow[] = []) {
           content_hash: params[6] as string,
           quarantined: false,
           meta: JSON.parse(params[7] as string),
+          source_run_id: params[8] as string,
+          trust_artifact_role: params[9] as string,
         })
       }
       return { rows: [] }
@@ -256,11 +266,13 @@ describe('writePositionHistoryRawArtifact', () => {
       timeframe: null,
       fetched_at: fetchedAt,
       content_hash: input.sourceRunId,
+      source_run_id: input.sourceRunId,
+      trust_artifact_role: EVENT_HISTORY_RAW_ARTIFACT_ROLE,
       quarantined: false,
     })
     const pointerSql = database.query.mock.calls.map(([sql]) => String(sql)).join('\n')
-    expect(pointerSql).not.toContain('source_run_id')
-    expect(pointerSql).not.toContain('trust_artifact_role')
+    expect(pointerSql).toContain('source_run_id')
+    expect(pointerSql).toContain('trust_artifact_role')
     const meta = database.pointers[0].meta as Record<string, unknown>
     const reconciliation = prepareHistoryRawArtifactReconciliationExpectation(input)
     expect(reconciliation).toMatchObject({
@@ -663,6 +675,36 @@ describe('writePositionHistoryRawArtifact', () => {
     )
 
     expect(database.pointers).toHaveLength(1)
+  })
+
+  it.each([
+    ['source run', (pointer: PointerRow) => (pointer.source_run_id = 'f'.repeat(64))],
+    ['artifact role', (pointer: PointerRow) => (pointer.trust_artifact_role = 'source_payload')],
+    ['quarantine state', (pointer: PointerRow) => (pointer.quarantined = true)],
+  ] as const)('rejects a retry when the database pointer %s drifts', async (_label, mutate) => {
+    const input = await reviewedBitgetArtifactInput()
+    const database = databaseHarness()
+    await writePositionHistoryRawArtifact(input, database.runTransaction)
+    mutate(database.pointers[0])
+
+    await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).rejects.toThrow(
+      'database pointer 41 does not match the artifact'
+    )
+  })
+
+  it('rejects a second event-history pointer bound to the same source run', async () => {
+    const input = await reviewedBitgetArtifactInput()
+    const database = databaseHarness()
+    await writePositionHistoryRawArtifact(input, database.runTransaction)
+    database.pointers.push({
+      ...database.pointers[0],
+      id: 42,
+      storage_path: `${database.pointers[0].storage_path}.duplicate`,
+    })
+
+    await expect(writePositionHistoryRawArtifact(input, database.runTransaction)).rejects.toThrow(
+      `expected one database pointer for ${input.sourceRunId}, found 2`
+    )
   })
 
   it('requires a claimed transaction runner before Storage or database I/O', async () => {

@@ -110,7 +110,7 @@ function recordsWrapper(client: QueryClient) {
   }
 }
 
-const HISTORY_KINDS = ['position_history', 'orders', 'transfers'] as const
+const HISTORY_KINDS = ['position_history'] as const
 
 describe.each(HISTORY_KINDS)('useTraderRecords %s completeness', (kind) => {
   beforeEach(() => jest.clearAllMocks())
@@ -153,7 +153,10 @@ describe.each(HISTORY_KINDS)('useTraderRecords %s completeness', (kind) => {
           recordsResponse(
             recordsPage({
               nextCursor: 'page-3',
-              completeness: { state: 'partial', reason: 'interactive_preview' },
+              completeness: {
+                state: 'complete',
+                reason: 'verified_terminal_history',
+              },
             })
           )
         )
@@ -189,7 +192,7 @@ describe.each(HISTORY_KINDS)('useTraderRecords %s completeness', (kind) => {
     await act(async () => {
       await view.result.current.fetchNextPage()
     })
-    await waitFor(() => expect(view.result.current.completeness?.state).toBe('partial'))
+    await waitFor(() => expect(view.result.current.completeness?.state).toBe('complete'))
     await act(async () => {
       await view.result.current.fetchNextPage()
     })
@@ -243,16 +246,13 @@ describe.each(HISTORY_KINDS)('useTraderRecords %s completeness', (kind) => {
 describe('useTraderRecords completeness isolation', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  it.each([
-    undefined,
-    { state: 'partial', reason: 'interactive_preview' } as HistoryCompleteness,
-    {
-      state: 'complete',
-      reason: 'verified_terminal_history',
-    } as HistoryCompleteness,
-  ])(
-    'always returns null for positions, regardless of history metadata %#',
-    async (completeness) => {
+  it.each(['positions', 'orders', 'transfers'] as const)(
+    'always returns null completeness for non-position-history kind %s',
+    async (kind) => {
+      const completeness = {
+        state: 'partial',
+        reason: 'interactive_preview',
+      } as HistoryCompleteness
       ;(fetcher as jest.Mock).mockResolvedValue(
         recordsResponse(recordsPage({ cacheState: 'cold-fetched', completeness }))
       )
@@ -262,7 +262,7 @@ describe('useTraderRecords completeness isolation', () => {
           useTraderRecords({
             source: 'gmx',
             exchangeTraderId: 'trader-a',
-            kind: 'positions',
+            kind,
             enabled: true,
           }),
         { wrapper: recordsWrapper(client) }
@@ -275,6 +275,37 @@ describe('useTraderRecords completeness isolation', () => {
       client.clear()
     }
   )
+
+  it('hides cached warm history rows and pagination without a complete verdict', async () => {
+    ;(fetcher as jest.Mock).mockResolvedValue(
+      recordsResponse(
+        recordsPage({
+          rows: [{ id: 'legacy-row' }],
+          nextCursor: 'legacy-cursor',
+          completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+        })
+      )
+    )
+    const client = queryClient()
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'position_history',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
+    expect(view.result.current.rows).toEqual([])
+    expect(view.result.current.hasNextPage).toBe(false)
+    expect(view.result.current.completeness?.state).toBe('unknown')
+
+    view.unmount()
+    client.clear()
+  })
 
   it('clears completeness while a new subject is loading', async () => {
     const pendingB = deferred<ApiSuccessResponse<RecordsPage>>()
@@ -299,7 +330,7 @@ describe('useTraderRecords completeness isolation', () => {
         useTraderRecords({
           source: 'gmx',
           exchangeTraderId,
-          kind: 'orders',
+          kind: 'position_history',
           enabled: true,
         }),
       {
@@ -427,7 +458,14 @@ describe('useTraderRecords cursor generation reset', () => {
       return Promise.resolve(
         recordsResponse(
           firstPageReads === 1
-            ? recordsPage({ rows: [{ id: 'legacy-1' }], nextCursor: 'legacy-cursor' })
+            ? recordsPage({
+                rows: [{ id: 'legacy-1' }],
+                nextCursor: 'legacy-cursor',
+                completeness: {
+                  state: 'complete',
+                  reason: 'verified_terminal_history',
+                },
+              })
             : recordsPage({
                 rows: [{ id: 'verified-1' }],
                 nextCursor: 'verified-cursor',

@@ -286,6 +286,15 @@ const zhCore = {
   source: '来源',
   ssrDataRefreshHint: '数据会自动刷新，请稍后再试。',
   ssrLoadingRanking: '正在加载排名数据...',
+  // 币种排名发布状态会在完整路由词典加载前服务端渲染，必须同步提供。
+  tokenRankingsTitle: '币种排行',
+  tokenRankingsSubtitle: '发现每个币种的最佳交易员。谁交易 BTC 最厉害？',
+  tokenRankingUnpublishedTitle: '币种排名正在验证',
+  tokenRankingUnpublishedDescription:
+    'Arena 正在构建并验证权威排名快照；通过验证前不会发布币种排名。这不代表没有交易数据。',
+  tokenRankingEmptyCohortTitle: '暂无符合证据标准的交易员',
+  tokenRankingEmptyCohortDescription:
+    '当前合格交易员集合为空。任何历史不完整、价格不可信、成本基础未知或汇率换算不完整的交易员都会标记为“部分/未知”，并排除在排名之外。',
   stats: '数据统计',
   success: '操作成功',
   switchLanguage: '切换语言',

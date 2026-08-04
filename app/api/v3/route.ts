@@ -19,6 +19,7 @@ import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
+import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
 import {
   EXCHANGE_CONFIG,
   DEAD_BLOCKED_PLATFORMS,
@@ -297,7 +298,7 @@ async function handleTrader(params: URLSearchParams) {
   if (!detail) {
     return { error: 'Trader not found', status: 404 }
   }
-  return { data: detail }
+  return { data: quarantineLegacyPositionHistory(detail) }
 }
 
 async function handleSearch(params: URLSearchParams) {

@@ -54,15 +54,13 @@ export async function downsampleOldSeries(keepDays = 90): Promise<DownsampleResu
   }
 }
 
-/** Keep monthly partitions 2 months ahead on all partitioned arena tables. */
+/** Keep monthly partitions 2 months ahead on active writable arena tables. */
 export async function ensurePartitions(): Promise<number> {
-  // Position history remains an expand-first fallback until each identity has
-  // its first verified publication. Keep its legacy hierarchy writable during
-  // that coexistence window; the eventual contract-phase cutover owns removal.
+  // arena.position_history is a retired typed surface. Its retained rows are a
+  // quarantine/archive, so maintenance must not extend that legacy hierarchy.
   const tables = [
     'leaderboard_entries',
     'trader_series',
-    'position_history',
     'order_records',
     'transfer_history',
     'copier_records',
@@ -108,20 +106,20 @@ export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number
  * passed snapshot within the last 30 days.
  */
 export async function pruneLongTailHistories(retentionDays = 180): Promise<number> {
-  // This only maintains the mutable legacy fallback. Verified facts and their
+  // arena.position_history is absent by design: the later legacy-relation
+  // freeze supersedes the earlier unverified-row cleanup allowance and rejects
+  // DELETE as well as INSERT/UPDATE/TRUNCATE. Verified facts and their
   // publication/audit evidence have separate immutable retention authority.
-  const tables = ['position_history', 'order_records', 'transfer_history', 'copier_records']
-  const tsCol: Record<string, string> = {
-    position_history: 'closed_at',
-    order_records: 'ts',
-    transfer_history: 'ts',
-    copier_records: 'ts',
-  }
+  const histories = [
+    { table: 'order_records', timestampColumn: 'ts' },
+    { table: 'transfer_history', timestampColumn: 'ts' },
+    { table: 'copier_records', timestampColumn: 'ts' },
+  ] as const
   let deleted = 0
-  for (const table of tables) {
+  for (const { table, timestampColumn } of histories) {
     const result = await getIngestPool().query(
       `DELETE FROM arena.${table} h
-        WHERE h.${tsCol[table]} < now() - ($1 || ' days')::interval
+        WHERE h.${timestampColumn} < now() - ($1 || ' days')::interval
           AND NOT EXISTS (
             SELECT 1 FROM arena.leaderboard_entries e
              WHERE e.trader_id = h.trader_id

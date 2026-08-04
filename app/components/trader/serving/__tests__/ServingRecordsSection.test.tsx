@@ -14,7 +14,7 @@ jest.mock('@/lib/hooks/useTraderRecords', () => ({
 jest.mock('../RecordsTable', () => () => null)
 jest.mock('../CopierAggregatePanel', () => () => null)
 jest.mock('../ModuleDegraded', () => () => null)
-jest.mock('@/app/components/common/ProvenanceFooter', () => () => null)
+jest.mock('@/app/components/common/RecordProvenanceFooter', () => () => null)
 
 function capability(enabledKinds: RecordKind[]): SourceCapability {
   const enabled = new Set(enabledKinds)
@@ -126,7 +126,7 @@ describe('ServingRecordsSection selection scope', () => {
     })
   })
 
-  it.each(['position_history', 'orders', 'transfers'] as const)(
+  it.each(['position_history'] as const)(
     'discloses a partial %s preview as rank-ineligible',
     (kind) => {
       ;(useTraderRecords as jest.Mock).mockReturnValue({
@@ -166,7 +166,7 @@ describe('ServingRecordsSection selection scope', () => {
     }
   )
 
-  it('discloses unknown order-history evidence', () => {
+  it('discloses unknown position-history evidence', () => {
     ;(useTraderRecords as jest.Mock).mockReturnValue({
       rows: [{ symbol: 'ETHUSDT' }],
       provenance: null,
@@ -187,7 +187,7 @@ describe('ServingRecordsSection selection scope', () => {
       <ServingRecordsSection
         source="gmx"
         exchangeTraderId="trader-a"
-        capability={capability(['orders'])}
+        capability={capability(['position_history'])}
         tf={90}
       />
     )
@@ -201,8 +201,9 @@ describe('ServingRecordsSection selection scope', () => {
 
   it.each([
     ['positions', { state: 'partial', reason: 'interactive_preview' }],
+    ['orders', { state: 'unknown', reason: 'history_evidence_not_bound' }],
     [
-      'orders',
+      'position_history',
       {
         state: 'complete',
         reason: 'verified_terminal_history',

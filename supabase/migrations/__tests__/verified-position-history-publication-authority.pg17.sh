@@ -5,8 +5,8 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-PREREQUISITE_MIGRATION="$ROOT_DIR/supabase/migrations/20260803195000_verified_position_history_raw_prerequisites.sql"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260803200000_verified_position_history_publication_authority.sql"
+PREREQUISITE_MIGRATION="$ROOT_DIR/supabase/migrations/20260804045000_verified_position_history_raw_prerequisites.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20260804050000_verified_position_history_publication_authority.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql createdb; do
@@ -156,7 +156,8 @@ CREATE TABLE arena.sources (
   id smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   slug text NOT NULL UNIQUE,
   adapter_slug text NOT NULL,
-  currency text NOT NULL
+  currency text NOT NULL,
+  meta jsonb NOT NULL DEFAULT '{}'
 );
 CREATE TABLE arena.traders (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -175,7 +176,12 @@ CREATE TABLE arena.raw_objects (
   bytes integer NOT NULL,
   content_hash text NOT NULL,
   quarantined boolean NOT NULL DEFAULT false,
-  meta jsonb NOT NULL DEFAULT '{}'
+  meta jsonb NOT NULL DEFAULT '{}',
+  source_run_id text,
+  trust_artifact_role text
+);
+CREATE TABLE arena.record_surface_publications (
+  publication_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
 );
 CREATE TABLE arena.position_history (
   trader_id bigint NOT NULL REFERENCES arena.traders(id),
@@ -190,7 +196,9 @@ CREATE TABLE arena.position_history (
   realized_pnl numeric,
   currency text NOT NULL,
   dedupe_hash text NOT NULL,
-  raw jsonb
+  raw jsonb,
+  verified_publication_id bigint
+    REFERENCES arena.record_surface_publications(publication_id)
 ) PARTITION BY RANGE (closed_at);
 CREATE UNIQUE INDEX uq_arena_position_history_dedupe
   ON arena.position_history (closed_at, dedupe_hash);
@@ -258,9 +266,28 @@ CREATE FUNCTION public.arena_records_page(
   p_cursor text DEFAULT NULL,
   p_limit integer DEFAULT 50
 ) RETURNS jsonb
-LANGUAGE sql STABLE SECURITY DEFINER
+LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
-AS $$ SELECT '{}'::jsonb $$;
+AS $$
+BEGIN
+  IF p_kind = 'position_history' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'rows', '[]'::pg_catalog.jsonb,
+      'nextCursor', NULL::pg_catalog.text,
+      'asOf', NULL::pg_catalog.timestamptz,
+      'sourceAsOf', NULL::pg_catalog.timestamptz,
+      'observedAt', NULL::pg_catalog.timestamptz,
+      'publishedAt', NULL::pg_catalog.timestamptz,
+      'currency', 'USDT',
+      'completeness', pg_catalog.jsonb_build_object(
+        'state', 'unknown',
+        'reason', 'history_evidence_not_bound'
+      )
+    );
+  END IF;
+  RETURN '{}'::pg_catalog.jsonb;
+END
+$$;
 
 CREATE MATERIALIZED VIEW arena.mv_source_capabilities AS
 SELECT source_row.slug,
@@ -323,6 +350,72 @@ INSERT INTO arena.position_history (
     "roi":"7.25"
   }'
 );
+
+-- Emulate the exact main-line retirement boundary that must precede the @2
+-- pair: the six-argument writer is a retained fail-closed audit stub, typed
+-- rows are immutable, and browser roles cannot read the legacy table.
+CREATE FUNCTION arena.get_position_history_publication_checkpoint(
+  p_source_id smallint,
+  p_trader_id bigint
+) RETURNS jsonb
+LANGUAGE sql STABLE
+SET search_path = pg_catalog, pg_temp
+AS $$ SELECT NULL::pg_catalog.jsonb $$;
+
+CREATE FUNCTION arena.position_history_publication_chain_healthy(
+  p_root_publication_id bigint,
+  p_source_id smallint,
+  p_trader_id bigint
+) RETURNS boolean
+LANGUAGE sql STABLE
+SET search_path = pg_catalog, pg_temp
+AS $$ SELECT false $$;
+
+CREATE FUNCTION arena.publish_verified_position_history(
+  p_raw_object_id bigint,
+  p_previous_publication_id bigint,
+  p_effective_cursor_after timestamptz,
+  p_rows jsonb,
+  p_lane text,
+  p_publisher_contract text
+) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  RAISE EXCEPTION
+    'legacy position-history publisher is retired; parser-conservation receipt required'
+    USING ERRCODE = '55000';
+END
+$$;
+
+CREATE FUNCTION arena.protect_verified_position_history_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  RAISE EXCEPTION
+    'position-history insert requires parser-conservation publication authority'
+    USING ERRCODE = '55000';
+END
+$$;
+
+CREATE TRIGGER protect_verified_position_history_before_write
+BEFORE INSERT OR UPDATE OR DELETE ON arena.position_history
+FOR EACH ROW EXECUTE FUNCTION arena.protect_verified_position_history_row();
+CREATE TRIGGER protect_verified_position_history_before_truncate
+BEFORE TRUNCATE ON arena.position_history
+FOR EACH STATEMENT EXECUTE FUNCTION arena.protect_verified_position_history_row();
+
+REVOKE ALL ON FUNCTION arena.publish_verified_position_history(
+  bigint,bigint,timestamptz,jsonb,text,text
+) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION arena.protect_verified_position_history_row()
+  FROM PUBLIC, anon, authenticated, service_role;
+DROP POLICY "Public read position_history" ON arena.position_history;
+REVOKE SELECT ON arena.position_history FROM PUBLIC, anon, authenticated;
+
 REFRESH MATERIALIZED VIEW arena.mv_source_capabilities;
 SQL
 
@@ -353,6 +446,22 @@ grep -Fq 'record or capability RPC owner/security contract drifted' "$DRIFT_LOG"
 
 owner_psql -q -f "$PREREQUISITE_MIGRATION"
 owner_psql -q -f "$MIGRATION"
+
+# The forward reopen must preserve main's retired @1 writer and browser-table
+# quarantine while adding only the new owner-only four-argument authority.
+expect_failure_contains retired_legacy_publisher \
+  'legacy position-history publisher is retired; parser-conservation receipt required' \
+  "SELECT arena.publish_verified_position_history(
+     1::bigint,NULL::bigint,NULL::timestamptz,'[]'::jsonb,'tier_b','retired'
+   )"
+expect_api_failure_contains retired_legacy_publisher_private service_role \
+  'permission denied' \
+  "SELECT arena.publish_verified_position_history(
+     1::bigint,NULL::bigint,NULL::timestamptz,'[]'::jsonb,'tier_b','retired'
+   )"
+expect_api_failure_contains legacy_typed_rows_private anon \
+  'permission denied' \
+  'SELECT pg_catalog.count(*) FROM arena.position_history'
 
 # Non-evidence RAW retains the pre-existing service workflow after installing
 # the ALWAYS guards. The same role cannot touch the private admission ledger.
@@ -2000,42 +2109,37 @@ if rg -q 'v_seen_dedupes|v_seen_source_fact_ids|v_manifest_ordinals|array_append
   exit 1
 fi
 
-owner_psql -q <<'SQL'
-INSERT INTO arena.position_history (
-  trader_id, opened_at, closed_at, symbol, side, leverage, size,
-  entry_price, exit_price, realized_pnl, currency, dedupe_hash, raw
-) VALUES (
-  41, '2026-06-03T00:00:00Z', '2026-06-04T00:00:00Z',
-  'LEGACY_AFTER', 'short', 2, 3, 4, 5, 6, 'USDT',
-  '2222222222222222222222222222222222222222',
-  '{"closingValue":"50","marginType":"isolated","maxOpenInterest":"25","roi":"8.5"}'
-);
-SQL
+expect_failure_contains legacy_typed_write_frozen \
+  'position-history insert requires parser-conservation publication authority' \
+  "INSERT INTO arena.position_history (
+     trader_id, opened_at, closed_at, symbol, side, leverage, size,
+     entry_price, exit_price, realized_pnl, currency, dedupe_hash, raw
+   ) VALUES (
+     41, '2026-06-03T00:00:00Z', '2026-06-04T00:00:00Z',
+     'LEGACY_AFTER', 'short', 2, 3, 4, 5, 6, 'USDT',
+     '2222222222222222222222222222222222222222',
+     '{\"closingValue\":\"50\",\"marginType\":\"isolated\",\"maxOpenInterest\":\"25\",\"roi\":\"8.5\"}'
+   )"
 LEGACY_PAGE="$(api_query anon \
   "SELECT public.arena_records_page('bitget_futures','leader-1','position_history',NULL,NULL,20)")"
-assert_json legacy_fallback "$LEGACY_PAGE" '
+assert_json legacy_quarantine "$LEGACY_PAGE" '
   assert(value.completeness.contract === "arena.position-history-completeness@2", "contract")
   assert(value.completeness.state === "unknown", "state")
   assert(value.completeness.evidenceState === "unknown", "evidence")
   assert(value.completeness.reason === "history_evidence_not_bound", "reason")
   assert(value.completeness.blockerReasons[0] === "history_evidence_not_bound", "blocker")
   assert(value.asOf === null && value.sourceAsOf === null, "unknown clocks")
-  assert(value.rows.some((row) => row.symbol === "LEGACY"), "legacy row missing")
-  const row = value.rows.find((candidate) => candidate.symbol === "LEGACY")
-  assert(Number(row.max_open_interest) === 12.5, "max_open_interest")
-  assert(row.margin_mode === "cross", "margin_mode")
-  assert(Number(row.roi) === 7.25, "roi")
-  assert(Number(row.closing_value) === 456.5, "closing_value")
+  assert(value.publicationId === null && value.stateId === null, "publication identity")
+  assert(value.sourceRunId === null, "source run identity")
+  assert(Array.isArray(value.rows) && value.rows.length === 0, "legacy rows quarantined")
+  assert(value.nextCursor === null, "legacy cursor quarantined")
 '
-LEGACY_CURSOR_PAGE="$(api_query anon \
-  "SELECT public.arena_records_page('bitget_futures','leader-1','position_history',NULL,NULL,1)")"
-LEGACY_CURSOR="$(JSON_VALUE="$LEGACY_CURSOR_PAGE" node -e \
-  'process.stdout.write(JSON.parse(process.env.JSON_VALUE).nextCursor)')"
-if [[ ! "$LEGACY_CURSOR" =~ ^[^|]+\|[0-9a-f]{40}$ ]]; then
-  echo "[verified-position-history] legacy cursor contract drifted" >&2
-  exit 1
-fi
-expect_api_failure_contains legacy_cursor_trailing anon 'invalid legacy position-history cursor' \
+LEGACY_CURSOR='2026-06-02T00:00:00.000Z|1111111111111111111111111111111111111111'
+expect_api_failure_sqlstate_contains legacy_cursor_without_authority anon 40001 \
+  'reset pagination without a cursor' \
+  "SELECT public.arena_records_page('bitget_futures','leader-1','position_history',NULL,'$LEGACY_CURSOR',1)"
+expect_api_failure_sqlstate_contains legacy_cursor_trailing anon 40001 \
+  'reset pagination without a cursor' \
   "SELECT public.arena_records_page('bitget_futures','leader-1','position_history',NULL,'$LEGACY_CURSOR|',1)"
 expect_api_failure_contains null_kind anon 'unknown record kind' \
   "SELECT public.arena_records_page('bitget_futures','leader-1',NULL,NULL,NULL,1)"
@@ -2917,16 +3021,16 @@ expect_failure_contains fact_truncate \
   'verified position-history authority is immutable' \
   "TRUNCATE arena.verified_position_history_facts CASCADE"
 
-owner_psql -q <<'SQL'
-INSERT INTO arena.position_history (
-  trader_id, opened_at, closed_at, symbol, side, leverage, size,
-  entry_price, exit_price, realized_pnl, currency, dedupe_hash, raw
-) VALUES (
-  41, '2034-01-01T00:00:00Z', '2035-01-01T00:00:00Z',
-  'FUTURE_LEGACY', 'long', 1, 1, 1, 1, 1, 'USDT',
-  'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', '{}'
-);
-SQL
+expect_failure_contains future_legacy_write_frozen \
+  'position-history insert requires parser-conservation publication authority' \
+  "INSERT INTO arena.position_history (
+     trader_id, opened_at, closed_at, symbol, side, leverage, size,
+     entry_price, exit_price, realized_pnl, currency, dedupe_hash, raw
+   ) VALUES (
+     41, '2034-01-01T00:00:00Z', '2035-01-01T00:00:00Z',
+     'FUTURE_LEGACY', 'long', 1, 1, 1, 1, 1, 'USDT',
+     'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', '{}'
+   )"
 
 owner_psql -q <<'SQL'
 DO $proof$
@@ -2947,6 +3051,17 @@ BEGIN
        'arena.publish_verified_position_history(bigint,text,bigint,text)',
        'EXECUTE'
      )
+     OR pg_catalog.has_function_privilege(
+       'service_role',
+       'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_table_privilege(
+       'anon', 'arena.position_history', 'SELECT'
+     )
+     OR pg_catalog.has_table_privilege(
+       'authenticated', 'arena.position_history', 'SELECT'
+     )
      OR pg_catalog.has_table_privilege(
        'service_role', 'arena.verified_position_history_facts', 'SELECT'
      )
@@ -2956,6 +3071,14 @@ BEGIN
        'EXECUTE'
      ) THEN
     RAISE EXCEPTION 'authority grant topology drifted';
+  END IF;
+  IF (
+       SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_proc AS function_row
+       WHERE function_row.pronamespace = 'arena'::pg_catalog.regnamespace
+         AND function_row.proname = 'publish_verified_position_history'
+     ) <> 2 THEN
+    RAISE EXCEPTION 'retired/new publisher overload set drifted';
   END IF;
   IF EXISTS (
     SELECT 1

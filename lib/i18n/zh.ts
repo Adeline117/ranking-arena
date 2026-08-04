@@ -5301,6 +5301,12 @@ const zh = {
   tokenRankingCount: '{count} 位交易员正在交易 {token}',
   tokenRankingNoData: '未找到 {token} 的交易数据',
   tokenRankingNoDataDesc: '该币种的交易数据可能尚不可用。请尝试其他币种或稍后再来。',
+  tokenRankingUnpublishedTitle: '币种排名正在验证',
+  tokenRankingUnpublishedDescription:
+    'Arena 正在构建并验证权威排名快照；通过验证前不会发布币种排名。这不代表没有交易数据。',
+  tokenRankingEmptyCohortTitle: '暂无符合证据标准的交易员',
+  tokenRankingEmptyCohortDescription:
+    '当前合格交易员集合为空。任何历史不完整、价格不可信、成本基础未知或汇率换算不完整的交易员都会标记为“部分/未知”，并排除在排名之外。',
   tokenRankingBrowseAll: '浏览所有币种',
   tokenRankingTotalPnl: '总盈亏',
   tokenRankingTrades: '交易数',

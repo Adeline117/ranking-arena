@@ -31,6 +31,7 @@ import { serializePublicLinkedAggregate } from '@/lib/data/linked-trader-public'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -237,7 +238,8 @@ export async function GET(
             ['trader']
           )
 
-      const { pageData, resolved } = data
+      const { resolved } = data
+      const pageData = quarantineLegacyPositionHistory(data.pageData)
 
       // ── include: bundle additional data into the response ──
       const includeParam = req.nextUrl.searchParams.get('include') || ''

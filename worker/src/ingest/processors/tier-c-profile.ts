@@ -219,6 +219,20 @@ function historyRowsForRender(
       const { copierLabel: _pii, raw: _raw, ...rest } = row
       return rest
     }
+    if (row.kind === 'position_history') {
+      // Verifier/parser provenance is an internal claim substrate, not part of
+      // the Tier-C render contract or the receipt-bound records projection.
+      const {
+        raw: _raw,
+        sourceFactId: _sourceFactId,
+        sourceLifecycleMarker: _sourceLifecycleMarker,
+        sourceReturn: _sourceReturn,
+        fieldSources: _fieldSources,
+        limitations: _limitations,
+        ...rest
+      } = row
+      return rest
+    }
     const { raw: _raw, ...rest } = row
     return rest
   })

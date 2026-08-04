@@ -106,7 +106,7 @@ describe('token ranking generation barrier', () => {
     expect(normalized).toContain("notify pgrst, 'reload schema'")
   })
 
-  it('is an ordered PREDEPLOY barrier and keeps generated contracts synchronized', () => {
+  it('remains an ordered predecessor and documents the retired live contract', () => {
     const predeployStart = runner.indexOf('PREDEPLOY_MIGRATIONS=(')
     const predeployEnd = runner.indexOf('\n)', predeployStart) + 2
     const quarantineStart = runner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
@@ -136,9 +136,18 @@ describe('token ranking generation barrier', () => {
     expect(generatedTypes).toContain('get_token_trader_rankings_v2: {')
     expect(generatedTypes).toContain('get_popular_tokens_v2: {')
     expect(runbook).toContain('/rest/v1/rpc/get_token_ranking_publication_head')
-    expect(runbook).toContain('generation_seq=0')
-    expect(runbook).toContain('.code == "40001"')
-    expect(runbook).toContain('/rest/v1/rpc/get_popular_tokens_v2')
+    expect(runbook).toContain('.[0].generation_seq == 0')
+    expect(runbook).toContain('20260804043000_retire_legacy_token_rankings.sql')
+    expect(runbook).toContain('20260804044000_freeze_legacy_position_history_relations.sql')
+    expect(runbook).toContain('legacy_token_rpcs_closed')
+    expect(runbook).toContain('legacy_token_mvs_closed')
+    expect(runbook).toContain('legacy_history_frozen')
+    expect(runbook).toContain('TOKEN_RANKING_NOT_PUBLISHED')
+    expect(runbook).toContain('rank_eligible=true')
+    expect(runbook).not.toContain('.code == "40001"')
+    expect(runbook).not.toContain('/rest/v1/rpc/get_popular_tokens_v2')
+    expect(runbook).not.toContain('SELECT public.refresh_popular_tokens_mv();')
+    expect(runbook).not.toMatch(/generation_seq\s*>=\s*1/)
     expect(packageJson).toContain(
       'supabase/migrations/__tests__/token-trader-rank-authority.pg17.sh'
     )

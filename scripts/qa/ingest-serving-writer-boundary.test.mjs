@@ -41,10 +41,53 @@ const directSqlWriter = new RegExp(
 const queryBuilderWriter =
   /\.from\s*\(\s*(['"`])bots\1\s*\)\s*\.\s*(?:insert|upsert|update|delete)\s*\(/i
 const legacyPublisher = /\bpublishBots\b|publish-bots/
+const positionHistoryRelation = String.raw`(?:(?:"arena"|arena)\s*\.\s*)?(?:"position_history"|position_history)(?![A-Za-z0-9_$])`
+const directPositionHistoryWriter = new RegExp(
+  String.raw`\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|COPY|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?${positionHistoryRelation}`,
+  'i'
+)
+const positionHistoryQueryBuilderWriter =
+  /\.from\s*\(\s*(['"`])position_history\1\s*\)\s*\.\s*(?:insert|upsert|update|delete)\s*\(/i
+const retiredPositionHistorySqlReference =
+  /(?:"arena"|arena)\s*\.\s*(?:"publish_verified_position_history"|publish_verified_position_history)(?![A-Za-z0-9_$])/i
+const retiredPositionHistoryRpc = /\.\s*rpc\s*\(\s*(['"`])publish_verified_position_history\1/i
+const retiredPositionHistoryPublisher = /\bpublishTierBVerifiedPositionHistoryInTransaction\b/i
+const REVIEWED_POSITION_HISTORY_AUTHORITY = 'lib/ingest/verified-position-history.ts'
+const reviewedPositionHistoryAuthoritySql =
+  /SELECT\s+arena\s*\.\s*publish_verified_position_history\s*\(\s*\$1::bigint\s*,\s*\$2::text\s*,\s*\$3::bigint\s*,\s*\$4::text\s*\)\s+AS\s+receipt/i
+const genericHistoryPublisherCall = /\bpublishHistoryRows(?:InTransaction)?\s*\(/m
+const REVIEWED_GENERIC_HISTORY_CALLERS = new Set([
+  'lib/ingest/serving/publish.ts',
+  'scripts/ingest-test-surfaces.ts',
+])
 
 function hasArenaBotsWriter(source) {
   return (
     directSqlWriter.test(source) || queryBuilderWriter.test(source) || legacyPublisher.test(source)
+  )
+}
+
+function hasPositionHistoryBypass(source) {
+  return (
+    directPositionHistoryWriter.test(source) ||
+    positionHistoryQueryBuilderWriter.test(source) ||
+    retiredPositionHistorySqlReference.test(source) ||
+    retiredPositionHistoryRpc.test(source) ||
+    retiredPositionHistoryPublisher.test(source)
+  )
+}
+
+function isReviewedPositionHistoryAuthority(file, source) {
+  const authorityReferences =
+    source.match(new RegExp(retiredPositionHistorySqlReference.source, 'gi')) ?? []
+  return (
+    file === REVIEWED_POSITION_HISTORY_AUTHORITY &&
+    authorityReferences.length === 1 &&
+    reviewedPositionHistoryAuthoritySql.test(source) &&
+    !directPositionHistoryWriter.test(source) &&
+    !positionHistoryQueryBuilderWriter.test(source) &&
+    !retiredPositionHistoryRpc.test(source) &&
+    !retiredPositionHistoryPublisher.test(source)
   )
 }
 
@@ -106,5 +149,103 @@ test('repository production TS/JS has no arena.bots writer or legacy publisher',
     offenders,
     [],
     `arena.bots must remain a read-only legacy table; direct writers found: ${offenders.join(', ')}`
+  )
+})
+
+test('position-history bypass detector covers direct DML and the retired RPC helper', () => {
+  for (const writer of [
+    'INSERT INTO arena.position_history (trader_id) VALUES (1)',
+    'UPDATE ONLY "arena" . "position_history" SET raw = $1',
+    'DELETE FROM arena . position_history WHERE trader_id = $1',
+    'MERGE INTO "arena"."position_history" AS target USING incoming ON true',
+    'TRUNCATE TABLE arena.position_history',
+    'INSERT INTO position_history (trader_id) VALUES (1)',
+    'UPDATE "position_history" SET raw = $1',
+    "client.from('position_history').upsert(rows)",
+    'publishTierBVerifiedPositionHistoryInTransaction(transaction, input)',
+    'SELECT arena.publish_verified_position_history($1, $2, $3, $4, $5, $6)',
+    'SELECT "arena" . "publish_verified_position_history"($1, $2)',
+    "client.rpc('publish_verified_position_history', input)",
+    'client\n  .rpc(\n    "publish_verified_position_history",\n    input\n  )',
+    'client.rpc(`publish_verified_position_history`, input)',
+  ]) {
+    assert.equal(hasPositionHistoryBypass(writer), true, `writer fixture was missed: ${writer}`)
+  }
+  for (const reader of [
+    'SELECT * FROM arena.position_history',
+    'SELECT * FROM position_history',
+    "client.from('position_history').select('*')",
+    "client.rpc('get_position_history_publication_checkpoint', input)",
+    "client.from('trader_position_history').update({ raw: null })",
+  ]) {
+    assert.equal(
+      hasPositionHistoryBypass(reader),
+      false,
+      `reader fixture was misclassified: ${reader}`
+    )
+  }
+})
+
+test('only the reviewed module may call the exact four-argument @2 authority', () => {
+  const reviewedAuthority = `
+    export const SQL = \`SELECT arena.publish_verified_position_history(
+      $1::bigint,
+      $2::text,
+      $3::bigint,
+      $4::text
+    ) AS receipt\`
+  `
+  const legacyAuthority = 'SELECT arena.publish_verified_position_history($1, $2, $3, $4, $5, $6)'
+
+  assert.equal(
+    isReviewedPositionHistoryAuthority(REVIEWED_POSITION_HISTORY_AUTHORITY, reviewedAuthority),
+    true
+  )
+  assert.equal(isReviewedPositionHistoryAuthority('worker/src/bypass.ts', reviewedAuthority), false)
+  assert.equal(
+    isReviewedPositionHistoryAuthority(
+      REVIEWED_POSITION_HISTORY_AUTHORITY,
+      `${reviewedAuthority}\n${legacyAuthority}`
+    ),
+    false
+  )
+})
+
+test('repository production TS/JS has no direct or retired position-history writer', () => {
+  const offenders = []
+  for (const sourceRoot of SOURCE_ROOTS) {
+    const absoluteRoot = resolve(ROOT, sourceRoot)
+    if (!existsSync(absoluteRoot)) continue
+    for (const file of productionSources(absoluteRoot)) {
+      const source = readFileSync(resolve(ROOT, file), 'utf8')
+      if (hasPositionHistoryBypass(source) && !isReviewedPositionHistoryAuthority(file, source)) {
+        offenders.push(file)
+      }
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `position_history requires parser-conservation publication; bypasses found: ${offenders.join(', ')}`
+  )
+})
+
+test('generic history publication remains confined to reviewed non-position call sites', () => {
+  const callers = []
+  for (const sourceRoot of SOURCE_ROOTS) {
+    const absoluteRoot = resolve(ROOT, sourceRoot)
+    if (!existsSync(absoluteRoot)) continue
+    for (const file of productionSources(absoluteRoot)) {
+      const source = readFileSync(resolve(ROOT, file), 'utf8')
+      if (genericHistoryPublisherCall.test(source)) callers.push(file)
+    }
+  }
+  assert.deepEqual(callers.sort(), [...REVIEWED_GENERIC_HISTORY_CALLERS].sort())
+
+  const manualSmoke = readFileSync(resolve(ROOT, 'scripts/ingest-test-surfaces.ts'), 'utf8')
+  assert.match(manualSmoke, /for \(const kind of \['copiers'\] as const\)/)
+  assert.doesNotMatch(
+    manualSmoke,
+    /for \(const kind of \[[^\]]*position_history[^\]]*\] as const\)/
   )
 })

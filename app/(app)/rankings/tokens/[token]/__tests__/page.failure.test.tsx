@@ -18,17 +18,26 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => mockGetSupabaseAdmin(),
 }))
 
-jest.mock('@/lib/rankings/token-ranking-snapshot', () => ({
-  TOKEN_RANKING_MAX_GENERATION: 9_007_199_254_740_000,
-  getTokenTraderRankingSnapshot: (...args: unknown[]) => mockGetTokenTraderRankingSnapshot(...args),
-}))
+jest.mock('@/lib/rankings/token-ranking-snapshot', () => {
+  const actual = jest.requireActual('@/lib/rankings/token-ranking-snapshot')
+  return {
+    ...actual,
+    getTokenTraderRankingSnapshot: (...args: unknown[]) =>
+      mockGetTokenTraderRankingSnapshot(...args),
+  }
+})
 
 jest.mock('../TokenRankingClient', () => ({
   __esModule: true,
   default: () => null,
 }))
 
-import TokenDetailPage, { loadTokenTradersSSR, parseTokenPageQuery } from '../page'
+import TokenDetailPage, {
+  generateMetadata,
+  loadTokenTradersSSR,
+  parseTokenPageQuery,
+} from '../page'
+import { TokenRankingReadError } from '@/lib/rankings/token-ranking-snapshot'
 
 const PUBLISHED_AT = '2026-07-29T20:00:00.123Z'
 const supabase = { rpc: jest.fn() }
@@ -73,6 +82,7 @@ type TokenDetailProps = {
   initialPage: number
   requestedGeneration: string | null
   initialSnapshot: unknown
+  initialStatus: 'success' | 'unpublished' | 'error'
 }
 
 describe('token ranking detail SSR publication boundary', () => {
@@ -109,6 +119,13 @@ describe('token ranking detail SSR publication boundary', () => {
     ]) {
       expect(parseTokenPageQuery(query).canonical).toBe(false)
     }
+  })
+
+  it('keeps detail verification pages out of search indexes and removes ranking claims', async () => {
+    const metadata = await generateMetadata({ params: Promise.resolve({ token: 'btc' }) })
+
+    expect(metadata.robots).toEqual({ index: false, follow: true })
+    expect(JSON.stringify(metadata)).not.toMatch(/\bbest\b|\btop\b|latest available/i)
   })
 
   it('redirects lowercase paths and noncanonical queries before reading a snapshot', async () => {
@@ -156,6 +173,7 @@ describe('token ranking detail SSR publication boundary', () => {
       initialPage: 2,
       requestedGeneration: '17',
       initialSnapshot: snapshot,
+      initialStatus: 'success',
     })
   })
 
@@ -187,6 +205,23 @@ describe('token ranking detail SSR publication boundary', () => {
       initialPage: 0,
       requestedGeneration: '17',
       initialSnapshot: snapshot,
+      initialStatus: 'success',
+    })
+  })
+
+  it('preserves intentional unpublished separately from a retryable failure', async () => {
+    mockGetTokenTraderRankingSnapshot.mockRejectedValue(
+      new TokenRankingReadError('not_published', 'authority snapshot required')
+    )
+
+    const element = (await TokenDetailPage({
+      params: Promise.resolve({ token: 'BTC' }),
+      searchParams: Promise.resolve({ generation: '17' }),
+    })) as ReactElement<TokenDetailProps>
+
+    expect(element.props).toMatchObject({
+      initialSnapshot: null,
+      initialStatus: 'unpublished',
     })
   })
 
@@ -209,6 +244,7 @@ describe('token ranking detail SSR publication boundary', () => {
 
       const element = (await page) as ReactElement<TokenDetailProps>
       expect(element.props.initialSnapshot).toBeNull()
+      expect(element.props.initialStatus).toBe('error')
       expect(element.props.requestedGeneration).toBe('17')
       expect(receivedSignal?.aborted).toBe(true)
     } finally {

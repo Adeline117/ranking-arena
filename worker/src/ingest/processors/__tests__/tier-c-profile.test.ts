@@ -161,6 +161,15 @@ function parsedHistoryRow(kind: 'position_history' | 'orders' | 'transfers' | 'c
       exitPrice: 110,
       realizedPnl: 10,
       dedupeHash: 'position-1',
+      sourceFactId: '["trader","position-1"]',
+      sourceLifecycleMarker: 'All Closed',
+      sourceReturn: 0.1,
+      fieldSources: {
+        sourceFactId: { fieldPaths: ['data[].positionId'] },
+        sourceLifecycleMarker: { fieldPaths: ['data[].status'] },
+        sourceReturn: { fieldPaths: ['data[].roi'] },
+      },
+      limitations: [],
       raw,
     }
   }
@@ -687,6 +696,11 @@ describe('Tier-C incomplete profile window gate', () => {
       for (const row of renderPayload.rows) {
         expect(row.raw).toBeUndefined()
         expect(row.copierLabel).toBeUndefined()
+        expect(row.sourceFactId).toBeUndefined()
+        expect(row.sourceLifecycleMarker).toBeUndefined()
+        expect(row.sourceReturn).toBeUndefined()
+        expect(row.fieldSources).toBeUndefined()
+        expect(row.limitations).toBeUndefined()
       }
       expect(mockSessionClose).toHaveBeenCalledTimes(1)
     }

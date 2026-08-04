@@ -1592,6 +1592,16 @@ export async function publishPositions(
   }
 }
 
+type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history'>
+
+function assertCompatibilityHistoryKind(
+  kind: HistoryKind
+): asserts kind is CompatibilityHistoryKind {
+  if (kind === 'position_history') {
+    throw new Error('[history] position_history requires parser-conservation publication')
+  }
+}
+
 async function publishHistoryRowsTransactionInternal(
   client: IngestQueryExecutor,
   src: SourceRow,
@@ -1600,6 +1610,7 @@ async function publishHistoryRowsTransactionInternal(
   rows: ParsedHistoryRow[],
   newCursor: string | null
 ): Promise<number> {
+  assertCompatibilityHistoryKind(kind)
   if (rows.length === 0) return 0
   if (rows.some((row) => row.kind !== kind)) {
     throw new Error(`[history] row kind does not match ${kind}`)
@@ -1607,46 +1618,7 @@ async function publishHistoryRowsTransactionInternal(
   await ensureHistoryPartitions(client, kind, rows)
   let written = 0
 
-  if (kind === 'position_history') {
-    const result = await client.query(
-      `INSERT INTO arena.position_history
-           (trader_id, opened_at, closed_at, symbol, side, leverage, size,
-            entry_price, exit_price, realized_pnl, currency, dedupe_hash, raw)
-         SELECT $1, r.opened_at::timestamptz, r.closed_at::timestamptz, r.symbol,
-                r.side, r.leverage, r.size, r.entry_price, r.exit_price,
-                r.realized_pnl, $2, r.dedupe_hash, r.raw
-           FROM jsonb_to_recordset($3::jsonb) AS r(
-             opened_at text, closed_at text, symbol text, side text,
-             leverage numeric, size numeric, entry_price numeric,
-             exit_price numeric, realized_pnl numeric, dedupe_hash text, raw jsonb)
-         ON CONFLICT (closed_at, dedupe_hash) DO NOTHING`,
-      [
-        traderId,
-        src.currency,
-        JSON.stringify(
-          rows
-            .filter(
-              (r): r is Extract<ParsedHistoryRow, { kind: 'position_history' }> =>
-                r.kind === 'position_history'
-            )
-            .map((r) => ({
-              opened_at: r.openedAt,
-              closed_at: r.closedAt,
-              symbol: r.symbol,
-              side: r.side,
-              leverage: r.leverage,
-              size: r.size,
-              entry_price: r.entryPrice,
-              exit_price: r.exitPrice,
-              realized_pnl: r.realizedPnl,
-              dedupe_hash: r.dedupeHash,
-              raw: r.raw,
-            }))
-        ),
-      ]
-    )
-    written = result.rowCount ?? 0
-  } else if (kind === 'orders') {
+  if (kind === 'orders') {
     const result = await client.query(
       `INSERT INTO arena.order_records
            (trader_id, ts, kind, symbol, side, price, qty, currency, dedupe_hash, raw)
@@ -1759,15 +1731,16 @@ async function publishHistoryRowsTransactionInternal(
 }
 
 /**
- * Query-only incremental history publication. The caller owns the transaction
- * so an immutable RAW pointer, typed history rows, and the monotonic cursor may
- * commit or roll back as one unit.
+ * Query-only compatibility publication for non-position histories. The caller
+ * owns the transaction so RAW, typed rows, and the monotonic cursor may commit
+ * or roll back as one unit. Position history requires parser-conservation
+ * evidence and is rejected both by the type and the runtime guard.
  */
 export async function publishHistoryRowsInTransaction(
   transaction: IngestQueryExecutor,
   src: SourceRow,
   traderId: number,
-  kind: HistoryKind,
+  kind: CompatibilityHistoryKind,
   rows: ParsedHistoryRow[],
   newCursor: string | null
 ): Promise<number> {
@@ -1775,16 +1748,17 @@ export async function publishHistoryRowsInTransaction(
 }
 
 /**
- * Incremental history publish: idempotent upsert by dedupe_hash + cursor
- * update (spec §2.3 Histories). Returns rows actually written.
+ * Non-position compatibility publish: idempotent upsert by dedupe_hash +
+ * cursor update (spec §2.3 Histories). Returns rows actually written.
  */
 export async function publishHistoryRows(
   src: SourceRow,
   traderId: number,
-  kind: HistoryKind,
+  kind: CompatibilityHistoryKind,
   rows: ParsedHistoryRow[],
   newCursor: string | null
 ): Promise<number> {
+  assertCompatibilityHistoryKind(kind)
   if (rows.length === 0) return 0
   const client = await ingestClientConnect()
   try {

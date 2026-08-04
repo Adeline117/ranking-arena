@@ -1080,6 +1080,8 @@ interface PositionHistoryTrustPointerRow {
   content_hash: string
   quarantined: boolean
   meta: unknown
+  source_run_id: string | null
+  trust_artifact_role: string | null
 }
 
 function positionHistoryArtifactError(detail: string): Error {
@@ -1364,17 +1366,23 @@ export function prepareHistoryRawArtifactReconciliationExpectation(
 
 async function loadPositionHistoryTrustPointers(
   transaction: IngestQueryExecutor,
-  artifact: PreparedPositionHistoryRawArtifact
+  artifact: PreparedPositionHistoryRawArtifact,
+  sourceRunId: string
 ): Promise<PositionHistoryTrustPointerRow[]> {
   const { rows } = await transaction.query<PositionHistoryTrustPointerRow>(
     `SELECT id, source_id, job_type, trader_id, timeframe,
             fetched_at::text AS fetched_at, storage_path,
-            bytes, content_hash, quarantined, meta
+            bytes, content_hash, quarantined, meta,
+            source_run_id, trust_artifact_role
        FROM arena.raw_objects
       WHERE storage_path = $1
+         OR (
+           source_run_id = $2
+           AND trust_artifact_role = 'event_history'
+         )
       ORDER BY id
       FOR UPDATE`,
-    [artifact.storagePath]
+    [artifact.storagePath, sourceRunId]
   )
   return rows
 }
@@ -1418,6 +1426,8 @@ function validatePositionHistoryTrustPointer(
     row.bytes !== artifact.durableCompressedBytes ||
     row.content_hash !== input.sourceRunId ||
     row.quarantined !== false ||
+    row.source_run_id !== input.sourceRunId ||
+    row.trust_artifact_role !== EVENT_HISTORY_RAW_ARTIFACT_ROLE ||
     !metaMatches
   ) {
     throw positionHistoryArtifactError(`database pointer ${row.id} does not match the artifact`)
@@ -1437,8 +1447,8 @@ async function insertPositionHistoryTrustPointer(
   await transaction.query(
     `INSERT INTO arena.raw_objects
        (source_id, job_type, trader_id, timeframe, fetched_at, storage_path,
-        bytes, content_hash, meta)
-     VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8)
+        bytes, content_hash, meta, source_run_id, trust_artifact_role)
+     VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (storage_path) DO NOTHING`,
     [
       input.sourceId,
@@ -1449,6 +1459,8 @@ async function insertPositionHistoryTrustPointer(
       artifact.durableCompressedBytes,
       artifact.contentHash,
       JSON.stringify(positionHistoryArtifactMeta(artifact)),
+      input.sourceRunId,
+      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
     ]
   )
 }
@@ -1463,10 +1475,10 @@ async function persistPositionHistoryTrustPointer(
     [`arena.history-raw-artifact:${input.artifact.history_kind}:${input.sourceRunId}`]
   )
 
-  let rows = await loadPositionHistoryTrustPointers(transaction, artifact)
+  let rows = await loadPositionHistoryTrustPointers(transaction, artifact, input.sourceRunId)
   if (rows.length === 0) {
     await insertPositionHistoryTrustPointer(transaction, input, artifact)
-    rows = await loadPositionHistoryTrustPointers(transaction, artifact)
+    rows = await loadPositionHistoryTrustPointers(transaction, artifact, input.sourceRunId)
   }
   return validatePositionHistoryTrustPointer(rows, input, artifact)
 }

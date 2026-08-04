@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function source(path: string): string {
@@ -8,6 +8,10 @@ function source(path: string): string {
 describe('public diagnostics contract', () => {
   const diagnose = source('scripts/diagnose.mjs')
   const status = source('scripts/check_status.mjs')
+  const scriptsReadme = source('scripts/README.md')
+  const productionAllowlist = JSON.parse(source('scripts/PRODUCTION_ALLOWLIST.json')) as {
+    allowed: string[]
+  }
   const packageJson = JSON.parse(source('package.json')) as {
     scripts: Record<string, string>
   }
@@ -17,6 +21,17 @@ describe('public diagnostics contract', () => {
     expect(diagnose).toContain("'check_status.mjs'), '--freshness'")
     expect(diagnose).toContain("'check_status.mjs'), '--platforms'")
     expect(packageJson.scripts['check:status']).toBe('node scripts/diagnose.mjs --status')
+  })
+
+  it('does not expose the retired table-count diagnostic', () => {
+    expect(existsSync(join(process.cwd(), 'scripts/check_tables.mjs'))).toBe(false)
+    expect(diagnose).not.toContain('check_tables.mjs')
+    expect(diagnose).not.toContain('--tables')
+    expect(packageJson.scripts['check:tables']).toBeUndefined()
+    expect(productionAllowlist.allowed).not.toContain('check_tables.mjs')
+    expect(scriptsReadme).not.toContain('check_tables')
+    expect(scriptsReadme).not.toContain('check:tables')
+    expect(scriptsReadme).not.toContain('--tables')
   })
 
   it('checks the user-visible serving contracts instead of retired snapshot tables', () => {

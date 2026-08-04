@@ -108,19 +108,27 @@ export async function GET(
         cursor
       )
       // A cursor is bound to one warm keyset snapshot. If the RPC rejects it
-      // (including the expand-first legacy -> verified transition), never
+      // (including a quarantined legacy -> verified authority transition), never
       // substitute a Tier-C first-page preview as the next page. Tell the
       // client to rebuild the whole chain instead.
-      if (cursor !== null && page === null) return cursorInvalidatedResponse()
+      if (
+        cursor !== null &&
+        (page === null || (kind === 'position_history' && page.completeness?.state !== 'complete'))
+      ) {
+        return cursorInvalidatedResponse()
+      }
 
-      // Cursor pages, non-empty first pages, and an explicitly verified empty
-      // history are warm truth. Only an unbound empty first page may be cold.
-      if (page && (page.rows.length > 0 || cursor || page.completeness?.state === 'complete')) {
-        if (kind === 'position_history' && page.completeness?.state !== 'complete') {
-          // During expand-first, caching a legacy page can make a cursor reset
-          // loop back into the old generation after the first verified publish.
-          return apiSuccess<RecordsPage>(page, 200, { 'Cache-Control': 'no-store' })
-        }
+      // A position-history page is warm truth only after the exact @2 receipt
+      // binding passes. Verified empty history is authoritative; unverified
+      // legacy rows are quarantined and fall through to a bounded Tier-C
+      // preview on page one.
+      const warmPageIsServeable =
+        page !== null && (kind !== 'position_history' || page.completeness?.state === 'complete')
+      if (
+        page &&
+        warmPageIsServeable &&
+        (page.rows.length > 0 || cursor || page.completeness?.state === 'complete')
+      ) {
         return withCache(apiSuccess<RecordsPage>(page), {
           maxAge: 30,
           staleWhileRevalidate: 120,
@@ -142,7 +150,7 @@ export async function GET(
       }
 
       const pending: RecordsPage = {
-        rows: page?.rows ?? [],
+        rows: kind === 'position_history' ? [] : (page?.rows ?? []),
         nextCursor: null,
         provenance: page?.provenance ?? {
           source: resolved.source,
@@ -151,7 +159,7 @@ export async function GET(
           publishedAt: null,
         },
         cacheState: 'pending',
-        ...(kind !== 'positions'
+        ...(kind === 'position_history'
           ? {
               completeness: page?.completeness ?? {
                 state: 'unknown' as const,

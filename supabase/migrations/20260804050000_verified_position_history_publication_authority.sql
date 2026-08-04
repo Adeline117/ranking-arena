@@ -1,9 +1,10 @@
 -- Verified, immutable publication authority for Tier-B position history.
 --
--- EXPAND-FIRST DEPLOY ORDER: this migration installs the reviewed @2 writer
--- and read path without freezing legacy workers. Legacy rows remain writable
--- and visible as unverified fallback data until an identity receives its first
--- verified publication; legacy rows are never promoted into verified state.
+-- FORWARD REOPEN DEPLOY ORDER: the preceding retirement/quarantine migrations
+-- have already made the legacy @1 writer, typed rows, direct table reads, and
+-- public history projection fail closed. This migration installs the reviewed
+-- parser-conservation @2 authority as the only path that can reopen public
+-- position history. Legacy rows remain quarantined and are never promoted.
 
 BEGIN;
 
@@ -15,7 +16,7 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 
 SELECT pg_catalog.pg_advisory_xact_lock(
   pg_catalog.hashtextextended(
-    '20260803200000-verified-position-history-authority-v1',
+    '20260804050000-verified-position-history-authority-v1',
     0
   )
 );
@@ -37,6 +38,7 @@ BEGIN
      OR pg_catalog.to_regclass('arena.sources') IS NULL
      OR pg_catalog.to_regclass('arena.traders') IS NULL
      OR pg_catalog.to_regclass('arena.raw_objects') IS NULL
+     OR pg_catalog.to_regclass('arena.record_surface_publications') IS NULL
      OR pg_catalog.to_regclass(
        'arena.position_history_raw_admissions'
      ) IS NULL
@@ -84,6 +86,18 @@ BEGIN
      ) IS NULL
      OR pg_catalog.to_regprocedure(
        'arena.protect_position_history_registry_identity()'
+     ) IS NULL
+     OR pg_catalog.to_regprocedure(
+       'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)'
+     ) IS NULL
+     OR pg_catalog.to_regprocedure(
+       'arena.get_position_history_publication_checkpoint(smallint,bigint)'
+     ) IS NULL
+     OR pg_catalog.to_regprocedure(
+       'arena.position_history_publication_chain_healthy(bigint,smallint,bigint)'
+     ) IS NULL
+     OR pg_catalog.to_regprocedure(
+       'arena.protect_verified_position_history_row()'
      ) IS NULL THEN
     RAISE EXCEPTION
       'verified position-history authority requires PG17, the Arena serving/RAW foundations, and all API roles';
@@ -121,7 +135,8 @@ BEGIN
       )
       AND function_row.oid NOT IN (
         'public.arena_records_page(text,text,text,integer,text,integer)'::pg_catalog.regprocedure,
-        'public.arena_source_capabilities()'::pg_catalog.regprocedure
+        'public.arena_source_capabilities()'::pg_catalog.regprocedure,
+        'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)'::pg_catalog.regprocedure
       )
   ) THEN
     RAISE EXCEPTION 'record, capability, or publisher overload drift prevents cutover';
@@ -135,6 +150,14 @@ BEGIN
       AND function_row.prosecdef
       AND function_row.prorettype = 'pg_catalog.jsonb'::pg_catalog.regtype
       AND function_row.proowner = 'postgres'::pg_catalog.regrole
+      AND pg_catalog.strpos(
+        function_row.prosrc,
+        'history_evidence_not_bound'
+      ) > 0
+      AND pg_catalog.strpos(
+        function_row.prosrc,
+        'arena.position_history'
+      ) = 0
   ) OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_proc AS function_row
@@ -154,18 +177,76 @@ BEGIN
       AND table_row.relkind = 'p'
       AND table_row.relowner = 'postgres'::pg_catalog.regrole
       AND table_row.relrowsecurity
-  ) OR NOT EXISTS (
+  ) OR EXISTS (
     SELECT 1
     FROM pg_catalog.pg_policy AS policy_row
     WHERE policy_row.polrelid = 'arena.position_history'::pg_catalog.regclass
       AND policy_row.polname = 'Public read position_history'
-      AND policy_row.polcmd = 'r'
-  ) OR NOT pg_catalog.has_table_privilege(
+  ) OR pg_catalog.has_table_privilege(
     'anon', 'arena.position_history', 'SELECT'
-  ) OR NOT pg_catalog.has_table_privilege(
+  ) OR pg_catalog.has_table_privilege(
     'authenticated', 'arena.position_history', 'SELECT'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute_row
+    WHERE attribute_row.attrelid = 'arena.position_history'::pg_catalog.regclass
+      AND attribute_row.attname = 'verified_publication_id'
+      AND attribute_row.atttypid = 'pg_catalog.int8'::pg_catalog.regtype
+      AND NOT attribute_row.attnotnull
+      AND attribute_row.attnum > 0
+      AND NOT attribute_row.attisdropped
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.oid =
+        'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)'::pg_catalog.regprocedure
+      AND function_row.proowner = 'postgres'::pg_catalog.regrole
+      AND function_row.prosecdef
+      AND function_row.provolatile = 'v'
+      AND function_row.proparallel = 'u'
+      AND function_row.prorettype = 'pg_catalog.jsonb'::pg_catalog.regtype
+      AND function_row.pronargdefaults = 0
+      AND pg_catalog.strpos(
+        function_row.prosrc,
+        'legacy position-history publisher is retired; parser-conservation receipt required'
+      ) > 0
+      AND pg_catalog.strpos(function_row.prosrc, 'arena.raw_objects') = 0
+      AND pg_catalog.strpos(function_row.prosrc, 'arena.position_history') = 0
+  ) OR pg_catalog.has_function_privilege(
+    'anon',
+    'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated',
+    'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)',
+    'EXECUTE'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'arena.position_history'::pg_catalog.regclass
+      AND trigger_row.tgname = 'protect_verified_position_history_before_write'
+      AND trigger_row.tgfoid =
+        'arena.protect_verified_position_history_row()'::pg_catalog.regprocedure
+      AND trigger_row.tgtype = 31
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'arena.position_history'::pg_catalog.regclass
+      AND trigger_row.tgname = 'protect_verified_position_history_before_truncate'
+      AND trigger_row.tgfoid =
+        'arena.protect_verified_position_history_row()'::pg_catalog.regprocedure
+      AND trigger_row.tgtype = 34
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
   ) THEN
-    RAISE EXCEPTION 'legacy position-history partition/RLS contract drifted';
+    RAISE EXCEPTION
+      'retired position-history writer/read/typed-row quarantine drifted';
   END IF;
 
   IF NOT EXISTS (
@@ -4172,8 +4253,8 @@ BEGIN
 
   IF p_kind = 'position_history' THEN
     -- Resolve whether this identity has crossed over before interpreting its
-    -- cursor. Before the first verified publication, legacy history remains a
-    -- visible, explicitly unverified 2C fallback.
+    -- cursor. Before the first verified publication the retired typed surface
+    -- remains quarantined: the only safe 2C response is empty/unknown.
     SELECT
       publication.publication_id,
       publication.source_run_id,
@@ -4218,80 +4299,10 @@ BEGIN
 
     IF v_anchor_publication_id IS NULL THEN
       IF p_cursor IS NOT NULL AND p_cursor <> '' THEN
-        IF p_cursor !~
-             '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z[|][0-9a-f]{40}$'
-           OR NOT arena.position_history_canonical_timestamp(
-             pg_catalog.split_part(p_cursor, '|', 1)
-           ) THEN
-          RAISE EXCEPTION 'invalid legacy position-history cursor'
-            USING ERRCODE = '22023';
-        END IF;
-        v_cursor_ts := pg_catalog.split_part(p_cursor, '|', 1)::timestamptz;
-        v_cursor_hash := pg_catalog.split_part(p_cursor, '|', 2);
+        RAISE EXCEPTION
+          'position-history authority changed; reset pagination without a cursor'
+          USING ERRCODE = '40001';
       END IF;
-
-      WITH candidates AS (
-        SELECT
-          legacy.*,
-          pg_catalog.row_number() OVER (
-            ORDER BY legacy.closed_at DESC, legacy.dedupe_hash DESC
-          ) AS result_ordinal
-        FROM arena.position_history AS legacy
-        WHERE legacy.trader_id = v_trader_id
-          AND legacy.closed_at IS NOT NULL
-          AND (
-            v_cursor_ts IS NULL
-            OR (legacy.closed_at, legacy.dedupe_hash) <
-               (v_cursor_ts, v_cursor_hash)
-          )
-        ORDER BY legacy.closed_at DESC, legacy.dedupe_hash DESC
-        LIMIT v_limit + 1
-      )
-      SELECT
-        COALESCE(
-          pg_catalog.jsonb_agg(
-            pg_catalog.jsonb_build_object(
-              'closed_at',
-                arena.position_history_timestamp_text(candidate.closed_at),
-              'closing_value', COALESCE(
-                arena.jnum(candidate.raw->>'closingValue'),
-                arena.jnum(candidate.raw->>'closeValue')
-              ),
-              'currency', candidate.currency,
-              'entry_price', candidate.entry_price,
-              'exit_price', candidate.exit_price,
-              'leverage', candidate.leverage,
-              'margin_mode', arena.jmargin_mode(candidate.raw),
-              'max_open_interest', COALESCE(
-                arena.jnum(candidate.raw->>'maxOpenInterest'),
-                arena.jnum(candidate.raw->>'max_open_interest')
-              ),
-              'opened_at', CASE WHEN candidate.opened_at IS NULL THEN NULL
-                ELSE arena.position_history_timestamp_text(candidate.opened_at)
-                END,
-              'realized_pnl', candidate.realized_pnl,
-              'roi', COALESCE(
-                arena.jnum(candidate.raw->>'roi'),
-                arena.jnum(candidate.raw->>'roiRate')
-              ),
-              'side', candidate.side,
-              'size', candidate.size,
-              'source_return', NULL,
-              'symbol', candidate.symbol
-            ) ORDER BY candidate.closed_at DESC, candidate.dedupe_hash DESC
-          ) FILTER (WHERE candidate.result_ordinal <= v_limit),
-          '[]'::jsonb
-        ),
-        COALESCE(
-          pg_catalog.bool_or(candidate.result_ordinal > v_limit),
-          false
-        ),
-        pg_catalog.max(candidate.closed_at)
-          FILTER (WHERE candidate.result_ordinal = v_limit),
-        pg_catalog.max(candidate.dedupe_hash)
-          FILTER (WHERE candidate.result_ordinal = v_limit)
-      INTO v_rows, v_has_more, v_last_ts, v_last_hash
-      FROM candidates AS candidate;
 
       RETURN pg_catalog.jsonb_build_object(
         'asOf', NULL,
@@ -4306,13 +4317,11 @@ BEGIN
           'state', 'unknown'
         ),
         'currency', v_currency,
-        'nextCursor', CASE WHEN v_has_more THEN
-          arena.position_history_timestamp_text(v_last_ts) || '|' ||
-          v_last_hash ELSE NULL END,
+        'nextCursor', NULL,
         'observedAt', NULL,
         'publicationId', NULL,
         'publishedAt', NULL,
-        'rows', v_rows,
+        'rows', '[]'::pg_catalog.jsonb,
         'sourceAsOf', NULL,
         'sourceRunId', NULL,
         'stateId', NULL
@@ -5819,27 +5828,90 @@ BEGIN
     RAISE EXCEPTION 'postflight: quadratic cumulative state storage returned';
   END IF;
 
-  IF NOT pg_catalog.has_table_privilege(
+  IF pg_catalog.has_table_privilege(
        'anon', 'arena.position_history', 'SELECT'
      )
-     OR NOT pg_catalog.has_table_privilege(
+     OR pg_catalog.has_table_privilege(
        'authenticated', 'arena.position_history', 'SELECT'
      )
-     OR NOT EXISTS (
+     OR EXISTS (
        SELECT 1
        FROM pg_catalog.pg_policy AS policy_row
        WHERE policy_row.polrelid = 'arena.position_history'::pg_catalog.regclass
          AND policy_row.polname = 'Public read position_history'
-         AND policy_row.polcmd = 'r'
      )
-     OR EXISTS (
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_proc AS function_row
+       WHERE function_row.oid =
+           'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)'::pg_catalog.regprocedure
+         AND function_row.proowner = 'postgres'::pg_catalog.regrole
+         AND function_row.prosecdef
+         AND pg_catalog.strpos(
+           function_row.prosrc,
+           'legacy position-history publisher is retired; parser-conservation receipt required'
+         ) > 0
+         AND pg_catalog.strpos(function_row.prosrc, 'arena.raw_objects') = 0
+         AND pg_catalog.strpos(function_row.prosrc, 'arena.position_history') = 0
+     )
+     OR pg_catalog.has_function_privilege(
+       'anon',
+       'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'authenticated',
+       'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'service_role',
+       'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)',
+       'EXECUTE'
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_proc AS function_row
+       WHERE function_row.oid =
+           'public.arena_records_page(text,text,text,integer,text,integer)'::pg_catalog.regprocedure
+         AND pg_catalog.strpos(
+           function_row.prosrc,
+           'arena.position-history-completeness@2'
+         ) > 0
+         AND pg_catalog.strpos(
+           function_row.prosrc,
+           'FROM arena.verified_position_history_facts AS fact'
+         ) > 0
+         AND pg_catalog.strpos(
+           function_row.prosrc,
+           'FROM arena.position_history AS legacy'
+         ) = 0
+     )
+     OR NOT EXISTS (
        SELECT 1
        FROM pg_catalog.pg_trigger AS trigger_row
        WHERE trigger_row.tgrelid = 'arena.position_history'::pg_catalog.regclass
-         AND trigger_row.tgname LIKE 'reject_legacy_position_history%'
+         AND trigger_row.tgname =
+           'protect_verified_position_history_before_write'
+         AND trigger_row.tgfoid =
+           'arena.protect_verified_position_history_row()'::pg_catalog.regprocedure
+         AND trigger_row.tgtype = 31
+         AND trigger_row.tgenabled = 'O'
+         AND NOT trigger_row.tgisinternal
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_trigger AS trigger_row
+       WHERE trigger_row.tgrelid = 'arena.position_history'::pg_catalog.regclass
+         AND trigger_row.tgname =
+           'protect_verified_position_history_before_truncate'
+         AND trigger_row.tgfoid =
+           'arena.protect_verified_position_history_row()'::pg_catalog.regprocedure
+         AND trigger_row.tgtype = 34
+         AND trigger_row.tgenabled = 'O'
          AND NOT trigger_row.tgisinternal
      ) THEN
-    RAISE EXCEPTION 'postflight: expand-first legacy compatibility drifted';
+    RAISE EXCEPTION 'postflight: retired history quarantine drifted';
   END IF;
 
   IF EXISTS (
@@ -5857,7 +5929,8 @@ BEGIN
       AND function_row.oid NOT IN (
         'public.arena_records_page(text,text,text,integer,text,integer)'::pg_catalog.regprocedure,
         'public.arena_source_capabilities()'::pg_catalog.regprocedure,
-        'arena.publish_verified_position_history(bigint,text,bigint,text)'::pg_catalog.regprocedure
+        'arena.publish_verified_position_history(bigint,text,bigint,text)'::pg_catalog.regprocedure,
+        'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)'::pg_catalog.regprocedure
       )
   ) THEN
     RAISE EXCEPTION 'postflight: RPC overload appeared during cutover';

@@ -5436,6 +5436,12 @@ const en = {
   tokenRankingNoData: 'No trade data found for {token}',
   tokenRankingNoDataDesc:
     'Trade data for this token may not be available yet. Try a different token or check back later.',
+  tokenRankingUnpublishedTitle: 'Token rankings are being verified',
+  tokenRankingUnpublishedDescription:
+    'Arena is building and verifying the authoritative ranking snapshot. No token ranking is published until it passes; this does not mean there is no trading data.',
+  tokenRankingEmptyCohortTitle: 'No traders meet the evidence standard',
+  tokenRankingEmptyCohortDescription:
+    'The eligible cohort is empty. Any trader with incomplete history, an untrusted price, unknown cost basis, or incomplete FX conversion is marked partial/unknown and excluded from rankings.',
   tokenRankingBrowseAll: 'Browse All Tokens',
   tokenRankingTotalPnl: 'Total PnL',
   tokenRankingTrades: 'Trades',

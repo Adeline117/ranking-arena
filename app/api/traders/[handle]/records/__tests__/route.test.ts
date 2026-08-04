@@ -99,7 +99,7 @@ describe('records route history trust boundary', () => {
     mockRecordsPageFromTierC.mockReturnValue(null)
   })
 
-  it.each(['position_history', 'orders', 'transfers'] as const)(
+  it.each(['position_history'] as const)(
     'passes the exact %s kind into the Tier-C mapper',
     async (kind) => {
       const workerPayload = { rows: [{ symbol: 'BTCUSDT' }] }
@@ -133,7 +133,17 @@ describe('records route history trust boundary', () => {
     }
   )
 
-  it.each(['position_history', 'orders', 'transfers'] as const)(
+  it.each(['orders', 'transfers'] as const)(
+    'does not attach a position-history verdict to pending %s',
+    async (kind) => {
+      const response = await callRoute(kind)
+      const body = await response.json()
+      expect(body.data.cacheState).toBe('pending')
+      expect(body.data.completeness).toBeUndefined()
+    }
+  )
+
+  it.each(['position_history'] as const)(
     'fails a pending %s page closed when no evidence is available',
     async (kind) => {
       const response = await callRoute(kind)
@@ -215,7 +225,7 @@ describe('records route history trust boundary', () => {
     }
   )
 
-  it('returns an empty warm cursor page without a Tier-C request', async () => {
+  it('invalidates an unverified warm history cursor without a Tier-C request', async () => {
     const warmEmpty = {
       rows: [],
       nextCursor: null,
@@ -233,13 +243,16 @@ describe('records route history trust boundary', () => {
     const response = await callRoute('position_history', 'valid-cursor')
     const body = await response.json()
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(409)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(body.data).toEqual(warmEmpty)
+    expect(body.error).toMatchObject({
+      code: RECORDS_CURSOR_INVALIDATED_CODE,
+      resetRequired: true,
+    })
     expect(mockRequestTierC).not.toHaveBeenCalled()
   })
 
-  it('does not cache an unverified legacy history first page during expand-first', async () => {
+  it('does not cache an unverified quarantined history first page', async () => {
     mockGetRecordsPage.mockResolvedValue({
       rows: [{ symbol: 'BTCUSDT' }],
       nextCursor: 'legacy-cursor',
@@ -254,9 +267,17 @@ describe('records route history trust boundary', () => {
     } satisfies RecordsPage)
 
     const response = await callRoute('position_history')
+    const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(body.data).toMatchObject({
+      rows: [],
+      nextCursor: null,
+      cacheState: 'pending',
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    })
+    expect(mockRequestTierC).toHaveBeenCalledTimes(1)
   })
 
   it.each(['', '  '] as const)('rejects a non-canonical cursor %j', async (cursor) => {

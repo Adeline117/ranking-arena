@@ -55,6 +55,7 @@ import { avatarSrc } from '@/lib/utils/avatar-proxy'
 // JSON-LD structured data is emitted by the server component (page.tsx).
 // Do NOT emit it here — that causes duplicate ProfilePage + BreadcrumbList.
 import { RankSparkline } from '@/app/components/ranking/RankSparkline'
+import { LEGACY_HISTORY_COMPLETENESS_UNKNOWN } from '@/lib/data/trader/history-quarantine'
 
 // Memoized tab components — each wraps its own subtree so SWR revalidations
 // on one tab don't cause reconciliation of the others.
@@ -197,6 +198,7 @@ import {
 // When no position data exists, the Portfolio component shows an empty state
 type TraderPageData = import('@/app/(app)/u/[handle]/components/types').TraderPageData
 const EMPTY_SIMILAR_TRADERS: NonNullable<TraderPageData['similarTraders']> = []
+const EMPTY_LEGACY_POSITION_HISTORY: NonNullable<TraderPageData['positionHistory']> = []
 
 // #31: traderFetcher extracted to lib/hooks/traderFetcher.ts (shared with useUserProfile)
 
@@ -1011,10 +1013,6 @@ export default function TraderProfileClient({
     () => scopedTraderData?.portfolio ?? [],
     [scopedTraderData?.portfolio]
   )
-  const traderPositionHistory = useMemo(
-    () => scopedTraderData?.positionHistory ?? [],
-    [scopedTraderData?.positionHistory]
-  )
   const traderEquityCurve = useMemo(
     () => scopedTraderData?.equityCurve,
     [scopedTraderData?.equityCurve]
@@ -1169,8 +1167,15 @@ export default function TraderProfileClient({
   const effPerformance = useThreeTab ? servingTab.traderPerformance : traderPerformance
   const effStats = useThreeTab ? servingTab.traderStats : traderStats
   const effPortfolio = useThreeTab ? servingTab.traderPortfolio : traderPortfolio
-  const effPositionHistory = useThreeTab ? servingTab.traderPositionHistory : traderPositionHistory
-  const effHistoryCompleteness = useThreeTab ? servingTab.historyCompleteness : null
+  // Legacy detail/cache payloads are not bound to terminal evidence. The
+  // serving hook is the only path allowed to expose verified rows; every
+  // legacy branch stays visibly unknown instead of implying completeness.
+  const effPositionHistory = useThreeTab
+    ? servingTab.traderPositionHistory
+    : EMPTY_LEGACY_POSITION_HISTORY
+  const effHistoryCompleteness = useThreeTab
+    ? servingTab.historyCompleteness
+    : LEGACY_HISTORY_COMPLETENESS_UNKNOWN
   const effEquityCurve = useThreeTab ? servingTab.traderEquityCurve : traderEquityCurve
   const effAssetBreakdown = useThreeTab ? servingTab.traderAssetBreakdown : traderAssetBreakdown
   // U2-12: serving sources have no similarTraders in traderData (the /core path

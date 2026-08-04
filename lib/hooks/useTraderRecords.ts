@@ -44,7 +44,7 @@ function recordsUrl(
 ): string {
   const params = new URLSearchParams({ kind, source, tf: String(tf) })
   // This stable generation marker changes the CDN/browser cache key at the
-  // legacy -> verified rollout boundary. Older cacheable first pages cannot
+  // quarantined -> verified rollout boundary. Older cacheable first pages cannot
   // be replayed into the new cursor-reset protocol.
   if (kind === 'position_history') {
     params.set('records_contract', POSITION_HISTORY_RECORDS_CONTRACT)
@@ -81,7 +81,7 @@ function combinedHistoryCompleteness(
   kind: Exclude<RecordKind, 'copiers'>,
   pages: RecordsPage[]
 ): HistoryCompleteness | null {
-  if (kind === 'positions' || pages.length === 0) return null
+  if (kind !== 'position_history' || pages.length === 0) return null
 
   const pageCompleteness = pages.map(
     (page) =>
@@ -130,6 +130,21 @@ function combinedRecordProvenance(source: string, pages: RecordsPage[]): RecordP
   }
 }
 
+function mayDisplayPageRows(kind: Exclude<RecordKind, 'copiers'>, page: RecordsPage): boolean {
+  // Tier-C rows are an explicitly labelled partial preview. Warm rows claim
+  // durable authority and therefore require the exact complete verdict that
+  // the server derived from the @2 publication envelope.
+  return (
+    kind !== 'position_history' ||
+    page.cacheState === 'cold-fetched' ||
+    page.completeness?.state === 'complete'
+  )
+}
+
+function mayRequestNextPage(kind: Exclude<RecordKind, 'copiers'>, page: RecordsPage): boolean {
+  return kind !== 'position_history' || page.completeness?.state === 'complete'
+}
+
 export function useTraderRecords({
   source,
   exchangeTraderId,
@@ -159,7 +174,8 @@ export function useTraderRecords({
       return res.data
     },
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    getNextPageParam: (lastPage) =>
+      mayRequestNextPage(kind, lastPage) ? (lastPage.nextCursor ?? undefined) : undefined,
     enabled: enabled && Boolean(source) && Boolean(exchangeTraderId),
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
@@ -178,7 +194,7 @@ export function useTraderRecords({
   }, [cursorInvalidated, queryClient, queryKey])
 
   const pages = query.data?.pages ?? []
-  const rows = pages.flatMap((p) => p.rows)
+  const rows = pages.flatMap((page) => (mayDisplayPageRows(kind, page) ? page.rows : []))
   const completeness = combinedHistoryCompleteness(kind, pages)
   const provenance = combinedRecordProvenance(source, pages)
 

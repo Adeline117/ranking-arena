@@ -7,9 +7,11 @@ import PageHeader from '@/app/components/ui/PageHeader'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Metric from '@/app/components/ui/Metric'
 import ErrorState from '@/app/components/ui/ErrorState'
+import EmptyState from '@/app/components/ui/EmptyState'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import { tokens } from '@/lib/design-tokens'
 import { formatPnL } from '@/lib/utils/format'
+import { isTokenRankingNotPublishedResponse } from '@/lib/rankings/token-ranking-api-contract'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export interface PopularToken {
@@ -319,7 +321,7 @@ const TOKENS_INDEX_CSS = `
 
 interface TokensIndexClientProps {
   initialSnapshot?: PopularTokenIndexSnapshot | null
-  initialStatus?: 'success' | 'error'
+  initialStatus?: 'success' | 'unpublished' | 'error'
 }
 
 export default function TokensIndexClient({
@@ -330,8 +332,12 @@ export default function TokensIndexClient({
   const [snapshot, setSnapshot] = useState<PopularTokenIndexSnapshot | null>(
     initialStatus === 'success' ? initialSnapshot : null
   )
-  const [loadState, setLoadState] = useState<'loading' | 'success' | 'error'>(
-    initialStatus === 'success' && initialSnapshot !== null ? 'success' : 'loading'
+  const [loadState, setLoadState] = useState<'loading' | 'success' | 'unpublished' | 'error'>(
+    initialStatus === 'success' && initialSnapshot !== null
+      ? 'success'
+      : initialStatus === 'unpublished'
+        ? 'unpublished'
+        : 'loading'
   )
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('traders')
@@ -361,8 +367,17 @@ export default function TokensIndexClient({
         signal: controller.signal,
         cache: 'no-store',
       })
-      if (!response.ok) throw new Error(`popular-tokens: ${response.status}`)
-      const nextSnapshot = parsePopularTokenIndexSnapshot(await response.json())
+      const body: unknown = await response.json().catch(() => null)
+      if (!response.ok) {
+        if (isTokenRankingNotPublishedResponse(response.status, body)) {
+          if (requestRef.current !== controller || controller.signal.aborted) return
+          setSnapshot(null)
+          setLoadState('unpublished')
+          return
+        }
+        throw new Error(`popular-tokens: ${response.status}`)
+      }
+      const nextSnapshot = parsePopularTokenIndexSnapshot(body)
       if (requestRef.current !== controller || controller.signal.aborted) return
 
       // One state update replaces generation, publication metadata, total, and
@@ -384,10 +399,15 @@ export default function TokensIndexClient({
     // A successful empty SSR result is legitimate data and must not be retried
     // or relabelled as a transport failure. Only failed/timed-out SSR loads fall
     // through to the wire.
-    if (initialStatus === 'success') return
+    if (
+      initialStatus === 'unpublished' ||
+      (initialStatus === 'success' && initialSnapshot !== null)
+    ) {
+      return
+    }
     void loadPopularTokens()
     return () => requestRef.current?.abort()
-  }, [initialStatus, loadPopularTokens])
+  }, [initialSnapshot, initialStatus, loadPopularTokens])
 
   // Merge featured tokens with published tokens (dedup by symbol). Missing
   // featured tokens are discovery links, not measured zero-activity rows.
@@ -437,58 +457,77 @@ export default function TokensIndexClient({
       <style>{TOKENS_INDEX_CSS}</style>
 
       {/* Header */}
-      <PageHeader title={t('tokenRankingsTitle')} subtitle={t('tokenRankingsSubtitle')} />
+      <PageHeader
+        title={t('tokenRankingsTitle')}
+        subtitle={
+          loadState === 'unpublished' || (loadState === 'success' && snapshot?.total === 0)
+            ? undefined
+            : t('tokenRankingsSubtitle')
+        }
+      />
 
       {/* Controls: search + sort */}
-      <Box
-        style={{
-          marginBottom: 20,
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 12,
-          alignItems: 'center',
-        }}
-      >
-        <input
-          type="text"
-          className="tk-search-input"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('tokenRankingsSearchPlaceholder')}
-          aria-label={t('tokenRankingsSearchPlaceholder')}
-          aria-busy={!interactive || loadState === 'loading'}
-          disabled={!interactive}
-          style={{
-            flex: '1 1 240px',
-            maxWidth: 400,
-            padding: '10px 16px',
-            borderRadius: tokens.radius.lg,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            background: tokens.colors.bg.secondary,
-            color: tokens.colors.text.primary,
-            fontSize: tokens.typography.fontSize.base,
-            transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
-          }}
-        />
+      {loadState !== 'unpublished' && !(loadState === 'success' && snapshot?.total === 0) && (
         <Box
-          role="group"
-          aria-label={t('tokenRankingsSortLabel')}
-          style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+          style={{
+            marginBottom: 20,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 12,
+            alignItems: 'center',
+          }}
         >
-          {sortOptions.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              className="tk-sort-btn"
-              aria-pressed={sortKey === opt.key}
-              disabled={!interactive}
-              onClick={() => setSortKey(opt.key)}
-            >
-              {opt.label}
-            </button>
-          ))}
+          <input
+            type="text"
+            className="tk-search-input"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('tokenRankingsSearchPlaceholder')}
+            aria-label={t('tokenRankingsSearchPlaceholder')}
+            aria-busy={!interactive || loadState === 'loading'}
+            disabled={!interactive}
+            style={{
+              flex: '1 1 240px',
+              maxWidth: 400,
+              padding: '10px 16px',
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.secondary,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.base,
+              transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
+            }}
+          />
+          <Box
+            role="group"
+            aria-label={t('tokenRankingsSortLabel')}
+            style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+          >
+            {sortOptions.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                className="tk-sort-btn"
+                aria-pressed={sortKey === opt.key}
+                disabled={!interactive}
+                onClick={() => setSortKey(opt.key)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </Box>
         </Box>
-      </Box>
+      )}
+
+      {loadState === 'unpublished' && (
+        <Box role="status" aria-live="polite">
+          <EmptyState
+            title={t('tokenRankingUnpublishedTitle')}
+            description={t('tokenRankingUnpublishedDescription')}
+            variant="card"
+          />
+        </Box>
+      )}
 
       {loadState === 'error' && (
         <ErrorState
@@ -500,7 +539,15 @@ export default function TokensIndexClient({
       )}
 
       {/* Token Grid */}
-      {loadState === 'loading' && snapshot === null ? (
+      {loadState === 'unpublished' ? null : loadState === 'success' && snapshot?.total === 0 ? (
+        <Box role="status">
+          <EmptyState
+            title={t('tokenRankingEmptyCohortTitle')}
+            description={t('tokenRankingEmptyCohortDescription')}
+            variant="card"
+          />
+        </Box>
+      ) : loadState === 'loading' && snapshot === null ? (
         <Box
           style={{
             display: 'grid',

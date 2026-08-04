@@ -3,13 +3,13 @@ import { join } from 'node:path'
 
 const root = process.cwd()
 const prerequisite = readFileSync(
-  join(root, 'supabase/migrations/20260803195000_verified_position_history_raw_prerequisites.sql'),
+  join(root, 'supabase/migrations/20260804045000_verified_position_history_raw_prerequisites.sql'),
   'utf8'
 )
 const migration = readFileSync(
   join(
     root,
-    'supabase/migrations/20260803200000_verified_position_history_publication_authority.sql'
+    'supabase/migrations/20260804050000_verified_position_history_publication_authority.sql'
   ),
   'utf8'
 )
@@ -119,7 +119,7 @@ describe('verified position-history publication authority migration', () => {
     expect(migration).toContain("SET LOCAL statement_timeout = '2min'")
     expect(migration).toContain("SET LOCAL TIME ZONE 'UTC'")
     expect(migration).toContain("current_setting('server_version_num')::integer / 10000 <> 17")
-    expect(migration).toContain('20260803200000-verified-position-history-authority-v1')
+    expect(migration).toContain('20260804050000-verified-position-history-authority-v1')
     expect(migration).toContain("to_regprocedure('extensions.hmac(bytea,bytea,text)')")
     expect(migration).toContain("to_regprocedure('extensions.gen_random_bytes(integer)')")
     expect(migration).toMatch(
@@ -291,7 +291,7 @@ describe('verified position-history publication authority migration', () => {
     expect(migration).toContain('source_run replay conflicts with its immutable publication')
   })
 
-  it('serves the latest trader authority and fails closed on reviewed identity drift', () => {
+  it('serves only the latest verified authority and keeps legacy history quarantined', () => {
     const records = section(
       migration,
       'CREATE OR REPLACE FUNCTION public.arena_records_page',
@@ -315,7 +315,9 @@ describe('verified position-history publication authority migration', () => {
     expect(records).toContain(
       'verified position-history identity no longer matches its immutable acquisition'
     )
-    expect(records).toContain('FROM arena.position_history AS legacy')
+    expect(records).not.toContain('FROM arena.position_history AS legacy')
+    expect(records).toContain("'rows', '[]'::pg_catalog.jsonb")
+    expect(records).toContain("'nextCursor', NULL")
     expect(records).toContain("'arena.position-history-completeness@2'")
     expect(records).toContain("'state', 'unknown'")
     expect(records).toContain("'state', 'complete'")
@@ -419,6 +421,16 @@ describe('verified position-history publication authority migration', () => {
     )
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.arena_records_page(')
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.arena_source_capabilities()')
+    expect(migration).toContain(
+      'arena.publish_verified_position_history(bigint,bigint,timestamp with time zone,jsonb,text,text)'
+    )
+    expect(migration).toContain(
+      'legacy position-history publisher is retired; parser-conservation receipt required'
+    )
+    expect(migration).toContain(
+      "pg_catalog.has_table_privilege(\n       'anon', 'arena.position_history', 'SELECT'"
+    )
+    expect(migration).toContain('postflight: retired history quarantine drifted')
   })
 
   it('has a real PG17 proof for admission, differential parity, attacks, CAS, and reads', () => {

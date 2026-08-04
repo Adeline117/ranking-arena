@@ -124,7 +124,9 @@ function RecordKindPanel({
   }
   return (
     <Box>
-      {kind !== 'positions' && <HistoryCompletenessNotice completeness={records.completeness} />}
+      {kind === 'position_history' && (
+        <HistoryCompletenessNotice completeness={records.completeness} />
+      )}
       <RecordsTable
         columns={RECORD_COLUMNS[kind]}
         rows={records.rows}
@@ -132,7 +134,9 @@ function RecordKindPanel({
         isFetchingNextPage={records.isFetchingNextPage}
         onLoadMore={() => records.fetchNextPage()}
         emptyKey={
-          kind !== 'positions' && records.completeness && records.completeness.state !== 'complete'
+          kind === 'position_history' &&
+          records.completeness &&
+          records.completeness.state !== 'complete'
             ? 'historyPreviewEmptyTitle'
             : undefined
         }
