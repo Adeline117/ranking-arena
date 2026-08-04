@@ -30,12 +30,13 @@ test('retired pre-arena tools stay removed', () => {
     'scripts/generate-trader-bios.ts',
     'scripts/lib/base-importer.mjs',
     'scripts/lib/platform-config.mjs',
+    'scripts/lib/stealth-browser.mjs',
   ]
 
   assert.deepEqual(
     retiredPreArenaTools.filter((path) => existsSync(join(repoRoot, path))),
     [],
-    'retired tools targeting dropped or non-serving schemas must be rewritten, not restored'
+    'retired tools outside the supported arena pipeline must be rewritten, not restored'
   )
 
   const packageCommands = Object.values(packageJson.scripts).join('\n')
