@@ -6,11 +6,11 @@ import { strictCanonicalJson, strictCanonicalSha256 } from './strict-canonical-j
 export const COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT =
   'arena.ingest.copier-projection-tuple@1' as const
 export const COPIER_SNAPSHOT_LENGTH_PREFIXED_UTF8_CONTRACT =
-  'arena.ingest.length-prefixed-utf8.uint32be@1' as const
-export const COPIER_SNAPSHOT_CANDIDATE_MULTISET_CONTRACT =
-  'arena.ingest.copier-candidate-sha256-multiset.fixed-bytes@1' as const
-export const COPIER_SNAPSHOT_CANDIDATE_PROJECTION_MULTISET_CONTRACT =
-  'arena.ingest.copier-candidate-projection-sha256-multiset.fixed-bytes@1' as const
+  'arena.ingest.length-prefixed-utf8.nonnegative-int32be@1' as const
+export const COPIER_SNAPSHOT_SOURCE_CANDIDATE_FIXED_MULTISET_CONTRACT =
+  'arena.ingest.copier-source-candidate-sha256-multiset.domain-count-fixed-bytes@1' as const
+export const COPIER_SNAPSHOT_CANDIDATE_PROJECTION_FIXED_MULTISET_CONTRACT =
+  'arena.ingest.copier-candidate-projection-sha256-multiset.domain-count-fixed-bytes@1' as const
 
 /** `copy_duration_days` is stored as a PostgreSQL `integer`. */
 export const COPIER_SNAPSHOT_MAX_DURATION_DAYS = 2_147_483_647
@@ -356,7 +356,7 @@ export function buildCopierSnapshotProjection(
   })
 }
 
-function sortedSha256Bytes(hashes: readonly string[], label: string): Buffer {
+function sortedSha256Hex(hashes: readonly string[], label: string): string[] {
   const snapshot = strictCanonicalSnapshot(hashes, label)
   if (!Array.isArray(snapshot)) throw projectionError(`${label} must be an array`)
   const normalized = snapshot.map((hash, index) => {
@@ -364,32 +364,55 @@ function sortedSha256Bytes(hashes: readonly string[], label: string): Buffer {
     return hash
   })
   normalized.sort()
-  return Buffer.concat(normalized.map((hash) => Buffer.from(hash, 'hex')))
+  return normalized
+}
+
+function encodeMultisetDomainAndCount(contract: string, count: number): Buffer {
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw projectionError('multiset count must be a nonnegative safe integer')
+  }
+  const countBytes = Buffer.allocUnsafe(8)
+  countBytes.writeBigInt64BE(BigInt(count))
+  return Buffer.concat([encodeCopierSnapshotNullableUtf8(contract), countBytes])
 }
 
 /**
- * Sort lowercase digest text by raw byte order, retain duplicate occurrences,
- * concatenate each decoded 32-byte digest, then SHA-256 the exact bytes. Empty
- * input hashes the empty byte string.
+ * Domain-separate this digest from the candidate ledger's canonical-JSON
+ * multiset. Encode the fixed contract and signed-int64-compatible count first,
+ * then sort decoded 32-byte hashes by raw byte order and retain duplicates.
  */
-export function encodeCopierSnapshotCandidateMultiset(hashes: readonly string[]): Buffer {
-  return sortedSha256Bytes(hashes, 'candidate multiset')
+export function encodeCopierSnapshotSourceCandidateFixedMultiset(
+  hashes: readonly string[]
+): Buffer {
+  const sorted = sortedSha256Hex(hashes, 'source candidate fixed multiset')
+  return Buffer.concat([
+    encodeMultisetDomainAndCount(
+      COPIER_SNAPSHOT_SOURCE_CANDIDATE_FIXED_MULTISET_CONTRACT,
+      sorted.length
+    ),
+    ...sorted.map((hash) => Buffer.from(hash, 'hex')),
+  ])
 }
 
-export function copierSnapshotCandidateMultisetSha256(hashes: readonly string[]): string {
-  return createHash('sha256').update(encodeCopierSnapshotCandidateMultiset(hashes)).digest('hex')
+export function copierSnapshotSourceCandidateFixedMultisetSha256(
+  hashes: readonly string[]
+): string {
+  return createHash('sha256')
+    .update(encodeCopierSnapshotSourceCandidateFixedMultiset(hashes))
+    .digest('hex')
 }
 
 /**
- * Sort by the raw 64-byte `candidate || projection` pair, retain duplicates,
- * concatenate, then SHA-256. No JSON or PostgreSQL jsonb rendering participates.
+ * Encode a distinct domain and occurrence count, then sort by the raw 64-byte
+ * `candidate || projection` pair and retain duplicates. No JSON or PostgreSQL
+ * jsonb rendering participates.
  */
-export function encodeCopierSnapshotCandidateProjectionMultiset(
+export function encodeCopierSnapshotCandidateProjectionFixedMultiset(
   pairs: readonly CopierSnapshotCandidateProjectionPair[]
 ): Buffer {
-  const snapshot = strictCanonicalSnapshot(pairs, 'candidate-projection multiset')
+  const snapshot = strictCanonicalSnapshot(pairs, 'candidate-projection fixed multiset')
   if (!Array.isArray(snapshot)) {
-    throw projectionError('candidate-projection multiset must be an array')
+    throw projectionError('candidate-projection fixed multiset must be an array')
   }
   const pairHex = snapshot.map((pair, index) => {
     if (!isPlainRecord(pair)) {
@@ -401,13 +424,19 @@ export function encodeCopierSnapshotCandidateProjectionMultiset(
     return `${pair.source_candidate_sha256}${pair.projection_sha256}`
   })
   pairHex.sort()
-  return Buffer.concat(pairHex.map((pair) => Buffer.from(pair, 'hex')))
+  return Buffer.concat([
+    encodeMultisetDomainAndCount(
+      COPIER_SNAPSHOT_CANDIDATE_PROJECTION_FIXED_MULTISET_CONTRACT,
+      pairHex.length
+    ),
+    ...pairHex.map((pair) => Buffer.from(pair, 'hex')),
+  ])
 }
 
-export function copierSnapshotCandidateProjectionMultisetSha256(
+export function copierSnapshotCandidateProjectionFixedMultisetSha256(
   pairs: readonly CopierSnapshotCandidateProjectionPair[]
 ): string {
   return createHash('sha256')
-    .update(encodeCopierSnapshotCandidateProjectionMultiset(pairs))
+    .update(encodeCopierSnapshotCandidateProjectionFixedMultiset(pairs))
     .digest('hex')
 }
