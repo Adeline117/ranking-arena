@@ -3,9 +3,11 @@
 /**
  * Long-term database backup to Cloudflare R2
  *
- * Dumps an explicit complete schema set or the full database → gzip → upload to R2
- * Run daily via Mac Mini cron: npm run backup:r2
- * Run manually with full DB: npm run backup:r2:full
+ * Dumps an explicit application schema set or the full database → gzip → upload to R2
+ * Run the application-data capture: BACKUP_SCHEMAS=arena,public npm run backup:r2
+ * Run a full-database capture: npm run backup:r2:full
+ * Neither mode is a proven managed-auth disaster-recovery path until its
+ * matching restore drill has passed on an isolated managed scratch project.
  *
  * Requires: DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */
