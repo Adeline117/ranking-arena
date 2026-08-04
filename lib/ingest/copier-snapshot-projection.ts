@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import type { ParsedCopierRow } from './core/types'
+import { strictCanonicalJson, strictCanonicalSha256 } from './strict-canonical-json'
 
 export const COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT =
   'arena.ingest.copier-projection-tuple@1' as const
@@ -55,10 +56,16 @@ export interface CopierSnapshotCandidateProjectionPair {
   readonly projection_sha256: string
 }
 
-type CopierProjectionRow = Pick<
-  ParsedCopierRow,
-  'kind' | 'copierLabel' | 'copierPnl' | 'copierInvested' | 'copyDurationDays' | 'dedupeHash'
->
+const PARSED_COPIER_ROW_FIELDS = Object.freeze([
+  'kind',
+  'ts',
+  'copierLabel',
+  'copierPnl',
+  'copierInvested',
+  'copyDurationDays',
+  'dedupeHash',
+  'raw',
+] as const)
 
 function projectionError(detail: string): Error {
   return new Error(`[ingest] copier snapshot projection failed: ${detail}`)
@@ -76,6 +83,29 @@ function assertExactKeys(value: Record<string, unknown>, expected: readonly stri
   if (actual.length !== required.length || actual.some((key, index) => key !== required[index])) {
     throw projectionError('projection tuple must have the exact contract fields')
   }
+}
+
+/** Detach getters/proxies and reject every value strict canonical JSON cannot preserve exactly. */
+function strictCanonicalSnapshot(value: unknown, label: string): unknown {
+  try {
+    const snapshot: unknown = JSON.parse(strictCanonicalJson(value))
+    return snapshot
+  } catch (cause) {
+    throw projectionError(
+      `${label} is not strict canonical JSON: ${cause instanceof Error ? cause.message : String(cause)}`
+    )
+  }
+}
+
+function strictCanonicalRecordSnapshot(
+  value: unknown,
+  expectedKeys: readonly string[],
+  label: string
+): Record<string, unknown> {
+  const snapshot = strictCanonicalSnapshot(value, label)
+  if (!isPlainRecord(snapshot)) throw projectionError(`${label} must be an object`)
+  assertExactKeys(snapshot, expectedKeys)
+  return snapshot
 }
 
 function assertUnicodeScalarText(value: string, label: string): void {
@@ -194,42 +224,45 @@ function freezeTuple(
 export function revalidateCopierSnapshotProjectionTuple(
   value: unknown
 ): CanonicalCopierSnapshotProjectionTuple {
-  if (!isPlainRecord(value)) throw projectionError('projection tuple must be an object')
-  assertExactKeys(value, COPIER_SNAPSHOT_PROJECTION_TUPLE_FIELDS)
-  if (value.contract !== COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT) {
+  const snapshot = strictCanonicalRecordSnapshot(
+    value,
+    COPIER_SNAPSHOT_PROJECTION_TUPLE_FIELDS,
+    'projection tuple'
+  )
+  if (snapshot.contract !== COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT) {
     throw projectionError('projection tuple contract is invalid')
   }
-  assertSha256(value.source_candidate_sha256, 'source candidate SHA-256')
-  if (value.source_event_at !== null) {
+  assertSha256(snapshot.source_candidate_sha256, 'source candidate SHA-256')
+  if (snapshot.source_event_at !== null) {
     throw projectionError('source_event_at must be null in projection V1')
   }
 
-  if (value.copier_label !== null) {
-    assertCanonicalProjectionText(value.copier_label, 'copier_label')
+  if (snapshot.copier_label !== null) {
+    assertCanonicalProjectionText(snapshot.copier_label, 'copier_label')
   }
-  if (value.copier_pnl !== null) {
-    assertCanonicalDecimalText(value.copier_pnl, 'copier_pnl')
+  if (snapshot.copier_pnl !== null) {
+    assertCanonicalDecimalText(snapshot.copier_pnl, 'copier_pnl')
   }
-  if (value.copier_invested !== null) {
-    assertCanonicalDecimalText(value.copier_invested, 'copier_invested')
-    if (Number(value.copier_invested) < 0) {
+  if (snapshot.copier_invested !== null) {
+    assertCanonicalDecimalText(snapshot.copier_invested, 'copier_invested')
+    if (Number(snapshot.copier_invested) < 0) {
       throw projectionError('copier_invested must be nonnegative')
     }
   }
-  if (value.copy_duration_days !== null) {
-    assertCanonicalDurationText(value.copy_duration_days, 'copy_duration_days')
+  if (snapshot.copy_duration_days !== null) {
+    assertCanonicalDurationText(snapshot.copy_duration_days, 'copy_duration_days')
   }
-  assertCanonicalProjectionText(value.dedupe_hash, 'dedupe_hash')
+  assertCanonicalProjectionText(snapshot.dedupe_hash, 'dedupe_hash')
 
   return freezeTuple({
     contract: COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT,
-    source_candidate_sha256: value.source_candidate_sha256,
+    source_candidate_sha256: snapshot.source_candidate_sha256,
     source_event_at: null,
-    copier_label: value.copier_label as string | null,
-    copier_pnl: value.copier_pnl as string | null,
-    copier_invested: value.copier_invested as string | null,
-    copy_duration_days: value.copy_duration_days as string | null,
-    dedupe_hash: value.dedupe_hash,
+    copier_label: snapshot.copier_label as string | null,
+    copier_pnl: snapshot.copier_pnl as string | null,
+    copier_invested: snapshot.copier_invested as string | null,
+    copy_duration_days: snapshot.copy_duration_days as string | null,
+    dedupe_hash: snapshot.dedupe_hash,
   })
 }
 
@@ -273,43 +306,47 @@ export function copierSnapshotProjectionSha256(value: unknown): string {
   return createHash('sha256').update(encodeCopierSnapshotProjectionTuple(value)).digest('hex')
 }
 
-/** Build the exact V1 projection of one ParsedCopierRow and bind its RAW candidate SHA. */
-export function buildCopierSnapshotProjection(input: {
-  sourceCandidateSha256: string
-  row: CopierProjectionRow
-}): CopierSnapshotProjectionDigest {
-  assertSha256(input.sourceCandidateSha256, 'source candidate SHA-256')
-  if (!isPlainRecord(input.row) || input.row.kind !== 'copiers') {
+/** Build the exact V1 projection and derive its source identity from `row.raw`. */
+export function buildCopierSnapshotProjection(
+  input: ParsedCopierRow
+): CopierSnapshotProjectionDigest {
+  const row = strictCanonicalRecordSnapshot(input, PARSED_COPIER_ROW_FIELDS, 'parsed copier row')
+  if (row.kind !== 'copiers') {
     throw projectionError('parsed row kind must be copiers')
   }
-  if (input.row.copierPnl !== null && typeof input.row.copierPnl !== 'number') {
+  if (typeof row.ts !== 'string') {
+    throw projectionError('parsed row timestamp must be text')
+  }
+  if (!isPlainRecord(row.raw)) {
+    throw projectionError('parsed row RAW candidate must be an object')
+  }
+  if (row.copierPnl !== null && typeof row.copierPnl !== 'number') {
     throw projectionError('copier_pnl must be a number or null')
   }
-  if (input.row.copierInvested !== null && typeof input.row.copierInvested !== 'number') {
+  if (row.copierInvested !== null && typeof row.copierInvested !== 'number') {
     throw projectionError('copier_invested must be a number or null')
   }
-  if (input.row.copyDurationDays !== null && typeof input.row.copyDurationDays !== 'number') {
+  if (row.copyDurationDays !== null && typeof row.copyDurationDays !== 'number') {
     throw projectionError('copy_duration_days must be a number or null')
   }
 
+  const sourceCandidateSha256 = strictCanonicalSha256(row.raw)
   const tuple = revalidateCopierSnapshotProjectionTuple({
     contract: COPIER_SNAPSHOT_PROJECTION_TUPLE_CONTRACT,
-    source_candidate_sha256: input.sourceCandidateSha256,
+    source_candidate_sha256: sourceCandidateSha256,
     source_event_at: null,
-    copier_label: input.row.copierLabel,
+    copier_label: row.copierLabel,
     copier_pnl:
-      input.row.copierPnl === null
-        ? null
-        : canonicalCopierSnapshotDecimal(input.row.copierPnl, 'copier_pnl'),
+      row.copierPnl === null ? null : canonicalCopierSnapshotDecimal(row.copierPnl, 'copier_pnl'),
     copier_invested:
-      input.row.copierInvested === null
+      row.copierInvested === null
         ? null
-        : canonicalCopierSnapshotDecimal(input.row.copierInvested, 'copier_invested'),
+        : canonicalCopierSnapshotDecimal(row.copierInvested, 'copier_invested'),
     copy_duration_days:
-      input.row.copyDurationDays === null
+      row.copyDurationDays === null
         ? null
-        : canonicalDurationDays(input.row.copyDurationDays, 'copy_duration_days'),
-    dedupe_hash: input.row.dedupeHash,
+        : canonicalDurationDays(row.copyDurationDays, 'copy_duration_days'),
+    dedupe_hash: row.dedupeHash,
   })
   const tupleBytes = encodeCopierSnapshotProjectionTuple(tuple)
   return Object.freeze({
@@ -320,8 +357,9 @@ export function buildCopierSnapshotProjection(input: {
 }
 
 function sortedSha256Bytes(hashes: readonly string[], label: string): Buffer {
-  if (!Array.isArray(hashes)) throw projectionError(`${label} must be an array`)
-  const normalized = hashes.map((hash, index) => {
+  const snapshot = strictCanonicalSnapshot(hashes, label)
+  if (!Array.isArray(snapshot)) throw projectionError(`${label} must be an array`)
+  const normalized = snapshot.map((hash, index) => {
     assertSha256(hash, `${label} member ${index}`)
     return hash
   })
@@ -349,8 +387,11 @@ export function copierSnapshotCandidateMultisetSha256(hashes: readonly string[])
 export function encodeCopierSnapshotCandidateProjectionMultiset(
   pairs: readonly CopierSnapshotCandidateProjectionPair[]
 ): Buffer {
-  if (!Array.isArray(pairs)) throw projectionError('candidate-projection multiset must be an array')
-  const pairHex = pairs.map((pair, index) => {
+  const snapshot = strictCanonicalSnapshot(pairs, 'candidate-projection multiset')
+  if (!Array.isArray(snapshot)) {
+    throw projectionError('candidate-projection multiset must be an array')
+  }
+  const pairHex = snapshot.map((pair, index) => {
     if (!isPlainRecord(pair)) {
       throw projectionError(`candidate-projection pair ${index} must be an object`)
     }
