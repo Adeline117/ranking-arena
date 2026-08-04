@@ -56,7 +56,7 @@ function combinedHistoryCompleteness(
   kind: Exclude<RecordKind, 'copiers'>,
   pages: RecordsPage[]
 ): HistoryCompleteness | null {
-  if (kind !== 'position_history' || pages.length === 0) return null
+  if (kind === 'positions' || pages.length === 0) return null
   const states = pages.map(
     (page) =>
       page.completeness ??
@@ -166,7 +166,14 @@ export function useCopierAggregate(opts: {
 
   const data = query.data
   const aggregate: CopierAggregate | null =
-    data && 'copierCount' in data ? (data as CopierAggregate) : null
+    data && 'copierCount' in data
+      ? {
+          ...data,
+          // Old cached responses predate the completeness field. They must
+          // fail closed instead of silently presenting an aggregate as whole.
+          completeness: data.completeness ?? UNBOUND_HISTORY,
+        }
+      : null
 
   return {
     aggregate,

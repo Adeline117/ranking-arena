@@ -103,10 +103,10 @@ export type TraderCoreResponse =
 export type RecordKind = 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
 
 /**
- * Trust state for closed-position history. `complete` is deliberately narrow:
- * callers may only emit it after binding terminal acquisition evidence to the
- * served page. Preview/on-demand reads stay `partial`; legacy warm reads whose
- * evidence is not yet joined stay `unknown`.
+ * Trust state for append-only record history. `complete` is deliberately
+ * narrow: callers may only emit it after binding terminal acquisition evidence
+ * to the served page or aggregate. Preview/on-demand reads stay `partial`;
+ * legacy warm reads whose evidence is not yet joined stay `unknown`.
  */
 export type HistoryCompletenessState = 'complete' | 'partial' | 'unknown'
 
@@ -147,7 +147,7 @@ export interface RecordsPage<T = Record<string, unknown>> {
   nextCursor: string | null
   provenance: RecordProvenance
   cacheState: CoreCacheState
-  /** Present for position_history. Omitted for non-history record surfaces. */
+  /** Present for position_history/orders/transfers; omitted for current positions. */
   completeness?: HistoryCompleteness
 }
 
@@ -159,6 +159,8 @@ export interface CopierAggregate {
   pnlDistribution: Array<{ bucket: string; count: number }>
   depth: 'full' | 'top10' | 'top3_preview' | 'none'
   provenance: RecordProvenance
+  /** Collection/history evidence, distinct from the source's advertised depth. */
+  completeness?: HistoryCompleteness
 }
 
 /** Capability matrix — data, not code (spec §6): derived from the sources

@@ -93,16 +93,22 @@ function provenance(observedAt: string | null = null) {
   }
 }
 
-function request(cursor?: string): NextRequest {
+function request(
+  kind: 'positions' | 'position_history' | 'orders' | 'transfers' = 'position_history',
+  cursor?: string
+): NextRequest {
   const url = new URL(
-    'https://arena.example/api/traders/Trader%20One/records?kind=position_history&source=bitget_futures&tf=30'
+    `https://arena.example/api/traders/Trader%20One/records?kind=${kind}&source=bitget_futures&tf=30`
   )
   if (cursor) url.searchParams.set('cursor', cursor)
   return { nextUrl: url } as NextRequest
 }
 
-async function callRoute(cursor?: string) {
-  return GET(request(cursor), { params: Promise.resolve({ handle: 'Trader%20One' }) })
+async function callRoute(
+  kind: 'positions' | 'position_history' | 'orders' | 'transfers' = 'position_history',
+  cursor?: string
+) {
+  return GET(request(kind, cursor), { params: Promise.resolve({ handle: 'Trader%20One' }) })
 }
 
 describe('records route provenance and completeness', () => {
@@ -141,6 +147,27 @@ describe('records route provenance and completeness', () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     expect(mockRequestTierC).toHaveBeenCalled()
   })
+
+  it.each(['orders', 'transfers'] as const)(
+    'serves warm %s with explicit unknown completeness',
+    async (kind) => {
+      const page: RecordsPage = {
+        rows: [{ id: `${kind}-1` }],
+        nextCursor: `${kind}-next`,
+        provenance: provenance('2026-08-03T11:00:00.000Z'),
+        cacheState: 'warm',
+        completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+      }
+      mockGetRecordsPage.mockResolvedValue(page)
+
+      const response = await callRoute(kind)
+      const body = await response.json()
+
+      expect(body.data).toEqual(page)
+      expect(response.headers.get('Cache-Control')).toContain('s-maxage=30')
+      expect(mockRequestTierC).not.toHaveBeenCalled()
+    }
+  )
 
   it('returns the Tier-C preview with no-store and exact routing coordinates', async () => {
     const workerPayload = { rows: [{ symbol: 'ETHUSDT' }] }
@@ -224,21 +251,24 @@ describe('records route provenance and completeness', () => {
     expect(body.data.provenance).not.toHaveProperty('asOf')
   })
 
-  it('does not replay the first Tier-C preview for a stale history cursor', async () => {
-    const page: RecordsPage = {
-      rows: [],
-      nextCursor: null,
-      provenance: provenance('2026-08-03T11:00:00.000Z'),
-      cacheState: 'warm',
-      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+  it.each(['position_history', 'orders', 'transfers'] as const)(
+    'does not replay the first Tier-C %s preview for a stale cursor',
+    async (kind) => {
+      const page: RecordsPage = {
+        rows: [],
+        nextCursor: null,
+        provenance: provenance(),
+        cacheState: 'warm',
+        completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+      }
+      mockGetRecordsPage.mockResolvedValue(kind === 'position_history' ? page : null)
+
+      const response = await callRoute(kind, 'legacy-history-cursor')
+      const body = await response.json()
+
+      expect(body.data).toEqual({ ...page, cacheState: 'pending' })
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+      expect(mockRequestTierC).not.toHaveBeenCalled()
     }
-    mockGetRecordsPage.mockResolvedValue(page)
-
-    const response = await callRoute('legacy-history-cursor')
-    const body = await response.json()
-
-    expect(body.data).toEqual({ ...page, cacheState: 'pending' })
-    expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(mockRequestTierC).not.toHaveBeenCalled()
-  })
+  )
 })

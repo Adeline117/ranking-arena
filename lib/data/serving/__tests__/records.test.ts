@@ -87,6 +87,7 @@ describe('copier PII rule (spec §6)', () => {
       copierCountMax: null,
       totalCopierPnl: null,
       pnlDistribution: [{ bucket: 'valid', count: 2 }],
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
   })
 
@@ -122,6 +123,7 @@ describe('copier PII rule (spec §6)', () => {
         observedAt: null,
         publishedAt: null,
       },
+      completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
     })
     // The serialized aggregate must contain no copier identifiers anywhere.
     expect(JSON.stringify(aggregate)).not.toMatch(/copier_label|copierLabel|email/)
@@ -171,7 +173,7 @@ describe('getRecordsPage', () => {
     })
   })
 
-  it('preserves rows and pagination without attaching history completeness to non-history kinds', async () => {
+  it('preserves warm order rows but marks their unbound history unknown', async () => {
     const page = await getRecordsPage(
       rpcClient({
         rows: [{ order_id: 'order-1' }],
@@ -185,7 +187,10 @@ describe('getRecordsPage', () => {
     )
     expect(page!.rows).toEqual([{ order_id: 'order-1' }])
     expect(page!.nextCursor).toBe('orders-next')
-    expect(page!.completeness).toBeUndefined()
+    expect(page!.completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
   })
 
   it('keeps source, observation, and publication clocks distinct', async () => {
@@ -208,6 +213,7 @@ describe('getRecordsPage', () => {
       observedAt: '2026-06-10T12:00:00Z',
       publishedAt: '2026-06-10T12:01:00Z',
     })
+    expect(page!.completeness).toBeUndefined()
   })
 
   it('does not synthesize current time for missing or invalid provenance', async () => {
@@ -300,7 +306,7 @@ describe('recordsPageFromTierC', () => {
     })
   })
 
-  it('keeps old or contradictory Tier-C position-history payloads partial', () => {
+  it('keeps legacy, contradictory, or inapplicable complete Tier-C history partial', () => {
     const oldPage = recordsPageFromTierC('bitget_futures', 'position_history', { rows: [] })
     const forgedComplete = recordsPageFromTierC('bitget_futures', 'position_history', {
       rows: [],
@@ -309,6 +315,16 @@ describe('recordsPageFromTierC', () => {
         reason: 'interactive_preview',
         evidenceState: 'verified',
         scanTerminalState: 'exhausted',
+      },
+    })
+    const validButInapplicableComplete = recordsPageFromTierC('bitget_futures', 'orders', {
+      rows: [],
+      completeness: {
+        state: 'complete',
+        reason: 'verified_terminal_history',
+        evidenceState: 'verified',
+        scanTerminalState: 'exhausted',
+        blockerReasons: [],
       },
     })
 
@@ -320,19 +336,40 @@ describe('recordsPageFromTierC', () => {
       state: 'partial',
       reason: 'interactive_preview',
     })
+    expect(validButInapplicableComplete!.completeness).toEqual({
+      state: 'partial',
+      reason: 'interactive_preview',
+    })
   })
 
-  it('leaves non-history Tier-C pagination and completeness unchanged', () => {
-    const page = recordsPageFromTierC('bitget_futures', 'orders', {
-      rows: [],
-      nextCursor: 'orders-next',
-      completeness: {
+  it.each(['orders', 'transfers'] as const)(
+    'maps Tier-C %s as a non-pageable partial preview',
+    (kind) => {
+      const page = recordsPageFromTierC('bitget_futures', kind, {
+        rows: [],
+        nextCursor: 'orders-next',
+        completeness: {
+          state: 'partial',
+          reason: 'interactive_preview',
+        },
+      })
+
+      expect(page!.nextCursor).toBeNull()
+      expect(page!.completeness).toEqual({
         state: 'partial',
         reason: 'interactive_preview',
-      },
+      })
+    }
+  )
+
+  it('keeps current positions pageable without attaching history completeness', () => {
+    const page = recordsPageFromTierC('bitget_futures', 'positions', {
+      rows: [],
+      nextCursor: 'positions-next',
+      completeness: { state: 'partial', reason: 'interactive_preview' },
     })
 
-    expect(page!.nextCursor).toBe('orders-next')
+    expect(page!.nextCursor).toBe('positions-next')
     expect(page!.completeness).toBeUndefined()
   })
 
