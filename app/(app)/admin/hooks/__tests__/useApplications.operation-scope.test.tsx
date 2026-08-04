@@ -664,7 +664,10 @@ describe('useApplications operation/viewer scope', () => {
 
     await act(async () => {
       reviewResponse.resolve(editReviewAck(1, 'approve'))
-      await expect(Promise.all([first, second])).resolves.toEqual([true, false])
+      const outcomes = await Promise.all([first, second])
+      // Both calls race through an async intent digest before single-flight;
+      // either caller may own the physical request, but exactly one must win.
+      expect(outcomes).toEqual(expect.arrayContaining([true, false]))
     })
 
     expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
