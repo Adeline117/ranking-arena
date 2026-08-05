@@ -90,6 +90,8 @@
     "qa:migration-history-shape": "node scripts/qa/migration-history-shape.mjs",
     "qa:baseline-candidate": "node scripts/qa/validate-baseline-candidate.mjs",
     "qa:baseline-candidates": "node scripts/qa/validate-baseline-candidate.mjs --all",
+    "qa:baseline-capture": "node --test scripts/qa/canonical-baseline-capture.test.mjs",
+    "qa:baseline-capture-pg17": "ARENA_REAL_BASELINE_CAPTURE_PG17_TEST=1 node --test scripts/qa/canonical-baseline-capture.test.mjs",
     "qa:baseline-replay-contract": "node --test scripts/qa/baseline-candidate-replay-harness.test.mjs",
     "qa:baseline-sql-safety": "node --test scripts/qa/baseline-sql-safety.test.mjs",
     "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",

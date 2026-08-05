@@ -26,6 +26,19 @@ function writeJson(filePath, value) {
   writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`)
 }
 
+function tableCatalogRow(name) {
+  return {
+    forceRowSecurity: false,
+    kind: 'r',
+    name,
+    owner: 'postgres',
+    partitionBound: null,
+    persistence: 'p',
+    rowSecurity: false,
+    schema: 'public',
+  }
+}
+
 function makeFixture() {
   const tempRoot = mkdtempSync(path.join(tmpdir(), 'arena-baseline-validator-'))
   const repoRoot = path.join(tempRoot, 'repo')
@@ -99,7 +112,7 @@ function makeFixture() {
     policies: [],
     publications: [],
     schemas: [],
-    tables: [{ name: 'widgets', schema: 'public' }],
+    tables: [tableCatalogRow('widgets')],
     triggers: [],
     types: [],
     views: [],
@@ -533,14 +546,26 @@ test('rejects extra candidate artifacts and non-canonical source catalogue array
     try {
       const sourcePath = path.join(fixture.candidateDir, 'source-catalog.json')
       const source = JSON.parse(readFileSync(sourcePath, 'utf8'))
-      source.catalog.tables = [
-        { name: 'z', schema: 'public' },
-        { name: 'a', schema: 'public' },
-      ]
+      source.catalog.tables = [tableCatalogRow('z'), tableCatalogRow('a')]
       writeJson(sourcePath, source)
       fixture.catalog = source.catalog
       refreshManifest(fixture)
       assert.throws(() => validate(fixture), /canonically sorted and contain no duplicates/)
+    } finally {
+      cleanup(fixture)
+    }
+  })
+
+  await t.test('catalog row contract', () => {
+    const fixture = makeFixture()
+    try {
+      const sourcePath = path.join(fixture.candidateDir, 'source-catalog.json')
+      const source = JSON.parse(readFileSync(sourcePath, 'utf8'))
+      delete source.catalog.tables[0].owner
+      writeJson(sourcePath, source)
+      fixture.catalog = source.catalog
+      refreshManifest(fixture)
+      assert.throws(() => validate(fixture), /catalog tables\[0\] must contain exactly/u)
     } finally {
       cleanup(fixture)
     }
