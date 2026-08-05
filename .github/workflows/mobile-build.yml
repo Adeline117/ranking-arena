@@ -16,6 +16,9 @@ on:
           - ios
           - both
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '22'
 
@@ -27,6 +30,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -52,10 +57,16 @@ jobs:
           NEXT_PUBLIC_APP_URL: https://www.arenafi.org
 
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: ./node_modules/.bin/cap sync android
 
       - name: Create google-services.json
-        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          umask 077
+          GOOGLE_SERVICES_FILE="$RUNNER_TEMP/android-google-services.json"
+          printf '%s' "$GOOGLE_SERVICES_JSON" > "$GOOGLE_SERVICES_FILE"
+          install -m 600 "$GOOGLE_SERVICES_FILE" android/app/google-services.json
 
       - name: Build Android APK (Debug)
         if: github.event_name == 'workflow_dispatch'
@@ -65,14 +76,18 @@ jobs:
 
       - name: Build Android AAB (Release)
         if: github.event_name == 'push'
-        run: |
-          cd android
-          echo '${{ secrets.ANDROID_KEYSTORE_BASE64 }}' | base64 -d > release.keystore
-          ./gradlew bundleRelease
         env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          umask 077
+          KEYSTORE_FILE="$RUNNER_TEMP/android-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | openssl base64 -d -A > "$KEYSTORE_FILE"
+          install -m 600 "$KEYSTORE_FILE" android/release.keystore
+          cd android
+          ./gradlew bundleRelease
 
       - name: Upload APK artifact
         if: github.event_name == 'workflow_dispatch'
@@ -80,6 +95,8 @@ jobs:
         with:
           name: android-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Upload AAB artifact
         if: github.event_name == 'push'
@@ -87,6 +104,8 @@ jobs:
         with:
           name: android-release-aab
           path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload to Firebase App Distribution
         if: github.event_name == 'workflow_dispatch'
@@ -97,6 +116,15 @@ jobs:
           groups: testers
           file: android/app/build/outputs/apk/debug/app-debug.apk
 
+      - name: Clean Android credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/android-google-services.json"
+          rm -f "$RUNNER_TEMP/android-release.keystore"
+          rm -f android/app/google-services.json
+          rm -f android/release.keystore
+          rm -f service_credentials_content.json
+
   # Build iOS (requires macOS runner)
   build-ios:
     if: github.event.inputs.platform == 'ios' || github.event.inputs.platform == 'both' || github.event_name == 'push'
@@ -104,6 +132,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -125,7 +155,7 @@ jobs:
           NEXT_PUBLIC_APP_URL: https://www.arenafi.org
 
       - name: Sync Capacitor
-        run: npx cap sync ios
+        run: ./node_modules/.bin/cap sync ios
 
       - name: Install CocoaPods
         run: |
@@ -133,7 +163,13 @@ jobs:
           pod install
 
       - name: Create GoogleService-Info.plist
-        run: echo '${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}' | base64 -d > ios/App/App/GoogleService-Info.plist
+        env:
+          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          umask 077
+          GOOGLE_SERVICE_INFO_FILE="$RUNNER_TEMP/ios-google-service-info.plist"
+          printf '%s' "$GOOGLE_SERVICE_INFO_PLIST" | openssl base64 -d -A > "$GOOGLE_SERVICE_INFO_FILE"
+          install -m 600 "$GOOGLE_SERVICE_INFO_FILE" ios/App/App/GoogleService-Info.plist
 
       - name: Build iOS (Debug)
         if: github.event_name == 'workflow_dispatch'
@@ -155,9 +191,15 @@ jobs:
 
       - name: Install Provisioning Profile
         if: github.event_name == 'push'
+        env:
+          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
         run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo '${{ secrets.APPLE_PROVISIONING_PROFILE }}' | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          umask 077
+          PROFILE_DIRECTORY="$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_FILE="$RUNNER_TEMP/ios-profile.mobileprovision"
+          mkdir -p "$PROFILE_DIRECTORY"
+          printf '%s' "$APPLE_PROVISIONING_PROFILE" | openssl base64 -d -A > "$PROFILE_FILE"
+          install -m 600 "$PROFILE_FILE" "$PROFILE_DIRECTORY/profile.mobileprovision"
 
       - name: Build iOS (Release)
         if: github.event_name == 'push'
@@ -184,6 +226,8 @@ jobs:
         with:
           name: ios-release-ipa
           path: ios/App/build/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload to TestFlight
         if: github.event_name == 'push'
@@ -194,11 +238,21 @@ jobs:
           api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
           api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
 
+      - name: Clean iOS credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/ios-google-service-info.plist"
+          rm -f "$RUNNER_TEMP/ios-profile.mobileprovision"
+          rm -f ios/App/App/GoogleService-Info.plist
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
+
   # Create GitHub Release
   create-release:
     needs: [build-android, build-ios]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download Android AAB
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
