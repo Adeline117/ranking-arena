@@ -1,6 +1,6 @@
 // t() mock：返回 key 本身，便于断言选了哪条消息
 jest.mock('@/lib/i18n', () => ({ t: (k: string) => k }))
-jest.mock('@/lib/logger', () => ({ logger: { error: jest.fn() } }))
+jest.mock('@/lib/utils/logger', () => ({ logger: { error: jest.fn() } }))
 
 import { parseError, getErrorMessage, isRetryableError } from '../error-handling'
 

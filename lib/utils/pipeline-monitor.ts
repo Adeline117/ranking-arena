@@ -5,7 +5,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { logger } from '@/lib/logger'
+import { logger } from './logger'
 
 // ============================================
 // Types
@@ -22,13 +22,13 @@ export interface PipelineMetric {
 
 export interface SourceHealth {
   source: string
-  successRate: number        // 0-100
-  errorRate: number          // 0-100
+  successRate: number // 0-100
+  errorRate: number // 0-100
   lastFetchAt: string | null
-  avgDuration: number        // ms
+  avgDuration: number // ms
   totalRecords: number
   recentErrors: Array<{ created_at: string; metadata: Record<string, unknown> }>
-  healthScore: number        // 0-100
+  healthScore: number // 0-100
   status: 'healthy' | 'degraded' | 'down'
 }
 
@@ -44,10 +44,7 @@ export interface PipelineOverview {
 // Record Metrics
 // ============================================
 
-async function recordMetric(
-  supabase: SupabaseClient,
-  metric: PipelineMetric
-): Promise<void> {
+async function recordMetric(supabase: SupabaseClient, metric: PipelineMetric): Promise<void> {
   const { error } = await supabase.from('pipeline_metrics').insert({
     source: metric.source,
     metric_type: metric.metric_type,
@@ -166,24 +163,25 @@ export async function getSourceHealth(
 
   const rows = metrics || []
 
-  const successes = rows.filter(r => r.metric_type === 'fetch_success')
-  const errors = rows.filter(r => r.metric_type === 'fetch_error')
-  const durations = rows.filter(r => r.metric_type === 'fetch_duration')
-  const records = rows.filter(r => r.metric_type === 'record_count')
+  const successes = rows.filter((r) => r.metric_type === 'fetch_success')
+  const errors = rows.filter((r) => r.metric_type === 'fetch_error')
+  const durations = rows.filter((r) => r.metric_type === 'fetch_duration')
+  const records = rows.filter((r) => r.metric_type === 'record_count')
 
   const totalFetches = successes.length + errors.length
   const successRate = totalFetches > 0 ? (successes.length / totalFetches) * 100 : 0
   const errorRate = totalFetches > 0 ? (errors.length / totalFetches) * 100 : 0
 
-  const avgDuration = durations.length > 0
-    ? durations.reduce((sum, d) => sum + Number(d.value), 0) / durations.length
-    : 0
+  const avgDuration =
+    durations.length > 0
+      ? durations.reduce((sum, d) => sum + Number(d.value), 0) / durations.length
+      : 0
 
   const totalRecords = records.reduce((sum, r) => sum + Number(r.value), 0)
 
   const lastFetchAt = rows.length > 0 ? rows[0].created_at : null
 
-  const recentErrors = errors.slice(0, 10).map(e => ({
+  const recentErrors = errors.slice(0, 10).map((e) => ({
     created_at: e.created_at,
     metadata: ((e as Record<string, unknown>).metadata ?? {}) as Record<string, unknown>,
   }))
@@ -237,26 +235,29 @@ export async function getPipelineOverview(
     .select('source')
     .gte('created_at', since)
 
-  const uniqueSources = [...new Set((sourcesData || []).map(r => r.source))]
+  const uniqueSources = [...new Set((sourcesData || []).map((r) => r.source))]
 
   const sources = await Promise.all(
-    uniqueSources.map(source => getSourceHealth(supabase, source, windowHours))
+    uniqueSources.map((source) => getSourceHealth(supabase, source, windowHours))
   )
 
   sources.sort((a, b) => a.source.localeCompare(b.source))
 
   const totalFetches = sources.reduce((sum, s) => {
-    const total = Math.round(s.successRate > 0 || s.errorRate > 0
-      ? 100 / (s.successRate || 1) * (s.successRate / 100)
-      : 0)
+    const total = Math.round(
+      s.successRate > 0 || s.errorRate > 0
+        ? (100 / (s.successRate || 1)) * (s.successRate / 100)
+        : 0
+    )
     return sum + total
   }, 0)
 
   const totalErrors = sources.reduce((sum, s) => s.recentErrors.length + sum, 0)
 
-  const overallHealth = sources.length > 0
-    ? Math.round(sources.reduce((sum, s) => sum + s.healthScore, 0) / sources.length)
-    : 0
+  const overallHealth =
+    sources.length > 0
+      ? Math.round(sources.reduce((sum, s) => sum + s.healthScore, 0) / sources.length)
+      : 0
 
   return {
     sources,
