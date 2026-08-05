@@ -108,6 +108,7 @@ test('keeps retired legacy runtime roots and entrypoints deleted', () => {
     'specs/batch-enrichment-v2-sync.md',
     '.claude/skills/arena-fetcher-error-handling.md',
     '.claude/skills/arena-enrichment-patterns',
+    '.claude/skills/arena-cf-worker-patterns',
     '.claude/skills/arena-vps-cron',
   ]) {
     assert.equal(existsSync(join(root, path)), false, `${path} must remain retired`)

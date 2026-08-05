@@ -811,13 +811,13 @@ or stop when queue or ownership authority is unavailable.
 
 ## Key Infrastructure
 
-| Resource             | Value                                                |
-| -------------------- | ---------------------------------------------------- |
-| **Supabase Project** | `iknktzifjdyujdccyhsv`                               |
-| **Vercel Region**    | `hnd1` (Tokyo)                                       |
-| **VPS Singapore**    | `45.76.152.169` (scraper port 3457, proxy port 3456) |
-| **VPS Japan**        | `149.28.27.242` (proxy port 3456)                    |
-| **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
-| **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 48 endpoints / 40 Vercel schedules, staggered        |
-| **Scraper PM2 name** | `arena-scraper`                                      |
+| Resource                | Value                                                              |
+| ----------------------- | ------------------------------------------------------------------ |
+| **Supabase Project**    | `iknktzifjdyujdccyhsv`                                             |
+| **Vercel Region**       | `hnd1` (Tokyo)                                                     |
+| **VPS Singapore**       | `45.76.152.169` (scraper port 3457, proxy port 3456)               |
+| **VPS Japan**           | `149.28.27.242` (proxy port 3456)                                  |
+| **Cloudflare artifact** | Quarantined; endpoint state unverified; no repository deploy owner |
+| **Live Site**           | `https://www.arenafi.org`                                          |
+| **Cron Schedule**       | 48 endpoints / 40 Vercel schedules, staggered                      |
+| **Scraper PM2 name**    | `arena-scraper`                                                    |

@@ -4,27 +4,26 @@
 
 ## Arena Skills (`.claude/skills/`)
 
-| Skill                      | Purpose                                         |
-| -------------------------- | ----------------------------------------------- |
-| `arena-supabase-ops`       | DB operations, RLS, migrations                  |
-| `arena-cf-worker-patterns` | Cloudflare Worker proxy                         |
-| `arena-anti-block`         | Geo-blocking bypass                             |
-| `arena-vercel-deploy`      | Vercel deployment                               |
-| `data-quality`             | Canonical ingest and source-quality diagnostics |
-| `ccxt-typescript`          | Exchange API via CCXT                           |
-| `security-review`          | Auth/payment security                           |
+| Skill                 | Purpose                                         |
+| --------------------- | ----------------------------------------------- |
+| `arena-supabase-ops`  | DB operations, RLS, migrations                  |
+| `arena-anti-block`    | Geo-blocking diagnostics                        |
+| `arena-vercel-deploy` | Vercel deployment                               |
+| `data-quality`        | Canonical ingest and source-quality diagnostics |
+| `ccxt-typescript`     | Exchange API via CCXT                           |
+| `security-review`     | Auth/payment security                           |
 
 ## Skill Router
 
-| Task                     | Primary Skill         | Fallback                   |
-| ------------------------ | --------------------- | -------------------------- |
-| Exchange API integration | `ccxt-typescript`     | `arena-anti-block`         |
-| Data pipeline fix        | `data-quality`        | `arena-anti-block`         |
-| DB schema/migration      | `arena-supabase-ops`  | —                          |
-| Geo-blocking issue       | `arena-anti-block`    | `arena-cf-worker-patterns` |
-| VPS service diagnostics  | `arena-anti-block`    | `arena-cf-worker-patterns` |
-| Deployment               | `arena-vercel-deploy` | —                          |
-| Payment/auth security    | `security-review`     | —                          |
+| Task                     | Primary Skill         | Fallback           |
+| ------------------------ | --------------------- | ------------------ |
+| Exchange API integration | `ccxt-typescript`     | `arena-anti-block` |
+| Data pipeline fix        | `data-quality`        | `arena-anti-block` |
+| DB schema/migration      | `arena-supabase-ops`  | —                  |
+| Geo-blocking issue       | `arena-anti-block`    | `data-quality`     |
+| VPS service diagnostics  | `arena-anti-block`    | `data-quality`     |
+| Deployment               | `arena-vercel-deploy` | —                  |
+| Payment/auth security    | `security-review`     | —                  |
 
 ## Slash Commands
 

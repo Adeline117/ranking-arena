@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, statSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { dirname, extname, join, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { parse } from 'yaml'
@@ -9,6 +9,26 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 function read(path) {
   return readFileSync(resolve(root, path), 'utf8')
+}
+
+function readTextTree(directory, extensions, requireAllFiles = false) {
+  const files = []
+
+  function visit(path) {
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const entryPath = join(path, entry.name)
+      if (entry.isDirectory()) visit(entryPath)
+      else if (entry.isSymbolicLink()) {
+        assert.fail(`policy source must not be a symbolic link: ${entryPath}`)
+      } else if (entry.isFile()) {
+        if (extensions.has(extname(entry.name))) files.push(readFileSync(entryPath, 'utf8'))
+        else if (requireAllFiles) assert.fail(`unscanned policy source: ${entryPath}`)
+      }
+    }
+  }
+
+  visit(resolve(root, directory))
+  return files
 }
 
 test('documentation index contains only resolvable local links', () => {
@@ -45,6 +65,47 @@ test('runbook does not restore retired or fictional recovery controls', () => {
   assert.doesNotMatch(runbook, /scripts\/pipeline-report\.ts/)
   assert.doesNotMatch(runbook, /FEATURE_READ_ONLY/)
   assert.doesNotMatch(runbook, /Redis is non-critical|all Redis consumers fail-open/i)
+})
+
+test('keeps the Cloudflare compatibility artifact outside the active control plane', () => {
+  const packageJson = JSON.parse(read('cloudflare-worker/package.json'))
+  const artifactReadme = read('cloudflare-worker/README.md')
+  const skillRouter = read('.claude/ARENA_SKILL_SYSTEM.md')
+  const guidanceExtensions = new Set(['.json', '.md', '.sh', '.yaml', '.yml'])
+  const runtimeExtensions = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
+  const activeGuidance = [
+    read('README.md'),
+    read('CLAUDE.md'),
+    read('docs/REPOSITORY_STRUCTURE.md'),
+    read('docs/RUNBOOK.md'),
+    read('docs/SCRAPER.md'),
+    ...readTextTree('.claude', guidanceExtensions, true),
+  ].join('\n')
+  const runtimeSources = ['app', 'lib', 'worker']
+    .flatMap((directory) => readTextTree(directory, runtimeExtensions))
+    .join('\n')
+
+  assert.deepEqual(Object.keys(packageJson.scripts).sort(), ['dev'])
+  assert.equal(packageJson.scripts.dev, 'wrangler dev --local --ip 127.0.0.1')
+  assert.equal(existsSync(resolve(root, '.claude/skills/arena-cf-worker-patterns')), false)
+  assert.doesNotMatch(skillRouter, /arena-cf-worker-patterns/)
+  assert.doesNotMatch(activeGuidance, /workers\.dev|CLOUDFLARE_API_TOKEN|ranking-arena-proxy/i)
+  assert.doesNotMatch(activeGuidance, /\b(?:npx\s+)?wrangler\s+[a-z][\w-]*/i)
+  assert.doesNotMatch(
+    runtimeSources,
+    /cloudflare-worker|workers\.dev|ranking-arena-proxy|\b(?:CLOUDFLARE|CF)_(?:(?:WORKER|PROXY)(?:_(?:URL|ENDPOINT|HOST))?|URL)\b/i
+  )
+  assert.match(artifactReadme, /Status:\*\* Quarantined/)
+  assert.match(artifactReadme, /external-traffic audit/)
+  assert.match(artifactReadme, /Historical audit locator only \(current state unverified\)/)
+  assert.match(artifactReadme, /ranking-arena-proxy\.broosbook\.workers\.dev/)
+  for (const artifact of [
+    'cloudflare-worker/package-lock.json',
+    'cloudflare-worker/src/index.ts',
+    'cloudflare-worker/wrangler.toml',
+  ]) {
+    assert.equal(existsSync(resolve(root, artifact)), true, `${artifact} remains audit evidence`)
+  }
 })
 
 test('source policies scan the owned repository boundary in clean CI checkouts', () => {

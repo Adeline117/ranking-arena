@@ -147,40 +147,40 @@ Each trader profile includes:
 ## Architecture
 
 ```
-                        +-------------------+
-                        |    Vercel CDN     |
-                        |    (Edge/ISR)     |
-                        +--------+----------+
+                       +-------------------+
+                       |    Vercel CDN     |
+                       |    (Edge/ISR)     |
+                       +---------+---------+
                                  |
-                        +--------+----------+
-                        |    Next.js 16     |
-                        |    App Router     |
-                        |    API + pages    |
-                        +--+-----+-------+--+
-                           |     |       |
-              +------------+  +--+---+  ++------------+
-              |               |      |                |
-     +--------+-----+  +-----+---+  +-----+-----+   |
-     |   Supabase   |  | Upstash  |  | Meilisearch|   |
-     |  PostgreSQL  |  |  Redis   |  | Full-text  |   |
-     |Versioned schema|  |  Cache   |  |  Search    |   |
-     |  Auth + RLS  |  +---------+  +-----------+   |
-     +--------------+                                |
-                                       +-------------+---+
-                                       | 40 Schedules     |
-                  +------------------->| Data Pipeline   |
-                  |                    +--------+--------+
-                  |                             |
-         +--------+----------+        +--------+--------+
-         | CF Worker Proxy   |        | VPS Scrapers    |
-         | (geo-block bypass)|        | SG + JP nodes   |
-         +-------------------+        | Playwright      |
-                  |                    +-----------------+
-         +--------+-------------------------------------------+
-         | Registry-governed source APIs                     |
-         | CEX + DEX leaderboards, profiles, and on-chain    |
-         | evidence; active-serving coverage is data-driven  |
-         +----------------------------------------------------+
+                       +---------+---------+
+                       |    Next.js 16     |
+                       | App Router + APIs |
+                       +----+----+----+----+
+                            |    |    |
+                +-----------+    |    +------------+
+                |                |                 |
+        +-------+--------+  +----+----+  +---------+--------+
+        |   Supabase     |  | Upstash |  |   Meilisearch    |
+        | PostgreSQL/RLS |  |  Redis  |  | Full-text search |
+        +-------+--------+  +---------+  +------------------+
+                ^
+                |
+        +-------+----------------+
+        | Registry-owned ingest  |
+        | workers + publication  |
+        +-----------+------------+
+                    ^
+                    |
+        +------------+------------+
+        | Reviewed direct, VPS,   |
+        | browser + on-chain paths|
+        +------------+------------+
+                    ^
+                    |
+        +-----------+--------------------------------------+
+        | Registry-governed CEX + DEX source APIs          |
+        | Active-serving coverage is evidence-driven       |
+        +--------------------------------------------------+
 ```
 
 ### Key Architectural Decisions
