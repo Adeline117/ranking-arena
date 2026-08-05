@@ -375,6 +375,31 @@ function ignored(path, rules) {
   return result
 }
 
+// Keep the exact Docker model above as the source of truth for context behavior
+// and size reporting. This second model is deliberately more defensive: an
+// unrooted, slashless rule may also match any path segment. Requiring copied-tree
+// runtime inputs to survive both models prevents a client/version interpretation
+// change (or a future broad rule such as *.md) from silently shrinking the image.
+function conservativelyIgnored(path, rules) {
+  let result = false
+  const candidates = pathAndParents(path)
+  const segments = path.split('/')
+
+  for (const rule of rules) {
+    const normalized = normalizedDockerPattern(rule.pattern)
+    const expression = patternExpression(rule.pattern)
+    const exactMatch = candidates.some((candidate) => expression.test(candidate))
+    const slashlessSegmentMatch =
+      !rule.pattern.startsWith('/') &&
+      !normalized.includes('/') &&
+      segments.some((segment) => expression.test(segment))
+
+    if (exactMatch || slashlessSegmentMatch) result = !rule.negated
+  }
+
+  return result
+}
+
 function parseStrictYaml(source) {
   const document = parseDocument(source, {
     prettyErrors: false,
@@ -653,6 +678,21 @@ test('dockerignore parser enforces canonical root matching and ordered negation'
   }
 })
 
+test('conservative closure catches slashless rules below the context root', () => {
+  const markdownRule = dockerignoreRules('*.md')
+  assert.equal(ignored('lib/new/required.md', markdownRule), false)
+  assert.equal(conservativelyIgnored('lib/new/required.md', markdownRule), true)
+
+  const markdownReincluded = dockerignoreRules('*.md\n!lib/new/required.md')
+  assert.equal(ignored('lib/new/required.md', markdownReincluded), false)
+  assert.equal(conservativelyIgnored('lib/new/required.md', markdownReincluded), false)
+  assert.equal(conservativelyIgnored('lib/new/still-excluded.md', markdownReincluded), true)
+
+  const dependencyRule = dockerignoreRules('node_modules')
+  assert.equal(ignored('lib/node_modules/runtime/index.js', dependencyRule), false)
+  assert.equal(conservativelyIgnored('lib/node_modules/runtime/index.js', dependencyRule), true)
+})
+
 test('repository-only roots are excluded exactly without hiding Worker inputs', () => {
   const rules = dockerignoreRules(readFileSync(dockerignorePath, 'utf8'))
 
@@ -682,6 +722,15 @@ test('repository-only roots are excluded exactly without hiding Worker inputs', 
 
 test('every tracked copied-tree input has an explicit ignore and Git-mode decision', () => {
   const rules = dockerignoreRules(readFileSync(dockerignorePath, 'utf8'))
+  assert.deepEqual(
+    rules
+      .filter(
+        (rule) => rule.negated && normalizedDockerPattern(rule.pattern) === 'lib/logger/README.md'
+      )
+      .map((rule) => rule.pattern),
+    ['lib/logger/README.md'],
+    'the nested runtime README needs one path-qualified reinclude'
+  )
   const treeSources = contextCopySources(readFileSync(dockerfilePath, 'utf8')).filter((path) =>
     ['lib', 'worker'].includes(path)
   )
@@ -707,6 +756,11 @@ test('every tracked copied-tree input has an explicit ignore and Git-mode decisi
     }
 
     assert.equal(ignored(entry.path, rules), false, `${entry.path} is unexpectedly ignored`)
+    assert.equal(
+      conservativelyIgnored(entry.path, rules),
+      false,
+      `${entry.path} may be ignored by slashless basename matching`
+    )
     assertRegularIndexEntry(entry)
     runtimeInputs += 1
   }
