@@ -70,7 +70,7 @@ test('CI keeps optional artifacts bounded, main-only, and off the quality gate',
   const testStep = unitSteps.find((step) => step.name === 'Run tests with coverage')
   const coverageArtifact = unitSteps.find((step) => step.name === 'Upload coverage artifact')
   assert.match(testStep.run, /--coverageReporters=lcovonly/)
-  assert.equal(coverageArtifact.uses, 'actions/upload-artifact@v6')
+  assert.match(coverageArtifact.uses, /^actions\/upload-artifact@[0-9a-f]{40}$/)
   assert.equal(
     coverageArtifact.if,
     "always() && github.event_name == 'push' && github.ref == 'refs/heads/main'"
@@ -91,7 +91,7 @@ test('Playwright uploads one bounded diagnostic only after a failure', () => {
   for (const job of [mainWorkflow.jobs.e2e, nightlyWorkflow.jobs.e2e]) {
     const artifacts = job.steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     assert.equal(artifacts.length, 1)
-    assert.equal(artifacts[0].uses, 'actions/upload-artifact@v6')
+    assert.match(artifacts[0].uses, /^actions\/upload-artifact@[0-9a-f]{40}$/)
     assert.equal(artifacts[0].if, 'failure()')
     assert.equal(artifacts[0]['continue-on-error'], true)
     assert.equal(artifacts[0].with['retention-days'], 3)

@@ -34,7 +34,7 @@ jobs:
       HEALTH_URL: 'https://www.arenafi.org/api/health'
       ISSUE_TITLE: '🛑 Production deploy is stale'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # full history so we can measure how far prod is behind
 
