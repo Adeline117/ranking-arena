@@ -1,0 +1,776 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:managed-scratch-evidence-receipt:1",
+  "title": "Arena managed scratch evidence receipt",
+  "description": "Shape-only contract for self-asserted offline claims. Runtime validation is authoritative; conformance does not recompute hashes, verify external evidence files, or authorize a production action.",
+  "$comment": "Cross-field chronology, canonical extension ordering, identity independence, sensitive-data rejection, and external-evidence limitations are enforced or reported by scripts/qa/managed-evidence-receipt.mjs. This schema is not evidence proof.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "status",
+    "production_authorized",
+    "receipt_id",
+    "created_at",
+    "provider_incident",
+    "legacy_restore",
+    "current_contract_restore",
+    "source_capture",
+    "candidate",
+    "managed_pg17_replays",
+    "preview"
+  ],
+  "properties": {
+    "contract": { "const": "arena.managed-scratch-evidence-receipt@1" },
+    "status": { "const": "receipt/claims-only" },
+    "production_authorized": { "const": false },
+    "receipt_id": { "$ref": "#/$defs/sha256" },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "provider_incident": { "$ref": "#/$defs/providerIncident" },
+    "legacy_restore": { "$ref": "#/$defs/legacyRestore" },
+    "current_contract_restore": { "$ref": "#/$defs/currentRestore" },
+    "source_capture": { "$ref": "#/$defs/sourceCapture" },
+    "candidate": { "$ref": "#/$defs/candidate" },
+    "managed_pg17_replays": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/replay" },
+            { "properties": { "slot": { "const": "replay-a" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/replay" },
+            { "properties": { "slot": { "const": "replay-b" } } }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "preview": { "$ref": "#/$defs/preview" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableSha256": {
+      "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{3})?Z$"
+    },
+    "safeLabel": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "result": {
+      "enum": ["failed", "passed"]
+    },
+    "checkResult": {
+      "enum": ["failed", "not-applicable", "not-covered", "passed"]
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "schema", "version"],
+      "properties": {
+        "name": { "$ref": "#/$defs/safeLabel" },
+        "schema": { "$ref": "#/$defs/safeLabel" },
+        "version": { "$ref": "#/$defs/safeLabel" }
+      }
+    },
+    "extensionCatalog": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/extension" },
+      "description": "Runtime requires unique extension names and canonical name/schema/version ordering."
+    },
+    "providerIncident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_sha256", "incident_identity_sha256", "resolved_at", "status"],
+      "properties": {
+        "evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "incident_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "resolved_at": { "$ref": "#/$defs/timestamp" },
+        "status": { "const": "resolved/evidence-only" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capacity_slot_sha256",
+        "clean_at_start",
+        "compute_class",
+        "created_at",
+        "deleted_at",
+        "deletion_due_at",
+        "deletion_owner_sha256",
+        "deletion_receipt_sha256",
+        "deletion_status",
+        "disk_gib",
+        "empty_at_start",
+        "extensions",
+        "identity_sha256",
+        "isolated_from_production",
+        "kind",
+        "outbound_side_effects_quarantined",
+        "postgres_version",
+        "production_aliases_attached",
+        "production_credentials_present",
+        "region"
+      ],
+      "properties": {
+        "capacity_slot_sha256": { "$ref": "#/$defs/sha256" },
+        "clean_at_start": { "const": true },
+        "compute_class": { "$ref": "#/$defs/safeLabel" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "deleted_at": { "$ref": "#/$defs/timestamp" },
+        "deletion_due_at": { "$ref": "#/$defs/timestamp" },
+        "deletion_owner_sha256": { "$ref": "#/$defs/sha256" },
+        "deletion_receipt_sha256": { "$ref": "#/$defs/sha256" },
+        "deletion_status": { "const": "deleted" },
+        "disk_gib": { "type": "integer", "minimum": 1 },
+        "empty_at_start": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensionCatalog" },
+        "identity_sha256": { "$ref": "#/$defs/sha256" },
+        "isolated_from_production": { "const": true },
+        "kind": { "enum": ["managed-preview", "managed-restore", "managed-schema-replay"] },
+        "outbound_side_effects_quarantined": { "const": true },
+        "postgres_version": {
+          "type": "string",
+          "pattern": "^17(?:\\.[0-9]+){1,3}$"
+        },
+        "production_aliases_attached": { "const": false },
+        "production_credentials_present": { "const": false },
+        "region": { "$ref": "#/$defs/safeLabel" }
+      }
+    },
+    "restoreTarget": {
+      "allOf": [
+        { "$ref": "#/$defs/target" },
+        {
+          "properties": {
+            "disk_gib": { "type": "integer", "minimum": 100 },
+            "empty_at_start": { "const": true },
+            "kind": { "const": "managed-restore" }
+          }
+        }
+      ]
+    },
+    "replayTarget": {
+      "allOf": [
+        { "$ref": "#/$defs/target" },
+        {
+          "properties": {
+            "empty_at_start": { "const": true },
+            "kind": { "const": "managed-schema-replay" }
+          }
+        }
+      ]
+    },
+    "previewTarget": {
+      "allOf": [
+        { "$ref": "#/$defs/target" },
+        {
+          "properties": {
+            "empty_at_start": { "const": true },
+            "kind": { "const": "managed-preview" }
+          }
+        }
+      ]
+    },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_bytes",
+        "artifact_sha256",
+        "backup_completed_at",
+        "gzip_crc_result",
+        "gzip_isize_result",
+        "metadata_contract",
+        "metadata_sha256",
+        "metadata_verified",
+        "pg_dump_tail_result",
+        "required_relations_result",
+        "restore_exit_code",
+        "stream_completed_at",
+        "stream_started_at",
+        "tail_sha256",
+        "target_identity_sha256"
+      ],
+      "properties": {
+        "artifact_bytes": { "type": "integer", "minimum": 1073741824 },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "backup_completed_at": { "$ref": "#/$defs/timestamp" },
+        "gzip_crc_result": { "$ref": "#/$defs/result" },
+        "gzip_isize_result": { "$ref": "#/$defs/result" },
+        "metadata_contract": {
+          "enum": ["arena.pg-dump-complete.v1", "legacy-pg17-restrict-footer"]
+        },
+        "metadata_sha256": { "$ref": "#/$defs/sha256" },
+        "metadata_verified": { "type": "boolean" },
+        "pg_dump_tail_result": { "$ref": "#/$defs/result" },
+        "required_relations_result": { "$ref": "#/$defs/result" },
+        "restore_exit_code": { "type": "integer", "minimum": 0 },
+        "stream_completed_at": { "$ref": "#/$defs/timestamp" },
+        "stream_started_at": { "$ref": "#/$defs/timestamp" },
+        "tail_sha256": { "$ref": "#/$defs/sha256" },
+        "target_identity_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "criticalRows": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["arena.trader_stats", "arena.traders", "public.leaderboard_ranks"],
+      "properties": {
+        "arena.trader_stats": { "type": "integer", "minimum": 0 },
+        "arena.traders": { "type": "integer", "minimum": 0 },
+        "public.leaderboard_ranks": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checked_at",
+        "constraint_count",
+        "critical_rows",
+        "index_count",
+        "nonempty_table_count",
+        "table_count",
+        "target_identity_sha256"
+      ],
+      "properties": {
+        "checked_at": { "$ref": "#/$defs/timestamp" },
+        "constraint_count": { "type": "integer", "minimum": 0 },
+        "critical_rows": { "$ref": "#/$defs/criticalRows" },
+        "index_count": { "type": "integer", "minimum": 0 },
+        "nonempty_table_count": { "type": "integer", "minimum": 0 },
+        "table_count": { "type": "integer", "minimum": 0 },
+        "target_identity_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "rls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acl_sha256",
+        "catalog_sha256",
+        "checked_at",
+        "enabled_relation_count",
+        "policy_count",
+        "relation_count",
+        "result",
+        "target_identity_sha256"
+      ],
+      "properties": {
+        "acl_sha256": { "$ref": "#/$defs/sha256" },
+        "catalog_sha256": { "$ref": "#/$defs/sha256" },
+        "checked_at": { "$ref": "#/$defs/timestamp" },
+        "enabled_relation_count": { "type": "integer", "minimum": 0 },
+        "policy_count": { "type": "integer", "minimum": 0 },
+        "relation_count": { "type": "integer", "minimum": 0 },
+        "result": { "$ref": "#/$defs/result" },
+        "target_identity_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "result": { "const": "passed" } }, "required": ["result"] },
+          "then": {
+            "properties": {
+              "enabled_relation_count": { "type": "integer", "minimum": 1 },
+              "policy_count": { "type": "integer", "minimum": 1 },
+              "relation_count": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog_sha256",
+        "checked_at",
+        "coverage",
+        "existing_login",
+        "identity_count",
+        "mfa_if_configured",
+        "new_registration",
+        "oauth_if_configured",
+        "result",
+        "target_identity_sha256",
+        "user_count"
+      ],
+      "properties": {
+        "catalog_sha256": { "$ref": "#/$defs/sha256" },
+        "checked_at": { "$ref": "#/$defs/timestamp" },
+        "coverage": { "enum": ["app-auth-sidecar", "managed-platform", "not-in-app-backup"] },
+        "existing_login": { "$ref": "#/$defs/checkResult" },
+        "identity_count": { "type": "integer", "minimum": 0 },
+        "mfa_if_configured": { "$ref": "#/$defs/checkResult" },
+        "new_registration": { "$ref": "#/$defs/checkResult" },
+        "oauth_if_configured": { "$ref": "#/$defs/checkResult" },
+        "result": { "enum": ["failed", "not-covered", "passed"] },
+        "target_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "user_count": { "type": "integer", "minimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "result": { "const": "passed" } }, "required": ["result"] },
+          "then": {
+            "properties": {
+              "coverage": { "enum": ["app-auth-sidecar", "managed-platform"] },
+              "existing_login": { "const": "passed" },
+              "identity_count": { "type": "integer", "minimum": 1 },
+              "mfa_if_configured": { "enum": ["not-applicable", "passed"] },
+              "new_registration": { "const": "passed" },
+              "oauth_if_configured": { "enum": ["not-applicable", "passed"] },
+              "user_count": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "coverage": { "const": "not-in-app-backup" } },
+            "required": ["coverage"]
+          },
+          "then": { "properties": { "result": { "const": "not-covered" } } }
+        },
+        {
+          "if": {
+            "properties": { "result": { "const": "not-covered" } },
+            "required": ["result"]
+          },
+          "then": {
+            "properties": {
+              "coverage": { "const": "not-in-app-backup" },
+              "existing_login": { "enum": ["not-applicable", "not-covered"] },
+              "mfa_if_configured": { "enum": ["not-applicable", "not-covered"] },
+              "new_registration": { "enum": ["not-applicable", "not-covered"] },
+              "oauth_if_configured": { "enum": ["not-applicable", "not-covered"] }
+            }
+          }
+        }
+      ]
+    },
+    "smokeCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "result"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeLabel" },
+        "result": { "$ref": "#/$defs/checkResult" }
+      }
+    },
+    "smoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checked_at", "checks", "result", "target_identity_sha256"],
+      "properties": {
+        "checked_at": { "$ref": "#/$defs/timestamp" },
+        "checks": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/smokeCheck" }
+        },
+        "result": { "$ref": "#/$defs/result" },
+        "target_identity_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "rpoRto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backup_cutoff_at",
+        "calculation_sha256",
+        "latest_included_at",
+        "rpo_seconds",
+        "rto_seconds",
+        "service_ready_at",
+        "target_identity_sha256"
+      ],
+      "properties": {
+        "backup_cutoff_at": { "$ref": "#/$defs/timestamp" },
+        "calculation_sha256": { "$ref": "#/$defs/sha256" },
+        "latest_included_at": { "$ref": "#/$defs/timestamp" },
+        "rpo_seconds": { "type": "integer", "minimum": 0 },
+        "rto_seconds": { "type": "integer", "minimum": 0 },
+        "service_ready_at": { "$ref": "#/$defs/timestamp" },
+        "target_identity_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "protectedSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_identity_sha256",
+        "artifact_sha256",
+        "kind",
+        "protected_copy_identity_sha256",
+        "snapshot_date"
+      ],
+      "properties": {
+        "artifact_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "kind": { "const": "protected-legacy-2026-07-26" },
+        "protected_copy_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "snapshot_date": { "const": "2026-07-26" }
+      }
+    },
+    "currentSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_identity_sha256", "artifact_sha256", "kind"],
+      "properties": {
+        "artifact_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "kind": { "const": "current-contract-post-incident" }
+      }
+    },
+    "restore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auth",
+        "completed_at",
+        "completion",
+        "counts",
+        "evidence_id",
+        "purpose",
+        "result",
+        "rls",
+        "rpo_rto",
+        "smoke",
+        "source",
+        "started_at",
+        "subject_target_sha256",
+        "target"
+      ],
+      "properties": {
+        "auth": { "$ref": "#/$defs/auth" },
+        "completed_at": { "$ref": "#/$defs/timestamp" },
+        "completion": { "$ref": "#/$defs/completion" },
+        "counts": { "$ref": "#/$defs/counts" },
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "purpose": {
+          "enum": ["current-contract-post-incident-restore", "protected-legacy-restore"]
+        },
+        "result": { "$ref": "#/$defs/result" },
+        "rls": { "$ref": "#/$defs/rls" },
+        "rpo_rto": { "$ref": "#/$defs/rpoRto" },
+        "smoke": { "$ref": "#/$defs/smoke" },
+        "source": {
+          "oneOf": [{ "$ref": "#/$defs/protectedSource" }, { "$ref": "#/$defs/currentSource" }]
+        },
+        "started_at": { "$ref": "#/$defs/timestamp" },
+        "subject_target_sha256": { "$ref": "#/$defs/sha256" },
+        "target": { "$ref": "#/$defs/restoreTarget" }
+      }
+    },
+    "legacyRestore": {
+      "allOf": [
+        { "$ref": "#/$defs/restore" },
+        {
+          "properties": {
+            "completion": {
+              "allOf": [
+                { "$ref": "#/$defs/completion" },
+                {
+                  "properties": { "metadata_contract": { "const": "legacy-pg17-restrict-footer" } }
+                }
+              ]
+            },
+            "purpose": { "const": "protected-legacy-restore" },
+            "source": { "$ref": "#/$defs/protectedSource" }
+          }
+        }
+      ]
+    },
+    "currentRestore": {
+      "allOf": [
+        { "$ref": "#/$defs/restore" },
+        {
+          "properties": {
+            "completion": {
+              "allOf": [
+                { "$ref": "#/$defs/completion" },
+                { "properties": { "metadata_contract": { "const": "arena.pg-dump-complete.v1" } } }
+              ]
+            },
+            "purpose": { "const": "current-contract-post-incident-restore" },
+            "source": { "$ref": "#/$defs/currentSource" }
+          }
+        }
+      ]
+    },
+    "sourceCaptureArtifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app_schema_sha256",
+        "migration_ledger_sha256",
+        "normalized_catalog_sha256",
+        "source_catalog_file_sha256"
+      ],
+      "properties": {
+        "app_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "migration_ledger_sha256": { "$ref": "#/$defs/sha256" },
+        "normalized_catalog_sha256": { "$ref": "#/$defs/sha256" },
+        "source_catalog_file_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifacts",
+        "ca_sha256",
+        "ca_validity",
+        "captured_at",
+        "connection_mode",
+        "evidence_id",
+        "git_sha",
+        "incomplete_marker_absent",
+        "postgres_version",
+        "purpose",
+        "repeatable_read",
+        "source_identity_sha256",
+        "sslmode",
+        "status",
+        "subject_source_identity_sha256",
+        "transaction_read_only"
+      ],
+      "properties": {
+        "artifacts": { "$ref": "#/$defs/sourceCaptureArtifacts" },
+        "ca_sha256": { "$ref": "#/$defs/sha256" },
+        "ca_validity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["not_after", "not_before"],
+          "properties": {
+            "not_after": { "$ref": "#/$defs/timestamp" },
+            "not_before": { "$ref": "#/$defs/timestamp" }
+          }
+        },
+        "captured_at": { "$ref": "#/$defs/timestamp" },
+        "connection_mode": { "enum": ["direct-5432", "session-pooler-5432"] },
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "git_sha": { "$ref": "#/$defs/gitSha" },
+        "incomplete_marker_absent": { "const": true },
+        "postgres_version": { "type": "string", "pattern": "^17(?:\\.[0-9]+){1,3}$" },
+        "purpose": { "const": "canonical-source-capture" },
+        "repeatable_read": { "const": true },
+        "source_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "sslmode": { "const": "verify-full" },
+        "status": { "const": "source-capture/not-a-candidate" },
+        "subject_source_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "transaction_read_only": { "const": true }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_sha256",
+        "capture_evidence_id",
+        "created_at",
+        "evidence_id",
+        "expected_replay_catalog_sha256",
+        "expected_replay_ledger_sha256",
+        "foundation_sha256",
+        "git_sha",
+        "independent_review",
+        "launch_inventory_sha256",
+        "postdeploy_migration_count",
+        "predeploy_migration_count",
+        "platform_prerequisites_sha256",
+        "production_deployable",
+        "purpose",
+        "replay_runner_sha256",
+        "source_catalog_sha256",
+        "status"
+      ],
+      "properties": {
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "capture_evidence_id": { "$ref": "#/$defs/sha256" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "expected_replay_catalog_sha256": { "$ref": "#/$defs/sha256" },
+        "expected_replay_ledger_sha256": { "$ref": "#/$defs/sha256" },
+        "foundation_sha256": { "$ref": "#/$defs/sha256" },
+        "git_sha": { "$ref": "#/$defs/gitSha" },
+        "independent_review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["result", "reviewed_at", "reviewer_identity_sha256"],
+          "properties": {
+            "result": { "$ref": "#/$defs/result" },
+            "reviewed_at": { "$ref": "#/$defs/timestamp" },
+            "reviewer_identity_sha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "launch_inventory_sha256": { "$ref": "#/$defs/sha256" },
+        "postdeploy_migration_count": { "const": 3 },
+        "predeploy_migration_count": { "const": 122 },
+        "platform_prerequisites_sha256": { "$ref": "#/$defs/sha256" },
+        "production_deployable": { "const": false },
+        "purpose": { "const": "canonical-baseline-candidate" },
+        "replay_runner_sha256": { "$ref": "#/$defs/sha256" },
+        "source_catalog_sha256": { "$ref": "#/$defs/sha256" },
+        "status": { "const": "candidate/not-deployable" }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actual_catalog_sha256",
+        "actual_ledger_sha256",
+        "catalog_match",
+        "catalog_mismatch_count",
+        "catalog_mismatch_manifest_sha256",
+        "expected_catalog_sha256",
+        "expected_ledger_sha256",
+        "ledger_match",
+        "ledger_mismatch_count",
+        "ledger_mismatch_manifest_sha256",
+        "target_identity_sha256"
+      ],
+      "properties": {
+        "actual_catalog_sha256": { "$ref": "#/$defs/sha256" },
+        "actual_ledger_sha256": { "$ref": "#/$defs/sha256" },
+        "catalog_match": { "type": "boolean" },
+        "catalog_mismatch_count": { "type": "integer", "minimum": 0 },
+        "catalog_mismatch_manifest_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "expected_catalog_sha256": { "$ref": "#/$defs/sha256" },
+        "expected_ledger_sha256": { "$ref": "#/$defs/sha256" },
+        "ledger_match": { "type": "boolean" },
+        "ledger_mismatch_count": { "type": "integer", "minimum": 0 },
+        "ledger_mismatch_manifest_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "target_identity_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "phases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_schema", "forward_epoch", "foundation"],
+      "properties": {
+        "app_schema": { "$ref": "#/$defs/result" },
+        "forward_epoch": { "$ref": "#/$defs/result" },
+        "foundation": { "$ref": "#/$defs/result" }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auth",
+        "candidate_evidence_id",
+        "completed_at",
+        "comparison",
+        "counts",
+        "evidence_id",
+        "foundation_sha256",
+        "git_sha",
+        "phases",
+        "platform_prerequisites_sha256",
+        "purpose",
+        "replay_runner_sha256",
+        "result",
+        "rls",
+        "slot",
+        "smoke",
+        "started_at",
+        "status",
+        "subject_target_sha256",
+        "target"
+      ],
+      "properties": {
+        "auth": { "$ref": "#/$defs/auth" },
+        "candidate_evidence_id": { "$ref": "#/$defs/sha256" },
+        "completed_at": { "$ref": "#/$defs/timestamp" },
+        "comparison": { "$ref": "#/$defs/comparison" },
+        "counts": { "$ref": "#/$defs/counts" },
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "foundation_sha256": { "$ref": "#/$defs/sha256" },
+        "git_sha": { "$ref": "#/$defs/gitSha" },
+        "phases": { "$ref": "#/$defs/phases" },
+        "platform_prerequisites_sha256": { "$ref": "#/$defs/sha256" },
+        "purpose": { "const": "managed-pg17-baseline-replay" },
+        "replay_runner_sha256": { "$ref": "#/$defs/sha256" },
+        "result": { "$ref": "#/$defs/result" },
+        "rls": { "$ref": "#/$defs/rls" },
+        "slot": { "enum": ["replay-a", "replay-b"] },
+        "smoke": { "$ref": "#/$defs/smoke" },
+        "started_at": { "$ref": "#/$defs/timestamp" },
+        "status": { "const": "replay/candidate-evidence" },
+        "subject_target_sha256": { "$ref": "#/$defs/sha256" },
+        "target": { "$ref": "#/$defs/replayTarget" }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auth",
+        "candidate_evidence_id",
+        "completed_at",
+        "comparison",
+        "counts",
+        "evidence_id",
+        "foundation_sha256",
+        "git_sha",
+        "phases",
+        "platform_prerequisites_sha256",
+        "pull_request_number",
+        "purpose",
+        "replay_runner_sha256",
+        "result",
+        "rls",
+        "smoke",
+        "started_at",
+        "status",
+        "subject_target_sha256",
+        "target"
+      ],
+      "properties": {
+        "auth": { "$ref": "#/$defs/auth" },
+        "candidate_evidence_id": { "$ref": "#/$defs/sha256" },
+        "completed_at": { "$ref": "#/$defs/timestamp" },
+        "comparison": { "$ref": "#/$defs/comparison" },
+        "counts": { "$ref": "#/$defs/counts" },
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "foundation_sha256": { "$ref": "#/$defs/sha256" },
+        "git_sha": { "$ref": "#/$defs/gitSha" },
+        "phases": { "$ref": "#/$defs/phases" },
+        "platform_prerequisites_sha256": { "$ref": "#/$defs/sha256" },
+        "pull_request_number": { "type": "integer", "minimum": 1 },
+        "purpose": { "const": "managed-preview-full-replay" },
+        "replay_runner_sha256": { "$ref": "#/$defs/sha256" },
+        "result": { "$ref": "#/$defs/result" },
+        "rls": { "$ref": "#/$defs/rls" },
+        "smoke": { "$ref": "#/$defs/smoke" },
+        "started_at": { "$ref": "#/$defs/timestamp" },
+        "status": { "const": "preview/candidate-evidence" },
+        "subject_target_sha256": { "$ref": "#/$defs/sha256" },
+        "target": { "$ref": "#/$defs/previewTarget" }
+      }
+    }
+  }
+}

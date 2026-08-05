@@ -1,4 +1,4 @@
-export const SOURCE_CATALOG_CONTRACT = 'arena.canonical-baseline-source-catalog@1'
+export const SOURCE_CATALOG_CONTRACT = 'arena.canonical-baseline-source-catalog@3'
 
 export const SOURCE_CATALOG_KEYS = Object.freeze([
   'acls',
@@ -21,9 +21,20 @@ const nullableString = Object.freeze({ nullable: true, type: 'string' })
 const stringArray = Object.freeze({ arrayOf: 'string' })
 const nullableStringArray = Object.freeze({ arrayOf: 'string', nullable: true })
 
+export const SOURCE_LEDGER_ROW_SHAPE = Object.freeze({
+  createdBy: nullableString,
+  idempotencyKey: nullableString,
+  name: 'string',
+  statementsSha256: 'string',
+  version: 'string',
+})
+
+export const SOURCE_LEDGER_ROW_KEYS = Object.freeze(Object.keys(SOURCE_LEDGER_ROW_SHAPE))
+
 export const SOURCE_CATALOG_ROW_SHAPES = Object.freeze({
   acls: Object.freeze({ acl: 'string', name: 'string', objectKind: 'string', schema: 'string' }),
   columns: Object.freeze({
+    acl: nullableStringArray,
     defaultExpression: nullableString,
     generated: 'string',
     identity: 'string',
@@ -63,6 +74,7 @@ export const SOURCE_CATALOG_ROW_SHAPES = Object.freeze({
     language: 'string',
     leakproof: 'boolean',
     name: 'string',
+    owner: 'string',
     result: nullableString,
     schema: 'string',
     securityDefiner: 'boolean',
@@ -145,7 +157,14 @@ export const SOURCE_CATALOG_ROW_SHAPES = Object.freeze({
     rangeSubtype: nullableString,
     schema: 'string',
   }),
-  views: Object.freeze({ definition: 'string', kind: 'string', name: 'string', schema: 'string' }),
+  views: Object.freeze({
+    definition: 'string',
+    kind: 'string',
+    name: 'string',
+    owner: 'string',
+    reloptions: nullableStringArray,
+    schema: 'string',
+  }),
 })
 
 function failDefault(message) {
@@ -198,6 +217,19 @@ function assertShape(value, descriptor, label, fail) {
   fail(`${label} has an invalid contract descriptor`)
 }
 
+function assertCanonicalStringSet(value, label, fail) {
+  let previous = null
+  for (const [index, entry] of value.entries()) {
+    if (entry.length === 0 || entry.trim() !== entry || /[\u0000-\u001f\u007f]/u.test(entry)) {
+      fail(`${label}[${index}] must be a non-empty printable string`)
+    }
+    if (previous !== null && entry <= previous) {
+      fail(`${label} must be sorted and contain no duplicates`)
+    }
+    previous = entry
+  }
+}
+
 export function validateSourceCatalogRowContracts(catalog, { fail = failDefault } = {}) {
   assertExactKeys(catalog, SOURCE_CATALOG_ROW_SHAPES, 'source-catalog.json catalog', fail)
   for (const key of SOURCE_CATALOG_KEYS) {
@@ -219,6 +251,48 @@ export function validateSourceCatalogRowContracts(catalog, { fail = failDefault 
       ) {
         fail(`${label}.membershipKind is invalid`)
       }
+      if (key === 'columns' && row.acl !== null) {
+        assertCanonicalStringSet(row.acl, `${label}.acl`, fail)
+      }
+      if (key === 'views' && row.reloptions !== null) {
+        assertCanonicalStringSet(row.reloptions, `${label}.reloptions`, fail)
+      }
+    }
+  }
+}
+
+export function validateSourceLedgerRowContracts(
+  ledger,
+  { fail = failDefault, label = 'source-catalog.json ledger' } = {}
+) {
+  if (!Array.isArray(ledger)) fail(`${label} must be an array`)
+  for (const [index, row] of ledger.entries()) {
+    const rowLabel = `${label}[${index}]`
+    assertExactKeys(row, SOURCE_LEDGER_ROW_SHAPE, rowLabel, fail)
+    for (const [field, descriptor] of Object.entries(SOURCE_LEDGER_ROW_SHAPE)) {
+      assertShape(row[field], descriptor, `${rowLabel}.${field}`, fail)
+    }
+    for (const field of ['version', 'name']) {
+      if (
+        row[field].length === 0 ||
+        row[field].trim() !== row[field] ||
+        /[\u0000-\u001f\u007f]/u.test(row[field])
+      ) {
+        fail(`${rowLabel}.${field} must be a non-empty printable string`)
+      }
+    }
+    for (const field of ['createdBy', 'idempotencyKey']) {
+      if (row[field] === null) continue
+      if (
+        row[field].length === 0 ||
+        row[field].trim() !== row[field] ||
+        /[\u0000-\u001f\u007f]/u.test(row[field])
+      ) {
+        fail(`${rowLabel}.${field} must be null or a non-empty printable string`)
+      }
+    }
+    if (!/^[a-f0-9]{64}$/u.test(row.statementsSha256)) {
+      fail(`${rowLabel}.statementsSha256 must be a lowercase SHA-256 digest`)
     }
   }
 }

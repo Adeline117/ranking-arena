@@ -25,7 +25,6 @@ import {
   realpath,
   rm,
   rmdir,
-  stat,
   unlink,
   writeFile,
 } from 'node:fs/promises'
@@ -40,6 +39,7 @@ import {
   SOURCE_CATALOG_KEYS,
   validateSourceCatalogRowContracts,
 } from '../qa/baseline-source-catalog-contract.mjs'
+import { containsBaselineCredentialLikeData } from '../qa/baseline-credential-safety.mjs'
 import { validateAppSchemaSqlSafety } from '../qa/baseline-sql-safety.mjs'
 import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
 
@@ -68,7 +68,7 @@ const PUBLIC_SCHEMA_NORMALIZED_COMMENT =
   '-- Arena baseline replay uses the target-provided "public" schema.'
 const SAFE_CLI_ERROR_CODES = new Set(['CAPTURE_CLEANUP_FAILED', 'CAPTURE_INTERRUPTED'])
 
-const CATALOG_QUERIES = Object.freeze({
+export const CATALOG_QUERIES = Object.freeze({
   acls: `
     /* arena_baseline_catalog:acls */
     SELECT
@@ -112,6 +112,14 @@ const CATALOG_QUERIES = Object.freeze({
       relation.relname AS relation,
       attribute.attnum::integer AS ordinal,
       attribute.attname AS name,
+      CASE
+        WHEN attribute.attacl IS NULL THEN NULL
+        ELSE ARRAY(
+          SELECT acl_row.acl::text
+          FROM pg_catalog.unnest(attribute.attacl) AS acl_row(acl)
+          ORDER BY acl_row.acl::text COLLATE pg_catalog."C"
+        )::text[]
+      END AS acl,
       pg_catalog.format_type(attribute.atttypid, attribute.atttypmod) AS type,
       attribute.attnotnull AS "notNull",
       attribute.attidentity AS identity,
@@ -191,6 +199,7 @@ const CATALOG_QUERIES = Object.freeze({
       routine.provolatile AS volatility,
       routine.prosecdef AS "securityDefiner",
       routine.proleakproof AS leakproof,
+      pg_catalog.pg_get_userbyid(routine.proowner) AS owner,
       routine.proconfig AS configuration,
       CASE
         WHEN routine.prokind IN ('f', 'p', 'w')
@@ -466,6 +475,15 @@ const CATALOG_QUERIES = Object.freeze({
       namespace.nspname AS schema,
       relation.relname AS name,
       relation.relkind AS kind,
+      pg_catalog.pg_get_userbyid(relation.relowner) AS owner,
+      CASE
+        WHEN relation.reloptions IS NULL THEN NULL
+        ELSE ARRAY(
+          SELECT option_row.option
+          FROM pg_catalog.unnest(relation.reloptions) AS option_row(option)
+          ORDER BY option_row.option COLLATE pg_catalog."C"
+        )::text[]
+      END AS reloptions,
       pg_catalog.pg_get_viewdef(relation.oid, true) AS definition
     FROM pg_catalog.pg_class AS relation
     JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
@@ -477,7 +495,12 @@ const CATALOG_QUERIES = Object.freeze({
 
 const LEDGER_QUERY = `
   /* arena_baseline_ledger */
-  SELECT version::text AS version, name::text AS name, statements
+  SELECT
+    version::text AS version,
+    name::text AS name,
+    created_by::text AS "createdBy",
+    idempotency_key::text AS "idempotencyKey",
+    statements
   FROM supabase_migrations.schema_migrations
   ORDER BY version::text, name::text
 `
@@ -501,7 +524,9 @@ function sha256(value) {
 function decodeUrlPart(value, label) {
   try {
     const decoded = decodeURIComponent(value)
-    if (!decoded || /[\0\r\n]/u.test(decoded)) refuse(`SOURCE_URL_${label}_INVALID`)
+    if (!decoded || /[\u0000-\u001f\u007f]/u.test(decoded)) {
+      refuse(`SOURCE_URL_${label}_INVALID`)
+    }
     return decoded
   } catch (error) {
     if (error instanceof CaptureConfigurationError) throw error
@@ -550,6 +575,9 @@ export function validateSourceUrl(raw) {
 }
 
 async function validateCaFile(caPath) {
+  if (typeof fsConstants.O_NOFOLLOW !== 'number') {
+    refuse('SOURCE_CA_NOFOLLOW_UNAVAILABLE')
+  }
   if (typeof caPath !== 'string' || !path.isAbsolute(caPath)) {
     refuse('SOURCE_CA_MUST_BE_ABSOLUTE')
   }
@@ -645,10 +673,8 @@ async function validateOutputDirectory(outputDir) {
   }
   if ((await realpath(parent)) !== parent) refuse('OUTPUT_PARENT_MUST_NOT_USE_SYMLINKS')
   const effectiveUserId = typeof process.geteuid === 'function' ? process.geteuid() : null
-  if (
-    (effectiveUserId !== null && parentMetadata.uid !== effectiveUserId) ||
-    (parentMetadata.mode & 0o077) !== 0
-  ) {
+  if (effectiveUserId === null) refuse('OUTPUT_OWNER_ID_UNAVAILABLE')
+  if (parentMetadata.uid !== effectiveUserId || (parentMetadata.mode & 0o077) !== 0) {
     refuse('OUTPUT_PARENT_MUST_BE_OWNER_ONLY')
   }
   try {
@@ -661,6 +687,7 @@ async function validateOutputDirectory(outputDir) {
   return {
     outputDir: normalized,
     parent,
+    effectiveUserId,
     parentIdentity: Object.freeze({
       dev: parentMetadata.dev,
       ino: parentMetadata.ino,
@@ -682,6 +709,7 @@ async function assertOutputParentIdentity(destination) {
     metadata.dev !== destination.parentIdentity.dev ||
     metadata.ino !== destination.parentIdentity.ino ||
     metadata.uid !== destination.parentIdentity.uid ||
+    metadata.uid !== destination.effectiveUserId ||
     (metadata.mode & 0o077) !== 0 ||
     (await realpath(destination.parent)) !== destination.parent
   ) {
@@ -689,27 +717,252 @@ async function assertOutputParentIdentity(destination) {
   }
 }
 
-async function validateToolPath(toolPath) {
-  let requestedMetadata
-  try {
-    requestedMetadata = await stat(toolPath)
-  } catch {
-    refuse('PG17_TOOLCHAIN_INCOMPLETE')
+const TOOL_IDENTITY_FIELDS = Object.freeze([
+  'dev',
+  'ino',
+  'uid',
+  'mode',
+  'size',
+  'mtimeMs',
+  'ctimeMs',
+  'sha256',
+])
+const DIRECTORY_IDENTITY_FIELDS = Object.freeze([
+  'dev',
+  'ino',
+  'uid',
+  'mode',
+  'size',
+  'mtimeMs',
+  'ctimeMs',
+])
+
+function postgresToolchainUserId() {
+  const effectiveUserId = typeof process.geteuid === 'function' ? process.geteuid() : null
+  if (!Number.isInteger(effectiveUserId) || effectiveUserId < 0) {
+    refuse('PG17_TOOLCHAIN_OWNER_ID_UNAVAILABLE')
   }
-  if (!requestedMetadata.isFile() || (requestedMetadata.mode & 0o111) === 0) {
-    refuse('PG17_TOOLCHAIN_INCOMPLETE')
-  }
-  const physicalPath = await realpath(toolPath)
-  const metadata = await lstat(physicalPath)
-  if (!metadata.isFile() || (metadata.mode & 0o111) === 0) refuse('PG17_TOOLCHAIN_INCOMPLETE')
+  return effectiveUserId
+}
+
+function sourceOwnerAllowed(uid, effectiveUserId) {
+  return uid === 0 || uid === effectiveUserId
+}
+
+function metadataIdentity(metadata, digest) {
   return Object.freeze({
-    physicalPath,
-    identity: Object.freeze({
-      dev: metadata.dev,
-      ino: metadata.ino,
-      sha256: sha256(await readFile(physicalPath)),
-    }),
+    ctimeMs: metadata.ctimeMs,
+    dev: metadata.dev,
+    ino: metadata.ino,
+    mode: metadata.mode,
+    mtimeMs: metadata.mtimeMs,
+    ...(digest === undefined ? {} : { sha256: digest }),
+    size: metadata.size,
+    uid: metadata.uid,
   })
+}
+
+function sameIdentity(actual, expected, fields) {
+  return fields.every((field) => actual[field] === expected[field])
+}
+
+function toolSetIdentityDigest(identities) {
+  return sha256(
+    JSON.stringify(
+      TOOL_NAMES.map((name) => [
+        name,
+        Object.fromEntries(TOOL_IDENTITY_FIELDS.map((field) => [field, identities[name][field]])),
+      ])
+    )
+  )
+}
+
+function directoryIdentityWithToolDigest(directoryIdentity, identities) {
+  return Object.freeze({
+    ...directoryIdentity,
+    sha256: toolSetIdentityDigest(identities),
+  })
+}
+
+function assertTrustedSourceDirectoryMetadata(metadata, effectiveUserId) {
+  if (
+    metadata.isSymbolicLink() ||
+    !metadata.isDirectory() ||
+    !sourceOwnerAllowed(metadata.uid, effectiveUserId) ||
+    (metadata.mode & 0o022) !== 0
+  ) {
+    refuse('PG17_BIN_INSECURE')
+  }
+}
+
+async function trustedPhysicalToolDirectory(pgBin, effectiveUserId) {
+  let physicalDirectory
+  let metadata
+  try {
+    physicalDirectory = await realpath(pgBin)
+    metadata = await lstat(physicalDirectory)
+  } catch {
+    refuse('PG17_BIN_UNAVAILABLE')
+  }
+  assertTrustedSourceDirectoryMetadata(metadata, effectiveUserId)
+  return Object.freeze({
+    identity: metadataIdentity(metadata),
+    path: physicalDirectory,
+  })
+}
+
+async function assertTrustedSourceDirectory(directory, expectedIdentity, effectiveUserId) {
+  let metadata
+  try {
+    metadata = await lstat(directory)
+  } catch {
+    refuse('PG17_BIN_CHANGED_DURING_CAPTURE')
+  }
+  assertTrustedSourceDirectoryMetadata(metadata, effectiveUserId)
+  if (!sameIdentity(metadataIdentity(metadata), expectedIdentity, DIRECTORY_IDENTITY_FIELDS)) {
+    refuse('PG17_BIN_CHANGED_DURING_CAPTURE')
+  }
+}
+
+function assertTrustedSourceToolMetadata(metadata, effectiveUserId) {
+  if (
+    metadata.isSymbolicLink() ||
+    !metadata.isFile() ||
+    (metadata.mode & 0o111) === 0 ||
+    !sourceOwnerAllowed(metadata.uid, effectiveUserId) ||
+    (metadata.mode & 0o022) !== 0
+  ) {
+    refuse('PG17_TOOL_INSECURE')
+  }
+}
+
+async function readPinnedSourceTool(toolPath, effectiveUserId, expectedIdentity = null) {
+  if (typeof fsConstants.O_NOFOLLOW !== 'number') refuse('PG17_TOOL_NOFOLLOW_UNAVAILABLE')
+  let handle
+  try {
+    const pathMetadata = await lstat(toolPath)
+    assertTrustedSourceToolMetadata(pathMetadata, effectiveUserId)
+    handle = await open(toolPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW)
+    const before = await handle.stat()
+    assertTrustedSourceToolMetadata(before, effectiveUserId)
+    if (before.dev !== pathMetadata.dev || before.ino !== pathMetadata.ino) {
+      refuse('PG17_TOOL_CHANGED_DURING_READ')
+    }
+    const contents = await handle.readFile()
+    const after = await handle.stat()
+    const finalPathMetadata = await lstat(toolPath)
+    assertTrustedSourceToolMetadata(after, effectiveUserId)
+    assertTrustedSourceToolMetadata(finalPathMetadata, effectiveUserId)
+    const identity = metadataIdentity(after, sha256(contents))
+    for (const observed of [metadataIdentity(before), metadataIdentity(finalPathMetadata)]) {
+      if (!sameIdentity(observed, identity, DIRECTORY_IDENTITY_FIELDS)) {
+        refuse('PG17_TOOL_CHANGED_DURING_READ')
+      }
+    }
+    if (expectedIdentity && !sameIdentity(identity, expectedIdentity, TOOL_IDENTITY_FIELDS)) {
+      refuse('PG17_TOOL_CHANGED_DURING_CAPTURE')
+    }
+    return Object.freeze({ contents, identity })
+  } catch (error) {
+    if (error instanceof CaptureConfigurationError) throw error
+    refuse('PG17_TOOLCHAIN_INCOMPLETE')
+  } finally {
+    await handle?.close().catch(() => undefined)
+  }
+}
+
+function assertPrivateRuntimeDirectoryMetadata(metadata, effectiveUserId) {
+  if (
+    metadata.isSymbolicLink() ||
+    !metadata.isDirectory() ||
+    metadata.uid !== effectiveUserId ||
+    (metadata.mode & 0o777) !== 0o700
+  ) {
+    refuse('PG17_TOOL_RUNTIME_INSECURE')
+  }
+}
+
+async function assertPrivateRuntimeDirectory(directory, expectedIdentity, effectiveUserId) {
+  let metadata
+  try {
+    metadata = await lstat(directory)
+  } catch {
+    refuse('PG17_TOOL_RUNTIME_CHANGED')
+  }
+  assertPrivateRuntimeDirectoryMetadata(metadata, effectiveUserId)
+  if (
+    expectedIdentity &&
+    !['dev', 'ino', 'uid'].every((field) => metadata[field] === expectedIdentity[field])
+  ) {
+    refuse('PG17_TOOL_RUNTIME_CHANGED')
+  }
+  if ((await realpath(directory)) !== directory) refuse('PG17_TOOL_RUNTIME_CHANGED')
+  return metadataIdentity(metadata)
+}
+
+async function assertPrivateRuntimeDirectoryStable(directory, expectedIdentity, effectiveUserId) {
+  const actual = await assertPrivateRuntimeDirectory(directory, expectedIdentity, effectiveUserId)
+  if (!sameIdentity(actual, expectedIdentity, DIRECTORY_IDENTITY_FIELDS)) {
+    refuse('PG17_TOOL_RUNTIME_CHANGED')
+  }
+}
+
+function assertPrivateToolMetadata(metadata, effectiveUserId) {
+  if (
+    metadata.isSymbolicLink() ||
+    !metadata.isFile() ||
+    metadata.uid !== effectiveUserId ||
+    (metadata.mode & 0o777) !== 0o500
+  ) {
+    refuse('PG17_PRIVATE_TOOL_COPY_INSECURE')
+  }
+}
+
+async function readPinnedPrivateTool(toolPath, effectiveUserId, expectedIdentity = null) {
+  if (typeof fsConstants.O_NOFOLLOW !== 'number') refuse('PG17_TOOL_NOFOLLOW_UNAVAILABLE')
+  let handle
+  try {
+    const pathMetadata = await lstat(toolPath)
+    assertPrivateToolMetadata(pathMetadata, effectiveUserId)
+    handle = await open(toolPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW)
+    const before = await handle.stat()
+    assertPrivateToolMetadata(before, effectiveUserId)
+    if (before.dev !== pathMetadata.dev || before.ino !== pathMetadata.ino) {
+      refuse('PG17_PRIVATE_TOOL_COPY_CHANGED')
+    }
+    const contents = await handle.readFile()
+    const after = await handle.stat()
+    const finalPathMetadata = await lstat(toolPath)
+    assertPrivateToolMetadata(after, effectiveUserId)
+    assertPrivateToolMetadata(finalPathMetadata, effectiveUserId)
+    const identity = metadataIdentity(after, sha256(contents))
+    for (const observed of [metadataIdentity(before), metadataIdentity(finalPathMetadata)]) {
+      if (!sameIdentity(observed, identity, DIRECTORY_IDENTITY_FIELDS)) {
+        refuse('PG17_PRIVATE_TOOL_COPY_CHANGED')
+      }
+    }
+    if (expectedIdentity && !sameIdentity(identity, expectedIdentity, TOOL_IDENTITY_FIELDS)) {
+      refuse('PG17_PRIVATE_TOOL_COPY_CHANGED')
+    }
+    return Object.freeze({ contents, identity })
+  } catch (error) {
+    if (error instanceof CaptureConfigurationError) throw error
+    refuse('PG17_PRIVATE_TOOL_COPY_UNAVAILABLE')
+  } finally {
+    await handle?.close().catch(() => undefined)
+  }
+}
+
+async function writePrivateToolCopy(toolPath, contents, expectedSha256, effectiveUserId) {
+  try {
+    await writeFile(toolPath, contents, { flag: 'wx', mode: 0o500 })
+    await chmod(toolPath, 0o500)
+  } catch {
+    refuse('PG17_PRIVATE_TOOL_COPY_FAILED')
+  }
+  const copy = await readPinnedPrivateTool(toolPath, effectiveUserId)
+  if (copy.identity.sha256 !== expectedSha256) refuse('PG17_PRIVATE_TOOL_COPY_CHANGED')
+  return copy.identity
 }
 
 function defaultRunCommand(command, args, options = {}) {
@@ -820,100 +1073,233 @@ function parsePostgresVersion(output) {
   }
 }
 
-function toolEnvironment(env) {
-  const childEnv = {
+function toolEnvironment(privateToolDirectory) {
+  return cleanPostgresConnectionEnv({
     LANG: 'C',
     LC_ALL: 'C',
+    PATH: `${privateToolDirectory}${path.delimiter}/usr/bin:/bin`,
     TZ: 'UTC',
-  }
-  for (const name of ['PATH', 'SystemRoot', 'WINDIR']) {
-    if (typeof env[name] === 'string' && env[name].length > 0) childEnv[name] = env[name]
-  }
-  return cleanPostgresConnectionEnv(childEnv)
+  })
 }
 
 async function assertToolIdentity(toolPath, identity) {
-  let metadata
-  try {
-    metadata = await lstat(toolPath)
-  } catch {
-    refuse('PG17_TOOL_CHANGED_DURING_CAPTURE')
+  const effectiveUserId = postgresToolchainUserId()
+  await readPinnedPrivateTool(toolPath, effectiveUserId, identity)
+}
+
+async function assertMaterializedToolchain(toolchain) {
+  const effectiveUserId = postgresToolchainUserId()
+  await assertPrivateRuntimeDirectoryStable(
+    toolchain.privateDirectory,
+    toolchain.privateDirectoryIdentity,
+    effectiveUserId
+  )
+  const entries = (await readdir(toolchain.privateDirectory)).sort()
+  if (JSON.stringify(entries) !== JSON.stringify([...TOOL_NAMES].sort())) {
+    refuse('PG17_PRIVATE_TOOL_SET_INVALID')
   }
+  for (const name of TOOL_NAMES)
+    await assertToolIdentity(toolchain[name], toolchain.identities[name])
+}
+
+async function removePrivateToolDirectory(
+  privateToolDirectory,
+  privateToolDirectoryIdentity,
+  runtimeRoot,
+  runtimeRootIdentity,
+  effectiveUserId
+) {
+  await assertPrivateRuntimeDirectory(runtimeRoot, runtimeRootIdentity, effectiveUserId)
+  const metadata = await lstat(privateToolDirectory)
   if (
-    !metadata.isFile() ||
-    (metadata.mode & 0o111) === 0 ||
-    metadata.dev !== identity.dev ||
-    metadata.ino !== identity.ino ||
-    (await realpath(toolPath)) !== toolPath ||
-    sha256(await readFile(toolPath)) !== identity.sha256
+    metadata.isSymbolicLink() ||
+    !metadata.isDirectory() ||
+    metadata.dev !== privateToolDirectoryIdentity.dev ||
+    metadata.ino !== privateToolDirectoryIdentity.ino ||
+    metadata.uid !== effectiveUserId ||
+    (await realpath(privateToolDirectory)) !== privateToolDirectory
   ) {
-    refuse('PG17_TOOL_CHANGED_DURING_CAPTURE')
+    refuse('PG17_TOOL_RUNTIME_CHANGED')
   }
+  await chmod(privateToolDirectory, 0o700)
+  await rm(privateToolDirectory, { recursive: true })
+}
+
+async function createPrivateToolDirectory(runtimeRoot, effectiveUserId) {
+  if (typeof runtimeRoot !== 'string' || !path.isAbsolute(runtimeRoot)) {
+    refuse('PG17_TOOL_RUNTIME_MUST_BE_ABSOLUTE')
+  }
+  const normalizedRuntimeRoot = path.resolve(runtimeRoot)
+  const runtimeRootIdentity = await assertPrivateRuntimeDirectory(
+    normalizedRuntimeRoot,
+    null,
+    effectiveUserId
+  )
+  const privateToolDirectory = path.join(normalizedRuntimeRoot, 'postgres-tools')
+  try {
+    await mkdir(privateToolDirectory, { mode: 0o700 })
+    await chmod(privateToolDirectory, 0o700)
+  } catch {
+    refuse('PG17_TOOL_RUNTIME_CREATE_FAILED')
+  }
+  const privateToolDirectoryIdentity = await assertPrivateRuntimeDirectory(
+    privateToolDirectory,
+    null,
+    effectiveUserId
+  )
+  return Object.freeze({
+    privateToolDirectory,
+    privateToolDirectoryIdentity,
+    runtimeRoot: normalizedRuntimeRoot,
+    runtimeRootIdentity,
+  })
 }
 
 export async function inspectPg17Toolchain(
   pgBin,
   runCommand = defaultRunCommand,
   env = process.env,
-  signal
+  signal,
+  runtimeRoot
 ) {
   if (typeof pgBin !== 'string' || !path.isAbsolute(pgBin)) refuse('PG17_BIN_MUST_BE_ABSOLUTE')
-  let binMetadata
-  try {
-    binMetadata = await stat(pgBin)
-  } catch {
-    refuse('PG17_BIN_UNAVAILABLE')
-  }
-  if (!binMetadata.isDirectory()) refuse('PG17_BIN_UNAVAILABLE')
-
-  const tools = {}
-  const identities = {}
-  let expectedVersion = null
-  let expectedPhysicalDirectory = null
+  void env
+  const effectiveUserId = postgresToolchainUserId()
+  const sourceDirectory = await trustedPhysicalToolDirectory(pgBin, effectiveUserId)
+  const sourceTools = {}
   for (const name of TOOL_NAMES) {
     throwIfAborted(signal)
-    const requestedPath = path.join(pgBin, name)
-    const { identity, physicalPath } = await validateToolPath(requestedPath)
-    const physicalDirectory = path.dirname(physicalPath)
-    if (expectedPhysicalDirectory !== null && expectedPhysicalDirectory !== physicalDirectory) {
-      refuse('PG17_TOOLS_MUST_SHARE_ONE_PHYSICAL_DIRECTORY')
-    }
-    expectedPhysicalDirectory = physicalDirectory
-    const result = await runCommand(physicalPath, ['--version'], {
-      env: toolEnvironment(env),
-      signal,
-      timeoutMs: TOOL_VERSION_TIMEOUT_MS,
-    })
-    throwIfAborted(signal)
-    if (
-      result.code !== 0 ||
-      result.signal ||
-      result.overflow ||
-      result.terminationFailed ||
-      result.timedOut
-    ) {
-      refuse('PG17_TOOL_VERSION_FAILED')
-    }
-    const version = parsePostgresVersion(`${result.stdout}\n${result.stderr}`)
-    if (
-      version.major !== MINIMUM_POSTGRES_VERSION.major ||
-      version.minor < MINIMUM_POSTGRES_VERSION.minor
-    ) {
-      refuse('PG17_6_OR_NEWER_REQUIRED')
-    }
-    if (expectedVersion !== null && expectedVersion !== version.text) {
-      refuse('PG17_TOOLS_MUST_HAVE_EXACT_VERSION')
-    }
-    expectedVersion = version.text
-    await assertToolIdentity(physicalPath, identity)
-    tools[name] = physicalPath
-    identities[name] = identity
+    sourceTools[name] = await readPinnedSourceTool(
+      path.join(sourceDirectory.path, name),
+      effectiveUserId
+    )
   }
-  return Object.freeze({
-    ...tools,
-    identities: Object.freeze(identities),
-    version: expectedVersion,
-  })
+  await assertTrustedSourceDirectory(
+    sourceDirectory.path,
+    sourceDirectory.identity,
+    effectiveUserId
+  )
+  const sourceIdentities = Object.freeze(
+    Object.fromEntries(TOOL_NAMES.map((name) => [name, sourceTools[name].identity]))
+  )
+  const sourceDirectoryIdentity = directoryIdentityWithToolDigest(
+    sourceDirectory.identity,
+    sourceIdentities
+  )
+
+  let privateRuntime = null
+  try {
+    privateRuntime = await createPrivateToolDirectory(runtimeRoot, effectiveUserId)
+    const tools = {}
+    const identities = {}
+    for (const name of TOOL_NAMES) {
+      const privatePath = path.join(privateRuntime.privateToolDirectory, name)
+      identities[name] = await writePrivateToolCopy(
+        privatePath,
+        sourceTools[name].contents,
+        sourceTools[name].identity.sha256,
+        effectiveUserId
+      )
+      tools[name] = privatePath
+    }
+
+    const privateDirectoryIdentity = directoryIdentityWithToolDigest(
+      await assertPrivateRuntimeDirectory(
+        privateRuntime.privateToolDirectory,
+        privateRuntime.privateToolDirectoryIdentity,
+        effectiveUserId
+      ),
+      identities
+    )
+    const entries = (await readdir(privateRuntime.privateToolDirectory)).sort()
+    if (JSON.stringify(entries) !== JSON.stringify([...TOOL_NAMES].sort())) {
+      refuse('PG17_PRIVATE_TOOL_SET_INVALID')
+    }
+
+    let expectedVersion = null
+    for (const name of TOOL_NAMES) {
+      throwIfAborted(signal)
+      await assertToolIdentity(tools[name], identities[name])
+      const result = await runCommand(tools[name], ['--version'], {
+        env: toolEnvironment(privateRuntime.privateToolDirectory),
+        signal,
+        timeoutMs: TOOL_VERSION_TIMEOUT_MS,
+      })
+      throwIfAborted(signal)
+      if (
+        result.code !== 0 ||
+        result.signal ||
+        result.overflow ||
+        result.terminationFailed ||
+        result.timedOut
+      ) {
+        refuse('PG17_TOOL_VERSION_FAILED')
+      }
+      const version = parsePostgresVersion(`${result.stdout}\n${result.stderr}`)
+      if (
+        version.major !== MINIMUM_POSTGRES_VERSION.major ||
+        version.minor < MINIMUM_POSTGRES_VERSION.minor
+      ) {
+        refuse('PG17_6_OR_NEWER_REQUIRED')
+      }
+      if (expectedVersion !== null && expectedVersion !== version.text) {
+        refuse('PG17_TOOLS_MUST_HAVE_EXACT_VERSION')
+      }
+      expectedVersion = version.text
+      await assertToolIdentity(tools[name], identities[name])
+    }
+
+    await assertPrivateRuntimeDirectoryStable(
+      privateRuntime.privateToolDirectory,
+      privateDirectoryIdentity,
+      effectiveUserId
+    )
+    const finalEntries = (await readdir(privateRuntime.privateToolDirectory)).sort()
+    if (JSON.stringify(finalEntries) !== JSON.stringify([...TOOL_NAMES].sort())) {
+      refuse('PG17_PRIVATE_TOOL_SET_INVALID')
+    }
+    for (const name of TOOL_NAMES) await assertToolIdentity(tools[name], identities[name])
+    for (const name of TOOL_NAMES) {
+      await readPinnedSourceTool(
+        path.join(sourceDirectory.path, name),
+        effectiveUserId,
+        sourceTools[name].identity
+      )
+    }
+    await assertTrustedSourceDirectory(
+      sourceDirectory.path,
+      sourceDirectory.identity,
+      effectiveUserId
+    )
+
+    return Object.freeze({
+      ...tools,
+      identities: Object.freeze(identities),
+      privateDirectory: privateRuntime.privateToolDirectory,
+      privateDirectoryIdentity,
+      sourceDirectory: sourceDirectory.path,
+      sourceDirectoryIdentity,
+      sourceIdentities,
+      version: expectedVersion,
+    })
+  } catch (error) {
+    if (privateRuntime !== null) {
+      try {
+        await removePrivateToolDirectory(
+          privateRuntime.privateToolDirectory,
+          privateRuntime.privateToolDirectoryIdentity,
+          privateRuntime.runtimeRoot,
+          privateRuntime.runtimeRootIdentity,
+          effectiveUserId
+        )
+      } catch (cleanupError) {
+        throw new Error('PG17_TOOL_RUNTIME_CLEANUP_FAILED', {
+          cause: new AggregateError([error, cleanupError]),
+        })
+      }
+    }
+    throw error
+  }
 }
 
 function canonicalize(value) {
@@ -928,7 +1314,7 @@ function canonicalize(value) {
   return value instanceof Date ? value.toISOString() : value
 }
 
-function canonicalRows(rows, label) {
+export function canonicalRows(rows, label) {
   if (!Array.isArray(rows)) throw new Error(`CAPTURE_${label.toUpperCase()}_ROWS_INVALID`)
   const normalized = rows.map((row) => canonicalize(row))
   normalized.sort((left, right) => {
@@ -969,6 +1355,19 @@ function normalizeLedger(rows) {
         throw new Error(`CAPTURE_LEDGER_${key.toUpperCase()}_INVALID`)
       }
     }
+    for (const key of ['createdBy', 'idempotencyKey']) {
+      if (
+        row?.[key] !== null &&
+        (typeof row?.[key] !== 'string' ||
+          row[key].length === 0 ||
+          row[key].trim() !== row[key] ||
+          /[\u0000-\u001f\u007f]/u.test(row[key]))
+      ) {
+        throw new Error(
+          `CAPTURE_LEDGER_${key.replace(/[A-Z]/gu, (letter) => `_${letter}`).toUpperCase()}_INVALID`
+        )
+      }
+    }
     if (
       row.statements !== null &&
       (!Array.isArray(row.statements) || row.statements.some((value) => typeof value !== 'string'))
@@ -981,6 +1380,8 @@ function normalizeLedger(rows) {
       modernVersions.add(row.version)
     }
     return {
+      createdBy: row.createdBy,
+      idempotencyKey: row.idempotencyKey,
       name: row.name,
       statementsSha256: ledgerDigest(row.statements),
       version: row.version,
@@ -991,17 +1392,7 @@ function normalizeLedger(rows) {
 }
 
 function assertNoCredentialLikeData(contents, label) {
-  const patterns = [
-    /\bpostgres(?:ql)?:\/\/[^\s'"<>]+/iu,
-    /\bhttps?:\/\/[a-z0-9-]+\.supabase\.co\b/iu,
-    /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/u,
-    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
-    /\bsb_(?:secret|publishable)_[A-Za-z0-9_-]{12,}\b/u,
-    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/u,
-    /https:\/\/hooks\.slack\.com\/services\//iu,
-    /\b\d{8,10}:[A-Za-z0-9_-]{30,}\b/u,
-  ]
-  if (patterns.some((pattern) => pattern.test(contents))) {
+  if (containsBaselineCredentialLikeData(contents)) {
     throw new Error(`${label}_CONTAINS_CREDENTIAL_LIKE_DATA`)
   }
 }
@@ -1074,8 +1465,26 @@ function clientConfiguration(source, caContents) {
   }
 }
 
-function pgDumpEnvironment(env, source, privateCaPath, privateHome) {
-  const childEnv = Object.assign(toolEnvironment(env), {
+function pgPassField(value) {
+  return String(value).replaceAll('\\', '\\\\').replaceAll(':', '\\:')
+}
+
+function privatePgPassContents(source) {
+  const fields = [source.host, source.port, source.database, source.user, source.password]
+  if (fields.some((value) => /[\u0000-\u001f\u007f]/u.test(String(value)))) {
+    refuse('SOURCE_URL_PGPASS_FIELD_INVALID')
+  }
+  return `${fields.map(pgPassField).join(':')}\n`
+}
+
+function pgDumpEnvironment(
+  source,
+  privateCaPath,
+  privateHome,
+  privatePgPassPath,
+  privateToolDirectory
+) {
+  const childEnv = Object.assign(toolEnvironment(privateToolDirectory), {
     HOME: privateHome,
     PGAPPNAME: 'arena-canonical-baseline-readonly-capture',
     PGCLIENTENCODING: 'UTF8',
@@ -1086,8 +1495,7 @@ function pgDumpEnvironment(env, source, privateCaPath, privateHome) {
     PGHOST: source.host,
     PGOPTIONS:
       '-c default_transaction_read_only=on -c search_path=pg_catalog -c TimeZone=UTC -c DateStyle=ISO,MDY -c extra_float_digits=3',
-    PGPASSWORD: source.password,
-    PGPASSFILE: path.join(privateHome, 'nonexistent-pgpass'),
+    PGPASSFILE: privatePgPassPath,
     PGPORT: String(source.port),
     PGSERVICEFILE: path.join(privateHome, 'nonexistent-pg-service.conf'),
     PGSSLMODE: 'verify-full',
@@ -1133,17 +1541,66 @@ async function privateDirectoryIdentity(target) {
 }
 
 async function regularFileIdentity(target) {
-  const metadata = await lstat(target)
   const effectiveUserId = typeof process.geteuid === 'function' ? process.geteuid() : null
-  if (
-    metadata.isSymbolicLink() ||
-    !metadata.isFile() ||
-    (effectiveUserId !== null && metadata.uid !== effectiveUserId) ||
-    (metadata.mode & 0o077) !== 0
-  ) {
-    throw new Error('CAPTURE_PRIVATE_FILE_INVALID')
+  if (effectiveUserId === null) throw new Error('CAPTURE_PRIVATE_FILE_INVALID')
+  if (typeof fsConstants.O_NOFOLLOW !== 'number') {
+    throw new Error('CAPTURE_PRIVATE_FILE_NOFOLLOW_UNAVAILABLE')
   }
-  return Object.freeze({ dev: metadata.dev, ino: metadata.ino })
+  let handle
+  try {
+    const pathMetadata = await lstat(target)
+    if (
+      pathMetadata.isSymbolicLink() ||
+      !pathMetadata.isFile() ||
+      pathMetadata.uid !== effectiveUserId ||
+      (pathMetadata.mode & 0o077) !== 0
+    ) {
+      throw new Error('CAPTURE_PRIVATE_FILE_INVALID')
+    }
+    handle = await open(target, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW)
+    const before = await handle.stat()
+    if (
+      !before.isFile() ||
+      before.dev !== pathMetadata.dev ||
+      before.ino !== pathMetadata.ino ||
+      before.uid !== effectiveUserId ||
+      (before.mode & 0o077) !== 0
+    ) {
+      throw new Error('CAPTURE_PRIVATE_FILE_INVALID')
+    }
+    const contents = await handle.readFile()
+    const after = await handle.stat()
+    const finalPathMetadata = await lstat(target)
+    for (const field of ['dev', 'ino', 'size', 'mtimeMs', 'ctimeMs']) {
+      if (before[field] !== after[field] || after[field] !== finalPathMetadata[field]) {
+        throw new Error('CAPTURE_PRIVATE_FILE_CHANGED_DURING_READ')
+      }
+    }
+    if (
+      finalPathMetadata.isSymbolicLink() ||
+      !finalPathMetadata.isFile() ||
+      finalPathMetadata.uid !== effectiveUserId ||
+      (finalPathMetadata.mode & 0o077) !== 0
+    ) {
+      throw new Error('CAPTURE_PRIVATE_FILE_INVALID')
+    }
+    return Object.freeze({
+      dev: after.dev,
+      ino: after.ino,
+      mode: after.mode,
+      sha256: sha256(contents),
+      size: after.size,
+      uid: after.uid,
+    })
+  } finally {
+    await handle?.close().catch(() => undefined)
+  }
+}
+
+function sameOwnedFile(actual, expected) {
+  return ['dev', 'ino', 'mode', 'sha256', 'size', 'uid'].every(
+    (field) => actual[field] === expected[field]
+  )
 }
 
 async function safeRemove(target, destination, expectedIdentity) {
@@ -1191,6 +1648,7 @@ async function claimOutputDirectory(destination) {
     const metadata = await lstat(destination.outputDir)
     if (
       metadata.uid !== destination.parentIdentity.uid ||
+      metadata.uid !== destination.effectiveUserId ||
       (metadata.mode & 0o077) !== 0 ||
       (await realpath(destination.outputDir)) !== destination.outputDir
     ) {
@@ -1235,6 +1693,7 @@ async function assertClaimedOutputIdentity(destination, expectedIdentity) {
     metadata.dev !== expectedIdentity.dev ||
     metadata.ino !== expectedIdentity.ino ||
     metadata.uid !== destination.parentIdentity.uid ||
+    metadata.uid !== destination.effectiveUserId ||
     (metadata.mode & 0o077) !== 0 ||
     (await realpath(destination.outputDir)) !== destination.outputDir
   ) {
@@ -1250,15 +1709,13 @@ async function removeClaimedOutput(destination, expectedIdentity, ownedEntries) 
     const identity = ownedEntries.get(entry)
     if (!identity) throw new Error('CAPTURE_OUTPUT_CLEANUP_ENTRY_INVALID')
     const entryPath = path.join(destination.outputDir, entry)
-    const metadata = await lstat(entryPath)
-    if (
-      metadata.isSymbolicLink() ||
-      !metadata.isFile() ||
-      metadata.dev !== identity.dev ||
-      metadata.ino !== identity.ino
-    ) {
+    let actual
+    try {
+      actual = await regularFileIdentity(entryPath)
+    } catch {
       throw new Error('CAPTURE_OUTPUT_CLEANUP_ENTRY_INVALID')
     }
+    if (!sameOwnedFile(actual, identity)) throw new Error('CAPTURE_OUTPUT_CLEANUP_ENTRY_INVALID')
   }
   for (const entry of entries) await unlink(path.join(destination.outputDir, entry))
   await rmdir(destination.outputDir)
@@ -1278,19 +1735,20 @@ async function assertClaimedOutputEntries(
   for (const entry of entries) {
     const expectedEntryIdentity = ownedEntries.get(entry)
     if (!expectedEntryIdentity) throw new Error('CAPTURE_OUTPUT_ARTIFACT_IDENTITY_INVALID')
-    const metadata = await lstat(path.join(destination.outputDir, entry))
-    if (
-      metadata.isSymbolicLink() ||
-      !metadata.isFile() ||
-      metadata.dev !== expectedEntryIdentity.dev ||
-      metadata.ino !== expectedEntryIdentity.ino
-    ) {
+    let actual
+    try {
+      actual = await regularFileIdentity(path.join(destination.outputDir, entry))
+    } catch {
+      throw new Error('CAPTURE_OUTPUT_ARTIFACT_IDENTITY_INVALID')
+    }
+    if (!sameOwnedFile(actual, expectedEntryIdentity)) {
       throw new Error('CAPTURE_OUTPUT_ARTIFACT_IDENTITY_INVALID')
     }
   }
 }
 
 export async function captureCanonicalBaseline({
+  claimOutput = claimOutputDirectory,
   clientFactory,
   commitOutputMarker = unlink,
   env = process.env,
@@ -1307,9 +1765,9 @@ export async function captureCanonicalBaseline({
   const rawSourceUrl = env[CAPTURE_SOURCE_URL_NAME]
   const source = validateSourceUrl(rawSourceUrl)
   const caContents = await validateCaFile(env[CAPTURE_CA_FILE_NAME])
-  const toolchain = await inspectPg17Toolchain(env.PG17_BIN, runCommand, env, signal)
   const makeClient = clientFactory ?? ((configuration) => new pg.Client(configuration))
 
+  let toolchain = null
   let stageRoot = null
   let stageIdentity = null
   let runtimeRoot = null
@@ -1340,10 +1798,19 @@ export async function captureCanonicalBaseline({
     await assertOutputParentIdentity(destination)
     await chmod(stageRoot, 0o700)
     await chmod(runtimeRoot, 0o700)
+    toolchain = await inspectPg17Toolchain(env.PG17_BIN, runCommand, env, signal, runtimeRoot)
     const privateHome = path.join(runtimeRoot, 'home')
     await mkdir(privateHome, { mode: 0o700 })
+    await chmod(privateHome, 0o700)
     const privateCaPath = path.join(runtimeRoot, 'source-ca.pem')
     await writeFile(privateCaPath, caContents, { flag: 'wx', mode: 0o600 })
+    await chmod(privateCaPath, 0o600)
+    const privatePgPassPath = path.join(privateHome, 'source.pgpass')
+    await writeFile(privatePgPassPath, privatePgPassContents(source), {
+      flag: 'wx',
+      mode: 0o600,
+    })
+    await chmod(privatePgPassPath, 0o600)
 
     client = makeClient(clientConfiguration(source, caContents))
     abortClient = () => {
@@ -1383,17 +1850,24 @@ export async function captureCanonicalBaseline({
 
     const dumpPath = path.join(stageRoot, 'app-schema.sql')
     throwIfAborted(signal)
-    await assertToolIdentity(toolchain.pg_dump, toolchain.identities.pg_dump)
+    await assertMaterializedToolchain(toolchain)
     const dumpResult = await runCommand(
       toolchain.pg_dump,
       pgDumpArguments(snapshot.snapshotId, dumpPath),
       {
-        env: pgDumpEnvironment(env, source, privateCaPath, privateHome),
+        env: pgDumpEnvironment(
+          source,
+          privateCaPath,
+          privateHome,
+          privatePgPassPath,
+          toolchain.privateDirectory
+        ),
         killGraceMs: toolKillGraceMs,
         signal,
         timeoutMs: pgDumpTimeoutMs,
       }
     )
+    await assertMaterializedToolchain(toolchain)
     throwIfAborted(signal)
     if (
       dumpResult.code !== 0 ||
@@ -1447,7 +1921,7 @@ export async function captureCanonicalBaseline({
     // The destination is not complete while its marker exists; exact-file
     // consumers must reject it until the marker is atomically removed.
     throwIfAborted(signal)
-    outputIdentity = await claimOutputDirectory(destination)
+    outputIdentity = await claimOutput(destination)
     const markerPath = path.join(destination.outputDir, CAPTURE_INCOMPLETE_MARKER)
     await writeFile(markerPath, 'incomplete\n', { flag: 'wx', mode: 0o600 })
     ownedOutputEntries.set(CAPTURE_INCOMPLETE_MARKER, await regularFileIdentity(markerPath))
@@ -1488,8 +1962,14 @@ export async function captureCanonicalBaseline({
     // final abort gate loses to a successful unlink: the complete capture is
     // reported as success and is never cleaned up as an interrupted attempt.
     await commitOutputMarker(markerPath)
-    ownedOutputEntries.delete(CAPTURE_INCOMPLETE_MARKER)
+    await assertClaimedOutputEntries(
+      destination,
+      outputIdentity,
+      ownedOutputEntries,
+      CAPTURE_ARTIFACT_NAMES
+    )
     outputCommitted = true
+    ownedOutputEntries.delete(CAPTURE_INCOMPLETE_MARKER)
 
     return Object.freeze({
       artifactCount: 2,
@@ -1509,6 +1989,14 @@ export async function captureCanonicalBaseline({
     let cleanupFailed = false
     if (!outputCommitted && outputIdentity) {
       try {
+        const markerPath = path.join(destination.outputDir, CAPTURE_INCOMPLETE_MARKER)
+        try {
+          await lstat(markerPath)
+        } catch (markerError) {
+          if (markerError?.code !== 'ENOENT') throw markerError
+          await writeFile(markerPath, 'incomplete\n', { flag: 'wx', mode: 0o600 })
+          ownedOutputEntries.set(CAPTURE_INCOMPLETE_MARKER, await regularFileIdentity(markerPath))
+        }
         await removeClaimedOutput(destination, outputIdentity, ownedOutputEntries)
       } catch {
         cleanupFailed = true
@@ -1616,6 +2104,7 @@ export const _captureContractForTests = Object.freeze({
   catalogQueries: CATALOG_QUERIES,
   directExitCode,
   ledgerQuery: LEDGER_QUERY,
+  normalizeLedger,
   normalizeTargetProvidedPublicSchema,
   pgDumpArguments,
   publicSchemaCreateStatement: PUBLIC_SCHEMA_CREATE_STATEMENT,

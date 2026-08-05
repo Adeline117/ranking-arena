@@ -13,6 +13,7 @@ import {
   rm,
   symlink,
   unlink,
+  utimes,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -70,8 +71,10 @@ async function fixture(t) {
   t.after(() => rm(root, { force: true, recursive: true }))
   const bin = path.join(root, 'pg17-bin')
   const outputParent = path.join(root, 'captures')
+  const toolRuntime = path.join(root, 'tool-runtime')
   await mkdir(bin)
   await mkdir(outputParent, { mode: 0o700 })
+  await mkdir(toolRuntime, { mode: 0o700 })
   for (const tool of ['pg_dump', 'psql']) {
     const toolPath = path.join(bin, tool)
     await writeFile(toolPath, '#!/bin/sh\nexit 1\n')
@@ -97,6 +100,7 @@ async function fixture(t) {
     outputDir: path.join(outputParent, 'capture-20260804'),
     outputParent,
     root,
+    toolRuntime,
   }
 }
 
@@ -118,6 +122,7 @@ function fakeClient({
     language: 'sql',
     leakproof: false,
     name,
+    owner: 'postgres',
     result: 'void',
     schema: 'public',
     securityDefiner: false,
@@ -168,6 +173,8 @@ function fakeClient({
           return {
             rows: ledgerRows ?? [
               {
+                createdBy: 'codex',
+                idempotencyKey: `codex:20260804000000:${'a'.repeat(64)}`,
                 name: 'captured_boundary',
                 statements: ['SUPER_SECRET_STATEMENT_TEXT', 'second statement'],
                 version: '20260804000000',
@@ -185,7 +192,22 @@ function fakeRunner({ events, dumpContents = VALID_DUMP, dumpExitCode = 0, versi
   const calls = []
   const runCommand = async (command, args, options = {}) => {
     const name = path.basename(command)
-    calls.push({ args: [...args], command, name, options })
+    const call = { args: [...args], command, name, options }
+    calls.push(call)
+    const commandMetadata = await lstat(command)
+    const commandParentMetadata = await lstat(path.dirname(command))
+    call.commandIdentity = {
+      dev: commandMetadata.dev,
+      ino: commandMetadata.ino,
+      mode: commandMetadata.mode,
+      uid: commandMetadata.uid,
+    }
+    call.commandParentIdentity = {
+      dev: commandParentMetadata.dev,
+      ino: commandParentMetadata.ino,
+      mode: commandParentMetadata.mode,
+      uid: commandParentMetadata.uid,
+    }
     if (args.length === 1 && args[0] === '--version') {
       events?.push(`spawn:${name}:version`)
       return {
@@ -198,6 +220,8 @@ function fakeRunner({ events, dumpContents = VALID_DUMP, dumpExitCode = 0, versi
     }
     assert.equal(name, 'pg_dump')
     events?.push('spawn:pg_dump:capture')
+    call.pgPassContents = await readFile(options.env.PGPASSFILE, 'utf8')
+    call.pgPassMode = (await lstat(options.env.PGPASSFILE)).mode
     const outputArgument = args.find((argument) => argument.startsWith('--file='))
     assert.ok(outputArgument)
     if (dumpExitCode === 0) await writeFile(outputArgument.slice('--file='.length), dumpContents)
@@ -256,8 +280,35 @@ test('source URL is port-5432-only and requires one exact verify-full option', (
     `postgresql://capture:${SECRET}@${SOURCE_HOST}:5432/postgres?sslmode=verify-full&sslmode=verify-full`,
     `postgresql://capture:${SECRET}@${SOURCE_HOST}:5432/postgres?sslmode=verify-full&application_name=bypass`,
     `postgresql://capture:${SECRET}@db.example.test:5432/postgres?sslmode=verify-full`,
+    `postgresql://cap%0Ature:${SECRET}@${SOURCE_HOST}:5432/postgres?sslmode=verify-full`,
+    `postgresql://capture:pass%0Dword@${SOURCE_HOST}:5432/postgres?sslmode=verify-full`,
+    `postgresql://capture:pass%09word@${SOURCE_HOST}:5432/postgres?sslmode=verify-full`,
+    `postgresql://capture:pass%7Fword@${SOURCE_HOST}:5432/postgres?sslmode=verify-full`,
+    `postgresql://capture:${SECRET}@${SOURCE_HOST}:5432/post%00gres?sslmode=verify-full`,
   ]
   for (const sourceUrl of invalid) assert.throws(() => validateSourceUrl(sourceUrl))
+})
+
+test('private pgpass escapes colons and backslashes without exporting PGPASSWORD', async (t) => {
+  const setup = await fixture(t)
+  const runner = fakeRunner()
+  const escapedSourceUrl = `postgresql://cap%3Ature:pa%3Ass%5Cword@${SOURCE_HOST}:5432/post%3Agres?sslmode=verify-full`
+  await captureCanonicalBaseline({
+    clientFactory: fakeClient(),
+    env: { ...setup.env, [CAPTURE_SOURCE_URL_NAME]: escapedSourceUrl },
+    outputDir: setup.outputDir,
+    runCommand: runner.runCommand,
+  })
+  const dumpCall = runner.calls.find((call) =>
+    call.args.some((argument) => argument.startsWith('--snapshot='))
+  )
+  assert.ok(dumpCall)
+  assert.equal(
+    dumpCall.pgPassContents,
+    `${SOURCE_HOST}:5432:post\\:gres:cap\\:ture:pa\\:ss\\\\word\n`
+  )
+  assert.equal(dumpCall.options.env.PGPASSWORD, undefined)
+  assert.equal(dumpCall.pgPassMode & 0o777, 0o600)
 })
 
 test('rejects a relative, malformed, or symlinked CA path before client creation', async (t) => {
@@ -343,7 +394,9 @@ test('requires pg_dump and psql 17.6+ from one exact toolchain version', async (
     inspectPg17Toolchain(
       setup.bin,
       fakeRunner({ versions: { pg_dump: '17.5', psql: '17.5' } }).runCommand,
-      setup.env
+      setup.env,
+      undefined,
+      setup.toolRuntime
     ),
     /PG17_6_OR_NEWER_REQUIRED/u
   )
@@ -351,10 +404,157 @@ test('requires pg_dump and psql 17.6+ from one exact toolchain version', async (
     inspectPg17Toolchain(
       setup.bin,
       fakeRunner({ versions: { pg_dump: '17.8', psql: '17.9' } }).runCommand,
-      setup.env
+      setup.env,
+      undefined,
+      setup.toolRuntime
     ),
     /PG17_TOOLS_MUST_HAVE_EXACT_VERSION/u
   )
+})
+
+test('materialized tools retain complete source and private-copy identities', async (t) => {
+  const setup = await fixture(t)
+  const inspected = await inspectPg17Toolchain(
+    setup.bin,
+    fakeRunner().runCommand,
+    setup.env,
+    undefined,
+    setup.toolRuntime
+  )
+  const identityKeys = ['ctimeMs', 'dev', 'ino', 'mode', 'mtimeMs', 'sha256', 'size', 'uid']
+  assert.deepEqual(Object.keys(inspected.privateDirectoryIdentity).sort(), identityKeys)
+  assert.deepEqual(Object.keys(inspected.sourceDirectoryIdentity).sort(), identityKeys)
+  assert.match(inspected.privateDirectoryIdentity.sha256, /^[a-f0-9]{64}$/u)
+  assert.match(inspected.sourceDirectoryIdentity.sha256, /^[a-f0-9]{64}$/u)
+  for (const name of ['pg_dump', 'psql']) {
+    assert.deepEqual(Object.keys(inspected.identities[name]).sort(), identityKeys)
+    assert.deepEqual(Object.keys(inspected.sourceIdentities[name]).sort(), identityKeys)
+    assert.equal(inspected.identities[name].sha256, inspected.sourceIdentities[name].sha256)
+    assert.notEqual(inspected.identities[name].ino, inspected.sourceIdentities[name].ino)
+    assert.equal(inspected.identities[name].mode & 0o777, 0o500)
+  }
+  await rm(inspected.privateDirectory, { recursive: true })
+  assert.deepEqual(await readdir(setup.toolRuntime), [])
+})
+
+test('rejects writable, symlinked, or irregular source toolchain components', async (t) => {
+  for (const scenario of [
+    'writable-directory',
+    'writable-file',
+    'symlink-file',
+    'directory-file',
+  ]) {
+    await t.test(scenario, async (subtest) => {
+      const setup = await fixture(subtest)
+      if (scenario === 'writable-directory') {
+        await chmod(setup.bin, 0o775)
+      } else if (scenario === 'writable-file') {
+        await chmod(path.join(setup.bin, 'pg_dump'), 0o720)
+      } else if (scenario === 'symlink-file') {
+        const target = path.join(setup.root, 'outside-pg-dump')
+        await writeFile(target, '#!/bin/sh\nexit 1\n', { mode: 0o700 })
+        await unlink(path.join(setup.bin, 'pg_dump'))
+        await symlink(target, path.join(setup.bin, 'pg_dump'))
+      } else {
+        await unlink(path.join(setup.bin, 'pg_dump'))
+        await mkdir(path.join(setup.bin, 'pg_dump'), { mode: 0o700 })
+      }
+      const runner = fakeRunner()
+      await assert.rejects(
+        inspectPg17Toolchain(setup.bin, runner.runCommand, setup.env, undefined, setup.toolRuntime),
+        /PG17_(?:BIN|TOOL)_INSECURE/u
+      )
+      assert.equal(runner.calls.length, 0)
+      assert.deepEqual(await readdir(setup.toolRuntime), [])
+    })
+  }
+})
+
+test('requires an exact owner-only private runtime before copying tools', async (t) => {
+  const setup = await fixture(t)
+  await chmod(setup.toolRuntime, 0o750)
+  const runner = fakeRunner()
+  await assert.rejects(
+    inspectPg17Toolchain(setup.bin, runner.runCommand, setup.env, undefined, setup.toolRuntime),
+    /PG17_TOOL_RUNTIME_INSECURE/u
+  )
+  assert.equal(runner.calls.length, 0)
+  assert.deepEqual(await readdir(setup.toolRuntime), [])
+})
+
+test('source-tool replacement after pinned copying fails closed and cleans private copies', async (t) => {
+  const setup = await fixture(t)
+  const baseRunner = fakeRunner()
+  let replaced = false
+  const runCommand = async (command, args, options) => {
+    const result = await baseRunner.runCommand(command, args, options)
+    if (!replaced && path.basename(command) === 'pg_dump' && args[0] === '--version') {
+      replaced = true
+      const sourcePath = path.join(setup.bin, 'pg_dump')
+      await unlink(sourcePath)
+      await writeFile(sourcePath, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
+    }
+    return result
+  }
+  await assert.rejects(
+    inspectPg17Toolchain(setup.bin, runCommand, setup.env, undefined, setup.toolRuntime),
+    /PG17_TOOL_CHANGED_DURING_CAPTURE/u
+  )
+  assert.equal(replaced, true)
+  assert.deepEqual(await readdir(setup.toolRuntime), [])
+})
+
+test('same-size private-copy tamper with restored mtime is detected after execution', async (t) => {
+  const setup = await fixture(t)
+  const baseRunner = fakeRunner()
+  let tampered = false
+  const runCommand = async (command, args, options) => {
+    const result = await baseRunner.runCommand(command, args, options)
+    if (!tampered && path.basename(command) === 'pg_dump' && args[0] === '--version') {
+      tampered = true
+      const before = await lstat(command)
+      const contents = await readFile(command, 'utf8')
+      const changed = contents.replace('exit 1', 'exit 0')
+      assert.equal(Buffer.byteLength(changed), Buffer.byteLength(contents))
+      await chmod(command, 0o700)
+      await writeFile(command, changed)
+      await chmod(command, 0o500)
+      await utimes(command, before.atime, before.mtime)
+    }
+    return result
+  }
+  await assert.rejects(
+    inspectPg17Toolchain(setup.bin, runCommand, setup.env, undefined, setup.toolRuntime),
+    /PG17_PRIVATE_TOOL_COPY_CHANGED/u
+  )
+  assert.equal(tampered, true)
+  assert.deepEqual(await readdir(setup.toolRuntime), [])
+})
+
+test('source and private-directory permission drift is rechecked after version execution', async (t) => {
+  for (const scenario of ['source', 'private']) {
+    await t.test(scenario, async (subtest) => {
+      const setup = await fixture(subtest)
+      const baseRunner = fakeRunner()
+      let changed = false
+      const runCommand = async (command, args, options) => {
+        const result = await baseRunner.runCommand(command, args, options)
+        if (!changed && path.basename(command) === 'pg_dump' && args[0] === '--version') {
+          changed = true
+          await chmod(scenario === 'source' ? setup.bin : path.dirname(command), 0o750)
+        }
+        return result
+      }
+      await assert.rejects(
+        inspectPg17Toolchain(setup.bin, runCommand, setup.env, undefined, setup.toolRuntime),
+        scenario === 'source'
+          ? /PG17_BIN_(?:INSECURE|CHANGED_DURING_CAPTURE)/u
+          : /PG17_TOOL_RUNTIME_INSECURE/u
+      )
+      assert.equal(changed, true)
+      assert.deepEqual(await readdir(setup.toolRuntime), [])
+    })
+  }
 })
 
 test('catalog SQL reads only pg_catalog and the one ledger query reads only its managed table', () => {
@@ -369,6 +569,20 @@ test('catalog SQL reads only pg_catalog and the one ledger query reads only its 
     }
   }
   assert.match(_captureContractForTests.ledgerQuery, /FROM supabase_migrations\.schema_migrations/u)
+  assert.match(_captureContractForTests.ledgerQuery, /created_by::text AS "createdBy"/u)
+  assert.match(_captureContractForTests.ledgerQuery, /idempotency_key::text AS "idempotencyKey"/u)
+  assert.match(_captureContractForTests.catalogQueries.columns, /attribute\.attacl/u)
+  assert.match(
+    _captureContractForTests.catalogQueries.columns,
+    /WHEN attribute\.attacl IS NULL THEN NULL/u
+  )
+  assert.match(_captureContractForTests.catalogQueries.functions, /routine\.proowner/u)
+  assert.match(_captureContractForTests.catalogQueries.views, /relation\.relowner/u)
+  assert.match(_captureContractForTests.catalogQueries.views, /relation\.reloptions/u)
+  assert.match(
+    _captureContractForTests.catalogQueries.views,
+    /ORDER BY option_row\.option COLLATE pg_catalog\."C"/u
+  )
   assert.equal(
     /\b(?:INSERT|UPDATE|DELETE|MERGE|COPY)\b/iu.test(_captureContractForTests.ledgerQuery),
     false
@@ -456,7 +670,9 @@ test('captures catalog, ledger digests, and schema dump from one exported read-o
   assert.equal(path.dirname(dumpCall.options.env.HOME), dumpCall.options.env.TMPDIR)
   assert.equal(path.dirname(dumpCall.options.env.PGPASSFILE), dumpCall.options.env.HOME)
   assert.match(dumpCall.options.env.PGOPTIONS, /search_path=pg_catalog/u)
-  assert.equal(dumpCall.options.env.PGPASSWORD, SECRET)
+  assert.equal(dumpCall.options.env.PGPASSWORD, undefined)
+  assert.equal(dumpCall.pgPassContents, `${SOURCE_HOST}:5432:postgres:capture:${SECRET}\n`)
+  assert.equal(dumpCall.pgPassMode & 0o777, 0o600)
   assert.notEqual(dumpCall.options.env.PGSSLROOTCERT, setup.caPath)
   assert.equal(dumpCall.options.env[CAPTURE_SOURCE_URL_NAME], undefined)
   assert.equal(dumpCall.options.env.DATABASE_URL, undefined)
@@ -465,6 +681,15 @@ test('captures catalog, ledger digests, and schema dump from one exported read-o
   assert.equal(dumpCall.options.env.DYLD_INSERT_LIBRARIES, undefined)
   assert.equal(dumpCall.options.env.SUPABASE_ACCESS_TOKEN, undefined)
   for (const call of runner.calls) {
+    assert.notEqual(path.dirname(call.command), setup.bin)
+    assert.equal(path.basename(path.dirname(call.command)), 'postgres-tools')
+    assert.equal(call.commandIdentity.mode & 0o777, 0o500)
+    assert.equal(call.commandParentIdentity.mode & 0o777, 0o700)
+    assert.equal(call.commandIdentity.uid, process.geteuid())
+    assert.equal(call.commandParentIdentity.uid, process.geteuid())
+    assert.equal(call.options.env.PGPASSWORD, undefined)
+    assert.equal(call.options.env.PG17_BIN, undefined)
+    assert.equal(call.options.env.PATH.includes(setup.bin), false)
     assert.equal(
       call.args.some((argument) => argument.includes(SECRET)),
       false
@@ -496,6 +721,16 @@ test('captures catalog, ledger digests, and schema dump from one exported read-o
   assert.equal(sourceCatalog.postgresMajor, 17)
   assert.equal(sourceCatalog.capturedAt, '2026-08-04T12:34:56.789Z')
   assert.equal(sourceCatalog.ledger.length, 1)
+  assert.deepEqual(Object.keys(sourceCatalog.ledger[0]).sort(), [
+    'createdBy',
+    'idempotencyKey',
+    'name',
+    'statementsSha256',
+    'version',
+  ])
+  assert.equal(sourceCatalog.ledger[0].createdBy, 'codex')
+  assert.equal(sourceCatalog.ledger[0].idempotencyKey, `codex:20260804000000:${'a'.repeat(64)}`)
+  assert.equal(Object.hasOwn(sourceCatalog.ledger[0], 'statements'), false)
   assert.match(sourceCatalog.ledger[0].statementsSha256, /^[a-f0-9]{64}$/u)
   assert.deepEqual(
     Object.keys(sourceCatalog.catalog).sort(),
@@ -558,6 +793,35 @@ test('an output directory that appears during capture is never overwritten or re
   }
 })
 
+test('an output claim failure cleans capture-owned staging and never publishes', async (t) => {
+  const setup = await fixture(t)
+  const events = []
+  let claimCalls = 0
+
+  await assert.rejects(
+    captureCanonicalBaseline({
+      claimOutput: async () => {
+        claimCalls += 1
+        throw new Error('simulated output claim failure')
+      },
+      clientFactory: fakeClient({ events }),
+      env: setup.env,
+      outputDir: setup.outputDir,
+      runCommand: fakeRunner({ events }).runCommand,
+    }),
+    /simulated output claim failure/u
+  )
+
+  assert.equal(claimCalls, 1)
+  await assert.rejects(readdir(setup.outputDir))
+  assert.equal(
+    (await readdir(setup.outputParent)).some((name) => name.startsWith('.arena-')),
+    false
+  )
+  assert.ok(events.includes('query:ROLLBACK'))
+  assert.ok(events.includes('client:end'))
+})
+
 test('invalid captured SQL fails closed and removes all staging without publishing', async (t) => {
   const setup = await fixture(t)
   const events = []
@@ -616,6 +880,14 @@ test('credential-like function definitions fail closed before source catalog pub
     'AKIAABCDEFGHIJKLMNOP',
     'https://hooks.slack.com/services/example',
     '123456789:abcdefghijklmnopqrstuvwxyzABCDEFGH',
+    'redis://default:cache-password@example.invalid:6379/0',
+    'rediss://default:cache-password@example.invalid:6380/0',
+    'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij',
+    'github_pat_ABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890',
+    'sk_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    'rk_test_ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    'whsec_ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    "api_secret = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456'",
   ]
   for (const credentialLikeValue of credentialLikeValues) {
     await t.test(credentialLikeValue.split(':')[0], async () => {
@@ -712,16 +984,54 @@ test('malformed or duplicate modern ledger rows fail before pg_dump and publicat
   const invalidLedgers = [
     [
       {
+        createdBy: 'codex',
+        idempotencyKey: `codex:20260804000000:${'a'.repeat(64)}`,
         name: 'invalid_statements',
         statements: [null],
         version: '20260804000000',
       },
     ],
     [
-      { name: 'one', statements: [], version: '20260804000000' },
-      { name: 'two', statements: [], version: '20260804000000' },
+      {
+        createdBy: 'codex',
+        idempotencyKey: `codex:20260804000000:${'a'.repeat(64)}`,
+        name: 'one',
+        statements: [],
+        version: '20260804000000',
+      },
+      {
+        createdBy: 'codex',
+        idempotencyKey: `codex:20260804000000:${'b'.repeat(64)}`,
+        name: 'two',
+        statements: [],
+        version: '20260804000000',
+      },
     ],
-    [{ name: 'legacy_only', statements: [], version: '001' }],
+    [
+      {
+        createdBy: null,
+        idempotencyKey: null,
+        name: 'legacy_only',
+        statements: [],
+        version: '001',
+      },
+    ],
+    [
+      {
+        idempotencyKey: null,
+        name: 'missing_created_by',
+        statements: [],
+        version: '20260804000000',
+      },
+    ],
+    [
+      {
+        createdBy: null,
+        name: 'missing_idempotency_key',
+        statements: [],
+        version: '20260804000000',
+      },
+    ],
   ]
   for (const ledgerRows of invalidLedgers) {
     await t.test(ledgerRows[0].name, async () => {
@@ -746,8 +1056,20 @@ test('malformed or duplicate modern ledger rows fail before pg_dump and publicat
 test('nullable reconciled ledger statements remain distinct from an observed empty array', async (t) => {
   const setup = await fixture(t)
   const ledgerRows = [
-    { name: 'reconciled_without_body', statements: null, version: '00057' },
-    { name: 'observed_empty_body', statements: [], version: '20260804000000' },
+    {
+      createdBy: null,
+      idempotencyKey: null,
+      name: 'reconciled_without_body',
+      statements: null,
+      version: '00057',
+    },
+    {
+      createdBy: 'codex',
+      idempotencyKey: `codex:20260804000000:${'a'.repeat(64)}`,
+      name: 'observed_empty_body',
+      statements: [],
+      version: '20260804000000',
+    },
   ]
   await captureCanonicalBaseline({
     clientFactory: fakeClient({ ledgerRows }),
@@ -765,11 +1087,15 @@ test('nullable reconciled ledger statements remain distinct from an observed emp
       .digest('hex')
   assert.deepEqual(sourceCatalog.ledger, [
     {
+      createdBy: 'codex',
+      idempotencyKey: `codex:20260804000000:${'a'.repeat(64)}`,
       name: 'observed_empty_body',
       statementsSha256: digest([]),
       version: '20260804000000',
     },
     {
+      createdBy: null,
+      idempotencyKey: null,
       name: 'reconciled_without_body',
       statementsSha256: digest(null),
       version: '00057',
@@ -1050,6 +1376,69 @@ test('a failed marker commit removes the owned partial output without publishing
   )
 })
 
+test('a marker callback that unlinks then fails still removes the owned partial output', async (t) => {
+  const setup = await fixture(t)
+  await assert.rejects(
+    captureCanonicalBaseline({
+      clientFactory: fakeClient(),
+      commitOutputMarker: async (markerPath) => {
+        await unlink(markerPath)
+        throw new Error('simulated post-unlink marker failure')
+      },
+      env: setup.env,
+      outputDir: setup.outputDir,
+      runCommand: fakeRunner().runCommand,
+    }),
+    /simulated post-unlink marker failure/u
+  )
+  await assert.rejects(readdir(setup.outputDir))
+  assert.equal(
+    (await readdir(setup.outputParent)).some((name) => name.startsWith('.arena-')),
+    false
+  )
+})
+
+test('same-length published artifact tamper is detected after marker commit', async (t) => {
+  const setup = await fixture(t)
+  let caught
+  await assert.rejects(
+    captureCanonicalBaseline({
+      clientFactory: fakeClient(),
+      commitOutputMarker: async (markerPath) => {
+        const artifactPath = path.join(setup.outputDir, 'app-schema.sql')
+        const before = await lstat(artifactPath)
+        const changed = Buffer.from(await readFile(artifactPath))
+        changed[changed.indexOf('CREATE TABLE')] = 'X'.charCodeAt(0)
+        await writeFile(artifactPath, changed)
+        await utimes(artifactPath, before.atime, before.mtime)
+        await unlink(markerPath)
+      },
+      env: setup.env,
+      outputDir: setup.outputDir,
+      runCommand: fakeRunner().runCommand,
+    }),
+    (error) => {
+      caught = error
+      return true
+    }
+  )
+
+  assert.equal(caught.message, 'CAPTURE_CLEANUP_FAILED')
+  assert.equal(caught.cause?.message, 'CAPTURE_OUTPUT_ARTIFACT_IDENTITY_INVALID')
+  assert.equal(
+    await readFile(
+      path.join(setup.outputDir, _captureContractForTests.captureIncompleteMarker),
+      'utf8'
+    ),
+    'incomplete\n'
+  )
+  assert.deepEqual((await readdir(setup.outputDir)).sort(), [
+    _captureContractForTests.captureIncompleteMarker,
+    'app-schema.sql',
+    'source-catalog.json',
+  ])
+})
+
 test('cleanup preserves a temporary root whose inode was replaced', async (t) => {
   const setup = await fixture(t)
   const events = []
@@ -1163,9 +1552,20 @@ test(
       })
       await client.connect()
       for (const statement of [
+        'CREATE ROLE app_runtime NOLOGIN',
         'CREATE SCHEMA arena',
+        'GRANT CREATE, USAGE ON SCHEMA arena TO app_runtime',
+        'CREATE SCHEMA supabase_migrations',
+        'CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY, statements text[], name text NOT NULL, created_by text, idempotency_key text)',
         'CREATE TABLE public.app_table(id integer PRIMARY KEY, payload text)',
+        'GRANT SELECT (payload) ON public.app_table TO app_runtime',
         'CREATE TABLE arena.scope_table(id integer PRIMARY KEY)',
+        "CREATE FUNCTION arena.security_probe() RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, arena AS 'SELECT 1'",
+        'ALTER FUNCTION arena.security_probe() OWNER TO app_runtime',
+        'CREATE VIEW arena.secure_view WITH (security_barrier=true, security_invoker=true, check_option=cascaded) AS SELECT id FROM public.app_table WHERE id > 0',
+        'ALTER VIEW arena.secure_view OWNER TO app_runtime',
+        'CREATE MATERIALIZED VIEW arena.materialized_probe WITH (fillfactor=80) AS SELECT id FROM public.app_table WITH NO DATA',
+        'ALTER MATERIALIZED VIEW arena.materialized_probe OWNER TO app_runtime',
         'CREATE TYPE arena.composite_v1 AS (id bigint, label text)',
         'CREATE DOMAIN arena.positive_int AS integer DEFAULT 1 CHECK (VALUE > 0)',
         "CREATE TYPE public.mood AS ENUM ('calm', 'alert')",
@@ -1176,7 +1576,40 @@ test(
       ]) {
         await client.query(statement)
       }
+      const rawLedgerSha256 = 'c'.repeat(64)
+      await client.query(
+        'INSERT INTO supabase_migrations.schema_migrations(version, statements, name, created_by, idempotency_key) VALUES ($1, $2, $3, $4, $5)',
+        [
+          '20260804000000',
+          ['SELECT 1;', 'SELECT 2;'],
+          'real_capture_fixture',
+          'codex',
+          `codex:20260804000000:${rawLedgerSha256}`,
+        ]
+      )
       await client.query("SELECT pg_catalog.set_config('search_path', 'pg_catalog', false)")
+
+      const capturedLedgerRows = (await client.query(_captureContractForTests.ledgerQuery)).rows
+      assert.deepEqual(capturedLedgerRows, [
+        {
+          createdBy: 'codex',
+          idempotencyKey: `codex:20260804000000:${rawLedgerSha256}`,
+          name: 'real_capture_fixture',
+          statements: ['SELECT 1;', 'SELECT 2;'],
+          version: '20260804000000',
+        },
+      ])
+      const normalizedLedger = _captureContractForTests.normalizeLedger(capturedLedgerRows)
+      assert.deepEqual(Object.keys(normalizedLedger[0]).sort(), [
+        'createdBy',
+        'idempotencyKey',
+        'name',
+        'statementsSha256',
+        'version',
+      ])
+      assert.equal(normalizedLedger[0].createdBy, 'codex')
+      assert.equal(normalizedLedger[0].idempotencyKey, `codex:20260804000000:${rawLedgerSha256}`)
+      assert.equal(Object.hasOwn(normalizedLedger[0], 'statements'), false)
 
       const catalog = {}
       for (const key of _captureContractForTests.catalogKeys) {
@@ -1212,6 +1645,38 @@ test(
         catalog.types.find((row) => row.name === 'composite_v1').compositeAttributes.length,
         2
       )
+      assert.deepEqual(
+        catalog.columns.find(
+          (row) => row.schema === 'public' && row.relation === 'app_table' && row.name === 'payload'
+        ).acl,
+        ['app_runtime=r/postgres']
+      )
+      assert.equal(
+        catalog.columns.find(
+          (row) => row.schema === 'public' && row.relation === 'app_table' && row.name === 'id'
+        ).acl,
+        null
+      )
+      const securityDefiner = catalog.functions.find(
+        (row) => row.schema === 'arena' && row.name === 'security_probe'
+      )
+      assert.equal(securityDefiner.owner, 'app_runtime')
+      assert.equal(securityDefiner.securityDefiner, true)
+      const secureView = catalog.views.find(
+        (row) => row.schema === 'arena' && row.name === 'secure_view'
+      )
+      assert.equal(secureView.owner, 'app_runtime')
+      assert.deepEqual(secureView.reloptions, [
+        'check_option=cascaded',
+        'security_barrier=true',
+        'security_invoker=true',
+      ])
+      const materializedView = catalog.views.find(
+        (row) => row.schema === 'arena' && row.name === 'materialized_probe'
+      )
+      assert.equal(materializedView.kind, 'm')
+      assert.equal(materializedView.owner, 'app_runtime')
+      assert.deepEqual(materializedView.reloptions, ['fillfactor=80'])
 
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
       const snapshotId = (await client.query('SELECT pg_catalog.pg_export_snapshot() AS id'))
