@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawnSync } from 'node:child_process'
-import test from 'node:test'
+import { after, test } from 'node:test'
+import { TextDecoder } from 'node:util'
 
 const root = path.resolve(import.meta.dirname, '../..')
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
+const maxGitOutputBytes = 64 * 1024 * 1024
 const ignoreRules = fs.readFileSync(path.join(root, '.vercelignore'), 'utf8')
 const deployGate = fs.readFileSync(path.join(root, '.github/workflows/deploy-gate.yml'), 'utf8')
 const releaseControl = fs.readFileSync(
@@ -19,26 +22,166 @@ const releaseControlScript = fs.readFileSync(
 const nextConfig = fs.readFileSync(path.join(root, 'next.config.ts'), 'utf8')
 const ciWorkflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
 const vercelConfig = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'))
+const sourceTestName = /\.(?:test|spec)\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts)$/i
+let ignoreFixture
 
-function ignoredByVercelRules(relativePath) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-vercel-upload-'))
+function isolatedGitEnv() {
+  const env = {}
+  for (const key of [
+    'PATH',
+    'TMPDIR',
+    'TMP',
+    'TEMP',
+    'SYSTEMROOT',
+    'WINDIR',
+    'COMSPEC',
+    'PATHEXT',
+  ]) {
+    if (process.env[key] !== undefined) env[key] = process.env[key]
+  }
+  env.GIT_CONFIG_NOSYSTEM = '1'
+  env.GIT_CONFIG_GLOBAL = os.devNull
+  env.GIT_OPTIONAL_LOCKS = '0'
+  env.GIT_TERMINAL_PROMPT = '0'
+  env.LC_ALL = 'C'
+  return env
+}
+
+function runGit(args, { cwd = root, input, allowedStatuses = [0] } = {}) {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'buffer',
+    env: isolatedGitEnv(),
+    input,
+    maxBuffer: maxGitOutputBytes,
+  })
+  assert.equal(result.error, undefined, `git ${args[0]} failed to start: ${String(result.error)}`)
+  assert.ok(
+    allowedStatuses.includes(result.status),
+    Buffer.isBuffer(result.stderr) ? result.stderr.toString('utf8') : `git ${args[0]} failed`
+  )
+  assert.equal(result.signal, null, `git ${args[0]} was terminated by ${result.signal}`)
+  assert.ok(Buffer.isBuffer(result.stdout), `git ${args[0]} stdout must be a Buffer`)
+  return result
+}
+
+function nulRecords(output, label) {
+  assert.ok(Buffer.isBuffer(output), `${label} output must be a Buffer`)
+  if (output.length === 0) return []
+  assert.equal(output.at(-1), 0, `${label} output must be NUL-terminated`)
+  const records = []
+  let start = 0
+  for (let end = output.indexOf(0, start); end !== -1; end = output.indexOf(0, start)) {
+    assert.notEqual(end, start, `${label} output contains an empty record`)
+    records.push(output.subarray(start, end))
+    start = end + 1
+    if (start === output.length) break
+  }
+  assert.equal(start, output.length, `${label} output has trailing bytes`)
+  return records
+}
+
+function decodeUtf8(value, label) {
   try {
-    spawnSync('git', ['init', '--quiet'], { cwd: directory, check: true })
-    fs.writeFileSync(path.join(directory, '.gitignore'), ignoreRules)
-    const target = path.join(directory, relativePath)
-    fs.mkdirSync(path.dirname(target), { recursive: true })
-    fs.writeFileSync(target, '')
-    const result = spawnSync('git', ['check-ignore', '--quiet', '--no-index', relativePath], {
-      cwd: directory,
-    })
-    if (result.status !== 0 && result.status !== 1) {
-      throw new Error(`git check-ignore failed with status ${result.status}`)
-    }
-    return result.status === 0
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true })
+    return utf8Decoder.decode(value)
+  } catch {
+    assert.fail(`${label} is not valid UTF-8`)
   }
 }
+
+function assertCanonicalRepositoryPath(relativePath) {
+  assert.equal(typeof relativePath, 'string', 'repository path must be a string')
+  assert.notEqual(relativePath.length, 0, 'repository path must not be empty')
+  assert.equal(path.posix.isAbsolute(relativePath), false, `${relativePath} must be relative`)
+  assert.equal(relativePath.includes('\\'), false, `${relativePath} must use POSIX separators`)
+  assert.doesNotMatch(relativePath, /[\u0000-\u001f\u007f]/u, `${relativePath} is unsafe`)
+  assert.equal(path.posix.normalize(relativePath), relativePath, `${relativePath} is not canonical`)
+  assert.ok(
+    relativePath
+      .split('/')
+      .every((segment) => segment !== '' && segment !== '.' && segment !== '..'),
+    `${relativePath} contains an unsafe segment`
+  )
+}
+
+function trackedEntries(pathspec) {
+  const result = runGit(['ls-files', '--stage', '-z', '--', pathspec])
+  return nulRecords(result.stdout, 'git ls-files').map((record) => {
+    const separator = record.indexOf(9)
+    assert.ok(separator > 0 && separator < record.length - 1, 'Git index record is malformed')
+    const metadata = record.subarray(0, separator).toString('ascii')
+    const match = /^(?<mode>[0-7]{6}) (?<object>[0-9a-f]{40}|[0-9a-f]{64}) (?<stage>[0-3])$/u.exec(
+      metadata
+    )
+    assert.ok(match, 'Git index metadata is malformed')
+    const relativePath = decodeUtf8(record.subarray(separator + 1), 'Git index path')
+    assertCanonicalRepositoryPath(relativePath)
+    return { mode: match.groups.mode, path: relativePath, stage: match.groups.stage }
+  })
+}
+
+function trackedRegularPaths(pathspec) {
+  const paths = trackedEntries(pathspec).map((entry) => {
+    assert.equal(entry.stage, '0', `${entry.path} must not have an unmerged index stage`)
+    assert.match(entry.mode, /^100(?:644|755)$/u, `${entry.path} must have a regular Git mode`)
+    return entry.path
+  })
+  assert.equal(new Set(paths).size, paths.length, `${pathspec} index paths must be unique`)
+  return paths.sort()
+}
+
+function vercelIgnoreRepository() {
+  if (ignoreFixture !== undefined) return ignoreFixture
+  ignoreFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-vercel-upload-'))
+  runGit(['init', '--quiet'], { cwd: ignoreFixture })
+  return ignoreFixture
+}
+
+function ignoredVercelPaths(relativePaths, rules = ignoreRules) {
+  const paths = [...relativePaths]
+  for (const relativePath of paths) assertCanonicalRepositoryPath(relativePath)
+  assert.equal(
+    new Set(paths).size,
+    paths.length,
+    'Vercel classification input paths must be unique'
+  )
+  if (paths.length === 0) return new Set()
+
+  const directory = vercelIgnoreRepository()
+  fs.writeFileSync(path.join(directory, '.gitignore'), rules)
+  const input = Buffer.concat(
+    paths.flatMap((relativePath) => [Buffer.from(relativePath), Buffer.of(0)])
+  )
+  const result = runGit(['check-ignore', '--no-index', '-z', '--stdin'], {
+    cwd: directory,
+    input,
+    allowedStatuses: [0, 1],
+  })
+  const ignored = nulRecords(result.stdout, 'git check-ignore').map((record) => {
+    const relativePath = decodeUtf8(record, 'git check-ignore path')
+    assertCanonicalRepositoryPath(relativePath)
+    assert.equal(paths.includes(relativePath), true, `${relativePath} was not requested`)
+    return relativePath
+  })
+  assert.equal(new Set(ignored).size, ignored.length, 'git check-ignore returned duplicate paths')
+  assert.equal(
+    result.status,
+    ignored.length === 0 ? 1 : 0,
+    'git check-ignore status/output drifted'
+  )
+  return new Set(ignored)
+}
+
+function ignoredByVercelRules(relativePath) {
+  return ignoredVercelPaths([relativePath]).has(relativePath)
+}
+
+after(() => {
+  if (ignoreFixture !== undefined) {
+    fs.rmSync(ignoreFixture, { recursive: true, force: true })
+    ignoreFixture = undefined
+  }
+})
 
 function assertProjectRegularFile(relativePath) {
   const metadata = fs.lstatSync(path.join(root, relativePath))
@@ -212,6 +355,36 @@ test('keeps the complete Web install and build closure in the Vercel upload', ()
 test('keeps unrelated operational scripts out of the Vercel upload', () => {
   assert.equal(ignoredByVercelRules('scripts/openclaw/daily-pipeline-report.mjs'), true)
   assert.equal(ignoredByVercelRules('scripts/post-deploy-check.sh'), true)
+})
+
+test('uploads every tracked public asset while excluding the service-worker test inventory', () => {
+  const publicAssets = trackedRegularPaths('public')
+  const serviceWorkerFiles = trackedRegularPaths('__tests__/service-worker')
+  const serviceWorkerTestSources = serviceWorkerFiles.filter((relativePath) =>
+    sourceTestName.test(relativePath)
+  )
+  assert.ok(publicAssets.length > 0, 'tracked public asset inventory must not be empty')
+  assert.ok(serviceWorkerTestSources.length > 0, 'service-worker test source inventory disappeared')
+
+  const ignored = ignoredVercelPaths([...publicAssets, ...serviceWorkerFiles])
+  for (const relativePath of publicAssets) {
+    assert.equal(ignored.has(relativePath), false, `${relativePath} must upload`)
+  }
+  for (const relativePath of serviceWorkerFiles) {
+    assert.equal(ignored.has(relativePath), true, `${relativePath} must not upload`)
+  }
+  for (const relativePath of serviceWorkerTestSources) {
+    assert.equal(ignored.has(relativePath), true, `${relativePath} test source must not upload`)
+  }
+
+  const broadPublicExclusion = `${ignoreRules.trimEnd()}\n/public/\n`
+  const mutatedIgnored = ignoredVercelPaths(publicAssets, broadPublicExclusion)
+  assert.ok(mutatedIgnored.size > 0, 'broad public mutation must ignore tracked runtime assets')
+  assert.throws(() => {
+    for (const relativePath of publicAssets) {
+      assert.equal(mutatedIgnored.has(relativePath), false, `${relativePath} must upload`)
+    }
+  }, /must upload/u)
 })
 
 test('keeps isolated mobile release tooling out of the Vercel upload', () => {

@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { resolve } from 'node:path'
 import vm from 'node:vm'
+
+const serviceWorkerPath = resolve(__dirname, '../../public/sw.js')
 
 class MockResponse {
   constructor(private readonly body: string) {}
@@ -41,7 +43,7 @@ describe('service worker push viewer isolation', () => {
       skipWaiting: jest.fn(),
     }
 
-    vm.runInNewContext(readFileSync(join(process.cwd(), 'public/sw.js'), 'utf8'), {
+    vm.runInNewContext(readFileSync(serviceWorkerPath, 'utf8'), {
       self,
       caches,
       clients: { matchAll: jest.fn(), openWindow: jest.fn() },
