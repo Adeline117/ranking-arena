@@ -43,8 +43,14 @@ function mergeSeries(
 export default function CoreCharts({ series, timeframe }: CoreChartsProps) {
   const { t } = useLanguage()
 
-  const roiPoints = series.roi ?? series.roi_trading ?? []
-  const pnlPoints = series.pnl ?? series.cumulative_pnl ?? series.pnl_trading ?? []
+  const roiPoints = useMemo(
+    () => series.roi ?? series.roi_trading ?? [],
+    [series.roi, series.roi_trading]
+  )
+  const pnlPoints = useMemo(
+    () => series.pnl ?? series.cumulative_pnl ?? series.pnl_trading ?? [],
+    [series.cumulative_pnl, series.pnl, series.pnl_trading]
+  )
 
   // A flat all-zero (or single-value) series is not chartable — inactive
   // traders return a full window of zeros, which would otherwise render a

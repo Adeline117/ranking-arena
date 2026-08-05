@@ -125,12 +125,16 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
   // Adapters so the feed hooks (which operate on arrays + an "open" post) drive
   // our single post. setPosts maps over a one-element array; setOpenPost routes
   // a null (delete) to navigation.
-  const setPosts = useCallback<React.Dispatch<React.SetStateAction<Post[]>>>((action) => {
-    setPost((prev) => {
-      const next = typeof action === 'function' ? (action as (p: Post[]) => Post[])([prev]) : action
-      return next[0] ?? prev
-    })
-  }, [])
+  const setPosts = useCallback<React.Dispatch<React.SetStateAction<Post[]>>>(
+    (action) => {
+      setPost((prev) => {
+        const next =
+          typeof action === 'function' ? (action as (p: Post[]) => Post[])([prev]) : action
+        return next[0] ?? prev
+      })
+    },
+    [setPost]
+  )
 
   const setOpenPost = useCallback(
     (v: Post | null) => {
@@ -140,7 +144,7 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
       }
       setPost(v)
     },
-    [router]
+    [router, setPost]
   )
 
   const handleCommentCountChange = useCallback(

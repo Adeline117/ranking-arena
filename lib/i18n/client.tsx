@@ -103,22 +103,26 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Stable translation function — only recreated when language actually changes, not on mount
+  // Treat the dictionary version as part of the translation snapshot identity.
+  // Full dictionaries mutate the module cache in place, so language alone cannot
+  // tell React when consumers need a fresh translation function.
+  const translationSnapshot = useMemo(() => ({ language, txnVersion }), [language, txnVersion])
+
+  // Stable translation function — recreated only when the language or dictionary changes.
   const t = useMemo((): TranslationFunction => {
     return (key: string): string => {
+      const activeLanguage = translationSnapshot.language
       const k = key as keyof typeof translations.en
-      const value = translations[language][k] ?? translations.en[k]
+      const value = translations[activeLanguage][k] ?? translations.en[k]
       if (value === undefined) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn(`[i18n] Missing translation key: "${key}" (lang=${language})`)
+          console.warn(`[i18n] Missing translation key: "${key}" (lang=${activeLanguage})`)
         }
         return key
       }
       return value
     }
-    // txnVersion is intentionally in the deps: when the full async dictionary merges in,
-    // the version bumps and we must hand consumers a fresh t() so feature keys re-resolve.
-  }, [language, txnVersion])
+  }, [translationSnapshot])
 
   const contextValue = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t])
 

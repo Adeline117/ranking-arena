@@ -316,8 +316,14 @@ const MEMBER_ROW_HEIGHT = 52 // px, matches padding + avatar size
 const VIRTUALIZE_THRESHOLD = 20
 
 function VirtualizedMemberList({ members }: { members: GroupMember[] }): React.ReactElement {
+  'use no memo'
+
+  // TanStack Virtual returns imperative functions whose identity is managed by
+  // the library. Keep this focused adapter outside React Compiler memoization
+  // until the library exposes a compiler-compatible API.
   const parentRef = useRef<HTMLDivElement>(null)
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- this component is the explicit TanStack Virtual compiler boundary
   const virtualizer = useVirtualizer({
     count: members.length,
     getScrollElement: () => parentRef.current,

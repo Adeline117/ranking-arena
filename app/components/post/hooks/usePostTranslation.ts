@@ -159,7 +159,7 @@ export function usePostTranslation({
         setTranslating(false)
       }
     },
-    [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken]
+    [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken, t]
   )
 
   const translateListPosts = useCallback(

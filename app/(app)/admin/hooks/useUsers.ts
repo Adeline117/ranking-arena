@@ -124,7 +124,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         setActionLoading((prev) => ({ ...prev, [userId]: false }))
       }
     },
-    [accessToken, showToast]
+    [accessToken, showToast, t]
   )
 
   const unbanUser = useCallback(
@@ -162,7 +162,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         setActionLoading((prev) => ({ ...prev, [userId]: false }))
       }
     },
-    [accessToken, showToast]
+    [accessToken, showToast, t]
   )
 
   return {

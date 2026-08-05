@@ -2,7 +2,7 @@
 
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
@@ -96,12 +96,6 @@ export default function ApplyGroupPage() {
     []
   )
 
-  useEffect(() => {
-    if (accessToken) {
-      fetchMyApplications(accessToken)
-    }
-  }, [accessToken, sessionGeneration, userId, viewerKey])
-
   // The DOM file input is shared across renders. Clear A's selected File as
   // soon as ownership changes, while stale A completions are forbidden from
   // clearing a later B selection.
@@ -124,41 +118,50 @@ export default function ApplyGroupPage() {
     setFieldErrors(newErrors)
   }
 
-  const fetchMyApplications = async (token: string, requestScope?: ViewerScope) => {
-    const scope = requestScope ?? { viewerKey, sessionGeneration, userId }
-    if (
-      !scope.userId ||
-      scope.viewerKey !== `user:${scope.userId}` ||
-      jwtSubject(token) !== scope.userId ||
-      !isViewerScopeCurrent(scope)
-    )
-      return
-    try {
-      const result = await authedFetch<{ applications?: unknown[] }>(
-        '/api/groups/apply',
-        'GET',
-        token,
-        undefined,
-        15_000,
-        {
-          expectedUserId: scope.userId,
-          expectedSessionGeneration: scope.sessionGeneration,
-        }
+  const fetchMyApplications = useCallback(
+    async (token: string, requestScope?: ViewerScope) => {
+      const scope = requestScope ?? { viewerKey, sessionGeneration, userId }
+      if (
+        !scope.userId ||
+        scope.viewerKey !== `user:${scope.userId}` ||
+        jwtSubject(token) !== scope.userId ||
+        !isViewerScopeCurrent(scope)
       )
-
-      if (result.stale || !isViewerScopeCurrent(scope)) return
-      if (!result.ok) {
-        logger.warn('Failed to fetch applications:', result.status)
         return
-      }
+      try {
+        const result = await authedFetch<{ applications?: unknown[] }>(
+          '/api/groups/apply',
+          'GET',
+          token,
+          undefined,
+          15_000,
+          {
+            expectedUserId: scope.userId,
+            expectedSessionGeneration: scope.sessionGeneration,
+          }
+        )
 
-      if (result.data?.applications) {
-        setExistingApplications(result.data.applications)
+        if (result.stale || !isViewerScopeCurrent(scope)) return
+        if (!result.ok) {
+          logger.warn('Failed to fetch applications:', result.status)
+          return
+        }
+
+        if (result.data?.applications) {
+          setExistingApplications(result.data.applications)
+        }
+      } catch (err) {
+        logger.error('Error fetching applications:', err)
       }
-    } catch (err) {
-      logger.error('Error fetching applications:', err)
+    },
+    [sessionGeneration, setExistingApplications, userId, viewerKey]
+  )
+
+  useEffect(() => {
+    if (accessToken) {
+      void fetchMyApplications(accessToken)
     }
-  }
+  }, [accessToken, fetchMyApplications])
 
   const addRule = () => {
     const zhText = newRuleZh.trim()

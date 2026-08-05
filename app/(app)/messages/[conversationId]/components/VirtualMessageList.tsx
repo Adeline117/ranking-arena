@@ -58,6 +58,10 @@ export default function VirtualMessageList({
   loadingMore,
   onLoadMore,
 }: VirtualMessageListProps) {
+  'use no memo'
+
+  // TanStack Virtual owns the identity of its imperative methods. This component
+  // is the integration boundary until the library exposes a compiler-compatible API.
   const parentRef = useRef<HTMLDivElement>(null)
 
   // Flatten message groups into a single array of items
@@ -81,6 +85,7 @@ export default function VirtualMessageList({
     return items
   }, [messages, userId])
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- this component is the explicit TanStack Virtual compiler boundary
   const virtualizer = useVirtualizer({
     count: flatItems.length,
     getScrollElement: () => parentRef.current,

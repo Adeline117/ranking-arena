@@ -137,7 +137,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     } finally {
       if (isViewerScopeCurrent(requestScope)) setApplicationsLoading(false)
     }
-  }, [accessToken, stateOwnerKey])
+  }, [accessToken, setApplications, setApplicationsLoading])
 
   const loadEditApplicationsGuarded = useCallback(
     async (commitGuard?: () => boolean) => {
@@ -196,7 +196,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
         }
       }
     },
-    [accessToken, stateOwnerKey]
+    [accessToken, setEditApplications, setEditApplicationsLoading, stateOwnerKey]
   )
 
   const loadEditApplications = useCallback(
@@ -294,7 +294,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
           })
       }
     },
-    [accessToken, showToast, stateOwnerKey]
+    [accessToken, setActionLoading, setApplications, showToast, stateOwnerKey, t]
   )
 
   const rejectApplication = useCallback(
@@ -391,7 +391,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
           })
       }
     },
-    [accessToken, showToast, stateOwnerKey]
+    [accessToken, setActionLoading, setApplications, showToast, stateOwnerKey, t]
   )
 
   const runEditApplicationAction = useCallback(
@@ -526,7 +526,15 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
           })
       }
     },
-    [accessToken, editApplications, loadEditApplicationsGuarded, showToast, stateOwnerKey, t]
+    [
+      accessToken,
+      editApplications,
+      loadEditApplicationsGuarded,
+      setActionLoading,
+      showToast,
+      stateOwnerKey,
+      t,
+    ]
   )
 
   const approveEditApplication = useCallback(
