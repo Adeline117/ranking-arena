@@ -69,6 +69,7 @@ test('runs the worker directly in PM2 with the release-owned tsx loader', (t) =>
     env: {
       NODE_ENV: 'production',
       PLAYWRIGHT_BROWSERS_PATH: join(releaseDir, '.playwright-browsers'),
+      TSX_TSCONFIG_PATH: join(releaseDir, 'worker', 'tsconfig.json'),
     },
     exec_mode: 'fork',
     instances: 1,
