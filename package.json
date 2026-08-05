@@ -88,6 +88,7 @@
     "qa:architecture": "node scripts/qa/architecture-boundary-check.mjs",
     "qa:source-policy": "node scripts/qa/source-policy-check.mjs",
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
+    "qa:migration-safety": "node scripts/qa/migration-sql-safety-check.mjs",
     "qa:migration-history-shape": "node scripts/qa/migration-history-shape.mjs",
     "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",
     "qa:auth-recovery-preflight": "node --test scripts/maintenance/auth-recovery-preflight.test.mjs",

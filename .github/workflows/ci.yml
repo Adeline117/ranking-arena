@@ -297,20 +297,13 @@ jobs:
       - name: Supabase typed-client bypass ratchet
         run: npm run qa:cast-ratchet
 
-      - name: Migration lint — block dangerous DDL
-        run: |
-          CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
-          if [ -n "$CHANGED" ]; then
-            DANGEROUS=$(echo "$CHANGED" | xargs grep -iEn 'DROP TABLE|DROP COLUMN|ALTER.*NOT NULL(?!.*DEFAULT)' 2>/dev/null || true)
-            if [ -n "$DANGEROUS" ]; then
-              echo "::error::Dangerous migration patterns detected (review manually before merging):"
-              echo "$DANGEROUS"
-              exit 1
-            fi
-            echo "Migration lint passed — no dangerous DDL found"
-          else
-            echo "No migration changes to lint"
-          fi
+      # The Node gate owns diff enumeration and SQL inspection. Git, I/O, and
+      # parser failures exit 2; policy findings exit 1. Do not wrap this command
+      # in shell fallbacks or suppress stderr.
+      - name: Migration SQL safety gate
+        env:
+          MIGRATION_SAFETY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: npm run qa:migration-safety
 
   # ─────────────────────────────────────────────
   # Stage 3a: Unit Tests (parallel with build)
