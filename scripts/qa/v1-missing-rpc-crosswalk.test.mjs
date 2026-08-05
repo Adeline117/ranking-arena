@@ -307,6 +307,7 @@ test('rejects TypeScript test references forged by inert literals, regexes, and 
       `    expect(true).not.toMatch(/${definition.name}/)\n` +
       `    for (const name of [${JSON.stringify(definition.name)}]) {\n` +
       `      expect(name).toBe(name)\n` +
+      `      expect(migration && name).toBe(name)\n` +
       `    }\n` +
       `  })\n` +
       `})\n`
