@@ -78,12 +78,24 @@ e2e/ k6/                End-to-end and load tests
 __tests__/              Framework root-entrypoint contracts and test-only mocks
 docs/                   Current guidance, operational knowledge, and history
 .github/                Ownership, review policy, and CI/CD workflows
+.githooks/              Repository-managed local hook entry points
+.claude/ .cursor/        Repository-local agent instructions and editor policy
+.vscode/                 Shared editor settings
+vendor/                  Audited upstream source retained behind explicit boundaries
 ```
 
-Framework-required root configuration remains at the repository root. Generated
-outputs, screenshots, logs, browser profiles, environment files containing local
-or real values, and local state must stay untracked. Sanitized templates such as
-`.env.example` and `.env.template` remain tracked and must contain no credentials.
+The machine-readable inventory in
+`scripts/qa/repository-root-allowlist.json` is the authority for these directories
+and for framework-required root files. `npm run qa:root-layout` reads only the Git
+index, rejects unknown or stale entries, non-regular root entries, conflict stages,
+and portable-name collisions, and deliberately ignores ignored or untracked local
+state. Adding a top-level directory therefore requires the ADR, documentation, and
+allowlist changes in the same review.
+
+Generated outputs, screenshots, logs, browser profiles, environment files
+containing local or real values, and local state must stay untracked. Sanitized
+templates such as `.env.example` and `.env.template` remain tracked and must
+contain no credentials.
 
 ## Internal conventions
 
