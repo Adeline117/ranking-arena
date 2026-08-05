@@ -99,7 +99,7 @@ live contract 缺少以下五个 RPC：
 到 defining migration、runner raw/ledger digest、实际 consumer、generated type、静态/PG17
 测试及终态 ACL，并锁定四项 ranking authority → `040430`
 retirement 顺序。当前 crosswalk digest 为
-`89023cda03016d35eede68fbcd67cab082ff9186c38e06caf1a204e85288a964`；运行
+`065d3524c7928fb86907e2acdf97477acadcaa567b686e82c549164645be8ef5`；运行
 `npm run --silent qa:v1-missing-rpc-crosswalk` 可重建。其 live 缺失状态仍只绑定
 `2026-08-04T19:15:53.362Z` 历史只读快照，不能替代新的 production catalogue 复核，
 也不授权应用 migration。`get_token_ranking_publication_head` 与两个 writer 的目标是
@@ -149,7 +149,7 @@ hardening、V1 candidate、线上 token containment 和 `brace-expansion` 5.0.9
 来自 `@lhci/cli` 或 `@solana/web3.js` 的 `uuid`/`jayson` 链，registry 给出的自动方案是
 破坏性降级/跨大版本，不在本波次强制覆盖；须在独立兼容性迁移中处理。
 
-该新 lock 已在 Tailscale 上的第二网络 MacBook 以 commit `57300bcf4` 的精确 archive
+该新 lock 首先在 Tailscale 上的第二网络 MacBook 以 commit `57300bcf4` 的精确 archive
 独立验证：Node `22.23.2`、npm `11.11.0` 对上述 SHA-256 完成 clean `npm ci`
 （1930 packages），clean-tree audit 为 0 info/low/high/critical、4 moderate；
 `qa:baseline-offline` 为 309/307 pass/2 explicit PG skip，`qa:sweep-unit` 为
@@ -158,6 +158,20 @@ hardening、V1 candidate、线上 token containment 和 `brace-expansion` 5.0.9
 hosted CI 相同的无权限 Supabase/cron placeholder 完成 Next.js 16.2.11 production build、
 161 个静态页面及 1094 个 chunk 的 BigInt postbuild 检查；未向该主机提供生产 secret，
 也没有连接或修改生产数据库。
+
+终审关闭 RPC crosswalk 的空洞循环推断后，又在最终代码 commit
+`37ce53bce3d523eee560eff242b369f1d1c7a794` 上从精确 archive 完整重跑上述 clean
+MacBook 门禁：Git tree 为 `e32a81c5d60d04c3f9905b6deff7c6397a318469`，archive
+SHA-256 为 `25f48497ea2b65b9b900568f047424e8785a4caaba48e179876d56b567977f6d`，lock SHA-256
+仍为 `bceb7a4b3f3a28f6f4cfebc16e013485a0b428a3e438f67d2eda6c0db0469af6`。八条命令
+全部退出 0，结果仍为 1930 packages、audit 0 high/critical（4 moderate）、
+309/307 pass/2 explicit PG skip、713/711 pass/2 explicit PG skip、两套 TypeScript
+通过、lint 0 error/2694 warning，以及 161 pages/1094 chunks 的 cold production build。
+[脱敏的机器验证 manifest 与完整日志包](./evidence/v1-baseline-macbook-20260805/README.md)
+已随仓库保留；decoded bundle SHA-256 为
+`0cf24f95df6a51ace9ef8ac1f3504d80b49b08df3ee8654fef9d6123131abf2d`。manifest 明确记录
+`production_secrets_present=false`、`production_endpoints_contacted=false` 与
+`production_authorized=false`，所以这只关闭验证可追溯性缺口，不改变 NO-GO。
 
 - 同一应用源码树完成 Next.js 16.2.11 production-like build、161 个静态页面和
   1094 个浏览器 chunk 的 BigInt postbuild 检查。
