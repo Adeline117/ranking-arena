@@ -31,7 +31,6 @@
 
 import type {
   HistoryKind,
-  ParsedHistoryRow,
   ParsedPosition,
   RankingTimeframe,
   RawBundle,

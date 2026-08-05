@@ -7,9 +7,8 @@ import enFull from '@/lib/i18n/en'
 import { registerFullDict } from '@/lib/i18n'
 registerFullDict('en', enFull as unknown as Record<string, string>)
 
-import { useState, useEffect, useId } from 'react'
+import { useState, useId } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
@@ -185,21 +184,9 @@ function FaqSection({ title, items }: { title: string; items: Array<{ q: string;
 
 export default function HelpPageClient() {
   const { t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
   const faqData = getFaqData(t)
-
-  useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        setEmail(data.user?.email ?? null)
-      })
-      .catch(() => {
-        /* Intentionally swallowed: auth check non-critical for help page */
-      })
-  }, [])
 
   // Filter FAQ items by search query
   const filterItems = (items: Array<{ q: string; a: string }>) => {

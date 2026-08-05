@@ -57,7 +57,7 @@ export default function UserProfileClient({
 
   // Not found state
   if (!profile) {
-    return <ProfileNotFound handle={handle} email={email} />
+    return <ProfileNotFound handle={handle} />
   }
 
   // Blocked state — show minimal page
@@ -76,12 +76,12 @@ export default function UserProfileClient({
 
   // Trader loading state
   if (isTraderDataLoading) {
-    return <TraderLoading email={email} />
+    return <TraderLoading />
   }
 
   // Trader error state
   if (isTraderDataError) {
-    return <TraderError email={email} />
+    return <TraderError />
   }
 
   // Trader mode: identical to TraderPageClient layout

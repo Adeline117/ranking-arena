@@ -3,7 +3,7 @@
  */
 
 import { logger } from '@/lib/logger'
-import type { EvaluationCheck, EvaluationIssue } from '../pipeline-evaluator'
+import type { EvaluationIssue } from '../pipeline-evaluator'
 import type { CheckResult } from './types'
 
 function getBaseUrl(): string {

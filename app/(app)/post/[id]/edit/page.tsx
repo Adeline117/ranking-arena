@@ -272,7 +272,6 @@ export default function EditPostPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -299,7 +298,6 @@ export default function EditPostPage() {
     supabase.auth
       .getUser()
       .then(({ data }) => {
-        setEmail(data.user?.email ?? null)
         setUserId(data.user?.id ?? null)
       })
       // eslint-disable-next-line no-restricted-syntax

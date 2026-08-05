@@ -7,8 +7,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
 import { resolveExchangeSlug } from '@/lib/constants/exchanges'
 
-import { FIVE_MINUTES_MS } from '@/lib/constants/time'
-
 export type TimeRange = '90D' | '30D' | '7D' | 'COMPOSITE'
 export type SortBy = 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown'
 export type SortOrder = 'asc' | 'desc'

@@ -6,11 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-interface TraderLoadingProps {
-  email: string | null
-}
-
-export function TraderLoading({ email }: TraderLoadingProps) {
+export function TraderLoading() {
   return (
     <Box
       style={{
@@ -26,11 +22,7 @@ export function TraderLoading({ email }: TraderLoadingProps) {
   )
 }
 
-interface TraderErrorProps {
-  email: string | null
-}
-
-export function TraderError({ email }: TraderErrorProps) {
+export function TraderError() {
   const { t } = useLanguage()
 
   return (

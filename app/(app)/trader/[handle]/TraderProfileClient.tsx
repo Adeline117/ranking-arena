@@ -1345,11 +1345,7 @@ export default function TraderProfileClient({
         />
 
         <TraderStaleBanner show={showStaleBanner} t={t} />
-        <TraderPlatformDeadBanner
-          show={isPrimaryAccount && !!data.is_platform_dead}
-          source={visibleSource}
-          t={t}
-        />
+        <TraderPlatformDeadBanner show={isPrimaryAccount && !!data.is_platform_dead} t={t} />
 
         {/* Sticky mini header for mobile */}
         <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>

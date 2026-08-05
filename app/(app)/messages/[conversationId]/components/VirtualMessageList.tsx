@@ -82,7 +82,6 @@ export default function VirtualMessageList({
   }, [messages, userId])
 
   const virtualizer = useVirtualizer({
-    // eslint-disable-line react-hooks/incompatible-library -- by design
     count: flatItems.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (index) => {

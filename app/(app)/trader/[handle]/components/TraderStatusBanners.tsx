@@ -10,7 +10,6 @@
 
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
 interface TraderStaleBannerProps {
   show: boolean
@@ -45,7 +44,6 @@ export function TraderStaleBanner({ show, t }: TraderStaleBannerProps) {
 
 interface TraderPlatformDeadBannerProps {
   show: boolean
-  source: string
   t: (key: string) => string
 }
 
@@ -53,9 +51,8 @@ interface TraderPlatformDeadBannerProps {
  * Platform-dead banner — shown when the exchange is in our isDead() list
  * (data may be stale because we no longer poll the platform).
  */
-export function TraderPlatformDeadBanner({ show, source, t }: TraderPlatformDeadBannerProps) {
+export function TraderPlatformDeadBanner({ show, t }: TraderPlatformDeadBannerProps) {
   if (!show) return null
-  const exchangeName = EXCHANGE_NAMES[source] || source
   return (
     <Box
       style={{

@@ -10,7 +10,6 @@ import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import PageHeader from '@/app/components/ui/PageHeader'
 import ErrorState from '@/app/components/ui/ErrorState'
-import { supabase } from '@/lib/supabase/client'
 import { useMarketSpotData, type SpotCoin } from '@/lib/hooks/useMarketSpot'
 
 // Core above-fold components: direct import for faster LCP
@@ -250,7 +249,6 @@ function MarketPageContent({
   initialSpotDataUpdatedAt?: number
 }) {
   const { t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
   const [selectedToken, setSelectedToken] = useState<{
     id: string
     symbol: string
@@ -279,10 +277,6 @@ function MarketPageContent({
   const hasUsableSpotData = !!spotData?.length || !!initialSpotData?.length
   const spotPending = spotLoading && !hasUsableSpotData
   const spotFailed = spotError && !hasUsableSpotData
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
-  }, [])
 
   const handleSectorClick = useCallback((category: string) => {
     setSectorFilter((prev) => (prev === category ? null : category))

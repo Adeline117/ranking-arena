@@ -77,7 +77,7 @@ export default function TraderFeed({
       })
       .catch(() => {
         /* Auth check non-critical for trader feed */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [])
 
   const sortedItems = useMemo(() => {

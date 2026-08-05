@@ -112,7 +112,7 @@ interface MonitoringData {
 export default function MonitoringPage() {
   const { t } = useLanguage()
   const { showToast } = useToast()
-  const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
+  const { accessToken, isAdmin, authChecking } = useAdminAuth()
   const [data, setData] = useState<MonitoringData | null>(null)
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)

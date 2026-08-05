@@ -314,7 +314,7 @@ const sty = {
 
 export default function PipelineMonitoringDashboard() {
   const { t } = useLanguage()
-  const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
+  const { accessToken, isAdmin, authChecking } = useAdminAuth()
   const [pipelineData, setPipelineData] = useState<PipelineData | null>(null)
   const [enrichmentData, setEnrichmentData] = useState<EnrichmentData | null>(null)
   const [loading, setLoading] = useState(true)

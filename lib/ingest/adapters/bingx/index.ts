@@ -23,16 +23,7 @@
  * WORKER-ONLY MODULE (imported via adapters/register in the worker).
  */
 
-import type {
-  HistoryKind,
-  ParsedHistoryRow,
-  ParsedPosition,
-  RankingTimeframe,
-  RawBundle,
-  RawPage,
-  SourceRow,
-  Timeframe,
-} from '../../core/types'
+import type { HistoryKind, RankingTimeframe, RawBundle, RawPage, SourceRow } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession, ReplayRequestTemplate } from '../../fetch/types'
 import { apiFetcher, replayPaged } from '../../fetch/capture'

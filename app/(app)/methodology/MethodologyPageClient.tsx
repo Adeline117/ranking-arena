@@ -120,16 +120,6 @@ const tocBoxStyle: React.CSSProperties = {
 const anchorClass =
   'rounded-md outline-none transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent-primary)]'
 
-/* ---------- helpers ---------- */
-
-function renderParagraphs(block: string): React.ReactNode {
-  return block.split('\n\n').map((p, i) => (
-    <p key={i} style={i > 0 ? { marginTop: tokens.spacing[3] } : undefined}>
-      {p}
-    </p>
-  ))
-}
-
 function renderList(block: string, style?: React.CSSProperties): React.ReactNode {
   return (
     <ul style={{ ...listStyle, ...style }}>
