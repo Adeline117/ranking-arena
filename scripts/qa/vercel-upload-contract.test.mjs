@@ -158,7 +158,7 @@ test('keeps Deploy Gate as the only writer of production domains', () => {
   assert.match(releaseControl, /push:\n    branches: \[main\]/)
   assert.match(releaseControl, /workflow_dispatch:/)
   assert.match(releaseControl, /cancel-in-progress: false/)
-  assert.match(releaseControl, /uses: actions\/checkout@v4/)
+  assert.match(releaseControl, /uses: actions\/checkout@[0-9a-f]{40}/)
   assert.match(releaseControl, /run: node scripts\/ci\/enforce-vercel-release-control\.mjs/)
   assert.match(releaseControlScript, /https:\/\/api\.vercel\.com/)
   assert.match(

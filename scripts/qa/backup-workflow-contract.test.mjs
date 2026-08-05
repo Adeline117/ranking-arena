@@ -128,9 +128,13 @@ function runAlert({
 
 test('validates every backup secret before checkout or dependency installation', () => {
   const preflightPosition = workflow.indexOf('- name: Validate backup configuration')
+  const checkoutPosition = workflow.indexOf('- uses: actions/checkout@')
+  const setupNodePosition = workflow.indexOf('- uses: actions/setup-node@')
   assert.ok(preflightPosition >= 0)
-  assert.ok(preflightPosition < workflow.indexOf('- uses: actions/checkout@v4'))
-  assert.ok(preflightPosition < workflow.indexOf('- uses: actions/setup-node@v6'))
+  assert.ok(checkoutPosition >= 0)
+  assert.ok(setupNodePosition >= 0)
+  assert.ok(preflightPosition < checkoutPosition)
+  assert.ok(preflightPosition < setupNodePosition)
   assert.ok(preflightPosition < workflow.indexOf('- run: npm ci --ignore-scripts'))
 
   const configured = runPreflight()
