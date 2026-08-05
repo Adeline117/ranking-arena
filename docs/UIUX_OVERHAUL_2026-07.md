@@ -45,12 +45,16 @@
 | U9  | **Groups/频道**   | `/groups` `/groups/[id]` `/groups/[id]/manage` `/groups/[id]/new` `/groups/apply` `/channels/[channelId]`                                                                                                                                                                                     | 待排      |
 | U10 | **Inbox/消息**    | `/inbox` `/notifications` `/messages` `/messages/[conversationId]` + presence/未读徽章                                                                                                                                                                                                        | 待排      |
 | U11 | **个人中心家族**  | `/u/[handle]` `/u/[handle]/new` `/user-center` `/settings` `/settings/linked-accounts` `/watchlist` `/favorites` `/favorites/[folderId]` `/following` `/portfolio` `/exchange/auth` `/exchange/auth/api-key` `/exchange/auth/callback`(注意:watchlist 与 favorites 并存,走查时评估是否该合并) | 待排      |
-| U12 | **次级/静态页**   | `/learn` `/learn/[slug]` `/quiz` `/quiz/questions` `/quiz/result` `/wrapped/[handle]` `/about` `/help` `/methodology` `/api-docs` `/status` `/offline` `/privacy` `/terms` `/disclaimer` `/dmca` `/design-system`                                                                             | 待排      |
+| U12 | **次级/静态页**   | `/learn` `/learn/[slug]` `/quiz` `/quiz/questions` `/quiz/result` `/wrapped/[handle]` `/about` `/help` `/methodology` `/api-docs` `/status` `/offline` `/privacy` `/terms` `/disclaimer` `/dmca`                                                                                              | 待排      |
 | U13 | **Admin 后台**    | `/admin`（含 canonical data-health tab；旧 `/admin/data-health` 永久跳转）`/admin/monitoring` `/admin/monitoring/pipeline` `/admin/pro-metrics` `/admin/reports`(owner 专用,标准可放宽,排最后)                                                                                                | 待排      |
 | U14 | **横切兜底**      | 亮色主题 + ja/ko 全站 sweep(前面各单元遗漏的)                                                                                                                                                                                                                                                 | 最后      |
 
 > 顺序依据 CLAUDE.md Product Priority:核心路径(首页→排行→详情→搜索→
 > 登录→Pro)优先于次级(Market/社交/Library)。owner 可随时调序/插队。
+>
+> `app/design-system/LeaderboardRedesignPreview.tsx` 是 owner-gated 的 source-only 原型，
+> 不属于可访问路由，禁止挂载到生产 `/design-system`。owner 走查时只在本地临时挂载；
+> 若未来需要共享预览，必须另建受控入口。
 
 ## 把关操作方式
 
