@@ -10,24 +10,14 @@
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js'
 import type { Database } from './database.types'
-import { NextRequest } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { logger } from '@/lib/logger'
+import { readCorrelationId } from '@/lib/telemetry/correlation-context'
 
-// Lazy-loaded correlation ID getter (avoids importing node:async_hooks in client bundles)
-let _getCorrelationId: (() => string | undefined) | null = null
+// Runtime-neutral correlation ID bridge; the API layer owns AsyncLocalStorage.
 function correlationId(): string | undefined {
   if (typeof window !== 'undefined') return undefined
-  if (!_getCorrelationId) {
-    try {
-      const mod = '@/lib/api/' + 'correlation'
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      _getCorrelationId = require(mod).getCorrelationId
-    } catch (_err) {
-      /* correlation module unavailable */
-      _getCorrelationId = () => undefined
-    }
-  }
-  return _getCorrelationId!()
+  return readCorrelationId()
 }
 
 // 构建时使用占位符，运行时使用真实环境变量

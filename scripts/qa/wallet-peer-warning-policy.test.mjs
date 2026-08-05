@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import test from 'node:test'
 
-import { getOptionalWalletPeerWarningRules } from '../../lib/config/webpack-warning-policy.mjs'
+import {
+  getOptionalWalletPeerWarningRules,
+  getReviewedThirdPartyWarningRules,
+} from '../../lib/config/webpack-warning-policy.mjs'
 
 const root = process.cwd()
 
@@ -149,6 +152,7 @@ test('optional peer warning policy is constrained by importer and request', () =
 test('Next webpack config uses the narrow policy instead of global IgnorePlugin entries', () => {
   const config = read('next.config.ts')
   assert.match(config, /\.\.\.getOptionalWalletPeerWarningRules\(\)/)
+  assert.match(config, /\.\.\.getReviewedThirdPartyWarningRules\(\)/)
 
   const ignorePlugin = config.match(/new webpack\.IgnorePlugin\(\{[\s\S]*?\}\)/)?.[0]
   assert.ok(ignorePlugin, 'expected the existing IgnorePlugin configuration')
@@ -160,4 +164,39 @@ test('Next webpack config uses the narrow policy instead of global IgnorePlugin 
   ]) {
     assert.doesNotMatch(ignorePlugin, dependency)
   }
+})
+
+test('reviewed third-party warning policy matches only the unreachable Tempo module', () => {
+  const rules = getReviewedThirdPartyWarningRules()
+  assert.equal(rules.length, 1)
+
+  const isReviewed = (module, message) =>
+    rules.some((rule) => rule.module.test(module) && rule.message.test(message))
+  const warning = 'Critical dependency: the request of a dependency is an expression'
+
+  assert.equal(
+    isReviewed(
+      '/repo/node_modules/viem/node_modules/ox/_esm/tempo/internal/virtualMasterPool.js',
+      warning
+    ),
+    true
+  )
+  assert.equal(
+    isReviewed('/repo/node_modules/ox/_esm/tempo/internal/virtualMasterPool.js', warning),
+    false
+  )
+  assert.equal(
+    isReviewed(
+      '/repo/node_modules/viem/node_modules/ox/_esm/tempo/internal/another-module.js',
+      warning
+    ),
+    false
+  )
+  assert.equal(
+    isReviewed(
+      '/repo/node_modules/viem/node_modules/ox/_esm/tempo/internal/virtualMasterPool.js',
+      'Module not found: unrelated'
+    ),
+    false
+  )
 })

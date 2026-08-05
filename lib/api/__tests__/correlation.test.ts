@@ -2,11 +2,8 @@
  * Correlation ID system tests
  */
 
-import {
-  getOrCreateCorrelationId,
-  getCorrelationId,
-  runWithCorrelationId,
-} from '../correlation'
+import { getOrCreateCorrelationId, getCorrelationId, runWithCorrelationId } from '../correlation'
+import { readCorrelationId } from '@/lib/telemetry/correlation-context'
 
 // Minimal NextRequest-like object for testing
 function fakeRequest(headers: Record<string, string> = {}) {
@@ -14,9 +11,7 @@ function fakeRequest(headers: Record<string, string> = {}) {
     headers: {
       get(name: string) {
         // Header lookup is case-insensitive per HTTP spec
-        const key = Object.keys(headers).find(
-          (k) => k.toLowerCase() === name.toLowerCase()
-        )
+        const key = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase())
         return key ? headers[key] : null
       },
     },
@@ -61,11 +56,13 @@ describe('Correlation ID', () => {
   describe('AsyncLocalStorage context', () => {
     it('should return undefined outside of a correlation context', () => {
       expect(getCorrelationId()).toBeUndefined()
+      expect(readCorrelationId()).toBeUndefined()
     })
 
     it('should return the correlation ID inside runWithCorrelationId', () => {
       runWithCorrelationId('test-cid-789', () => {
         expect(getCorrelationId()).toBe('test-cid-789')
+        expect(readCorrelationId()).toBe('test-cid-789')
       })
     })
 
@@ -92,6 +89,23 @@ describe('Correlation ID', () => {
         await new Promise((resolve) => setTimeout(resolve, 10))
         expect(getCorrelationId()).toBe('async-cid')
       })
+    })
+
+    it('should isolate concurrent request contexts', async () => {
+      const ids = ['request-a', 'request-b']
+      const observed = await Promise.all(
+        ids.map((id, index) =>
+          runWithCorrelationId(id, async () => {
+            await new Promise((resolve) => setTimeout(resolve, index + 1))
+            return [getCorrelationId(), readCorrelationId()]
+          })
+        )
+      )
+
+      expect(observed).toEqual([
+        ['request-a', 'request-a'],
+        ['request-b', 'request-b'],
+      ])
     })
   })
 })

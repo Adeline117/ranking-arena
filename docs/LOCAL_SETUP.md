@@ -43,10 +43,11 @@ If a task genuinely needs server secrets, ask the owner — they are shared via
 
 ## Troubleshooting
 
-| Symptom                                     | Cause                                                                 | Fix                                                                    |
-| ------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Every page slow, Supabase errors in console | `.env.local` typo'd/corrupted (often by chat apps mangling long keys) | `rm .env.local && bash scripts/setup-local-env.sh`, restart dev server |
-| `Invalid API key` / 401 in console          | same as above                                                         | same as above                                                          |
-| Weird build/runtime errors                  | Wrong Node major, or deps installed with yarn/pnpm                    | `nvm use`; reinstall with `npm ci`                                     |
-| Only the first page-load is slow            | dev on-demand compile                                                 | normal — revisit the page                                              |
-| Changed `.env.local` but nothing happened   | env is read at boot                                                   | restart `npm run dev`                                                  |
+| Symptom                                     | Cause                                                                 | Fix                                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Every page slow, Supabase errors in console | `.env.local` typo'd/corrupted (often by chat apps mangling long keys) | `rm .env.local && bash scripts/setup-local-env.sh`, restart dev server           |
+| `Invalid API key` / 401 in console          | same as above                                                         | same as above                                                                    |
+| Weird build/runtime errors                  | Wrong Node major, or deps installed with yarn/pnpm                    | `nvm use`; reinstall with `npm ci`                                               |
+| Production build fails with `ENOSPC`        | Next's reusable webpack cache exceeds available local disk            | Delete generated `.next`, then run `ARENA_DISABLE_WEBPACK_CACHE=1 npm run build` |
+| Only the first page-load is slow            | dev on-demand compile                                                 | normal — revisit the page                                                        |
+| Changed `.env.local` but nothing happened   | env is read at boot                                                   | restart `npm run dev`                                                            |
