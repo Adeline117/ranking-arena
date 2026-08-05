@@ -147,7 +147,18 @@ graph TD
 | Auth 原语          | `lib/api/with-cron.ts`/`with-admin-auth.ts`/`auth.ts`/`lib/auth/`                                  |
 | 数据获取           | Server `lib/data/*`；Client `lib/hooks/use*`；Cache `lib/cache/redis-layer.ts` / `redis-client.ts` |
 
-## 七、安全横切基建
+## 七、运行时源码边界
+
+`app/`、`lib/`、`worker/` 与已登记的根运行时入口构成生产源码来源。仓库内 import
+解析完成后，目标必须位于 `app/`、`lib/` 或 `worker/`，并继续遵守 UI、共享库和 worker
+之间的既有单向依赖规则。根运行时入口只可额外引用其他已登记的根运行时入口。
+
+`tooling/`、`infra/`、`cloudflare-worker/`、`e2e/`、根 `__tests__/` 以及其他部署外或
+独立部署根不得进入上述运行时依赖图；静态 import、dynamic import、re-export、require
+与 type-only import 使用同一规则。第三方 bare package import 不属于仓库目标，不受此根
+分类影响。该约束由 `npm run qa:architecture` 强制执行。
+
+## 八、安全横切基建
 
 除全表 RLS（Supabase policies）外，安全原语分布如下（`middleware.ts` 级 CSP/CORS
 在 `middleware.ts` 之外由 Next 配置 + 各 API wrapper 承担）：
