@@ -1,4 +1,4 @@
 {
   "description": "Scripts explicitly allowed for production/runtime operations.",
-  "allowed": ["check_status.mjs", "diagnose.mjs", "pipeline-health-check.mjs"]
+  "allowed": ["diagnose.mjs", "pipeline-health-check.mjs"]
 }

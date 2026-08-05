@@ -17,8 +17,9 @@ npm run check:freshness
 npm run check:platforms
 ```
 
-`npm run diagnose` runs all three sections. Set `ARENA_URL` to test a local or
-preview deployment; it defaults to the production site.
+`scripts/diagnose.mjs` is the single diagnostics implementation. `npm run
+diagnose` runs all three sections. Set `ARENA_URL` to test a local or preview
+deployment; it defaults to the production site.
 
 For an internal, read-only active-source freshness check, run:
 

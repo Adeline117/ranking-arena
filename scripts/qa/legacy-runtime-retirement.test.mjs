@@ -47,6 +47,7 @@ test('keeps retired legacy runtime roots and entrypoints deleted', () => {
     'scripts/check-migration-naming.sh',
     'scripts/check-orphan-pages.sh',
     'scripts/check-service-layer.sh',
+    'scripts/check_status.mjs',
     'scripts/check_enrichment.mjs',
     'scripts/check_seasons.mjs',
     'scripts/check_tables.mjs',

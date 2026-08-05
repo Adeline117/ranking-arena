@@ -15,11 +15,7 @@ const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import
 const diagnoseSource = readFileSync(new URL('../diagnose.mjs', import.meta.url), 'utf8')
 
 test('keeps the production script surface minimal and diagnostics canonical', () => {
-  assert.deepEqual(allowlist.allowed, [
-    'check_status.mjs',
-    'diagnose.mjs',
-    'pipeline-health-check.mjs',
-  ])
+  assert.deepEqual(allowlist.allowed, ['diagnose.mjs', 'pipeline-health-check.mjs'])
 
   for (const command of [
     'check:seasons',
@@ -31,7 +27,8 @@ test('keeps the production script surface minimal and diagnostics canonical', ()
     assert.equal(Object.hasOwn(packageJson.scripts, command), false)
   }
 
-  assert.match(diagnoseSource, /check_status\.mjs/)
+  assert.doesNotMatch(diagnoseSource, /check_status\.mjs/)
+  assert.match(diagnoseSource, /fetchJson\(baseUrl, '\/api\/health'\)/)
   assert.doesNotMatch(diagnoseSource, /check_(?:seasons|tables|enrichment)\.mjs|trader_snapshots/)
 })
 

@@ -186,5 +186,3 @@ export default function UserProfileClient({
     </Box>
   )
 }
-
-// FollowersList extracted to ./components/FollowersList.tsx
