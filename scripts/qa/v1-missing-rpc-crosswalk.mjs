@@ -582,42 +582,13 @@ function assertionDirectlyReferencesRpc(assertion, rpcName, tainted) {
   )
 }
 
-function loopBindsRpcToAssertion(node, rpcName, tainted) {
-  if (
-    !ts.isForOfStatement(node) ||
-    !ts.isVariableDeclarationList(node.initializer) ||
-    node.initializer.declarations.length !== 1
-  ) {
-    return false
-  }
-  const declaration = node.initializer.declarations[0]
-  if (!ts.isIdentifier(declaration.name) || !ts.isArrayLiteralExpression(node.expression)) {
-    return false
-  }
-  if (!node.expression.elements.some((element) => containsRpcLiteral(element, rpcName))) {
-    return false
-  }
-  const binding = declaration.name.text
-  return visitTypeScriptNode(node.statement, (candidate) => {
-    if (!ts.isCallExpression(candidate)) return false
-    const assertion = assertionDetails(candidate)
-    return (
-      assertion !== null &&
-      assertionUsesTaintedEvidence(assertion, tainted) &&
-      containsIdentifier(assertion.actual, (name) => name === binding)
-    )
-  })
-}
-
 function hasTypeScriptTestReference(sourceFile, rpcName) {
   const tainted = collectTaintedEvidenceIdentifiers(sourceFile)
   if (tainted.size === 0) return false
   return visitTypeScriptNode(sourceFile, (node) => {
-    if (ts.isCallExpression(node)) {
-      const assertion = assertionDetails(node)
-      if (assertion && assertionDirectlyReferencesRpc(assertion, rpcName, tainted)) return true
-    }
-    return loopBindsRpcToAssertion(node, rpcName, tainted)
+    if (!ts.isCallExpression(node)) return false
+    const assertion = assertionDetails(node)
+    return assertion !== null && assertionDirectlyReferencesRpc(assertion, rpcName, tainted)
   })
 }
 

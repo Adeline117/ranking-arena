@@ -295,8 +295,8 @@ Owner/Admin 需要提供的 CA、受控 5432 只读 URL、两个空白 PG17 repl
    约 100 GiB 的 managed scratch 先完整恢复受保护的 2026-07-26 legacy 对象，完成
    CRC/tail、索引、RLS/auth、关键表及应用只读 smoke，形成事故/历史恢复证据。
 2. 生成一份通过当前 completion metadata 与关键表门禁的新备份，并在新的干净
-   > =100 GiB restore target 完整恢复，证明 launch RPO/RTO。可在导出第 1 步证据并
-   > 删除/重新创建项目后复用同一容量预算，但不得覆盖 legacy restore 或混用证据。
+   `>=100 GiB` restore target 完整恢复，证明 launch RPO/RTO。可在导出第 1 步证据并
+   删除/重新创建项目后复用同一容量预算，但不得覆盖 legacy restore 或混用证据。
 3. 用已评审的只读 capture scaffold 取得 source witness，再独立构造 canonical
    baseline；不得改写旧 migration。先在两个空白 managed PostgreSQL 17 完整重放，
    再对冻结 catalogue/ledger 做等价核对，并让 ledger-driven Preview 通过。此前不得
