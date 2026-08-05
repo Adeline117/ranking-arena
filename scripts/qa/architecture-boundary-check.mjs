@@ -140,6 +140,17 @@ export function classifyBoundary(source, target) {
   const rootRuntimeSource = ROOT_RUNTIME_SOURCES.has(source)
   if (!SOURCE_ROOTS.includes(sourceRoot) && !rootRuntimeSource) return null
 
+  // lib/logger.ts is a backwards-compatibility facade over the canonical
+  // lib/utils/logger.ts implementation. Utilities must not depend back on the
+  // facade that wraps their own layer; sibling imports keep this boundary
+  // acyclic while the wider compatibility migration proceeds in small batches.
+  if (
+    source.startsWith('lib/utils/') &&
+    (target === 'lib/logger' || /^lib\/logger\.[cm]?[jt]sx?$/u.test(target))
+  ) {
+    return 'logger-utils-must-use-canonical-module'
+  }
+
   if (sourceRoot === 'lib' && (target === 'app' || target.startsWith('app/'))) {
     return 'lib-must-not-import-app'
   }

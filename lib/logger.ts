@@ -1,8 +1,9 @@
 /**
  * Logger re-export for backwards compatibility
  *
- * The canonical logger implementation is at lib/utils/logger.ts
- * This file re-exports for existing imports from '@/lib/logger'
+ * The canonical logger implementation is at lib/utils/logger.ts.
+ * This file re-exports for existing imports from '@/lib/logger'; new code
+ * should import the canonical module instead.
  */
 
 export {

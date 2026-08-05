@@ -46,6 +46,9 @@ test('collects TypeScript CommonJS imports and fails closed on parse errors', ()
 })
 
 test('resolves aliases and relative repository imports', () => {
+  assert.equal(resolveRepositoryTarget('lib/utils/content.ts', '@/lib/logger'), 'lib/logger')
+  assert.equal(resolveRepositoryTarget('lib/utils/content.ts', '../logger'), 'lib/logger')
+  assert.equal(resolveRepositoryTarget('lib/utils/content.ts', './logger'), 'lib/utils/logger')
   assert.equal(resolveRepositoryTarget('lib/domain/file.ts', '@/app/api/jobs'), 'app/api/jobs')
   assert.equal(
     resolveRepositoryTarget('lib/domain/file.ts', '@/lib/../app/api/jobs'),
@@ -61,6 +64,14 @@ test('resolves aliases and relative repository imports', () => {
 })
 
 test('classifies forbidden dependency directions', () => {
+  assert.equal(
+    classifyBoundary('lib/utils/content.ts', 'lib/logger'),
+    'logger-utils-must-use-canonical-module'
+  )
+  assert.equal(
+    classifyBoundary('lib/utils/content.ts', 'lib/logger.ts'),
+    'logger-utils-must-use-canonical-module'
+  )
   assert.equal(
     classifyBoundary('lib/domain/file.ts', 'app/components/Button'),
     'lib-must-not-import-app'
@@ -97,6 +108,10 @@ test('classifies forbidden dependency directions', () => {
 })
 
 test('allows intended dependency directions', () => {
+  assert.equal(classifyBoundary('lib/utils/content.ts', 'lib/utils/logger'), null)
+  assert.equal(classifyBoundary('lib/utils/content.ts', 'lib/logger/README'), null)
+  assert.equal(classifyBoundary('lib/utils-legacy/content.ts', 'lib/logger'), null)
+  assert.equal(classifyBoundary('lib/services/email.ts', 'lib/logger'), null)
   assert.equal(classifyBoundary('app/api/jobs/route.ts', 'lib/jobs/service'), null)
   assert.equal(classifyBoundary('app/components/Card.tsx', 'lib/ui/card'), null)
   assert.equal(classifyBoundary('worker/job.ts', 'lib/ingest/job'), null)
