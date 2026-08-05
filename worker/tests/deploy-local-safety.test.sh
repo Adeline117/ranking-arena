@@ -67,7 +67,6 @@ assert_before() {
 
 emit_test_archive() {
   command tar -cf - \
-    .npmrc package.json package-lock.json tsconfig.json \
     scripts/ci/worker-release-id.mjs lib worker
 }
 export -f emit_test_archive
@@ -198,18 +197,20 @@ fake_git_environment() {
 }
 
 fake_npm_ci() {
-  printf 'npm cwd=%s args=ci\n' "$PWD" >> "$EVENT_LOG"
+  local install_root="$PWD/worker"
+  printf 'npm cwd=%s args=ci --prefix worker --omit=dev\n' "$PWD" >> "$EVENT_LOG"
   mkdir -p \
-    "$PWD/node_modules/tsx/dist" \
-    "$PWD/node_modules/playwright" \
-    "$PWD/node_modules/.bin" \
+    "$install_root/node_modules/tsx/dist" \
+    "$install_root/node_modules/playwright" \
+    "$install_root/node_modules/.bin" \
     "$PWD/.playwright-browsers/chromium-test"
-  printf '%s\n' 'export {}' > "$PWD/node_modules/tsx/dist/cli.mjs"
-  printf '%s\n' 'export {}' > "$PWD/node_modules/tsx/dist/loader.mjs"
-  printf '%s\n' 'export {}' > "$PWD/node_modules/playwright/cli.js"
-  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$PWD/node_modules/.bin/tsx"
-  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$PWD/node_modules/.bin/playwright"
-  chmod +x "$PWD/node_modules/.bin/tsx" "$PWD/node_modules/.bin/playwright"
+  printf '%s\n' 'export {}' > "$install_root/node_modules/tsx/dist/cli.mjs"
+  printf '%s\n' 'export {}' > "$install_root/node_modules/tsx/dist/loader.mjs"
+  printf '%s\n' 'export {}' > "$install_root/node_modules/playwright/cli.js"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$install_root/node_modules/.bin/tsx"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$install_root/node_modules/.bin/playwright"
+  chmod +x "$install_root/node_modules/.bin/tsx" \
+    "$install_root/node_modules/.bin/playwright"
 }
 
 make_old_release() {
@@ -261,11 +262,17 @@ install_common_fake_functions() {
         printf '100755 blob %s\tworker/deploy-ingest-local.sh\n' "$TEST_SHA"
         ;;
       *'ls-tree -r --name-only'*)
-        printf '%s\n' .npmrc package.json package-lock.json tsconfig.json \
+        printf '%s\n' worker/.npmrc worker/package.json worker/package-lock.json \
+          worker/tsconfig.json lib/ingest/core/regions.ts \
           scripts/ci/worker-release-id.mjs worker/deploy-ingest-local.sh
         ;;
-      *'ls-tree -r '*' -- .npmrc'*)
-        printf '100644 blob %s\t.npmrc\n' "$TEST_SHA"
+      *'ls-tree -r '*' -- lib worker'*)
+        printf '160000 commit %s\tlib/forge-std\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/.npmrc\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/package.json\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/package-lock.json\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/tsconfig.json\n' "$TEST_SHA"
+        printf '100644 blob %s\tlib/ingest/core/regions.ts\n' "$TEST_SHA"
         printf '100755 blob %s\tworker/deploy-ingest-local.sh\n' "$TEST_SHA"
         ;;
       *'archive'*) emit_test_archive ;;
@@ -274,7 +281,8 @@ install_common_fake_functions() {
   }
 
   npm() {
-    [ "${1:-}" = ci ] || fail "only npm ci is allowed in deploy tests: $*"
+    [ "$*" = 'ci --prefix worker --omit=dev' ] || \
+      fail "only the Worker production closure install is allowed in deploy tests: $*"
     fake_npm_ci
   }
 
@@ -459,7 +467,8 @@ install_common_fake_functions() {
         fi
         printf '%s\n' '[local-heartbeat-proof] exact fresh Redis roster identity ready'
         ;;
-      *npm-cli.js*' ci') fake_npm_ci ;;
+      *npm-cli.js*' ci --prefix worker --omit=dev') fake_npm_ci ;;
+      *npm-cli.js*' ls --prefix worker --omit=dev --all') return 0 ;;
       *fs.renameSync*lock_token*|*lock_token*fs.renameSync*)
         printf '%s\n' \
           "${5:-arena.local-ingest-cutover-journal@1}" \
@@ -700,11 +709,14 @@ test_exact_target_and_archive_contract() {
     'orchestrator self-hash must compare with the reviewed target blob'
   assert_contains "$deploy" '100755' \
     'reviewed deploy orchestrator must retain its executable Git mode'
+  assert_contains "$deploy" 'NF == 4 && $1 == "160000" && $2 == "commit"' \
+    'only the Docker-ignored Foundry gitlink may be excluded from Worker release inputs'
+  assert_contains "$deploy" '$3 ~ /^[0-9a-f]+$/ && (length($3) == 40 || length($3) == 64)' \
+    'the excluded Foundry gitlink must retain a valid Git object identity'
   assert_contains "$archive_block" '"$GIT_BIN" archive "$SHA" --' \
     'release source must be archived from the exact reviewed commit'
 
-  for required in .npmrc lib worker package.json package-lock.json tsconfig.json \
-    scripts/ci/worker-release-id.mjs; do
+  for required in lib worker scripts/ci/worker-release-id.mjs; do
     assert_contains "$archive_block" "$required" "exact archive must include $required"
   done
   for forbidden in app components public styles .env.local; do
@@ -848,11 +860,17 @@ test_archive_invocation_has_no_ui_paths() {
         printf '100755 blob %s\tworker/deploy-ingest-local.sh\n' "$TEST_SHA"
         ;;
       *'ls-tree -r --name-only'*)
-        printf '%s\n' .npmrc package.json package-lock.json tsconfig.json \
+        printf '%s\n' worker/.npmrc worker/package.json worker/package-lock.json \
+          worker/tsconfig.json lib/ingest/core/regions.ts \
           scripts/ci/worker-release-id.mjs worker/deploy-ingest-local.sh
         ;;
-      *'ls-tree -r '*' -- .npmrc'*)
-        printf '100644 blob %s\t.npmrc\n' "$TEST_SHA"
+      *'ls-tree -r '*' -- lib worker'*)
+        printf '160000 commit %s\tlib/forge-std\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/.npmrc\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/package.json\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/package-lock.json\n' "$TEST_SHA"
+        printf '100644 blob %s\tworker/tsconfig.json\n' "$TEST_SHA"
+        printf '100644 blob %s\tlib/ingest/core/regions.ts\n' "$TEST_SHA"
         printf '100755 blob %s\tworker/deploy-ingest-local.sh\n' "$TEST_SHA"
         ;;
       *'archive'*) return 71 ;;
@@ -879,8 +897,7 @@ test_archive_invocation_has_no_ui_paths() {
     'executed archive must create isolated bare metadata'
   archive_event="$(grep 'git archive' "$event_log" || true)"
   [ -n "$archive_event" ] || { printf '%s\n' "$output" >&2; fail 'test must reach exact archive'; }
-  for required in .npmrc lib worker package.json package-lock.json tsconfig.json \
-    scripts/ci/worker-release-id.mjs; do
+  for required in lib worker scripts/ci/worker-release-id.mjs; do
     assert_contains "$archive_event" "$required" "archive command must include $required"
   done
   for forbidden in ' app ' ' components ' ' public ' ' styles ' '.env.local'; do
@@ -907,6 +924,10 @@ test_release_owned_dependencies_and_secret_scope() {
     'npm ci must enter the isolated candidate, never the development worktree'
   assert_contains "$install_block" '"$NPM_CLI" ci' \
     'isolated install must invoke the Node-22-bound npm CLI'
+  assert_contains "$install_block" '--prefix worker --omit=dev' \
+    'isolated install must use only the Worker production dependency closure'
+  assert_contains "$install_block" 'ls --prefix worker --omit=dev --all' \
+    'isolated install must reject missing production peers before cutover'
   assert_contains "$deploy" '.playwright-browsers' \
     'browser bytes must be owned by the immutable candidate release'
   assert_matches "$deploy" '(test|\[)[[:space:]]+![[:space:]]+-L.*node_modules' \

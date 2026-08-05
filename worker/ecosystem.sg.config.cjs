@@ -20,6 +20,9 @@ module.exports = {
       args: 'tsx worker/src/ingest-worker.ts',
       cwd: __dirname + '/..',
       env_file: 'worker/.env',
+      env: {
+        TSX_TSCONFIG_PATH: __dirname + '/tsconfig.json',
+      },
       autorestart: true,
       max_restarts: 10,
       min_uptime: '10s',

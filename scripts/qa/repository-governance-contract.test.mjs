@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { parse } from 'yaml'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -56,6 +57,78 @@ test('source policies scan the owned repository boundary in clean CI checkouts',
   assert.match(workflow, /run: npm run qa:source-policy/)
   assert.match(policy, /git\(\['ls-files', '-co', '--exclude-standard'/)
   assert.doesNotMatch(policy, /git\(\['diff'/)
+})
+
+test('CI audits the independent Worker production lock without rewriting or swallowing failures', () => {
+  const workflow = parse(read('.github/workflows/ci.yml'))
+  const workerJob = workflow.jobs['worker-package']
+  const stepsByName = new Map(
+    workerJob.steps.filter((step) => step.name).map((step) => [step.name, step])
+  )
+  const checkout = workerJob.steps.find(
+    (step) => step.uses === 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'
+  )
+  const setupNode = workerJob.steps.find(
+    (step) => step.uses === 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38'
+  )
+  const productionInstall = stepsByName.get('Install the independent Worker production closure')
+  const audit = stepsByName.get('Audit the Worker production closure')
+  const productionLayout = stepsByName.get(
+    'Verify the production tree and mirror the release layout'
+  )
+  const imports = stepsByName.get('Load every declared Worker dependency')
+  const alias = stepsByName.get('Prove Worker tsx alias and shared-source resolution')
+  const returnProduction = stepsByName.get('Return the production tree to the Worker prefix')
+  const developmentInstall = stepsByName.get('Install the independent Worker development closure')
+  const developmentLayout = stepsByName.get(
+    'Verify the development tree and mirror the release layout'
+  )
+  const typecheck = stepsByName.get('Type-check from the independent Worker tree')
+  const boundary = stepsByName.get('Worker package boundary contract')
+
+  assert.equal(workerJob['runs-on'], 'ubuntu-latest')
+  assert.equal(checkout?.with?.['persist-credentials'], false)
+  assert.equal(setupNode?.with?.['node-version'], '22')
+  assert.equal(setupNode?.with?.cache, 'npm')
+  assert.equal(setupNode?.with?.['cache-dependency-path'], 'worker/package-lock.json')
+  assert.equal(
+    productionInstall?.run,
+    'PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --prefix worker --omit=dev'
+  )
+  assert.equal(audit?.run, 'npm audit --prefix worker --omit=dev --audit-level=high')
+  assert.match(productionLayout?.run ?? '', /npm ls --prefix worker --omit=dev --all/)
+  assert.match(productionLayout?.run ?? '', /test ! -e node_modules/)
+  assert.match(productionLayout?.run ?? '', /mv worker\/node_modules node_modules/)
+  assert.ok(
+    productionLayout.run.indexOf('test ! -e node_modules') <
+      productionLayout.run.indexOf('mv worker/node_modules node_modules')
+  )
+  assert.match(imports?.run ?? '', /Object\.keys\(manifest\.dependencies\)/)
+  assert.match(alias?.run ?? '', /TSX_TSCONFIG_PATH="\$PWD\/worker\/tsconfig\.json"/)
+  assert.match(alias?.run ?? '', /import\('@\/lib\/ingest\/core\/regions'\)/)
+  assert.match(returnProduction?.run ?? '', /mv node_modules worker\/node_modules/)
+  assert.equal(developmentInstall?.run, 'PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --prefix worker')
+  assert.match(developmentLayout?.run ?? '', /npm ls --prefix worker --all/)
+  assert.match(developmentLayout?.run ?? '', /test ! -e node_modules/)
+  assert.match(developmentLayout?.run ?? '', /mv worker\/node_modules node_modules/)
+  assert.equal(
+    typecheck?.run,
+    'node node_modules/typescript/bin/tsc -p worker/tsconfig.json --noEmit'
+  )
+  assert.equal(boundary?.run, 'node --test scripts/qa/worker-package-boundary.test.mjs')
+  assert.ok(
+    workerJob.steps.indexOf(productionInstall) < workerJob.steps.indexOf(productionLayout) &&
+      workerJob.steps.indexOf(productionLayout) < workerJob.steps.indexOf(imports) &&
+      workerJob.steps.indexOf(alias) < workerJob.steps.indexOf(returnProduction) &&
+      workerJob.steps.indexOf(returnProduction) < workerJob.steps.indexOf(developmentInstall) &&
+      workerJob.steps.indexOf(developmentInstall) < workerJob.steps.indexOf(developmentLayout) &&
+      workerJob.steps.indexOf(developmentLayout) < workerJob.steps.indexOf(typecheck)
+  )
+  assert.deepEqual(workflow.jobs['lint-typecheck'].needs, ['pre-checks', 'worker-package'])
+  for (const step of workerJob.steps) {
+    assert.equal(step['continue-on-error'], undefined)
+    if (step.run) assert.doesNotMatch(step.run, /\|\|\s*true/)
+  }
 })
 
 test('session worktrees isolate credentials, dependencies, and destructive cleanup', () => {

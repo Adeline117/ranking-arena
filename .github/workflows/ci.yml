@@ -229,10 +229,79 @@ jobs:
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check
   # ─────────────────────────────────────────────
+  worker-package:
+    name: Worker Package Boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: worker/package-lock.json
+      - name: Install the independent Worker production closure
+        run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --prefix worker --omit=dev
+      - name: Audit the Worker production closure
+        run: npm audit --prefix worker --omit=dev --audit-level=high
+      - name: Verify the production tree and mirror the release layout
+        run: |
+          set -euo pipefail
+          npm ls --prefix worker --omit=dev --all >/dev/null
+          test ! -e node_modules
+          test -d worker/node_modules
+          test ! -L worker/node_modules
+          mv worker/node_modules node_modules
+          test -d node_modules
+          test ! -L node_modules
+          test ! -e worker/node_modules
+      - name: Load every declared Worker dependency
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises'
+
+          const manifest = JSON.parse(await readFile('worker/package.json', 'utf8'))
+          for (const dependency of Object.keys(manifest.dependencies)) {
+            await import(dependency)
+          }
+          NODE
+      - name: Prove Worker tsx alias and shared-source resolution
+        run: |
+          TSX_TSCONFIG_PATH="$PWD/worker/tsconfig.json" \
+            node node_modules/tsx/dist/cli.mjs --eval \
+            "Promise.all([import('@/lib/ingest/core/regions'), import('./worker/src/ingest/queues.ts'), import('./worker/src/ingest/heartbeat.ts')]).then(([regions]) => { if (regions.INGEST_REGIONS.join(',') !== 'local,vps_sg,vps_jp') process.exit(1) })"
+      - name: Return the production tree to the Worker prefix
+        run: |
+          set -euo pipefail
+          test -d node_modules
+          test ! -L node_modules
+          test ! -e worker/node_modules
+          mv node_modules worker/node_modules
+          test ! -e node_modules
+      - name: Install the independent Worker development closure
+        run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --prefix worker
+      - name: Verify the development tree and mirror the release layout
+        run: |
+          set -euo pipefail
+          npm ls --prefix worker --all >/dev/null
+          test ! -e node_modules
+          test -d worker/node_modules
+          test ! -L worker/node_modules
+          mv worker/node_modules node_modules
+          test -d node_modules
+          test ! -L node_modules
+          test ! -e worker/node_modules
+      - name: Type-check from the independent Worker tree
+        run: node node_modules/typescript/bin/tsc -p worker/tsconfig.json --noEmit
+      - name: Worker package boundary contract
+        run: node --test scripts/qa/worker-package-boundary.test.mjs
+
   lint-typecheck:
     name: Lint & Type Check
     runs-on: ubuntu-latest
-    needs: pre-checks
+    needs: [pre-checks, worker-package]
     steps:
       - uses: actions/checkout@v4
         with:

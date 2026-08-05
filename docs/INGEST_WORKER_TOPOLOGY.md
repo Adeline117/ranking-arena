@@ -19,8 +19,9 @@ neither missing, duplicate, nor combined-region owners are healthy.
 ## Runtime locations
 
 - `/opt/arena-ingest` is the SG production directory. It is not a Git checkout.
-  It contains the complete runtime source, package inputs, `node_modules`, logs,
-  secrets excluded from sync, `DEPLOYED_SHA`, and `WORKER_RELEASE_ID`.
+  It contains the complete runtime source, Worker-owned package inputs,
+  `node_modules`, logs, secrets excluded from sync, `DEPLOYED_SHA`, and
+  `WORKER_RELEASE_ID`.
 - `/opt/ranking-arena` is a stale checkout and is never a deployment source.
 - Confirm SG ownership with `pm2 describe arena-ingest-worker-sg` and its exact
   `exec cwd`; do not infer it from a directory name or Git state elsewhere.

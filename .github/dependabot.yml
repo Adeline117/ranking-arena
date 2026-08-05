@@ -1,35 +1,55 @@
 # yaml-language-server: $schema=https://json.schemastore.org/dependabot-2.0.json
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: 'weekly'
+      day: 'monday'
     open-pull-requests-limit: 10
     commit-message:
-      prefix: "deps"
+      prefix: 'deps'
     labels:
-      - "dependencies"
+      - 'dependencies'
     # Only allow minor and patch updates (ignore major version bumps)
     ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
     # Group security updates separately
     groups:
       security-updates:
+        applies-to: 'security-updates'
         patterns:
-          - "*"
-        update-types:
-          - "security"
+          - '*'
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  # The ingest worker owns a separate manifest and lockfile. Keep its update
+  # policy equivalent to the root app without coupling app and worker releases.
+  - package-ecosystem: 'npm'
+    directory: '/worker'
     schedule:
-      interval: "monthly"
+      interval: 'weekly'
+      day: 'monday'
     open-pull-requests-limit: 10
     commit-message:
-      prefix: "ci"
+      prefix: 'deps'
+    labels:
+      - 'dependencies'
     ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    groups:
+      security-updates:
+        applies-to: 'security-updates'
+        patterns:
+          - '*'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: 'ci'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']

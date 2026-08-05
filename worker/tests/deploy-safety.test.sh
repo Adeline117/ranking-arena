@@ -29,8 +29,8 @@ export -f node
 
 emit_test_archive() {
   command tar -cf - \
-    .npmrc package.json package-lock.json tsconfig.json \
     scripts/ci/worker-release-id.mjs worker/deploy-ingest-sg.sh \
+    worker/.npmrc worker/package.json worker/package-lock.json worker/tsconfig.json \
     worker/preflight-sg-runtime.ts worker/verify-sg-heartbeat.ts \
     worker/verify-sg-ready-log.awk \
     lib/ingest/core/regions.ts
@@ -237,7 +237,7 @@ test_pm2_stop_failure_restores_previous_process() {
     if [[ "$*" == *'verify-sg-heartbeat.ts'* ]]; then
       printf '%s\n' '[sg-heartbeat-proof] exact fresh Redis roster identity ready'; return 0
     fi
-    if [[ "$*" == *'for f in .npmrc package.json package-lock.json'* ]]; then
+    if [[ "$*" == *'for f in worker/.npmrc worker/package.json worker/package-lock.json'* ]]; then
       printf '%s\n' "$TEST_HASH"; return 0
     fi
     if [[ "$*" == *"cat '/opt/arena-ingest/DEPLOYED_SHA'"* ]]; then printf '%s\n' "$OLD_SHA"; return 0; fi
@@ -306,7 +306,7 @@ test_failed_candidate_readiness_rolls_back_complete_directory() {
     if [[ "$*" == *'verify-sg-heartbeat.ts'* ]]; then
       printf '%s\n' '[sg-heartbeat-proof] exact fresh Redis roster identity ready'; return 0
     fi
-    if [[ "$*" == *'for f in .npmrc package.json package-lock.json'* ]]; then
+    if [[ "$*" == *'for f in worker/.npmrc worker/package.json worker/package-lock.json'* ]]; then
       printf '%s\n' "$TEST_HASH"; return 0
     fi
     if [[ "$*" == *"cat '/opt/arena-ingest/DEPLOYED_SHA'"* ]]; then printf '%s\n' "$OLD_SHA"; return 0; fi
@@ -481,7 +481,7 @@ run_post_cutover_fault() {
       esac
       return 0
     fi
-    if [[ "$*" == *'for f in .npmrc package.json package-lock.json'* ]]; then
+    if [[ "$*" == *'for f in worker/.npmrc worker/package.json worker/package-lock.json'* ]]; then
       printf '%s\n' "$TEST_HASH"; return 0
     fi
     if [[ "$*" == *"cat '/opt/arena-ingest/DEPLOYED_SHA'"* ]]; then printf '%s\n' "$OLD_SHA"; return 0; fi
@@ -1096,10 +1096,10 @@ test_concurrent_deploy_refuses_before_backup() {
     if [[ "$*" == *'docker ps'*'--format'* ]]; then
       return 0
     fi
-    if [[ "$*" == *"test -f '/opt/arena-ingest/.npmrc'"* ]]; then
+    if [[ "$*" == *"test -f '/opt/arena-ingest/worker/.npmrc'"* ]]; then
       return 0
     fi
-    if [[ "$*" == *"sha1sum .npmrc package.json package-lock.json"* ]]; then
+    if [[ "$*" == *"sha1sum worker/.npmrc worker/package.json worker/package-lock.json"* ]]; then
       printf '%s\n' 'same-lock-hash'
       return 0
     fi
@@ -1429,16 +1429,31 @@ test_log_verifier_rejects_old_or_forged_evidence() {
 }
 
 test_release_stamp_matches_exact_committed_inputs() {
-  local deploy
+  local deploy cleanup_line module_line prepare_line root_gate_line sync_line
   deploy="$(<"$DEPLOY_SCRIPT")"
   assert_contains "$deploy" 'GIT_NO_REPLACE_OBJECTS=1 git archive "$SHA"' \
     'deployment source must be materialized from the exact commit'
-  assert_contains "$deploy" 'CODE_PATHS=(.npmrc lib worker package.json package-lock.json tsconfig.json)' \
+  assert_contains "$deploy" 'CODE_PATHS=(lib worker)' \
     'every deploy mode must ship the complete worker release inputs'
   assert_contains "$deploy" 'LOCAL_DEP_INPUTS_HASH="$(dependency_input_hash "$DEPLOY_SOURCE_DIR")"' \
     'code-only must attest every dependency install input'
   assert_contains "$deploy" '"${SOURCE_PATHS[@]}" "$VPS_HOST:$STAGING_DIR/"' \
     'rsync must populate an isolated candidate from the immutable snapshot'
+  assert_contains "$deploy" "find '\$STAGING_DIR/lib' '\$STAGING_DIR/worker'" \
+    'candidate cleanup must scan only the fixed shared and Worker source roots'
+  assert_contains "$deploy" '-name node_modules -prune -exec rm -rf -- {} +' \
+    'candidate cleanup must remove inherited dependency directories and symlinks'
+  assert_contains "$deploy" '-name node_modules -print -quit' \
+    'candidate cleanup must fail closed if any nested dependency shadow remains'
+  sync_line="$(grep -n '^rsync -az --delete ' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  cleanup_line="$(grep -n '^remove_candidate_dependency_shadows$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  prepare_line="$(grep -n '^echo "3/7 preparing candidate dependencies"$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  root_gate_line="$(grep -n '^assert_candidate_dependency_root$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  module_line="$(grep -n '^echo "4/7 loading every critical module' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  [ "$sync_line" -lt "$cleanup_line" ] && [ "$cleanup_line" -lt "$prepare_line" ] || \
+    fail 'nested dependency cleanup must follow source sync and precede every dependency mode'
+  [ "$prepare_line" -lt "$root_gate_line" ] && [ "$root_gate_line" -lt "$module_line" ] || \
+    fail 'root dependency ownership must be checked after preparation and before module loading'
   assert_contains "$deploy" "mv '\$STAGING_DIR/.WORKER_RELEASE_ID.tmp' '\$STAGING_DIR/WORKER_RELEASE_ID'" \
     'worker release stamp must be atomically renamed'
   assert_contains "$deploy" "mv '\$REMOTE_DIR' '\$BACKUP_DIR'" \
@@ -1451,6 +1466,81 @@ test_release_stamp_matches_exact_committed_inputs() {
     '"$READY_MARKER" "$SHA" "$WORKER_RELEASE_ID" "$CANDIDATE_PM2_PID"' \
     'fresh candidate logs must bind the full SHA, release ID, and exact candidate PID'
   echo 'ok - release stamp is bound to exact committed code and dependency inputs'
+}
+
+test_candidate_dependency_shadows_are_removed_without_touching_live() {
+  local tmp live staging outside candidate_shadow
+  tmp="$(mktemp -d)"
+  live="$tmp/live"
+  staging="$tmp/staging"
+  outside="$tmp/outside-shadow-target"
+  mkdir -p \
+    "$live/node_modules" \
+    "$live/worker/node_modules" \
+    "$live/lib/ingest/node_modules" \
+    "$live/lib/shared" \
+    "$outside"
+  printf '%s\n' attested > "$live/node_modules/root-marker"
+  printf '%s\n' worker-shadow > "$live/worker/node_modules/shadow-marker"
+  printf '%s\n' lib-shadow > "$live/lib/ingest/node_modules/shadow-marker"
+  printf '%s\n' outside-safe > "$outside/marker"
+  ln -s "$outside" "$live/lib/shared/node_modules"
+  cp -a "$live" "$staging"
+
+  STAGING_DIR="$staging"
+  DEPLOY_LOCK_DIR="$tmp/deploy-lock"
+  DEPLOY_LOCK_TOKEN='candidate-shadow-cleanup-owner'
+  mkdir "$DEPLOY_LOCK_DIR"
+  printf '%s\n' "$DEPLOY_LOCK_TOKEN" > "$DEPLOY_LOCK_DIR/owner"
+  ssh_sg() { bash -c "$1"; }
+  eval "$(awk '/^remove_candidate_dependency_shadows\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+  eval "$(awk '/^assert_candidate_dependency_root\(\)/,/^}/' "$DEPLOY_SCRIPT")"
+
+  remove_candidate_dependency_shadows || fail 'exact candidate shadow cleanup must succeed'
+  candidate_shadow="$(find "$staging/lib" "$staging/worker" \
+    -name node_modules -print -quit)"
+  [ -z "$candidate_shadow" ] || fail "candidate dependency shadow survived: $candidate_shadow"
+  [ "$(<"$staging/node_modules/root-marker")" = attested ] || \
+    fail 'candidate attested root node_modules must remain untouched'
+
+  rm -rf "$staging/node_modules"
+  mkdir -p "$staging/worker/deep/node_modules"
+  printf '%s\n' inherited > "$staging/worker/deep/node_modules/shadow-marker"
+  remove_candidate_dependency_shadows || \
+    fail 'artifact candidate must clean nested shadows even when inherited root deps are absent'
+  [ ! -e "$staging/worker/deep/node_modules" ] || \
+    fail 'missing inherited root must not preserve a nested Worker shadow'
+  mkdir "$staging/node_modules"
+  printf '%s\n' artifact > "$staging/node_modules/root-marker"
+  assert_candidate_dependency_root || \
+    fail 'a real artifact-replaced root dependency directory must pass the common gate'
+
+  rm -rf "$staging/node_modules"
+  if assert_candidate_dependency_root; then
+    fail 'the common dependency gate must reject a missing final root'
+  fi
+  mkdir -p "$staging/lib/reintroduced/node_modules"
+  printf '%s\n' inherited > "$staging/lib/reintroduced/node_modules/shadow-marker"
+  ln -s "$outside" "$staging/node_modules"
+  remove_candidate_dependency_shadows || \
+    fail 'an inherited root symlink must not block nested cleanup before artifact replacement'
+  [ ! -e "$staging/lib/reintroduced/node_modules" ] || \
+    fail 'an inherited root symlink must not preserve a nested shared-lib shadow'
+  if assert_candidate_dependency_root; then
+    fail 'the common dependency gate must reject a final root dependency symlink'
+  fi
+  [ "$(<"$live/worker/node_modules/shadow-marker")" = worker-shadow ] || \
+    fail 'candidate cleanup must not mutate the live Worker shadow fixture'
+  [ "$(<"$live/lib/ingest/node_modules/shadow-marker")" = lib-shadow ] || \
+    fail 'candidate cleanup must not mutate the live shared-lib shadow fixture'
+  [ -L "$live/lib/shared/node_modules" ] || \
+    fail 'candidate cleanup must not remove a live dependency-shadow symlink'
+  [ "$(<"$outside/marker")" = outside-safe ] || \
+    fail 'removing a dependency-shadow symlink must not follow its target'
+
+  unset -f ssh_sg remove_candidate_dependency_shadows assert_candidate_dependency_root
+  rm -rf "$tmp"
+  echo 'ok - candidate dependency shadows are removed without touching root or live bytes'
 }
 
 test_remote_javascript_quotes_survive_shell_rendering() {
@@ -1736,6 +1826,7 @@ test_container_bypass_is_disabled
 test_ready_check_requires_fresh_sha_evidence
 test_rollback_capture_policy_is_preflighted
 test_log_verifier_rejects_old_or_forged_evidence
+test_candidate_dependency_shadows_are_removed_without_touching_live
 test_release_stamp_matches_exact_committed_inputs
 test_remote_javascript_quotes_survive_shell_rendering
 test_pm2_dump_predicate_rejects_primary_and_backup_residue

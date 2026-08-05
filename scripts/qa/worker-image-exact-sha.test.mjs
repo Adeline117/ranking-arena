@@ -8,6 +8,14 @@ const ingestDockerfile = readFileSync('worker/Dockerfile.ingest', 'utf8')
 const dockerRunner = readFileSync('worker/docker-run-sg.sh', 'utf8')
 const dockerCompose = readFileSync('worker/docker-compose.sg.yml', 'utf8')
 
+const PINNED_IMAGE_ACTIONS = [
+  'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+  'docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f',
+  'docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9',
+  'docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8',
+  'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+]
+
 test('builds a deployable worker image whenever deterministic runtime inputs change', () => {
   const pushTrigger = imageWorkflow.slice(
     imageWorkflow.indexOf('on:'),
@@ -18,16 +26,33 @@ test('builds a deployable worker image whenever deterministic runtime inputs cha
   for (const path of [
     "'worker/**'",
     "'lib/**'",
-    "'package.json'",
-    "'package-lock.json'",
     "'.dockerignore'",
-    "'.npmrc'",
-    "'tsconfig.json'",
     "'scripts/ci/worker-release-id.mjs'",
     "'.github/workflows/build-ingest-image.yml'",
     "'.github/workflows/deploy-ingest-sg.yml'",
   ]) {
     assert.ok(pushTrigger.includes(path), `missing worker image trigger for ${path}`)
+  }
+  for (const rootAppInput of [
+    "'package.json'",
+    "'package-lock.json'",
+    "'.npmrc'",
+    "'tsconfig.json'",
+  ]) {
+    assert.ok(
+      !pushTrigger.includes(rootAppInput),
+      `root app input must not invalidate the Worker image: ${rootAppInput}`
+    )
+  }
+  for (const foundryPath of ["'!lib/forge-std'", "'!lib/forge-std/**'"]) {
+    assert.ok(
+      pushTrigger.includes(foundryPath),
+      `Foundry-only input must not trigger the Worker image: ${foundryPath}`
+    )
+    assert.ok(
+      pushTrigger.indexOf(foundryPath) > pushTrigger.indexOf("'lib/**'"),
+      `Foundry exclusion must follow the positive shared-lib pattern: ${foundryPath}`
+    )
   }
   assert.match(imageWorkflow, /node scripts\/ci\/worker-release-id\.mjs "\$GITHUB_SHA"/)
   assert.match(
@@ -44,8 +69,10 @@ test('builds a deployable worker image whenever deterministic runtime inputs cha
   assert.doesNotMatch(ingestDockerfile, /chown -R pwuser:pwuser \/app(?:\s|$)/)
   assert.match(
     ingestDockerfile,
-    /COPY worker\/vendor\/brace-expansion-compat \.\/worker\/vendor\/brace-expansion-compat\nRUN npm ci/
+    /COPY worker\/package\.json worker\/package-lock\.json worker\/\.npmrc \.\/\nRUN npm ci --omit=dev/
   )
+  assert.match(ingestDockerfile, /TSX_TSCONFIG_PATH=\/app\/worker\/tsconfig\.json/)
+  assert.doesNotMatch(ingestDockerfile, /COPY package\.json package-lock\.json/)
   assert.match(dockerRunner, /disabled: use the exact-main transactional SG deploy workflow/)
   assert.match(dockerCompose, /services: \{\}/)
   assert.doesNotMatch(dockerCompose, /^\s+image:/m)
@@ -53,6 +80,15 @@ test('builds a deployable worker image whenever deterministic runtime inputs cha
   assert.match(deployGate, /node "\$RUNNER_TEMP\/worker-release-id\.mjs" "\$HEAD_SHA"/)
   assert.doesNotMatch(deployGate, /expected_(?:sha|release_id)=/)
   assert.match(deployGate, /steps\.worker_fleet\.outcome == 'success'/)
+})
+
+test('production image build actions are pinned to immutable commits', () => {
+  for (const action of PINNED_IMAGE_ACTIONS) {
+    assert.match(imageWorkflow, new RegExp(`uses: ${action}`))
+  }
+  for (const match of imageWorkflow.matchAll(/uses:\s+([^\s#]+)/gu)) {
+    assert.match(match[1], /^[^@]+@[a-f0-9]{40}$/u, `mutable image-build action: ${match[1]}`)
+  }
 })
 
 test('manual image builds remain exact origin/main through alias promotion', () => {
@@ -133,5 +169,5 @@ test('promotes the verified digest without overwriting conflicting formal aliase
   assert.match(promote, /promoted_digest="\$\(inspect_digest "\$ref"\)"/)
   assert.match(promote, /worker-image-release\.json/)
   assert.match(promote, /digest_ref/)
-  assert.match(imageWorkflow, /actions\/upload-artifact@v4/)
+  assert.match(imageWorkflow, new RegExp(`uses: ${PINNED_IMAGE_ACTIONS.at(-1)}`))
 })
