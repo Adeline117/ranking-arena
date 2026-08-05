@@ -1,74 +1,41 @@
-# Arena Anti-Block Patterns
+# Arena Anti-Block Diagnostics
 
-交易所 API 反封锁策略。
+Diagnose exchange API blocking without creating an unowned proxy or bypassing
+the source registry.
 
-## 封锁类型 & 对策
+## Ownership boundary
 
-| 类型 | 症状 | 解决 |
-|------|------|------|
-| Cloudflare JS Challenge | HTML "Just a moment..." | Puppeteer + stealth |
-| Cloudflare 1015 | 403 Rate Limit | 降速 + 换 IP |
-| Cloudflare WAF | 403 Forbidden | CF Worker / VPS |
-| Geo-block | 403/451 | 日本 VPS / ClashX |
-| API Rate Limit | 429 | sleep + exponential backoff |
-| Auth Required | 401 | 加 headers/cookies |
+- Confirm the source and surface in `arena.sources` before changing transport.
+- Treat `arena.sources.fetch_region` as the authority for execution placement.
+- Keep HTTP acquisition behind the `FetchSession` boundary under
+  `lib/ingest/fetch/` and the canonical RAW/capture boundary so rate budgets,
+  deadlines, retries, and evidence remain enforceable.
+- Use only repository-owned worker, VPS, or browser transports with a documented
+  health check and rollback path.
+- Do not add an ad hoc proxy, public endpoint, or automatic fallback chain.
+- Change registry placement only through a reviewed forward migration; never use
+  dashboard edits or ad hoc production SQL.
 
-## Puppeteer (Mac Mini)
+## Diagnostic sequence
 
-```javascript
-import puppeteer from 'puppeteer-extra'
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-puppeteer.use(StealthPlugin())
+1. Reproduce the failure through the registered adapter, not a one-off request.
+2. Classify the response: authentication, rate limit, WAF/challenge, geo block,
+   upstream outage, or payload/schema drift.
+3. Inspect the source's configured region and the worker evidence for that run.
+4. If placement is wrong, update the reviewed registry/region contract and prove
+   the adapter in that environment. If a browser is required, keep it within the
+   owned browser transport and preserve the same evidence contract.
+5. Validate rate limiting, timeout behavior, retry bounds, and publication gates
+   before declaring the source healthy.
 
-const browser = await puppeteer.launch({
-  headless: 'new',
-  executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  args: ['--no-sandbox', '--disable-setuid-sandbox'],
-})
-const page = await browser.newPage()
-await page.setUserAgent('Mozilla/5.0 ...')
+## Completion evidence
 
-// 等待 CF challenge 通过
-await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 })
-// 提取 JSON
-const data = await page.evaluate(() => JSON.parse(document.body.innerText))
-```
+- The canonical adapter succeeds in its selected region.
+- RAW evidence and structured failure logs are present.
+- Retry and rate budgets remain bounded.
+- No temporary proxy, credential, or undocumented production endpoint was added.
+- `docs/ADAPTER_ONBOARDING.md` and the source registry agree with the runtime.
 
-## Bybit WAF 特殊处理
-
-Bybit API 被 WAF 保护，curl 直接 403。必须用 Puppeteer + stealth:
-
-```javascript
-// 先访问主页获取 cookies
-await page.goto('https://www.bybit.com', { waitUntil: 'domcontentloaded' })
-await sleep(3000)
-// 再请求 API
-await page.goto('https://www.bybit.com/copy-trading/api/...')
-```
-
-## 降级链
-
-```
-Mac Mini 直连 → CF Worker → VPS 代理 → Puppeteer
-```
-
-每一层失败才降到下一层，避免不必要的慢速请求。
-
-## 平台封锁状态
-
-| 平台 | 直连 | CF Worker | Puppeteer | VPS |
-|------|------|-----------|-----------|-----|
-| Binance | ✅ | ✅ | - | ✅ |
-| Bybit | ❌ WAF | ✅ | ✅ | ❌ |
-| BitMart | ❌ CF | ❌ | 需要 | - |
-| BloFin | ❌ CF | ✅ | - | - |
-| Gains | ❌ 429 | ❌ 404 | - | - |
-| MEXC | ✅ | ✅ | - | ✅ |
-
-## Chrome 版本
-
-Mac Mini 安装了 Chrome 145.0.7632.77，Puppeteer 自动使用。
-
-## 更新日志
-
-- 2026-02-23: 创建 skill
+Use `data-quality` for publication and evidence diagnostics. Follow
+`docs/SCRAPER.md` for canonical transport ownership and
+`docs/ADAPTER_ONBOARDING.md` for adapter acceptance.

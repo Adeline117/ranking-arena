@@ -15,5 +15,10 @@ traffic and route configuration through an authorized read-only account audit.
 Reactivation requires an ADR, an owning workflow, secret contract, health check,
 rollback procedure, and a proven repository consumer.
 
-Local development commands in `package.json` are for inspection only and do not
-grant production deployment authority.
+Historical audit locator only (current state unverified):
+`https://ranking-arena-proxy.broosbook.workers.dev`. This is discovery evidence
+for the external audit, not a runtime endpoint or deployment authorization.
+
+The only package command is `npm run dev`. It starts Wrangler's local emulator
+on loopback; the package deliberately exposes no production publish or log-tail
+command. Local inspection does not grant deployment authority.
