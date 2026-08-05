@@ -40,6 +40,7 @@ Thumbs.db
 docs
 *.md
 !README.md
+!lib/logger/README.md
 
 # Foundry contracts are an independent deployable unit.
 contracts
