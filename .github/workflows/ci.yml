@@ -358,6 +358,8 @@ jobs:
         run: node --test scripts/maintenance/restore-from-r2.test.mjs
       - name: Auth recovery preflight fail-closed contract
         run: npm run qa:auth-recovery-preflight
+      - name: Ranking authority cache purge fail-closed contract
+        run: npm run qa:maintenance-unit
       - name: Backup freshness fail-closed contract
         run: node --test scripts/openclaw/backup-freshness-check.test.mjs
       - run: npm run lint
