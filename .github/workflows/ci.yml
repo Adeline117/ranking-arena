@@ -229,6 +229,20 @@ jobs:
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check
   # ─────────────────────────────────────────────
+  mobile-release-tooling-audit:
+    name: Mobile Release Tooling Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22'
+      - name: Audit the isolated mobile release tooling lock
+        run: npm audit --prefix tooling/mobile-release --audit-level=high
+
   worker-package:
     name: Worker Package Boundary
     runs-on: ubuntu-latest
@@ -301,8 +315,27 @@ jobs:
   lint-typecheck:
     name: Lint & Type Check
     runs-on: ubuntu-latest
-    needs: [pre-checks, worker-package]
+    needs: [pre-checks, worker-package, mobile-release-tooling-audit]
+    # A skipped required check is treated as successful by GitHub. Run this job
+    # after every prerequisite outcome and fail its first step unless all gates
+    # succeeded, so the documented required context cannot fail open.
+    if: ${{ always() }}
     steps:
+      - name: Enforce prerequisite gate results
+        env:
+          PRE_CHECKS_RESULT: ${{ needs.pre-checks.result }}
+          WORKER_PACKAGE_RESULT: ${{ needs.worker-package.result }}
+          MOBILE_RELEASE_TOOLING_AUDIT_RESULT: ${{ needs.mobile-release-tooling-audit.result }}
+        run: |
+          set -euo pipefail
+          if [ "$PRE_CHECKS_RESULT" = success ] && \
+             [ "$WORKER_PACKAGE_RESULT" = success ] && \
+             [ "$MOBILE_RELEASE_TOOLING_AUDIT_RESULT" = success ]; then
+            exit 0
+          fi
+          printf '::error::Prerequisite gate failed: pre-checks=%s worker-package=%s mobile-release-tooling-audit=%s\n' \
+            "$PRE_CHECKS_RESULT" "$WORKER_PACKAGE_RESULT" "$MOBILE_RELEASE_TOOLING_AUDIT_RESULT"
+          exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0

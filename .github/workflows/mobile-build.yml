@@ -107,23 +107,35 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Install Firebase release tooling
+        if: github.event_name == 'workflow_dispatch'
+        run: npm ci --prefix tooling/mobile-release --ignore-scripts
+
       - name: Upload to Firebase App Distribution
         if: github.event_name == 'workflow_dispatch'
-        uses: wzieba/Firebase-Distribution-Github-Action@bd494989dd4bec0343f78adee87fe66e48279ad6 # v1.7.1
-        with:
-          appId: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          groups: testers
-          file: android/app/build/outputs/apk/debug/app-debug.apk
+        env:
+          FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: |
+          umask 077
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          unset FIREBASE_SERVICE_ACCOUNT
+          ./tooling/mobile-release/node_modules/.bin/firebase appdistribution:distribute \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            --app "$FIREBASE_ANDROID_APP_ID" \
+            --groups testers \
+            --non-interactive
 
       - name: Clean Android credentials
         if: always()
         run: |
           rm -f "$RUNNER_TEMP/android-google-services.json"
           rm -f "$RUNNER_TEMP/android-release.keystore"
+          rm -f "$RUNNER_TEMP/firebase-service-account.json"
           rm -f android/app/google-services.json
           rm -f android/release.keystore
-          rm -f service_credentials_content.json
 
   # Build iOS (requires macOS runner)
   build-ios:

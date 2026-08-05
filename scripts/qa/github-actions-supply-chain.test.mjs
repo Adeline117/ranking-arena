@@ -10,6 +10,7 @@ const githubActionReference =
   /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*@[0-9a-f]{40}$/
 const dockerReference = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/
 const releaseComment = /^v\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?$/
+const retiredGithubActions = new Set(['wzieba/firebase-distribution-github-action'])
 
 function relativePath(filePath) {
   return path.relative(root, filePath).split(path.sep).join('/')
@@ -109,6 +110,12 @@ function classifyUsesReference(reference, context) {
     reference,
     githubActionReference,
     `${context}: GitHub actions must use a full lowercase 40-character commit SHA`
+  )
+  const actionName = reference.slice(0, reference.lastIndexOf('@')).toLowerCase()
+  assert.equal(
+    retiredGithubActions.has(actionName),
+    false,
+    `${context}: retired GitHub action must not be restored`
   )
   return 'github'
 }
@@ -233,6 +240,7 @@ test('reference validation rejects mutable and unsafe action sources', () => {
     'owner/action@v4',
     'owner/action@abcdef0',
     'owner/action@${{ github.sha }}',
+    `wzieba/Firebase-Distribution-Github-Action@${sha}`,
     'docker://ghcr.io/acme/action:latest',
     `docker://ghcr.io/acme/action@sha256:${'B'.repeat(64)}`,
     './../outside',

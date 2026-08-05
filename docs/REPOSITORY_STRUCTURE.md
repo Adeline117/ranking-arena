@@ -21,6 +21,11 @@ while durable design decisions belong in [DECISIONS.md](./DECISIONS.md).
 | Native shells   | `ios/`, `android/`, `appstore/` | Capacitor packaging and store metadata                  |
 | Operations      | `infra/`, `scripts/`            | Host configuration and operator tooling                 |
 
+`tooling/` contains non-deployable, lockfile-isolated release tool packages.
+Each package is invoked only by its owning release workflow and is excluded from
+the Web and Worker deployment contexts. It is not a deployable unit and does not
+require a deployable-unit ADR.
+
 Each deployable unit must have a documented entry point, owning workflow, health
 check, and rollback path. A new top-level deployable requires an ADR.
 
@@ -73,6 +78,7 @@ contracts/ script/       Foundry project (no tracked first-party Forge tests yet
 ios/ android/ appstore/ Native application shells
 infra/                  Declarative host/process infrastructure
 scripts/                CI, diagnostics, maintenance, and operator commands
+tooling/                Non-deployable, lockfile-isolated release tool packages
 specs/                  Reviewed implementation specifications and templates
 e2e/ k6/                End-to-end and load tests
 __tests__/              Framework root-entrypoint contracts and test-only mocks
@@ -97,6 +103,9 @@ or real values, and local state must stay untracked. Sanitized templates such as
   boundary rather than importing an entry point.
 - Stable operator commands are exposed through `package.json`; one-off probes use
   an ignored scratch directory.
+- Keep release-only third-party CLIs in a private `tooling/<capability>/` package
+  with its own lockfile and update policy; do not add them to deployable package
+  manifests.
 
 ## Migration sequence
 

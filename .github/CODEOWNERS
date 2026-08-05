@@ -37,6 +37,7 @@
 /docs/DOCUMENTATION_POLICY.md @Adeline117
 /docs/REPOSITORY_STRUCTURE.md @Adeline117
 /infra/                     @Adeline117
+/tooling/                   @Adeline117
 
 # 数据管道核心
 /lib/ingest/                @Adeline117

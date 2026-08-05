@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import test from 'node:test'
@@ -124,10 +125,75 @@ test('CI audits the independent Worker production lock without rewriting or swal
       workerJob.steps.indexOf(developmentInstall) < workerJob.steps.indexOf(developmentLayout) &&
       workerJob.steps.indexOf(developmentLayout) < workerJob.steps.indexOf(typecheck)
   )
-  assert.deepEqual(workflow.jobs['lint-typecheck'].needs, ['pre-checks', 'worker-package'])
+  assert.deepEqual(workflow.jobs['lint-typecheck'].needs, [
+    'pre-checks',
+    'worker-package',
+    'mobile-release-tooling-audit',
+  ])
   for (const step of workerJob.steps) {
     assert.equal(step['continue-on-error'], undefined)
     if (step.run) assert.doesNotMatch(step.run, /\|\|\s*true/)
+  }
+})
+
+test('the required lint context propagates every prerequisite gate outcome', () => {
+  const workflow = parse(read('.github/workflows/ci.yml'))
+  const lintJob = workflow.jobs['lint-typecheck']
+  const propagation = lintJob.steps[0]
+
+  assert.equal(lintJob.if, '${{ always() }}')
+  assert.equal(lintJob['continue-on-error'], undefined)
+  assert.equal(propagation.name, 'Enforce prerequisite gate results')
+  assert.equal(propagation.if, undefined)
+  assert.equal(propagation['continue-on-error'], undefined)
+  assert.deepEqual(propagation.env, {
+    PRE_CHECKS_RESULT: '${{ needs.pre-checks.result }}',
+    WORKER_PACKAGE_RESULT: '${{ needs.worker-package.result }}',
+    MOBILE_RELEASE_TOOLING_AUDIT_RESULT: '${{ needs.mobile-release-tooling-audit.result }}',
+  })
+  assert.match(propagation.run, /set -euo pipefail/)
+  for (const result of [
+    'PRE_CHECKS_RESULT',
+    'WORKER_PACKAGE_RESULT',
+    'MOBILE_RELEASE_TOOLING_AUDIT_RESULT',
+  ]) {
+    assert.match(propagation.run, new RegExp(`\\"\\$${result}\\" = success`))
+  }
+  assert.match(propagation.run, /exit 1/)
+  assert.doesNotMatch(propagation.run, /\|\|\s*true/)
+
+  const runPropagation = (results) =>
+    spawnSync('bash', ['-c', propagation.run], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, ...results },
+    })
+  assert.equal(
+    runPropagation({
+      PRE_CHECKS_RESULT: 'success',
+      WORKER_PACKAGE_RESULT: 'success',
+      MOBILE_RELEASE_TOOLING_AUDIT_RESULT: 'success',
+    }).status,
+    0
+  )
+  for (const results of [
+    {
+      PRE_CHECKS_RESULT: 'failure',
+      WORKER_PACKAGE_RESULT: 'success',
+      MOBILE_RELEASE_TOOLING_AUDIT_RESULT: 'success',
+    },
+    {
+      PRE_CHECKS_RESULT: 'success',
+      WORKER_PACKAGE_RESULT: 'skipped',
+      MOBILE_RELEASE_TOOLING_AUDIT_RESULT: 'success',
+    },
+    {
+      PRE_CHECKS_RESULT: 'success',
+      WORKER_PACKAGE_RESULT: 'success',
+      MOBILE_RELEASE_TOOLING_AUDIT_RESULT: 'cancelled',
+    },
+  ]) {
+    assert.equal(runPropagation(results).status, 1)
   }
 })
 
