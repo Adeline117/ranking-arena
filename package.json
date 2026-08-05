@@ -225,7 +225,7 @@
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
     "babel-plugin-react-compiler": "^1.0.0",
-    "brace-expansion": "file:worker/vendor/brace-expansion-compat",
+    "brace-expansion": "file:vendor/brace-expansion-compat",
     "capacitor-native-biometric": "^4.2.2",
     "chrome-launcher": "^1.2.1",
     "dotenv": "^17.4.2",

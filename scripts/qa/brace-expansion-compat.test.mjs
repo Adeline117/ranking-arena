@@ -1,9 +1,19 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { join, resolve } from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 const require = createRequire(import.meta.url)
-const compatPath = '../../worker/vendor/brace-expansion-compat/index.cjs'
+const root = resolve(import.meta.dirname, '../..')
+const compatRoot = join(root, 'vendor', 'brace-expansion-compat')
+const compatPath = join(compatRoot, 'index.cjs')
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'))
+}
 
 function dependencyFrom(consumer) {
   const consumerRequire = createRequire(require.resolve(consumer))
@@ -30,7 +40,7 @@ test('brace-expansion facade preserves callable and named CommonJS exports', () 
 })
 
 test('brace-expansion facade preserves default and named ESM exports', async () => {
-  const module = await import('../../worker/vendor/brace-expansion-compat/index.mjs')
+  const module = await import(pathToFileURL(join(compatRoot, 'index.mjs')).href)
 
   assert.equal(module.default, module.expand)
   assert.deepEqual(module.expand('file-{a,b}.txt'), ['file-a.txt', 'file-b.txt'])
@@ -60,4 +70,31 @@ test('facade delegates to the exact patched upstream release', () => {
 
   assert.equal(upstream.name, 'brace-expansion')
   assert.equal(upstream.version, '5.0.9')
+})
+
+test('root application owns the compatibility facade outside the Worker boundary', () => {
+  const dependencyPath = ['file:vendor', 'brace-expansion-compat'].join('/')
+  const oldPath = ['worker', 'vendor', 'brace-expansion-compat'].join('/')
+  const manifest = readJson(join(root, 'package.json'))
+  const lockfile = readJson(join(root, 'package-lock.json'))
+  const eslintConfig = readFileSync(join(root, 'eslint.config.mjs'), 'utf8')
+  const workerManifest = readFileSync(join(root, 'worker', 'package.json'), 'utf8')
+  const workerLockfile = readFileSync(join(root, 'worker', 'package-lock.json'), 'utf8')
+
+  assert.equal(manifest.devDependencies['brace-expansion'], dependencyPath)
+  assert.equal(lockfile.packages[''].devDependencies['brace-expansion'], dependencyPath)
+  assert.equal(lockfile.packages['node_modules/brace-expansion'].resolved, dependencyPath.slice(5))
+  assert.equal(lockfile.packages[dependencyPath.slice(5)].name, 'brace-expansion')
+  assert.equal(existsSync(join(root, ...oldPath.split('/'))), false)
+  assert.match(eslintConfig, /globalIgnores\(\[[\s\S]*?'vendor\/\*\*'/u)
+  assert.doesNotMatch(workerManifest, /brace-expansion-compat/u)
+  assert.doesNotMatch(workerLockfile, /brace-expansion-compat/u)
+
+  const staleReferences = spawnSync('git', ['grep', '-n', '-I', '-F', oldPath, '--', '.'], {
+    cwd: root,
+    encoding: 'utf8',
+  })
+  assert.equal(staleReferences.status, 1, staleReferences.stdout || staleReferences.stderr)
+  assert.equal(staleReferences.stdout, '')
+  assert.equal(staleReferences.stderr, '')
 })
