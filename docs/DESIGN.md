@@ -311,7 +311,9 @@ Established 2026-06-29 (Waves 0–5 + three high-risk features). Reuse this when
    (`docs/UIUX_AUDIT_<date>.md`). The ledger drives every fix; it's the steering doc.
 2. **Wave it.** Wave 0 audit → Wave 1 cross-cutting (one fix benefits every page: a11y primitives,
    nav IA, color-blind cues, focus rings) → Wave 2 core path → Wave 3 secondary sweep →
-   Wave 4 flagship redesign (prototype at `/design-system` FIRST, confirm, then port live) →
+   Wave 4 flagship redesign (keep `app/design-system/LeaderboardRedesignPreview.tsx` as an
+   owner-gated, source-only prototype; never expose it as a production `/design-system` route;
+   mount it locally only for an owner walkthrough, or use a separately controlled preview entry) →
    Wave 5 verify.
 3. **Agent team, disjoint files.** Fan out parallel agents but give each a non-overlapping file set;
    serialize anything touching shared files (i18n locale files, `lib/data/notifications.ts`,
