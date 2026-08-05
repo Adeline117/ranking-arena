@@ -928,9 +928,14 @@ recover_previous_release() {
   local rollback_pid rollback_not_before_ms rollback_final_not_before_ms final_rollback_pid
   local current_snapshot current_roster_identity current_env_sha
   local rollback_roster_identity final_rollback_roster_identity
-  local displaced_tree
+  local displaced_tree rollback_tsx_tsconfig
   assert_local_lock || {
     echo '✗✗ local deploy lock was lost; automatic rollback is unsafe' >&2
+    return 1
+  }
+  rollback_tsx_tsconfig="$RELEASE_DIR/worker/tsconfig.json"
+  [ -f "$rollback_tsx_tsconfig" ] || {
+    echo '✗✗ heartbeat verifier configuration is unavailable; automatic rollback is unsafe' >&2
     return 1
   }
 
@@ -959,7 +964,7 @@ recover_previous_release() {
         (cd "$RELEASE_DIR" && env -i \
           HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
           PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
-          TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json" \
+          TSX_TSCONFIG_PATH="$rollback_tsx_tsconfig" \
           "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
           "$OLD_PID" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
           "$rollback_final_not_before_ms") || {
@@ -1083,7 +1088,7 @@ $NEW_PROCESS_TREE}" || {
     (cd "$RELEASE_DIR" && env -i \
       HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
       PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
-      TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json" \
+      TSX_TSCONFIG_PATH="$rollback_tsx_tsconfig" \
       "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
       "$rollback_pid" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
       "$rollback_not_before_ms") || {
@@ -1117,7 +1122,7 @@ $NEW_PROCESS_TREE}" || {
     (cd "$RELEASE_DIR" && env -i \
       HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
       PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
-      TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json" \
+      TSX_TSCONFIG_PATH="$rollback_tsx_tsconfig" \
       "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
       "$rollback_pid" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
       "$rollback_final_not_before_ms") || {

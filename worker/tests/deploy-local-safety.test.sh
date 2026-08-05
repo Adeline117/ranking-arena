@@ -1000,6 +1000,50 @@ test_deploy_lock_and_signal_recovery_contract() {
   echo 'ok - atomic local lock and signal-safe centralized rollback are required'
 }
 
+test_rollback_heartbeat_config_is_candidate_owned_and_guarded() {
+  local recovery_source discovery_source recovery_proof_count release_move_line recovery_arm_line
+  recovery_source="$(awk '
+    /^recover_previous_release\(\)/ { capture = 1 }
+    /^safe_remove_generated_release\(\)/ { capture = 0 }
+    capture { print }
+  ' "$DEPLOY_SCRIPT")"
+  assert_contains "$recovery_source" \
+    'rollback_tsx_tsconfig="$RELEASE_DIR/worker/tsconfig.json"' \
+    'rollback proofs must use the candidate-owned Worker config'
+  assert_contains "$recovery_source" '[ -f "$rollback_tsx_tsconfig" ] || {' \
+    'rollback must fail closed before verification when the candidate config is unavailable'
+  assert_not_contains "$recovery_source" \
+    'TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json"' \
+    'rollback heartbeat proofs must consume the previously validated config path'
+  recovery_proof_count="$(grep -Fc \
+    'TSX_TSCONFIG_PATH="$rollback_tsx_tsconfig"' <<<"$recovery_source")"
+  [ "$recovery_proof_count" = 3 ] ||
+    fail 'every baseline, initial, and final rollback proof must use the compatible config'
+  assert_not_contains "$recovery_source" 'TSX_TSCONFIG_PATH="$OLD_CWD/' \
+    'rollback proof code and dependencies come from the reviewed candidate, not the restored release'
+
+  release_move_line="$(grep -n '^mv "$STAGING_DIR" "$RELEASE_DIR"$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  recovery_arm_line="$(grep -n '^RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+  [ -n "$release_move_line" ] && [ -n "$recovery_arm_line" ] && \
+    [ "$release_move_line" -lt "$recovery_arm_line" ] ||
+    fail 'the candidate proof root must be finalized before rollback can be armed'
+
+  discovery_source="$(awk '
+    /^discover_existing_runtime_identity\(\)/ { capture = 1 }
+    /^wait_for_discovered_identity\(\)/ { capture = 0 }
+    capture { print }
+  ' "$DEPLOY_SCRIPT")"
+  assert_contains "$discovery_source" \
+    'tsx_tsconfig="$release_dir/worker/tsconfig.json"' \
+    'normal runtime discovery must require the new Worker-owned config'
+  assert_contains "$discovery_source" '[ -f "$tsx_tsconfig" ] || return 1' \
+    'normal runtime discovery must fail closed without the Worker-owned config'
+  assert_not_contains "$discovery_source" 'resolve_rollback_heartbeat_tsconfig' \
+    'rollback validation must not weaken normal candidate discovery'
+
+  echo 'ok - rollback heartbeat proofs use one guarded candidate-owned Worker config'
+}
+
 test_busy_lock_refuses_before_candidate_or_pm2_stop() {
   local tmp old_dir output status events
   tmp="$(mktemp -d)"
@@ -2191,6 +2235,7 @@ test_archive_invocation_has_no_ui_paths
 test_release_owned_dependencies_and_secret_scope
 test_all_candidate_gates_precede_pm2_stop
 test_deploy_lock_and_signal_recovery_contract
+test_rollback_heartbeat_config_is_candidate_owned_and_guarded
 test_busy_lock_refuses_before_candidate_or_pm2_stop
 test_runtime_mismatch_fails_before_pm2_stop
 test_disk_module_and_database_failures_precede_pm2_stop
