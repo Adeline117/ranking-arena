@@ -55,10 +55,30 @@ stories
 e2e
 playwright-report
 
+# Repository-only inputs and independent deployment units. The ingest image's
+# root-context COPY closure is intentionally limited to lib/** and worker/**;
+# Actions computes the Worker release identity before invoking Docker. Keep these
+# after the narrow README exception so no nested repository input is re-included.
+/.claude
+/.cursor
+/.githooks
+/.github
+/android
+/app
+/appstore
+/cloudflare-worker
+/infra
+/ios
+/k6
+/public
+/scripts
+/specs
+/supabase
+/vendor
+
 # Other
 .vercel
 .turbo
 .arena-ingest
 backups
 worker/logs
-.claude/worktrees
