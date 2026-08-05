@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { resolve } from 'node:path'
 import vm from 'node:vm'
+
+const serviceWorkerPath = resolve(__dirname, '../../public/sw.js')
 
 describe('service worker offline cache contract', () => {
   it('caches only the fallback document and never intercepts ranking APIs', async () => {
@@ -29,7 +31,7 @@ describe('service worker offline cache contract', () => {
       skipWaiting: jest.fn(),
     }
 
-    vm.runInNewContext(readFileSync(join(process.cwd(), 'public/sw.js'), 'utf8'), {
+    vm.runInNewContext(readFileSync(serviceWorkerPath, 'utf8'), {
       self,
       caches,
       clients: { matchAll: jest.fn(), openWindow: jest.fn() },
