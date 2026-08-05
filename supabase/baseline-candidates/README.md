@@ -26,8 +26,14 @@ source-catalog.json
   credentials, or managed `auth`/`storage` schema definitions, and it must
   retain the matching `\restrict`/`\unrestrict` envelope emitted by
   PostgreSQL 17.6 or newer.
-- `source-catalog.json` is a normalized, one-way catalogue witness for the
-  read-only source snapshot. It is not a dump of user rows.
+- `source-catalog.json` is a normalized, one-way catalogue and migration-ledger
+  witness for the read-only source snapshot. Its `@3` catalogue also binds
+  nullable column ACLs, function owners, and view/materialized-view owners plus
+  complete nullable relation options, so default-versus-empty ACL,
+  security-invoker/barrier, and ownership drift cannot compare equal. Ledger
+  rows contain the exact version, name, nullable
+  creator, nullable idempotency key, and a digest of the typed statement array;
+  they never contain statement bodies or user rows.
 - `platform-prerequisites.json` records the managed Supabase roles, schemas,
   relations, types, functions, and extensions supplied by the pinned disposable
   foundation before replay. Its six sorted arrays are compared with the
@@ -73,6 +79,61 @@ path and symlink boundaries, PostgreSQL 17 identity, the positive
 escapes, migration-ledger references, sequence-state changes, common
 host/outbound capabilities, and credential/connection identifiers.
 
+Freeze the repository-side launch manifest without connecting to a database:
+
+```bash
+npm run --silent qa:launch-migration-inventory
+```
+
+The JSON output derives every phase directly from
+`scripts/maintenance/apply-launch-migrations.sh`, verifies that every referenced
+migration is a real in-repository file with no symlinked path, and records the
+raw-file digest plus the exact one-element statement-array digest written by the
+reviewed launch runner. Those two digests also define the expected
+`createdBy=codex` and `codex:<version>:<raw-file-sha256>` idempotency identity.
+It is deterministic inventory, not live ledger evidence.
+
+After a real private source capture exists, reconcile its captured ledger with a
+selected launch phase offline:
+
+```bash
+npm run --silent qa:source-launch-ledger -- \
+  --source-catalog /canonical/private/source-catalog.json \
+  --phase predeploy
+```
+
+The source file must remain owner-only and use a canonical path without symlink
+components. `exact` requires all five ledger fields—version, name, statement
+digest, creator, and idempotency key—to match the runner-derived expectation.
+The report keeps exact, missing, identity/body drift, and modern out-of-scope
+ledger rows distinct; missing or drift exits nonzero. It neither connects to a
+database nor converts an exact ledger match into catalog or launch approval.
+
+Assemble a candidate only after the completed private source capture, reviewed
+foundation, and reviewed platform-prerequisite document exist. Every modern
+migration newer than the boundary must be repeated explicitly in exact order:
+
+```bash
+npm run --silent qa:baseline-candidate-assemble -- \
+  --candidate-name <candidate> \
+  --source-capture-dir /canonical/private/completed-source-capture \
+  --source-git-sha <40-hex-git-sha> \
+  --project-ref-sha256 <64-hex-project-ref-hash> \
+  --foundation supabase/baseline-foundations/<reviewed-foundation>.sql \
+  --platform-prerequisites /canonical/private/platform-prerequisites.json \
+  --baseline-through <14-digit-version> \
+  --forward-migration supabase/migrations/<first-newer-migration>.sql \
+  --forward-migration supabase/migrations/<second-newer-migration>.sql
+```
+
+Use `--no-forward-migrations` instead of every `--forward-migration` only when
+the repository inventory proves that no modern migration is newer than the
+captured boundary. The assembler never connects to a database or reads secret
+environment variables. It validates in a private staging repository, refuses
+an existing output, pins every input against drift, publishes owner-only files
+behind an incomplete marker, and runs the canonical validator again after the
+commit point. The result remains `candidate/not-deployable`.
+
 Replay only through the candidate-directory entry point. The harness runs the
 validator itself, re-reads and hashes every executable file into a private
 staging directory, and derives the foundation/app/forward paths from the
@@ -91,6 +152,18 @@ starts PostgreSQL with `listen_addresses=''` on a short private Unix socket,
 and applies each pre-scanned phase in its own fail-fast transaction. If a server
 cannot be stopped, it preserves and reports the exact cluster/socket paths
 instead of deleting a live data directory.
+
+After the foundation and app schema are applied, the harness captures the same
+normalized catalogue categories used by source capture. Thirteen materialized
+categories must exactly equal the captured source boundary; publications are
+explicitly recorded as not replayed and the disposable baseline must contain
+none. The source migration ledger is anchored only by its captured digest—it is
+not recreated or represented as the managed Supabase ledger. Each declared
+forward SQL file and its private harness execution row commit in the same
+transaction, so the observed execution plan must exactly match the candidate.
+The final catalogue delta is evidence for review only: the result always keeps
+`finalCatalogApproved`, `managedSupabaseEquivalent`, `productionEquivalent`,
+and `promotionEvidence` false.
 
 This static gate and local replay are designed to prevent accidental unsafe
 execution. Foundation and forward files remain trusted, reviewed repository
@@ -131,21 +204,28 @@ child beneath `/private/tmp`, never macOS's `/tmp` alias or the shared
 `/private/tmp` directory itself). The Node client additionally pins certificate
 and hostname verification;
 `pg_dump` receives credentials only in a minimal allowlisted child environment,
-never argv. Ambient cloud tokens and dynamic-loader injection variables are not
-passed to PostgreSQL tools.
+never argv or `PGPASSWORD`: capture writes one escaped owner-only pgpass inside
+its private runtime root. The physical PostgreSQL directory and tools must be
+root/current-user owned and not group/world writable. Their bytes are read from
+`O_NOFOLLOW`-pinned descriptors into an exact `0700` runtime tool directory as
+`0500` private copies; only those copies run, and their full identity plus digest
+is rechecked around version probes and the real dump. Ambient cloud tokens and
+dynamic-loader injection variables are not passed to PostgreSQL tools.
 
 The command opens `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`, exports one
 snapshot, reads fixed `pg_catalog` queries plus
 `supabase_migrations.schema_migrations`, and keeps the exporting transaction
 open until the schema-only `pg_dump --snapshot`, SQL safety validation, and
-artifact writes finish. Ledger statement text is SHA-256 digested in memory and
-is never written. The digest covers the canonical typed payload
+artifact writes finish. Ledger creator and idempotency identity are retained for
+exact reconciliation, while statement text is SHA-256 digested in memory and is
+never written. The digest covers the canonical typed payload
 `{"kind":"sql-statements","value":...}` so a historical `NULL` statement body
 remains distinct from a recorded empty array. Locale-sensitive catalogue
 ordering is replaced with deterministic JavaScript code-unit ordering, and
 relevant session GUCs are pinned. The capture and candidate validator share
 exact per-category row contracts rather than accepting arbitrary catalogue
-objects.
+objects. Those contracts include sorted nullable column ACLs, function owners,
+and view/materialized-view owners plus complete sorted nullable relation options.
 
 Capture selects only application schemas `public` and `arena` and passes
 `--exclude-extension=*`: installed extension names, versions, and schemas are

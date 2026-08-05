@@ -1,4 +1,3 @@
-import { config } from 'dotenv'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -244,6 +243,7 @@ export async function waitForExpectedLocalHeartbeat(
 }
 
 async function main(): Promise<void> {
+  const { config } = await import('dotenv')
   config({ path: resolve(process.cwd(), 'worker', '.env'), override: false, quiet: true })
   const [{ getConnection }, { WORKER_ROSTER_KEY }] = await Promise.all([
     import('./src/connection'),

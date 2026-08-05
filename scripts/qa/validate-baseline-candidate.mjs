@@ -1,10 +1,20 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto'
-import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+} from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { containsBaselineCredentialLikeData } from './baseline-credential-safety.mjs'
 import {
   validateAppSchemaSqlSafety,
   validateFoundationSqlSafety,
@@ -14,6 +24,7 @@ import {
   SOURCE_CATALOG_CONTRACT,
   SOURCE_CATALOG_KEYS,
   validateSourceCatalogRowContracts,
+  validateSourceLedgerRowContracts,
 } from './baseline-source-catalog-contract.mjs'
 
 export const BASELINE_CANDIDATE_CONTRACT = 'arena.canonical-baseline-candidate@1'
@@ -142,34 +153,122 @@ function assertInside(root, target, label) {
   return relative
 }
 
-function assertPathComponentsAreNotSymlinks(root, target, label) {
+function effectiveUserId() {
+  if (typeof process.geteuid !== 'function') {
+    fail('effective user identity is unavailable; refusing to validate filesystem evidence')
+  }
+  const value = process.geteuid()
+  if (!Number.isSafeInteger(value) || value < 0) {
+    fail('effective user identity is invalid; refusing to validate filesystem evidence')
+  }
+  return BigInt(value)
+}
+
+function statIdentity(stat) {
+  if (
+    typeof stat.dev !== 'bigint' ||
+    typeof stat.ino !== 'bigint' ||
+    typeof stat.uid !== 'bigint' ||
+    typeof stat.mode !== 'bigint' ||
+    typeof stat.size !== 'bigint' ||
+    typeof stat.mtimeNs !== 'bigint' ||
+    typeof stat.ctimeNs !== 'bigint'
+  ) {
+    fail('filesystem does not expose the metadata required for safe validation')
+  }
+  return Object.freeze({
+    ctimeNs: stat.ctimeNs,
+    dev: stat.dev,
+    ino: stat.ino,
+    mode: stat.mode,
+    mtimeNs: stat.mtimeNs,
+    size: stat.size,
+    uid: stat.uid,
+  })
+}
+
+const IDENTITY_KEYS = Object.freeze(['dev', 'ino', 'uid', 'mode', 'size', 'mtimeNs', 'ctimeNs'])
+
+function sameIdentity(left, right) {
+  return IDENTITY_KEYS.every((key) => left[key] === right[key])
+}
+
+function assertTrustedOwner(identity, label) {
+  const euid = effectiveUserId()
+  if (identity.uid !== 0n && identity.uid !== euid) {
+    fail(`${label} must be owned by root or the effective user`)
+  }
+}
+
+function permissionBits(identity) {
+  return Number(identity.mode & 0o7777n)
+}
+
+function assertTrustedDirectoryStat(stat, label, { privateDirectory = false } = {}) {
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    fail(`${label} must be a real directory, not a symlink`)
+  }
+  const identity = statIdentity(stat)
+  assertTrustedOwner(identity, label)
+  const permissions = permissionBits(identity)
+  if (privateDirectory ? permissions !== 0o700 : (permissions & 0o7022) !== 0) {
+    fail(
+      privateDirectory
+        ? `${label} must have exact 0700 permissions`
+        : `${label} must not be group- or other-writable or carry special permission bits`
+    )
+  }
+  return identity
+}
+
+function assertTrustedFileStat(stat, label, { privateFile = false } = {}) {
+  if (!stat.isFile() || stat.isSymbolicLink()) fail(`${label} must be a regular non-symlink file`)
+  const identity = statIdentity(stat)
+  assertTrustedOwner(identity, label)
+  const permissions = permissionBits(identity)
+  if (privateFile ? permissions !== 0o600 : (permissions & 0o7022) !== 0) {
+    fail(
+      privateFile
+        ? `${label} must have exact 0600 permissions`
+        : `${label} must not be group- or other-writable or carry special permission bits`
+    )
+  }
+  return identity
+}
+
+function assertPathComponentsAreTrusted(root, target, label) {
   const relative = assertInside(root, target, label)
   let current = root
   for (const segment of relative.split(path.sep)) {
     current = path.join(current, segment)
     let stat
     try {
-      stat = lstatSync(current)
+      stat = lstatSync(current, { bigint: true })
     } catch {
       fail(`${label} does not exist: ${current}`)
     }
     if (stat.isSymbolicLink()) fail(`${label} must not contain a symlink: ${current}`)
+    if (current !== target) assertTrustedDirectoryStat(stat, `${label} parent directory`)
   }
 }
 
 function assertDirectoryRootIsNotSymlink(root, label) {
   let stat
   try {
-    stat = lstatSync(root)
+    stat = lstatSync(root, { bigint: true })
   } catch {
     fail(`${label} does not exist: ${root}`)
   }
-  if (stat.isSymbolicLink() || !stat.isDirectory()) {
-    fail(`${label} must be a real directory, not a symlink`)
-  }
+  return assertTrustedDirectoryStat(stat, label)
 }
 
-function resolveRegularFile(root, relativePath, label) {
+function callHook(testHooks, name, details) {
+  const hook = testHooks?.[name]
+  if (hook !== undefined && typeof hook !== 'function') fail(`test hook ${name} must be a function`)
+  hook?.(Object.freeze({ ...details }))
+}
+
+function resolveSafeRelativePath(root, relativePath, label) {
   if (
     typeof relativePath !== 'string' ||
     relativePath.includes('\0') ||
@@ -180,33 +279,128 @@ function resolveRegularFile(root, relativePath, label) {
     fail(`${label} has an unsafe path`)
   }
   const target = path.resolve(root, relativePath)
-  const rootPrefix = `${root}${path.sep}`
-  if (!target.startsWith(rootPrefix)) fail(`${label} escapes its allowed root`)
-  assertPathComponentsAreNotSymlinks(root, target, label)
-  const stat = lstatSync(target)
-  if (!stat.isFile()) fail(`${label} must be a regular file`)
-  const physical = realpathSync(target)
-  if (!physical.startsWith(rootPrefix)) fail(`${label} resolves outside its allowed root`)
-  return physical
+  assertInside(root, target, label)
+  return target
+}
+
+function readPinnedRegularFile(root, relativePath, label, { privateFile = false, testHooks } = {}) {
+  const target = resolveSafeRelativePath(root, relativePath, label)
+  assertPathComponentsAreTrusted(root, target, label)
+  let pathStat
+  try {
+    pathStat = lstatSync(target, { bigint: true })
+  } catch {
+    fail(`${label} does not exist`)
+  }
+  const before = assertTrustedFileStat(pathStat, label, { privateFile })
+  callHook(testHooks, 'afterLstatBeforeOpen', { label, path: target })
+
+  if (!Number.isInteger(constants.O_NOFOLLOW) || constants.O_NOFOLLOW === 0) {
+    fail('O_NOFOLLOW is unavailable; refusing to validate filesystem evidence')
+  }
+  let descriptor
+  try {
+    descriptor = openSync(target, constants.O_RDONLY | constants.O_NOFOLLOW)
+  } catch {
+    fail(`${label} could not be opened without following symbolic links`)
+  }
+
+  let opened
+  let contents
+  let after
+  try {
+    opened = assertTrustedFileStat(fstatSync(descriptor, { bigint: true }), label, {
+      privateFile,
+    })
+    if (!sameIdentity(before, opened)) fail(`${label} changed while it was being opened`)
+    contents = readFileSync(descriptor)
+    if (BigInt(contents.length) !== opened.size)
+      fail(`${label} size changed while it was being read`)
+    callHook(testHooks, 'afterFdRead', { label, path: target })
+    after = assertTrustedFileStat(fstatSync(descriptor, { bigint: true }), label, {
+      privateFile,
+    })
+    if (!sameIdentity(opened, after)) fail(`${label} changed while it was being read`)
+  } finally {
+    closeSync(descriptor)
+  }
+
+  let finalPathStat
+  try {
+    finalPathStat = lstatSync(target, { bigint: true })
+  } catch {
+    fail(`${label} changed after it was read`)
+  }
+  const finalPathIdentity = assertTrustedFileStat(finalPathStat, label, { privateFile })
+  if (!sameIdentity(after, finalPathIdentity)) fail(`${label} changed after it was read`)
+  const record = {
+    contents,
+    identity: finalPathIdentity,
+    label,
+    path: target,
+    privateFile,
+    relativePath,
+    root,
+    sha256: sha256(contents),
+  }
+  callHook(testHooks, 'afterPinnedRead', { label, path: target, sha256: record.sha256 })
+  return Object.freeze(record)
+}
+
+function readTrustedDirectory(target, label, { privateDirectory = false } = {}) {
+  let stat
+  try {
+    stat = lstatSync(target, { bigint: true })
+  } catch {
+    fail(`${label} does not exist`)
+  }
+  const identity = assertTrustedDirectoryStat(stat, label, { privateDirectory })
+  if (realpathSync(target) !== target) fail(`${label} must resolve to itself`)
+  return Object.freeze({ identity, label, path: target, privateDirectory })
+}
+
+function assertDirectoryRecordUnchanged(record) {
+  const current = readTrustedDirectory(record.path, record.label, {
+    privateDirectory: record.privateDirectory,
+  })
+  if (!sameIdentity(record.identity, current.identity)) {
+    fail(`${record.label} changed during candidate validation`)
+  }
+}
+
+function assertPinnedPathUnchanged(record) {
+  let stat
+  try {
+    stat = lstatSync(record.path, { bigint: true })
+  } catch {
+    fail(`${record.label} changed during candidate validation`)
+  }
+  const identity = assertTrustedFileStat(stat, record.label, {
+    privateFile: record.privateFile,
+  })
+  if (!sameIdentity(record.identity, identity)) {
+    fail(`${record.label} changed during candidate validation`)
+  }
+}
+
+function reopenPinnedFile(record, testHooks) {
+  const current = readPinnedRegularFile(record.root, record.relativePath, record.label, {
+    privateFile: record.privateFile,
+    testHooks,
+  })
+  if (!sameIdentity(record.identity, current.identity) || record.sha256 !== current.sha256) {
+    fail(`${record.label} changed during candidate validation`)
+  }
+  return current
 }
 
 function validateNoSecrets(contents, label) {
-  const patterns = [
-    /\bpostgres(?:ql)?:\/\/[^\s'"<>]+/iu,
-    /\bhttps?:\/\/[a-z0-9-]+\.supabase\.co\b/iu,
-    /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/u,
-    /\bsb_(?:secret|publishable)_[A-Za-z0-9_-]{12,}\b/u,
-    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/u,
-    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
-    /https:\/\/hooks\.slack\.com\/services\//iu,
-    /\b\d{8,10}:[A-Za-z0-9_-]{30,}\b/u,
-  ]
-  if (patterns.some((pattern) => pattern.test(contents))) {
+  if (containsBaselineCredentialLikeData(contents)) {
     fail(`${label} contains a credential or connection identifier`)
   }
 }
 
-function validateForwardManifest(document, repoRoot, sourceLedger) {
+function validateForwardManifest(document, repoRoot, sourceLedger, { testHooks } = {}) {
   assertExactKeys(
     document,
     [
@@ -270,22 +464,23 @@ function validateForwardManifest(document, repoRoot, sourceLedger) {
     }
     if (seenPaths.has(migration.path)) fail(`duplicate forward migration path: ${migration.path}`)
     assertSha256(migration.sha256, `${label}.sha256`)
-    const migrationPath = resolveRegularFile(repoRoot, migration.path, label)
-    const contents = readFileSync(migrationPath)
+    const record = readPinnedRegularFile(repoRoot, migration.path, label, { testHooks })
+    const contents = record.contents
     validateNoSecrets(contents.toString('utf8'), migration.path)
-    const actual = sha256(contents)
-    if (actual !== migration.sha256) {
+    if (record.sha256 !== migration.sha256) {
       fail(`${label}.sha256 does not match ${migration.path}`)
     }
     validateReplaySqlSafety(contents.toString('utf8'), { label: migration.path })
     previousVersion = migration.version
     seenPaths.add(migration.path)
-    replayMigrations.push({ ...migration, absolutePath: migrationPath })
+    replayMigrations.push({ ...migration, absolutePath: record.path, record })
   }
 
   const migrationsRoot = path.join(repoRoot, 'supabase', 'migrations')
-  assertPathComponentsAreNotSymlinks(repoRoot, migrationsRoot, 'migration directory')
+  assertPathComponentsAreTrusted(repoRoot, migrationsRoot, 'migration directory')
+  const migrationDirectory = readTrustedDirectory(migrationsRoot, 'migration directory')
   const repositoryModernMigrations = []
+  const repositoryFiles = new Map()
   const seenRepositoryVersions = new Set()
   for (const entry of readdirSync(migrationsRoot, { withFileTypes: true })) {
     const match = entry.name.match(/^(\d{14})_([a-z0-9][a-z0-9_]*)\.sql$/u)
@@ -297,12 +492,13 @@ function validateForwardManifest(document, repoRoot, sourceLedger) {
       fail(`modern migration version is duplicated in the repository: ${match[1]}`)
     }
     const repoPath = `supabase/migrations/${entry.name}`
-    const absolutePath = resolveRegularFile(repoRoot, repoPath, repoPath)
+    const record = readPinnedRegularFile(repoRoot, repoPath, repoPath, { testHooks })
     repositoryModernMigrations.push({
       path: repoPath,
-      sha256: sha256(readFileSync(absolutePath)),
+      sha256: record.sha256,
       version: match[1],
     })
+    repositoryFiles.set(repoPath, record)
     seenRepositoryVersions.add(match[1])
   }
   repositoryModernMigrations.sort((left, right) => left.version.localeCompare(right.version))
@@ -322,10 +518,22 @@ function validateForwardManifest(document, repoRoot, sourceLedger) {
     fail('forward-migrations.json must list every modern migration newer than baselineThrough')
   }
 
+  for (const migration of replayMigrations) {
+    const inventoryRecord = repositoryFiles.get(migration.path)
+    if (!inventoryRecord || inventoryRecord.sha256 !== migration.sha256) {
+      fail(`${migration.path} changed between forward-manifest and repository inventory reads`)
+    }
+    migration.record = inventoryRecord
+    migration.absolutePath = inventoryRecord.path
+  }
+
   return {
     baselineThrough: document.baselineThrough,
+    migrationDirectory,
     migrationCount: document.migrations.length,
+    migrationNames: repositoryModernMigrations.map((migration) => path.basename(migration.path)),
     migrations: replayMigrations,
+    repositoryFiles,
   }
 }
 
@@ -349,28 +557,11 @@ function validateSourceCatalog(document, manifestSource) {
     assertCanonicalObjectArray(document.catalog[key], `source-catalog.json catalog ${key}`)
   }
   assertCanonicalObjectArray(document.ledger, 'source-catalog.json ledger')
+  validateSourceLedgerRowContracts(document.ledger, { fail })
   const modernVersions = []
   const seenModernVersions = new Set()
   for (const [index, entry] of document.ledger.entries()) {
     const label = `source-catalog.json ledger[${index}]`
-    assertExactKeys(entry, ['name', 'statementsSha256', 'version'], label)
-    if (
-      typeof entry.version !== 'string' ||
-      entry.version.length === 0 ||
-      entry.version.trim() !== entry.version ||
-      /[\u0000-\u001f\u007f]/u.test(entry.version)
-    ) {
-      fail(`${label}.version must be a non-empty printable string`)
-    }
-    if (
-      typeof entry.name !== 'string' ||
-      entry.name.length === 0 ||
-      entry.name.trim() !== entry.name ||
-      /[\u0000-\u001f\u007f]/u.test(entry.name)
-    ) {
-      fail(`${label}.name must be a non-empty printable string`)
-    }
-    assertSha256(entry.statementsSha256, `${label}.statementsSha256`)
     if (VERSION_PATTERN.test(entry.version)) {
       if (seenModernVersions.has(entry.version)) {
         fail(`${label}.version duplicates modern source ledger version ${entry.version}`)
@@ -415,7 +606,7 @@ function validatePlatformPrerequisites(document) {
   }
 }
 
-function validateFoundation(document, repoRoot) {
+function validateFoundation(document, repoRoot, { testHooks } = {}) {
   assertExactKeys(
     document,
     ['contract', 'path', 'postgresMajor', 'sha256', 'status'],
@@ -434,18 +625,152 @@ function validateFoundation(document, repoRoot) {
     fail('manifest.json foundation path must name a repository baseline-foundations SQL file')
   }
   assertSha256(document.sha256, 'manifest.json foundation sha256')
-  const foundationPath = resolveRegularFile(
-    repoRoot,
-    document.path,
-    'manifest.json foundation path'
-  )
-  const contents = readFileSync(foundationPath)
+  const record = readPinnedRegularFile(repoRoot, document.path, 'manifest.json foundation path', {
+    testHooks,
+  })
+  const contents = record.contents
   validateNoSecrets(contents.toString('utf8'), document.path)
   validateFoundationSqlSafety(contents.toString('utf8'), { label: document.path })
-  if (sha256(contents) !== document.sha256) {
+  if (record.sha256 !== document.sha256) {
     fail('manifest.json foundation sha256 does not match its SQL file')
   }
-  return { absolutePath: foundationPath, path: document.path, sha256: document.sha256 }
+  return { absolutePath: record.path, path: document.path, record, sha256: document.sha256 }
+}
+
+function snapshotDirectoryHierarchy(
+  repoRoot,
+  candidatesRoot,
+  candidateDir,
+  { includeCandidate = true } = {}
+) {
+  const records = []
+  records.push(readTrustedDirectory(repoRoot, 'repository root'))
+  let current = repoRoot
+  for (const segment of assertInside(
+    repoRoot,
+    candidatesRoot,
+    'baseline candidates directory'
+  ).split(path.sep)) {
+    current = path.join(current, segment)
+    records.push(readTrustedDirectory(current, 'baseline candidates directory hierarchy'))
+  }
+  if (includeCandidate) {
+    records.push(
+      readTrustedDirectory(candidateDir, 'candidate directory', {
+        privateDirectory: true,
+      })
+    )
+  }
+  return Object.freeze(records)
+}
+
+function assertDirectoryHierarchyUnchanged(records) {
+  for (const record of records) assertDirectoryRecordUnchanged(record)
+}
+
+function readCandidateEntries(candidateDir, expectedEntries) {
+  const entries = readdirSync(candidateDir, { withFileTypes: true })
+  const names = entries.map((entry) => entry.name).sort()
+  if (
+    names.length !== expectedEntries.length ||
+    names.some((entry, index) => entry !== expectedEntries[index])
+  ) {
+    fail(`candidate directory must contain exactly: ${expectedEntries.join(', ')}`)
+  }
+  if (entries.some((entry) => entry.isSymbolicLink() || !entry.isFile())) {
+    fail('every candidate artifact must be a regular non-symlink file')
+  }
+  return names
+}
+
+function readModernMigrationNames(migrationsRoot) {
+  const names = []
+  for (const entry of readdirSync(migrationsRoot, { withFileTypes: true })) {
+    if (!/^(\d{14})_([a-z0-9][a-z0-9_]*)\.sql$/u.test(entry.name)) continue
+    if (entry.isSymbolicLink() || !entry.isFile()) {
+      fail(`modern migration must be a regular non-symlink file: ${entry.name}`)
+    }
+    names.push(entry.name)
+  }
+  return names.sort()
+}
+
+function assertExactStringArray(actual, expected, message) {
+  if (
+    actual.length !== expected.length ||
+    actual.some((entry, index) => entry !== expected[index])
+  ) {
+    fail(message)
+  }
+}
+
+function serializeIdentity(identity) {
+  return Object.freeze({
+    ctimeNs: identity.ctimeNs.toString(),
+    dev: identity.dev.toString(),
+    ino: identity.ino.toString(),
+    mode: permissionBits(identity).toString(8).padStart(4, '0'),
+    mtimeNs: identity.mtimeNs.toString(),
+    size: identity.size.toString(),
+    uid: identity.uid.toString(),
+  })
+}
+
+function replayFile(record, extra = {}) {
+  return {
+    absolutePath: record.path,
+    contents: Buffer.from(record.contents),
+    identity: serializeIdentity(record.identity),
+    sha256: record.sha256,
+    ...extra,
+  }
+}
+
+function finalVerifyEvidence({
+  artifactRecords,
+  expectedCandidateEntries,
+  forward,
+  foundation,
+  hierarchyRecords,
+  physicalCandidate,
+  testHooks,
+}) {
+  callHook(testHooks, 'beforeFinalVerification', { candidateDir: physicalCandidate })
+  assertDirectoryHierarchyUnchanged(hierarchyRecords)
+  readCandidateEntries(physicalCandidate, expectedCandidateEntries)
+
+  const finalArtifacts = new Map()
+  for (const [name, record] of artifactRecords) {
+    finalArtifacts.set(name, reopenPinnedFile(record, testHooks))
+  }
+  const finalFoundation = reopenPinnedFile(foundation.record, testHooks)
+
+  assertDirectoryRecordUnchanged(forward.migrationDirectory)
+  assertExactStringArray(
+    readModernMigrationNames(forward.migrationDirectory.path),
+    [...forward.migrationNames].sort(),
+    'modern migration inventory changed during candidate validation'
+  )
+  const finalRepositoryFiles = new Map()
+  for (const [migrationPath, record] of forward.repositoryFiles) {
+    finalRepositoryFiles.set(migrationPath, reopenPinnedFile(record, testHooks))
+  }
+
+  // A last path-identity sweep ensures an early final-pass file was not swapped
+  // while later evidence was being re-opened and re-hashed.
+  for (const record of finalArtifacts.values()) assertPinnedPathUnchanged(record)
+  assertPinnedPathUnchanged(finalFoundation)
+  for (const record of finalRepositoryFiles.values()) assertPinnedPathUnchanged(record)
+  assertDirectoryHierarchyUnchanged(hierarchyRecords)
+  assertDirectoryRecordUnchanged(forward.migrationDirectory)
+  readCandidateEntries(physicalCandidate, expectedCandidateEntries)
+  assertExactStringArray(
+    readModernMigrationNames(forward.migrationDirectory.path),
+    [...forward.migrationNames].sort(),
+    'modern migration inventory changed during candidate validation'
+  )
+
+  return { finalArtifacts, finalFoundation, finalRepositoryFiles }
 }
 
 export function validateBaselineCandidate({
@@ -453,6 +778,7 @@ export function validateBaselineCandidate({
   repoRoot = SCRIPT_ROOT,
   candidatesRoot = path.join(repoRoot, 'supabase', 'baseline-candidates'),
   includeReplayPlan = false,
+  testHooks,
 } = {}) {
   if (typeof candidateDir !== 'string' || candidateDir.length === 0) {
     fail('an explicit candidate directory is required')
@@ -462,20 +788,17 @@ export function validateBaselineCandidate({
   const physicalRepoRoot = realpathSync(requestedRepoRoot)
   const requestedCandidatesRoot = path.resolve(candidatesRoot)
   const requestedCandidate = path.resolve(candidateDir)
-  assertPathComponentsAreNotSymlinks(
+  assertPathComponentsAreTrusted(
     requestedRepoRoot,
     requestedCandidatesRoot,
     'baseline candidates directory'
   )
+  assertDirectoryRootIsNotSymlink(requestedCandidatesRoot, 'baseline candidates directory')
   const physicalCandidatesRoot = realpathSync(requestedCandidatesRoot)
   assertInside(physicalRepoRoot, physicalCandidatesRoot, 'baseline candidates directory')
-  assertPathComponentsAreNotSymlinks(
-    requestedCandidatesRoot,
-    requestedCandidate,
-    'candidate directory'
-  )
-  const candidateStat = lstatSync(requestedCandidate)
-  if (!candidateStat.isDirectory()) fail('candidate directory must be a directory')
+  assertPathComponentsAreTrusted(requestedCandidatesRoot, requestedCandidate, 'candidate directory')
+  const candidateStat = lstatSync(requestedCandidate, { bigint: true })
+  assertTrustedDirectoryStat(candidateStat, 'candidate directory', { privateDirectory: true })
   const physicalCandidate = realpathSync(requestedCandidate)
   const candidateRelative = assertInside(
     physicalCandidatesRoot,
@@ -486,26 +809,23 @@ export function validateBaselineCandidate({
     fail('candidate directory must be one direct, safely named child of baseline-candidates')
   }
   const expectedEntries = ['manifest.json', ...REQUIRED_ARTIFACTS].sort()
-  const actualEntries = readdirSync(physicalCandidate, { withFileTypes: true })
-  if (
-    actualEntries.length !== expectedEntries.length ||
-    actualEntries
-      .map((entry) => entry.name)
-      .sort()
-      .some((entry, index) => entry !== expectedEntries[index])
-  ) {
-    fail(`candidate directory must contain exactly: ${expectedEntries.join(', ')}`)
-  }
-  if (actualEntries.some((entry) => entry.isSymbolicLink() || !entry.isFile())) {
-    fail('every candidate artifact must be a regular non-symlink file')
-  }
+  const hierarchyRecords = snapshotDirectoryHierarchy(
+    physicalRepoRoot,
+    physicalCandidatesRoot,
+    physicalCandidate
+  )
+  readCandidateEntries(physicalCandidate, expectedEntries)
 
+  const artifactRecords = new Map()
   const artifactContents = new Map()
   for (const fileName of ['manifest.json', ...REQUIRED_ARTIFACTS]) {
-    const filePath = resolveRegularFile(physicalCandidate, fileName, fileName)
-    const contents = readFileSync(filePath)
-    artifactContents.set(fileName, contents)
-    validateNoSecrets(contents.toString('utf8'), fileName)
+    const record = readPinnedRegularFile(physicalCandidate, fileName, fileName, {
+      privateFile: true,
+      testHooks,
+    })
+    artifactRecords.set(fileName, record)
+    artifactContents.set(fileName, record.contents)
+    validateNoSecrets(record.contents.toString('utf8'), fileName)
   }
 
   const manifest = parseJson(
@@ -548,7 +868,7 @@ export function validateBaselineCandidate({
     }
   }
 
-  const foundation = validateFoundation(manifest.foundation, physicalRepoRoot)
+  const foundation = validateFoundation(manifest.foundation, physicalRepoRoot, { testHooks })
 
   const appSchemaSafety = validateAppSchemaSqlSafety(
     artifactContents.get('app-schema.sql').toString('utf8'),
@@ -568,12 +888,24 @@ export function validateBaselineCandidate({
     artifactContents.get('forward-migrations.json').toString('utf8'),
     'forward-migrations.json'
   )
-  const forward = validateForwardManifest(forwardDocument, physicalRepoRoot, sourceLedger)
+  const forward = validateForwardManifest(forwardDocument, physicalRepoRoot, sourceLedger, {
+    testHooks,
+  })
   const prerequisiteDocument = parseJson(
     artifactContents.get('platform-prerequisites.json').toString('utf8'),
     'platform-prerequisites.json'
   )
   validatePlatformPrerequisites(prerequisiteDocument)
+
+  const { finalArtifacts, finalFoundation, finalRepositoryFiles } = finalVerifyEvidence({
+    artifactRecords,
+    expectedCandidateEntries: expectedEntries,
+    forward,
+    foundation,
+    hierarchyRecords,
+    physicalCandidate,
+    testHooks,
+  })
 
   const result = {
     candidate: path.relative(physicalRepoRoot, physicalCandidate).split(path.sep).join('/'),
@@ -584,13 +916,21 @@ export function validateBaselineCandidate({
   }
   if (includeReplayPlan) {
     result.replayPlan = {
-      appSchema: {
-        absolutePath: path.join(physicalCandidate, 'app-schema.sql'),
-        sha256: manifest.files['app-schema.sql'],
-      },
-      foundation,
-      forwardMigrations: forward.migrations,
+      appSchema: replayFile(finalArtifacts.get('app-schema.sql')),
+      forwardManifest: replayFile(finalArtifacts.get('forward-migrations.json')),
+      foundation: replayFile(finalFoundation, { path: foundation.path }),
+      forwardMigrations: forward.migrations.map((migration) => {
+        const record = finalRepositoryFiles.get(migration.path)
+        if (!record) fail(`${migration.path} is missing from the final migration inventory`)
+        return replayFile(record, { path: migration.path, version: migration.version })
+      }),
       platformPrerequisites: prerequisiteDocument,
+      platformPrerequisitesFile: replayFile(finalArtifacts.get('platform-prerequisites.json')),
+      sourceCatalog: replayFile(finalArtifacts.get('source-catalog.json'), {
+        baselineThrough: forward.baselineThrough,
+        catalogSha256: manifest.source.catalogSha256,
+        ledgerSha256: manifest.source.ledgerSha256,
+      }),
     }
   }
   return result
@@ -604,12 +944,29 @@ export function validateAllBaselineCandidates({
   assertDirectoryRootIsNotSymlink(requestedRepoRoot, 'repository root')
   const physicalRepoRoot = realpathSync(requestedRepoRoot)
   const requestedCandidatesRoot = path.resolve(candidatesRoot)
-  assertPathComponentsAreNotSymlinks(
+  assertPathComponentsAreTrusted(
     requestedRepoRoot,
     requestedCandidatesRoot,
     'baseline candidates directory'
   )
-  const entries = readdirSync(requestedCandidatesRoot, { withFileTypes: true })
+  assertDirectoryRootIsNotSymlink(requestedCandidatesRoot, 'baseline candidates directory')
+  const physicalCandidatesRoot = realpathSync(requestedCandidatesRoot)
+  assertInside(physicalRepoRoot, physicalCandidatesRoot, 'baseline candidates directory')
+  const hierarchyRecords = snapshotDirectoryHierarchy(
+    physicalRepoRoot,
+    physicalCandidatesRoot,
+    physicalCandidatesRoot,
+    { includeCandidate: false }
+  )
+  const entries = readdirSync(physicalCandidatesRoot, { withFileTypes: true })
+  const inventory = entries
+    .map((entry) => ({
+      directory: entry.isDirectory(),
+      file: entry.isFile(),
+      name: entry.name,
+      symlink: entry.isSymbolicLink(),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name))
   const candidates = []
   for (const entry of entries) {
     if (entry.name === 'README.md' && entry.isFile() && !entry.isSymbolicLink()) continue
@@ -622,11 +979,23 @@ export function validateAllBaselineCandidates({
     }
     candidates.push(
       validateBaselineCandidate({
-        candidateDir: path.join(requestedCandidatesRoot, entry.name),
-        candidatesRoot: requestedCandidatesRoot,
+        candidateDir: path.join(physicalCandidatesRoot, entry.name),
+        candidatesRoot: physicalCandidatesRoot,
         repoRoot: physicalRepoRoot,
       })
     )
+  }
+  assertDirectoryHierarchyUnchanged(hierarchyRecords)
+  const finalInventory = readdirSync(physicalCandidatesRoot, { withFileTypes: true })
+    .map((entry) => ({
+      directory: entry.isDirectory(),
+      file: entry.isFile(),
+      name: entry.name,
+      symlink: entry.isSymbolicLink(),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name))
+  if (JSON.stringify(inventory) !== JSON.stringify(finalInventory)) {
+    fail('baseline candidate inventory changed during validation')
   }
   candidates.sort((left, right) => left.candidate.localeCompare(right.candidate))
   return { candidateCount: candidates.length, candidates }

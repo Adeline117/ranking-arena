@@ -31,11 +31,20 @@ import {
   SOURCE_CATALOG_CONTRACT,
   canonicalJsonSha256,
 } from './validate-baseline-candidate.mjs'
+import { SOURCE_CATALOG_KEYS } from './baseline-source-catalog-contract.mjs'
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const SOURCE_HARNESS = resolve(ROOT, 'scripts/maintenance/replay-baseline-candidate.pg17.sh')
+const SOURCE_CAPTURE = resolve(ROOT, 'scripts/maintenance/capture-canonical-baseline.mjs')
+const SOURCE_POSTGRES_CLI_ENV = resolve(ROOT, 'scripts/maintenance/postgres-cli-env.mjs')
 const SOURCE_VALIDATOR = resolve(ROOT, 'scripts/qa/validate-baseline-candidate.mjs')
 const SOURCE_SQL_SAFETY = resolve(ROOT, 'scripts/qa/baseline-sql-safety.mjs')
+const SOURCE_CREDENTIAL_SAFETY = resolve(ROOT, 'scripts/qa/baseline-credential-safety.mjs')
+const SOURCE_TARGET_CATALOG_CAPTURE = resolve(
+  ROOT,
+  'scripts/qa/capture-baseline-replay-target-catalog.mjs'
+)
+const SOURCE_WITNESS_COMPARATOR = resolve(ROOT, 'scripts/qa/baseline-replay-witness-comparator.mjs')
 const SOURCE_CATALOG_CONTRACT_MODULE = resolve(
   ROOT,
   'scripts/qa/baseline-source-catalog-contract.mjs'
@@ -69,13 +78,23 @@ function makeFixture() {
     mkdirSync(directory, { recursive: true })
   }
   copyFileSync(SOURCE_HARNESS, harness)
+  copyFileSync(SOURCE_CAPTURE, resolve(maintenanceDir, 'capture-canonical-baseline.mjs'))
+  copyFileSync(SOURCE_POSTGRES_CLI_ENV, resolve(maintenanceDir, 'postgres-cli-env.mjs'))
   copyFileSync(SOURCE_VALIDATOR, resolve(qaDir, 'validate-baseline-candidate.mjs'))
   copyFileSync(SOURCE_SQL_SAFETY, resolve(qaDir, 'baseline-sql-safety.mjs'))
+  copyFileSync(SOURCE_CREDENTIAL_SAFETY, resolve(qaDir, 'baseline-credential-safety.mjs'))
+  copyFileSync(
+    SOURCE_TARGET_CATALOG_CAPTURE,
+    resolve(qaDir, 'capture-baseline-replay-target-catalog.mjs')
+  )
+  copyFileSync(SOURCE_WITNESS_COMPARATOR, resolve(qaDir, 'baseline-replay-witness-comparator.mjs'))
   copyFileSync(
     SOURCE_CATALOG_CONTRACT_MODULE,
     resolve(qaDir, 'baseline-source-catalog-contract.mjs')
   )
+  symlinkSync(realpathSync(resolve(ROOT, 'node_modules')), resolve(repoRoot, 'node_modules'), 'dir')
   chmodSync(harness, 0o755)
+  chmodSync(candidate, 0o700)
 
   writeFileSync(foundation, 'CREATE SCHEMA auth;\nCREATE SCHEMA storage;\n')
   writeFileSync(
@@ -114,16 +133,31 @@ function makeFixture() {
     repositoryMigrationSetSha256: canonicalJsonSha256(repositoryMigrations),
   })
   const catalog = {
-    acls: [],
+    acls: [
+      { acl: '', name: 'arena', objectKind: 'schema', schema: 'arena' },
+      {
+        acl: '{pg_database_owner=UC/pg_database_owner,=U/pg_database_owner}',
+        name: 'public',
+        objectKind: 'schema',
+        schema: 'public',
+      },
+    ],
     columns: [],
     constraints: [],
     defaultPrivileges: [],
-    extensions: [],
+    extensions: [{ name: 'plpgsql', schema: 'pg_catalog', version: '1.0' }],
     functions: [],
     indexes: [],
     policies: [],
     publications: [],
-    schemas: [],
+    schemas: [
+      { acl: '', name: 'arena', owner: 'postgres' },
+      {
+        acl: '{pg_database_owner=UC/pg_database_owner,=U/pg_database_owner}',
+        name: 'public',
+        owner: 'pg_database_owner',
+      },
+    ],
     tables: [],
     triggers: [],
     types: [],
@@ -131,6 +165,8 @@ function makeFixture() {
   }
   const ledger = [
     {
+      createdBy: null,
+      idempotencyKey: null,
       name: 'fixture_boundary',
       statementsSha256: sha256(boundarySql),
       version: BASELINE_THROUGH,
@@ -202,6 +238,15 @@ function refreshManifest(fixture) {
     },
     status: CANDIDATE_STATUS,
   })
+  for (const file of [
+    'app-schema.sql',
+    'forward-migrations.json',
+    'manifest.json',
+    'platform-prerequisites.json',
+    'source-catalog.json',
+  ]) {
+    chmodSync(resolve(fixture.candidate, file), 0o600)
+  }
 }
 
 function makeFakePg17() {
@@ -211,6 +256,13 @@ function makeFakePg17() {
   const shell = `#!/usr/bin/env bash
 set -Eeuo pipefail
 name="$(basename "$0")"
+fake_root="$(cd "$(dirname "$0")/.." && pwd -P)"
+fake_state="$fake_root/state"
+FAKE_PG_CALLS="\${FAKE_PG_CALLS:-$fake_state/calls.log}"
+FAKE_PSQL_ENVIRONMENTS="\${FAKE_PSQL_ENVIRONMENTS:-$fake_state/psql-environments.log}"
+FAKE_PSQL_EXECUTED="\${FAKE_PSQL_EXECUTED:-$fake_state/psql-executed.log}"
+FAKE_PSQL_FILES="\${FAKE_PSQL_FILES:-$fake_state/psql-files.log}"
+FAKE_PSQL_QUERY_COUNT="\${FAKE_PSQL_QUERY_COUNT:-$fake_state/psql-query-count}"
 if [[ "\${1:-}" == '--version' ]]; then
   version="\${FAKE_PG_VERSION:-17.9}"
   if [[ "$name" == 'postgres' ]]; then
@@ -248,28 +300,67 @@ elif [[ "$name" == 'pg_ctl' ]]; then
 elif [[ "$name" == 'psql' ]]; then
   sql_file=''
   query_mode=0
+  all_arguments="$*"
   for ((index = 0; index < \${#arguments[@]}; index += 1)); do
     if [[ "\${arguments[$index]}" == '-f' ]]; then sql_file="\${arguments[$((index + 1))]}"; fi
     if [[ "\${arguments[$index]}" == '-At' ]]; then query_mode=1; fi
   done
   if [[ "$query_mode" == '1' ]]; then
-    query_count=0
-    if [[ -f "$FAKE_PSQL_QUERY_COUNT" ]]; then
-      read -r query_count < "$FAKE_PSQL_QUERY_COUNT"
-    fi
-    query_count=$((query_count + 1))
-    printf '%s\n' "$query_count" > "$FAKE_PSQL_QUERY_COUNT"
-    if [[ "$query_count" == '1' ]]; then
-      printf '%s\n' "$FAKE_PREREQUISITES_BEFORE_JSON"
+    if [[ "$all_arguments" =~ arena_baseline_catalog:([A-Za-z]+) ]]; then
+      catalog_key="\${BASH_REMATCH[1]}"
+      catalog_count=0
+      if [[ -f "$fake_state/catalog-query-count" ]]; then
+        read -r catalog_count < "$fake_state/catalog-query-count"
+      fi
+      catalog_count=$((catalog_count + 1))
+      printf '%s\n' "$catalog_count" > "$fake_state/catalog-query-count"
+      catalog_phase='baseline'
+      if ((catalog_count > 14)); then catalog_phase='final'; fi
+      cat "$fake_state/catalog/$catalog_phase-$catalog_key.json"
+    elif [[ "$all_arguments" == *arena_baseline_source_anchor_witness* ]]; then
+      if [[ -n "\${FAKE_WITNESS_SOURCE_ANCHOR_JSON:-}" ]]; then
+        printf '%s\n' "$FAKE_WITNESS_SOURCE_ANCHOR_JSON"
+      else
+        cat "$fake_state/source-anchor.json"
+      fi
+    elif [[ "$all_arguments" == *arena_baseline_forward_execution_witness* ]]; then
+      if [[ -n "\${FAKE_WITNESS_FORWARD_EXECUTIONS_JSON:-}" ]]; then
+        printf '%s\n' "$FAKE_WITNESS_FORWARD_EXECUTIONS_JSON"
+      else
+        cat "$fake_state/forward-executions.json"
+      fi
     else
-      printf '%s\n' "$FAKE_PREREQUISITES_JSON"
+      query_count=0
+      if [[ -f "$FAKE_PSQL_QUERY_COUNT" ]]; then
+        read -r query_count < "$FAKE_PSQL_QUERY_COUNT"
+      fi
+      query_count=$((query_count + 1))
+      printf '%s\n' "$query_count" > "$FAKE_PSQL_QUERY_COUNT"
+      if [[ "$query_count" == '1' ]]; then
+        printf '%s\n' "$FAKE_PREREQUISITES_BEFORE_JSON"
+      else
+        printf '%s\n' "$FAKE_PREREQUISITES_JSON"
+      fi
     fi
   elif [[ -n "$sql_file" ]]; then
-    printf '%s\n' "$sql_file" >> "$FAKE_PSQL_FILES"
+    sql_source="\${ARENA_BASELINE_STAGED_SQL:-$sql_file}"
+    if [[ -n "\${FAKE_SWAP_STAGED_BASENAME:-}" && \
+      "$(basename "$sql_source")" == "$FAKE_SWAP_STAGED_BASENAME" ]]; then
+      mv -- "$sql_source" "$sql_source.attested"
+      printf '%s\n' 'SELECT malicious_swapped_bytes();' > "$sql_source"
+    fi
+    if [[ -n "\${FAKE_SWAP_STAGE_BASENAME:-}" && \
+      "$(basename "$sql_source")" == "$FAKE_SWAP_STAGE_BASENAME" ]]; then
+      stage_to_swap="$(dirname "$sql_source")"
+      mv -- "$stage_to_swap" "$stage_to_swap.attested"
+      mkdir -m 700 "$stage_to_swap"
+    fi
+    printf '%s\n' "$sql_source" >> "$FAKE_PSQL_FILES"
+    cat "$sql_file" >> "$FAKE_PSQL_EXECUTED"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$HOME" "$XDG_CONFIG_HOME" "$PGPASSFILE" "$PGSERVICEFILE" "$PSQL_PAGER" "\${CDPATH:-}" \
       >> "$FAKE_PSQL_ENVIRONMENTS"
-    if [[ -n "\${FAKE_PSQL_FAIL_BASENAME:-}" && "$(basename "$sql_file")" == "$FAKE_PSQL_FAIL_BASENAME" ]]; then
+    if [[ -n "\${FAKE_PSQL_FAIL_BASENAME:-}" && "$(basename "$sql_source")" == "$FAKE_PSQL_FAIL_BASENAME" ]]; then
       exit 19
     fi
   fi
@@ -278,6 +369,7 @@ fi
 
   mkdirSync(bin, { recursive: true })
   mkdirSync(state, { recursive: true })
+  mkdirSync(resolve(state, 'catalog'), { recursive: true })
   for (const executable of ['initdb', 'pg_ctl', 'postgres', 'psql']) {
     const file = resolve(bin, executable)
     writeFileSync(file, shell)
@@ -288,10 +380,46 @@ fi
     bin,
     calls: resolve(state, 'calls.log'),
     environments: resolve(state, 'psql-environments.log'),
+    executed: resolve(state, 'psql-executed.log'),
     files: resolve(state, 'psql-files.log'),
     queryCount: resolve(state, 'psql-query-count'),
     root,
+    state,
   }
+}
+
+function configureFakeWitness(fixture, fake, overrides = {}) {
+  rmSync(resolve(fake.state, 'catalog-query-count'), { force: true })
+  const baseline = structuredClone(fixture.catalog)
+  baseline.publications = []
+  const final = structuredClone(baseline)
+  if (overrides.FAKE_TARGET_BASELINE_TABLE_DRIFT === '1') {
+    baseline.tables = [
+      {
+        forceRowSecurity: false,
+        kind: 'r',
+        name: 'undeclared_fixture',
+        owner: 'postgres',
+        partitionBound: null,
+        persistence: 'p',
+        rowSecurity: false,
+        schema: 'arena',
+      },
+    ]
+  }
+  for (const key of SOURCE_CATALOG_KEYS) {
+    writeJson(resolve(fake.state, 'catalog', `baseline-${key}.json`), baseline[key])
+    writeJson(resolve(fake.state, 'catalog', `final-${key}.json`), final[key])
+  }
+  writeJson(resolve(fake.state, 'source-anchor.json'), {
+    baselineThrough: BASELINE_THROUGH,
+    catalogSha256: canonicalJsonSha256(fixture.catalog),
+    ledgerSha256: canonicalJsonSha256(fixture.ledger),
+  })
+  const forward = JSON.parse(
+    readFileSync(resolve(fixture.candidate, 'forward-migrations.json'), 'utf8')
+  )
+  writeJson(resolve(fake.state, 'forward-executions.json'), forward.migrations)
 }
 
 function cleanEnvironment(fake, tempParent, overrides = {}) {
@@ -313,6 +441,7 @@ function cleanEnvironment(fake, tempParent, overrides = {}) {
     ...env,
     FAKE_PG_CALLS: fake.calls,
     FAKE_PSQL_ENVIRONMENTS: fake.environments,
+    FAKE_PSQL_EXECUTED: fake.executed,
     FAKE_PSQL_FILES: fake.files,
     FAKE_PSQL_QUERY_COUNT: fake.queryCount,
     FAKE_PREREQUISITES_BEFORE_JSON: JSON.stringify({
@@ -350,6 +479,7 @@ function args(fixture, candidate = relative(fixture.repoRoot, fixture.candidate)
 }
 
 function run(fixture, fake, tempParent, env = {}, candidate) {
+  if (fake.state) configureFakeWitness(fixture, fake, env)
   return spawnSync('bash', args(fixture, candidate), {
     cwd: fixture.repoRoot,
     encoding: 'utf8',
@@ -459,6 +589,35 @@ test('replay rejects mixed tools, psql before 17.6, and external connection envi
   }
 })
 
+test('replay accepts only a control-free owner-controlled TMPDIR or the sticky system root', async (t) => {
+  for (const scenario of ['non-sticky world-writable', 'control character']) {
+    await t.test(scenario, () => {
+      const fixture = makeFixture()
+      const fake = makeFakePg17()
+      const tempParent = mkdtempSync(resolve(tmpdir(), 'arena-replay-tmp-'))
+      try {
+        if (scenario === 'non-sticky world-writable') chmodSync(tempParent, 0o777)
+        const requestedTemp =
+          scenario === 'control character' ? `${tempParent}\nunsafe` : tempParent
+        const result = run(fixture, fake, requestedTemp, {
+          ARENA_DISPOSABLE_BASELINE_REPLAY: '1',
+        })
+        assert.equal(result.status, 1)
+        assert.match(result.stderr, /TMPDIR must be absolute, control-free/)
+        if (scenario === 'non-sticky world-writable') {
+          assert.deepEqual(readdirSync(tempParent), [])
+          chmodSync(tempParent, 0o700)
+        }
+        const calls = existsSync(fake.calls) ? readFileSync(fake.calls, 'utf8') : ''
+        assert.equal(calls.includes('initdb'), false)
+      } finally {
+        if (existsSync(tempParent)) chmodSync(tempParent, 0o700)
+        remove(fixture.tempRoot, fake.root, tempParent)
+      }
+    })
+  }
+})
+
 test('replay rejects nested, symlinked, and hash-drifted candidates before initdb', async (t) => {
   for (const scenario of ['nested', 'symlink', 'hash drift']) {
     await t.test(scenario, () => {
@@ -523,7 +682,8 @@ test('replay stages attested bytes, uses a private socket, and checks prerequisi
       false
     )
 
-    const calls = readFileSync(fake.calls, 'utf8').trim().split('\n')
+    const callsText = readFileSync(fake.calls, 'utf8')
+    const calls = callsText.trim().split('\n')
     const start = calls.find((line) => line.startsWith('pg_ctl\t') && line.includes(' start'))
     assert.ok(start)
     assert.match(start, /listen_addresses=''/)
@@ -531,12 +691,20 @@ test('replay stages attested bytes, uses a private socket, and checks prerequisi
     assert.equal(start.includes(` -p ${fake.bin}/postgres `), true)
     const socketRoot = socketRootFromStartCall(start)
     const psqlCalls = calls.filter((line) => line.startsWith('psql\t'))
-    assert.equal(psqlCalls.length, 5)
+    assert.equal(psqlCalls.length, 36)
     assert.equal(
       psqlCalls.filter((call) => call.includes('-At -c SELECT json_build_object')).length,
       2
     )
-    for (const call of psqlCalls) assert.match(call, /-h \/tmp\/arena-baseline-pg17-socket/)
+    assert.equal(
+      [...callsText.matchAll(/arena_baseline_catalog:/gu)].length,
+      SOURCE_CATALOG_KEYS.length * 2
+    )
+    assert.equal([...callsText.matchAll(/arena_baseline_source_anchor_witness/gu)].length, 1)
+    assert.equal([...callsText.matchAll(/arena_baseline_forward_execution_witness/gu)].length, 1)
+    for (const call of psqlCalls) {
+      assert.match(call, /-h \/(?:private\/)?tmp\/arena-baseline-pg17-socket/)
+    }
     const fileCalls = psqlCalls.filter((call) => call.includes(' -f '))
     assert.equal(fileCalls.length, 3)
     for (const call of fileCalls) {
@@ -559,11 +727,128 @@ test('replay stages attested bytes, uses a private socket, and checks prerequisi
       assert.equal(cdpath, '')
     }
     assert.ok(calls.some((line) => /pg_ctl\t-D .* -m immediate -w stop/.test(line)))
-    assert.match(result.stdout, /dependency replay passed \(not promotion evidence\)/)
+    assert.match(result.stdout, /"sourceLedgerDigestAnchored":true/)
+    assert.match(result.stdout, /"executionLedgerMatched":true/)
+    assert.match(result.stdout, /"productionEquivalent":false/)
+    assert.match(result.stdout, /dependency witness passed \(not promotion evidence\)/)
     assert.deepEqual(readdirSync(tempParent), [])
     assert.equal(existsSync(socketRoot), false)
   } finally {
     remove(fixture.tempRoot, fake.root, tempParent)
+  }
+})
+
+test('staged file and staging-directory swaps are detected without executing replacement SQL', async (t) => {
+  for (const [scenario, environment] of [
+    ['file swap', { FAKE_SWAP_STAGED_BASENAME: 'foundation.sql' }],
+    ['stage swap', { FAKE_SWAP_STAGE_BASENAME: 'foundation.sql' }],
+  ]) {
+    await t.test(scenario, () => {
+      const fixture = makeFixture()
+      const fake = makeFakePg17()
+      const tempParent = mkdtempSync(resolve(tmpdir(), 'arena-replay-tmp-'))
+      try {
+        const result = run(fixture, fake, tempParent, {
+          ARENA_DISPOSABLE_BASELINE_REPLAY: '1',
+          ...environment,
+        })
+        assert.notEqual(result.status, 0)
+        assert.match(result.stderr, /staged replay state changed or became unsafe/)
+        const executed = readFileSync(fake.executed, 'utf8')
+        assert.match(executed, /CREATE SCHEMA auth;/)
+        assert.doesNotMatch(executed, /malicious_swapped_bytes/)
+        assert.match(readFileSync(fake.calls, 'utf8'), /pg_ctl\t-D .* -m immediate -w stop/)
+        assert.deepEqual(readdirSync(tempParent), [])
+      } finally {
+        remove(fixture.tempRoot, fake.root, tempParent)
+      }
+    })
+  }
+})
+
+test('a staged file changed before state attestation cannot redefine its expected digest', () => {
+  const fixture = makeFixture()
+  const fake = makeFakePg17()
+  const tempParent = mkdtempSync(resolve(tmpdir(), 'arena-replay-tmp-'))
+  const wrapperRoot = mkdtempSync(resolve(tmpdir(), 'arena-replay-node-wrapper-'))
+  const wrapper = resolve(wrapperRoot, 'node')
+  writeFileSync(
+    wrapper,
+    `#!/usr/bin/env bash
+set -uo pipefail
+arguments=("$@")
+stage=''
+for ((index = 0; index < \${#arguments[@]}; index += 1)); do
+  if [[ "\${arguments[$index]}" == */validate-baseline-candidate.mjs ]]; then
+    stage="\${arguments[$((index + 4))]}"
+    break
+  fi
+done
+status=0
+"$FAKE_REAL_NODE" "$@" || status=$?
+if [[ "$status" == '0' && -n "$stage" ]]; then
+  printf '%s\n' 'SELECT malicious_pre_attestation_bytes();' > "$stage/foundation.sql"
+fi
+exit "$status"
+`
+  )
+  chmodSync(wrapper, 0o755)
+  try {
+    const result = run(fixture, fake, tempParent, {
+      ARENA_DISPOSABLE_BASELINE_REPLAY: '1',
+      FAKE_REAL_NODE: process.execPath,
+      NODE_BIN: wrapper,
+    })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /could not pin the staged replay state/)
+    const calls = existsSync(fake.calls) ? readFileSync(fake.calls, 'utf8') : ''
+    assert.equal(calls.includes('initdb'), false)
+    assert.deepEqual(readdirSync(tempParent), [])
+  } finally {
+    remove(fixture.tempRoot, fake.root, tempParent, wrapperRoot)
+  }
+})
+
+test('target catalogue and harness-ledger witness mismatches fail closed and still clean', async (t) => {
+  const mismatchedAnchor = {
+    baselineThrough: BASELINE_THROUGH,
+    catalogSha256: 'f'.repeat(64),
+    ledgerSha256: 'e'.repeat(64),
+  }
+  for (const [scenario, env, message] of [
+    [
+      'baseline catalogue drift',
+      { FAKE_TARGET_BASELINE_TABLE_DRIFT: '1' },
+      /baseline catalog tables does not match/,
+    ],
+    [
+      'source anchor drift',
+      { FAKE_WITNESS_SOURCE_ANCHOR_JSON: JSON.stringify(mismatchedAnchor) },
+      /catalogSha256 does not match/,
+    ],
+    [
+      'missing forward execution',
+      { FAKE_WITNESS_FORWARD_EXECUTIONS_JSON: '[]' },
+      /execution ledger does not exactly match/,
+    ],
+  ]) {
+    await t.test(scenario, () => {
+      const fixture = makeFixture()
+      const fake = makeFakePg17()
+      const tempParent = mkdtempSync(resolve(tmpdir(), 'arena-replay-tmp-'))
+      try {
+        const result = run(fixture, fake, tempParent, {
+          ARENA_DISPOSABLE_BASELINE_REPLAY: '1',
+          ...env,
+        })
+        assert.notEqual(result.status, 0)
+        assert.match(result.stderr, message)
+        assert.match(readFileSync(fake.calls, 'utf8'), /pg_ctl\t-D .* -m immediate -w stop/)
+        assert.deepEqual(readdirSync(tempParent), [])
+      } finally {
+        remove(fixture.tempRoot, fake.root, tempParent)
+      }
+    })
   }
 })
 
@@ -764,6 +1049,7 @@ test(
       bin: process.env.PG17_BIN ?? '/opt/homebrew/opt/postgresql@17/bin',
       calls: resolve(state, 'unused-calls.log'),
       environments: resolve(state, 'unused-environments.log'),
+      executed: resolve(state, 'unused-executed.log'),
       files: resolve(state, 'unused-files.log'),
       queryCount: resolve(state, 'unused-query-count'),
     }
@@ -773,7 +1059,7 @@ test(
         ARENA_DISPOSABLE_BASELINE_REPLAY: '1',
       })
       assert.equal(result.status, 0, result.stderr)
-      assert.match(result.stdout, /dependency replay passed \(not promotion evidence\)/)
+      assert.match(result.stdout, /dependency witness passed \(not promotion evidence\)/)
       assert.deepEqual(readdirSync(tempParent), [])
     } finally {
       remove(fixture.tempRoot, state)

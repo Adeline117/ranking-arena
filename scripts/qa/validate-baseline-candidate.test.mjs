@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  chownSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -48,6 +58,7 @@ function makeFixture() {
   const foundationsDir = path.join(repoRoot, 'supabase', 'baseline-foundations')
   const foundationPath = path.join(foundationsDir, 'supabase-pg17.sql')
   mkdirSync(candidateDir, { recursive: true })
+  chmodSync(candidateDir, 0o700)
   mkdirSync(migrationsDir, { recursive: true })
   mkdirSync(foundationsDir, { recursive: true })
   writeFileSync(foundationPath, 'CREATE SCHEMA auth;\nCREATE SCHEMA storage;\n')
@@ -119,6 +130,8 @@ function makeFixture() {
   }
   const ledger = [
     {
+      createdBy: null,
+      idempotencyKey: null,
       name: 'observed',
       statementsSha256: 'e'.repeat(64),
       version: '20260804000000',
@@ -191,6 +204,9 @@ function refreshManifest(fixture, mutate = () => {}) {
   }
   mutate(manifest)
   writeJson(path.join(fixture.candidateDir, 'manifest.json'), manifest)
+  for (const fileName of ['manifest.json', ...Object.keys(files)]) {
+    chmodSync(path.join(fixture.candidateDir, fileName), 0o600)
+  }
 }
 
 function validate(fixture) {
@@ -312,6 +328,261 @@ test('rejects secrets and connection identifiers in every candidate artifact', (
     )
     refreshManifest(fixture)
     assert.throws(() => validate(fixture), /credential or connection identifier/)
+  } finally {
+    cleanup(fixture)
+  }
+})
+
+test('uses the shared detector for Redis, GitHub, Stripe, and assignment credentials', async (t) => {
+  for (const [name, credential] of [
+    ['redis', 'redis://:redis_password_123456789@cache.example.invalid:6379/0'],
+    ['github', `ghp_${'G'.repeat(32)}`],
+    ['stripe', `sk_live_${'S'.repeat(24)}`],
+    ['assignment', `DATABASE_PASSWORD="${'p'.repeat(24)}"`],
+  ]) {
+    await t.test(name, () => {
+      const fixture = makeFixture()
+      try {
+        writeFileSync(
+          path.join(fixture.candidateDir, 'app-schema.sql'),
+          `COMMENT ON SCHEMA public IS '${credential.replaceAll("'", "''")}';\n`
+        )
+        refreshManifest(fixture)
+        assert.throws(
+          () => validate(fixture),
+          (error) => {
+            assert.match(error.message, /contains a credential or connection identifier/)
+            assert.equal(error.message.includes(credential), false)
+            return true
+          }
+        )
+      } finally {
+        cleanup(fixture)
+      }
+    })
+  }
+})
+
+test('requires owner-controlled hierarchy and protocol permissions', async (t) => {
+  for (const [name, mutate, message] of [
+    [
+      'repository root',
+      (fixture) => chmodSync(fixture.repoRoot, 0o777),
+      /not be group- or other-writable/,
+    ],
+    [
+      'candidates root',
+      (fixture) => chmodSync(fixture.candidatesRoot, 0o777),
+      /not be group- or other-writable/,
+    ],
+    [
+      'candidate directory',
+      (fixture) => chmodSync(fixture.candidateDir, 0o755),
+      /exact 0700 permissions/,
+    ],
+    [
+      'candidate artifact',
+      (fixture) => chmodSync(path.join(fixture.candidateDir, 'app-schema.sql'), 0o644),
+      /exact 0600 permissions/,
+    ],
+    [
+      'foundation',
+      (fixture) => chmodSync(fixture.foundationPath, 0o666),
+      /not be group- or other-writable/,
+    ],
+    [
+      'migration',
+      (fixture) => chmodSync(path.join(fixture.repoRoot, fixture.migrationPaths[0]), 0o666),
+      /not be group- or other-writable/,
+    ],
+  ]) {
+    await t.test(name, () => {
+      const fixture = makeFixture()
+      try {
+        mutate(fixture)
+        assert.throws(() => validate(fixture), message)
+      } finally {
+        cleanup(fixture)
+      }
+    })
+  }
+})
+
+test('fails closed when effective user identity is unavailable', () => {
+  const fixture = makeFixture()
+  const originalGeteuid = process.geteuid
+  try {
+    process.geteuid = undefined
+    assert.throws(() => validate(fixture), /effective user identity is unavailable/)
+  } finally {
+    process.geteuid = originalGeteuid
+    cleanup(fixture)
+  }
+})
+
+test('rejects filesystem evidence owned by neither root nor the effective user', () => {
+  const fixture = makeFixture()
+  const originalGeteuid = process.geteuid
+  try {
+    const euid = originalGeteuid()
+    if (euid === 0) {
+      chownSync(path.join(fixture.candidateDir, 'app-schema.sql'), 1, 1)
+    } else {
+      process.geteuid = () => euid + 1
+    }
+    assert.throws(() => validate(fixture), /must be owned by root or the effective user/)
+  } finally {
+    process.geteuid = originalGeteuid
+    cleanup(fixture)
+  }
+})
+
+test('rejects regular-file and symlink replacement between lstat and O_NOFOLLOW open', async (t) => {
+  for (const scenario of ['regular replacement', 'symlink replacement']) {
+    await t.test(scenario, () => {
+      const fixture = makeFixture()
+      let replaced = false
+      try {
+        assert.throws(
+          () =>
+            validateBaselineCandidate({
+              ...fixture,
+              testHooks: {
+                afterLstatBeforeOpen: ({ label, path: target }) => {
+                  if (replaced || label !== 'app-schema.sql') return
+                  replaced = true
+                  const original = `${target}.original`
+                  renameSync(target, original)
+                  if (scenario === 'symlink replacement') {
+                    symlinkSync(original, target)
+                  } else {
+                    writeFileSync(target, readFileSync(original), { mode: 0o600 })
+                    chmodSync(target, 0o600)
+                  }
+                },
+              },
+            }),
+          /changed while it was being opened|could not be opened without following symbolic links/
+        )
+        assert.equal(replaced, true)
+      } finally {
+        cleanup(fixture)
+      }
+    })
+  }
+})
+
+test('final pass rejects candidate, foundation, and migration evidence drift', async (t) => {
+  for (const [name, mutate] of [
+    [
+      'candidate artifact',
+      (fixture) =>
+        writeFileSync(
+          path.join(fixture.candidateDir, 'app-schema.sql'),
+          `${readFileSync(path.join(fixture.candidateDir, 'app-schema.sql'), 'utf8')}-- drift\n`
+        ),
+    ],
+    [
+      'foundation',
+      (fixture) =>
+        writeFileSync(
+          fixture.foundationPath,
+          `${readFileSync(fixture.foundationPath, 'utf8')}-- drift\n`
+        ),
+    ],
+    [
+      'migration',
+      (fixture) => {
+        const target = path.join(fixture.repoRoot, fixture.migrationPaths[0])
+        writeFileSync(target, `${readFileSync(target, 'utf8')}-- drift\n`)
+      },
+    ],
+  ]) {
+    await t.test(name, () => {
+      const fixture = makeFixture()
+      let mutated = false
+      try {
+        assert.throws(
+          () =>
+            validateBaselineCandidate({
+              ...fixture,
+              testHooks: {
+                beforeFinalVerification: () => {
+                  if (mutated) return
+                  mutated = true
+                  mutate(fixture)
+                },
+              },
+            }),
+          /changed during candidate validation/
+        )
+        assert.equal(mutated, true)
+      } finally {
+        cleanup(fixture)
+      }
+    })
+  }
+})
+
+test('final pass re-enumerates candidate artifacts and the modern migration inventory', async (t) => {
+  for (const [name, mutate, message] of [
+    [
+      'candidate artifact set',
+      (fixture) => writeFileSync(path.join(fixture.candidateDir, 'late.sql'), 'SELECT 1;\n'),
+      /candidate directory changed during candidate validation|must contain exactly/,
+    ],
+    [
+      'migration inventory',
+      (fixture) =>
+        writeFileSync(
+          path.join(fixture.repoRoot, 'supabase/migrations/20260806000000_late.sql'),
+          'SELECT 1;\n'
+        ),
+      /migration directory changed during candidate validation|migration inventory changed/,
+    ],
+  ]) {
+    await t.test(name, () => {
+      const fixture = makeFixture()
+      try {
+        assert.throws(
+          () =>
+            validateBaselineCandidate({
+              ...fixture,
+              testHooks: { beforeFinalVerification: () => mutate(fixture) },
+            }),
+          message
+        )
+      } finally {
+        cleanup(fixture)
+      }
+    })
+  }
+})
+
+test('includeReplayPlan returns final pinned bytes and complete filesystem identities', () => {
+  const fixture = makeFixture()
+  try {
+    const result = validateBaselineCandidate({ ...fixture, includeReplayPlan: true })
+    for (const file of [
+      result.replayPlan.appSchema,
+      result.replayPlan.forwardManifest,
+      result.replayPlan.foundation,
+      result.replayPlan.platformPrerequisitesFile,
+      result.replayPlan.sourceCatalog,
+      ...result.replayPlan.forwardMigrations,
+    ]) {
+      assert.equal(Buffer.isBuffer(file.contents), true)
+      assert.equal(sha256(file.contents), file.sha256)
+      assert.deepEqual(Object.keys(file.identity).sort(), [
+        'ctimeNs',
+        'dev',
+        'ino',
+        'mode',
+        'mtimeNs',
+        'size',
+        'uid',
+      ])
+    }
   } finally {
     cleanup(fixture)
   }
@@ -509,6 +780,8 @@ test('binds baselineThrough to one existing latest modern source-ledger boundary
           fixture.ledger = source.ledger
         } else {
           source.ledger.push({
+            createdBy: null,
+            idempotencyKey: null,
             name: 'z_duplicate',
             statementsSha256: 'f'.repeat(64),
             version: source.ledger[0].version,
@@ -566,6 +839,21 @@ test('rejects extra candidate artifacts and non-canonical source catalogue array
       fixture.catalog = source.catalog
       refreshManifest(fixture)
       assert.throws(() => validate(fixture), /catalog tables\[0\] must contain exactly/u)
+    } finally {
+      cleanup(fixture)
+    }
+  })
+
+  await t.test('ledger row contract', () => {
+    const fixture = makeFixture()
+    try {
+      const sourcePath = path.join(fixture.candidateDir, 'source-catalog.json')
+      const source = JSON.parse(readFileSync(sourcePath, 'utf8'))
+      delete source.ledger[0].idempotencyKey
+      writeJson(sourcePath, source)
+      fixture.ledger = source.ledger
+      refreshManifest(fixture)
+      assert.throws(() => validate(fixture), /ledger\[0\] must contain exactly/u)
     } finally {
       cleanup(fixture)
     }

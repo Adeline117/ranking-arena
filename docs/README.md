@@ -53,12 +53,16 @@
 
 ## Operations
 
-| Document                         | Description                       |
-| -------------------------------- | --------------------------------- |
-| [RUNBOOK.md](./RUNBOOK.md)       | Emergency operations manual       |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Deployment checklist and rollback |
-| [STAGING.md](./STAGING.md)       | Staging/preview deployments       |
-| [SLO.md](./SLO.md)               | Freshness budgets and SLOs        |
+| Document                                                                               | Description                                      |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| [V1_EXECUTION_STATUS_2026-08-04.md](./V1_EXECUTION_STATUS_2026-08-04.md)               | Current V1 launch authority and NO-GO stop lines |
+| [V1_MANAGED_SCRATCH_REQUEST_2026-08-04.md](./V1_MANAGED_SCRATCH_REQUEST_2026-08-04.md) | Required isolated restore/replay inputs          |
+| [V1_PRODUCT_STATUS_AND_PLAN_2026-08-03.md](./V1_PRODUCT_STATUS_AND_PLAN_2026-08-03.md) | V1 product scope; runtime facts defer to status  |
+| [V1_BETA_OPERATING_RUNBOOK_2026-08-03.md](./V1_BETA_OPERATING_RUNBOOK_2026-08-03.md)   | Invite-only Beta gates; currently blocked        |
+| [RUNBOOK.md](./RUNBOOK.md)                                                             | Emergency operations manual                      |
+| [DEPLOYMENT.md](./DEPLOYMENT.md)                                                       | Deployment checklist and rollback                |
+| [STAGING.md](./STAGING.md)                                                             | Staging/preview deployments                      |
+| [SLO.md](./SLO.md)                                                                     | Freshness budgets and SLOs                       |
 
 ## Design & Principles
 

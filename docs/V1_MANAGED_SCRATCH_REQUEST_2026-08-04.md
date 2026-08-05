@@ -28,10 +28,17 @@ them into an issue or PR, or place them in shell history.
    foundation -> baseline -> forward replay. Record project-ref hashes, region,
    exact PostgreSQL version, compute class, disk size, extension versions, and
    deletion owner. Do not reuse production or a failed Git Preview branch.
-4. A separate managed restore target with at least 100 GiB available storage,
-   preferably created through **Restore to a New Project** from an approved
-   physical backup/PITR point. This target is not interchangeable with the two
-   empty schema-replay projects.
+4. Managed restore capacity with at least 100 GiB available storage for two
+   clean restore cycles: first the protected 2026-07-26 legacy object, then a
+   current-contract backup generated after provider recovery. The same capacity
+   budget may be reused only after evidence from the first cycle is exported and
+   its project is deleted/re-created clean; otherwise provide two distinct
+   targets. Prefer **Restore to a New Project** from an approved physical
+   backup/PITR point. Restore targets are not interchangeable with the two empty
+   schema-replay projects. In the receipt, each clean allocation lifecycle gets
+   a distinct `capacity_slot_sha256`; all five restore/replay/Preview slots must
+   be globally distinct even when one physical capacity budget is reused only
+   after deletion and clean re-creation.
 
 ## Isolation requirements
 
@@ -55,7 +62,15 @@ them into an issue or PR, or place them in shell history.
    incident to be resolved.
 2. Validate the certificate and read-only 5432 connection without exposing the
    URL; prove PostgreSQL 17 and `transaction_read_only=on`.
-3. Run the reviewed
+3. Restore the protected 2026-07-26 legacy object to an at-least-100-GiB target
+   and complete full stream CRC/tail, table/index/constraint counts, RLS/Auth,
+   critical-row counts, and read-only application smoke checks. Export the
+   evidence before deleting or resetting the target.
+4. After provider recovery, generate a current-contract backup with completion
+   metadata and positive critical-table gates. Restore it into a newly clean
+   at-least-100-GiB target and record launch RPO/RTO; never overwrite the legacy
+   restore or combine their evidence.
+5. Run the reviewed
    [`capture-canonical-baseline.mjs`](../scripts/maintenance/capture-canonical-baseline.mjs)
    command to capture application schema, normalized catalogue, and
    migration-ledger hashes from one exported repeatable-read, read-only
@@ -63,16 +78,16 @@ them into an issue or PR, or place them in shell history.
    marker means the claimed directory must not be consumed. Its completed output
    remains source evidence and must not be placed directly under
    `supabase/migrations`.
-4. Construct and independently review one `candidate/not-deployable` artifact.
-   Do not rewrite any applied historical migration.
-5. Replay the exact foundation, app schema, and complete forward epoch on both
+6. Use the reviewed offline
+   [`assemble-canonical-baseline-candidate.mjs`](../scripts/maintenance/assemble-canonical-baseline-candidate.mjs)
+   entry point to construct one `candidate/not-deployable` artifact, then have a
+   different reviewer inspect it. Supply the exact complete forward epoch; do
+   not rewrite any applied historical migration. Assembly success is not GO.
+7. Replay the exact foundation, app schema, and complete forward epoch on both
    empty managed PG17 projects. Compare normalized catalogue and ledger output.
-6. Restore the protected backup to the >=100 GiB target and complete full stream
-   CRC/tail, table/index/constraint counts, RLS/Auth, critical-row counts, and
-   read-only application smoke checks.
-7. Reconcile the restored source, both schema replays, Preview, and the approved
+8. Reconcile the restored source, both schema replays, Preview, and the approved
    V1 target. Any mismatch keeps production NO-GO.
-8. Only after separate owner GO may the production deployment runbook begin;
+9. Only after separate owner GO may the production deployment runbook begin;
    this request never grants that GO.
 
 ## Evidence receipt
@@ -87,6 +102,26 @@ The reviewer should receive only non-secret evidence:
 - catalogue/ledger comparison hashes and mismatch list
 - restore verification counts, CRC/tail result, smoke result, and deletion
   receipts for disposable resources
+
+Copy the deliberately invalid
+[`managed-evidence-receipt.template.json`](../scripts/fixtures/managed-evidence-receipt.template.json)
+outside the repository, replace every placeholder with reviewed non-secret
+evidence, set the completed copy to owner-only mode (`chmod 0600`), and validate
+the completed local JSON:
+
+```bash
+npm run --silent qa:managed-evidence-receipt -- \
+  /canonical/private/managed-evidence-receipt.json
+```
+
+The runtime validator cross-checks claims for both restore cycles, source
+capture, candidate review, two independent managed PG17 replays, and Preview.
+Its [`JSON Schema`](../scripts/qa/managed-evidence-receipt.schema.json) is a
+shape-only companion; runtime checks are authoritative. This command does not
+open external evidence files or recompute their hashes. It therefore always
+returns `receipt/claims-only`, `evidence_proven: false`, and
+`production_authorized: false`, even when `all_claimed_checks_passed` is true.
+External evidence review and separate owner GO remain mandatory.
 
 ## Official references
 

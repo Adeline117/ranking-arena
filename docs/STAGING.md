@@ -1,18 +1,22 @@
 # Staging & Preview Deployments
 
-> **INCIDENT NO-GO — this legacy Preview workflow is suspended.** As of the
-> 2026-08-03/04 audit, the main Vercel project's Preview scope inherits
-> production database, Supabase service-role, Stripe, R2, encryption, and other
-> high-privilege secrets. The two test projects have no usable isolated
-> environment or successful deployment. Do not push a candidate/staging/PR
-> branch, invoke a Preview cron, or follow the legacy commands below until
-> [`V1_EXECUTION_STATUS_2026-08-03.md`](./V1_EXECUTION_STATUS_2026-08-03.md)
+> **INCIDENT NO-GO — this legacy Preview workflow is suspended.** The generic
+> Vercel Preview/Development high-privilege variables were cleared, all four
+> protection bypasses were revoked, and Git integration was disconnected. This
+> removed the known inheritance path but did not create a qualified staging
+> environment: the exact old branch override is not proved disposable, and both
+> Git-linked Supabase Preview projects fail historical reconstruction. Do not
+> restore deployment integration, add secrets, invoke a Preview cron, or follow
+> the legacy mutation commands below until
+> [`V1_EXECUTION_STATUS_2026-08-04.md`](./V1_EXECUTION_STATUS_2026-08-04.md)
 > records disposable staging isolation and owner GO.
 
 ## Overview
 
-Historically Ranking Arena treated Vercel Preview as staging. That model is not
-an isolated staging environment and is currently prohibited. Production lives
+Historically Ranking Arena treated Vercel Preview as staging. The known generic
+secret leakage path is now cleared, but no Preview has proved an isolated
+database, clean baseline, fixtures, source trust, or successful deployment; the
+model is still prohibited. Production lives
 at [arenafi.org](https://www.arenafi.org); a replacement staging environment must
 use a disposable database, Stripe test mode, staging-only storage/keys, no
 production secrets, and a protected GitHub environment with a required reviewer.
@@ -28,8 +32,9 @@ production secrets, and a protected GitHub environment with a required reviewer.
 ## How It Works
 
 The following is the **historical Vercel behavior**, not an authorized current
-release path. Vercel automatically deployed every branch push; this is
-precisely why all pushes are now blocked until Preview secrets are isolated:
+release path. Vercel automatically deployed every branch push before Git
+integration was disconnected. A PR push used only for code review is not a
+staging deployment and cannot satisfy any staging gate:
 
 - **Historical:** push to `main` → Production deployment at arenafi.org
 - **Historical:** push to `staging` → Preview deployment at a stable staging URL
@@ -48,13 +53,18 @@ workflow bound to the disposable staging project and exact candidate SHA.
 
 ### Quick Staging Deploy — removed
 
-There is no authorized quick deploy path. A direct push would create a
-high-privilege Preview and is a release-control violation.
+There is no authorized quick deploy path. A direct push is not a staging action;
+if Git integration or Preview secrets are restored, it could recreate the old
+exposure. Any deployment-producing push without the approved isolation and
+owner GO is a release-control violation.
 
 ## Environment Variables
 
-Vercel supports separate environment-variable scopes, but the current project
-has production credentials in Preview. Scope labels alone are not isolation.
+Vercel supports separate environment-variable scopes. The known generic
+Preview/Development production credentials have been removed, but the exact
+old branch override and a complete disposable staging secret set are not yet
+proved. Empty scopes are containment, not a usable staging environment; scope
+labels alone are not isolation.
 
 | Scope           | Applies To                                                      |
 | --------------- | --------------------------------------------------------------- |
@@ -62,7 +72,12 @@ has production credentials in Preview. Scope labels alone are not isolation.
 | **Preview**     | All non-production deployments (staging, PRs, feature branches) |
 | **Development** | `vercel dev` locally                                            |
 
-### Setting Environment Variables
+### Setting Environment Variables (owner-only after GO)
+
+The following describes provider capabilities, not a current instruction to
+change Vercel state. During NO-GO, do not add Preview or Production variables
+from the CLI or Dashboard. After owner approval, record only variable names,
+scope, owner, and verification result—never values.
 
 **Via Vercel Dashboard:**
 
@@ -70,15 +85,8 @@ has production credentials in Preview. Scope labels alone are not isolation.
 2. Add variable and select which environments it applies to
 3. For staging-specific values (e.g., different Supabase project), set them under **Preview** scope
 
-**Via CLI:**
-
-```bash
-# Add a preview-only variable
-npx vercel env add NEXT_PUBLIC_SUPABASE_URL preview
-
-# Add a production-only variable
-npx vercel env add NEXT_PUBLIC_SUPABASE_URL production
-```
+CLI mutation is intentionally omitted from this suspended runbook. Use the
+approved secret-management channel and a separately reviewed exact scope plan.
 
 ### Recommended Staging Overrides
 
