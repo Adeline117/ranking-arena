@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { parse } from 'yaml'
+
+import {
+  isDocumentationMarkdownPath,
+  markdownLinkTargets,
+  resolveRepositoryLink,
+  trackedDocumentationPaths,
+  trackedRepositoryPaths,
+} from './documentation-links.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -41,19 +49,65 @@ function assertTracked(path) {
   assert.equal(result.stdout.trim(), path)
 }
 
-test('documentation index contains only resolvable local links', () => {
-  const indexPath = resolve(root, 'docs/README.md')
-  const markdown = readFileSync(indexPath, 'utf8')
-  const links = [
-    ...markdown.matchAll(/\[[^\]]+\]\((?!https?:|mailto:|#)([^)#?]+)(?:#[^)]+)?\)/g),
-  ].map((match) => match[1].replace(/^<|>$/g, ''))
+const documentationLifecycleSections = [
+  'Current guidance',
+  'Active plans and decision queues',
+  'Historical evidence',
+]
 
-  assert.ok(links.length > 0, 'docs/README.md must index local documentation')
-  for (const link of links) {
-    assert.ok(
-      existsSync(resolve(dirname(indexPath), decodeURIComponent(link))),
-      `missing docs index target: ${link}`
-    )
+test('tracked documentation is lifecycle-classified once and local repository links resolve', () => {
+  const documentationPaths = trackedDocumentationPaths()
+  const trackedPaths = new Set(trackedRepositoryPaths())
+  const linkOptions = { repositoryRoot: root, trackedPaths }
+  const indexPath = 'docs/README.md'
+
+  assert.ok(documentationPaths.includes(indexPath), `${indexPath} must be tracked`)
+  for (const sourcePath of documentationPaths) {
+    const source = lstatSync(resolve(root, sourcePath))
+    assert.ok(source.isFile() && !source.isSymbolicLink(), `${sourcePath} must be a regular file`)
+
+    for (const target of markdownLinkTargets(read(sourcePath))) {
+      resolveRepositoryLink(sourcePath, target, linkOptions)
+    }
+  }
+
+  const index = read(indexPath)
+  const secondLevelHeadings = [...index.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => match[1])
+  assert.deepEqual(
+    secondLevelHeadings,
+    documentationLifecycleSections,
+    `${indexPath} must use only the governed lifecycle sections in order`
+  )
+
+  let lifecycleSection = null
+  const classifiedPaths = new Map()
+  for (const line of index.split('\n')) {
+    const heading = line.match(/^##\s+(.+?)\s*$/)
+    if (heading) lifecycleSection = heading[1]
+
+    for (const target of markdownLinkTargets(line)) {
+      const destination = resolveRepositoryLink(indexPath, target, linkOptions)
+      if (!destination?.repositoryPath.startsWith('docs/')) continue
+      if (!isDocumentationMarkdownPath(destination.repositoryPath)) continue
+
+      assert.ok(
+        documentationLifecycleSections.includes(lifecycleSection),
+        `${destination.repositoryPath} must be under a governed lifecycle section`
+      )
+      const sections = classifiedPaths.get(destination.repositoryPath) ?? []
+      sections.push(lifecycleSection)
+      classifiedPaths.set(destination.repositoryPath, sections)
+    }
+  }
+
+  const expectedPaths = documentationPaths.filter((path) => path !== indexPath)
+  assert.deepEqual(
+    [...classifiedPaths.keys()].sort(),
+    expectedPaths,
+    `${indexPath} must classify every tracked documentation page except itself`
+  )
+  for (const [path, sections] of classifiedPaths) {
+    assert.equal(sections.length, 1, `${path} must have exactly one lifecycle classification`)
   }
 })
 
