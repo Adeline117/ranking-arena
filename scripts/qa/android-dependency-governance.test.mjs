@@ -66,19 +66,30 @@ const expectedGradlePolicy = {
   ],
 }
 
-const androidProjectReviewClosure = new Map([
-  ['android/settings.gradle', '100644'],
-  ['android/capacitor.settings.gradle', '100644'],
-  ['android/build.gradle', '100644'],
-  ['android/variables.gradle', '100644'],
-  ['android/gradle.properties', '100644'],
-  ['android/gradlew', '100755'],
-  ['android/gradlew.bat', '100644'],
-  ['android/gradle/wrapper/gradle-wrapper.jar', '100644'],
-  ['android/gradle/wrapper/gradle-wrapper.properties', '100644'],
-  ['android/app/build.gradle', '100644'],
-  ['android/app/capacitor.build.gradle', '100644'],
-  ['android/app/proguard-rules.pro', '100644'],
+const androidDependencyInputClassification = new Map([
+  ['android/app/build.gradle', { mode: '100644', coverage: 'dependabot-version-updates' }],
+  ['android/app/capacitor.build.gradle', { mode: '100644', coverage: 'manual-review-required' }],
+  ['android/app/proguard-rules.pro', { mode: '100644', coverage: 'manual-review-required' }],
+  ['android/build.gradle', { mode: '100644', coverage: 'dependabot-version-updates' }],
+  ['android/capacitor.settings.gradle', { mode: '100644', coverage: 'manual-review-required' }],
+  ['android/gradle.properties', { mode: '100644', coverage: 'manual-review-required' }],
+  [
+    'android/gradle/wrapper/gradle-wrapper.jar',
+    { mode: '100644', coverage: 'dependabot-version-updates' },
+  ],
+  [
+    'android/gradle/wrapper/gradle-wrapper.properties',
+    { mode: '100644', coverage: 'dependabot-version-updates' },
+  ],
+  ['android/gradlew', { mode: '100755', coverage: 'dependabot-version-updates' }],
+  ['android/gradlew.bat', { mode: '100644', coverage: 'dependabot-version-updates' }],
+  ['android/settings.gradle', { mode: '100644', coverage: 'manual-review-required' }],
+  ['android/variables.gradle', { mode: '100644', coverage: 'manual-review-required' }],
+])
+
+const androidDependencyCoverageKinds = new Set([
+  'dependabot-version-updates',
+  'manual-review-required',
 ])
 
 const canonicalGradleListItem = `  - package-ecosystem: gradle
@@ -291,6 +302,117 @@ function assertSafeRepositoryPath(repositoryRoot, repositoryPath) {
   return absolutePath
 }
 
+function isAndroidDependencyBuildCandidate(repositoryPath) {
+  if (!repositoryPath.startsWith('android/')) return false
+
+  const pathSegments = repositoryPath.split('/')
+  const fileName = pathSegments.at(-1)
+  const isGradleWrapperInput = repositoryPath.startsWith('android/gradle/wrapper/')
+  const isLegacyDependencyLock = repositoryPath.startsWith('android/gradle/dependency-locks/')
+  const isDependencyVerificationInput =
+    repositoryPath === 'android/gradle/verification-metadata.xml' ||
+    repositoryPath === 'android/gradle/verification-keyring.keys'
+  const isLocalBinaryDependency =
+    pathSegments.includes('libs') && (fileName.endsWith('.jar') || fileName.endsWith('.aar'))
+
+  return (
+    fileName.endsWith('.gradle') ||
+    fileName.endsWith('.gradle.kts') ||
+    fileName === 'gradle.properties' ||
+    fileName === 'local.properties' ||
+    fileName === 'gradle.lockfile' ||
+    fileName.startsWith('gradlew') ||
+    fileName.endsWith('.versions.toml') ||
+    fileName.endsWith('.lockfile') ||
+    fileName.endsWith('.pro') ||
+    isGradleWrapperInput ||
+    isLegacyDependencyLock ||
+    isDependencyVerificationInput ||
+    isLocalBinaryDependency
+  )
+}
+
+function discoverAndroidDependencyBuildCandidates(repositoryRoot) {
+  const output = runGit(repositoryRoot, ['ls-files', '-z', '--', 'android'])
+  if (output.length === 0) return []
+
+  const trackedPaths = output.split('\0')
+  assert.equal(
+    trackedPaths.pop(),
+    '',
+    'NUL-delimited Android index discovery must end with a delimiter'
+  )
+  assert.equal(
+    new Set(trackedPaths).size,
+    trackedPaths.length,
+    'Android index discovery must not contain duplicate paths'
+  )
+
+  return trackedPaths
+    .filter(isAndroidDependencyBuildCandidate)
+    .map((repositoryPath) => {
+      assertSafeRepositoryPath(repositoryRoot, repositoryPath)
+      return repositoryPath
+    })
+    .sort()
+}
+
+function assertAndroidDependencyInputClassification(
+  repositoryRoot,
+  classification,
+  label = 'Android dependency input classification'
+) {
+  assert.ok(classification instanceof Map, `${label} must be a Map`)
+
+  const discoveredCandidates = discoverAndroidDependencyBuildCandidates(repositoryRoot)
+  const classifiedPaths = [...classification.keys()].sort()
+  const discoveredSet = new Set(discoveredCandidates)
+  const classifiedSet = new Set(classifiedPaths)
+  const unclassifiedCandidates = discoveredCandidates.filter((path) => !classifiedSet.has(path))
+  const staleClassifications = classifiedPaths.filter((path) => !discoveredSet.has(path))
+
+  assert.equal(
+    unclassifiedCandidates.length,
+    0,
+    `${label} has unclassified Android dependency/build candidates:\n${unclassifiedCandidates.join(
+      '\n'
+    )}`
+  )
+  assert.equal(
+    staleClassifications.length,
+    0,
+    `${label} has stale classifications that are not tracked candidates:\n${staleClassifications.join(
+      '\n'
+    )}`
+  )
+
+  for (const [repositoryPath, metadata] of classification) {
+    assert.equal(
+      isAndroidDependencyBuildCandidate(repositoryPath),
+      true,
+      `${repositoryPath} must match the Android dependency/build candidate boundary`
+    )
+    assert.ok(
+      metadata && typeof metadata === 'object' && !Array.isArray(metadata),
+      `${repositoryPath} classification must be an object`
+    )
+    assert.deepEqual(
+      Object.keys(metadata).sort(),
+      ['coverage', 'mode'],
+      `${repositoryPath} classification must contain exactly mode and coverage`
+    )
+    assert.match(metadata.mode, /^100(?:644|755)$/, `${repositoryPath} has an invalid mode`)
+    assert.equal(
+      androidDependencyCoverageKinds.has(metadata.coverage),
+      true,
+      `${repositoryPath} has an unknown dependency coverage classification`
+    )
+    assertTrackedRegularFile(repositoryRoot, repositoryPath, metadata.mode)
+  }
+
+  return discoveredCandidates
+}
+
 function assertTrackedRegularFile(repositoryRoot, repositoryPath, expectedMode) {
   const absolutePath = assertSafeRepositoryPath(repositoryRoot, repositoryPath)
   const segments = repositoryPath.split('/')
@@ -454,10 +576,63 @@ ${mutateOnce(
   }
 })
 
-test('checked-in Android Gradle project review closure is tracked and regular', () => {
-  for (const [repositoryPath, expectedMode] of androidProjectReviewClosure) {
-    assertTrackedRegularFile(root, repositoryPath, expectedMode)
+test('candidate discovery covers conventional Gradle governance inputs', () => {
+  for (const repositoryPath of [
+    'android/app/build.gradle',
+    'android/app/build.gradle.kts',
+    'android/app/consumer-rules.pro',
+    'android/app/libs/local-runtime.aar',
+    'android/app/libs/local-runtime.jar',
+    'android/app/local.properties',
+    'android/gradle.properties',
+    'android/gradle/dependency-locks/runtimeClasspath.lockfile',
+    'android/gradle/libs.versions.toml',
+    'android/gradle/platform.versions.toml',
+    'android/gradle/verification-keyring.keys',
+    'android/gradle/verification-metadata.xml',
+    'android/gradle/wrapper/checksums/gradle-wrapper.sha256',
+    'android/gradle/wrapper/gradle-wrapper.properties',
+    'android/gradle.lockfile',
+    'android/gradlew',
+    'android/gradlew.bat',
+    'android/gradlew.ps1',
+  ]) {
+    assert.equal(
+      isAndroidDependencyBuildCandidate(repositoryPath),
+      true,
+      `${repositoryPath} must be discovered as a governed candidate`
+    )
   }
+
+  for (const repositoryPath of [
+    'android/.gitignore',
+    'android/app/google-services.json.example',
+    'android/app/src/main/AndroidManifest.xml',
+    'android/app/src/main/java/com/arenafi/app/MainActivity.java',
+    'build.gradle',
+  ]) {
+    assert.equal(
+      isAndroidDependencyBuildCandidate(repositoryPath),
+      false,
+      `${repositoryPath} must remain outside the dependency/build candidate boundary`
+    )
+  }
+})
+
+test('tracked Android dependency/build candidates exactly match the reviewed classification', () => {
+  assert.deepEqual(
+    assertAndroidDependencyInputClassification(root, androidDependencyInputClassification),
+    [...androidDependencyInputClassification.keys()].sort()
+  )
+  assert.deepEqual(
+    [
+      ...new Set(
+        [...androidDependencyInputClassification.values()].map(({ coverage }) => coverage)
+      ),
+    ].sort(),
+    [...androidDependencyCoverageKinds].sort(),
+    'reviewed inputs must preserve both automated and manual coverage boundaries'
+  )
 })
 
 test('Git-backed closure checks isolate caller state and clean every canary', (context) => {
@@ -593,6 +768,63 @@ test('Git-backed closure checks isolate caller state and clean every canary', (c
   )
   runGit(fixtureRoot, ['add', '--', 'android/build.gradle'])
   assert.doesNotThrow(() => assertTrackedRegularFile(fixtureRoot, 'android/build.gradle', '100644'))
+
+  const fixtureClassification = new Map([
+    ['android/build.gradle', { mode: '100644', coverage: 'dependabot-version-updates' }],
+  ])
+  assert.deepEqual(
+    assertAndroidDependencyInputClassification(
+      fixtureRoot,
+      fixtureClassification,
+      'fixture classification'
+    ),
+    ['android/build.gradle']
+  )
+  assert.throws(
+    () =>
+      assertAndroidDependencyInputClassification(
+        fixtureRoot,
+        new Map([
+          ...fixtureClassification,
+          [
+            'android/app/removed-dependencies.gradle',
+            { mode: '100644', coverage: 'manual-review-required' },
+          ],
+        ]),
+        'stale fixture classification'
+      ),
+    /stale classifications that are not tracked candidates:\nandroid\/app\/removed-dependencies\.gradle/
+  )
+  assert.throws(
+    () =>
+      assertAndroidDependencyInputClassification(
+        fixtureRoot,
+        new Map([
+          ['android/build.gradle', { mode: '100644', coverage: 'unproven-security-updates' }],
+        ]),
+        'coverage fixture classification'
+      ),
+    /unknown dependency coverage classification/
+  )
+
+  const fixtureAppDirectory = join(gradleDirectory, 'app')
+  mkdirSync(fixtureAppDirectory)
+  const unclassifiedDependencyInput = join(fixtureAppDirectory, 'new-dependencies.gradle')
+  writeFileSync(unclassifiedDependencyInput, '// newly introduced dependency input\n')
+  runGit(fixtureRoot, ['add', '--', 'android/app/new-dependencies.gradle'])
+  assert.deepEqual(discoverAndroidDependencyBuildCandidates(fixtureRoot), [
+    'android/app/new-dependencies.gradle',
+    'android/build.gradle',
+  ])
+  assert.throws(
+    () =>
+      assertAndroidDependencyInputClassification(
+        fixtureRoot,
+        fixtureClassification,
+        'mutation fixture classification'
+      ),
+    /unclassified Android dependency\/build candidates:\nandroid\/app\/new-dependencies\.gradle/
+  )
 
   symlinkSync(externalRoot, join(fixtureRoot, 'linked-android'))
   assert.throws(
