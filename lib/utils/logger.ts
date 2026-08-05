@@ -4,22 +4,12 @@
  * 生产环境自动关闭 debug/log，保留 warn/error
  */
 
-// Correlation ID support — server-only (node:async_hooks not available in browser)
-let _getCorrelationId: (() => string | undefined) | null = null
+import { readCorrelationId } from '@/lib/telemetry/correlation-context'
+
+// Runtime-neutral bridge; active correlation IDs exist only in server request contexts.
 function correlationId(): string | undefined {
   if (typeof window !== 'undefined') return undefined
-  if (!_getCorrelationId) {
-    try {
-      // Dynamic path to prevent Turbopack from resolving node:async_hooks in client bundles
-      const mod = '@/lib/api/' + 'correlation'
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      _getCorrelationId = require(mod).getCorrelationId
-    } catch (_err) {
-      /* correlation module unavailable (Edge Runtime) */
-      _getCorrelationId = () => undefined
-    }
-  }
-  return _getCorrelationId!()
+  return readCorrelationId()
 }
 
 // ============================================

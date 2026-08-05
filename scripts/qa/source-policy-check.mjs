@@ -34,6 +34,17 @@ export function evaluateSource(path, source) {
   const cronRoute = /^app\/api\/cron\//.test(path)
 
   if (!isTestPath(path)) {
+    const directTempoRuntime =
+      /import\s*\{[^}]*\btempo(?:Devnet|Localnet|Testnet)?\b[^}]*\}\s*from\s*['"]viem\/chains['"]/gs.exec(
+        source
+      ) ??
+      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"](?:ox|viem)(?:\/[^'"]*)?\/tempo(?:\/[^'"]*)?['"]/gi.exec(
+        source
+      )
+    if (directTempoRuntime) {
+      addViolation(violations, path, 'tempo-runtime-boundary', source, directTempoRuntime)
+    }
+
     const directSpecializedWalletPeer =
       /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"](?:@base-org\/account|@coinbase\/wallet-sdk|@metamask\/connect-evm|@safe-global\/safe-apps-(?:sdk|provider))(?:\/[^'"]*)?['"]/g.exec(
         source

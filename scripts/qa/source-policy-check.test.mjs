@@ -40,6 +40,18 @@ test('keeps specialized wallet connectors and peers outside runtime source', () 
     ),
     []
   )
+  assert.deepEqual(
+    rules('lib/web3/unsafe-tempo.ts', "import { tempoLocalnet } from 'viem/chains'"),
+    ['tempo-runtime-boundary']
+  )
+  assert.deepEqual(
+    rules('lib/web3/unsafe-tempo-path.ts', "const tempo = await import('ox/tempo')"),
+    ['tempo-runtime-boundary']
+  )
+  assert.deepEqual(
+    rules('lib/web3/__tests__/tempo.test.ts', "import { tempo } from 'viem/chains'"),
+    []
+  )
 })
 
 test('rejects multiline notification inserts in non-cron API routes', () => {

@@ -1,5 +1,8 @@
 import type { NextConfig } from 'next'
-import { getOptionalWalletPeerWarningRules } from './lib/config/webpack-warning-policy.mjs'
+import {
+  getOptionalWalletPeerWarningRules,
+  getReviewedThirdPartyWarningRules,
+} from './lib/config/webpack-warning-policy.mjs'
 // withSentryConfig REMOVED — it injects ~194KB Sentry SDK into every page's
 // initial bundle, blocking LCP. Sentry is now loaded entirely via
 // instrumentation-client.ts (requestIdleCallback + dynamic import).
@@ -66,6 +69,13 @@ const nextConfig = {
       }
     }
   ) => {
+    // Local and constrained CI environments may opt out of Next's multi-GB
+    // persistent webpack cache. Build output is unchanged; only the reusable
+    // compilation cache is omitted. Hosted builds keep the default cache.
+    if (process.env.ARENA_DISABLE_WEBPACK_CACHE === '1') {
+      config.cache = false
+    }
+
     if (!isServer) {
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
@@ -100,6 +110,7 @@ const nextConfig = {
     config.ignoreWarnings = [
       ...(config.ignoreWarnings || []),
       ...getOptionalWalletPeerWarningRules(),
+      ...getReviewedThirdPartyWarningRules(),
     ]
     // Production deliberately uses webpack: Turbopack/SWC has emitted invalid
     // Math.pow(base, BigInt(exponent)) for noble-curves, breaking Privy at runtime.
