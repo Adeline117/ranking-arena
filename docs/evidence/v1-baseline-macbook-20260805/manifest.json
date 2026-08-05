@@ -1,0 +1,241 @@
+{
+  "schema": "arena.mac-validation@1",
+  "validation_id": "7d5529cb-7c21-4888-90bd-0d25979fb976",
+  "evidence_scope": "clean-local-validation/not-production-authorization",
+  "source": {
+    "repository": "Adeline117/ranking-arena",
+    "commit_sha": "37ce53bce3d523eee560eff242b369f1d1c7a794",
+    "tree_sha": "e32a81c5d60d04c3f9905b6deff7c6397a318469",
+    "archive_sha256": "25f48497ea2b65b9b900568f047424e8785a4caaba48e179876d56b567977f6d",
+    "archive_bytes": 56145920,
+    "package_lock_sha256": "bceb7a4b3f3a28f6f4cfebc16e013485a0b428a3e438f67d2eda6c0db0469af6"
+  },
+  "executor": {
+    "label": "tailscale-secondary-macbook",
+    "os": {
+      "name": "macOS",
+      "version": "26.5.1",
+      "build": "25F80"
+    },
+    "arch": "arm64",
+    "node": "22.23.2",
+    "node_binary_sha256": "18e387c90ab8a8400183e8bdd396376e1e875b91b4c874b894dcade7b35bf572",
+    "npm": "11.11.0",
+    "npm_cli_sha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7"
+  },
+  "isolation": {
+    "input": "exact-git-archive",
+    "source_tree_recomputed": true,
+    "preexisting_node_modules": false,
+    "private_root_mode": "0700",
+    "log_file_mode": "0600",
+    "environment_profile": {
+      "build_placeholder_variables": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "CRON_SECRET"
+      ],
+      "ci": true,
+      "home": "<VALIDATION_USER_HOME>",
+      "npm_userconfig": "/dev/null",
+      "path": [
+        "<VALIDATION_ROOT>/toolchain",
+        "<VALIDATION_ROOT>/toolchain/node_modules/npm/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ],
+      "process_environment": "env -i",
+      "production_secret_values": "not-present",
+      "tmpdir": "/private/tmp"
+    },
+    "environment_profile_sha256": "ea0e3fbafa68835a123ea66b9280f1bbca23af88ca04c041fcf0ecb489d04c39",
+    "production_secrets_present": false,
+    "production_endpoints_contacted": false,
+    "placeholders_redacted_in_logs": true,
+    "test_credential_decoys_redacted_in_logs": true
+  },
+  "started_at": "2026-08-05T05:48:15Z",
+  "completed_at": "2026-08-05T06:25:51Z",
+  "commands": [
+    {
+      "id": "npm-ci",
+      "argv": ["npm", "ci", "--no-audit", "--no-fund"],
+      "started_at": "2026-08-05T05:48:15Z",
+      "completed_at": "2026-08-05T05:48:36Z",
+      "exit_code": 0,
+      "log_ref": "logs/npm-ci.log",
+      "log_sha256": "84ac9266ebaa4b392e7e59c31972e146efabe315f0d3226cce85c569afc89326",
+      "log_bytes": 2214,
+      "summary": {
+        "packages_added": 1930
+      }
+    },
+    {
+      "id": "npm-audit",
+      "argv": ["npm", "audit", "--audit-level=high", "--json"],
+      "started_at": "2026-08-05T05:48:55Z",
+      "completed_at": "2026-08-05T05:48:56Z",
+      "exit_code": 0,
+      "log_ref": "logs/npm-audit.json",
+      "log_sha256": "f00a483075a1633884535f03c33ff53806f54e80cbba646b8584cb5c2c1d9d83",
+      "log_bytes": 2495,
+      "summary": {
+        "info": 0,
+        "low": 0,
+        "moderate": 4,
+        "high": 0,
+        "critical": 0,
+        "total": 4
+      }
+    },
+    {
+      "id": "baseline-offline",
+      "argv": ["npm", "run", "qa:baseline-offline"],
+      "started_at": "2026-08-05T05:49:07Z",
+      "completed_at": "2026-08-05T05:49:47Z",
+      "exit_code": 0,
+      "log_ref": "logs/baseline-offline.log",
+      "log_sha256": "6ef3c23b94bd16da1da897e51e0844d24a92dbf60d78fbbed1aaedc59ee2340f",
+      "log_bytes": 52567,
+      "summary": {
+        "tests": 309,
+        "passed": 307,
+        "failed": 0,
+        "skipped": 2
+      }
+    },
+    {
+      "id": "sweep-unit",
+      "argv": ["npm", "run", "qa:sweep-unit"],
+      "started_at": "2026-08-05T05:49:59Z",
+      "completed_at": "2026-08-05T05:50:46Z",
+      "exit_code": 0,
+      "log_ref": "logs/sweep-unit.log",
+      "log_sha256": "6d7c494dcd04e95c81ba1e58530dd51d170a55a51ce7ff93974f8ff181a6948e",
+      "log_bytes": 133744,
+      "summary": {
+        "tests": 713,
+        "passed": 711,
+        "failed": 0,
+        "skipped": 2
+      }
+    },
+    {
+      "id": "type-check-app",
+      "argv": ["npm", "run", "type-check"],
+      "started_at": "2026-08-05T05:51:00Z",
+      "completed_at": "2026-08-05T05:52:49Z",
+      "exit_code": 0,
+      "log_ref": "logs/type-check-app.log",
+      "log_sha256": "9548710ba53ad4ea6a92b93fc5c555621ae795b3ec26d2ad5f79145b6afc9562",
+      "log_bytes": 50,
+      "summary": {
+        "diagnostic_errors": 0,
+        "node_heap_mib": 4096
+      },
+      "environment_overrides": {
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    },
+    {
+      "id": "type-check-ingest-worker",
+      "argv": ["npm", "run", "type-check:ingest-worker"],
+      "started_at": "2026-08-05T05:53:02Z",
+      "completed_at": "2026-08-05T05:53:07Z",
+      "exit_code": 0,
+      "log_ref": "logs/type-check-ingest-worker.log",
+      "log_sha256": "73d1619df218fcd05511956fd96b7ecc7e2da6a688cee33ae9e0001cf6c4886a",
+      "log_bytes": 95,
+      "summary": {
+        "diagnostic_errors": 0,
+        "node_heap_mib": 4096
+      },
+      "environment_overrides": {
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    },
+    {
+      "id": "lint",
+      "argv": ["npm", "run", "lint"],
+      "started_at": "2026-08-05T05:53:17Z",
+      "completed_at": "2026-08-05T05:54:02Z",
+      "exit_code": 0,
+      "log_ref": "logs/lint.log",
+      "log_sha256": "abf8db510eaba0bf15d79ab0f76775e4397dd09c16c6112abaf12c80b7d2fed4",
+      "log_bytes": 510296,
+      "summary": {
+        "errors": 0,
+        "warnings": 2694,
+        "fixable_warnings": 3
+      }
+    },
+    {
+      "id": "production-build",
+      "argv": ["npm", "run", "build"],
+      "started_at": "2026-08-05T05:54:22Z",
+      "completed_at": "2026-08-05T06:25:51Z",
+      "exit_code": 0,
+      "log_ref": "logs/production-build.log",
+      "log_sha256": "f8b9781870229ed7a51273df397844a3437b60f32e5972f5397a7754d0c3e50c",
+      "log_bytes": 93906,
+      "summary": {
+        "next_version": "16.2.11",
+        "node_heap_mib": 6144,
+        "static_pages_generated": 161,
+        "bigint_chunks_checked": 1094,
+        "build_cache_present": false
+      },
+      "environment_overrides": {
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    }
+  ],
+  "evidence_bundle": {
+    "encoded_ref": "mac-validation-logs.tar.gz.b64",
+    "encoding": "base64(gzip(tar))",
+    "decoded_sha256": "0cf24f95df6a51ace9ef8ac1f3504d80b49b08df3ee8654fef9d6123131abf2d",
+    "decoded_bytes": 71228,
+    "encoded_sha256": "adb32fe0f1657a2058d2a42e8738c329c8e732f3464495f290ebbb42b0c3677b",
+    "encoded_bytes": 94973,
+    "expected_members": [
+      "logs/baseline-offline.log",
+      "logs/lint.log",
+      "logs/npm-audit.json",
+      "logs/npm-ci.log",
+      "logs/production-build.log",
+      "logs/sweep-unit.log",
+      "logs/type-check-app.log",
+      "logs/type-check-ingest-worker.log"
+    ],
+    "archive_format": "ustar+gzip",
+    "header_normalization": {
+      "uid": 0,
+      "gid": 0,
+      "uname": "root",
+      "gname": "root",
+      "member_mtime": "2000-01-01T00:00:00Z",
+      "gzip_mtime": 0
+    }
+  },
+  "overall_result": "pass",
+  "baseline_candidate_inventory": 0,
+  "evidence_provenance": "machine-recorded-command-output",
+  "production_authorized": false,
+  "generator": {
+    "name": "jq-manifest-assembly",
+    "version": "jq-1.7.1-apple",
+    "contract": "arena.mac-validation-manifest-inline@1",
+    "source_retrievable": false,
+    "source_ref": "not-retained:inline-private-validation-command",
+    "initial_assembly_source_sha256": "25d9ddf70f4c39cde4c3b9d83eadc26ccb858b240c80a2b4642f60a9b54f9faf",
+    "postprocessing": [
+      "sanitize-log-identities-placeholders-and-test-decoys",
+      "normalize-ustar-and-gzip-headers",
+      "record-command-environment-and-provenance"
+    ]
+  }
+}
