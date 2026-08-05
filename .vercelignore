@@ -46,6 +46,11 @@ storybook-static/
 .gitignore
 .gitattributes
 
+# 仓库控制面（CI/所有权与本地编辑器配置，不属于 Web 构建上下文）
+/.github/
+/.cursor/
+/.githooks/
+
 # 备份 (SQL dumps, 数GB)
 backups/
 
@@ -54,6 +59,13 @@ BITGET_REGRESSION_REPORT.md
 
 # Cloudflare Worker (独立部署)
 cloudflare-worker/
+
+# 数据库变更账本（由 Supabase 发布，不进入 Next.js 构建上下文）
+/supabase/
+
+# 主机基础设施与负载测试（独立运维/验证边界）
+/infra/
+/k6/
 
 # Foundry contracts (独立构建，不进入 Web 部署上下文)
 contracts/

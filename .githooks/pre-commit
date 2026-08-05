@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Managed by scripts/install-git-hooks.mjs.
+# Managed by install-git-hooks.mjs.
 
 set -euo pipefail
 

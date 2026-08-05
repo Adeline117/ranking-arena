@@ -1,5 +1,5 @@
 #!/bin/sh
-# Managed by scripts/install-git-hooks.mjs.
+# Managed by install-git-hooks.mjs.
 # Reject throwaway debug, redeploy-trigger, and marker commits.
 
 set -eu
