@@ -86,6 +86,7 @@
     "qa:cast-ratchet": "node scripts/qa/supabase-cast-ratchet.mjs",
     "qa:api-auth": "node scripts/qa/api-auth-coverage-check.mjs",
     "qa:architecture": "node scripts/qa/architecture-boundary-check.mjs",
+    "qa:root-layout": "node --test scripts/qa/repository-root-contract.test.mjs",
     "qa:source-policy": "node scripts/qa/source-policy-check.mjs",
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
     "qa:migration-history-shape": "node scripts/qa/migration-history-shape.mjs",
