@@ -27,6 +27,9 @@ docs/
 # 因此禁止再从这个被排除目录引用 package lifecycle 文件。
 scripts/
 
+# 隔离发布工具（不属于 Web 部署上下文）
+tooling/
+
 # 构建工具
 .storybook/
 storybook-static/

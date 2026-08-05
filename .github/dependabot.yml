@@ -43,6 +43,27 @@ updates:
         patterns:
           - '*'
 
+  # Mobile release tooling owns an isolated manifest and lockfile so the app's
+  # dependency installation does not carry the Firebase CLI dependency tree.
+  - package-ecosystem: 'npm'
+    directory: '/tooling/mobile-release'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: 'deps'
+    labels:
+      - 'dependencies'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    groups:
+      security-updates:
+        applies-to: 'security-updates'
+        patterns:
+          - '*'
+
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:

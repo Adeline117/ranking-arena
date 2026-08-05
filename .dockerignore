@@ -41,6 +41,9 @@ docs
 *.md
 !README.md
 
+# Release tooling is not part of the Worker image context.
+tooling
+
 # Foundry contracts are an independent deployable unit.
 contracts
 script

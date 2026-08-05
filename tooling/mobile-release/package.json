@@ -1,0 +1,11 @@
+{
+  "name": "@ranking-arena/mobile-release-tooling",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.19 <25"
+  },
+  "devDependencies": {
+    "firebase-tools": "15.25.1"
+  }
+}

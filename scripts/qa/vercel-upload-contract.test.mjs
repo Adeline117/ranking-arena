@@ -137,6 +137,11 @@ test('keeps unrelated operational scripts out of the Vercel upload', () => {
   assert.equal(ignoredByVercelRules('scripts/post-deploy-check.sh'), true)
 })
 
+test('keeps isolated mobile release tooling out of the Vercel upload', () => {
+  assert.equal(ignoredByVercelRules('tooling/mobile-release/package.json'), true)
+  assert.equal(ignoredByVercelRules('tooling/mobile-release/package-lock.json'), true)
+})
+
 test('keeps Vercel candidate failures reproducible and diagnosable', () => {
   const workflow = deployGate
   assert.doesNotMatch(workflow, /vercel@latest/)
