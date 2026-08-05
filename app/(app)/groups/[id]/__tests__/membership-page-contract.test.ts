@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 
@@ -39,7 +39,10 @@ describe('group page membership acknowledgement contract', () => {
     expect(requestedBranch).not.toContain("trackEvent('group_join'")
   })
 
-  it('does not reconnect the unused useGroupData hook', () => {
+  it('does not restore or reconnect the retired useGroupData hook', () => {
+    expect(existsSync(join(process.cwd(), 'app/(app)/groups/[id]/hooks/useGroupData.ts'))).toBe(
+      false
+    )
     expect(pageSource).not.toContain("from './hooks/useGroupData'")
     expect(pageSource).not.toContain('useGroupData(')
   })

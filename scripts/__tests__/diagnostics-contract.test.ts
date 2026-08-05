@@ -7,7 +7,6 @@ function source(path: string): string {
 
 describe('public diagnostics contract', () => {
   const diagnose = source('scripts/diagnose.mjs')
-  const status = source('scripts/check_status.mjs')
   const scriptsReadme = source('scripts/README.md')
   const productionAllowlist = JSON.parse(source('scripts/PRODUCTION_ALLOWLIST.json')) as {
     allowed: string[]
@@ -16,12 +15,13 @@ describe('public diagnostics contract', () => {
     scripts: Record<string, string>
   }
 
-  it('routes freshness and platform checks to an existing current diagnostic', () => {
+  it('keeps status, freshness, and platform checks in one canonical diagnostic', () => {
     expect(diagnose).not.toContain('check-freshness.mjs')
-    expect(diagnose).toContain("const CHECK_STATUS_PATH = resolve(__dirname, 'check_status.mjs')")
-    expect(diagnose).toContain("const SECTIONS = ['status', 'freshness', 'platforms']")
-    expect(diagnose).toContain('[CHECK_STATUS_PATH, ...args]')
+    expect(diagnose).not.toContain('check_status.mjs')
+    expect(existsSync(join(process.cwd(), 'scripts/check_status.mjs'))).toBe(false)
+    expect(diagnose).toContain("['status', 'freshness', 'platforms']")
     expect(packageJson.scripts['check:status']).toBe('node scripts/diagnose.mjs --status')
+    expect(productionAllowlist.allowed).toEqual(['diagnose.mjs', 'pipeline-health-check.mjs'])
   })
 
   it('does not expose the retired table-count diagnostic', () => {
@@ -36,11 +36,11 @@ describe('public diagnostics contract', () => {
   })
 
   it('checks the user-visible serving contracts instead of retired snapshot tables', () => {
-    expect(status).toContain("fetchJson(baseUrl, '/api/health')")
-    expect(status).toContain("fetchJson(baseUrl, '/api/sources/visible?timeRange=90D')")
-    expect(status).toContain("fetchJson(baseUrl, '/api/rankings?window=90d&limit=1')")
-    expect(status).not.toContain("from('trader_snapshots')")
-    expect(status).not.toContain('SUPABASE_SERVICE_ROLE_KEY')
+    expect(diagnose).toContain("fetchJson(baseUrl, '/api/health')")
+    expect(diagnose).toContain("fetchJson(baseUrl, '/api/sources/visible?timeRange=90D')")
+    expect(diagnose).toContain("fetchJson(baseUrl, '/api/rankings?window=90d&limit=1')")
+    expect(diagnose).not.toContain("from('trader_snapshots')")
+    expect(diagnose).not.toContain('SUPABASE_SERVICE_ROLE_KEY')
   })
 
   it('does not advertise a deleted outlier cleaner', () => {

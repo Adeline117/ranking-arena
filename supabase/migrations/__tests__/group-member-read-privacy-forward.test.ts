@@ -14,7 +14,6 @@ const browserMembershipSources = [
   'app/(app)/groups/[id]/page.tsx',
   'app/(app)/groups/[id]/manage/page.tsx',
   'app/(app)/groups/[id]/new/page.tsx',
-  'app/(app)/groups/[id]/hooks/useGroupData.ts',
 ].map((file) => ({ file, source: readFileSync(join(root, file), 'utf8') }))
 
 function viewDefinition(name: string, nextMarker: string): string {
@@ -130,11 +129,11 @@ describe('post-atomic-mute group-member read privacy', () => {
       )
     ).toBe(true)
 
-    const hook = browserMembershipSources.find(({ file }) =>
-      file.endsWith('useGroupData.ts')
+    const groupPage = browserMembershipSources.find(({ file }) =>
+      file.endsWith('groups/[id]/page.tsx')
     )?.source
-    expect(hook).toContain('`/api/groups/${groupId}/membership`')
-    expect(hook).not.toMatch(/\.from\([^)]*\)\s*\.(?:insert|update|delete|upsert)\(/)
+    expect(groupPage).toContain('`/api/groups/${requestGroupId}/membership`')
+    expect(groupPage).not.toMatch(/\.from\([^)]*\)\s*\.(?:insert|update|delete|upsert)\(/)
 
     // This injectable server helper intentionally preserves arbitrary-user
     // semantics and uses only the four safe base columns.
