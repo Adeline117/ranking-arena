@@ -43,6 +43,26 @@ updates:
         patterns:
           - '*'
 
+  # Version updates only. GitHub documents build.gradle and Gradle Wrapper
+  # inputs as supported, but the applied variables.gradle file is outside its
+  # documented dependency-file patterns and remains manually reviewed.
+  # SemVer-major upgrades are an intentional human-reviewed migration boundary.
+  # Gradle security coverage requires separately proven dependency submission;
+  # this entry does not claim or configure that coverage.
+  - package-ecosystem: 'gradle'
+    directory: '/android'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: 'deps'
+    labels:
+      - 'dependencies'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
