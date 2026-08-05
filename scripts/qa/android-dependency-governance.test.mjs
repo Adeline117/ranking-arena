@@ -120,12 +120,13 @@ function isolatedGitEnvironment(sourceEnvironment = process.env) {
   return { ...environment, ...forcedGitEnvironment }
 }
 
-function runGit(repositoryRoot, arguments_) {
+function runGit(repositoryRoot, arguments_, { input } = {}) {
   return execFileSync('git', arguments_, {
     cwd: repositoryRoot,
     encoding: 'utf8',
     env: isolatedGitEnvironment(),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    input,
+    stdio: ['pipe', 'pipe', 'pipe'],
   })
 }
 
@@ -311,9 +312,15 @@ function isAndroidDependencyBuildCandidate(repositoryPath) {
   const isLegacyDependencyLock = repositoryPath.startsWith('android/gradle/dependency-locks/')
   const isDependencyVerificationInput =
     repositoryPath === 'android/gradle/verification-metadata.xml' ||
-    repositoryPath === 'android/gradle/verification-keyring.keys'
-  const isLocalBinaryDependency =
-    pathSegments.includes('libs') && (fileName.endsWith('.jar') || fileName.endsWith('.aar'))
+    repositoryPath === 'android/gradle/verification-keyring.keys' ||
+    repositoryPath === 'android/gradle/verification-keyring.gpg'
+  const isGradleDaemonJvmInput = repositoryPath === 'android/gradle/gradle-daemon-jvm.properties'
+  const isGradleMetadataCatalog =
+    repositoryPath.startsWith('android/gradle/') && fileName.endsWith('.toml')
+  const isGradleBuildLogicInput =
+    repositoryPath.startsWith('android/buildSrc/') ||
+    repositoryPath.startsWith('android/build-logic/')
+  const isLocalBinaryDependency = fileName.endsWith('.jar') || fileName.endsWith('.aar')
 
   return (
     fileName.endsWith('.gradle') ||
@@ -328,32 +335,61 @@ function isAndroidDependencyBuildCandidate(repositoryPath) {
     isGradleWrapperInput ||
     isLegacyDependencyLock ||
     isDependencyVerificationInput ||
+    isGradleDaemonJvmInput ||
+    isGradleMetadataCatalog ||
+    isGradleBuildLogicInput ||
     isLocalBinaryDependency
   )
 }
 
-function discoverAndroidDependencyBuildCandidates(repositoryRoot) {
-  const output = runGit(repositoryRoot, ['ls-files', '-z', '--', 'android'])
+function discoverTrackedAndroidIndexEntries(repositoryRoot) {
+  const output = runGit(repositoryRoot, ['ls-files', '--stage', '-z', '--', 'android'])
   if (output.length === 0) return []
 
-  const trackedPaths = output.split('\0')
+  const indexRecords = output.split('\0')
   assert.equal(
-    trackedPaths.pop(),
+    indexRecords.pop(),
     '',
-    'NUL-delimited Android index discovery must end with a delimiter'
+    'NUL-delimited staged Android index discovery must end with a delimiter'
   )
+
+  const indexEntries = indexRecords.map((record) => {
+    const pathSeparator = record.indexOf('\t')
+    assert.ok(pathSeparator > 0, 'Android index discovery returned a malformed record')
+
+    const header = record.slice(0, pathSeparator)
+    const headerMatch = header.match(/^([0-7]{6}) ([0-9a-f]{40,64}) ([0-3])$/)
+    assert.ok(headerMatch, `Android index discovery returned a malformed header: ${header}`)
+
+    const [, mode, objectId, stage] = headerMatch
+    const repositoryPath = record.slice(pathSeparator + 1)
+    assertSafeRepositoryPath(repositoryRoot, repositoryPath)
+    assert.equal(
+      stage,
+      '0',
+      `${repositoryPath} must be an index stage-zero entry; found stage ${stage}`
+    )
+    assert.ok(
+      mode === '100644' || mode === '100755',
+      `${repositoryPath} has unsupported Android index mode ${mode}; only tracked regular files are allowed`
+    )
+
+    return { mode, objectId, repositoryPath }
+  })
+
   assert.equal(
-    new Set(trackedPaths).size,
-    trackedPaths.length,
+    new Set(indexEntries.map(({ repositoryPath }) => repositoryPath)).size,
+    indexEntries.length,
     'Android index discovery must not contain duplicate paths'
   )
 
-  return trackedPaths
+  return indexEntries
+}
+
+function discoverAndroidDependencyBuildCandidates(repositoryRoot) {
+  return discoverTrackedAndroidIndexEntries(repositoryRoot)
+    .map(({ repositoryPath }) => repositoryPath)
     .filter(isAndroidDependencyBuildCandidate)
-    .map((repositoryPath) => {
-      assertSafeRepositoryPath(repositoryRoot, repositoryPath)
-      return repositoryPath
-    })
     .sort()
 }
 
@@ -584,10 +620,19 @@ test('candidate discovery covers conventional Gradle governance inputs', () => {
     'android/app/libs/local-runtime.aar',
     'android/app/libs/local-runtime.jar',
     'android/app/local.properties',
+    'android/app/vendor/local-runtime.aar',
+    'android/app/vendor/local-runtime.jar',
+    'android/build-logic/src/main/kotlin/ArenaDependenciesPlugin.kt',
+    'android/buildSrc/README.md',
+    'android/buildSrc/src/main/groovy/ArenaDependencies.groovy',
+    'android/buildSrc/src/main/resources/META-INF/gradle-plugins/arena.properties',
     'android/gradle.properties',
+    'android/gradle/catalogs/platform.toml',
     'android/gradle/dependency-locks/runtimeClasspath.lockfile',
+    'android/gradle/gradle-daemon-jvm.properties',
     'android/gradle/libs.versions.toml',
     'android/gradle/platform.versions.toml',
+    'android/gradle/verification-keyring.gpg',
     'android/gradle/verification-keyring.keys',
     'android/gradle/verification-metadata.xml',
     'android/gradle/wrapper/checksums/gradle-wrapper.sha256',
@@ -606,9 +651,14 @@ test('candidate discovery covers conventional Gradle governance inputs', () => {
 
   for (const repositoryPath of [
     'android/.gitignore',
+    'android/app/gradle-daemon-jvm.properties',
     'android/app/google-services.json.example',
     'android/app/src/main/AndroidManifest.xml',
     'android/app/src/main/java/com/arenafi/app/MainActivity.java',
+    'android/app/verification-keyring.gpg',
+    'android/app/vendor/local-runtime.jar.txt',
+    'android/gradle/gradle-daemon-jvm.properties.example',
+    'android/gradle/verification-keyring.gpg.backup',
     'build.gradle',
   ]) {
     assert.equal(
@@ -809,11 +859,13 @@ test('Git-backed closure checks isolate caller state and clean every canary', (c
 
   const fixtureAppDirectory = join(gradleDirectory, 'app')
   mkdirSync(fixtureAppDirectory)
-  const unclassifiedDependencyInput = join(fixtureAppDirectory, 'new-dependencies.gradle')
-  writeFileSync(unclassifiedDependencyInput, '// newly introduced dependency input\n')
-  runGit(fixtureRoot, ['add', '--', 'android/app/new-dependencies.gradle'])
+  const fixtureVendorDirectory = join(fixtureAppDirectory, 'vendor')
+  mkdirSync(fixtureVendorDirectory)
+  const unclassifiedBinaryInput = join(fixtureVendorDirectory, 'local-runtime.jar')
+  writeFileSync(unclassifiedBinaryInput, 'fixture Android binary dependency\n')
+  runGit(fixtureRoot, ['add', '--', 'android/app/vendor/local-runtime.jar'])
   assert.deepEqual(discoverAndroidDependencyBuildCandidates(fixtureRoot), [
-    'android/app/new-dependencies.gradle',
+    'android/app/vendor/local-runtime.jar',
     'android/build.gradle',
   ])
   assert.throws(
@@ -821,9 +873,115 @@ test('Git-backed closure checks isolate caller state and clean every canary', (c
       assertAndroidDependencyInputClassification(
         fixtureRoot,
         fixtureClassification,
+        'binary mutation fixture classification'
+      ),
+    /unclassified Android dependency\/build candidates:\nandroid\/app\/vendor\/local-runtime\.jar/
+  )
+
+  const fixtureClassificationWithBinary = new Map([
+    ...fixtureClassification,
+    [
+      'android/app/vendor/local-runtime.jar',
+      { mode: '100644', coverage: 'manual-review-required' },
+    ],
+  ])
+  assert.deepEqual(
+    assertAndroidDependencyInputClassification(
+      fixtureRoot,
+      fixtureClassificationWithBinary,
+      'binary fixture classification'
+    ),
+    ['android/app/vendor/local-runtime.jar', 'android/build.gradle']
+  )
+
+  const unclassifiedDependencyInput = join(fixtureAppDirectory, 'new-dependencies.gradle')
+  writeFileSync(unclassifiedDependencyInput, '// newly introduced dependency input\n')
+  runGit(fixtureRoot, ['add', '--', 'android/app/new-dependencies.gradle'])
+  assert.deepEqual(discoverAndroidDependencyBuildCandidates(fixtureRoot), [
+    'android/app/new-dependencies.gradle',
+    'android/app/vendor/local-runtime.jar',
+    'android/build.gradle',
+  ])
+  assert.throws(
+    () =>
+      assertAndroidDependencyInputClassification(
+        fixtureRoot,
+        fixtureClassificationWithBinary,
         'mutation fixture classification'
       ),
     /unclassified Android dependency\/build candidates:\nandroid\/app\/new-dependencies\.gradle/
+  )
+
+  const symlinkIndexRoot = join(fixtureRoot, 'symlink-index-fixture')
+  const symlinkIndexApp = join(symlinkIndexRoot, 'android/app')
+  mkdirSync(symlinkIndexApp, { recursive: true })
+  runGit(symlinkIndexRoot, ['init', '--quiet'])
+  symlinkSync(externalRoot, join(symlinkIndexApp, 'libs'))
+  runGit(symlinkIndexRoot, ['add', '--', 'android/app/libs'])
+  assert.match(
+    runGit(symlinkIndexRoot, ['ls-files', '--stage', '--', 'android/app/libs']),
+    /^120000 [0-9a-f]{40,64} 0\tandroid\/app\/libs\n$/
+  )
+  assert.throws(
+    () => discoverAndroidDependencyBuildCandidates(symlinkIndexRoot),
+    /android\/app\/libs has unsupported Android index mode 120000/
+  )
+
+  const gitlinkIndexRoot = join(fixtureRoot, 'gitlink-index-fixture')
+  const embeddedRepository = join(gitlinkIndexRoot, 'android/app/vendor-module')
+  mkdirSync(embeddedRepository, { recursive: true })
+  runGit(gitlinkIndexRoot, ['init', '--quiet'])
+  runGit(embeddedRepository, ['init', '--quiet'])
+  writeFileSync(join(embeddedRepository, 'README.md'), 'embedded repository fixture\n')
+  runGit(embeddedRepository, ['add', '--', 'README.md'])
+  runGit(embeddedRepository, [
+    '-c',
+    'user.name=Repository QA',
+    '-c',
+    'user.email=qa@example.invalid',
+    'commit',
+    '--quiet',
+    '-m',
+    'fixture commit',
+  ])
+  runGit(gitlinkIndexRoot, ['add', '--', 'android/app/vendor-module'])
+  assert.match(
+    runGit(gitlinkIndexRoot, ['ls-files', '--stage', '--', 'android/app/vendor-module']),
+    /^160000 [0-9a-f]{40,64} 0\tandroid\/app\/vendor-module\n$/
+  )
+  assert.throws(
+    () => discoverAndroidDependencyBuildCandidates(gitlinkIndexRoot),
+    /android\/app\/vendor-module has unsupported Android index mode 160000/
+  )
+
+  const unmergedIndexRoot = join(fixtureRoot, 'unmerged-index-fixture')
+  const conflictBlobRoot = join(unmergedIndexRoot, 'conflict-blobs')
+  mkdirSync(conflictBlobRoot, { recursive: true })
+  runGit(unmergedIndexRoot, ['init', '--quiet'])
+  const conflictObjectIds = []
+  for (const [name, source] of [
+    ['base', '// merge base\n'],
+    ['ours', '// ours\n'],
+    ['theirs', '// theirs\n'],
+  ]) {
+    const blobPath = join(conflictBlobRoot, `${name}.gradle`)
+    writeFileSync(blobPath, source)
+    conflictObjectIds.push(
+      runGit(unmergedIndexRoot, ['hash-object', '-w', '--', `conflict-blobs/${name}.gradle`]).trim()
+    )
+  }
+  runGit(unmergedIndexRoot, ['update-index', '--index-info'], {
+    input: conflictObjectIds
+      .map((objectId, index) => `100644 ${objectId} ${index + 1}\tandroid/app/conflict.gradle\n`)
+      .join(''),
+  })
+  assert.match(
+    runGit(unmergedIndexRoot, ['ls-files', '--stage', '--', 'android/app/conflict.gradle']),
+    /^100644 [0-9a-f]{40,64} 1\tandroid\/app\/conflict\.gradle/m
+  )
+  assert.throws(
+    () => discoverAndroidDependencyBuildCandidates(unmergedIndexRoot),
+    /android\/app\/conflict\.gradle must be an index stage-zero entry; found stage 1/
   )
 
   symlinkSync(externalRoot, join(fixtureRoot, 'linked-android'))
