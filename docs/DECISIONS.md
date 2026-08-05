@@ -481,7 +481,7 @@ became the supported delivery model.
 
 ### Decision
 
-- Only tracked hooks installed by `scripts/install-git-hooks.mjs` count as local
+- Only tracked hooks installed by `install-git-hooks.mjs` count as local
   repository controls: bounded `pre-commit` staged checks and `commit-msg` policy.
 - Heavy checks and cross-file source policies run as explicit package commands
   and CI jobs. The source-policy gate scans the complete owned source boundary,

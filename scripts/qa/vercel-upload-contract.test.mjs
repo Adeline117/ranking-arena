@@ -40,6 +40,11 @@ function ignoredByVercelRules(relativePath) {
   }
 }
 
+function assertProjectRegularFile(relativePath) {
+  const metadata = fs.lstatSync(path.join(root, relativePath))
+  assert.equal(metadata.isFile(), true, `${relativePath} must remain a regular project file`)
+}
+
 function telegramFunctions() {
   const marker = '          send_telegram_alert() {'
   const closing = '\n          }\n'
@@ -124,12 +129,84 @@ function runVercelBuildCommand({ vercelEnv, ciTypesAttested = '' }) {
   }
 }
 
-test('uploads the build lifecycle checker required by package.json', () => {
+test('uploads every package lifecycle file required by package.json', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+  assert.equal(packageJson.scripts.prepare, 'node install-git-hooks.mjs')
   assert.match(packageJson.scripts.postbuild, /qa:build-bigint/)
   assert.equal(packageJson.scripts['qa:build-bigint'], 'node check-bigint-build-output.mjs')
+  assertProjectRegularFile('install-git-hooks.mjs')
+  assert.equal(ignoredByVercelRules('install-git-hooks.mjs'), false)
+  assert.equal(ignoredByVercelRules('scripts/install-git-hooks.mjs'), true)
   assert.equal(ignoredByVercelRules('check-bigint-build-output.mjs'), false)
   assert.equal(ignoredByVercelRules('scripts/qa/check-bigint-build-output.mjs'), true)
+})
+
+test('excludes repository control-plane and separately deployed roots from Web uploads', () => {
+  const exactRules = ignoreRules
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+  const excludedRoots = new Map([
+    [
+      '/supabase/',
+      [
+        'supabase/config.toml',
+        'supabase/migrations/20260722055000_metric_trust_source_page_lineage_forward_repair.sql',
+      ],
+    ],
+    ['/infra/', ['infra/vps-playwright/ecosystem.config.js']],
+    ['/k6/', ['k6/config.js', 'k6/smoke-test.js']],
+    ['/.github/', ['.github/CODEOWNERS', '.github/workflows/ci.yml']],
+    ['/.cursor/', ['.cursor/mcp.json']],
+    ['/.githooks/', ['.githooks/pre-commit', '.githooks/commit-msg']],
+  ])
+
+  for (const [rule, representativePaths] of excludedRoots) {
+    assert.equal(
+      exactRules.filter((candidate) => candidate === rule).length,
+      1,
+      `${rule} must have one explicit fail-closed upload exclusion`
+    )
+    for (const relativePath of representativePaths) {
+      assertProjectRegularFile(relativePath)
+      assert.equal(ignoredByVercelRules(relativePath), true, `${relativePath} must not upload`)
+    }
+  }
+})
+
+test('keeps the complete Web install and build closure in the Vercel upload', () => {
+  const requiredUploads = [
+    '.browserslistrc',
+    '.npmrc',
+    '.nvmrc',
+    'package.json',
+    'package-lock.json',
+    'next.config.ts',
+    'tsconfig.json',
+    'postcss.config.mjs',
+    'vercel.json',
+    'install-git-hooks.mjs',
+    'check-bigint-build-output.mjs',
+    'instrumentation.ts',
+    'sentry.client.config.ts',
+    'sentry.edge.config.ts',
+    'sentry.server.config.ts',
+    'proxy.ts',
+    'app/globals.css',
+    'app/layout.tsx',
+    'app/favicon.ico',
+    'lib/config/webpack-warning-policy.mjs',
+    'lib/supabase/server.ts',
+    'public/icons/icon.svg',
+    'vendor/brace-expansion-compat/package.json',
+    'vendor/brace-expansion-compat/index.cjs',
+    'vendor/brace-expansion-compat/index.mjs',
+  ]
+
+  for (const relativePath of requiredUploads) {
+    assertProjectRegularFile(relativePath)
+    assert.equal(ignoredByVercelRules(relativePath), false, `${relativePath} must upload`)
+  }
 })
 
 test('keeps unrelated operational scripts out of the Vercel upload', () => {

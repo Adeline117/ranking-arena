@@ -46,7 +46,7 @@
     "test:e2e:report": "playwright show-report",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "node scripts/install-git-hooks.mjs",
+    "prepare": "node install-git-hooks.mjs",
     "cap:sync": "npx cap sync",
     "cap:sync:ios": "npx cap sync ios",
     "cap:sync:android": "npx cap sync android",

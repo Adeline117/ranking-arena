@@ -1,13 +1,30 @@
 #!/usr/bin/env node
 
-import { chmod, copyFile, mkdir } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdir } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
-const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
+const repositoryRoot = fileURLToPath(new URL('./', import.meta.url))
 
-function gitPath(relativePath) {
+async function hasLocalGitMetadata() {
+  let metadata
+  try {
+    metadata = await lstat(path.join(repositoryRoot, '.git'))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false
+    throw error
+  }
+
+  if (metadata.isDirectory() || metadata.isFile()) return true
+  throw new Error(
+    'Refusing to install Git hooks: repository .git metadata must be a directory or regular file'
+  )
+}
+
+async function gitPath(relativePath) {
+  if (!(await hasLocalGitMetadata())) return null
+
   const result = spawnSync('git', ['rev-parse', '--git-path', relativePath], {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -19,7 +36,7 @@ function gitPath(relativePath) {
   return path.isAbsolute(resolved) ? resolved : path.join(repositoryRoot, resolved)
 }
 
-const hooksDirectory = gitPath('hooks')
+const hooksDirectory = await gitPath('hooks')
 if (hooksDirectory) {
   await mkdir(hooksDirectory, { recursive: true })
   for (const hookName of ['pre-commit', 'commit-msg']) {
