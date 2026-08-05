@@ -10,6 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const contractPath = 'scripts/qa/flash-news-translation-retirement.test.mjs'
 const retiredStem = ['retranslate', 'all'].join('-')
 const retiredPath = ['scripts', 'flash-news', `${retiredStem}.mjs`].join('/')
+const classifierPath = 'scripts/backfill-flash-news-classify.mjs'
 const backfillPath = 'scripts/backfill-flash-news-translate.mjs'
 const translatorPath = 'lib/services/translate-server.ts'
 const ingestPath = 'app/api/cron/flash-news-fetch/route.ts'
@@ -42,14 +43,13 @@ function trackedReferences(value) {
   return result.status === 0 ? result.stdout.trim().split('\n').filter(Boolean) : []
 }
 
-function isLocalizedFlashNewsUpdater(source) {
+function isFlashNewsRowUpdater(source) {
   const accessesFlashNews = /\bflash_news\b/.test(source)
-  const namesLocalizedTitle = /\btitle_(?:zh|ja|ko)\b|title_\$\{/.test(source)
   const updatesExistingRows =
     /\.from\s*\([^)]*\)[\s\S]{0,400}\.(?:update|upsert)\s*\(/.test(source) ||
     /method\s*:\s*['"]PATCH['"]/.test(source) ||
     /\bUPDATE\s+(?:public\.)?flash_news\b/i.test(source)
-  return accessesFlashNews && namesLocalizedTitle && updatesExistingRows
+  return accessesFlashNews && updatesExistingRows
 }
 
 function canonicalSafetyViolations(source) {
@@ -115,18 +115,18 @@ test('keeps the unsafe full-table translation entrypoint retired', () => {
   assert.deepEqual(trackedReferences(retiredStem), [])
 
   const runtimeExtensions = new Set(['.cjs', '.cts', '.js', '.mjs', '.mts', '.ts', '.tsx'])
-  const localizedTitleUpdaters = []
+  const existingRowWriters = []
   for (const path of trackedPaths('scripts')) {
     if (!runtimeExtensions.has(extname(path))) continue
     if (path === contractPath) continue
     const source = read(path)
-    if (isLocalizedFlashNewsUpdater(source)) localizedTitleUpdaters.push(path)
+    if (isFlashNewsRowUpdater(source)) existingRowWriters.push(path)
   }
 
-  assert.deepEqual(localizedTitleUpdaters, [backfillPath])
+  assert.deepEqual(existingRowWriters, [classifierPath, backfillPath])
 })
 
-test('localized-title writer inventory catches renamed unsafe mutations', () => {
+test('flash-news row-writer inventory catches renamed and computed-field mutations', () => {
   const renamedAndCommentPadded = `
     // Claims such as --apply and title_zh.is.null must not create an exception.
     async function repaintEverything(client, nextTitle) {
@@ -157,12 +157,95 @@ test('localized-title writer inventory catches renamed unsafe mutations', () => 
       body: JSON.stringify({ category: 'defi' }),
     })
   `
+  const computedLocalizedFieldWriter = `
+    const field = ['title', language].join('_')
+    client.from('flash_news').update({ [field]: translated })
+  `
 
-  assert.equal(isLocalizedFlashNewsUpdater(renamedAndCommentPadded), true)
-  assert.equal(isLocalizedFlashNewsUpdater(renamedRestWriter), true)
-  assert.equal(isLocalizedFlashNewsUpdater(dynamicTableAndPayloadWriter), true)
-  assert.equal(isLocalizedFlashNewsUpdater(upsertWriter), true)
-  assert.equal(isLocalizedFlashNewsUpdater(unrelatedCategoryPatch), false)
+  assert.equal(isFlashNewsRowUpdater(renamedAndCommentPadded), true)
+  assert.equal(isFlashNewsRowUpdater(renamedRestWriter), true)
+  assert.equal(isFlashNewsRowUpdater(dynamicTableAndPayloadWriter), true)
+  assert.equal(isFlashNewsRowUpdater(upsertWriter), true)
+  assert.equal(isFlashNewsRowUpdater(unrelatedCategoryPatch), true)
+  assert.equal(isFlashNewsRowUpdater(computedLocalizedFieldWriter), true)
+})
+
+test('the allowed category writer performs only an intercepted GET by default', (t) => {
+  assert.deepEqual(trackedPaths(classifierPath), [classifierPath])
+  const source = read(classifierPath)
+  assert.match(source, /const APPLY = args\.includes\(['"]--apply['"]\)/)
+
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'arena-classifier-dry-run.'))
+  const preloadPath = join(fixtureRoot, 'block-network.mjs')
+  const requestLogPath = join(fixtureRoot, 'requests.json')
+  t.after(() => rmSync(fixtureRoot, { force: true, recursive: true }))
+
+  writeFileSync(
+    preloadPath,
+    `
+      import { writeFileSync } from 'node:fs'
+
+      const requestLogPath = process.env.FLASH_NEWS_CLASSIFIER_REQUEST_LOG
+      if (!requestLogPath) throw new Error('missing isolated request log path')
+      const requests = []
+
+      globalThis.fetch = async (input, init = {}) => {
+        const url = typeof input === 'string' ? input : input?.url ?? String(input)
+        const method = String(init.method ?? input?.method ?? 'GET').toUpperCase()
+        requests.push({ method, url })
+
+        if (method !== 'GET' || !url.startsWith('https://fixture.invalid/rest/v1/flash_news?')) {
+          throw new Error(\`blocked non-fixture request: \${method} \${url}\`)
+        }
+
+        return new Response(
+          JSON.stringify([
+            {
+              id: 'fixture-news-1',
+              title: 'Bitcoin fixture headline',
+              content: 'Bitcoin market update',
+              category: 'other'
+            }
+          ]),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }
+
+      process.on('exit', () => writeFileSync(requestLogPath, JSON.stringify(requests)))
+    `
+  )
+
+  const result = spawnSync(
+    process.execPath,
+    ['--import', 'tsx', '--import', pathToFileURL(preloadPath).href, resolve(root, classifierPath)],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        FLASH_NEWS_CLASSIFIER_REQUEST_LOG: requestLogPath,
+        NEXT_PUBLIC_SUPABASE_URL: 'https://fixture.invalid',
+        PATH: process.env.PATH ?? '',
+        SUPABASE_SERVICE_ROLE_KEY: 'fixture-service-role-key',
+      },
+    }
+  )
+
+  assert.equal(result.signal, null)
+  assert.equal(result.status, 0, result.stderr || result.stdout)
+  assert.match(result.stdout, /mode=DRY-RUN/)
+  assert.match(result.stdout, /scanned 1 rows/)
+  assert.match(result.stdout, /no writes/)
+
+  const requests = JSON.parse(readFileSync(requestLogPath, 'utf8'))
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].method, 'GET')
+  const requestUrl = new URL(requests[0].url)
+  assert.equal(requestUrl.origin, 'https://fixture.invalid')
+  assert.equal(requestUrl.pathname, '/rest/v1/flash_news')
+  assert.equal(
+    requests.some(({ method }) => method === 'PATCH'),
+    false
+  )
 })
 
 test('the canonical backfill is dry-run by default and fills only missing recent fields', () => {
