@@ -20,7 +20,7 @@
   cache probe 全部为 MISS 且行为一致。
 - `2026-08-04T22:53Z` 前的 `/api/health` 证据为 HTTP 202/degraded；数据库与 Redis
   探针通过，freshness 当时为 `4/32 fresh`、`13 stale`、`15 critical`。最新值见下方
-  `2026-08-05T01:27Z` 复核；两者都不是 GO 信号。
+  `2026-08-05T05:28Z` 复核；两者都不是 GO 信号。
 - `2026-08-04T20:32Z` 再次从公网只读检查：health 仍是同一 202/degraded 状态；
   token containment checker 的 4 个 API、2 个页面、2 个 sitemap 检查全部通过。
 - `2026-08-04T22:53Z` 该次公网只读复核仍为 HTTP 202/degraded、精确 production
@@ -30,6 +30,9 @@
   commit `5ed4718b6`；数据库与 Redis 为 pass，但 freshness 恶化为 `4/32 fresh`、
   `1 stale`、`27 critical`。同一时段 Mac mini 与 Tailscale 上的 MacBook 分别完成
   token containment checker，4 个 API、2 个页面、2 个 sitemap 均通过。
+- `2026-08-05T05:28Z` 最新公网只读复核仍为 HTTP 202/degraded、精确 production
+  commit `5ed4718b6`；数据库与 Redis 为 pass，freshness 为 `5/32 fresh`、`1 stale`、
+  `26 critical`。它只比 01:27Z 多一个 fresh source，仍是明确 NO-GO。
 - `2026-08-05T01:37Z` 发现 GitHub 控制面曾把 15 个 repository-defined workflow
   重新启用，定时任务仍在触发；最新 runs 因 GitHub 账单限制以 0 steps 失败，没有
   job 或生产动作执行，但账单失败不是安全门禁。已把这 15 个重新禁用；连同原本禁用
@@ -43,7 +46,7 @@
   这消除了单轮竞态和 100 条分页截断，但仍是一段明确起止时间的只读观察，不冒充原子
   snapshot，也不扫描 22,000 多条已完成
   历史。使用本机已保存的 `gh` 身份时运行 `env -u GITHUB_TOKEN npm run --silent
-qa:github-workflow-control-plane`；`2026-08-05T03:53:52.399Z` 至 `03:53:56.083Z` 的真实
+qa:github-workflow-control-plane`；`2026-08-05T05:27:53.880Z` 至 `05:27:57.566Z` 的真实
   远端复验结果为 pass（前后 inventory 一致、17/17 disabled、1 个 Dependabot active、
   两轮共 10 次非终态查询的各 status 最大 total 均为 0）。该检查绝不
   enable/disable/cancel workflow。
@@ -53,7 +56,8 @@ qa:github-workflow-control-plane`；`2026-08-05T03:53:52.399Z` 至 `03:53:56.083
   值当前仍在 repository-secret scope；所有 repository-defined workflow 保持禁用，
   在建立获准 consumer boundary 前不得以重新启用 workflow 来测试消息。
 - Supabase 于 20:00Z 将 Management API 事故标记 resolved；23:38Z 的最新更新仍称
-  正在测试 project-upgrade 修复。当前
+  正在测试 project-upgrade 修复。`2026-08-05T05:28Z` 的官方状态 API 仍为
+  `minor / Partially Degraded Service`，未解决事故仍处于 `identified`。当前
   [官方状态页](https://status.supabase.com/)仍显示 Database degraded，
   [Project Upgrade Delays](https://status.supabase.com/incidents/2vt3m1qjsf29)仍在修复和
   测试中；provider 门禁没有解除。
