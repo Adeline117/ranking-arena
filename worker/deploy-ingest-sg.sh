@@ -115,7 +115,7 @@ CUTOVER_STARTED=0
 DEPLOY_SUCCEEDED=0
 ROLLBACK_COMMITTED=0
 
-CODE_PATHS=(.npmrc lib worker package.json package-lock.json tsconfig.json)
+CODE_PATHS=(lib worker)
 FULL_PATHS=("${CODE_PATHS[@]}")
 RSYNC_EXCLUDES=(
   --exclude '.git' --exclude '.env' --exclude 'node_modules'
@@ -149,7 +149,7 @@ trap cleanup_local_source EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 GIT_NO_REPLACE_OBJECTS=1 git archive "$SHA" -- \
-  .npmrc lib worker package.json package-lock.json tsconfig.json \
+  lib worker \
   scripts/ci/worker-release-id.mjs \
   | tar -xf - -C "$DEPLOY_SOURCE_DIR"
 WORKER_RELEASE_ID="$(node "$DEPLOY_SOURCE_DIR/scripts/ci/worker-release-id.mjs" "$SHA")"
@@ -178,7 +178,7 @@ dependency_input_hash() {
   local root="$1"
   local file digest
   {
-    for file in .npmrc package.json package-lock.json; do
+    for file in worker/.npmrc worker/package.json worker/package-lock.json; do
       digest="$(sha256_file "$root/$file")"
       printf '%s  %s\n' "$digest" "$file"
     done
@@ -245,6 +245,28 @@ export RSYNC_RSH='ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTi
 ssh_sg() {
   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
     -o ServerAliveInterval=20 -o ServerAliveCountMax=15 "$VPS_HOST" "$@"
+}
+
+remove_candidate_dependency_shadows() {
+  ssh_sg "set -eu
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test -d '$STAGING_DIR/lib'
+    test ! -L '$STAGING_DIR/lib'
+    test -d '$STAGING_DIR/worker'
+    test ! -L '$STAGING_DIR/worker'
+    find '$STAGING_DIR/lib' '$STAGING_DIR/worker' \
+      -name node_modules -prune -exec rm -rf -- {} +
+    test -z \"\$(find '$STAGING_DIR/lib' '$STAGING_DIR/worker' \
+      -name node_modules -print -quit)\"
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'"
+}
+
+assert_candidate_dependency_root() {
+  ssh_sg "set -eu
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'
+    test -d '$STAGING_DIR/node_modules'
+    test ! -L '$STAGING_DIR/node_modules'
+    test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'"
 }
 
 assert_deploy_lock() {
@@ -378,7 +400,14 @@ verify_sg_roster() {
     cd '$REMOTE_DIR'
     test -f '$proof_root/node_modules/tsx/dist/cli.mjs'
     test -f '$proof_root/worker/verify-sg-heartbeat.ts'
-    node '$proof_root/node_modules/tsx/dist/cli.mjs' \
+    if test -f '$proof_root/worker/tsconfig.json'; then
+      proof_tsconfig='$proof_root/worker/tsconfig.json'
+    else
+      proof_tsconfig='$proof_root/tsconfig.json'
+    fi
+    test -f \"\$proof_tsconfig\"
+    TSX_TSCONFIG_PATH=\"\$proof_tsconfig\" \
+      node '$proof_root/node_modules/tsx/dist/cli.mjs' \
       '$proof_root/worker/verify-sg-heartbeat.ts' \
       '$mode' '$expected_sha' '$expected_release' '$not_before_ms' '$pm2_pid'
     test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'" |
@@ -712,7 +741,7 @@ if [ "$REMOTE_RUNTIME" != "$EXPECTED_RUNTIME" ]; then
 fi
 
 REMOTE_DEP_INPUTS_HASH="$(ssh_sg "set -eu; cd '$REMOTE_DIR'
-  for f in .npmrc package.json package-lock.json; do
+  for f in worker/.npmrc worker/package.json worker/package-lock.json; do
     test -f \"\$f\"; digest=\$(sha256sum \"\$f\" | awk '{print \$1}')
     printf '%s  %s\\n' \"\$digest\" \"\$f\"
   done | sha256sum | awk '{print \$1}'" || true)"
@@ -738,6 +767,11 @@ SOURCE_PATHS=()
 for path in "${FULL_PATHS[@]}"; do SOURCE_PATHS+=("$DEPLOY_SOURCE_DIR/$path"); done
 assert_deploy_lock
 rsync -az --delete "${RSYNC_EXCLUDES[@]}" "${SOURCE_PATHS[@]}" "$VPS_HOST:$STAGING_DIR/"
+remove_candidate_dependency_shadows
+ssh_sg "set -eu
+  rm -f '$STAGING_DIR/.npmrc' '$STAGING_DIR/package.json' \
+    '$STAGING_DIR/package-lock.json' '$STAGING_DIR/tsconfig.json' \
+    '$STAGING_DIR/tsconfig.ingest-worker.json'"
 
 echo "3/7 preparing candidate dependencies"
 assert_deploy_lock
@@ -752,23 +786,26 @@ if [ "$MODE" = "artifact" ]; then
     tar --no-same-owner --no-same-permissions -xzf '$REMOTE_ARTIFACT' -C '$STAGING_DIR'
     test -d '$STAGING_DIR/node_modules'"
 elif [ "$MODE" = "full" ] && [ "$DEP_INPUTS_CHANGED" = 1 ] && [ "$FORCE_NPM_CI" = 1 ]; then
-  ssh_sg "cd '$STAGING_DIR' && npm ci"
+  ssh_sg "set -eu; cd '$STAGING_DIR'
+    rm -rf node_modules worker/node_modules
+    npm ci --prefix worker --omit=dev
+    npm ls --prefix worker --omit=dev --all >/dev/null
+    test -d worker/node_modules
+    mv worker/node_modules node_modules"
 fi
 
+assert_candidate_dependency_root
 echo "4/7 loading every critical module from the isolated candidate"
 assert_deploy_lock
 ssh_sg "set -eu; cd '$STAGING_DIR'
-  for m in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt playwright tsx dotenv esbuild; do
-    node -e \"require.resolve(process.argv[1])\" \"\$m\"
-  done
   test -x node_modules/.bin/tsx
-  node_modules/.bin/tsx --eval '
-    (async () => {
-      for (const m of [\"bullmq\",\"ioredis\",\"pg\",\"ccxt\",\"viem\",\"abitype\",\"luxon\",\"@supabase/supabase-js\",\"dotenv\",\"esbuild\",\"playwright\"])
-        await import(m)
-    })().catch(error => { console.error(error); process.exit(1) })
+  node --input-type=module -e '
+    const { readFile } = await import(\"node:fs/promises\")
+    const manifest = JSON.parse(await readFile(\"worker/package.json\", \"utf8\"))
+    for (const dependency of Object.keys(manifest.dependencies)) await import(dependency)
   '
-  node node_modules/tsx/dist/cli.mjs worker/preflight-sg-runtime.ts"
+  TSX_TSCONFIG_PATH=worker/tsconfig.json \
+    node node_modules/tsx/dist/cli.mjs worker/preflight-sg-runtime.ts"
 
 echo "5/7 stamping candidate and rechecking exact main"
 assert_deploy_lock

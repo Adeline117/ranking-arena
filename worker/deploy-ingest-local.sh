@@ -217,9 +217,15 @@ if grep -Eq '(^|/)\.gitattributes$' <<<"$RELEASE_TREE_PATHS"; then
   fail 'worker release contains .gitattributes; exact archive bytes are not proven'
 fi
 RELEASE_INPUT_TREE="$(git_command ls-tree -r "$SHA" -- \
-  .npmrc lib worker package.json package-lock.json tsconfig.json \
+  lib worker \
   scripts/ci/worker-release-id.mjs)" || fail 'unable to inspect worker release input modes'
-if awk '$1 != "100644" && $1 != "100755" { unsupported = 1 } END { exit !unsupported }' \
+if awk '
+  NF == 4 && $1 == "160000" && $2 == "commit" &&
+    $3 ~ /^[0-9a-f]+$/ && (length($3) == 40 || length($3) == 64) &&
+    $4 == "lib/forge-std" { next }
+  $1 != "100644" && $1 != "100755" { unsupported = 1 }
+  END { exit !unsupported }
+' \
   <<<"$RELEASE_INPUT_TREE"; then
   fail 'worker release inputs must contain only regular committed files'
 fi
@@ -238,7 +244,7 @@ archive_worker_release() {
     GIT_ATTR_NOSYSTEM=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
     GIT_NO_REPLACE_OBJECTS=1 GIT_OPTIONAL_LOCKS=0 \
     "$GIT_BIN" archive "$SHA" -- \
-      .npmrc lib worker package.json package-lock.json tsconfig.json \
+      lib worker \
       scripts/ci/worker-release-id.mjs \
       | /usr/bin/tar -xf - -C "$destination"; then
     rm -rf "$isolated_git"
@@ -596,7 +602,9 @@ prove_pid_descends_from() {
 discover_existing_runtime_identity() {
   local release_dir="$1" ancestor_pid="$2" not_before_ms="${3:-}"
   local request_timeout_ms="${4:-}"
-  local proof marker node heartbeat_pid extra
+  local proof marker node heartbeat_pid extra tsx_tsconfig
+  tsx_tsconfig="$release_dir/worker/tsconfig.json"
+  [ -f "$tsx_tsconfig" ] || return 1
   local -a discovery_args=(--discover-existing "$OLD_SHA" "$OLD_ROSTER_RELEASE_ID")
   if [ -n "$not_before_ms" ]; then
     [[ "$not_before_ms" =~ ^[1-9][0-9]*$ ]] || return 1
@@ -611,7 +619,7 @@ discover_existing_runtime_identity() {
     (
       cd "$release_dir" && env -i \
         HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
-        PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+        PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" TSX_TSCONFIG_PATH="$tsx_tsconfig" \
         "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
         "${discovery_args[@]}"
     ) | awk -F '\t' '
@@ -951,6 +959,7 @@ recover_previous_release() {
         (cd "$RELEASE_DIR" && env -i \
           HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
           PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+          TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json" \
           "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
           "$OLD_PID" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
           "$rollback_final_not_before_ms") || {
@@ -1074,6 +1083,7 @@ $NEW_PROCESS_TREE}" || {
     (cd "$RELEASE_DIR" && env -i \
       HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
       PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+      TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json" \
       "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
       "$rollback_pid" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
       "$rollback_not_before_ms") || {
@@ -1107,6 +1117,7 @@ $NEW_PROCESS_TREE}" || {
     (cd "$RELEASE_DIR" && env -i \
       HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
       PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+      TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json" \
       "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
       "$rollback_pid" "$OLD_SHA" "$OLD_RELEASE_ID" "$OLD_NODE_ID" \
       "$rollback_final_not_before_ms") || {
@@ -1229,7 +1240,15 @@ mkdir "$INSTALL_HOME"
 (cd "$STAGING_DIR" && env -i \
   HOME="$INSTALL_HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" \
   PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
-  "$NODE_BIN" "$NPM_CLI" ci)
+  "$NODE_BIN" "$NPM_CLI" ci --prefix worker --omit=dev)
+(cd "$STAGING_DIR" && env -i \
+  HOME="$INSTALL_HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" \
+  PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+  "$NODE_BIN" "$NPM_CLI" ls --prefix worker --omit=dev --all >/dev/null)
+[ -d "$STAGING_DIR/worker/node_modules" ] && [ ! -L "$STAGING_DIR/worker/node_modules" ] || \
+  fail 'Worker install did not produce an owned dependency directory'
+[ ! -e "$STAGING_DIR/node_modules" ] || fail 'candidate root node_modules must start absent'
+mv "$STAGING_DIR/worker/node_modules" "$STAGING_DIR/node_modules"
 [ -d "$STAGING_DIR/node_modules" ] && [ ! -L "$STAGING_DIR/node_modules" ] || \
   fail 'candidate node_modules must be a release-owned directory'
 
@@ -1244,11 +1263,10 @@ env -i HOME="$INSTALL_HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" \
 echo '4/8 loading critical modules and binding shared runtime state'
 (cd "$STAGING_DIR" && env -i HOME="$INSTALL_HOME" PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
   PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_DIR" \
-  "$NODE_BIN" node_modules/tsx/dist/cli.mjs --eval '
-    (async () => {
-      for (const module of ["bullmq","ioredis","pg","ccxt","viem","abitype","luxon","@supabase/supabase-js","dotenv","esbuild","playwright"])
-        await import(module)
-    })().catch((error) => { console.error(error); process.exit(1) })
+  "$NODE_BIN" --input-type=module --eval '
+    const { readFile } = await import("node:fs/promises")
+    const manifest = JSON.parse(await readFile("worker/package.json", "utf8"))
+    for (const dependency of Object.keys(manifest.dependencies)) await import(dependency)
   ')
 rm -rf "$STAGING_DIR/.arena-ingest" "$STAGING_DIR/worker/logs"
 ln -s "$SHARED_STATE_DIR" "$STAGING_DIR/.arena-ingest"
@@ -1269,6 +1287,7 @@ echo '5/8 proving browser and production database readiness before PM2 stop'
   HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
   PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_DIR" \
   ARENA_EXPECTED_WORKER_NODE_ID="$OLD_NODE_ID" \
+  TSX_TSCONFIG_PATH="$STAGING_DIR/worker/tsconfig.json" \
   "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/preflight-local-release.ts)
 read -r FREE_KB DISK_USED_PCT <<<"$(df -Pk "$RELEASE_ROOT" | awk 'END {gsub(/%/, "", $5); print $4, $5}')"
 [[ "$FREE_KB" =~ ^[0-9]+$ ]] && [[ "$DISK_USED_PCT" =~ ^[0-9]+$ ]] && \
@@ -1332,6 +1351,7 @@ wait_for_stamped_ready native "$DEPLOY_MARKER" "$DEPLOY_LOG" \
 (cd "$RELEASE_DIR" && env -i \
   HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
   PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+  TSX_TSCONFIG_PATH="$RELEASE_DIR/worker/tsconfig.json" \
   "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
   "$NEW_PID" "$SHA" "$WORKER_RELEASE_ID" "$OLD_NODE_ID" "$HEARTBEAT_NOT_BEFORE_MS") || \
   fail 'candidate lacks a fresh exact Redis roster identity'

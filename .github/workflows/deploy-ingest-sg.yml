@@ -72,33 +72,37 @@ jobs:
           # Must match the SG runtime. The deploy job also checks the live host.
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: worker/package-lock.json
 
-      - name: npm ci (deterministic, full)
-        run: npm ci
+      - name: Install the deterministic Worker runtime closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix worker --omit=dev
+          npm ls --prefix worker --omit=dev --all >/dev/null
+          test -d worker/node_modules
+          test ! -e node_modules
+          mv worker/node_modules node_modules
 
       - name: Verify dependency tree resolves and loads
         shell: bash
         run: |
           set -euo pipefail
-          for module in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt \
-                        playwright tsx dotenv esbuild; do
-            node -e "require.resolve('$module')" || {
-              echo "::error::dependency tree is incomplete: $module is unresolved"
-              exit 1
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises'
+
+          const manifest = JSON.parse(await readFile('worker/package.json', 'utf8'))
+          for (const dependency of Object.keys(manifest.dependencies)) {
+            try {
+              await import(dependency)
+            } catch (error) {
+              console.error(
+                `::error::Worker dependency failed to load: ${dependency}: ${String(error?.stack ?? error)}`
+              )
+              process.exit(1)
             }
-          done
-          npx tsx --eval "
-            (async () => {
-              const modules = ['bullmq','ioredis','pg','ccxt','viem','abitype','luxon','@supabase/supabase-js','dotenv','esbuild','playwright'];
-              for (const module of modules) {
-                try { await import(module); }
-                catch (error) {
-                  console.error('::error::dependency failed to load: '+module+': '+String(error && (error.stack||error.message||error)));
-                  process.exit(1);
-                }
-              }
-            })();
-          "
+          }
+          NODE
 
       - name: Package dependencies and write the bound manifest
         shell: bash
@@ -110,7 +114,7 @@ jobs:
             exit 1
           }
 
-          DEP_INPUTS_SHA256="$({ sha256sum .npmrc package.json package-lock.json; } | sha256sum | awk '{print $1}')"
+          DEP_INPUTS_SHA256="$({ sha256sum worker/.npmrc worker/package.json worker/package-lock.json; } | sha256sum | awk '{print $1}')"
           NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
           ARCH="$(node -p 'process.arch')"
           [ "$NODE_MAJOR" = '22' ] && [ "$ARCH" = 'x64' ] || {
@@ -237,7 +241,7 @@ jobs:
 
           export EXPECTED_TARGET_SHA="$TARGET_SHA"
           export EXPECTED_WORKER_RELEASE_ID="$(node scripts/ci/worker-release-id.mjs "$TARGET_SHA")"
-          export EXPECTED_DEP_INPUTS_SHA256="$({ sha256sum .npmrc package.json package-lock.json; } | sha256sum | awk '{print $1}')"
+          export EXPECTED_DEP_INPUTS_SHA256="$({ sha256sum worker/.npmrc worker/package.json worker/package-lock.json; } | sha256sum | awk '{print $1}')"
           export EXPECTED_NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
           export EXPECTED_ARCH="$(node -p 'process.arch')"
           export EXPECTED_TARBALL_SHA256="$(sha256sum arena-ingest-deps.tgz | awk '{print $1}')"

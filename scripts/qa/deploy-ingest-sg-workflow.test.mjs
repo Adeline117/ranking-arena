@@ -51,7 +51,10 @@ test('code-only accepts only an intentionally skipped dependency build', () => {
 
 test('dependency packaging does not download an unused local browser', () => {
   assert.doesNotMatch(workflow, /playwright install/)
-  assert.match(workflow, /await import\(module\)/)
+  assert.match(workflow, /npm ci --prefix worker --omit=dev/)
+  assert.match(workflow, /npm ls --prefix worker --omit=dev --all/)
+  assert.match(workflow, /mv worker\/node_modules node_modules/)
+  assert.match(workflow, /Object\.keys\(manifest\.dependencies\)/)
 })
 
 test('full artifact carries a strict independently recomputed manifest', () => {
@@ -66,7 +69,11 @@ test('full artifact carries a strict independently recomputed manifest', () => {
     assert.ok(workflow.includes(key), `manifest is missing ${key}`)
   }
   assert.match(workflow, /node scripts\/ci\/worker-release-id\.mjs "\$TARGET_SHA"/)
-  assert.match(workflow, /sha256sum \.npmrc package\.json package-lock\.json/)
+  assert.match(
+    workflow,
+    /sha256sum worker\/\.npmrc worker\/package\.json worker\/package-lock\.json/
+  )
+  assert.doesNotMatch(workflow, /sha256sum \.npmrc package\.json package-lock\.json/)
   assert.match(workflow, /sha256sum arena-ingest-deps\.tgz/)
   assert.match(workflow, /arena-ingest-deps\.manifest/)
   assert.match(workflow, /artifact manifest contains missing or unknown keys/)

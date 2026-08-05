@@ -5,20 +5,21 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
-const CONTRACT = 'arena.worker-release-inputs@1\0'
+const CONTRACT = 'arena.worker-release-inputs@2\0'
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024
 const REQUIRED_FILES = [
   '.github/workflows/build-ingest-image.yml',
   '.github/workflows/deploy-ingest-sg.yml',
   '.dockerignore',
-  '.npmrc',
-  'package-lock.json',
-  'package.json',
   'scripts/ci/worker-release-id.mjs',
-  'tsconfig.json',
+  'worker/.npmrc',
+  'worker/package-lock.json',
+  'worker/package.json',
+  'worker/tsconfig.json',
 ]
 const REQUIRED_TREES = ['lib', 'worker']
 const ALLOWED_MODES = new Set(['100644', '100755', '120000'])
+const EXCLUDED_NON_RUNTIME_GITLINKS = new Set(['lib/forge-std'])
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u
 const OBJECT_ID = /^[0-9a-f]+$/u
 const textDecoder = new TextDecoder('utf-8', { fatal: true })
@@ -125,18 +126,21 @@ function parseTreeOutput(rawOutput, objectIdLength) {
 
     const metadata = record.subarray(0, separator).toString('ascii')
     const match = /^(\d{6}) (\S+) ([0-9a-f]+)$/u.exec(metadata)
-    if (
-      !match ||
-      !ALLOWED_MODES.has(match[1]) ||
-      match[2] !== 'blob' ||
-      match[3].length !== objectIdLength ||
-      !OBJECT_ID.test(match[3])
-    ) {
+    if (!match || match[3].length !== objectIdLength || !OBJECT_ID.test(match[3])) {
       throw new Error('git tree output record is malformed')
     }
 
     const pathBuffer = record.subarray(separator + 1)
     const path = decodePath(pathBuffer)
+    const excludedNonRuntimeGitlink =
+      match[1] === '160000' && match[2] === 'commit' && EXCLUDED_NON_RUNTIME_GITLINKS.has(path)
+    if (excludedNonRuntimeGitlink) {
+      offset = recordEnd + 1
+      continue
+    }
+    if (!ALLOWED_MODES.has(match[1]) || match[2] !== 'blob') {
+      throw new Error('git tree output record is malformed')
+    }
     if (paths.has(path)) throw new Error('git tree output contains a duplicate path')
     paths.add(path)
     entries.push({ mode: match[1], objectId: match[3], path, pathBuffer })

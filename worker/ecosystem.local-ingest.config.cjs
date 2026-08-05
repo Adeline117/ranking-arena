@@ -79,6 +79,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PLAYWRIGHT_BROWSERS_PATH: join(releaseDir, '.playwright-browsers'),
+        TSX_TSCONFIG_PATH: join(workerDir, 'tsconfig.json'),
       },
       exec_mode: 'fork',
       instances: 1,

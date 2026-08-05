@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { computeWorkerReleaseId } from '../ci/worker-release-id.mjs'
 
 const SCRIPT = fileURLToPath(new URL('../ci/worker-release-id.mjs', import.meta.url))
+const FORGE_STD_COMMIT = '1801b0541f4fda118a10798fd3486bb7051c5dd6'
 const GIT_ENV = {
   ...process.env,
   GIT_AUTHOR_EMAIL: 'worker-release-test@example.com',
@@ -38,13 +39,18 @@ function makeRepo(t) {
   const repo = mkdtempSync(join(tmpdir(), 'arena-worker-release-id-'))
   t.after(() => rmSync(repo, { force: true, recursive: true }))
   git(repo, 'init', '-q')
-  put(repo, '.npmrc', 'engine-strict=true\n')
-  put(repo, '.dockerignore', '.env*\nnode_modules\n')
+  put(repo, '.dockerignore', '.env*\nnode_modules\nlib/forge-std\n')
   put(repo, '.github/workflows/build-ingest-image.yml', 'name: build worker\n')
   put(repo, '.github/workflows/deploy-ingest-sg.yml', 'name: deploy worker\n')
-  put(repo, 'package.json', '{"name":"worker-release-fixture","private":true}\n')
-  put(repo, 'package-lock.json', '{"name":"worker-release-fixture","lockfileVersion":3}\n')
-  put(repo, 'tsconfig.json', '{"compilerOptions":{"strict":true}}\n')
+  put(repo, '.github/dependabot.yml', 'version: 2\nupdates: []\n')
+  put(repo, '.npmrc', 'root-app-only=true\n')
+  put(repo, 'package.json', '{"name":"app-fixture","private":true}\n')
+  put(repo, 'package-lock.json', '{"name":"app-fixture","lockfileVersion":3}\n')
+  put(repo, 'tsconfig.json', '{"compilerOptions":{"jsx":"preserve"}}\n')
+  put(repo, 'worker/.npmrc', 'engine-strict=true\n')
+  put(repo, 'worker/package.json', '{"name":"worker-release-fixture","private":true}\n')
+  put(repo, 'worker/package-lock.json', '{"name":"worker-release-fixture","lockfileVersion":3}\n')
+  put(repo, 'worker/tsconfig.json', '{"compilerOptions":{"strict":true}}\n')
   put(repo, 'worker/index.ts', 'export const worker = true\n')
   put(repo, 'lib/shared.ts', 'export const shared = true\n')
   put(repo, 'scripts/ci/worker-release-id.mjs', 'export const contract = 1\n')
@@ -68,7 +74,7 @@ test('returns one deterministic lowercase SHA-256 from an import or the CLI', (t
   assert.equal(cli.trim(), imported)
 })
 
-test('ignores dirty state and commits outside the worker deployment inputs', (t) => {
+test('ignores dirty state and committed app or governance inputs outside the runtime', (t) => {
   const { base, repo } = makeRepo(t)
   const expected = computeWorkerReleaseId(base, { cwd: repo })
 
@@ -80,27 +86,54 @@ test('ignores dirty state and commits outside the worker deployment inputs', (t)
 
   put(repo, 'app/page.tsx', 'export default function Page() { return <main /> }\n')
   put(repo, 'docs/readme.md', '# unrelated update\n')
-  const unrelated = commit(repo, 'app and docs only')
+  put(repo, '.npmrc', 'root-app-only=false\n')
+  put(repo, 'package.json', '{"name":"app-fixture","private":true,"version":"2.0.0"}\n')
+  put(repo, 'package-lock.json', '{"name":"app-fixture","lockfileVersion":3,"version":"2.0.0"}\n')
+  put(repo, 'tsconfig.json', '{"compilerOptions":{"jsx":"react-jsx"}}\n')
+  put(repo, '.github/dependabot.yml', 'version: 2\nupdates:\n  - directory: /worker\n')
+  const unrelated = commit(repo, 'root app and governance metadata only')
   assert.equal(computeWorkerReleaseId(unrelated, { cwd: repo }), expected)
 })
 
-test('changes when worker, lib, package, lockfile, npm, or TypeScript inputs change', (t) => {
+test('excludes only the Docker-ignored Foundry gitlink from Worker runtime identity', (t) => {
+  const { repo } = makeRepo(t)
+  const expected = computeWorkerReleaseId('HEAD', { cwd: repo })
+
+  git(repo, 'update-index', '--add', '--cacheinfo', `160000,${FORGE_STD_COMMIT},lib/forge-std`)
+  git(repo, 'commit', '-q', '-m', 'add non-runtime Foundry gitlink')
+  assert.equal(computeWorkerReleaseId('HEAD', { cwd: repo }), expected)
+
+  git(
+    repo,
+    'update-index',
+    '--add',
+    '--cacheinfo',
+    `160000,${FORGE_STD_COMMIT},lib/unreviewed-submodule`
+  )
+  git(repo, 'commit', '-q', '-m', 'add unknown runtime-tree gitlink')
+  assert.throws(
+    () => computeWorkerReleaseId('HEAD', { cwd: repo }),
+    /git tree output record is malformed/
+  )
+})
+
+test('changes when Worker source, shared source, or Worker-owned release inputs change', (t) => {
   const { repo } = makeRepo(t)
   let previous = computeWorkerReleaseId('HEAD', { cwd: repo })
   const changes = [
     ['worker/index.ts', 'export const worker = 2\n'],
     ['lib/shared.ts', 'export const shared = 2\n'],
-    ['package.json', '{"name":"worker-release-fixture","private":true,"version":"2.0.0"}\n'],
+    ['worker/package.json', '{"name":"worker-release-fixture","private":true,"version":"2.0.0"}\n'],
     [
-      'package-lock.json',
+      'worker/package-lock.json',
       '{"name":"worker-release-fixture","version":"2.0.0","lockfileVersion":3}\n',
     ],
-    ['.npmrc', 'engine-strict=false\n'],
-    ['.dockerignore', '.env*\nnode_modules\nworker/tests\n'],
+    ['worker/.npmrc', 'engine-strict=false\n'],
+    ['.dockerignore', '.env*\nnode_modules\nworker/tests\nlib/forge-std\n'],
     ['.github/workflows/build-ingest-image.yml', 'name: build worker v2\n'],
     ['.github/workflows/deploy-ingest-sg.yml', 'name: deploy worker v2\n'],
     ['scripts/ci/worker-release-id.mjs', 'export const contract = 2\n'],
-    ['tsconfig.json', '{"compilerOptions":{"strict":false}}\n'],
+    ['worker/tsconfig.json', '{"compilerOptions":{"strict":false}}\n'],
   ]
 
   for (const [path, contents] of changes) {
@@ -112,18 +145,17 @@ test('changes when worker, lib, package, lockfile, npm, or TypeScript inputs cha
   }
 })
 
-test('rejects missing root files and missing worker or lib trees', async (t) => {
+test('rejects missing release files and a missing shared-source tree', async (t) => {
   const { base, repo } = makeRepo(t)
   const missingInputs = [
-    '.npmrc',
     '.dockerignore',
     '.github/workflows/build-ingest-image.yml',
     '.github/workflows/deploy-ingest-sg.yml',
-    'package-lock.json',
-    'package.json',
-    'tsconfig.json',
+    'worker/.npmrc',
+    'worker/package-lock.json',
+    'worker/package.json',
+    'worker/tsconfig.json',
     'scripts/ci/worker-release-id.mjs',
-    'worker/index.ts',
     'lib/shared.ts',
   ]
 
@@ -131,7 +163,7 @@ test('rejects missing root files and missing worker or lib trees', async (t) => 
     git(repo, 'checkout', '-q', base)
     rmSync(join(repo, path))
     const ref = commit(repo, `remove ${path}`)
-    const expected = /^(?:worker|lib)\//u.test(path) ? /input tree is missing/ : /input is missing/
+    const expected = path === 'lib/shared.ts' ? /input tree is missing/ : /input is missing/
     assert.throws(() => computeWorkerReleaseId(ref, { cwd: repo }), expected)
   }
 })

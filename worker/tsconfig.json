@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowJs": false,
+    "incremental": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "types": ["jest", "node"]
+  },
+  "files": [
+    "src/ingest/__tests__/region-consumer-runtime.test.ts",
+    "src/ingest/__tests__/worker-db-fence.test.ts",
+    "src/ingest/__tests__/worker-instance-ownership.test.ts",
+    "src/ingest/__tests__/worker-instance-ownership.redis.test.ts"
+  ],
+  "include": [
+    "src/connection.ts",
+    "src/ingest-worker.ts",
+    "src/ingest/**/*.ts",
+    "preflight-local-release.ts",
+    "preflight-sg-runtime.ts",
+    "verify-local-heartbeat.ts",
+    "verify-sg-heartbeat.ts"
+  ],
+  "exclude": ["node_modules", "**/__tests__/**", "**/*.test.ts"]
+}

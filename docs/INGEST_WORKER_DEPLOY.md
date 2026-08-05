@@ -24,10 +24,10 @@ ownership and monitoring semantics.
 
 Use **Actions → Deploy Ingest Worker (SG)** from the `main` workflow ref.
 
-| Change                                                      | Input                                                   |
-| ----------------------------------------------------------- | ------------------------------------------------------- |
-| `.npmrc`, `package.json`, and `package-lock.json` unchanged | `target_sha=<exact current main SHA>`, `mode=code-only` |
-| Any dependency install input changed                        | `target_sha=<exact current main SHA>`, `mode=full`      |
+| Change                                            | Input                                                   |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| `worker/.npmrc`, manifest, and lockfile unchanged | `target_sha=<exact current main SHA>`, `mode=code-only` |
+| Any Worker-owned dependency install input changed | `target_sha=<exact current main SHA>`, `mode=full`      |
 
 Obtain the target without abbreviating it:
 
@@ -53,8 +53,10 @@ In `full` mode, the build job:
 
 1. validates and checks out the exact target;
 2. proves it is current `origin/main`;
-3. builds dependencies on Node 22 Linux x64 with deterministic `npm ci`;
-4. resolves and actually imports every critical worker module; and
+3. installs only the production closure in `worker/package-lock.json` on
+   Node 22 Linux x64 with deterministic `npm ci --prefix worker --omit=dev`,
+   then rejects missing required peers with `npm ls`;
+4. actually imports every dependency declared by the Worker manifest; and
 5. emits a six-field manifest binding target SHA, worker release ID, dependency
    input hash, Node major, architecture, and tarball SHA-256.
 
@@ -104,8 +106,8 @@ bash worker/deploy-ingest-sg.sh --target-sha="$TARGET_SHA" --dry-run
 ```
 
 - `--dry-run`: itemized preview; no remote mutation.
-- `--code-only`: reuse the validated remote dependency tree only when all three
-  dependency inputs match.
+- `--code-only`: reuse the validated remote dependency tree only when
+  `worker/.npmrc`, `worker/package.json`, and `worker/package-lock.json` match.
 - `--from-artifact=<tgz> --artifact-manifest=<manifest>`: deploy a bound CI
   dependency artifact.
 - Default full mode: reuse matching dependencies; refuse changed inputs unless
@@ -146,6 +148,25 @@ for supervised handling.
 
 The retired standalone `onchain-enrich-web3.mts` entrypoint must remain absent.
 `maint:onchain-enrich` on the local BullMQ queue is the sole recurring owner.
+
+## Package and source boundary
+
+The ingest runtime owns `worker/package.json`, `worker/package-lock.json`,
+`worker/.npmrc`, and `worker/tsconfig.json`. Docker, SG artifacts, local releases,
+dependency hashes, and release IDs consume those files instead of the root app
+manifest, lockfile, or TypeScript configuration. Runtime deployments install
+production dependencies only; Worker type tooling remains in `devDependencies`.
+
+The Worker intentionally still consumes reviewed shared implementation from
+`lib/**`. Its standalone TypeScript config fixes `baseUrl` at the repository root
+and retains the `@/*` alias for that source contract. Moving shared ingest code
+into a separately versioned library package is a distinct migration; do not work
+around this boundary by falling back to the root app lockfile or tsconfig.
+
+`lib/forge-std` is a Foundry-only Git submodule, not a Worker runtime input. It is
+excluded consistently from the Docker context, automatic image trigger, release
+identity, and local release mode gate. Any other Git submodule under `lib/**` or
+`worker/**` remains an unsupported input and fails closed.
 
 ## Failure handling
 

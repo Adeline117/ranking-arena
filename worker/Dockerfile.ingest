@@ -6,33 +6,34 @@
 # the Playwright browsers ONCE here in CI; the box just `docker run`s it and never
 # installs anything. This is the ultimate form of the CI-artifact pipeline.
 #
-# Base = the official Playwright image pinned to the LOCKFILE playwright version
-# (package-lock → 1.59.1). It ships Chromium + system deps + a non-root `pwuser`
+# Base = the official Playwright image pinned to the Worker lockfile version
+# (worker/package-lock.json → 1.59.1). It ships Chromium + system deps + a
+# non-root `pwuser`
 # (the worker launches Chromium WITHOUT --no-sandbox, so it must NOT run as root).
 # Keep this tag in sync with package-lock's playwright version — the CI dep-verify
 # step + a smoke run catch a mismatch.
 #
 # Build (context = repo root):  docker build -f worker/Dockerfile.ingest -t arena-ingest .
-# The worker runs interpreted TS via tsx (no compile) → runtime needs source +
-# node_modules + tsconfig (for the @/* path alias). `.env` is MOUNTED at run time
-# (never baked); the anti-bot Playwright profiles persist via a mounted volume.
+# The worker runs interpreted TS via tsx (no compile) → runtime needs source,
+# its independent node_modules closure, and worker/tsconfig.json (for the @/*
+# path alias). `.env` is MOUNTED at run time (never baked); the anti-bot
+# Playwright profiles persist via a mounted volume.
 
 ARG PW_VERSION=v1.59.1-jammy
 
-# ── deps: deterministic full install (incl devDeps tsx/dotenv — runtime needs them) ──
+# ── deps: deterministic production install (tsx/dotenv are runtime deps) ──
 # Built on Node 22, matching CI and the native artifact pipeline. The Playwright
-# runtime image ships Node 24; both supported LTS majors are covered by the root
+# runtime image ships Node 24; both supported LTS majors are covered by the Worker
 # engine contract. Dependencies remain built separately because the runtime image's
 # npm major has stricter optional-peer resolution. All native addons here use N-API
 # prebuilds and both stages are Linux x64.
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
-# .npmrc carries `legacy-peer-deps=true` — REQUIRED: the privy/solana passkey deps
-# have a peerOptional typescript/@solana-kit conflict that strict `npm ci` rejects
-# with ERESOLVE (the whole repo installs with legacy-peer-deps; ci.yml does too).
-COPY package.json package-lock.json .npmrc ./
-COPY worker/vendor/brace-expansion-compat ./worker/vendor/brace-expansion-compat
-RUN npm ci --no-audit --no-fund
+# The Worker owns an independent manifest and lockfile. App-only dependencies and
+# root package churn cannot enter this image's installation closure.
+COPY worker/package.json worker/package-lock.json worker/.npmrc ./
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && npm ls --omit=dev --all
 
 # ── runtime ──
 FROM mcr.microsoft.com/playwright:${PW_VERSION} AS runtime
@@ -40,6 +41,7 @@ ARG DEPLOYED_SHA
 ARG WORKER_RELEASE_ID
 ENV NODE_ENV=production \
     NODE_OPTIONS=--max-old-space-size=2560 \
+    TSX_TSCONFIG_PATH=/app/worker/tsconfig.json \
     INGEST_REGIONS=vps_sg \
     INGEST_LOCAL_REGION=vps_sg
 WORKDIR /app
@@ -60,7 +62,6 @@ COPY --from=deps /app/node_modules ./node_modules
 # Branded Google Chrome channel (some sources use sources.meta.browser_channel
 # 'chrome' for the Akamai TLS fingerprint). Chromium is already in the base image.
 RUN npx playwright install chrome
-COPY package.json tsconfig.json ./
 COPY lib ./lib
 COPY worker ./worker
 
@@ -70,5 +71,6 @@ COPY worker ./worker
 RUN mkdir -p /app/.arena-ingest/profiles && chown -R pwuser:pwuser /app/.arena-ingest
 USER pwuser
 
-# tsx is the interpreter; the entry resolves @/* via tsconfig.
-CMD ["npx", "tsx", "worker/src/ingest-worker.ts"]
+# Use the release-owned interpreter directly; the entry resolves @/* through the
+# explicit Worker tsconfig selected above.
+CMD ["node", "node_modules/tsx/dist/cli.mjs", "worker/src/ingest-worker.ts"]

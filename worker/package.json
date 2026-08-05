@@ -1,0 +1,37 @@
+{
+  "name": "@ranking-arena/ingest-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic runtime and tooling boundary for the Arena ingest worker",
+  "engines": {
+    "node": ">=22.19 <25"
+  },
+  "scripts": {
+    "start": "tsx --tsconfig tsconfig.json src/ingest-worker.ts",
+    "type-check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@sentry/nextjs": "10.63.0",
+    "@supabase/supabase-js": "2.101.1",
+    "bullmq": "5.77.6",
+    "ccxt": "4.5.63",
+    "dotenv": "17.4.2",
+    "ioredis": "5.11.0",
+    "next": "16.3.0",
+    "pg": "8.20.0",
+    "playwright": "1.59.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "tsx": "4.22.3",
+    "viem": "2.55.10",
+    "webpack": "5.109.2",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/jest": "30.0.0",
+    "@types/node": "22.20.1",
+    "@types/pg": "8.20.0",
+    "typescript": "6.0.2",
+    "yaml": "2.9.0"
+  }
+}
