@@ -143,8 +143,17 @@ hardening、V1 candidate、线上 token containment 和 `brace-expansion` 5.0.9
 `bceb7a4b3f3a28f6f4cfebc16e013485a0b428a3e438f67d2eda6c0db0469af6`；`npm audit`
 已从 2 low + 23 moderate 收敛为 0 low + 4 moderate，仍是 0 high/critical。剩余四项均
 来自 `@lhci/cli` 或 `@solana/web3.js` 的 `uuid`/`jayson` 链，registry 给出的自动方案是
-破坏性降级/跨大版本，不在本波次强制覆盖；须在独立兼容性迁移中处理。该新 lock 尚须
-完成 Node 22 clean install 与全量回归，不能借用 PR #254 的旧 lock 证据。
+破坏性降级/跨大版本，不在本波次强制覆盖；须在独立兼容性迁移中处理。
+
+该新 lock 已在 Tailscale 上的第二网络 MacBook 以 commit `57300bcf4` 的精确 archive
+独立验证：Node `22.23.2`、npm `11.11.0` 对上述 SHA-256 完成 clean `npm ci`
+（1930 packages），clean-tree audit 为 0 info/low/high/critical、4 moderate；
+`qa:baseline-offline` 为 309/307 pass/2 explicit PG skip，`qa:sweep-unit` 为
+713/711 pass/2 explicit PG skip。应用与 ingest worker TypeScript 均通过（应用检查在
+8 GiB 主机显式使用 4 GiB Node heap），lint 为 0 error、2694 条既有 warning。使用与
+hosted CI 相同的无权限 Supabase/cron placeholder 完成 Next.js 16.2.11 production build、
+161 个静态页面及 1094 个 chunk 的 BigInt postbuild 检查；未向该主机提供生产 secret，
+也没有连接或修改生产数据库。
 
 - 同一应用源码树完成 Next.js 16.2.11 production-like build、161 个静态页面和
   1094 个浏览器 chunk 的 BigInt postbuild 检查。
