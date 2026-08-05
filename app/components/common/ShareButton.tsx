@@ -189,7 +189,7 @@ export default function ShareButton({
     const shareText = text.replace(data.url, shareUrl)
     trackShare('whatsapp')
     openPopup(`https://wa.me/?text=${encodeURIComponent(shareText)}`)
-  }, [text, data.url, openPopup])
+  }, [text, data.url, openPopup, trackShare])
 
   const pad =
     size === 'sm'

@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { LanguageProvider, useLanguage as useAppLanguage } from '../LanguageProvider'
-import { loadTranslations } from '@/lib/i18n'
+import { loadTranslations, onTranslationsReady, translations } from '@/lib/i18n'
 import { useLanguage as useSharedLanguage } from '@/lib/i18n/client'
 
 jest.mock('@/lib/i18n', () => ({
@@ -9,10 +9,15 @@ jest.mock('@/lib/i18n', () => ({
   translations: { en: { childLabel: 'Child content' }, zh: {}, ja: {}, ko: {} },
   loadTranslations: jest.fn().mockResolvedValue(undefined),
   getTranslationVersion: () => 0,
-  onTranslationsReady: () => jest.fn(),
+  onTranslationsReady: jest.fn(() => jest.fn()),
 }))
 
 describe('LanguageProvider', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    delete translations.en.asyncLabel
+  })
+
   it('mounts when requestIdleCallback is unavailable', () => {
     const original = window.requestIdleCallback
     delete (window as Window & { requestIdleCallback?: typeof requestIdleCallback })
@@ -52,5 +57,28 @@ describe('LanguageProvider', () => {
 
     expect(screen.getByTestId('context-identity')).toHaveTextContent('true')
     expect(screen.getByText('Child content')).toBeInTheDocument()
+  })
+
+  it('publishes a fresh translation function when an async dictionary becomes ready', () => {
+    function Consumer() {
+      return <div>{useAppLanguage().t('asyncLabel')}</div>
+    }
+
+    render(
+      <LanguageProvider>
+        <Consumer />
+      </LanguageProvider>
+    )
+
+    expect(screen.getByText('asyncLabel')).toBeInTheDocument()
+    const listener = jest.mocked(onTranslationsReady).mock.calls[0]?.[0]
+    expect(listener).toBeDefined()
+
+    act(() => {
+      translations.en.asyncLabel = 'Loaded asynchronously'
+      listener?.()
+    })
+
+    expect(screen.getByText('Loaded asynchronously')).toBeInTheDocument()
   })
 })

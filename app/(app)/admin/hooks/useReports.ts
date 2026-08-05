@@ -124,7 +124,7 @@ export function useReports(accessToken: string | null, showToast?: ToastFn) {
         setActionLoading((prev) => ({ ...prev, [reportId]: false }))
       }
     },
-    [accessToken, showToast]
+    [accessToken, showToast, t]
   )
 
   return {
