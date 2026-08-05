@@ -149,11 +149,30 @@ the conservative body scan is not a hostile-input sandbox. A pass is labelled
 dependency replay only; it is not managed-Supabase equivalence or promotion
 evidence.
 
-The completed scaffold regression run contained 347 top-level tests and 391
-total assertions: 390 passed, zero failed, and the one default skip was the
-opt-in real-cluster check. Running that check explicitly against PostgreSQL
-17 also passed. Candidate inventory remained empty, so this evidence validates
-only the guardrail and harness implementation, not any canonical baseline.
+A separate source-capture scaffold is now implemented but has not been run
+against production. It accepts only an official Supabase direct/session 5432
+endpoint, the project CA, TLS `verify-full`, and one PostgreSQL 17.6+ toolchain.
+One exported repeatable-read read-only snapshot binds the schema-only dump, 14
+strict catalogue categories, and one-way hashes of nullable ledger statement
+bodies. Exact shared row contracts cover publication membership/filter/column
+semantics and standalone composite/domain structure. The one PG17-generated
+`CREATE SCHEMA "public";` is normalized exactly once for fresh-target replay,
+then the SQL safety gate runs again. Credentials never enter argv/artifacts;
+children have a minimal environment and wall timeout, while signals use the
+single-owner disconnect/cleanup path only after TERM-to-KILL child shutdown has
+closed. A canonical owner-only parent plus exclusive `mkdir` prevents output
+replacement; an incomplete marker remains until both staged files are
+hard-linked and verified, and marker removal is the commit point. Its two final
+outputs remain source evidence, not a candidate or deployment authority. This
+is process-interruption readiness, not power-loss durability without fsync;
+filesystems without hard-link support fail closed.
+
+The completed scaffold regression run contained 375 top-level tests and 433
+total assertions: 431 passed, zero failed, and the two default skips were the
+opt-in real capture and replay integration checks. Running each explicitly
+against isolated PostgreSQL 17.8 also passed: capture 41/41 and replay 22/22.
+Candidate inventory remained empty, so this evidence validates only the
+guardrail and harness implementation, not any canonical baseline.
 
 A schema-only capture was attempted through the session pooler on port 5432 with
 TLS `verify-full`. It failed closed because the project CA certificate was not

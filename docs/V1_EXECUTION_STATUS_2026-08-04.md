@@ -28,7 +28,8 @@
 - 未来 GitHub Actions 与 Vercel Production 的 Telegram token/chat-id 已于 19:03Z
   更新，且 provider API 身份检查返回 200；当前 Vercel deployment 早于该更新，
   更新后也尚无真实消息投递证明，因此告警恢复仍为待验证。
-- Supabase 于 20:00Z 将 Management API 事故标记 resolved，但
+- Supabase 于 20:00Z 将 Management API 事故标记 resolved；23:38Z 的最新更新仍称
+  正在测试 project-upgrade 修复。当前
   [官方状态页](https://status.supabase.com/)仍显示 Database degraded，
   [Project Upgrade Delays](https://status.supabase.com/incidents/2vt3m1qjsf29)仍在修复和
   测试中；provider 门禁没有解除。
@@ -140,19 +141,47 @@ foundation 不能预建 `arena` 或 `public`/`arena` 应用对象。stop 失败�
 输入；保守 body scan 不是任意动态 SQL 的 hostile sandbox。成功只表示 local
 dependency replay，不表示 Supabase 等价或可部署。
 
-该 scaffold 的完整回归共 347 个顶层测试、391 条断言：390 条通过、0 条失败；唯一
-默认 skip 是需显式启用的真实集群测试，随后使用 PostgreSQL 17 单独启用回放亦通过。
-候选清单仍为空，因此这些证据只验证 guardrail/harness，不验证任何 canonical
-baseline。
+本轮随后补齐了独立的 production-source capture scaffold，但没有运行真实 source
+capture。该命令只接受官方 Supabase direct/session 5432、项目 CA、`verify-full` 与
+PG17.6+ 同源工具链；使用 `REPEATABLE READ READ ONLY` 导出单一 snapshot，把 14 类
+catalogue 与 nullable ledger body 的单向 hash 同 schema-only dump 绑定。它不把 URL、
+密码或 ledger SQL 写入产物，publication 的 all-table/relation/schema membership、
+row filter/column list、composite/domain 结构均有严格共享 row contract。PG17 dump 中
+会与空白目标冲突的唯一 `CREATE SCHEMA "public";` 被 exact-one 规范化后再次通过 SQL
+safety gate。子进程使用最小环境与 90 秒 wall timeout；超时或信号先 TERM、宽限后
+KILL，并等待 close 再走唯一的断连/清理路径。输出父目录必须 owner-only；原子 `mkdir`
+只认领不存在的目标，incomplete marker 在两个 hard-link 完整前阻止消费，移除 marker
+才是 commit point。它不会覆盖并发出现的目录；产物仍只有 `app-schema.sql` 与
+`source-catalog.json`，不是 candidate、manifest 或部署授权。这是进程中断下的
+readiness 协议，不声称未执行 fsync 时具备断电 durability；不支持 hard link 的文件
+系统会 fail closed。
+
+该 scaffold 的完整回归共 375 个顶层测试、433 条断言：431 条通过、0 条失败；两个
+默认 skip 分别是真实 capture 与真实 replay 的显式 PostgreSQL 集成检查。随后在隔离的
+PostgreSQL 17.8 上分别启用，capture 为 41/41、replay 为 22/22，均通过。候选清单仍
+为空，因此这些证据只验证 guardrail/harness，不验证任何 canonical baseline。
+
+只读配置审计还发现 `supabase/config.toml` 的本地 `db.major_version` 仍为 `15`，而
+已验证的生产服务端为 PostgreSQL 17。Supabase 官方要求本地 major 与 remote 一致；
+但 Git branching 会把 `config.toml` 变更同步到远端 branch。当前升级事故仍未解除，
+所以本轮不通过一次普通 push 猜测性触发数据库版本配置；应在 provider 恢复、目标
+branch PG17 定容获批后，以独立变更修正并执行 `SHOW server_version` 证明。
+
+Owner/Admin 需要提供的 CA、受控 5432 只读 URL、两个空白 PG17 replay project 与
+
+> =100 GiB restore target 已整理到
+> [managed scratch request](./V1_MANAGED_SCRATCH_REQUEST_2026-08-04.md)。其中不含 secret，
+> 也不授权创建付费资源或连接生产。
 
 ## 剩余门禁（严格顺序）
 
 1. 等待 Supabase 官方事故恢复；获取项目 CA 与受控的 backup/restore 通道，在至少
    约 100 GiB 的 managed scratch 完成全量恢复、CRC/tail、索引、RLS/auth、关键表
    及应用只读 smoke。
-2. 独立评审并实现 canonical baseline；不得改写旧 migration。先在空白 PostgreSQL
-   17 完整重放，再对冻结 catalogue/ledger 做等价核对，并让 ledger-driven Preview
-   通过。此前不得把 PR #254 的仓库 CI/Lighthouse 全绿解释为可合并或可发布。
+2. 用已评审的只读 capture scaffold 取得 source witness，再独立构造 canonical
+   baseline；不得改写旧 migration。先在两个空白 managed PostgreSQL 17 完整重放，
+   再对冻结 catalogue/ledger 做等价核对，并让 ledger-driven Preview 通过。此前不得
+   把 PR #254 的仓库 CI/Lighthouse 全绿解释为可合并或可发布。
 3. 逐项对账 5 个缺失 RPC 和 101 个 advisory migration 候选，在 disposable
    PostgreSQL 17 验证并生成精确 predeploy/postdeploy 清单；禁止对生产 `db push`。
 4. 建立 exact-SHA 非生产环境并验证 schema、缓存预热、token containment、告警真实
