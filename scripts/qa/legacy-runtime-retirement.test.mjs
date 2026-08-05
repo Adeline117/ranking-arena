@@ -21,6 +21,7 @@ test('keeps retired legacy runtime roots and entrypoints deleted', () => {
     'connectors',
     'workers',
     'Dockerfile',
+    'worker/deploy.sh',
     'app/api/cron/batch-discover/route.ts',
     'app/api/cron/cleanup-violations',
     'app/api/cron/compute-derived-metrics',
