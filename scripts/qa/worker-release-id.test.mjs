@@ -47,6 +47,7 @@ function makeRepo(t) {
   put(repo, 'package.json', '{"name":"app-fixture","private":true}\n')
   put(repo, 'package-lock.json', '{"name":"app-fixture","lockfileVersion":3}\n')
   put(repo, 'tsconfig.json', '{"compilerOptions":{"jsx":"preserve"}}\n')
+  put(repo, 'vendor/root-app-adapter/index.js', 'export const adapter = true\n')
   put(repo, 'worker/.npmrc', 'engine-strict=true\n')
   put(repo, 'worker/package.json', '{"name":"worker-release-fixture","private":true}\n')
   put(repo, 'worker/package-lock.json', '{"name":"worker-release-fixture","lockfileVersion":3}\n')
@@ -93,6 +94,17 @@ test('ignores dirty state and committed app or governance inputs outside the run
   put(repo, '.github/dependabot.yml', 'version: 2\nupdates:\n  - directory: /worker\n')
   const unrelated = commit(repo, 'root app and governance metadata only')
   assert.equal(computeWorkerReleaseId(unrelated, { cwd: repo }), expected)
+})
+
+test('ignores committed root-vendor changes outside the Worker runtime boundary', (t) => {
+  const { repo } = makeRepo(t)
+  const expected = computeWorkerReleaseId('HEAD', { cwd: repo })
+
+  put(repo, 'vendor/root-app-adapter/index.js', 'export const adapter = false\n')
+  put(repo, 'vendor/root-app-adapter/package.json', '{"name":"root-app-adapter"}\n')
+  const rootVendorChange = commit(repo, 'change root application vendor package')
+
+  assert.equal(computeWorkerReleaseId(rootVendorChange, { cwd: repo }), expected)
 })
 
 test('excludes only the Docker-ignored Foundry gitlink from Worker runtime identity', (t) => {

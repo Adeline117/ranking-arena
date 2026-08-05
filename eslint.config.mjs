@@ -399,6 +399,7 @@ const eslintConfig = defineConfig([
     // Tooling / docs / vendor - don't block app lint
     'scripts/**',
     'docs/**',
+    'vendor/**',
     'public/**/*.mjs',
     'worker/**',
     // Throwaway QA/verification scratch scripts (never shipped; console.log +
