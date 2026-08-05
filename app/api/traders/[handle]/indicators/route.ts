@@ -16,11 +16,6 @@ const logger = createLogger('trader-indicators-api')
 
 export const revalidate = 300 // 5分钟
 
-interface SnapshotRow {
-  roi_pct: number | null
-  created_at: string
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }

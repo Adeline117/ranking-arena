@@ -43,7 +43,7 @@ export default function ApplyGroupPage() {
   const submitOperationIdRef = useRef<Record<string, string>>({})
   const avatarUploadOperationIdRef = useRef<Record<string, number>>({})
   const nextAvatarUploadOperationIdRef = useRef(0)
-  const { accessToken, email, userId, viewerKey, sessionGeneration } = useAuthSession()
+  const { accessToken, userId, viewerKey, sessionGeneration } = useAuthSession()
   const stateOwnerKey = `${viewerKey}:${sessionGeneration}`
   const [loading, setLoading] = useViewerSlotState(stateOwnerKey, false)
   const [error, setError] = useViewerSlotState<string | null>(stateOwnerKey, null)

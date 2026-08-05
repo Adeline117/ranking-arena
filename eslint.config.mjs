@@ -118,6 +118,10 @@ const eslintConfig = defineConfig([
   // See docs/LINTING_GUIDE.md for rationale
   // ============================================
   {
+    linterOptions: {
+      // Unused suppressions hide rule coverage drift and must never accumulate.
+      reportUnusedDisableDirectives: 'error',
+    },
     rules: {
       // ----------------------------------------
       // Disabled rules (legacy patterns)
@@ -147,9 +151,9 @@ const eslintConfig = defineConfig([
       // Ban console.log in production code (use logger utility)
       'no-console': ['error', { allow: ['warn', 'error'] }],
 
-      // Warn on unused variables (helps catch dead code)
+      // Unused bindings are dead code or incomplete refactors; keep the category clean.
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',

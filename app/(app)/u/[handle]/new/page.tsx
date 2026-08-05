@@ -47,7 +47,6 @@ export default function NewPostPage() {
   const submitRef = useRef(false)
   const [cursorPosition, setCursorPosition] = useState<number | null>(null)
 
-  const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -81,7 +80,6 @@ export default function NewPostPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
     })
   }, [])

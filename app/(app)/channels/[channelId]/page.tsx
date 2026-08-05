@@ -60,7 +60,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
-  const { email, accessToken, userId, authChecked } = useAuthSession()
+  const { accessToken, userId, authChecked } = useAuthSession()
   const [channelId, setChannelId] = useState('')
   const [channel, setChannel] = useState<Channel | null>(null)
   const [members, setMembers] = useState<Member[]>([])

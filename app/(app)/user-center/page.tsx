@@ -131,7 +131,6 @@ function UserCenterPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null)
-  const [email, setEmail] = useState<string | null>(null)
 
   useEffect(() => {
     const tabParam = searchParams.get('tab') as Tab | null
@@ -166,7 +165,6 @@ function UserCenterPage() {
 
     const { user, session } = authResult
     setUserId(user.id)
-    setEmail(user.email ?? null)
     setAuthStatus('ready')
 
     try {

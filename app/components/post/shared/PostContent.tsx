@@ -18,7 +18,6 @@ import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import { ARENA_PURPLE, renderContentWithLinks, truncateText } from '@/lib/utils/content'
 import { localizedLabel } from '@/lib/utils/format'
-import { t } from '@/lib/i18n'
 import { resolveUserDisplayName } from '@/lib/utils/user-display'
 
 export interface PostContentData {

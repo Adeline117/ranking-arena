@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { createNotification } from '@/lib/data/notifications'
 import logger from '@/lib/logger'
 import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'

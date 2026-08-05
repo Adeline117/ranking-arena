@@ -288,7 +288,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const { language, t } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const { accessToken, email, userId, viewerKey, sessionGeneration } = useAuthSession()
+  const { accessToken, userId, viewerKey, sessionGeneration } = useAuthSession()
   const { isPro } = useSubscription()
   const router = useRouter()
   const manageResourceScopeRef = useRef({

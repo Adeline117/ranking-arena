@@ -7,10 +7,9 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface ProfileNotFoundProps {
   handle: string
-  email: string | null
 }
 
-export default function ProfileNotFound({ handle, email }: ProfileNotFoundProps) {
+export default function ProfileNotFound({ handle }: ProfileNotFoundProps) {
   const { t } = useLanguage()
 
   return (
