@@ -163,6 +163,7 @@ e2e/*debug*
 
 # Claude Code config
 /.claude/*
+!/.claude/conductor.json
 !/.claude/skills/
 !/.claude/commands/
 !/.claude/agents/

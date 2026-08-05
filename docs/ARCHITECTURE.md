@@ -2,13 +2,16 @@
 
 > 2026-07-02 首版（Phase 2 知识文档化）。之前审计指出全项目无架构图——本文补上。
 > 与 `docs/system-principles.md`（设计原则）、`docs/INGEST_WORKER_TOPOLOGY.md`（worker 节点）、
-> `docs/DECISIONS.md`（为什么这么做）配套。数值以 `memory/MEMORY.md` 的实测为准。
+> `docs/DECISIONS.md`（为什么这么做）配套。代码支持的 adapter 入口以已跟踪的
+> `lib/ingest/adapters/register.ts` 为准；实际启用的 source 清单以运行时
+> `arena.sources` registry 为准；Vercel 调度清单以已跟踪的 `vercel.json` 为准。
+> 本文不固化这些会随配置变化的数量。
 
 ## 一、系统全景
 
 ```mermaid
 graph TD
-  subgraph Sources[交易所 web/API · 36 sources]
+  subgraph Sources[交易所 web/API · runtime source registry]
     CEX[CEX: binance/bybit/okx/bitget/...]
     DEX[DEX: hyperliquid/gmx/dydx/...]
   end
@@ -83,7 +86,7 @@ Overall     = 90D×0.70 + 30D×0.25 + 7D×0.05
 graph LR
   subgraph Vercel[Vercel hnd1]
     APP[Next.js App + API]
-    CRON[41 Vercel Crons]
+    CRON[Vercel scheduled jobs]
     GATE[deploy-gate.yml CI 门禁部署]
   end
   subgraph Supabase[Supabase us-west-2 ~24GB]
