@@ -108,6 +108,102 @@ client tools, and a repeatable-read read-only snapshot. Capture code must not
 load an implicit dotenv file, put credentials in argv or output, read business
 rows, or update `supabase_migrations`.
 
+The capture command is separately and exactly opted in. Provision the three
+input variables through an approved secret-injection mechanism; do not place a
+real URL in documentation or shell history.
+
+```bash
+export ARENA_BASELINE_SOURCE_DATABASE_URL       # dedicated source URL
+export ARENA_BASELINE_SOURCE_CA_FILE            # absolute project CA path
+export PG17_BIN                                 # one PostgreSQL 17.6+ bin directory
+
+ARENA_CANONICAL_BASELINE_CAPTURE=1 \
+node scripts/maintenance/capture-canonical-baseline.mjs \
+  --output-dir /absolute/path/to/a-new-source-capture
+```
+
+The URL is accepted only for an official Supabase direct or session-pooler DNS
+name on port 5432 and must contain one exact `sslmode=verify-full` option. The CA
+must be a valid, currently usable CA certificate at a canonical absolute path
+with no symlink component and owner-only permissions. The output parent must
+likewise be a canonical, owner-owned `0700` directory (for example a private
+child beneath `/private/tmp`, never macOS's `/tmp` alias or the shared
+`/private/tmp` directory itself). The Node client additionally pins certificate
+and hostname verification;
+`pg_dump` receives credentials only in a minimal allowlisted child environment,
+never argv. Ambient cloud tokens and dynamic-loader injection variables are not
+passed to PostgreSQL tools.
+
+The command opens `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`, exports one
+snapshot, reads fixed `pg_catalog` queries plus
+`supabase_migrations.schema_migrations`, and keeps the exporting transaction
+open until the schema-only `pg_dump --snapshot`, SQL safety validation, and
+artifact writes finish. Ledger statement text is SHA-256 digested in memory and
+is never written. The digest covers the canonical typed payload
+`{"kind":"sql-statements","value":...}` so a historical `NULL` statement body
+remains distinct from a recorded empty array. Locale-sensitive catalogue
+ordering is replaced with deterministic JavaScript code-unit ordering, and
+relevant session GUCs are pinned. The capture and candidate validator share
+exact per-category row contracts rather than accepting arbitrary catalogue
+objects.
+
+Capture selects only application schemas `public` and `arena` and passes
+`--exclude-extension=*`: installed extension names, versions, and schemas are
+recorded in the catalogue, while reviewed extension creation belongs to the
+disposable managed foundation. Publication DDL is likewise excluded from the
+app dump and retained as catalogue evidence for later reconciliation. Security
+labels and subscriptions are outside this V1 app-schema capture. These bounds
+keep managed Supabase prerequisites outside app-schema SQL.
+
+PostgreSQL 17 emits one `CREATE SCHEMA "public";` even though every fresh
+PostgreSQL and Supabase target already provides that schema. Capture requires
+that exact statement exactly once, replaces only that line with a fixed comment,
+then re-runs SQL safety validation. It fails closed if the dump shape changes.
+Publication evidence preserves all-table, relation, and schema memberships,
+including partition-root mode, row filters, and selected columns. Type evidence
+filters generated array/table-row types while retaining standalone composite
+attributes and domain definitions/constraints.
+
+Publishing never uses replacement-style directory rename. An exclusive
+`mkdir` atomically claims the previously absent output path, an incomplete
+marker keeps the visible directory invalid while the two already-complete staged
+files are hard-linked without replacement, and removing that marker is the
+commit point. Consumers must reject a directory containing the marker or any
+artifact set other than exactly `app-schema.sql` and `source-catalog.json`.
+This is a portable no-overwrite/readiness protocol, not a claim that the whole
+directory is absent until commit. Both final files are owner-only. Filesystems
+without hard-link support fail closed. Marker removal is the logical commit
+point for process interruption; this V1 scaffold does not claim power-loss
+durability because it does not fsync the artifacts and parent directory. The
+completed directory is source evidence, not a candidate, manifest, or deployment
+authority. Normal failures roll back,
+disconnect, and remove capture-owned staging/claims before returning a generic
+error without libpq/pg_dump stderr. The default hosted unit sweep exercises this
+with fake clients and local child processes only; its default path never
+connects to a database.
+
+Every PostgreSQL child has a wall timeout. Timeout or direct CLI
+`SIGINT`/`SIGTERM` sends `SIGTERM`, escalates to `SIGKILL` after a bounded grace
+period, and waits for child close before the single-owner disconnect/cleanup
+path proceeds. A signal before the final commit gate publishes nothing; a
+successful marker removal after that gate is reported as committed success so
+automation never receives an interrupted exit for published artifacts. If
+cleanup itself fails, the command reports `CAPTURE_CLEANUP_FAILED` and does not
+claim success; inspect the selected output parent for a private
+`.arena-baseline-capture-*` directory or an incomplete claimed output before
+retrying. Other database/tool errors are deliberately reduced to the generic
+`CAPTURE_FAILED` code so remote error text cannot disclose credentials.
+
+The optional local integration check starts an isolated Unix-socket-only PG17
+cluster, executes all fixed catalogue queries, proves publication/composite/
+domain semantics, exports a real snapshot, and validates the exact dump flags:
+
+```bash
+ARENA_REAL_BASELINE_CAPTURE_PG17_TEST=1 \
+PG17_BIN=/absolute/path/to/postgresql-17.6-or-newer/bin \
+npm run qa:baseline-capture
+```
+
 Promotion requires all of the following in a separately reviewed maintenance
 wave:
 

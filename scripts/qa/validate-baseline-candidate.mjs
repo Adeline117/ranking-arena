@@ -10,10 +10,15 @@ import {
   validateFoundationSqlSafety,
   validateReplaySqlSafety,
 } from './baseline-sql-safety.mjs'
+import {
+  SOURCE_CATALOG_CONTRACT,
+  SOURCE_CATALOG_KEYS,
+  validateSourceCatalogRowContracts,
+} from './baseline-source-catalog-contract.mjs'
 
 export const BASELINE_CANDIDATE_CONTRACT = 'arena.canonical-baseline-candidate@1'
 export const FORWARD_MIGRATIONS_CONTRACT = 'arena.canonical-baseline-forward-migrations@1'
-export const SOURCE_CATALOG_CONTRACT = 'arena.canonical-baseline-source-catalog@1'
+export { SOURCE_CATALOG_CONTRACT }
 export const PLATFORM_PREREQUISITES_CONTRACT = 'arena.canonical-baseline-platform-prerequisites@1'
 export const FOUNDATION_CONTRACT = 'arena.disposable-supabase-foundation@1'
 export const CANDIDATE_STATUS = 'candidate/not-deployable'
@@ -33,22 +38,6 @@ const VERSION_PATTERN = /^\d{14}$/u
 const FORWARD_PATH_PATTERN = /^supabase\/migrations\/(\d{14})_([a-z0-9][a-z0-9_]*)\.sql$/u
 const FOUNDATION_PATH_PATTERN = /^supabase\/baseline-foundations\/[a-z0-9][a-z0-9_-]*\.sql$/u
 const CANDIDATE_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/u
-const SOURCE_CATALOG_KEYS = Object.freeze([
-  'acls',
-  'columns',
-  'constraints',
-  'defaultPrivileges',
-  'extensions',
-  'functions',
-  'indexes',
-  'policies',
-  'publications',
-  'schemas',
-  'tables',
-  'triggers',
-  'types',
-  'views',
-])
 
 function sha256(contents) {
   return createHash('sha256').update(contents).digest('hex')
@@ -355,6 +344,7 @@ function validateSourceCatalog(document, manifestSource) {
     fail('source-catalog.json capturedAt must match manifest source capturedAt')
   }
   assertExactKeys(document.catalog, SOURCE_CATALOG_KEYS, 'source-catalog.json catalog')
+  validateSourceCatalogRowContracts(document.catalog, { fail })
   for (const key of SOURCE_CATALOG_KEYS) {
     assertCanonicalObjectArray(document.catalog[key], `source-catalog.json catalog ${key}`)
   }

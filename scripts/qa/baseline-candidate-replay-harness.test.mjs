@@ -36,6 +36,10 @@ const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const SOURCE_HARNESS = resolve(ROOT, 'scripts/maintenance/replay-baseline-candidate.pg17.sh')
 const SOURCE_VALIDATOR = resolve(ROOT, 'scripts/qa/validate-baseline-candidate.mjs')
 const SOURCE_SQL_SAFETY = resolve(ROOT, 'scripts/qa/baseline-sql-safety.mjs')
+const SOURCE_CATALOG_CONTRACT_MODULE = resolve(
+  ROOT,
+  'scripts/qa/baseline-source-catalog-contract.mjs'
+)
 const RESTRICT_KEY = 'a'.repeat(63)
 const BASELINE_THROUGH = '20260804000000'
 const FORWARD_VERSION = '20260804000001'
@@ -67,6 +71,10 @@ function makeFixture() {
   copyFileSync(SOURCE_HARNESS, harness)
   copyFileSync(SOURCE_VALIDATOR, resolve(qaDir, 'validate-baseline-candidate.mjs'))
   copyFileSync(SOURCE_SQL_SAFETY, resolve(qaDir, 'baseline-sql-safety.mjs'))
+  copyFileSync(
+    SOURCE_CATALOG_CONTRACT_MODULE,
+    resolve(qaDir, 'baseline-source-catalog-contract.mjs')
+  )
   chmodSync(harness, 0o755)
 
   writeFileSync(foundation, 'CREATE SCHEMA auth;\nCREATE SCHEMA storage;\n')
