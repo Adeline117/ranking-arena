@@ -13,7 +13,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODE="${1:-plan}"
-PURGE_CONTRACT='public-rank-policy-v4+serving-metric-authority-v1'
+PURGE_CONTRACT='public-rank-policy-v7+serving-metric-authority-v1'
 
 usage() {
   printf '%s\n' \
@@ -84,7 +84,7 @@ if [[ "$LIVE_MAIN_SHA" != "$EXPECTED_RELEASE" ]]; then
   echo 'cache purge release does not equal the live pushed origin/main SHA' >&2
   exit 1
 fi
-if ! grep -Fq "PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v4'" \
+if ! grep -Fq "PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v7'" \
   "$ROOT/lib/rankings/publication-policy.ts" \
   || ! grep -Fq "SERVING_METRIC_AUTHORITY_CACHE_EPOCH = 'serving-metric-authority-v1'" \
     "$ROOT/lib/data/serving/cache-policy.ts"; then
