@@ -6,10 +6,10 @@ import { parseBitunixCopiersV1 } from './adapters/bitunix/copier-parser-v1'
 import { parseBlofinCopiersV1 } from './adapters/blofin/copier-parser-v1'
 import { parseBtccCopiersV1 } from './adapters/btcc/copier-parser-v1'
 import { parseBybitCopytradeCopiersV1 } from './adapters/bybit-copytrade/copier-parser-v1'
-import { parseCoinexHistory } from './adapters/coinex/parsers'
-import { parseGateHistory } from './adapters/gate/parsers'
-import { parseKucoinHistory } from './adapters/kucoin/parsers'
-import { parseLbankHistory } from './adapters/lbank/parsers'
+import { parseCoinexCopiersV1 } from './adapters/coinex/copier-parser-v1'
+import { parseGateCopiersV1 } from './adapters/gate/copier-parser-v1'
+import { parseKucoinCopiersV1 } from './adapters/kucoin/copier-parser-v1'
+import { parseLbankCopiersV1 } from './adapters/lbank/copier-parser-v1'
 import { parseMexcHistory } from './adapters/mexc/parsers'
 import { parseOkxHistory } from './adapters/okx/parsers'
 import { parseToobitHistory } from './adapters/toobit/parsers'
@@ -91,18 +91,10 @@ const COPIER_SNAPSHOT_PARSER_IMPLEMENTATIONS: Readonly<
     'bybit_copytrade',
     parseBybitCopytradeCopiersV1
   ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.coinex]: parserV1('coinex', (raw, ctx) =>
-    parseCoinexHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.gate]: parserV1('gate', (raw, ctx) =>
-    parseGateHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.kucoin]: parserV1('kucoin', (raw, ctx) =>
-    parseKucoinHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.lbank]: parserV1('lbank', (raw, ctx) =>
-    parseLbankHistory(raw, 'copiers', ctx)
-  ),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.coinex]: parserV1('coinex', parseCoinexCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.gate]: parserV1('gate', parseGateCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.kucoin]: parserV1('kucoin', parseKucoinCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.lbank]: parserV1('lbank', parseLbankCopiersV1),
   [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.mexc]: parserV1('mexc', (raw, ctx) =>
     parseMexcHistory(raw, 'copiers', ctx)
   ),

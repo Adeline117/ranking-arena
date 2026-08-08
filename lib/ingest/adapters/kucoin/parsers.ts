@@ -47,6 +47,7 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { validateRequiredSeriesTails, type ProfileQualityReject } from '../../core/profile-quality'
+import { parseKucoinCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -460,22 +461,7 @@ export function parseKucoinOrders(raw: unknown, _ctx: ParseCtx): ParsedHistoryRo
  * No row timestamp → ts = ctx.scrapedAt.
  */
 export function parseKucoinCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const { items } = pagedItems(raw)
-  const out: ParsedHistoryRow[] = []
-  for (const item of items) {
-    if (item.nickName === undefined || item.nickName === null) continue
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: String(item.nickName),
-      copierPnl: num(item.pnl),
-      copierInvested: num(item.copyPrincipal),
-      copyDurationDays: int(item.copyDays),
-      dedupeHash: dedupeHash('kucoin_cp', item.nickName, item.copyPrincipal, item.copyDays),
-      raw: item,
-    })
-  }
-  return out
+  return parseKucoinCopiersV1(raw, ctx)
 }
 
 export function parseKucoinHistory(
@@ -487,7 +473,7 @@ export function parseKucoinHistory(
     case 'orders':
       return parseKucoinOrders(raw, ctx)
     case 'copiers':
-      return parseKucoinCopiers(raw, ctx)
+      return parseKucoinCopiersV1(raw, ctx)
     default:
       // position history answers data:null (visibility-gated); no transfers.
       throw new Error(`[kucoin] history surface ${kind} not supported`)

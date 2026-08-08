@@ -18,6 +18,14 @@ import { parseBtccCopiersV1 } from '../adapters/btcc/copier-parser-v1'
 import { parseBtccHistory } from '../adapters/btcc/parsers'
 import { parseBybitCopytradeCopiersV1 } from '../adapters/bybit-copytrade/copier-parser-v1'
 import { parseBybitCopytradeHistory } from '../adapters/bybit-copytrade/parsers'
+import { parseCoinexCopiersV1 } from '../adapters/coinex/copier-parser-v1'
+import { parseCoinexHistory } from '../adapters/coinex/parsers'
+import { parseGateCopiersV1 } from '../adapters/gate/copier-parser-v1'
+import { parseGateHistory } from '../adapters/gate/parsers'
+import { parseKucoinCopiersV1 } from '../adapters/kucoin/copier-parser-v1'
+import { parseKucoinHistory } from '../adapters/kucoin/parsers'
+import { parseLbankCopiersV1 } from '../adapters/lbank/copier-parser-v1'
+import { parseLbankHistory } from '../adapters/lbank/parsers'
 import type { CopierCandidateAdapterSlug } from '../copier-candidate-conservation'
 import { buildCopierSnapshotParserContextV1 } from '../copier-parser-context-v1'
 import {
@@ -51,7 +59,18 @@ function context(sourceSlug: string): ParseCtx {
 
 type VersionedAdapter = Extract<
   CopierCandidateAdapterSlug,
-  'binance' | 'bingx' | 'bitget' | 'bitget_bots' | 'bitunix' | 'blofin' | 'btcc' | 'bybit_copytrade'
+  | 'binance'
+  | 'bingx'
+  | 'bitget'
+  | 'bitget_bots'
+  | 'bitunix'
+  | 'blofin'
+  | 'btcc'
+  | 'bybit_copytrade'
+  | 'coinex'
+  | 'gate'
+  | 'kucoin'
+  | 'lbank'
 >
 
 interface ParityCase {
@@ -73,6 +92,11 @@ const bitunixFollowers = fixture('bitunix/__tests__/fixtures/follow-list-p1.json
 const blofinFollowers = fixture('blofin/__tests__/fixtures/records-copiers.json')
 const btccFollowers = fixture('btcc/__tests__/fixtures/followers-p1.json')
 const bybitCopytradeFollowers = fixture('bybit-copytrade/__tests__/fixtures/other-follower-p1.json')
+const coinexFollowers = fixture('coinex/__tests__/fixtures/followers-p1.json')
+const gateFuturesFollowers = fixture('gate/__tests__/fixtures/follow-user-p1.json')
+const gateCfdFollowers = fixture('gate/__tests__/fixtures/followers-cfd-p1.json')
+const kucoinFollowers = fixture('kucoin/__tests__/fixtures/copy-traders-p1.json')
+const lbankFollowers = fixture('lbank/__tests__/fixtures/followers-p1.json')
 
 function wrapBinance(response: unknown): unknown {
   return {
@@ -184,6 +208,58 @@ const cases: readonly ParityCase[] = [
     parseV1: parseBybitCopytradeCopiersV1,
     parseCurrent: (raw, ctx) => parseBybitCopytradeHistory(raw, 'copiers', ctx),
   },
+  {
+    name: 'coinex followers',
+    adapterSlug: 'coinex',
+    raw: coinexFollowers,
+    ctx: context('coinex_futures'),
+    expectedCount: 10,
+    parseV1: parseCoinexCopiersV1,
+    parseCurrent: (raw, ctx) => parseCoinexHistory(raw, 'copiers', ctx),
+  },
+  {
+    name: 'gate futures follow users',
+    adapterSlug: 'gate',
+    raw: gateFuturesFollowers,
+    ctx: {
+      ...context('gate_futures'),
+      meta: { boardKey: 'futures' },
+    },
+    expectedCount: 3,
+    parseV1: parseGateCopiersV1,
+    parseCurrent: (raw, ctx) => parseGateHistory(raw, 'copiers', ctx),
+  },
+  {
+    name: 'gate CFD followers',
+    adapterSlug: 'gate',
+    raw: gateCfdFollowers,
+    ctx: {
+      ...context('gate_cfd'),
+      currency: 'USDx',
+      meta: { boardKey: 'cfd' },
+    },
+    expectedCount: 3,
+    parseV1: parseGateCopiersV1,
+    parseCurrent: (raw, ctx) => parseGateHistory(raw, 'copiers', ctx),
+  },
+  {
+    name: 'kucoin copy traders',
+    adapterSlug: 'kucoin',
+    raw: kucoinFollowers,
+    ctx: context('kucoin_futures'),
+    expectedCount: 3,
+    parseV1: parseKucoinCopiersV1,
+    parseCurrent: (raw, ctx) => parseKucoinHistory(raw, 'copiers', ctx),
+  },
+  {
+    name: 'lbank followers',
+    adapterSlug: 'lbank',
+    raw: lbankFollowers,
+    ctx: context('lbank_futures'),
+    expectedCount: 3,
+    parseV1: parseLbankCopiersV1,
+    parseCurrent: (raw, ctx) => parseLbankHistory(raw, 'copiers', ctx),
+  },
 ]
 
 describe('append-only copier parser V1', () => {
@@ -224,6 +300,68 @@ describe('append-only copier parser V1', () => {
     expect(parseBitgetHistory(wrapBitget(bitgetFollowers), 'copiers', ctx)).toEqual(bare)
   })
 
+  it('keeps Gate futures and CFD copier variants distinct', () => {
+    const futuresCtx: ParseCtx = {
+      ...context('gate_futures'),
+      meta: { boardKey: 'futures' },
+    }
+    const cfdCtx: ParseCtx = {
+      ...context('gate_cfd'),
+      currency: 'USDx',
+      meta: { boardKey: 'cfd' },
+    }
+    const futures = parseGateCopiersV1(gateFuturesFollowers, futuresCtx)
+    const cfd = parseGateCopiersV1(gateCfdFollowers, cfdCtx)
+
+    expect(futures[0]).toMatchObject({
+      copierLabel: '682318',
+      ts: new Date(1_780_586_472_000).toISOString(),
+      copierInvested: 2750,
+      copyDurationDays: null,
+    })
+    expect(cfd[0]).toMatchObject({
+      copierLabel: '景裕1',
+      ts: scrapedAt,
+      copierInvested: 33500,
+      copyDurationDays: 4,
+    })
+  })
+
+  it('pins KuCoin strict numeric grammar and scrape-clock semantics', () => {
+    const ctx = context('kucoin_futures')
+    const raw = {
+      data: {
+        totalNum: '0x1',
+        items: [
+          {
+            nickName: 'masked-user',
+            pnl: ' 1.25 ',
+            copyPrincipal: '0x10',
+            copyDays: '2.6e0',
+            statTime: 1,
+          },
+        ],
+      },
+    }
+    const versioned = parseKucoinCopiersV1(raw, ctx)
+    const replayed = replayCopierSnapshotParser({
+      adapterSlug: 'kucoin',
+      parserContract: COPIER_SNAPSHOT_PARSER_CONTRACTS.kucoin,
+      raw,
+      ctx,
+    })
+
+    expect(versioned).toHaveLength(1)
+    expect(versioned[0]).toMatchObject({
+      ts: scrapedAt,
+      copierPnl: 1.25,
+      copierInvested: null,
+      copyDurationDays: 3,
+    })
+    expect(parseKucoinHistory(raw, 'copiers', ctx)).toEqual(versioned)
+    expect(replayed).toEqual(versioned)
+  })
+
   it('retains the exact V1 context policy behind the public dispatcher', () => {
     for (const adapterSlug of [
       'binance',
@@ -234,6 +372,9 @@ describe('append-only copier parser V1', () => {
       'blofin',
       'btcc',
       'bybit_copytrade',
+      'coinex',
+      'kucoin',
+      'lbank',
       'gate',
     ] as const) {
       const input = {
@@ -268,6 +409,10 @@ describe('append-only copier parser V1', () => {
       './adapters/blofin/parsers',
       './adapters/btcc/parsers',
       './adapters/bybit-copytrade/parsers',
+      './adapters/coinex/parsers',
+      './adapters/gate/parsers',
+      './adapters/kucoin/parsers',
+      './adapters/lbank/parsers',
     ]
     for (const importPath of forbiddenReplayImports) {
       expect(replaySource).not.toContain(`from '${importPath}'`)
@@ -282,6 +427,10 @@ describe('append-only copier parser V1', () => {
       './adapters/blofin/copier-parser-v1',
       './adapters/btcc/copier-parser-v1',
       './adapters/bybit-copytrade/copier-parser-v1',
+      './adapters/coinex/copier-parser-v1',
+      './adapters/gate/copier-parser-v1',
+      './adapters/kucoin/copier-parser-v1',
+      './adapters/lbank/copier-parser-v1',
       './copier-parser-context-v1',
     ]) {
       expect(replaySource).toContain(importPath)
@@ -304,6 +453,10 @@ describe('append-only copier parser V1', () => {
         './copier-parser-v1',
         'parseBybitCopytradeCopiersV1(raw, ctx)',
       ],
+      ['adapters/coinex/parsers.ts', './copier-parser-v1', 'parseCoinexCopiersV1(raw, ctx)'],
+      ['adapters/gate/parsers.ts', './copier-parser-v1', 'parseGateCopiersV1(raw, ctx)'],
+      ['adapters/kucoin/parsers.ts', './copier-parser-v1', 'parseKucoinCopiersV1(raw, ctx)'],
+      ['adapters/lbank/parsers.ts', './copier-parser-v1', 'parseLbankCopiersV1(raw, ctx)'],
     ] as const
     for (const [file, importPath, delegation] of currentDelegates) {
       const contents = source(file)
@@ -320,6 +473,10 @@ describe('append-only copier parser V1', () => {
       'adapters/blofin/copier-parser-v1.ts',
       'adapters/btcc/copier-parser-v1.ts',
       'adapters/bybit-copytrade/copier-parser-v1.ts',
+      'adapters/coinex/copier-parser-v1.ts',
+      'adapters/gate/copier-parser-v1.ts',
+      'adapters/kucoin/copier-parser-v1.ts',
+      'adapters/lbank/copier-parser-v1.ts',
     ]
     for (const file of versionedSources) {
       const contents = source(file)
