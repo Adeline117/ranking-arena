@@ -11,6 +11,7 @@ Migrations:
 - `20260803106000_durable_comment_reaction_count_repair.sql`
 - `20260803107000_set_comment_reaction_desired_state.sql`
 - `20260803108000_comment_reaction_causal_intents.sql`
+- `20260803110000_post_media_upload_registry.sql` (adjacent inert predeploy authority)
 - `20260803109000_close_legacy_comment_reaction_desired_state.sql` (postdeploy)
 
 ## Outcome
@@ -122,10 +123,11 @@ Code evidence is committed in `089e8d445` (1050), `3153d356f` / `af00c8308`
 runner), `8f05b95ec` / `c50ab2911` / `209661569` / `d6bad1ef2` / `92d0c926e`
 (causal application and database ledger), `6bac3ace0` (1080 runner),
 `d874d8ad9` / `fd9172450` (1090 and fixed reviewed source digests), and
-`d44e72822` (postdeploy runner). This does not prove production has applied the
-migrations, completed the atomic cutover, deployed either scheduled consumer,
-drained either queue, or passed the read-only attestations. Production remains
-**NO-GO**.
+`d44e72822` (postdeploy runner). Adjacent launch evidence is `05adf3ef3` (the
+inert 1100 post-media registry) and `b8dc3e1cb` (1100 appended after 1080 in
+predeploy). This does not prove production has applied the migrations, completed
+the atomic cutover, deployed either scheduled consumer, drained either queue, or
+passed the read-only attestations. Production remains **NO-GO**.
 
 ## Serialization contract
 
@@ -231,16 +233,17 @@ order:
 7. `20260803106000_durable_comment_reaction_count_repair.sql`
 8. `20260803107000_set_comment_reaction_desired_state.sql`
 9. `20260803108000_comment_reaction_causal_intents.sql`
+10. `20260803110000_post_media_upload_registry.sql` (inert; no claim or cleanup authority)
 
 The postdeploy manifest must then contain
 `20260803109000_close_legacy_comment_reaction_desired_state.sql` exactly once.
-Commits `37d8f9cd7`, `e1ba49111`, `6bac3ace0`, and `d44e72822` establish the final
-order. The committed runner proof covers 198 predeploy migrations, 17 postdeploy
-migrations, and 225 unique classified migrations; its Node contract is 19/19,
-and the shell syntax/format/diff checks pass. This is repository evidence only,
-not a production ledger result. Production execution still uses the governed
-migration channel and exact name/body/hash ledger; the local runner's mutating
-psql commands remain disabled by ADR-023.
+Commits `37d8f9cd7`, `e1ba49111`, `6bac3ace0`, `d44e72822`, and `b8dc3e1cb`
+establish the final order. The committed runner proof covers 199 predeploy
+migrations, 17 postdeploy migrations, and 226 unique classified migrations; its
+Node contract is 19/19, and the shell syntax/format/diff checks pass. This is
+repository evidence only, not a production ledger result. Production execution
+still uses the governed migration channel and exact name/body/hash ledger; the
+local runner's mutating psql commands remain disabled by ADR-023.
 
 The fixed SHA256 ledger inputs are:
 
@@ -250,12 +253,13 @@ The fixed SHA256 ledger inputs are:
 | 1070          | `86d96b5793f7fde92a51743c9c3cce95e4f230f3d83911a6499d69accdf3bcbb` |
 | 1080          | `f7d808d5205c8b220d35dcd2511660bd2665e629e6bb0b7e52fcf59b551ca9a4` |
 | 1090          | `0a5326888b3d355998a1f8bbbef4e15400e6680e2f397b956518af3f2f925602` |
-| launch runner | `0e1db154fab91215725889933f1cdc7625f49877491285fd543e5ee4f712e16b` |
+| 1100          | `61871a54eab1f4ffb6931d617ca5c517b60483d0fd98f425fd2f06cdc71f7bc1` |
+| launch runner | `7b8309f630473096453f48f905131ba780cfe62879ae2335e03cb275494d0116` |
 
 Roll out in this order:
 
-1. deploy predeploy migrations 1040, 1045, 1050, 1060, 1070, and 1080 through
-   the approved production channel;
+1. deploy predeploy migrations 1040, 1045, 1050, 1060, 1070, 1080, and inert
+   registry 1100 through the approved production channel;
 2. verify their exact ledger body/hash and the PostgREST schema reload;
 3. bring up the same release SHA containing the causal client/API and both
    dedicated runtime workers in an isolated pool, atomically switch admission to
@@ -312,7 +316,9 @@ supabase/migrations/__tests__/close-legacy-comment-reaction-desired-state.pg17.s
 
 The 1080/1090 static suites contribute 20/20 passing tests; both matching PG17
 proofs pass against the real composed 1060/1070 dependency graph. The final
-runner contract is 19/19.
+runner contract is 19/19. The adjacent inert 1100 registry is separately covered
+by its dedicated Jest 13/13 and PostgreSQL 17 proof; it does not enable post-media
+claim, lease, cleanup, delete, cron, or Storage mutation.
 
 Causal comment-reaction application contracts:
 

@@ -1,7 +1,8 @@
 # Post media lifecycle audit — 2026-08-03
 
-Status: P1 open, with fail-closed deletion guards. This audit covers the public `posts` Storage
-bucket only.
+Status: **P1 open / release NO-GO**, with fail-closed deletion guards and an inert registry
+substrate. The media slice has no currently known P0 because cleanup remains disabled; this audit
+covers the public `posts` Storage bucket only.
 
 ## Object and ownership contract
 
@@ -23,8 +24,9 @@ group avatars.
 | Event                                                    | Current behavior                                                                                   | Risk/status                                              |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | Image/video upload fails before verified acknowledgement | Upload routes remove the exact server-derived path after acknowledgement/list verification failure | Covered                                                  |
+| Successful image/video upload                            | Current routes write Storage directly; they do not call the 1100 reserve/finalize authorities      | P1 unregistered object                                   |
 | Composer removes a selected image/video                  | Removes browser state/Markdown only                                                                | P1 orphan; object remains                                |
-| Composer is cancelled, tab closes, or draft is abandoned | No server cleanup registration or TTL                                                              | P1 orphan                                                |
+| Composer is cancelled, tab closes, or draft is abandoned | No route-level registry reservation or effective TTL                                               | P1 orphan                                                |
 | Atomic post creation fails after one or more uploads     | No claim/rollback link between upload and post RPC                                                 | P1 orphan                                                |
 | Post edit removes an image URL                           | Atomic edit updates the database but has no storage claim transition                               | P1 orphan                                                |
 | Author hard-delete through `/api/posts/[id]/delete`      | Deletes only the database row; exact owner predicate/affected-row acknowledgement is enforced      | P1 orphan; unsafe online cleanup is statically blocked   |
@@ -64,32 +66,73 @@ routes do not call it. It accepts the configured origin and the exact lowercase 
 `<owner>/videos/<UUID>.<allowed extension>` path, rejects image/foreign/query/credential/encoded
 paths, deduplicates candidates, and bounds scans to eight objects.
 
-## Why the remaining cleanup needs a registry
+## Inert registry substrate: migration 1100
+
+Commit `05adf3ef3` adds
+`20260803110000_post_media_upload_registry.sql` with SHA256
+`61871a54eab1f4ffb6931d617ca5c517b60483d0fd98f425fd2f06cdc71f7bc1`. It is a deliberately
+inert predeploy foundation:
+
+- `post_media_uploads` is private, owned by `postgres`, has forced RLS with no policies, and exposes
+  no table/column DML authority to browser or service roles. `owner_id` intentionally has no foreign
+  key or cascade that could erase lifecycle evidence during account deletion.
+- The only published mutation authorities are service-only SECURITY DEFINER reserve and finalize
+  functions. Reservation binds one immutable upload id to owner, object name, purpose, MIME, size,
+  and a server-owned one-hour expiry. Canonical lowercase owner paths and exact MIME/extension pairs
+  are enforced both at admission and by table constraints.
+- Finalize locks the exact registry identity and requires an exact
+  `storage.objects(bucket_id = 'posts', name = object_name)` row before changing `reserved` to
+  `uploaded`. Replay is idempotent and conflicting upload/object identities are rejected under real
+  concurrent sessions.
+- Finalize currently proves only bucket/name presence. It does **not** attest the Storage object's
+  actual metadata against the reserved MIME and size, so it is not yet sufficient claim evidence.
+- Both statuses are inert (`reserved` or `uploaded`), and `gc_admitted_at` is constrained to remain
+  `NULL`. The migration creates no claim, lease, cleanup, delete, cron, outbox, or Storage mutation
+  authority. No production upload route calls reserve/finalize yet.
+
+Commit `b8dc3e1cb` places 1100 exactly once in predeploy immediately after 1080. The runner proof is
+199 predeploy / 17 postdeploy / 226 unique classified migrations, with the Node contract still
+19/19. This is repository evidence, not proof that production applied the migration.
+
+The migration's dedicated Jest proof is 13/13, and its disposable PostgreSQL 17 proof covers clean
+install/replay, ACL and role-path drift, owner/path/MIME/expiry binding, privacy, and conflicting
+concurrent reservations. These proofs show that the inert boundary is closed; they do not show that
+any live upload is registered or safely reclaimable.
+
+## Why the registry substrate is not lifecycle completion
 
 The repository has a correct lease/ack cleanup model for private report evidence:
 `report_evidence_uploads` plus `/api/cron/cleanup-report-evidence`. It is intentionally bound to the
 private `reports` bucket and cannot safely be reused for public post objects.
 
-A complete fix requires a new `post_media_uploads` lifecycle, not a client URL deletion endpoint:
+A complete fix must extend and integrate `post_media_uploads`, not add a client URL deletion
+endpoint:
 
-1. Reserve an owner-bound object row before upload and finalize it only after Storage confirms the
-   exact server-derived path.
+1. Wire every image/video/group-avatar upload route to reserve before upload and finalize only after
+   verified Storage acknowledgement; strengthen finalization so the stored object's real metadata
+   is bound to the reserved MIME and size, not merely bucket/name presence.
 2. Claim uploaded rows inside the same database transaction as `create_post_atomic` and
    `edit_post_atomic`.
-3. Turn removed claims and deleted posts into cleanup-eligible rows; expire never-claimed uploads
-   after a short TTL.
-4. Lease bounded rows to a cron worker, remove through the Storage API, then acknowledge or release
+3. Quarantine or explicitly cover legacy object paths and include every non-post image consumer
+   (group applications/groups) in claim ownership before enabling image cleanup.
+4. Turn removed claims and deleted posts into cleanup-eligible rows; expire never-claimed uploads
+   only through an auditable database transition.
+5. Lease bounded rows to a cron worker, remove through the Storage API, then acknowledge or release
    the lease for retry.
-5. Include the non-post image consumers (group applications/groups) in claim ownership before
-   enabling image cleanup.
 
-This crosses upload routes, both atomic post mutations, group application approval, a migration,
-generated database types, and cron deployment. It should be delivered as a dedicated migration
-series rather than folded into the in-flight post-edit facet migration.
+Until all five steps and production proofs exist, claim/GC must remain disabled. Historical uploads
+do not match a guaranteed registered lifecycle, so treating them as ordinary expired rows would be
+unsafe. The remaining work crosses upload routes, both atomic post mutations, group application
+approval, generated database types, further migrations, and cron deployment; 1100 alone does not
+close P1.
 
 ## Executable verification
 
 ```sh
+npx jest --runInBand --runTestsByPath \
+  supabase/migrations/__tests__/post-media-upload-registry.test.ts
+supabase/migrations/__tests__/post-media-upload-registry.pg17.sh
+
 npx jest --runInBand --runTestsByPath \
   lib/posts/post-media-storage-path.test.ts \
   'app/api/posts/[id]/delete/__tests__/route.boundary.test.ts'
