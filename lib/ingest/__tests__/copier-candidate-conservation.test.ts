@@ -561,6 +561,16 @@ describe('durable copier candidate replay binding', () => {
     }
   })
 
+  it('rejects an unretained locator version without consulting the active selector', () => {
+    const binding = deriveCopierCandidateReplayBinding(source('bingx'))
+    expect(() =>
+      revalidateCopierCandidateReplayBinding({
+        ...binding,
+        candidate_locator_contract: 'arena.ingest.copier-candidate-locator.bingx@2',
+      })
+    ).toThrow('locator contract is not retained')
+  })
+
   it('rejects accessors, hidden fields, exotic prototypes, and extra binding fields', () => {
     const valid = deriveCopierCandidateReplayBinding(source('bingx'))
     let reads = 0
