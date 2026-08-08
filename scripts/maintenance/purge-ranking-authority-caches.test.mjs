@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const SCRIPT = resolve(ROOT, 'scripts/maintenance/purge-ranking-authority-caches.sh')
-const CONTRACT = 'public-rank-policy-v4+serving-metric-authority-v1'
+const CONTRACT = 'public-rank-policy-v7+serving-metric-authority-v1'
 const SHA = 'a'.repeat(40)
 
 function run(args, env = {}) {
