@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 const mockPush = jest.fn()
 const mockShowToast = jest.fn()
 const mockAuthedFetch = jest.fn()
+let mockSearchParams = new URLSearchParams()
 const VIEWER_A = '11111111-1111-4111-8111-111111111111'
 const VIEWER_B = '22222222-2222-4222-8222-222222222222'
 
@@ -57,7 +58,7 @@ let mockAuth: MockAuth = signedOut(1)
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams,
 }))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
@@ -198,6 +199,7 @@ function linkedResponse(userId: string, traderId: string) {
 describe('claim page login intent', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSearchParams = new URLSearchParams()
     mockAuth = signedOut(1)
     mockAuthedFetch.mockResolvedValue(
       response({ success: true, data: { linked_traders: [], count: 0 } })
@@ -219,6 +221,20 @@ describe('claim page login intent', () => {
       )
     )
     expect(mockShowToast).toHaveBeenCalledWith('pleaseLoginFirst', 'warning')
+  })
+
+  it('keeps direct-verification actions at the shared 44px target size', async () => {
+    mockSearchParams = new URLSearchParams({
+      trader: 'account/42',
+      source: 'binance',
+      handle: 'Alice Trader',
+      step: 'verify',
+    })
+
+    render(<ClaimPage />)
+
+    expect(await screen.findByRole('button', { name: 'change' })).toHaveClass('touch-target-sm')
+    expect(screen.getByRole('button', { name: 'loginToClaim' })).toHaveClass('touch-target-sm')
   })
 
   it('waits for auth bootstrap before deciding whether a selection needs login', async () => {

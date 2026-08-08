@@ -381,6 +381,7 @@ export default function ClaimPage() {
                 </Text>
               </Box>
               <button
+                className="touch-target-sm"
                 onClick={() => {
                   setStep('search')
                   setSelectedTrader(null)
@@ -407,6 +408,7 @@ export default function ClaimPage() {
               <Box style={{ textAlign: 'center' }}>
                 <Text style={{ marginBottom: tokens.spacing[3] }}>{t('pleaseLoginFirst')}</Text>
                 <button
+                  className="touch-target-sm"
                   onClick={() =>
                     router.push(
                       buildTraderClaimLoginHref({
