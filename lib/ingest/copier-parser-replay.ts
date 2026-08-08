@@ -10,10 +10,10 @@ import { parseCoinexCopiersV1 } from './adapters/coinex/copier-parser-v1'
 import { parseGateCopiersV1 } from './adapters/gate/copier-parser-v1'
 import { parseKucoinCopiersV1 } from './adapters/kucoin/copier-parser-v1'
 import { parseLbankCopiersV1 } from './adapters/lbank/copier-parser-v1'
-import { parseMexcHistory } from './adapters/mexc/parsers'
-import { parseOkxHistory } from './adapters/okx/parsers'
-import { parseToobitHistory } from './adapters/toobit/parsers'
-import { parseXtHistory } from './adapters/xt/parsers'
+import { parseMexcCopiersV1 } from './adapters/mexc/copier-parser-v1'
+import { parseOkxCopiersV1 } from './adapters/okx/copier-parser-v1'
+import { parseToobitCopiersV1 } from './adapters/toobit/copier-parser-v1'
+import { parseXtCopiersV1 } from './adapters/xt/copier-parser-v1'
 import {
   COPIER_CANDIDATE_ADAPTER_SLUGS,
   type CopierCandidateAdapterSlug,
@@ -95,18 +95,10 @@ const COPIER_SNAPSHOT_PARSER_IMPLEMENTATIONS: Readonly<
   [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.gate]: parserV1('gate', parseGateCopiersV1),
   [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.kucoin]: parserV1('kucoin', parseKucoinCopiersV1),
   [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.lbank]: parserV1('lbank', parseLbankCopiersV1),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.mexc]: parserV1('mexc', (raw, ctx) =>
-    parseMexcHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.okx]: parserV1('okx', (raw, ctx) =>
-    parseOkxHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.toobit]: parserV1('toobit', (raw, ctx) =>
-    parseToobitHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.xt]: parserV1('xt', (raw, ctx) =>
-    parseXtHistory(raw, 'copiers', ctx)
-  ),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.mexc]: parserV1('mexc', parseMexcCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.okx]: parserV1('okx', parseOkxCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.toobit]: parserV1('toobit', parseToobitCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.xt]: parserV1('xt', parseXtCopiersV1),
 })
 
 function parserReplayError(detail: string): Error {

@@ -77,5 +77,25 @@ exports[`append-only copier parser V1 keeps current adapters and retained replay
     "rowCount": 3,
     "sha256": "cecc08e74820b308888961751d40446df4536bdc5532183764c6015112d9c842",
   },
+  {
+    "case": "mexc followers",
+    "rowCount": 10,
+    "sha256": "0fefb22db5b0921fe8a33f50389ae3814cc241dadd850222276ec11bb8147d60",
+  },
+  {
+    "case": "okx SWAP copy traders",
+    "rowCount": 10,
+    "sha256": "076b8f26538e9015d161702a93687595984529679797a59d8d9c156dacf249d0",
+  },
+  {
+    "case": "toobit top followers",
+    "rowCount": 6,
+    "sha256": "75f251cd6f5208e6e7e3832e524a0a31ddca77c33c34aa8086c8dad6ec1c7afa",
+  },
+  {
+    "case": "xt followers",
+    "rowCount": 20,
+    "sha256": "50c046f457ecc681d04daffc75b9afb9ef36bd617a67119bb7ac177e7a0bc914",
+  },
 ]
 `;
