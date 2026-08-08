@@ -34,7 +34,6 @@ export default function UserProfileClient({
     email,
     currentUserId,
     profile,
-    mounted,
     isPro,
     isOwnProfile,
     t,
@@ -125,7 +124,6 @@ export default function UserProfileClient({
           handle={handle}
           isOwnProfile={isOwnProfile}
           currentUserId={currentUserId}
-          mounted={mounted}
           followersCount={followersCount}
           followingCount={followingCount}
           onFollowersCountChange={(delta) => setFollowersCount((prev) => prev + delta)}

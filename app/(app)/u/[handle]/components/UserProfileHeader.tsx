@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -27,7 +26,6 @@ interface UserProfileHeaderProps {
   handle: string
   isOwnProfile: boolean
   currentUserId: string | null
-  mounted: boolean
   followersCount: number
   followingCount: number
   onFollowersCountChange: (delta: number) => void
@@ -40,7 +38,6 @@ export default function UserProfileHeader({
   handle,
   isOwnProfile,
   currentUserId,
-  mounted,
   followersCount,
   followingCount,
   onFollowersCountChange,
@@ -49,7 +46,6 @@ export default function UserProfileHeader({
 }: UserProfileHeaderProps) {
   const router = useRouter()
   const { t, language } = useLanguage()
-  const [avatarHovered, setAvatarHovered] = useState(false)
 
   const joinedLabel = profile.created_at
     ? formatDateLocalized(profile.created_at, language, { year: 'numeric', month: 'long' })
@@ -80,8 +76,6 @@ export default function UserProfileHeader({
         boxShadow: '0 8px 32px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
         position: 'relative',
         overflow: 'visible',
-        opacity: mounted ? 1 : 0,
-        transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       {!hasCover && (
@@ -147,11 +141,7 @@ export default function UserProfileHeader({
         }}
       >
         {/* Avatar */}
-        <Box
-          style={{ position: 'relative', flexShrink: 0 }}
-          onMouseEnter={() => setAvatarHovered(true)}
-          onMouseLeave={() => setAvatarHovered(false)}
-        >
+        <Box style={{ position: 'relative', flexShrink: 0 }}>
           <Box
             className="profile-header-avatar"
             style={{
@@ -159,17 +149,12 @@ export default function UserProfileHeader({
               height: 72,
               borderRadius: tokens.radius.full,
               background: getAvatarGradient(profile.id),
-              border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+              border: `3px solid ${tokens.colors.border.primary}`,
               display: 'grid',
               placeItems: 'center',
               overflow: 'hidden',
               position: 'relative',
-              boxShadow: avatarHovered
-                ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${alpha(tokens.colors.accent.primary, 13)}`
-                : '0 4px 16px var(--color-overlay-light)',
-              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
-              cursor: 'pointer',
+              boxShadow: '0 4px 16px var(--color-overlay-light)',
             }}
           >
             <Text

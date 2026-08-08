@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { ServerProfile } from '../types'
 
 const mockPush = jest.fn()
@@ -56,13 +57,12 @@ function renderHeader({
 }) {
   const onFollowingClick = jest.fn()
 
-  render(
+  const view = render(
     <UserProfileHeader
       profile={profile(showFollowing)}
       handle="alice"
       isOwnProfile={isOwnProfile}
       currentUserId={isOwnProfile ? 'target-user' : 'viewer-user'}
-      mounted={true}
       followersCount={3}
       followingCount={7}
       onFollowersCountChange={jest.fn()}
@@ -71,7 +71,11 @@ function renderHeader({
     />
   )
 
-  return { onFollowingClick, followingButton: screen.getByRole('button', { name: '7 following' }) }
+  return {
+    container: view.container,
+    onFollowingClick,
+    followingButton: screen.getByRole('button', { name: '7 following' }),
+  }
 }
 
 describe('UserProfileHeader following privacy', () => {
@@ -86,6 +90,35 @@ describe('UserProfileHeader following privacy', () => {
     fireEvent.click(followingButton)
 
     expect(onFollowingClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps server-rendered profile identity visible before hydration', () => {
+    const markup = renderToStaticMarkup(
+      <UserProfileHeader
+        profile={profile(true)}
+        handle="alice"
+        isOwnProfile={false}
+        currentUserId={null}
+        followersCount={3}
+        followingCount={7}
+        onFollowersCountChange={jest.fn()}
+        onFollowingClick={jest.fn()}
+        onFollowersClick={jest.fn()}
+      />
+    )
+
+    expect(markup).toContain('profile-header')
+    expect(markup).toContain('alice')
+    expect(markup).not.toMatch(/opacity:\s*0/)
+  })
+
+  it('does not present the static avatar as an action', () => {
+    const { container } = renderHeader({ showFollowing: true })
+    const avatar = container.querySelector('.profile-header-avatar')
+
+    expect(avatar).not.toHaveAttribute('role', 'button')
+    expect(avatar).not.toHaveAttribute('tabindex')
+    expect(avatar).not.toHaveStyle({ cursor: 'pointer' })
   })
 
   it.each([false, undefined])(

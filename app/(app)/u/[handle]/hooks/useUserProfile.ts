@@ -84,7 +84,6 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     (recoveredProfileBelongsToRender ? (recoveredProfileState?.profile ?? null) : null)
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null)
   const [followersCount, setFollowersCount] = useState(serverProfile?.followers || 0)
-  const [mounted, setMounted] = useState(false)
   const mountedRef = useRef(false)
   const profileOperationRef = useRef(0)
   const blockOperationRef = useRef(0)
@@ -97,7 +96,6 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
 
   useEffect(() => {
     mountedRef.current = true
-    setMounted(true)
     return () => {
       mountedRef.current = false
       profileOperationRef.current += 1
@@ -335,7 +333,6 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     email,
     currentUserId,
     profile,
-    mounted,
     isPro,
     isOwnProfile,
     isBlocked,

@@ -79,7 +79,6 @@ function useProfileFixture() {
     email: null,
     currentUserId: mockIsOwnProfile ? mockProfile.id : 'viewer-user',
     profile: mockProfile,
-    mounted: true,
     isPro: false,
     isOwnProfile: mockIsOwnProfile,
     t: (key: string) => key,
