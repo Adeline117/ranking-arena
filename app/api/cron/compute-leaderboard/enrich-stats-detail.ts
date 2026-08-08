@@ -1,22 +1,28 @@
 /**
  * compute-leaderboard / enrich-stats-detail
  *
- * Phase 3: backfill missing metrics from `trader_stats_detail`. This catches
- * data from the enrichment cron that was written to stats_detail but never
- * propagated back to trader_snapshots_v2. Mutates traderMap in place.
+ * Phase 3: fill missing metrics from fresh, season-scoped
+ * `trader_stats_detail` evidence when the current ranking input lacks them.
+ * Mutates traderMap in place.
  *
  * Extracted from route.ts as part of the computeSeason main-loop split
  * (TASKS.md "Open follow-ups").
  */
 
 import { getSupabaseAdmin } from '@/lib/api'
+import {
+  PUBLIC_RANKING_FUTURE_TOLERANCE_MS,
+  PUBLIC_RANKING_MAX_COMPUTED_AGE_MS,
+} from '@/lib/rankings/publication-policy'
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderRow } from './trader-row'
+
+const STATS_TRADERS_PER_QUERY = 10
 
 /**
  * Find traders missing any of: win_rate, max_drawdown, sharpe, sortino,
  * calmar, trades_count. Then look them up in trader_stats_detail and fill
- * the gaps in place. Per-source query in chunks of 100, parallelized across
+ * the gaps in place. Per-source query in bounded chunks, parallelized across
  * sources.
  *
  * Returns the count of traders that were *attempted* (i.e. how many had at
@@ -43,6 +49,10 @@ export async function enrichFromStatsDetail(
 
   if (tradersNeedingEnrichment.length === 0) return 0
 
+  const nowMs = Date.now()
+  const capturedAfter = new Date(nowMs - PUBLIC_RANKING_MAX_COMPUTED_AGE_MS).toISOString()
+  const capturedBefore = new Date(nowMs + PUBLIC_RANKING_FUTURE_TOLERANCE_MS).toISOString()
+
   const enrichBySource = new Map<string, string[]>()
   for (const t of tradersNeedingEnrichment) {
     const ids = enrichBySource.get(t.source) || []
@@ -52,30 +62,30 @@ export async function enrichFromStatsDetail(
 
   await Promise.all(
     Array.from(enrichBySource.entries()).map(async ([source, traderIds]) => {
-      for (let i = 0; i < traderIds.length; i += 100) {
+      for (let i = 0; i < traderIds.length; i += STATS_TRADERS_PER_QUERY) {
         if (isOutOfTime(60_000)) break // leave time for scoring + upsert
-        const chunk = traderIds.slice(i, i + 100)
+        const chunk = traderIds.slice(i, i + STATS_TRADERS_PER_QUERY)
         const { data: statsRows } = await supabase
           .from('trader_stats_detail')
           .select(
-            'source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period'
+            'source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period, captured_at'
           )
           .eq('source', source)
+          .eq('period', season)
           .in('source_trader_id', chunk)
+          .gte('captured_at', capturedAfter)
+          .lte('captured_at', capturedBefore)
           .order('captured_at', { ascending: false })
           .limit(1000)
         if (!statsRows) continue
 
-        // Dedup: keep the best row per trader (prefer matching season, then most recent)
+        // Rows are already isolated to this season and ordered newest-first.
         const bestPerTrader = new Map<string, (typeof statsRows)[0]>()
         for (const sr of statsRows) {
           const tid = sr.source_trader_id.startsWith('0x')
             ? sr.source_trader_id.toLowerCase()
             : sr.source_trader_id
-          const existing = bestPerTrader.get(tid)
-          if (!existing || (sr.period === season && existing.period !== season)) {
-            bestPerTrader.set(tid, sr)
-          }
+          if (!bestPerTrader.has(tid)) bestPerTrader.set(tid, sr)
         }
 
         for (const [tid, sr] of bestPerTrader) {
