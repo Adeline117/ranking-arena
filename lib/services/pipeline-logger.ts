@@ -108,7 +108,6 @@ export class PipelineLogger {
     'pipeline-fetch',
     'fetch-details',
     'precompute-composite',
-    'compute-derived-metrics',
     'backfill-data',
 
     // Discovery & enrichment

@@ -39,8 +39,8 @@ test('registers exactly one three-hour freshness schedule without exceeding Verc
   const definitions = crons.filter((cron) => cron.path === FRESHNESS_PATH)
   const uniqueSchedulePaths = new Set(crons.map((cron) => cron.path))
   assert.deepEqual(definitions, [{ path: FRESHNESS_PATH, schedule: FRESHNESS_SCHEDULE }])
-  assert.equal(crons.length, 43)
-  assert.equal(uniqueSchedulePaths.size, 43)
+  assert.equal(crons.length, 42)
+  assert.equal(uniqueSchedulePaths.size, 42)
   assert.ok(crons.length <= 100, `expected at most 100 Vercel crons, found ${crons.length}`)
 
   const [minute, hourList, dayOfMonth, month, dayOfWeek] = FRESHNESS_SCHEDULE.split(' ')
@@ -107,7 +107,10 @@ test('documents the source_as_of authority and the no-alert inspection path', ()
   assert.match(runbook, /\/api\/admin\/data-freshness/)
   assert.match(runbook, /Never update `source_as_of` manually/)
   assert.match(runbook, /leaderboard_ranks\.computed_at/)
-  assert.match(runbook, /53 endpoints \/ 43 Vercel schedules/)
+  assert.match(
+    runbook,
+    new RegExp(`${cronRouteCount} endpoints / ${crons.length} Vercel schedules`)
+  )
   assert.doesNotMatch(runbook, /api\/cron\/(?:unified-connector|batch-fetch-traders|batch-enrich)/)
   assert.match(runbook, /scripts\/ingest-enqueue-region-smoke\.mts/)
   assert.match(runbook, /serving leaderboard uses Arena Score v4/)
