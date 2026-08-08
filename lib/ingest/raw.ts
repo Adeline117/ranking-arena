@@ -51,6 +51,7 @@ import {
   strictCanonicalSha256,
 } from './strict-canonical-json'
 import {
+  COPIER_SNAPSHOT_ARTIFACT_CONTRACT,
   copierSnapshotSourceRunId,
   copierSnapshotStoragePath,
   COPIER_SNAPSHOT_RAW_ARTIFACT_ROLE,
@@ -62,6 +63,11 @@ import {
   revalidateCopierSnapshotArtifactV2,
   type CopierSnapshotArtifactV2,
 } from './copier-snapshot-artifact-v2'
+import {
+  COPIER_CANDIDATE_LEDGER_CONTRACT,
+  COPIER_PARSER_CONSERVATION_CONTRACT,
+} from './copier-candidate-conservation'
+import { COPIER_SNAPSHOT_PROJECTION_LEDGER_CONTRACT } from './copier-snapshot-projection-ledger'
 
 export const RAW_BUCKET = 'raw-snapshots'
 
@@ -609,12 +615,15 @@ async function verifyExistingDeterministicRaw(
   return gzipBytes.byteLength
 }
 
+function deterministicRawMaxCompressedBytesForUncompressedBytes(uncompressedBytes: number): number {
+  const boundedOverhead = Math.max(64 * 1024, Math.ceil(uncompressedBytes / 16_384) * 16)
+  return Math.min(RAW_POINTER_MAX_COMPRESSED_BYTES, uncompressedBytes + boundedOverhead)
+}
+
 function deterministicRawMaxCompressedBytes(
   artifact: Pick<PreparedDeterministicRawArtifact, 'jsonBytes'>
 ): number {
-  const uncompressedBytes = artifact.jsonBytes.byteLength
-  const boundedOverhead = Math.max(64 * 1024, Math.ceil(uncompressedBytes / 16_384) * 16)
-  return Math.min(RAW_POINTER_MAX_COMPRESSED_BYTES, uncompressedBytes + boundedOverhead)
+  return deterministicRawMaxCompressedBytesForUncompressedBytes(artifact.jsonBytes.byteLength)
 }
 
 async function uploadDeterministicRaw(
@@ -1699,6 +1708,38 @@ export interface CopierSnapshotTrustRawArtifactV2Receipt extends RawObjectReceip
   readonly projectionLedgerSha256: string
 }
 
+export interface ReadVerifiedCopierSnapshotTrustRawArtifactV2Input {
+  readonly rawObjectId: number
+  readonly expectedSourceId: number
+  readonly expectedSourceSlug: string
+  readonly expectedTraderId: number
+  readonly expectedExchangeTraderId: string
+  readonly expectedLane: 'tier_b' | 'tier_c'
+  /** SHA-256 of the complete outer artifact@2 canonical bytes. */
+  readonly expectedSourceRunId: string
+  readonly expectedSnapshotSourceRunId: string
+  readonly expectedCandidateLedgerSha256: string
+  readonly expectedParserConservationSha256: string
+  readonly expectedProjectionLedgerSha256: string
+}
+
+export type LockedVerifiedCopierSnapshotTrustRawArtifactV2 = Readonly<{
+  contract: typeof COPIER_SNAPSHOT_ARTIFACT_V2_CONTRACT
+  /** Evidence binding only; never a completeness, rank, or publication grant. */
+  trustScope: 'raw_candidate_parser_projection_binding'
+  pointerSnapshot: Readonly<{
+    rawObjectId: number
+    sourceRunId: string
+    storagePath: string
+    observedAt: string
+  }>
+  snapshotSourceRunId: string
+  candidateLedgerSha256: string
+  parserConservationSha256: string
+  projectionLedgerSha256: string
+  artifact: CopierSnapshotArtifactV2
+}>
+
 interface CapturedCopierSnapshotTrustRawArtifactV2Input {
   readonly artifact: unknown
   readonly sourceRunId: string
@@ -1732,6 +1773,10 @@ interface CopierSnapshotTrustRawPointerRow {
   readonly meta: unknown
   readonly source_run_id: string | null
   readonly trust_artifact_role: string | null
+}
+
+interface LockedCopierSnapshotTrustRawPointerRow extends CopierSnapshotTrustRawPointerRow {
+  readonly gc_pending: boolean
 }
 
 function copierSnapshotTrustRawError(detail: string): Error {
@@ -2112,33 +2157,173 @@ interface ReadRawPayloadResult {
   uncompressedBytes: number
 }
 
-async function readRawPayload(
+function cancelRawDownloadReader(
+  reader: ReadableStreamDefaultReader<unknown>,
+  reason: Error
+): void {
+  try {
+    void reader.cancel(reason).catch(() => undefined)
+  } catch {
+    // The original bounded-read failure is authoritative; cancellation is best effort.
+  }
+}
+
+const rawTypedArrayTagGetter = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype) as object,
+  Symbol.toStringTag
+)?.get as ((this: unknown) => unknown) | undefined
+
+function isRawDownloadByteChunk(value: unknown): value is Uint8Array {
+  if (!ArrayBuffer.isView(value) || rawTypedArrayTagGetter === undefined) return false
+  try {
+    return Reflect.apply(rawTypedArrayTagGetter, value, []) === 'Uint8Array'
+  } catch {
+    return false
+  }
+}
+
+async function readBoundedRawDownload(
   rawObjectId: number,
   pointer: RawObjectPointer,
-  options: { maxUncompressedBytes?: number } = {}
-): Promise<ReadRawPayloadResult> {
-  const { data, error } = await getStorageClient()
-    .storage.from(RAW_BUCKET)
-    .download(pointer.storage_path)
-  if (error || !data) {
-    throw new Error(`[ingest] RAW download failed (${pointer.storage_path}): ${error?.message}`)
-  }
-
-  let gz: Buffer
+  maxCompressedBytes: number
+): Promise<Buffer> {
+  const download = getStorageClient().storage.from(RAW_BUCKET).download(pointer.storage_path)
+  let data: ReadableStream<unknown> | null
+  let error: { message?: string } | null
   try {
-    gz = Buffer.from(await data.arrayBuffer())
-  } catch (downloadError) {
+    ;({ data, error } = await download.asStream())
+  } catch (cause) {
     throw new Error(
-      `[ingest] RAW download body failed (${pointer.storage_path}): ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`
+      `[ingest] RAW stream download failed (${pointer.storage_path}): ${asError(cause).message}`
+    )
+  }
+  if (error || !data || typeof data.getReader !== 'function') {
+    throw new Error(
+      `[ingest] RAW stream download failed (${pointer.storage_path}): ${error?.message ?? 'empty stream body'}`
     )
   }
 
+  let reader: ReadableStreamDefaultReader<unknown>
+  try {
+    reader = data.getReader()
+  } catch (cause) {
+    throw new Error(
+      `[ingest] RAW stream reader failed (${pointer.storage_path}): ${asError(cause).message}`
+    )
+  }
+  const gz = Buffer.allocUnsafe(pointer.bytes)
+  let offset = 0
+  try {
+    while (true) {
+      let result: ReadableStreamReadResult<unknown>
+      try {
+        result = await reader.read()
+      } catch (cause) {
+        const streamError = new Error(
+          `[ingest] RAW stream body failed (${pointer.storage_path}): ${asError(cause).message}`
+        )
+        cancelRawDownloadReader(reader, streamError)
+        throw streamError
+      }
+
+      if (result.done === true) {
+        if (result.value !== undefined) {
+          const malformed = rawIntegrityError(
+            rawObjectId,
+            pointer.storage_path,
+            'stream EOF contained an unexpected chunk'
+          )
+          cancelRawDownloadReader(reader, malformed)
+          throw malformed
+        }
+        break
+      }
+      if (result.done !== false || !isRawDownloadByteChunk(result.value)) {
+        const malformed = rawIntegrityError(
+          rawObjectId,
+          pointer.storage_path,
+          'stream returned a non-byte chunk'
+        )
+        cancelRawDownloadReader(reader, malformed)
+        throw malformed
+      }
+      const chunk = result.value
+      if (
+        chunk.byteLength === 0 ||
+        chunk.byteLength > maxCompressedBytes - offset ||
+        chunk.byteLength > pointer.bytes - offset
+      ) {
+        const oversized = rawIntegrityError(
+          rawObjectId,
+          pointer.storage_path,
+          'Storage object exceeds the compressed byte limit'
+        )
+        cancelRawDownloadReader(reader, oversized)
+        throw oversized
+      }
+      gz.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      // A failed/mocked stream may already have released its reader.
+    }
+  }
+
+  if (offset !== pointer.bytes) {
+    throw rawIntegrityError(
+      rawObjectId,
+      pointer.storage_path,
+      `compressed byte count mismatch (expected ${pointer.bytes}, received ${offset})`
+    )
+  }
+  return gz
+}
+
+async function readRawPayload(
+  rawObjectId: number,
+  pointer: RawObjectPointer,
+  options: { maxCompressedBytes?: number; maxUncompressedBytes?: number } = {}
+): Promise<ReadRawPayloadResult> {
+  if (
+    options.maxCompressedBytes !== undefined &&
+    (!Number.isSafeInteger(options.maxCompressedBytes) || options.maxCompressedBytes < 0)
+  ) {
+    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'compressed byte limit is invalid')
+  }
   if (!Number.isSafeInteger(pointer.bytes) || pointer.bytes < 0) {
     throw rawIntegrityError(
       rawObjectId,
       pointer.storage_path,
       'stored compressed byte count is invalid'
     )
+  }
+  let gz: Buffer
+  if (options.maxCompressedBytes !== undefined) {
+    if (pointer.bytes > options.maxCompressedBytes) {
+      throw rawIntegrityError(
+        rawObjectId,
+        pointer.storage_path,
+        'stored compressed byte count exceeds the compressed byte limit'
+      )
+    }
+    gz = await readBoundedRawDownload(rawObjectId, pointer, options.maxCompressedBytes)
+  } else {
+    const { data, error } = await getStorageClient()
+      .storage.from(RAW_BUCKET)
+      .download(pointer.storage_path)
+    if (error || !data) {
+      throw new Error(`[ingest] RAW download failed (${pointer.storage_path}): ${error?.message}`)
+    }
+    try {
+      gz = Buffer.from(await data.arrayBuffer())
+    } catch (downloadError) {
+      throw new Error(
+        `[ingest] RAW download body failed (${pointer.storage_path}): ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`
+      )
+    }
   }
   if (gz.byteLength !== pointer.bytes) {
     throw rawIntegrityError(
@@ -2238,6 +2423,432 @@ export async function readRawObject(rawObjectId: number): Promise<unknown> {
     throw new Error(`[ingest] raw object ${rawObjectId} not found`)
   }
   return (await readRawPayload(rawObjectId, rows[0])).payload
+}
+
+const VERIFIED_COPIER_SNAPSHOT_TRUST_RAW_INPUT_FIELDS = Object.freeze([
+  'rawObjectId',
+  'expectedSourceId',
+  'expectedSourceSlug',
+  'expectedTraderId',
+  'expectedExchangeTraderId',
+  'expectedLane',
+  'expectedSourceRunId',
+  'expectedSnapshotSourceRunId',
+  'expectedCandidateLedgerSha256',
+  'expectedParserConservationSha256',
+  'expectedProjectionLedgerSha256',
+] as const)
+
+function verifiedCopierSnapshotTrustRawReadError(
+  rawObjectId: number | null,
+  detail: string
+): Error {
+  return new Error(
+    `[ingest] verified copier snapshot trust RAW read failed (id=${rawObjectId ?? 'unread'}): ${detail}`
+  )
+}
+
+function captureVerifiedCopierSnapshotTrustRawReadInput(
+  value: unknown
+): ReadVerifiedCopierSnapshotTrustRawArtifactV2Input {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || isProxy(value)) {
+    throw verifiedCopierSnapshotTrustRawReadError(null, 'input must be a non-proxy plain object')
+  }
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw verifiedCopierSnapshotTrustRawReadError(null, 'input must be a non-proxy plain object')
+  }
+  const ownKeys = Reflect.ownKeys(value)
+  if (
+    ownKeys.length !== VERIFIED_COPIER_SNAPSHOT_TRUST_RAW_INPUT_FIELDS.length ||
+    ownKeys.some(
+      (key) =>
+        typeof key !== 'string' ||
+        !VERIFIED_COPIER_SNAPSHOT_TRUST_RAW_INPUT_FIELDS.includes(
+          key as (typeof VERIFIED_COPIER_SNAPSHOT_TRUST_RAW_INPUT_FIELDS)[number]
+        )
+    )
+  ) {
+    throw verifiedCopierSnapshotTrustRawReadError(null, 'input must have the exact anchor fields')
+  }
+
+  const captured: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+  for (const field of VERIFIED_COPIER_SNAPSHOT_TRUST_RAW_INPUT_FIELDS) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, field)
+    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+      throw verifiedCopierSnapshotTrustRawReadError(
+        null,
+        'input anchors must be enumerable data properties'
+      )
+    }
+    captured[field] = descriptor.value
+  }
+
+  const rawObjectId = captured.rawObjectId
+  const sourceId = captured.expectedSourceId
+  const traderId = captured.expectedTraderId
+  if (typeof rawObjectId !== 'number' || !Number.isSafeInteger(rawObjectId) || rawObjectId <= 0) {
+    throw verifiedCopierSnapshotTrustRawReadError(null, 'raw object id is invalid')
+  }
+  if (typeof sourceId !== 'number' || !Number.isSafeInteger(sourceId) || sourceId <= 0) {
+    throw verifiedCopierSnapshotTrustRawReadError(rawObjectId, 'expected source id is invalid')
+  }
+  if (typeof traderId !== 'number' || !Number.isSafeInteger(traderId) || traderId <= 0) {
+    throw verifiedCopierSnapshotTrustRawReadError(rawObjectId, 'expected trader id is invalid')
+  }
+  const sourceSlug = captured.expectedSourceSlug
+  if (typeof sourceSlug !== 'string' || !/^[a-z0-9][a-z0-9_]{0,127}$/.test(sourceSlug)) {
+    throw verifiedCopierSnapshotTrustRawReadError(rawObjectId, 'expected source slug is invalid')
+  }
+  const exchangeTraderId = captured.expectedExchangeTraderId
+  if (
+    typeof exchangeTraderId !== 'string' ||
+    exchangeTraderId.length < 1 ||
+    exchangeTraderId.length > 512 ||
+    exchangeTraderId.trim() !== exchangeTraderId
+  ) {
+    throw verifiedCopierSnapshotTrustRawReadError(
+      rawObjectId,
+      'expected exchange trader id is invalid'
+    )
+  }
+  const lane = captured.expectedLane
+  if (lane !== 'tier_b' && lane !== 'tier_c') {
+    throw verifiedCopierSnapshotTrustRawReadError(rawObjectId, 'expected lane is invalid')
+  }
+  for (const [label, digest] of [
+    ['outer source run id', captured.expectedSourceRunId],
+    ['snapshot source run id', captured.expectedSnapshotSourceRunId],
+    ['candidate ledger digest', captured.expectedCandidateLedgerSha256],
+    ['parser conservation digest', captured.expectedParserConservationSha256],
+    ['projection ledger digest', captured.expectedProjectionLedgerSha256],
+  ] as const) {
+    if (typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) {
+      throw verifiedCopierSnapshotTrustRawReadError(rawObjectId, `expected ${label} is invalid`)
+    }
+  }
+
+  return Object.freeze({
+    rawObjectId,
+    expectedSourceId: sourceId,
+    expectedSourceSlug: sourceSlug,
+    expectedTraderId: traderId,
+    expectedExchangeTraderId: exchangeTraderId,
+    expectedLane: lane,
+    expectedSourceRunId: captured.expectedSourceRunId as string,
+    expectedSnapshotSourceRunId: captured.expectedSnapshotSourceRunId as string,
+    expectedCandidateLedgerSha256: captured.expectedCandidateLedgerSha256 as string,
+    expectedParserConservationSha256: captured.expectedParserConservationSha256 as string,
+    expectedProjectionLedgerSha256: captured.expectedProjectionLedgerSha256 as string,
+  })
+}
+
+async function loadLockedCopierSnapshotTrustRawPointers(
+  transaction: IngestQueryExecutor,
+  input: ReadVerifiedCopierSnapshotTrustRawArtifactV2Input
+): Promise<LockedCopierSnapshotTrustRawPointerRow[]> {
+  const { rows } = await transaction.query<LockedCopierSnapshotTrustRawPointerRow>(
+    `SELECT id, source_id, job_type, trader_id, timeframe,
+            fetched_at::text AS fetched_at, storage_path,
+            bytes, content_hash, quarantined, meta,
+            source_run_id, trust_artifact_role,
+            EXISTS (
+              SELECT 1
+              FROM arena.raw_object_gc_queue AS gc
+              WHERE gc.storage_path = raw_object.storage_path
+            ) AS gc_pending
+       FROM arena.raw_objects AS raw_object
+      WHERE raw_object.id = $1
+         OR (
+           raw_object.source_run_id = $2
+           AND raw_object.trust_artifact_role = $3
+         )
+      ORDER BY raw_object.id
+      FOR SHARE`,
+    [input.rawObjectId, input.expectedSourceRunId, COPIER_SNAPSHOT_TRUST_RAW_ARTIFACT_ROLE]
+  )
+  return rows
+}
+
+function expectedCopierSnapshotTrustRawReadMeta(
+  input: ReadVerifiedCopierSnapshotTrustRawArtifactV2Input,
+  observedAt: string,
+  compressedBytes: number,
+  uncompressedBytes: number
+): Record<string, unknown> {
+  return rawIntegrityMeta(
+    {
+      surface: 'copiers',
+      data_contract: COPIER_SNAPSHOT_ARTIFACT_V2_CONTRACT,
+      source_run_id: input.expectedSourceRunId,
+      source_id: input.expectedSourceId,
+      source_slug: input.expectedSourceSlug,
+      trader_id: input.expectedTraderId,
+      lane: input.expectedLane,
+      observed_at: observedAt,
+      snapshot_artifact_contract: COPIER_SNAPSHOT_ARTIFACT_CONTRACT,
+      snapshot_source_run_id: input.expectedSnapshotSourceRunId,
+      candidate_ledger_contract: COPIER_CANDIDATE_LEDGER_CONTRACT,
+      candidate_ledger_sha256: input.expectedCandidateLedgerSha256,
+      parser_conservation_contract: COPIER_PARSER_CONSERVATION_CONTRACT,
+      parser_conservation_sha256: input.expectedParserConservationSha256,
+      projection_ledger_contract: COPIER_SNAPSHOT_PROJECTION_LEDGER_CONTRACT,
+      projection_ledger_sha256: input.expectedProjectionLedgerSha256,
+    },
+    STRICT_CANONICAL_JSON_CONTRACT,
+    compressedBytes,
+    uncompressedBytes
+  )
+}
+
+interface ValidatedLockedCopierSnapshotTrustRawPointer {
+  readonly pointer: LockedCopierSnapshotTrustRawPointerRow
+  readonly observedAt: string
+  readonly uncompressedBytes: number
+  readonly maxCompressedBytes: number
+}
+
+function validateLockedCopierSnapshotTrustRawPointer(
+  rows: readonly LockedCopierSnapshotTrustRawPointerRow[],
+  input: ReadVerifiedCopierSnapshotTrustRawArtifactV2Input
+): ValidatedLockedCopierSnapshotTrustRawPointer {
+  if (rows.length !== 1) {
+    throw verifiedCopierSnapshotTrustRawReadError(
+      input.rawObjectId,
+      `expected one locked pointer for the outer source run, found ${rows.length}`
+    )
+  }
+  const pointer = rows[0]
+  const expectedJobType = input.expectedLane === 'tier_b' ? 'history:copiers' : 'tier_c'
+  const expectedStoragePath =
+    `${input.expectedSourceSlug}/copier_snapshot_trust/${input.expectedLane}/` +
+    `${input.expectedSourceRunId}/copier_snapshot_trust_${input.expectedSourceRunId}.json.gz`
+
+  let meta: Record<string, unknown> | null = null
+  let serializedMeta: string | null = null
+  try {
+    serializedMeta = strictCanonicalJson(pointer.meta)
+    const parsed: unknown = JSON.parse(serializedMeta)
+    meta = isRecord(parsed) ? parsed : null
+  } catch {
+    meta = null
+  }
+  const rawIntegrity = meta && isRecord(meta.raw_integrity) ? meta.raw_integrity : null
+  const observedAt = meta?.observed_at
+  const observedEpoch = typeof observedAt === 'string' ? Date.parse(observedAt) : Number.NaN
+  const uncompressedBytes = rawIntegrity?.uncompressed_bytes
+  const maxCompressedBytes =
+    typeof uncompressedBytes === 'number' &&
+    Number.isSafeInteger(uncompressedBytes) &&
+    uncompressedBytes > 0 &&
+    uncompressedBytes <= COPIER_SNAPSHOT_TRUST_RAW_MAX_UNCOMPRESSED_BYTES
+      ? deterministicRawMaxCompressedBytesForUncompressedBytes(uncompressedBytes)
+      : -1
+  const expectedMeta =
+    typeof observedAt === 'string' && maxCompressedBytes >= 0
+      ? expectedCopierSnapshotTrustRawReadMeta(
+          input,
+          observedAt,
+          pointer.bytes,
+          uncompressedBytes as number
+        )
+      : null
+  let metaMatches = false
+  try {
+    metaMatches =
+      serializedMeta !== null &&
+      expectedMeta !== null &&
+      serializedMeta === strictCanonicalJson(expectedMeta)
+  } catch {
+    metaMatches = false
+  }
+
+  if (
+    pointer.id !== input.rawObjectId ||
+    pointer.source_id !== input.expectedSourceId ||
+    pointer.job_type !== expectedJobType ||
+    pointer.trader_id !== input.expectedTraderId ||
+    pointer.timeframe !== null ||
+    typeof pointer.fetched_at !== 'string' ||
+    !Number.isFinite(Date.parse(pointer.fetched_at)) ||
+    pointer.storage_path !== expectedStoragePath ||
+    !Number.isSafeInteger(pointer.bytes) ||
+    pointer.bytes <= 0 ||
+    maxCompressedBytes < 0 ||
+    pointer.bytes > maxCompressedBytes ||
+    pointer.content_hash !== input.expectedSourceRunId ||
+    pointer.quarantined !== false ||
+    pointer.gc_pending !== false ||
+    pointer.source_run_id !== input.expectedSourceRunId ||
+    pointer.trust_artifact_role !== COPIER_SNAPSHOT_TRUST_RAW_ARTIFACT_ROLE ||
+    typeof observedAt !== 'string' ||
+    !Number.isFinite(observedEpoch) ||
+    new Date(observedEpoch).toISOString() !== observedAt ||
+    !metaMatches
+  ) {
+    throw verifiedCopierSnapshotTrustRawReadError(
+      input.rawObjectId,
+      'locked pointer does not match the expected artifact@2 identity'
+    )
+  }
+
+  return Object.freeze({
+    pointer,
+    observedAt,
+    uncompressedBytes: uncompressedBytes as number,
+    maxCompressedBytes,
+  })
+}
+
+async function validateLockedCopierSnapshotTrustFetchedAt(
+  transaction: IngestQueryExecutor,
+  rawObjectId: number,
+  expectedFetchedAt: string
+): Promise<void> {
+  const { rows } = await transaction.query<{ exact_instant: boolean; not_future: boolean }>(
+    `SELECT fetched_at = $2::timestamptz AS exact_instant,
+            fetched_at <= pg_catalog.statement_timestamp() + interval '5 minutes' AS not_future
+       FROM arena.raw_objects
+      WHERE id = $1`,
+    [rawObjectId, expectedFetchedAt]
+  )
+  if (rows.length !== 1 || rows[0].exact_instant !== true || rows[0].not_future !== true) {
+    throw verifiedCopierSnapshotTrustRawReadError(
+      rawObjectId,
+      'locked pointer timestamp does not match the artifact@2 observation clock'
+    )
+  }
+}
+
+/**
+ * Lock, read, and replay one copier artifact@2 under independently supplied
+ * pointer, account, outer, and child-hash anchors, then consume it inside the
+ * same caller-owned transaction. The evidence binds captured RAW candidates to
+ * their parser and projection only. It grants no capture completeness, rank
+ * eligibility, publication permission, or authority over current database
+ * source/trader rows; consumers must lock and validate those rows separately.
+ * Retaining the frozen evidence after this callback grants no additional trust.
+ */
+export async function withVerifiedCopierSnapshotTrustRawArtifactV2<T>(
+  input: ReadVerifiedCopierSnapshotTrustRawArtifactV2Input,
+  runTransaction: IngestTransactionRunner,
+  consume: (
+    transaction: IngestQueryExecutor,
+    evidence: LockedVerifiedCopierSnapshotTrustRawArtifactV2
+  ) => Promise<T>
+): Promise<T> {
+  // Function authority is checked before inspecting a possibly hostile input envelope.
+  if (typeof runTransaction !== 'function') {
+    throw verifiedCopierSnapshotTrustRawReadError(null, 'a claimed transaction runner is required')
+  }
+  if (typeof consume !== 'function') {
+    throw verifiedCopierSnapshotTrustRawReadError(null, 'a locked consumer is required')
+  }
+  const captured = captureVerifiedCopierSnapshotTrustRawReadInput(input)
+
+  return runTransaction(async (transaction) => {
+    await transaction.query(
+      `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+      [`arena.copier-snapshot-trust-raw-artifact:${captured.expectedSourceRunId}`]
+    )
+    const locked = validateLockedCopierSnapshotTrustRawPointer(
+      await loadLockedCopierSnapshotTrustRawPointers(transaction, captured),
+      captured
+    )
+    const raw = await readRawPayload(captured.rawObjectId, locked.pointer, {
+      // The locked pointer is both below the policy ceiling and the exact byte count.
+      maxCompressedBytes: Math.min(locked.maxCompressedBytes, locked.pointer.bytes),
+      maxUncompressedBytes: locked.uncompressedBytes,
+    })
+    let verified: ReturnType<typeof revalidateCopierSnapshotArtifactV2>
+    try {
+      verified = revalidateCopierSnapshotArtifactV2({
+        artifact: raw.payload,
+        expectedSourceRunId: captured.expectedSourceRunId,
+      })
+    } catch (cause) {
+      throw verifiedCopierSnapshotTrustRawReadError(
+        captured.rawObjectId,
+        `artifact@2 semantic replay failed: ${asError(cause).message}`
+      )
+    }
+    const artifact = verified.artifact
+    const snapshot = artifact.snapshot
+    if (
+      snapshot.source.id !== captured.expectedSourceId ||
+      snapshot.source.slug !== captured.expectedSourceSlug ||
+      snapshot.trader.id !== captured.expectedTraderId ||
+      snapshot.trader.exchange_trader_id !== captured.expectedExchangeTraderId ||
+      snapshot.lane !== captured.expectedLane ||
+      artifact.snapshot_source_run_id !== captured.expectedSnapshotSourceRunId ||
+      artifact.candidate_ledger_sha256 !== captured.expectedCandidateLedgerSha256 ||
+      artifact.parser_conservation_sha256 !== captured.expectedParserConservationSha256 ||
+      artifact.projection_ledger_sha256 !== captured.expectedProjectionLedgerSha256
+    ) {
+      throw verifiedCopierSnapshotTrustRawReadError(
+        captured.rawObjectId,
+        'artifact@2 coordinates or child anchors do not match the locked pointer'
+      )
+    }
+    await validateLockedCopierSnapshotTrustFetchedAt(
+      transaction,
+      captured.rawObjectId,
+      snapshot.observed_at
+    )
+
+    const expectedMeta = rawIntegrityMeta(
+      copierSnapshotTrustRawMetaBase({
+        artifact,
+        sourceRunId: captured.expectedSourceRunId,
+        storagePath: locked.pointer.storage_path,
+        jobType: captured.expectedLane === 'tier_b' ? 'history:copiers' : 'tier_c',
+      }),
+      STRICT_CANONICAL_JSON_CONTRACT,
+      raw.compressedBytes,
+      raw.uncompressedBytes
+    )
+    let metaMatches = false
+    try {
+      metaMatches = strictCanonicalJson(locked.pointer.meta) === strictCanonicalJson(expectedMeta)
+    } catch {
+      metaMatches = false
+    }
+    if (!metaMatches) {
+      throw verifiedCopierSnapshotTrustRawReadError(
+        captured.rawObjectId,
+        'locked pointer metadata is not the exact artifact@2 evidence contract'
+      )
+    }
+
+    const evidence: LockedVerifiedCopierSnapshotTrustRawArtifactV2 = Object.freeze({
+      contract: COPIER_SNAPSHOT_ARTIFACT_V2_CONTRACT,
+      trustScope: 'raw_candidate_parser_projection_binding',
+      pointerSnapshot: Object.freeze({
+        rawObjectId: captured.rawObjectId,
+        sourceRunId: captured.expectedSourceRunId,
+        storagePath: locked.pointer.storage_path,
+        observedAt: snapshot.observed_at,
+      }),
+      snapshotSourceRunId: artifact.snapshot_source_run_id,
+      candidateLedgerSha256: artifact.candidate_ledger_sha256,
+      parserConservationSha256: artifact.parser_conservation_sha256,
+      projectionLedgerSha256: artifact.projection_ledger_sha256,
+      artifact,
+    })
+    const result = await consume(transaction, evidence)
+
+    const reloaded = validateLockedCopierSnapshotTrustRawPointer(
+      await loadLockedCopierSnapshotTrustRawPointers(transaction, captured),
+      captured
+    )
+    if (strictCanonicalJson(reloaded.pointer) !== strictCanonicalJson(locked.pointer)) {
+      throw verifiedCopierSnapshotTrustRawReadError(
+        captured.rawObjectId,
+        'locked pointer changed during artifact@2 consumption'
+      )
+    }
+    return result
+  })
 }
 
 function verifiedPositionHistoryRawReadError(rawObjectId: number, detail: string): Error {
