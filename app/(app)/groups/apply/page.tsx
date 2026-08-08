@@ -12,7 +12,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
-import { authedFetch } from '@/lib/api/client'
+import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import { logger } from '@/lib/logger'
@@ -243,10 +243,14 @@ export default function ApplyGroupPage() {
       formData.append('purpose', 'group_avatar')
       formData.append('userId', requestUserId)
 
-      // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+      // /api/posts/upload-image uses the shared authenticated write middleware,
+      // so the bearer identity and double-submit CSRF proof are both required.
       const response = await fetch('/api/posts/upload-image', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${uploadToken}` },
+        headers: {
+          Authorization: `Bearer ${uploadToken}`,
+          ...getCsrfHeaders(),
+        },
         body: formData,
       })
       if (!operationIsCurrent()) return

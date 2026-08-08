@@ -21,7 +21,10 @@ jest.mock('@/app/components/home/hooks/useSubscription', () => ({
 }))
 jest.mock('@/app/components/ui/Toast', () => ({ useToast: jest.fn() }))
 jest.mock('@/lib/hooks/useUnsavedChangesGuard', () => ({ useUnsavedChangesGuard: jest.fn() }))
-jest.mock('@/lib/api/client', () => ({ authedFetch: jest.fn() }))
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: jest.fn(),
+  getCsrfHeaders: jest.fn(() => ({ 'x-csrf-token': 'csrf-test' })),
+}))
 jest.mock('@/lib/auth/token-refresh', () => ({
   tokenRefreshCoordinator: { getValidToken: jest.fn() },
 }))
@@ -98,12 +101,13 @@ import { useToast } from '@/app/components/ui/Toast'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import { authedFetch } from '@/lib/api/client'
+import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import ApplyGroupPage from '../page'
 
 const mockUseAuthSession = useAuthSession as jest.Mock
 const mockUseToast = useToast as jest.Mock
 const mockAuthedFetch = authedFetch as jest.Mock
+const mockGetCsrfHeaders = getCsrfHeaders as jest.Mock
 const mockGetValidToken = tokenRefreshCoordinator.getValidToken as jest.Mock
 const showToast = jest.fn()
 const USER_A = '11111111-1111-4111-8111-111111111111'
@@ -318,7 +322,10 @@ describe('group application viewer ownership', () => {
     expect(new Headers(firstRequest.headers).get('authorization')).toBe(
       `Bearer ${jwt(USER_A, 'fresh')}`
     )
+    expect(new Headers(firstRequest.headers).get('x-csrf-token')).toBe('csrf-test')
+    expect(mockGetCsrfHeaders).toHaveBeenCalledTimes(1)
     expect((firstRequest.body as FormData).get('userId')).toBe(USER_A)
+    expect((firstRequest.body as FormData).get('purpose')).toBe('group_avatar')
 
     const scopeB = synchronizeViewerScope(true, USER_B)
     currentAuth = authFor(USER_B, scopeB.sessionGeneration)
@@ -330,7 +337,10 @@ describe('group application viewer ownership', () => {
     expect(new Headers(secondRequest.headers).get('authorization')).toBe(
       `Bearer ${jwt(USER_B, 'fresh')}`
     )
+    expect(new Headers(secondRequest.headers).get('x-csrf-token')).toBe('csrf-test')
+    expect(mockGetCsrfHeaders).toHaveBeenCalledTimes(2)
     expect((secondRequest.body as FormData).get('userId')).toBe(USER_B)
+    expect((secondRequest.body as FormData).get('purpose')).toBe('group_avatar')
 
     await act(async () =>
       responseA.resolve({
