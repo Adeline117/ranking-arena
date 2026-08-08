@@ -1,7 +1,7 @@
-import { parseBinanceHistory } from './adapters/binance/parsers'
-import { parseBingxHistory } from './adapters/bingx/parsers'
-import { parseBitgetBotsCopiers } from './adapters/bitget/bots-parsers'
-import { parseBitgetHistory } from './adapters/bitget/parsers'
+import { parseBinanceCopiersV1 } from './adapters/binance/copier-parser-v1'
+import { parseBingxCopiersV1 } from './adapters/bingx/copier-parser-v1'
+import { parseBitgetBotsCopiersV1 } from './adapters/bitget/bots-copier-parser-v1'
+import { parseBitgetCopiersV1 } from './adapters/bitget/copier-parser-v1'
 import { parseBitunixHistory } from './adapters/bitunix/parsers'
 import { parseBlofinHistory } from './adapters/blofin/parsers'
 import { parseBtccHistory } from './adapters/btcc/parsers'
@@ -18,6 +18,10 @@ import {
   COPIER_CANDIDATE_ADAPTER_SLUGS,
   type CopierCandidateAdapterSlug,
 } from './copier-candidate-conservation'
+import {
+  buildCopierSnapshotParserContextV1,
+  type CopierParserContextV1Input,
+} from './copier-parser-context-v1'
 import type { Currency, ParseCtx, ParsedHistoryRow, ProductType } from './core/types'
 
 export type CopierSnapshotParserContract =
@@ -48,34 +52,10 @@ export const COPIER_SNAPSHOT_PARSER_CONTRACTS = Object.freeze({
   ...COPIER_SNAPSHOT_PARSER_V1_CONTRACTS,
 })
 
-type ParserContextInput = Readonly<{
-  productType: ProductType
-  sourceSlug: string
-  currency: Currency
-  scrapedAt: string
-}>
-
 interface CopierParserReplayImplementation {
   readonly adapterSlug: CopierCandidateAdapterSlug
   readonly replay: (raw: unknown, ctx: ParseCtx) => ParsedHistoryRow[]
-  readonly buildContext: (input: ParserContextInput) => Readonly<ParseCtx>
-}
-
-function buildParserContextV1(
-  adapterSlug: CopierCandidateAdapterSlug,
-  input: ParserContextInput
-): Readonly<ParseCtx> {
-  const meta =
-    adapterSlug === 'gate'
-      ? Object.freeze({ boardKey: input.productType as 'futures' | 'cfd' })
-      : Object.freeze({})
-  return Object.freeze({
-    sourceSlug: input.sourceSlug,
-    currency: input.currency,
-    tfLabelMap: Object.freeze({}),
-    scrapedAt: input.scrapedAt,
-    meta,
-  })
+  readonly buildContext: (input: CopierParserContextV1Input) => Readonly<ParseCtx>
 }
 
 function parserV1(
@@ -85,7 +65,8 @@ function parserV1(
   return Object.freeze({
     adapterSlug,
     replay,
-    buildContext: (input: ParserContextInput) => buildParserContextV1(adapterSlug, input),
+    buildContext: (input: CopierParserContextV1Input) =>
+      buildCopierSnapshotParserContextV1(adapterSlug, input),
   })
 }
 
@@ -96,18 +77,12 @@ function parserV1(
 const COPIER_SNAPSHOT_PARSER_IMPLEMENTATIONS: Readonly<
   Record<string, CopierParserReplayImplementation>
 > = Object.freeze({
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.binance]: parserV1('binance', (raw, ctx) =>
-    parseBinanceHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bingx]: parserV1('bingx', (raw, ctx) =>
-    parseBingxHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bitget]: parserV1('bitget', (raw, ctx) =>
-    parseBitgetHistory(raw, 'copiers', ctx)
-  ),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.binance]: parserV1('binance', parseBinanceCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bingx]: parserV1('bingx', parseBingxCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bitget]: parserV1('bitget', parseBitgetCopiersV1),
   [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bitget_bots]: parserV1(
     'bitget_bots',
-    parseBitgetBotsCopiers
+    parseBitgetBotsCopiersV1
   ),
   [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bitunix]: parserV1('bitunix', (raw, ctx) =>
     parseBitunixHistory(raw, 'copiers', ctx)

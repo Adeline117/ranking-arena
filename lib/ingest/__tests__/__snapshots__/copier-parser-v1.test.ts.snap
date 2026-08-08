@@ -1,0 +1,36 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`append-only copier parser V1 first batch keeps current adapters and retained replay byte-equivalent on real fixtures 1`] = `
+[
+  {
+    "case": "binance futures envelope",
+    "rowCount": 50,
+    "sha256": "bf57ecf3817155dda19a4497835e66aacae85e080b5e64f30159a1396b1fa459",
+  },
+  {
+    "case": "binance spot envelope",
+    "rowCount": 50,
+    "sha256": "a6f629a61ea942997bc24134d07301949861c2056bf3b2b4d379cd6e00babdcf",
+  },
+  {
+    "case": "bingx followers response",
+    "rowCount": 12,
+    "sha256": "b0a11dc5ee72007d9311b78e239175c37534164f844700c64111c30945d01161",
+  },
+  {
+    "case": "bitget bare response",
+    "rowCount": 2,
+    "sha256": "11ccf3b9295ee2533c53134bac4b1d51c9964632c832d8c09a0085b33b770c5e",
+  },
+  {
+    "case": "bitget evidence envelope",
+    "rowCount": 2,
+    "sha256": "11ccf3b9295ee2533c53134bac4b1d51c9964632c832d8c09a0085b33b770c5e",
+  },
+  {
+    "case": "bitget bots follow rank",
+    "rowCount": 10,
+    "sha256": "97661108dcd8702a59284b2127e150b8815cfacb24878ba69bc3993ee4112ea9",
+  },
+]
+`;
