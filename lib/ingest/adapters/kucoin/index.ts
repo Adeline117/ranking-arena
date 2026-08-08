@@ -9,7 +9,7 @@
  *   profile:   GET leadShow/{summary, overview, pnl/history?period={tf}d,
  *                currencyPreference}  (4 replayed GETs per TF)
  *   orders:    GET cross/futures/lead/order?leadConfigId&pageNum&pageSize
- *   copiers:   GET leadShow/copyTraders?leadConfigId&pageNum&pageSize
+ *   copiers:   GET leadShow/copyTraders?leadConfigId&currentPage&pageSize
  *   positions / position-history: NOT public (visibility-gated, data:null).
  *
  * The board is 30d-anchored with NO timeframe param → timeframes_native={30}
@@ -36,6 +36,17 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import {
+  KUCOIN_COPIER_HISTORY_URL,
+  kucoinCopierProjectionHash,
+  kucoinCopierHistoryUrl,
+  kucoinCopierSnapshotVerifier,
+  validateKucoinCopierPage,
+} from './copier-snapshot'
+import {
   parseKucoinHistory,
   parseKucoinLeaderboardPage,
   parseKucoinPositions,
@@ -53,6 +64,33 @@ const TF_PERIOD: Record<RankingTimeframe, string> = { 7: '7d', 30: '30d', 90: '9
 function endpoint(src: SourceRow, key: string, fallback: string): string {
   const endpoints = (src.meta.endpoints ?? {}) as Record<string, string>
   return endpoints[key] ?? fallback
+}
+
+function isCanonicalKucoinCopierSource(src: SourceRow): boolean {
+  return (
+    src.slug === 'kucoin_futures' &&
+    src.status === 'active' &&
+    src.serving_mode === 'serving' &&
+    src.adapter_slug === 'kucoin' &&
+    src.product_type === 'futures' &&
+    src.trader_kind_scope === 'mixed' &&
+    src.currency === 'USDT' &&
+    src.copier_table_depth === 'full' &&
+    endpoint(src, 'copiers', KUCOIN_COPIER_HISTORY_URL) === KUCOIN_COPIER_HISTORY_URL
+  )
+}
+
+function copierMaxPages(src: SourceRow): number {
+  const value = src.meta.copier_max_pages ?? 100
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    Object.is(value, -0)
+  ) {
+    throw new TypeError('[kucoin] copier_max_pages must be a positive safe integer')
+  }
+  return value
 }
 
 const warmedSessions = new WeakSet<FetchSession>()
@@ -77,6 +115,10 @@ const kucoinAdapter: SourceAdapter = {
     orders: true, // GET cross/futures/lead/order
     transfers: false, // no public balance-history surface
     copiers: true, // GET leadShow/copyTraders
+  },
+
+  verifyCopierSnapshot(src) {
+    return isCanonicalKucoinCopierSource(src) ? kucoinCopierSnapshotVerifier : null
   },
 
   /** Board is 30d-anchored; the timeframe argument only labels the snapshot
@@ -183,7 +225,7 @@ const kucoinAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     if (kind !== 'orders' && kind !== 'copiers') {
       throw new Error(`[kucoin] history surface ${kind} not supported`)
     }
@@ -216,22 +258,59 @@ const kucoinAdapter: SourceAdapter = {
       return
     }
 
-    // copiers
-    const url = endpoint(src, 'copiers', `${BASE}/leadShow/copyTraders`)
-    const maxPages = Number(src.meta.copier_max_pages) || 30
+    // copiers: exact reported-total pagination. Yield every response before
+    // evaluating it so malformed/zero/terminal candidates remain durable RAW.
+    const maxPages = copierMaxPages(src)
+    let stableTotal: number | null = null
+    let stableTotalPages: number | null = null
+    let rowsSeen = 0
+    const projectionHashes = new Set<string>()
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+      const url = kucoinCopierHistoryUrl(exchangeTraderId, pageIndex)
       const payload = await replayJson(session, fetcher, {
-        url: `${url}?lang=en_US&leadConfigId=${id}&pageNum=${pageIndex}&pageSize=${limit}`,
+        url,
         method: 'GET',
         headers: GET_HEADERS,
       })
-      const rows = parseKucoinHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      const totalPage = Number((payload as { data?: { totalPage?: unknown } })?.data?.totalPage)
-      if (Number.isFinite(totalPage) && totalPage > 0 && pageIndex >= totalPage) return
-      if (rows.length < limit) return
+
+      const page = validateKucoinCopierPage(payload, pageIndex)
+      if (page === null) {
+        throw new Error('[kucoin] copiers returned a malformed exact page envelope')
+      }
+      if (stableTotal === null) stableTotal = page.total
+      else if (page.total !== stableTotal) {
+        throw new Error('[kucoin] copiers changed totalNum during pagination')
+      }
+      if (stableTotalPages === null) stableTotalPages = page.totalPages
+      else if (page.totalPages !== stableTotalPages) {
+        throw new Error('[kucoin] copiers changed totalPage during pagination')
+      }
+      for (const row of page.rows) {
+        const projectionHash = kucoinCopierProjectionHash(row)
+        if (projectionHash === null || projectionHashes.has(projectionHash)) {
+          throw new Error('[kucoin] copiers returned a missing or duplicate parser projection')
+        }
+        projectionHashes.add(projectionHash)
+      }
+      rowsSeen += page.rows.length
+
+      if (
+        rowsSeen === stableTotal &&
+        pageIndex === Math.max(1, stableTotalPages) &&
+        projectionHashes.size === stableTotal
+      ) {
+        return {
+          contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+          observations: [
+            { segment_id: 'default', reason: 'reported_end', page_ordinal: pageIndex },
+          ],
+        }
+      }
     }
+    throw new Error(
+      `[kucoin] copiers reached page cap ${maxPages} before reported total ${String(stableTotal)}`
+    )
   },
 
   parseLeaderboard: parseKucoinLeaderboardPage,

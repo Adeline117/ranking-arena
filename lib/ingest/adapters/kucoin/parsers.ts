@@ -24,7 +24,7 @@
  *     - leadShow/currencyPreference?leadConfigId=  preferred-assets donut
  *   orders:  GET cross/futures/lead/order?leadConfigId&pageNum&pageSize
  *            (fills; orderId is the natural key)
- *   copiers: GET leadShow/copyTraders?leadConfigId&pageNum&pageSize
+ *   copiers: GET leadShow/copyTraders?leadConfigId&currentPage&pageSize
  *   positions / position history: NOT public (leadShow/positionHistory
  *            answers data:null regardless of params — visibility-gated).
  *
@@ -455,7 +455,7 @@ export function parseKucoinOrders(raw: unknown, _ctx: ParseCtx): ParsedHistoryRo
 }
 
 /**
- * Copy Traders tab (GET leadShow/copyTraders). nickName is a masked email —
+ * Copy Traders tab (GET leadShow/copyTraders?currentPage&pageSize). nickName is a masked email —
  * stored for dedupe/aggregates only, NEVER rendered (spec §6 copier PII).
  * No row timestamp → ts = ctx.scrapedAt.
  */
