@@ -61,6 +61,11 @@ describe('lane-bound copier snapshot V2 authority', () => {
   it('admits only the copier_snapshot role and exact version-paired receipt projections', () => {
     expect(migration).toMatch(/'copier_audit',\s+'copier_snapshot'/)
     expect(migration).toContain('raw_objects_copier_audit_contract')
+    expect(migration).toContain('raw_objects_legacy_copier_event_history_forbidden')
+    expect(migration).toContain("job_type IS DISTINCT FROM 'history:copiers'")
+    expect(migration).toContain("meta->>'history_kind' IS DISTINCT FROM 'copiers'")
+    expect(migration).toContain("meta->>'surface' IS DISTINCT FROM 'copiers'")
+    expect(migration).toContain('requires zero legacy copier event-history RAW objects')
     expect(migration).toContain(') IS TRUE\n  );')
     expect(migration).toContain("meta->>'surface' IS NOT DISTINCT FROM 'copiers_audit'")
     expect(migration).toContain(
@@ -156,7 +161,20 @@ describe('lane-bound copier snapshot V2 authority', () => {
     expect(publisher).toContain('v_rows_written IS DISTINCT FROM v_row_count')
   })
 
-  it('keeps the rolling V1 reader while serving exact V1 and V2 receipts through @3', () => {
+  it('keeps the V1 ABI fail closed while @3 retains exact V1 and V2 receipt projections', () => {
+    expect(migration.match(/v_v1_definition_sha256 constant text/g)).toHaveLength(2)
+    expect(
+      migration.match(/0a82205bc5f32fcd62ec4c82391f76546d265351e0eb0d89861e952ca2fd08c7/g)
+    ).toHaveLength(2)
+    expect(migration.match(/'v_raw\.job_type IS DISTINCT FROM ''history:copiers'''/g)).toHaveLength(
+      2
+    )
+    expect(
+      migration.match(/'v_raw\.trust_artifact_role IS DISTINCT FROM ''event_history'''/g)
+    ).toHaveLength(2)
+    expect(
+      migration.match(/'v_raw\.meta->>''history_kind'' IS DISTINCT FROM ''copiers'''/g)
+    ).toHaveLength(2)
     expect(reader).toContain('arena.copier-snapshot-receipt-reader@3')
     expect(reader).toContain("'arena.copier-snapshot-publication@1'")
     expect(reader).toContain("'arena.copier-snapshot-publication@2'")
@@ -165,6 +183,7 @@ describe('lane-bound copier snapshot V2 authority', () => {
     expect(reader).toContain('publication.acquisition_source_run_id')
     expect(reader).toContain('arena.copier_snapshot_legacy_fallback_enabled()')
     expect(migration).toContain("'service_role', v_v1, 'EXECUTE'")
+    expect(migration).toContain('Retained only for binary compatibility')
     expect(migration).toContain(
       'GRANT EXECUTE ON FUNCTION public.publish_copier_snapshot_v2(jsonb)'
     )
@@ -178,10 +197,21 @@ describe('lane-bound copier snapshot V2 authority', () => {
       'publication-constraint-preflight-drift',
       'partial-column-preflight-drift',
       'audit-contract-preflight-drift',
+      'v1-job-type-anchor-preflight-drift',
+      'v1-event-history-anchor-preflight-drift',
+      'v1-copier-history-kind-anchor-preflight-drift',
+      'legacy-copier-prohibition-preflight-drift',
+      'legacy-copier-event-history-existing-preflight',
+      'legacy-copier-job-only-existing-preflight',
+      'legacy-copier-surface-only-existing-preflight',
       'lane-aware-constraint-replay-drift',
       'audit-contract-replay-drift',
+      'legacy-copier-prohibition-replay-drift',
       'reader-v1-with-v2-replay-drift',
       'copier audit RAW frozen shape',
+      'legacy-event-history-copier-kind-forbidden',
+      'legacy-event-history-copier-surface-forbidden',
+      'legacy-event-history-copier-job-forbidden-with-json-null-meta',
       'copier-audit-role-without-source-run',
       'eligible-copier-audit-raw',
       'missing-copier-audit-meta',
@@ -196,6 +226,7 @@ describe('lane-bound copier snapshot V2 authority', () => {
       'wrong-copier-audit-contract',
       'v1-cannot-consume-copier-audit',
       'v2-cannot-consume-copier-audit',
+      'retained-v1-writer-is-input-isolated',
       'null-v2-publication-authority-coordinate',
       'inactive-subject',
       'shadow-subject',
@@ -247,5 +278,9 @@ describe('lane-bound copier snapshot V2 authority', () => {
     expect(ci).toContain('npm run qa:copier-snapshot-lane-v2-pg17')
     expect(runbook).toContain(migrationName)
     expect(runbook).toContain('040550`：**HOLD**')
+    expect(runbook).toContain('legacy_copier_event_history_raw_count')
+    expect(runbook).toContain("raw_object.job_type IS NOT DISTINCT FROM 'history:copiers'")
+    expect(runbook).toContain('候选 V2 code 可以先 staged')
+    expect(runbook).toContain('V1 RPC symbol/ACL')
   })
 })

@@ -297,11 +297,57 @@ expect_migration_failure_in_clone \
   'lane_preflight_base' \
   'ALTER TABLE arena.raw_objects ADD CONSTRAINT raw_objects_copier_audit_contract CHECK (true);'
 expect_migration_failure_in_clone \
+  'v1-job-type-anchor-preflight-drift' \
+  'copier V1 compatibility authority lineage or ACL drifted' \
+  'lane_preflight_base' \
+  "UPDATE pg_catalog.pg_proc SET prosrc=pg_catalog.replace(prosrc,'v_raw.job_type IS DISTINCT FROM ''history:copiers''','v_raw.job_type IS DISTINCT FROM ''history:orders''') WHERE oid='public.publish_copier_snapshot_v1(jsonb)'::pg_catalog.regprocedure;"
+expect_migration_failure_in_clone \
+  'v1-event-history-anchor-preflight-drift' \
+  'copier V1 compatibility authority lineage or ACL drifted' \
+  'lane_preflight_base' \
+  "UPDATE pg_catalog.pg_proc SET prosrc=pg_catalog.replace(prosrc,'v_raw.trust_artifact_role IS DISTINCT FROM ''event_history''','v_raw.trust_artifact_role IS DISTINCT FROM ''price_history''') WHERE oid='public.publish_copier_snapshot_v1(jsonb)'::pg_catalog.regprocedure;"
+expect_migration_failure_in_clone \
+  'v1-copier-history-kind-anchor-preflight-drift' \
+  'copier V1 compatibility authority lineage or ACL drifted' \
+  'lane_preflight_base' \
+  "UPDATE pg_catalog.pg_proc SET prosrc=pg_catalog.replace(prosrc,'v_raw.meta->>''history_kind'' IS DISTINCT FROM ''copiers''','v_raw.meta->>''history_kind'' IS DISTINCT FROM ''orders''') WHERE oid='public.publish_copier_snapshot_v1(jsonb)'::pg_catalog.regprocedure;"
+expect_migration_failure_in_clone \
+  'legacy-copier-prohibition-preflight-drift' \
+  'legacy copier event-history prohibition is partially installed' \
+  'lane_preflight_base' \
+  'ALTER TABLE arena.raw_objects ADD CONSTRAINT raw_objects_legacy_copier_event_history_forbidden CHECK (true);'
+expect_migration_failure_in_clone \
+  'legacy-copier-event-history-existing-preflight' \
+  'requires zero legacy copier event-history RAW objects' \
+  'lane_preflight_base' \
+  "INSERT INTO arena.raw_objects (id,source_id,job_type,trader_id,timeframe,fetched_at,storage_path,bytes,content_hash,quarantined,meta,source_run_id,trust_artifact_role) VALUES (9001,1,'history:orders',104,NULL,'2026-08-04 11:59:00+00','gate_futures/history/copiers/preflight-kind.json.gz',1,repeat('4',64),false,jsonb_build_object('history_kind','copiers'),repeat('4',64),'event_history');"
+expect_migration_failure_in_clone \
+  'legacy-copier-job-only-existing-preflight' \
+  'requires zero legacy copier event-history RAW objects' \
+  'lane_preflight_base' \
+  "INSERT INTO arena.raw_objects (id,source_id,job_type,trader_id,timeframe,fetched_at,storage_path,bytes,content_hash,quarantined,meta,source_run_id,trust_artifact_role) VALUES (9002,1,'history:copiers',104,NULL,'2026-08-04 11:59:00+00','gate_futures/history/copiers/preflight-job.json.gz',1,repeat('5',64),false,'{}'::jsonb,repeat('5',64),'event_history');"
+expect_migration_failure_in_clone \
+  'legacy-copier-surface-only-existing-preflight' \
+  'requires zero legacy copier event-history RAW objects' \
+  'lane_preflight_base' \
+  "INSERT INTO arena.raw_objects (id,source_id,job_type,trader_id,timeframe,fetched_at,storage_path,bytes,content_hash,quarantined,meta,source_run_id,trust_artifact_role) VALUES (9003,1,'history:orders',104,NULL,'2026-08-04 11:59:00+00','gate_futures/history/copiers/preflight-surface.json.gz',1,repeat('6',64),false,jsonb_build_object('history_kind',NULL,'surface','copiers'),repeat('6',64),'event_history');"
+expect_migration_failure_in_clone \
   'provenance-column-preflight-drift' \
   'copier lane V2 RAW or 054200 provenance shape drifted' \
   'lane_preflight_base' \
   'ALTER TABLE arena.copier_snapshot_rows ALTER COLUMN source_event_at SET NOT NULL;'
 if [[ "${PRINT_COPIER_LANE_CONSTRAINTS:-0}" == '1' ]]; then
+  psql_cmd -Atqc "
+    SELECT 'v1-definition-sha256|' || encode(
+      sha256(convert_to(
+        pg_get_functiondef(
+          'public.publish_copier_snapshot_v1(jsonb)'::regprocedure
+        ),
+        'UTF8'
+      )),
+      'hex'
+    );
+  "
   psql_cmd -Atqc "
     SELECT conname || E'\\n' || pg_get_constraintdef(oid, false)
     FROM pg_constraint
@@ -320,7 +366,8 @@ if [[ "${PRINT_COPIER_LANE_CONSTRAINTS:-0}" == '1' ]]; then
     WHERE conrelid='arena.raw_objects'::regclass
       AND conname IN (
         'raw_objects_metric_trust_binding',
-        'raw_objects_copier_audit_contract'
+        'raw_objects_copier_audit_contract',
+        'raw_objects_legacy_copier_event_history_forbidden'
       )
     ORDER BY conname;
   "
@@ -338,6 +385,11 @@ expect_migration_failure_in_clone \
   'copier audit RAW contract is not the exact lane-aware replay state' \
   'lane_replay_base' \
   "ALTER TABLE arena.raw_objects DROP CONSTRAINT raw_objects_copier_audit_contract; ALTER TABLE arena.raw_objects ADD CONSTRAINT raw_objects_copier_audit_contract CHECK (trust_artifact_role IS DISTINCT FROM 'copier_audit' OR meta->>'surface'='copiers_audit');"
+expect_migration_failure_in_clone \
+  'legacy-copier-prohibition-replay-drift' \
+  'legacy copier event-history prohibition is not the exact replay state' \
+  'lane_replay_base' \
+  "ALTER TABLE arena.raw_objects DROP CONSTRAINT raw_objects_legacy_copier_event_history_forbidden; ALTER TABLE arena.raw_objects ADD CONSTRAINT raw_objects_legacy_copier_event_history_forbidden CHECK (trust_artifact_role IS DISTINCT FROM 'event_history' OR meta->>'history_kind' IS DISTINCT FROM 'copiers');"
 expect_migration_failure_in_clone \
   'reader-v1-with-v2-replay-drift' \
   'copier reader is not the 054000 bridge or exact lane-aware replay state' \
@@ -362,31 +414,50 @@ if [[ "${PRINT_COPIER_LANE_CONSTRAINTS:-0}" == '1' ]]; then
     WHERE conrelid='arena.raw_objects'::regclass
       AND conname IN (
         'raw_objects_metric_trust_binding',
-        'raw_objects_copier_audit_contract'
+        'raw_objects_copier_audit_contract',
+        'raw_objects_legacy_copier_event_history_forbidden'
       )
     ORDER BY conname;
   "
 fi
 
-# Empty-state replay must be exact and must not revoke the rolling V1 writer.
+# Empty-state replay must be exact and retain the input-isolated V1 ABI/ACL.
 EMPTY_STATE_BEFORE="$(psql_cmd -Atqc "
   SELECT
     pg_get_functiondef('public.publish_copier_snapshot_v2(jsonb)'::regprocedure) ||
     pg_get_functiondef('public.arena_copier_aggregate(text,text)'::regprocedure) ||
-    pg_get_constraintdef(oid, false)
-  FROM pg_constraint
-  WHERE conrelid='arena.raw_objects'::regclass
-    AND conname='raw_objects_metric_trust_binding';
+    (
+      SELECT string_agg(
+        conname || E'\\n' || pg_get_constraintdef(oid, false),
+        E'\\n' ORDER BY conname
+      )
+      FROM pg_constraint
+      WHERE conrelid='arena.raw_objects'::regclass
+        AND conname IN (
+          'raw_objects_metric_trust_binding',
+          'raw_objects_copier_audit_contract',
+          'raw_objects_legacy_copier_event_history_forbidden'
+        )
+    );
 ")"
 psql_cmd -q -f "$LANE_AUTHORITY"
 EMPTY_STATE_AFTER="$(psql_cmd -Atqc "
   SELECT
     pg_get_functiondef('public.publish_copier_snapshot_v2(jsonb)'::regprocedure) ||
     pg_get_functiondef('public.arena_copier_aggregate(text,text)'::regprocedure) ||
-    pg_get_constraintdef(oid, false)
-  FROM pg_constraint
-  WHERE conrelid='arena.raw_objects'::regclass
-    AND conname='raw_objects_metric_trust_binding';
+    (
+      SELECT string_agg(
+        conname || E'\\n' || pg_get_constraintdef(oid, false),
+        E'\\n' ORDER BY conname
+      )
+      FROM pg_constraint
+      WHERE conrelid='arena.raw_objects'::regclass
+        AND conname IN (
+          'raw_objects_metric_trust_binding',
+          'raw_objects_copier_audit_contract',
+          'raw_objects_legacy_copier_event_history_forbidden'
+        )
+    );
 ")"
 assert_equal 'empty lane-authority replay drifted' "$EMPTY_STATE_BEFORE" "$EMPTY_STATE_AFTER"
 
@@ -605,7 +676,7 @@ INSERT INTO arena.raw_objects (
     repeat('c', 64), 'copier_snapshot'
   ),
   (
-    1004, 1, 'history:copiers', 104, NULL,
+    1004, 1, 'history:orders', 104, NULL,
     '2026-08-04 12:03:00+00',
     'gate_futures/history/copiers/' || repeat('d', 64) || '.json.gz',
     321, repeat('d', 64), false,
@@ -617,7 +688,7 @@ INSERT INTO arena.raw_objects (
       'source_slug', 'gate_futures',
       'exchange_trader_id', 'legacy-v1',
       'observed_at', '2026-08-04T12:03:00.000Z',
-      'history_kind', 'copiers',
+      'history_kind', 'orders',
       'starting_cursor', NULL,
       'capture_config', pg_catalog.jsonb_build_object(
         'caller_page_cap', NULL
@@ -740,6 +811,21 @@ AUDIT_RAW_STATE="$(psql_cmd -Atqc "
 assert_equal 'copier audit RAW frozen shape' \
   'copier_audit|copiers_audit|false|arena.ingest.copier-audit-raw-evidence@1|arena.ingest.history-acquisition-artifact@1' \
   "$AUDIT_RAW_STATE"
+
+expect_failure_contains \
+  'legacy-event-history-copier-kind-forbidden' \
+  'raw_objects_legacy_copier_event_history_forbidden' \
+  "INSERT INTO arena.raw_objects (id,source_id,job_type,trader_id,timeframe,fetched_at,storage_path,bytes,content_hash,quarantined,meta,source_run_id,trust_artifact_role) SELECT 1021,source_id,job_type,trader_id,timeframe,fetched_at,storage_path || '.copier-kind',bytes,repeat('3',64),quarantined,jsonb_set(meta,'{history_kind}','\"copiers\"'::jsonb),repeat('3',64),'event_history' FROM arena.raw_objects WHERE id=1004;"
+
+expect_failure_contains \
+  'legacy-event-history-copier-surface-forbidden' \
+  'raw_objects_legacy_copier_event_history_forbidden' \
+  "INSERT INTO arena.raw_objects (id,source_id,job_type,trader_id,timeframe,fetched_at,storage_path,bytes,content_hash,quarantined,meta,source_run_id,trust_artifact_role) SELECT 1022,source_id,job_type,trader_id,timeframe,fetched_at,storage_path || '.copier-surface',bytes,repeat('2',64),quarantined,meta || '{\"surface\":\"copiers\"}'::jsonb,repeat('2',64),'event_history' FROM arena.raw_objects WHERE id=1004;"
+
+expect_failure_contains \
+  'legacy-event-history-copier-job-forbidden-with-json-null-meta' \
+  'raw_objects_legacy_copier_event_history_forbidden' \
+  "INSERT INTO arena.raw_objects (id,source_id,job_type,trader_id,timeframe,fetched_at,storage_path,bytes,content_hash,quarantined,meta,source_run_id,trust_artifact_role) SELECT 1023,source_id,'history:copiers',trader_id,timeframe,fetched_at,storage_path || '.copier-job',bytes,repeat('1',64),quarantined,jsonb_build_object('history_kind',NULL,'surface',NULL),repeat('1',64),'event_history' FROM arena.raw_objects WHERE id=1004;"
 
 expect_failure_contains \
   'copier-audit-role-without-source-run' \
@@ -992,7 +1078,7 @@ expect_failure_contains \
 expect_failure_contains \
   'wrong-role' \
   'RAW role is audit-only or otherwise not publication eligible' \
-  "BEGIN; UPDATE arena.raw_objects SET trust_artifact_role='event_history' WHERE id=1003; SET ROLE service_role; SELECT public.publish_copier_snapshot_v2(public.copier_lane_request(1,103,1003,'tier_b',repeat('c',64),repeat('2',64),'2026-08-04 12:02:00+00'));"
+  "BEGIN; UPDATE arena.raw_objects SET trust_artifact_role='price_history' WHERE id=1003; SET ROLE service_role; SELECT public.publish_copier_snapshot_v2(public.copier_lane_request(1,103,1003,'tier_b',repeat('c',64),repeat('2',64),'2026-08-04 12:02:00+00'));"
 
 expect_failure_contains \
   'wrong-content-hash' \
@@ -1164,32 +1250,10 @@ expect_failure_contains \
   'does not prove the exact verified acquisition' \
   "SET ROLE service_role; SELECT public.publish_copier_snapshot_v1((public.copier_lane_request(1,103,1003,'tier_b',repeat('c',64),repeat('2',64),'2026-08-04 12:02:00+00') - 'acquisitionSourceRunId' - 'lane') || jsonb_build_object('contract','arena.copier-snapshot-publication@1'));"
 
-LEGACY_RECEIPT="$(psql_cmd -Atqc "
-  SET ROLE service_role;
-  SELECT public.publish_copier_snapshot_v1(
-    (public.copier_lane_request(
-      1,104,1004,'tier_c',repeat('d',64),repeat('5',64),
-      '2026-08-04 12:03:00+00'
-    ) - 'acquisitionSourceRunId' - 'lane') ||
-    jsonb_build_object('contract','arena.copier-snapshot-publication@1')
-  );
-")"
-LEGACY_STATE="$(psql_cmd -Atqc "
-  SET ROLE anon;
-  SELECT
-    ('$LEGACY_RECEIPT'::jsonb->>'sourceRunId') = repeat('d',64)
-    AND NOT ('$LEGACY_RECEIPT'::jsonb ? 'lane')
-    AND (
-      public.arena_copier_aggregate('gate_futures','legacy-v1')
-        ->>'receiptBound'
-    ) = 'true'
-    AND (
-      public.arena_copier_aggregate('gate_futures','legacy-v1')
-        ->>'copierCount'
-    ) = '2';
-")"
-assert_equal 'rolling V1 receipt was not readable after V2 expansion' \
-  't' "$LEGACY_STATE"
+expect_failure_contains \
+  'retained-v1-writer-is-input-isolated' \
+  'does not prove the exact verified acquisition' \
+  "SET ROLE service_role; SELECT public.publish_copier_snapshot_v1((public.copier_lane_request(1,104,1004,'tier_c',repeat('d',64),repeat('5',64),'2026-08-04 12:03:00+00') - 'acquisitionSourceRunId' - 'lane') || jsonb_build_object('contract','arena.copier-snapshot-publication@1'));"
 
 # A claim UPDATE that owns the trader row first must make V2 wait and then
 # reject. This proves the shared subject lock closes the race, not merely the

@@ -1,11 +1,13 @@
 -- Lane-bound copier snapshot publication authority.
 --
--- 054000 remains temporarily executable for rolling Tier-C workers, but it
--- accepts only the legacy event_history RAW role and always writes tier_c.
--- This forward authority admits the strict whole-wrapper copier_snapshot RAW
--- role, derives the stored lane from that immutable RAW metadata, and binds
--- the wrapper digest, nested acquisition digest, request digest, receipt row,
--- and returned receipt to the same lane-aware contract.
+-- The 054000 V1 symbol remains executable for binary and receipt-projection
+-- compatibility, but this migration drains and permanently forbids its legacy
+-- event_history + legacy copier job/meta RAW input. It therefore cannot create
+-- new V1 receipts after this cutover. The forward authority admits only the strict
+-- whole-wrapper copier_snapshot RAW role, derives the stored lane from that
+-- immutable RAW metadata, and binds the wrapper digest, nested acquisition
+-- digest, request digest, receipt row, and returned receipt to one lane-aware
+-- contract.
 
 BEGIN;
 
@@ -37,6 +39,8 @@ DECLARE
   v_raw_binding_count integer;
   v_audit_binding text;
   v_audit_binding_count integer;
+  v_legacy_copier_binding text;
+  v_legacy_copier_binding_count integer;
   v_evidence_binding text;
   v_evidence_binding_count integer;
   v_data_binding text;
@@ -45,12 +49,16 @@ DECLARE
   v_publisher_binding_count integer;
   v_authority_binding text;
   v_authority_binding_count integer;
+  v_v1_definition_sha256 constant text :=
+    '0a82205bc5f32fcd62ec4c82391f76546d265351e0eb0d89861e952ca2fd08c7';
   v_raw_old constant text :=
     'CHECK ((((source_run_id IS NULL) AND (trust_artifact_role IS NULL)) OR ((source_run_id ~ ''^[0-9a-f]{64}$''::text) AND (trust_artifact_role = ANY (ARRAY[''source_payload''::text, ''population_manifest''::text, ''normalization_components''::text, ''event_history''::text, ''price_history''::text, ''opening_inventory''::text])))))';
   v_raw_target constant text :=
     'CHECK (((((source_run_id IS NULL) AND (trust_artifact_role IS NULL)) OR ((source_run_id ~ ''^[0-9a-f]{64}$''::text) AND (trust_artifact_role = ANY (ARRAY[''source_payload''::text, ''population_manifest''::text, ''normalization_components''::text, ''event_history''::text, ''price_history''::text, ''opening_inventory''::text, ''copier_audit''::text, ''copier_snapshot''::text])))) IS TRUE))';
   v_audit_target constant text :=
     'CHECK (((trust_artifact_role IS DISTINCT FROM ''copier_audit''::text) OR ((NOT (jsonb_typeof(meta) IS DISTINCT FROM ''object''::text)) AND (NOT ((meta ->> ''surface''::text) IS DISTINCT FROM ''copiers_audit''::text)) AND (NOT ((meta -> ''publication_eligible''::text) IS DISTINCT FROM ''false''::jsonb)) AND (NOT ((meta ->> ''history_evidence_contract''::text) IS DISTINCT FROM ''arena.ingest.copier-audit-raw-evidence@1''::text)) AND (NOT ((meta ->> ''data_contract''::text) IS DISTINCT FROM ''arena.ingest.history-acquisition-artifact@1''::text)))))';
+  v_legacy_copier_target constant text :=
+    'CHECK (((trust_artifact_role IS DISTINCT FROM ''event_history''::text) OR ((job_type IS DISTINCT FROM ''history:copiers''::text) AND ((meta ->> ''history_kind''::text) IS DISTINCT FROM ''copiers''::text) AND ((meta ->> ''surface''::text) IS DISTINCT FROM ''copiers''::text))))';
   v_evidence_old constant text :=
     'CHECK ((evidence_contract = ''arena.copier-snapshot-publication@1''::text))';
   v_evidence_target constant text :=
@@ -99,6 +107,27 @@ BEGIN
       AND procedure.provolatile = 'v'
       AND procedure.proconfig IS NOT DISTINCT FROM
           ARRAY['search_path=pg_catalog, pg_temp']::text[]
+      AND pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.pg_get_functiondef(procedure.oid),
+            'UTF8'
+          )
+        ),
+        'hex'
+      ) IS NOT DISTINCT FROM v_v1_definition_sha256
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        'v_raw.job_type IS DISTINCT FROM ''history:copiers'''
+      ) > 0
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        'v_raw.trust_artifact_role IS DISTINCT FROM ''event_history'''
+      ) > 0
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        'v_raw.meta->>''history_kind'' IS DISTINCT FROM ''copiers'''
+      ) > 0
       AND pg_catalog.strpos(
         procedure.prosrc,
         'INSERT INTO arena.copier_snapshot_publications'
@@ -113,7 +142,7 @@ BEGIN
      OR pg_catalog.has_function_privilege(
        'authenticated', v_v1, 'EXECUTE'
      ) THEN
-    RAISE EXCEPTION 'copier V1 rolling authority lineage or ACL drifted';
+    RAISE EXCEPTION 'copier V1 compatibility authority lineage or ACL drifted';
   END IF;
 
   IF NOT EXISTS (
@@ -194,6 +223,7 @@ BEGIN
     AND constraint_row.contype = 'c'
     AND constraint_row.convalidated
     AND NOT constraint_row.condeferrable;
+
   IF v_v2 IS NULL THEN
     IF v_audit_binding_count IS DISTINCT FROM 0
        OR v_audit_binding IS NOT NULL THEN
@@ -203,6 +233,32 @@ BEGIN
     IF v_audit_binding_count IS DISTINCT FROM 1
        OR v_audit_binding IS DISTINCT FROM v_audit_target THEN
       RAISE EXCEPTION 'copier audit RAW contract is not the exact lane-aware replay state';
+    END IF;
+  END IF;
+
+  SELECT
+    pg_catalog.count(*),
+    pg_catalog.min(pg_catalog.pg_get_constraintdef(
+      constraint_row.oid, false
+    ))
+  INTO v_legacy_copier_binding_count, v_legacy_copier_binding
+  FROM pg_catalog.pg_constraint AS constraint_row
+  WHERE constraint_row.conrelid = 'arena.raw_objects'::pg_catalog.regclass
+    AND constraint_row.conname =
+        'raw_objects_legacy_copier_event_history_forbidden'
+    AND constraint_row.contype = 'c'
+    AND constraint_row.convalidated
+    AND NOT constraint_row.condeferrable;
+  IF v_v2 IS NULL THEN
+    IF v_legacy_copier_binding_count IS DISTINCT FROM 0
+       OR v_legacy_copier_binding IS NOT NULL THEN
+      RAISE EXCEPTION 'legacy copier event-history prohibition is partially installed';
+    END IF;
+  ELSE
+    IF v_legacy_copier_binding_count IS DISTINCT FROM 1
+       OR v_legacy_copier_binding IS DISTINCT FROM
+          v_legacy_copier_target THEN
+      RAISE EXCEPTION 'legacy copier event-history prohibition is not the exact replay state';
     END IF;
   END IF;
 
@@ -414,6 +470,21 @@ LOCK TABLE ONLY arena.copier_snapshot_rows IN ACCESS EXCLUSIVE MODE;
 DO $locked_preflight$
 BEGIN
   IF EXISTS (
+    SELECT 1
+    FROM arena.raw_objects AS raw_object
+    WHERE raw_object.trust_artifact_role IS NOT DISTINCT FROM
+        'event_history'
+      AND (
+        raw_object.job_type IS NOT DISTINCT FROM 'history:copiers'
+        OR raw_object.meta->>'history_kind' IS NOT DISTINCT FROM 'copiers'
+        OR raw_object.meta->>'surface' IS NOT DISTINCT FROM 'copiers'
+      )
+    LIMIT 1
+  ) THEN
+    RAISE EXCEPTION 'copier lane V2 authority requires zero legacy copier event-history RAW objects; archive and remove them through a separately approved evidence-retention procedure';
+  END IF;
+
+  IF EXISTS (
     SELECT 1 FROM arena.copier_snapshot_publications LIMIT 1
   ) OR EXISTS (
     SELECT 1 FROM arena.copier_snapshot_rows LIMIT 1
@@ -482,6 +553,20 @@ ALTER TABLE arena.raw_objects
           'arena.ingest.copier-audit-raw-evidence@1'
       AND meta->>'data_contract' IS NOT DISTINCT FROM
           'arena.ingest.history-acquisition-artifact@1'
+    )
+  );
+
+ALTER TABLE arena.raw_objects
+  DROP CONSTRAINT IF EXISTS
+    raw_objects_legacy_copier_event_history_forbidden;
+ALTER TABLE arena.raw_objects
+  ADD CONSTRAINT raw_objects_legacy_copier_event_history_forbidden
+  CHECK (
+    trust_artifact_role IS DISTINCT FROM 'event_history'
+    OR (
+      job_type IS DISTINCT FROM 'history:copiers'
+      AND meta->>'history_kind' IS DISTINCT FROM 'copiers'
+      AND meta->>'surface' IS DISTINCT FROM 'copiers'
     )
   );
 
@@ -1487,6 +1572,9 @@ GRANT EXECUTE ON FUNCTION public.publish_copier_snapshot_v2(jsonb)
 COMMENT ON FUNCTION public.publish_copier_snapshot_v2(jsonb) IS
   'Service-only lane-aware authority: validates one exact copier publication wrapper, its immutable RAW and nested acquisition digests, and atomically writes private rows plus a V2 receipt.';
 
+COMMENT ON FUNCTION public.publish_copier_snapshot_v1(jsonb) IS
+  'Retained only for binary compatibility. Lane V2 authority permanently forbids its event_history plus copiers RAW input, so it cannot create new receipts after 20260804054300.';
+
 CREATE OR REPLACE FUNCTION public.arena_copier_aggregate(
   p_source text,
   p_trader text
@@ -1684,11 +1772,17 @@ DECLARE
   v_raw_binding_count integer;
   v_audit_binding text;
   v_audit_binding_count integer;
+  v_legacy_copier_binding text;
+  v_legacy_copier_binding_count integer;
   v_constraint_state text[];
+  v_v1_definition_sha256 constant text :=
+    '0a82205bc5f32fcd62ec4c82391f76546d265351e0eb0d89861e952ca2fd08c7';
   v_raw_target constant text :=
     'CHECK (((((source_run_id IS NULL) AND (trust_artifact_role IS NULL)) OR ((source_run_id ~ ''^[0-9a-f]{64}$''::text) AND (trust_artifact_role = ANY (ARRAY[''source_payload''::text, ''population_manifest''::text, ''normalization_components''::text, ''event_history''::text, ''price_history''::text, ''opening_inventory''::text, ''copier_audit''::text, ''copier_snapshot''::text])))) IS TRUE))';
   v_audit_target constant text :=
     'CHECK (((trust_artifact_role IS DISTINCT FROM ''copier_audit''::text) OR ((NOT (jsonb_typeof(meta) IS DISTINCT FROM ''object''::text)) AND (NOT ((meta ->> ''surface''::text) IS DISTINCT FROM ''copiers_audit''::text)) AND (NOT ((meta -> ''publication_eligible''::text) IS DISTINCT FROM ''false''::jsonb)) AND (NOT ((meta ->> ''history_evidence_contract''::text) IS DISTINCT FROM ''arena.ingest.copier-audit-raw-evidence@1''::text)) AND (NOT ((meta ->> ''data_contract''::text) IS DISTINCT FROM ''arena.ingest.history-acquisition-artifact@1''::text)))))';
+  v_legacy_copier_target constant text :=
+    'CHECK (((trust_artifact_role IS DISTINCT FROM ''event_history''::text) OR ((job_type IS DISTINCT FROM ''history:copiers''::text) AND ((meta ->> ''history_kind''::text) IS DISTINCT FROM ''copiers''::text) AND ((meta ->> ''surface''::text) IS DISTINCT FROM ''copiers''::text))))';
   v_evidence_target constant text :=
     'CHECK ((evidence_contract = ANY (ARRAY[''arena.copier-snapshot-publication@1''::text, ''arena.copier-snapshot-publication@2''::text])))';
   v_data_target constant text :=
@@ -1724,6 +1818,20 @@ BEGIN
     AND constraint_row.convalidated
     AND NOT constraint_row.condeferrable;
 
+  SELECT
+    pg_catalog.count(*),
+    pg_catalog.min(pg_catalog.pg_get_constraintdef(
+      constraint_row.oid, false
+    ))
+  INTO v_legacy_copier_binding_count, v_legacy_copier_binding
+  FROM pg_catalog.pg_constraint AS constraint_row
+  WHERE constraint_row.conrelid = 'arena.raw_objects'::pg_catalog.regclass
+    AND constraint_row.conname =
+        'raw_objects_legacy_copier_event_history_forbidden'
+    AND constraint_row.contype = 'c'
+    AND constraint_row.convalidated
+    AND NOT constraint_row.condeferrable;
+
   SELECT pg_catalog.array_agg(
     constraint_row.conname || E'\n' ||
     pg_catalog.pg_get_constraintdef(constraint_row.oid, false)
@@ -1747,6 +1855,9 @@ BEGIN
      OR v_raw_binding IS DISTINCT FROM v_raw_target
      OR v_audit_binding_count IS DISTINCT FROM 1
      OR v_audit_binding IS DISTINCT FROM v_audit_target
+     OR v_legacy_copier_binding_count IS DISTINCT FROM 1
+     OR v_legacy_copier_binding IS DISTINCT FROM
+        v_legacy_copier_target
      OR v_constraint_state IS DISTINCT FROM ARRAY[
        'copier_snapshot_publication_authority_version' || E'\n' ||
          v_authority_target,
@@ -1787,6 +1898,44 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid = v_v1
+      AND procedure.proowner = 'postgres'::pg_catalog.regrole
+      AND procedure.prosecdef
+      AND procedure.provolatile = 'v'
+      AND procedure.proconfig IS NOT DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
+      AND pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.pg_get_functiondef(procedure.oid),
+            'UTF8'
+          )
+        ),
+        'hex'
+      ) IS NOT DISTINCT FROM v_v1_definition_sha256
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        'v_raw.job_type IS DISTINCT FROM ''history:copiers'''
+      ) > 0
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        'v_raw.trust_artifact_role IS DISTINCT FROM ''event_history'''
+      ) > 0
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        'v_raw.meta->>''history_kind'' IS DISTINCT FROM ''copiers'''
+      ) > 0
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        'INSERT INTO arena.copier_snapshot_publications'
+      ) > 0
+      AND pg_catalog.strpos(
+        procedure.prosrc,
+        '''tier_c'''
+      ) > 0
+  ) OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid = v_v2
