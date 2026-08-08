@@ -41,4 +41,30 @@ describe('strict canonical JSON', () => {
     expect(() => strictCanonicalJson(cycle)).toThrow('cycles')
     expect(() => strictCanonicalJson({ value: '\ud800' })).toThrow('isolated surrogate')
   })
+
+  it('rejects proxy objects before invoking any proxy trap', () => {
+    let trapCalls = 0
+    const proxy = new Proxy(
+      { value: 1 },
+      {
+        getPrototypeOf() {
+          trapCalls += 1
+          throw new Error('must not inspect a proxy')
+        },
+        ownKeys() {
+          trapCalls += 1
+          throw new Error('must not inspect a proxy')
+        },
+        getOwnPropertyDescriptor() {
+          trapCalls += 1
+          throw new Error('must not inspect a proxy')
+        },
+      }
+    )
+
+    expect(() => strictCanonicalJson(proxy)).toThrow('proxy objects')
+    expect(() => strictCanonicalJson({ nested: proxy })).toThrow('proxy objects')
+    expect(() => strictCanonicalJson(new Proxy([1], {}))).toThrow('proxy objects')
+    expect(trapCalls).toBe(0)
+  })
 })
