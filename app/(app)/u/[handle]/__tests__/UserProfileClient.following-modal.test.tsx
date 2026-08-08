@@ -37,10 +37,21 @@ jest.mock('../components/TraderProfileView', () => ({
 }))
 jest.mock('../components/UserProfileHeader', () => ({
   __esModule: true,
-  default: ({ onFollowingClick }: { onFollowingClick: () => void }) => (
-    <button type="button" onClick={onFollowingClick}>
-      following entry
-    </button>
+  default: ({
+    onFollowersClick,
+    onFollowingClick,
+  }: {
+    onFollowersClick: () => void
+    onFollowingClick: () => void
+  }) => (
+    <>
+      <button type="button" onClick={onFollowingClick}>
+        following entry
+      </button>
+      <button type="button" onClick={onFollowersClick}>
+        followers entry
+      </button>
+    </>
   ),
 }))
 jest.mock('../components/UserProfileTabs', () => ({
@@ -57,11 +68,14 @@ jest.mock('../hooks/useUserProfile', () => ({
 
 import UserProfileClient from '../UserProfileClient'
 
-function profile(showFollowing: boolean | undefined): ServerProfile {
+function profile(
+  showFollowing: boolean | undefined,
+  showFollowers: boolean | undefined
+): ServerProfile {
   return {
     id: 'target-user',
     handle: 'alice',
-    show_followers: true,
+    show_followers: showFollowers,
     show_following: showFollowing,
     followers: 3,
     following: 7,
@@ -99,7 +113,7 @@ function useProfileFixture() {
 
 describe('UserProfileClient following modal privacy', () => {
   beforeEach(() => {
-    mockProfile = profile(true)
+    mockProfile = profile(true, true)
     mockIsOwnProfile = false
     mockUseUserProfile.mockImplementation(useProfileFixture)
   })
@@ -116,7 +130,7 @@ describe('UserProfileClient following modal privacy', () => {
   it.each([false, undefined])(
     'refuses to mount another user non-public following modal (%s)',
     (showFollowing) => {
-      mockProfile = profile(showFollowing)
+      mockProfile = profile(showFollowing, true)
       render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)
 
       fireEvent.click(screen.getByRole('button', { name: 'following entry' }))
@@ -125,10 +139,31 @@ describe('UserProfileClient following modal privacy', () => {
     }
   )
 
+  it('wires another user public followers entry to the followers modal', () => {
+    render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'followers entry' }))
+
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-list-type', 'followers')
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-list-public', 'true')
+  })
+
+  it.each([false, undefined])(
+    'refuses to mount another user non-public followers modal (%s)',
+    (showFollowers) => {
+      mockProfile = profile(true, showFollowers)
+      render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'followers entry' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    }
+  )
+
   it.each([true, false, undefined])(
     'leaves the owner following action to the full-page route instead of a modal (%s)',
     (showFollowing) => {
-      mockProfile = profile(showFollowing)
+      mockProfile = profile(showFollowing, true)
       mockIsOwnProfile = true
       render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)
 

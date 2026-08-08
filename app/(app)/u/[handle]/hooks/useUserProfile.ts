@@ -255,7 +255,9 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   ])
 
   const isOwnProfile = currentUserId === profile?.id
-  const followingCount = (profile?.following || 0) + (profile?.followingTraders || 0)
+  // The header opens the user-follows list. Trader follows have a separate
+  // domain and must not inflate a count that the modal cannot enumerate.
+  const followingCount = profile?.following || 0
 
   // Trader loading/error states
   const isTraderDataLoading = isTrader && traderLoading && !serverTraderData

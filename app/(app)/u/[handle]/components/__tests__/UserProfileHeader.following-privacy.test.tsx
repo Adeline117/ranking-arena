@@ -36,11 +36,14 @@ jest.mock('@/app/components/user/LevelBadge', () => ({
 
 import UserProfileHeader from '../UserProfileHeader'
 
-function profile(showFollowing: boolean | undefined): ServerProfile {
+function profile(
+  showFollowing: boolean | undefined,
+  showFollowers: boolean | undefined
+): ServerProfile {
   return {
     id: 'target-user',
     handle: 'alice',
-    show_followers: true,
+    show_followers: showFollowers,
     show_following: showFollowing,
     followers: 3,
     following: 7,
@@ -52,16 +55,19 @@ function profile(showFollowing: boolean | undefined): ServerProfile {
 
 function renderHeader({
   showFollowing,
+  showFollowers,
   isOwnProfile = false,
 }: {
   showFollowing: boolean | undefined
+  showFollowers: boolean | undefined
   isOwnProfile?: boolean
 }) {
   const onFollowingClick = jest.fn()
+  const onFollowersClick = jest.fn()
 
   const view = render(
     <UserProfileHeader
-      profile={profile(showFollowing)}
+      profile={profile(showFollowing, showFollowers)}
       handle="alice"
       isOwnProfile={isOwnProfile}
       currentUserId={isOwnProfile ? 'target-user' : 'viewer-user'}
@@ -69,12 +75,14 @@ function renderHeader({
       followingCount={7}
       onFollowersCountChange={jest.fn()}
       onFollowingClick={onFollowingClick}
-      onFollowersClick={jest.fn()}
+      onFollowersClick={onFollowersClick}
     />
   )
 
   return {
     container: view.container,
+    followersButton: screen.getByRole('button', { name: '3 followers' }),
+    onFollowersClick,
     onFollowingClick,
     followingButton: screen.getByRole('button', { name: '7 following' }),
   }
@@ -86,7 +94,10 @@ describe('UserProfileHeader following privacy', () => {
   })
 
   it('opens a registered public profile following list', () => {
-    const { followingButton, onFollowingClick } = renderHeader({ showFollowing: true })
+    const { followingButton, onFollowingClick } = renderHeader({
+      showFollowing: true,
+      showFollowers: true,
+    })
 
     expect(followingButton).toBeEnabled()
     fireEvent.click(followingButton)
@@ -97,7 +108,7 @@ describe('UserProfileHeader following privacy', () => {
   it('keeps server-rendered profile identity visible before hydration', () => {
     const markup = renderToStaticMarkup(
       <UserProfileHeader
-        profile={profile(true)}
+        profile={profile(true, true)}
         handle="alice"
         isOwnProfile={false}
         currentUserId={null}
@@ -115,7 +126,7 @@ describe('UserProfileHeader following privacy', () => {
   })
 
   it('does not present the static avatar as an action', () => {
-    const { container } = renderHeader({ showFollowing: true })
+    const { container } = renderHeader({ showFollowing: true, showFollowers: true })
     const avatar = container.querySelector('.profile-header-avatar')
 
     expect(avatar).not.toHaveAttribute('role', 'button')
@@ -127,7 +138,7 @@ describe('UserProfileHeader following privacy', () => {
     render(
       <UserProfileHeader
         profile={{
-          ...profile(true),
+          ...profile(true, true),
           bio: 'Readable biography',
           cover_url: 'https://cdn.example.com/cover.jpg',
         }}
@@ -149,7 +160,10 @@ describe('UserProfileHeader following privacy', () => {
   it.each([false, undefined])(
     'does not expose another user non-public following entry (%s)',
     (showFollowing) => {
-      const { followingButton, onFollowingClick } = renderHeader({ showFollowing })
+      const { followingButton, onFollowingClick } = renderHeader({
+        showFollowing,
+        showFollowers: true,
+      })
 
       expect(followingButton).toBeDisabled()
       fireEvent.click(followingButton)
@@ -160,10 +174,26 @@ describe('UserProfileHeader following privacy', () => {
   )
 
   it.each([false, undefined])(
+    'does not expose another user non-public followers entry (%s)',
+    (showFollowers) => {
+      const { followersButton, onFollowersClick } = renderHeader({
+        showFollowing: true,
+        showFollowers,
+      })
+
+      expect(followersButton).toBeDisabled()
+      fireEvent.click(followersButton)
+
+      expect(onFollowersClick).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([false, undefined])(
     'routes the owner non-public following entry to the full management page (%s)',
     (showFollowing) => {
       const { followingButton, onFollowingClick } = renderHeader({
         showFollowing,
+        showFollowers: true,
         isOwnProfile: true,
       })
 

@@ -174,6 +174,21 @@ describe('useUserProfile viewer and provisioning ownership', () => {
     mockBlockExecute.mockResolvedValue({ data: [], error: null })
   })
 
+  it('reports only user follows in the count opened by the header', () => {
+    setAnonymousViewer()
+    const profile = {
+      ...serverProfile('target-user', 'alice'),
+      following: 2,
+      followingTraders: 40,
+    }
+
+    const { result } = renderHook(() =>
+      useUserProfile({ handle: 'alice', serverProfile: profile, serverTraderData: null })
+    )
+
+    expect(result.current.followingCount).toBe(2)
+  })
+
   it('contains no browser profile mutation or secondary auth source', () => {
     const source = readFileSync(
       join(process.cwd(), 'app/(app)/u/[handle]/hooks/useUserProfile.ts'),

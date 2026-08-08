@@ -346,7 +346,7 @@ export default function UserProfileHeader({
                 const followingInteractive =
                   profile.isRegistered && (isOwnProfile || profile.show_following === true)
                 const followersInteractive =
-                  profile.isRegistered && (isOwnProfile || profile.show_followers !== false)
+                  profile.isRegistered && (isOwnProfile || profile.show_followers === true)
                 const statButtonStyle = (interactive: boolean): CSSProperties => ({
                   appearance: 'none',
                   background: 'transparent',

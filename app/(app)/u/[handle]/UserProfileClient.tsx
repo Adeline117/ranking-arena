@@ -133,7 +133,7 @@ export default function UserProfileClient({
             }
           }}
           onFollowersClick={() => {
-            if (profile.isRegistered && (isOwnProfile || profile.show_followers !== false)) {
+            if (profile.isRegistered && (isOwnProfile || profile.show_followers === true)) {
               setModalType('followers')
             }
           }}
@@ -174,7 +174,7 @@ export default function UserProfileClient({
             isPublic={
               modalType === 'following'
                 ? profile.show_following === true
-                : profile.show_followers !== false
+                : profile.show_followers === true
             }
           />
         )}
