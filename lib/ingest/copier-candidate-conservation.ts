@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT } from './adapters/binance/history-contract'
 import { BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT } from './adapters/bitget/history-terminal'
-import type { ParsedHistoryRow, RawPage, SourceRow } from './core/types'
+import type { ParsedHistoryRow, ProductType, RawPage, SourceRow } from './core/types'
 import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
@@ -14,6 +14,8 @@ export const COPIER_CANDIDATE_MULTISET_CONTRACT =
   'arena.ingest.copier-candidate-multiset@1' as const
 export const COPIER_PARSER_CONSERVATION_CONTRACT =
   'arena.ingest.copier-parser-conservation@1' as const
+export const COPIER_CANDIDATE_REPLAY_BINDING_CONTRACT =
+  'arena.ingest.copier-candidate-replay-binding@1' as const
 
 export const COPIER_CANDIDATE_ADAPTER_SLUGS = Object.freeze([
   'binance',
@@ -35,6 +37,21 @@ export const COPIER_CANDIDATE_ADAPTER_SLUGS = Object.freeze([
 ] as const)
 
 export type CopierCandidateAdapterSlug = (typeof COPIER_CANDIDATE_ADAPTER_SLUGS)[number]
+export type CopierCandidateLocatorContract =
+  `arena.ingest.copier-candidate-locator.${string}@${number}`
+
+export interface CopierCandidateReplayBinding {
+  readonly contract: typeof COPIER_CANDIDATE_REPLAY_BINDING_CONTRACT
+  readonly serialization_contract: typeof STRICT_CANONICAL_JSON_CONTRACT
+  readonly adapter_slug: CopierCandidateAdapterSlug
+  readonly product_type: ProductType
+  readonly candidate_locator_contract: CopierCandidateLocatorContract
+}
+
+export interface CopierCandidateReplaySourceCoordinates {
+  readonly id: number
+  readonly slug: string
+}
 
 type Dict = Record<string, unknown>
 
@@ -57,6 +74,25 @@ const exchangeTraderIdSchema = z
 const locatorContractSchema = z
   .string()
   .regex(/^arena\.ingest\.copier-candidate-locator\.[a-z0-9_.]+@[1-9][0-9]*$/)
+  .transform((value): CopierCandidateLocatorContract => value as CopierCandidateLocatorContract)
+const productTypeSchema = z.enum(['spot', 'futures', 'cfd', 'onchain'])
+
+const replayBindingSchema = z
+  .object({
+    contract: z.literal(COPIER_CANDIDATE_REPLAY_BINDING_CONTRACT),
+    serialization_contract: z.literal(STRICT_CANONICAL_JSON_CONTRACT),
+    adapter_slug: z.enum(COPIER_CANDIDATE_ADAPTER_SLUGS),
+    product_type: productTypeSchema,
+    candidate_locator_contract: locatorContractSchema,
+  })
+  .strict()
+
+const replaySourceCoordinatesSchema = z
+  .object({
+    id: positiveSafeIntegerSchema,
+    slug: sourceSlugSchema,
+  })
+  .strict()
 
 const occurrenceSchema = z
   .object({
@@ -228,7 +264,7 @@ export interface ExtractedCopierCandidateRecords {
 interface CandidateLocator {
   readonly contract: string
   extract(input: {
-    src: SourceRow
+    binding: CopierCandidateReplayBinding
     exchangeTraderId: string
     pageIndex: number
     payload: Dict
@@ -381,16 +417,23 @@ const locators: Readonly<Record<CopierCandidateAdapterSlug, CandidateLocator>> =
   }),
   gate: Object.freeze({
     contract: 'arena.ingest.copier-candidate-locator.gate@1',
-    extract: (({ src, payload }) => {
-      if (src.meta.boardKey === 'futures' && src.product_type === 'futures') {
+    extract: (({ binding, payload }) => {
+      if (
+        binding.product_type === 'futures' &&
+        binding.candidate_locator_contract ===
+          'arena.ingest.copier-candidate-locator.gate.futures@1'
+      ) {
         assertSuccess(payload.code === 200, 'gate futures')
         return arrayAt(payload.data, 'gate.data')
       }
-      if (src.meta.boardKey === 'cfd' && src.product_type === 'cfd') {
+      if (
+        binding.product_type === 'cfd' &&
+        binding.candidate_locator_contract === 'arena.ingest.copier-candidate-locator.gate.cfd@1'
+      ) {
         assertSuccess(payload.code === 0, 'gate cfd')
         return pathArray(payload, ['data', 'list'], 'gate')
       }
-      throw conservationError('gate source variant must be explicit and internally consistent')
+      throw conservationError('gate replay binding must name one internally consistent variant')
     }) satisfies CandidateLocator['extract'],
   }),
   kucoin: locator('kucoin', ({ payload }) => {
@@ -423,6 +466,105 @@ const locators: Readonly<Record<CopierCandidateAdapterSlug, CandidateLocator>> =
   }),
 })
 
+function registeredLocator(adapterSlug: string): CandidateLocator {
+  if (!Object.prototype.hasOwnProperty.call(locators, adapterSlug)) {
+    throw conservationError(`adapter ${adapterSlug} is not registered`)
+  }
+  const selected = locators[adapterSlug as CopierCandidateAdapterSlug]
+  if (!selected) throw conservationError(`adapter ${adapterSlug} is not registered`)
+  return selected
+}
+
+export function selectCopierCandidateLocatorContract(
+  adapterSlug: string,
+  productType: ProductType
+): CopierCandidateLocatorContract {
+  const parsedProductType = productTypeSchema.safeParse(productType)
+  if (!parsedProductType.success) throw conservationError('product type is invalid')
+  const selected = registeredLocator(adapterSlug)
+  if (adapterSlug === 'gate') {
+    if (parsedProductType.data === 'futures') {
+      return 'arena.ingest.copier-candidate-locator.gate.futures@1'
+    }
+    if (parsedProductType.data === 'cfd') {
+      return 'arena.ingest.copier-candidate-locator.gate.cfd@1'
+    }
+    throw conservationError('gate product type must be futures or cfd')
+  }
+  return selected.contract as CopierCandidateLocatorContract
+}
+
+function canonicalLiveReplaySource(input: SourceRow): Readonly<{
+  id: number
+  slug: string
+  adapter_slug: string
+  product_type: ProductType
+  meta: Dict
+}> {
+  const snapshot = canonicalClone(input, 'source row')
+  if (
+    !isPlainRecord(snapshot) ||
+    !Number.isSafeInteger(snapshot.id) ||
+    (snapshot.id as number) <= 0 ||
+    !sourceSlugSchema.safeParse(snapshot.slug).success ||
+    typeof snapshot.adapter_slug !== 'string' ||
+    !productTypeSchema.safeParse(snapshot.product_type).success ||
+    !isPlainRecord(snapshot.meta)
+  ) {
+    throw conservationError('source row is missing candidate replay coordinates')
+  }
+  return Object.freeze({
+    id: snapshot.id as number,
+    slug: snapshot.slug as string,
+    adapter_slug: snapshot.adapter_slug,
+    product_type: snapshot.product_type as ProductType,
+    meta: snapshot.meta,
+  })
+}
+
+function buildReplayBindingFromCanonicalSource(
+  src: ReturnType<typeof canonicalLiveReplaySource>
+): CopierCandidateReplayBinding {
+  const adapterSlug = src.adapter_slug
+  const locatorContract = selectCopierCandidateLocatorContract(adapterSlug, src.product_type)
+  if (adapterSlug === 'gate' && src.meta.boardKey !== src.product_type) {
+    throw conservationError('gate source variant must be explicit and internally consistent')
+  }
+  return canonicalSchemaClone(
+    replayBindingSchema,
+    {
+      contract: COPIER_CANDIDATE_REPLAY_BINDING_CONTRACT,
+      serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+      adapter_slug: adapterSlug,
+      product_type: src.product_type,
+      candidate_locator_contract: locatorContract,
+    },
+    'candidate replay binding'
+  )
+}
+
+/**
+ * Derive the immutable replay identity while the complete live source is
+ * available. This identifies candidate extraction only; it is not publication
+ * authorization. Callers must separately enforce the current source/surface
+ * capability gate before creating trusted evidence.
+ */
+export function deriveCopierCandidateReplayBinding(src: SourceRow): CopierCandidateReplayBinding {
+  return buildReplayBindingFromCanonicalSource(canonicalLiveReplaySource(src))
+}
+
+/** Validate an untrusted persisted binding with exact keys and a closed locator registry. */
+export function revalidateCopierCandidateReplayBinding(
+  value: unknown
+): CopierCandidateReplayBinding {
+  const binding = canonicalSchemaClone(replayBindingSchema, value, 'candidate replay binding')
+  const expected = selectCopierCandidateLocatorContract(binding.adapter_slug, binding.product_type)
+  if (binding.candidate_locator_contract !== expected) {
+    throw conservationError('candidate replay binding locator does not match its adapter variant')
+  }
+  return binding
+}
+
 function candidateMultisetSha256(hashes: readonly string[]): string {
   return strictCanonicalSha256({
     contract: COPIER_CANDIDATE_MULTISET_CONTRACT,
@@ -431,31 +573,41 @@ function candidateMultisetSha256(hashes: readonly string[]): string {
   })
 }
 
-function canonicalSource(input: SourceRow): CopierCandidateLedger['source'] {
+function canonicalReplaySource(
+  input: CopierCandidateReplaySourceCoordinates,
+  binding: CopierCandidateReplayBinding
+): CopierCandidateLedger['source'] {
+  const source = canonicalSchemaClone(
+    replaySourceCoordinatesSchema,
+    input,
+    'candidate replay source coordinates'
+  )
   return canonicalSchemaClone(
     sourceSchema,
-    { id: input.id, slug: input.slug, adapter_slug: input.adapter_slug },
+    { id: source.id, slug: source.slug, adapter_slug: binding.adapter_slug },
     'source coordinates'
   )
 }
 
-export function extractCopierCandidateRecords(
-  input: ExtractCopierCandidateRecordsInput
-): ExtractedCopierCandidateRecords {
+function extractCopierCandidateRecordsWithBinding(input: {
+  binding: CopierCandidateReplayBinding
+  exchangeTraderId: string
+  pageIndex: number
+  payload: unknown
+}): ExtractedCopierCandidateRecords {
   if (!Number.isSafeInteger(input.pageIndex) || input.pageIndex <= 0) {
     throw conservationError('source page index must be a positive safe integer')
   }
   const traderIdentity = exchangeTraderIdSchema.safeParse(input.exchangeTraderId)
   if (!traderIdentity.success) throw conservationError('exchange trader id is invalid')
-  const adapterSlug = input.src.adapter_slug as CopierCandidateAdapterSlug
-  const selected = locators[adapterSlug]
-  if (!selected) throw conservationError(`adapter ${input.src.adapter_slug} is not registered`)
+  const adapterSlug = input.binding.adapter_slug
+  const selected = registeredLocator(adapterSlug)
 
   const payload = canonicalClone(input.payload, `${adapterSlug} page payload`)
   if (!isPlainRecord(payload))
     throw conservationError(`${adapterSlug} page payload must be an object`)
   const candidates = selected.extract({
-    src: input.src,
+    binding: input.binding,
     exchangeTraderId: traderIdentity.data,
     pageIndex: input.pageIndex,
     payload,
@@ -466,19 +618,41 @@ export function extractCopierCandidateRecords(
     }
     return canonicalClone(candidate, `${adapterSlug} candidate ${index + 1}`)
   })
-  const locatorContract =
-    adapterSlug === 'gate'
-      ? `arena.ingest.copier-candidate-locator.gate.${String(input.src.meta.boardKey)}@1`
-      : selected.contract
   return Object.freeze({
-    locatorContract,
+    locatorContract: input.binding.candidate_locator_contract,
     candidates: Object.freeze(normalized),
+  })
+}
+
+export function extractCopierCandidateRecordsFromReplayBinding(input: {
+  binding: unknown
+  exchangeTraderId: string
+  pageIndex: number
+  payload: unknown
+}): ExtractedCopierCandidateRecords {
+  return extractCopierCandidateRecordsWithBinding({
+    ...input,
+    binding: revalidateCopierCandidateReplayBinding(input.binding),
+  })
+}
+
+export function extractCopierCandidateRecords(
+  input: ExtractCopierCandidateRecordsInput
+): ExtractedCopierCandidateRecords {
+  return extractCopierCandidateRecordsWithBinding({
+    binding: deriveCopierCandidateReplayBinding(input.src),
+    exchangeTraderId: input.exchangeTraderId,
+    pageIndex: input.pageIndex,
+    payload: input.payload,
   })
 }
 
 function canonicalPage(page: RawPage, ordinal: number): RawPage {
   if (!isPlainRecord(page)) throw conservationError(`page ${ordinal} must be an object`)
   const safePage = canonicalClone(page, `page ${ordinal}`)
+  if (!exactKeys(safePage, ['pageIndex', 'payload', 'url', 'fetchedAt'])) {
+    throw conservationError(`page ${ordinal} has unexpected fields`)
+  }
   if (safePage.pageIndex !== ordinal) {
     throw conservationError('copier snapshot pages must be contiguous and ordered')
   }
@@ -513,19 +687,38 @@ export function buildCopierCandidateLedger(input: {
   exchangeTraderId: string
   pages: readonly RawPage[]
 }): CopierCandidateLedger {
-  const source = canonicalSource(input.src)
+  const liveSource = canonicalLiveReplaySource(input.src)
+  const binding = buildReplayBindingFromCanonicalSource(liveSource)
+  return buildCopierCandidateLedgerFromReplayBinding({
+    binding,
+    source: { id: liveSource.id, slug: liveSource.slug },
+    exchangeTraderId: input.exchangeTraderId,
+    pages: input.pages,
+  })
+}
+
+/** Rebuild a ledger from immutable evidence without fabricating a SourceRow. */
+export function buildCopierCandidateLedgerFromReplayBinding(input: {
+  binding: unknown
+  source: CopierCandidateReplaySourceCoordinates
+  exchangeTraderId: string
+  pages: readonly RawPage[]
+}): CopierCandidateLedger {
+  const binding = revalidateCopierCandidateReplayBinding(input.binding)
+  const source = canonicalReplaySource(input.source, binding)
   const traderIdentity = exchangeTraderIdSchema.safeParse(input.exchangeTraderId)
   if (!traderIdentity.success) throw conservationError('exchange trader id is invalid')
-  if (!Array.isArray(input.pages) || input.pages.length < 1 || input.pages.length > 100000) {
+  const capturedPages = canonicalClone(input.pages, 'capture pages')
+  if (!Array.isArray(capturedPages) || capturedPages.length < 1 || capturedPages.length > 100000) {
     throw conservationError('capture must contain between 1 and 100000 pages')
   }
 
   const hashes: string[] = []
-  const pages = input.pages.map((candidatePage, pageIndex) => {
+  const pages = capturedPages.map((candidatePage, pageIndex) => {
     const ordinal = pageIndex + 1
     const page = canonicalPage(candidatePage, ordinal)
-    const extracted = extractCopierCandidateRecords({
-      src: input.src,
+    const extracted = extractCopierCandidateRecordsWithBinding({
+      binding,
       exchangeTraderId: traderIdentity.data,
       pageIndex: page.pageIndex,
       payload: page.payload,
@@ -576,6 +769,25 @@ export function revalidateCopierCandidateLedger(input: {
     'candidate ledger'
   )
   const rebuilt = buildCopierCandidateLedger(input)
+  if (strictCanonicalJson(supplied) !== strictCanonicalJson(rebuilt)) {
+    throw conservationError('candidate ledger does not match replayed RAW pages')
+  }
+  return rebuilt
+}
+
+export function revalidateCopierCandidateLedgerFromReplayBinding(input: {
+  binding: unknown
+  source: CopierCandidateReplaySourceCoordinates
+  exchangeTraderId: string
+  pages: readonly RawPage[]
+  ledger: unknown
+}): CopierCandidateLedger {
+  const supplied = canonicalSchemaClone(
+    copierCandidateLedgerSchema,
+    input.ledger,
+    'candidate ledger'
+  )
+  const rebuilt = buildCopierCandidateLedgerFromReplayBinding(input)
   if (strictCanonicalJson(supplied) !== strictCanonicalJson(rebuilt)) {
     throw conservationError('candidate ledger does not match replayed RAW pages')
   }
