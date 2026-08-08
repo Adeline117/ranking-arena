@@ -25,7 +25,6 @@ import { checkPlatformFreshness } from './freshness-check'
 import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
-import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
 import { runPhase1, getPhase1ReadSource } from './phase1-select'
 import { rerankAllRows, atomicPlatformCleanup } from './rerank-cleanup'
 import { scoreTraders } from './score-traders'
@@ -634,8 +633,8 @@ async function computeSeason(
   }
 
   // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table).
-  // Catches data from the enrichment cron that was written to stats_detail but
-  // never propagated back to trader_snapshots_v2. Logic in enrich-stats-detail.ts.
+  // Uses only fresh, season-scoped evidence for dimensions missing from the
+  // current ranking input. Logic in enrich-stats-detail.ts.
   if (isOutOfTime(90_000)) {
     logger.warn(
       `[${season}] SKIPPING Phase 3 (stats_detail enrichment) — only ${Math.round(timeLeftMs() / 1000)}s left`
@@ -655,7 +654,7 @@ async function computeSeason(
       `[${season}] SKIPPING Phase 4 (equity_curve WR/MDD derivation) — only ${Math.round(timeLeftMs() / 1000)}s left`
     )
   } else {
-    const derived = await deriveWrMddFromEquityCurve(supabase, traderMap, isOutOfTime)
+    const derived = await deriveWrMddFromEquityCurve(supabase, traderMap, season, isOutOfTime)
     if (derived > 0) {
       logger.info(`[${season}] Derived ${derived} WR/MDD values from equity curves`)
     }
@@ -682,30 +681,13 @@ async function computeSeason(
     }
   }
 
-  // Phase 4b2: Fallback — compute advanced metrics from trader_daily_snapshots
-  // for traders still missing them after Phase 4b. Catches traders below the
-  // top-N enrichment cut-off whose equity_curve is empty. Logic in
-  // enrich-daily-snapshots.ts.
-  if (isOutOfTime(50_000)) {
-    logger.warn(
-      `[${season}] SKIPPING Phase 4b2 (advanced metrics from daily_snapshots) — only ${Math.round(timeLeftMs() / 1000)}s left`
-    )
-  } else {
-    const dailyDerived = await deriveAdvancedFromDailySnapshots(
-      supabase,
-      traderMap,
-      season,
-      isOutOfTime
-    )
-    if (dailyDerived > 0) {
-      logger.info(
-        `[${season}] Derived ${dailyDerived} sharpe/sortino/calmar/PF values from daily_snapshots (fallback)`
-      )
-    }
-  }
+  // trader_daily_snapshots is deliberately excluded from ranking enrichment:
+  // the table has no season identity, so its ROI deltas cannot prove
+  // 7D/30D/90D Sharpe or profit factor. Missing advanced dimensions remain
+  // null, and the v4 confidence calculation reflects that missing evidence.
 
-  // Phase 4b3: Last resort — compute calmar from ROI + MDD for any trader
-  // still missing it after Phases 4 / 4b / 4b2. Pure mutation in scoring-helpers.
+  // Phase 4b2: Last resort — compute calmar from ROI + MDD for any trader
+  // still missing it after Phases 4 / 4b. Pure mutation in scoring-helpers.
   {
     const calmarOnly = computeLastResortCalmar(traderMap, season)
     if (calmarOnly > 0) {
@@ -736,9 +718,9 @@ async function computeSeason(
     .filter((t) => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
     .filter((t) => t.trades_count == null || t.trades_count === 0 || t.trades_count >= MIN_TRADES) // 0 = unknown (API doesn't provide), treat same as null
 
-  // Re-apply boundary + contradiction sanitization AFTER all enrichment (Phases 3–4b3).
-  // The enrich steps (stats_detail / equity-curve / daily-snapshots) write win_rate /
-  // MDD / sharpe directly into traderMap, bypassing the intake sanitizer in
+  // Re-apply boundary + contradiction sanitization AFTER all enrichment (Phases 3–4b2).
+  // The enrich steps (stats_detail / equity-curve) write win_rate / MDD / sharpe
+  // directly into traderMap, bypassing the intake sanitizer in
   // addToTraderMap. Without this second pass, a profitable trader can carry a
   // contradictory 99.x% MDD or 0% win_rate into BOTH scoring and serving.
   for (const t of uniqueTraders) sanitizeTraderRow(t)
