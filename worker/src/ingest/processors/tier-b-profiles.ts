@@ -35,6 +35,7 @@ import {
   captureAndPublishVerifiedPositionHistory,
   captureTierBHistoryRawOnly,
 } from '../verified-position-history-publisher'
+import { captureAndPublishVerifiedCopierSnapshot } from '../verified-copier-snapshot-publisher'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
@@ -134,6 +135,26 @@ async function crawlTraderHistories(
         // Count only new facts from an already validated authority receipt.
         // Ambiguous-commit reconciliation returns replayed=true/factsAdded=0.
         rowsWritten += published.receipt.factsAdded
+      } else if (kind === 'copiers') {
+        const verifier = adapter.verifyCopierSnapshot?.(src) ?? null
+        if (verifier === null) {
+          await captureTierBHistoryRawOnly({
+            adapter,
+            kind,
+            ...(requireResponsePage ? { requireResponsePage: true } : {}),
+            session,
+            source: src,
+            trader,
+          })
+        } else {
+          await captureAndPublishVerifiedCopierSnapshot({
+            adapter,
+            ...(requireResponsePage ? { requireResponsePage: true } : {}),
+            session,
+            source: src,
+            trader,
+          })
+        }
       } else {
         await captureTierBHistoryRawOnly({
           adapter,

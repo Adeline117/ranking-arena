@@ -31,6 +31,8 @@ import {
 } from '../core/position-snapshot'
 import { isCanonicalPostgresTimestamp } from '../postgres-timestamp'
 import { strictCanonicalJson } from '../strict-canonical-json'
+import type { CopierPublicationLane } from '../copier-publication-lane-artifact'
+import type { CopierPublicationLaneRawReceipt } from '../copier-publication-lane-raw'
 
 /** PURE-DEX sources the spec authorizes to self-compute risk from chain data
  *  (§31/32/34: "所有数据要靠我们链上算"). CEX gives real Sharpe on its page —
@@ -1597,6 +1599,10 @@ export async function publishPositions(
 }
 
 export const COPIER_SNAPSHOT_PUBLICATION_CONTRACT = 'arena.copier-snapshot-publication@1' as const
+export const COPIER_SNAPSHOT_PUBLICATION_V2_CONTRACT =
+  'arena.copier-snapshot-publication@2' as const
+export const COPIER_SNAPSHOT_PUBLISHER_V2_CONTRACT =
+  'arena.ingest.copier-snapshot-publisher@2' as const
 
 export interface PublishCopierSnapshotInput {
   sourceId: number
@@ -1614,6 +1620,33 @@ export interface PublishCopierSnapshotInput {
 export interface CopierSnapshotPublicationReceipt {
   readonly receiptId: number
   readonly sourceRunId: string
+  readonly observedAt: string
+  readonly publishedAt: string
+  readonly rowCount: number
+}
+
+export interface PublishCopierSnapshotV2Input {
+  readonly lane: CopierPublicationLane
+  readonly sourceId: number
+  readonly traderId: number
+  readonly rawObject: CopierPublicationLaneRawReceipt
+  /** Digest of the complete publication-lane wrapper stored in RAW. */
+  readonly sourceRunId: string
+  /** Digest of the wrapper's nested history acquisition. */
+  readonly acquisitionSourceRunId: string
+  readonly observedAt: string
+  readonly currency: Currency
+  readonly evidenceState: 'verified'
+  readonly scanTerminalState: 'exhausted'
+  readonly blockerReasons: readonly string[]
+  readonly rows: readonly ParsedCopierRow[]
+}
+
+export interface CopierSnapshotPublicationV2Receipt {
+  readonly receiptId: number
+  readonly lane: CopierPublicationLane
+  readonly sourceRunId: string
+  readonly acquisitionSourceRunId: string
   readonly observedAt: string
   readonly publishedAt: string
   readonly rowCount: number
@@ -1908,6 +1941,215 @@ export async function publishCopierSnapshot(
     observedAt: prepared.observedAt,
     rowCount: prepared.rowCount,
   })
+}
+
+function validateCopierLaneRawReceipt(
+  value: unknown,
+  lane: CopierPublicationLane,
+  sourceRunId: string
+): CopierPublicationLaneRawReceipt {
+  const receipt = exactCopierSnapshotObject(
+    value,
+    ['id', 'storagePath', 'contentHash'],
+    'rawObject'
+  )
+  assertSafePositiveCopierInteger(receipt.id, 'rawObject.id')
+  if (receipt.contentHash !== sourceRunId) {
+    throw copierSnapshotError('rawObject.contentHash does not match sourceRunId')
+  }
+  if (typeof receipt.storagePath !== 'string') {
+    throw copierSnapshotError('rawObject.storagePath is invalid')
+  }
+  const pathParts = receipt.storagePath.split('/')
+  const expectedFilename = `copier_snapshot_${sourceRunId}.json.gz`
+  if (
+    pathParts.length !== 5 ||
+    !/^[a-z0-9_]+$/.test(pathParts[0]) ||
+    pathParts[1] !== 'copier_publication' ||
+    pathParts[2] !== lane ||
+    pathParts[3] !== sourceRunId ||
+    pathParts[4] !== expectedFilename
+  ) {
+    throw copierSnapshotError('rawObject.storagePath does not match the publication lane')
+  }
+  return Object.freeze({
+    id: receipt.id,
+    storagePath: receipt.storagePath,
+    contentHash: receipt.contentHash,
+  }) as CopierPublicationLaneRawReceipt
+}
+
+function prepareCopierSnapshotV2Payload(input: PublishCopierSnapshotV2Input): {
+  readonly payload: Record<string, unknown>
+  readonly lane: CopierPublicationLane
+  readonly sourceRunId: string
+  readonly acquisitionSourceRunId: string
+  readonly observedAt: string
+  readonly rowCount: number
+} {
+  const value = exactCopierSnapshotObject(
+    input,
+    [
+      'lane',
+      'sourceId',
+      'traderId',
+      'rawObject',
+      'sourceRunId',
+      'acquisitionSourceRunId',
+      'observedAt',
+      'currency',
+      'evidenceState',
+      'scanTerminalState',
+      'blockerReasons',
+      'rows',
+    ],
+    'v2 input'
+  )
+  if (value.lane !== 'tier_b' && value.lane !== 'tier_c') {
+    throw copierSnapshotError('lane must be tier_b or tier_c')
+  }
+  const sourceRunId = value.sourceRunId
+  if (
+    typeof sourceRunId !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(sourceRunId) ||
+    sourceRunId === '0'.repeat(64)
+  ) {
+    throw copierSnapshotError('sourceRunId must be a nonzero lowercase SHA-256 digest')
+  }
+  const acquisitionSourceRunId = value.acquisitionSourceRunId
+  if (
+    typeof acquisitionSourceRunId !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(acquisitionSourceRunId) ||
+    acquisitionSourceRunId === '0'.repeat(64)
+  ) {
+    throw copierSnapshotError('acquisitionSourceRunId must be a nonzero lowercase SHA-256 digest')
+  }
+  const rawObject = validateCopierLaneRawReceipt(value.rawObject, value.lane, sourceRunId)
+
+  // Reuse the frozen V1 row/value validator. Its prepared request is never
+  // sent; V2 replaces the contract and binds the lane plus both RAW digests.
+  const legacyValidated = prepareCopierSnapshotPayload({
+    sourceId: input.sourceId,
+    traderId: input.traderId,
+    rawObjectId: rawObject.id,
+    sourceRunId,
+    observedAt: input.observedAt,
+    currency: input.currency,
+    evidenceState: input.evidenceState,
+    scanTerminalState: input.scanTerminalState,
+    blockerReasons: input.blockerReasons,
+    rows: input.rows,
+  })
+  if (legacyValidated.sourceRunId === acquisitionSourceRunId) {
+    throw copierSnapshotError('wrapper and acquisition source runs must be distinct')
+  }
+  const legacyPayload = legacyValidated.payload
+  const payload = {
+    acquisitionSourceRunId,
+    blockerReasons: legacyPayload.blockerReasons,
+    contract: COPIER_SNAPSHOT_PUBLICATION_V2_CONTRACT,
+    currency: legacyPayload.currency,
+    evidenceState: legacyPayload.evidenceState,
+    lane: value.lane,
+    observedAt: legacyValidated.observedAt,
+    rawObjectId: rawObject.id,
+    rows: legacyPayload.rows,
+    scanTerminalState: legacyPayload.scanTerminalState,
+    sourceId: legacyPayload.sourceId,
+    sourceRunId: legacyValidated.sourceRunId,
+    traderId: legacyPayload.traderId,
+  }
+  cloneStrictJsonb(payload, 'v2 publication payload')
+  return Object.freeze({
+    payload,
+    lane: value.lane,
+    sourceRunId: legacyValidated.sourceRunId,
+    acquisitionSourceRunId,
+    observedAt: legacyValidated.observedAt,
+    rowCount: legacyValidated.rowCount,
+  })
+}
+
+function validateCopierSnapshotV2Receipt(
+  value: unknown,
+  expected: Readonly<{
+    lane: CopierPublicationLane
+    sourceRunId: string
+    acquisitionSourceRunId: string
+    observedAt: string
+    rowCount: number
+  }>
+): CopierSnapshotPublicationV2Receipt {
+  const receipt = exactCopierSnapshotObject(
+    value,
+    [
+      'receiptId',
+      'lane',
+      'sourceRunId',
+      'acquisitionSourceRunId',
+      'observedAt',
+      'publishedAt',
+      'rowCount',
+    ],
+    'v2 receipt'
+  )
+  assertSafePositiveCopierInteger(receipt.receiptId, 'v2 receipt.receiptId')
+  if (receipt.lane !== expected.lane) {
+    throw copierSnapshotError('v2 receipt.lane does not match the publication')
+  }
+  if (receipt.sourceRunId !== expected.sourceRunId) {
+    throw copierSnapshotError('v2 receipt.sourceRunId does not match the publication')
+  }
+  if (receipt.acquisitionSourceRunId !== expected.acquisitionSourceRunId) {
+    throw copierSnapshotError('v2 receipt.acquisitionSourceRunId does not match the publication')
+  }
+  if (receipt.observedAt !== expected.observedAt) {
+    throw copierSnapshotError('v2 receipt.observedAt does not match the publication')
+  }
+  if (!isCanonicalPostgresTimestamp(receipt.publishedAt)) {
+    throw copierSnapshotError('v2 receipt.publishedAt must be a canonical UTC timestamp')
+  }
+  if (
+    typeof receipt.rowCount !== 'number' ||
+    !Number.isSafeInteger(receipt.rowCount) ||
+    receipt.rowCount < 0 ||
+    Object.is(receipt.rowCount, -0) ||
+    receipt.rowCount !== expected.rowCount
+  ) {
+    throw copierSnapshotError('v2 receipt.rowCount does not match the publication')
+  }
+  if (Date.parse(expected.observedAt) > Date.parse(receipt.publishedAt) + 5 * 60_000) {
+    throw copierSnapshotError('v2 receipt publication clock precedes observation beyond tolerance')
+  }
+  return Object.freeze({
+    receiptId: receipt.receiptId,
+    lane: receipt.lane,
+    sourceRunId: receipt.sourceRunId,
+    acquisitionSourceRunId: receipt.acquisitionSourceRunId,
+    observedAt: receipt.observedAt,
+    publishedAt: receipt.publishedAt,
+    rowCount: receipt.rowCount,
+  }) as CopierSnapshotPublicationV2Receipt
+}
+
+/**
+ * Publish a lane-bound copier snapshot through the V2 owner RPC. The legacy
+ * V1 function stays available only for rolling compatibility; new workers
+ * must supply the durable wrapper receipt and both immutable source-run ids.
+ */
+export async function publishCopierSnapshotV2(
+  input: PublishCopierSnapshotV2Input
+): Promise<CopierSnapshotPublicationV2Receipt> {
+  const prepared = prepareCopierSnapshotV2Payload(input)
+  const result = await getIngestPool().query<{ receipt: unknown }>(
+    `SELECT public.publish_copier_snapshot_v2($1::jsonb) AS receipt`,
+    [strictCanonicalJson(prepared.payload)]
+  )
+  if (result.command !== 'SELECT' || result.rowCount !== 1 || result.rows.length !== 1) {
+    throw copierSnapshotError('v2 publisher RPC returned an invalid row count')
+  }
+  const row = exactCopierSnapshotObject(result.rows[0], ['receipt'], 'v2 publisher RPC row')
+  return validateCopierSnapshotV2Receipt(row.receipt, prepared)
 }
 
 type CompatibilityHistoryKind = Exclude<HistoryKind, 'position_history' | 'copiers'>

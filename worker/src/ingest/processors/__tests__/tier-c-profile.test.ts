@@ -18,6 +18,7 @@ const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
 const mockWriteHistoryRawArtifact = jest.fn()
+const mockWriteCopierPublicationLaneRawArtifact = jest.fn()
 const mockRecordStagingRejects = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockPublishPositions = jest.fn()
@@ -42,11 +43,15 @@ jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
   writeHistoryRawArtifact: (...args: unknown[]) => mockWriteHistoryRawArtifact(...args),
 }))
+jest.mock('@/lib/ingest/copier-publication-lane-raw', () => ({
+  writeCopierPublicationLaneRawArtifact: (...args: unknown[]) =>
+    mockWriteCopierPublicationLaneRawArtifact(...args),
+}))
 jest.mock('@/lib/ingest/staging/rejects', () => ({
   recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
-  publishCopierSnapshot: (...args: unknown[]) => mockPublishCopierSnapshot(...args),
+  publishCopierSnapshotV2: (...args: unknown[]) => mockPublishCopierSnapshot(...args),
   publishPositions: (...args: unknown[]) => mockPublishPositions(...args),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
 }))
@@ -60,6 +65,11 @@ jest.mock('@/lib/ingest/db', () => ({
 jest.mock('../../queues', () => ({ tierCResultKey: jest.fn(() => 'tier-c:result') }))
 
 import { processTierC } from '../tier-c-profile'
+import {
+  copierPublicationLaneSourceRunId,
+  copierPublicationLaneStoragePath,
+  type CopierPublicationLaneArtifact,
+} from '@/lib/ingest/copier-publication-lane-artifact'
 
 const src = {
   id: 34,
@@ -342,6 +352,13 @@ describe('Tier-C incomplete profile window gate', () => {
           contentHash: input.sourceRunId,
         }))
     )
+    mockWriteCopierPublicationLaneRawArtifact.mockImplementation(
+      async ({ artifact }: { artifact: CopierPublicationLaneArtifact }) => ({
+        id: 2_081_898,
+        storagePath: copierPublicationLaneStoragePath(artifact),
+        contentHash: copierPublicationLaneSourceRunId(artifact),
+      })
+    )
     mockRecordStagingRejects.mockResolvedValue(undefined)
     mockValidateProfile.mockReturnValue([])
     mockRedisSet.mockResolvedValue('OK')
@@ -360,13 +377,23 @@ describe('Tier-C incomplete profile window gate', () => {
       verified: true,
       envelopeRowCount: input.rows.length,
     }))
-    mockPublishCopierSnapshot.mockResolvedValue({
-      receiptId: 501,
-      sourceRunId: 'a'.repeat(64),
-      observedAt: '2026-07-15T12:00:00.000Z',
-      publishedAt: '2026-07-15T12:00:01.000Z',
-      rowCount: 1,
-    })
+    mockPublishCopierSnapshot.mockImplementation(
+      async (request: {
+        lane: 'tier_b' | 'tier_c'
+        sourceRunId: string
+        acquisitionSourceRunId: string
+        observedAt: string
+        rows: readonly unknown[]
+      }) => ({
+        receiptId: 501,
+        lane: request.lane,
+        sourceRunId: request.sourceRunId,
+        acquisitionSourceRunId: request.acquisitionSourceRunId,
+        observedAt: request.observedAt,
+        publishedAt: '2026-07-15T12:00:01.000Z',
+        rowCount: request.rows.length,
+      })
+    )
     mockIngestClientQuery.mockResolvedValue({ rows: [], rowCount: 0 })
     mockIngestClientRelease.mockReturnValue(undefined)
     mockSessionClose.mockResolvedValue(undefined)
@@ -808,19 +835,14 @@ describe('Tier-C incomplete profile window gate', () => {
       aggregateReady: true,
     })
 
-    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
-    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
-    const rawInput = mockWriteHistoryRawArtifact.mock.calls[0][0] as {
-      artifact: {
-        pages: Array<{ fetched_at: string }>
-        termination: Record<string, unknown>
-        capture_config: Record<string, unknown>
-      }
-      sourceRunId: string
-    }
-    expect(rawInput.artifact.capture_config).toEqual({ caller_page_cap: null })
-    expect(rawInput.artifact.pages).toHaveLength(3)
-    expect(rawInput.artifact.termination).toMatchObject({
+    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
+    const wrapper = mockWriteCopierPublicationLaneRawArtifact.mock.calls[0][0]
+      .artifact as CopierPublicationLaneArtifact
+    expect(wrapper.publication_lane).toBe('tier_c')
+    expect(wrapper.acquisition.capture_config).toEqual({ caller_page_cap: null })
+    expect(wrapper.acquisition.pages).toHaveLength(3)
+    expect(wrapper.acquisition.termination).toMatchObject({
       evidence_state: 'verified',
       scan_terminal_state: 'exhausted',
       blocker_reasons: [],
@@ -832,18 +854,24 @@ describe('Tier-C incomplete profile window gate', () => {
       rows: [copierRow, copierRow, copierRow],
     })
     expect(mockPublishCopierSnapshot).toHaveBeenCalledWith({
+      lane: 'tier_c',
       sourceId: src.id,
       traderId: 42,
-      rawObjectId: 2_081_897,
-      sourceRunId: rawInput.sourceRunId,
-      observedAt: rawInput.artifact.pages[2].fetched_at,
+      rawObject: {
+        id: 2_081_898,
+        storagePath: copierPublicationLaneStoragePath(wrapper),
+        contentHash: copierPublicationLaneSourceRunId(wrapper),
+      },
+      sourceRunId: copierPublicationLaneSourceRunId(wrapper),
+      acquisitionSourceRunId: wrapper.acquisition_source_run_id,
+      observedAt: wrapper.acquisition.pages[2].fetched_at,
       currency: 'USDC',
       evidenceState: 'verified',
       scanTerminalState: 'exhausted',
       blockerReasons: [],
       rows: [copierRow, copierRow, copierRow],
     })
-    expect(mockIngestClientQuery.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(mockWriteCopierPublicationLaneRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
       mockVerifyCopierConservation.mock.invocationCallOrder[0]
     )
     expect(mockVerifyCopierConservation.mock.invocationCallOrder[0]).toBeLessThan(
@@ -879,10 +907,10 @@ describe('Tier-C incomplete profile window gate', () => {
       'copier receipt RPC failed'
     )
 
-    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
-    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockPublishCopierSnapshot).toHaveBeenCalledTimes(1)
-    expect(mockIngestClientQuery.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(mockWriteCopierPublicationLaneRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
       mockPublishCopierSnapshot.mock.invocationCallOrder[0]
     )
     expect(mockRedisSet).not.toHaveBeenCalled()
@@ -896,22 +924,14 @@ describe('Tier-C incomplete profile window gate', () => {
     mockGetAdapter.mockReturnValue(historyAdapter(true))
     mockGetHistory.mockImplementation(() => historyPreviewStream())
     mockParseHistory.mockReturnValue([])
-    mockPublishCopierSnapshot.mockResolvedValue({
-      receiptId: 502,
-      sourceRunId: 'a'.repeat(64),
-      observedAt: '2026-07-15T12:00:00.000Z',
-      publishedAt: '2026-07-15T12:00:01.000Z',
-      rowCount: 0,
-    })
-
     await expect(processTierC(historyJob('copiers'), 'local')).resolves.toEqual({
       traderId: 42,
       surface: 'copiers',
       aggregateReady: true,
     })
 
-    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
-    expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
+    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockParseHistory).toHaveBeenCalledTimes(3)
     expect(mockVerifyCopierConservation).toHaveBeenCalledWith(expect.objectContaining({ rows: [] }))
     expect(mockPublishCopierSnapshot).toHaveBeenCalledWith(expect.objectContaining({ rows: [] }))
@@ -941,6 +961,22 @@ describe('Tier-C incomplete profile window gate', () => {
     )
 
     expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledWith(
+      {
+        artifact: expect.objectContaining({
+          capture_config: { caller_page_cap: 2 },
+          pages: [expect.any(Object), expect.any(Object)],
+          termination: expect.objectContaining({
+            evidence_state: 'caller_limited',
+            scan_terminal_state: 'partial',
+            blocker_reasons: ['caller_limit'],
+          }),
+        }),
+        sourceRunId: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+      expect.any(Function)
+    )
+    expect(mockWriteCopierPublicationLaneRawArtifact).not.toHaveBeenCalled()
     expect(mockIngestClientQuery.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'COMMIT'])
     expect(mockParseHistory).not.toHaveBeenCalled()
     expect(mockVerifyCopierConservation).not.toHaveBeenCalled()
@@ -961,6 +997,7 @@ describe('Tier-C incomplete profile window gate', () => {
     )
 
     expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteCopierPublicationLaneRawArtifact).not.toHaveBeenCalled()
     expect(mockParseHistory).not.toHaveBeenCalled()
     expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()
@@ -990,7 +1027,8 @@ describe('Tier-C incomplete profile window gate', () => {
 
     await expect(processTierC(historyJob('copiers'), 'local')).rejects.toThrow(message)
 
-    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockParseHistory).toHaveBeenCalledTimes(3)
     expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()

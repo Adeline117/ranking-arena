@@ -22,6 +22,7 @@ const mockPublishProfile = jest.fn()
 const mockDbQuery = jest.fn()
 const mockQueueAdd = jest.fn()
 const mockCaptureAndPublishVerifiedPositionHistory = jest.fn()
+const mockCaptureAndPublishVerifiedCopierSnapshot = jest.fn()
 
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
@@ -66,6 +67,14 @@ jest.mock('../../verified-position-history-publisher', () => {
     ...actual,
     captureAndPublishVerifiedPositionHistory: (...args: unknown[]) =>
       mockCaptureAndPublishVerifiedPositionHistory(...args),
+  }
+})
+jest.mock('../../verified-copier-snapshot-publisher', () => {
+  const actual = jest.requireActual('../../verified-copier-snapshot-publisher')
+  return {
+    ...actual,
+    captureAndPublishVerifiedCopierSnapshot: (...args: unknown[]) =>
+      mockCaptureAndPublishVerifiedCopierSnapshot(...args),
   }
 })
 
@@ -215,6 +224,24 @@ describe('Tier-B profile coverage accounting', () => {
         replayed: false,
         sourceRunId: 'b'.repeat(64),
         stateId: 1,
+      },
+    })
+    mockCaptureAndPublishVerifiedCopierSnapshot.mockResolvedValue({
+      rawObject: {
+        id: 2_081_898,
+        storagePath:
+          `binance_futures/copier_publication/tier_b/${'d'.repeat(64)}/` +
+          `copier_snapshot_${'d'.repeat(64)}.json.gz`,
+        contentHash: 'd'.repeat(64),
+      },
+      receipt: {
+        receiptId: 12,
+        lane: 'tier_b',
+        sourceRunId: 'd'.repeat(64),
+        acquisitionSourceRunId: 'e'.repeat(64),
+        observedAt: '2026-07-15T12:00:00.000Z',
+        publishedAt: '2026-07-15T12:00:01.000Z',
+        rowCount: 2,
       },
     })
     mockGetLatestPassedNativeCohort.mockResolvedValue({
@@ -527,6 +554,139 @@ describe('Tier-B profile coverage accounting', () => {
       { kind: 'copiers', state: 'verifier_missing', cursor: null },
     ])
     expect(mockParseHistory).not.toHaveBeenCalled()
+    expect(mockCaptureAndPublishVerifiedCopierSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('routes a selected copier verifier through the strict receipt publisher', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    const verifier = {
+      contract: 'arena.ingest.history-terminal-verifier.test.copiers@1',
+      verifyTerminal: jest.fn(),
+      verifyConservation: jest.fn(),
+    }
+    const adapter = {
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: false,
+        transfers: false,
+        copiers: true,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+      verifyCopierSnapshot: jest.fn(() => verifier),
+    }
+    mockGetAdapter.mockReturnValue(adapter)
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 0,
+    })
+
+    expect(adapter.verifyCopierSnapshot).toHaveBeenCalledWith(src)
+    expect(mockCaptureAndPublishVerifiedCopierSnapshot).toHaveBeenCalledWith({
+      adapter,
+      session: expect.anything(),
+      source: src,
+      trader: expect.objectContaining({ id: 42 }),
+    })
+    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockGetHistory).not.toHaveBeenCalled()
+  })
+
+  it('preserves the response-page gate for a record-only verified copier crawl', async () => {
+    const copierOnlySource = {
+      ...recordOnlySource,
+      slug: 'binance_futures',
+      adapter_slug: 'binance',
+    }
+    const verifier = {
+      contract: 'arena.ingest.history-terminal-verifier.test.copiers@1',
+      verifyTerminal: jest.fn(),
+      verifyConservation: jest.fn(),
+    }
+    const adapter = {
+      capabilities: {
+        profile: false,
+        positionHistory: false,
+        orders: false,
+        transfers: false,
+        copiers: true,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      verifyCopierSnapshot: jest.fn(() => verifier),
+    }
+    mockGetSourceBySlug.mockResolvedValue(copierOnlySource)
+    mockGetAdapter.mockReturnValue(adapter)
+
+    await expect(
+      processTierB({ data: { sourceSlug: 'binance_futures' } } as Job<TierJobData>)
+    ).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 0,
+    })
+
+    expect(mockCaptureAndPublishVerifiedCopierSnapshot).toHaveBeenCalledWith({
+      adapter,
+      requireResponsePage: true,
+      session: expect.anything(),
+      source: copierOnlySource,
+      trader: expect.objectContaining({ id: 42 }),
+    })
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('reports a strict copier publication failure without discarding other history evidence', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(() => historyStream())
+    const verifier = {
+      contract: 'arena.ingest.history-terminal-verifier.test.copiers@1',
+      verifyTerminal: jest.fn(),
+      verifyConservation: jest.fn(),
+    }
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: true,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+      verifyCopierSnapshot: jest.fn(() => verifier),
+    })
+    mockCaptureAndPublishVerifiedCopierSnapshot.mockRejectedValue(
+      new Error('tier_b receipt rejected')
+    )
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 0,
+      errors: 1,
+    })
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteHistoryRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: { history_kind: 'orders' },
+    })
+    expect(mockCaptureAndPublishVerifiedCopierSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it('persists upstream-error evidence before reporting the history failure', async () => {
