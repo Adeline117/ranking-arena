@@ -114,13 +114,19 @@ describe('Bitget bot copier aggregate authority', () => {
     )
   })
 
-  it('maps SQL NULL and non-plain data to the existing pending/no-store API contract', () => {
+  it('serves only receipt-bound/none aggregates and maps every other result to pending', () => {
     expect(recordsReader).toContain('if (error || !isPlainRecord(data)) return null')
     expect(recordsReader).toMatch(
       /function isPlainRecord\(value: unknown\)[\s\S]*?if \(value === null \|\| typeof value !== 'object' \|\| Array\.isArray\(value\)\) return false/
     )
     expect(recordsRoute).toMatch(
-      /if \(aggregate\)[\s\S]*withCache\([\s\S]*return apiSuccess\(\{ cacheState: 'pending' as const \}, 200, \{ 'Cache-Control': 'no-store' \}\)/
+      /if \(aggregate && \(aggregate\.receiptBound \|\| aggregate\.depth === 'none'\)\)[\s\S]*return withCache\(apiSuccess\(aggregate\)/
+    )
+    expect(recordsRoute).toMatch(
+      /refreshedAggregate &&\s*\(refreshedAggregate\.receiptBound \|\| refreshedAggregate\.depth === 'none'\)[\s\S]*return withCache\(apiSuccess\(refreshedAggregate\)/
+    )
+    expect(recordsRoute).toContain(
+      "return apiSuccess({ cacheState: 'pending' as const }, 200, { 'Cache-Control': 'no-store' })"
     )
   })
 
