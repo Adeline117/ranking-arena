@@ -53,7 +53,11 @@ test('retired ad hoc UI screenshot entrypoint stays removed', () => {
 })
 
 test('retired one-off schema and VPS instructions stay removed', () => {
-  const retiredOperationalFiles = ['scripts/get-schema.mjs', 'scripts/DEPLOY_TO_VPS.md']
+  const retiredOperationalFiles = [
+    'scripts/get-schema.mjs',
+    'scripts/show-trader-sources-schema.ts',
+    'scripts/DEPLOY_TO_VPS.md',
+  ]
 
   assert.deepEqual(
     retiredOperationalFiles.filter((path) => existsSync(join(repoRoot, path))),
