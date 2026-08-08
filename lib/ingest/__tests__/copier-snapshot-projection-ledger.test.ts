@@ -349,6 +349,13 @@ describe('copier snapshot projection ledger', () => {
         expect(row.projection.source_candidate_sha256).toBe(row.source_candidate_sha256)
         expect(copierSnapshotProjectionSha256(row.projection)).toBe(row.projection_sha256)
       })
+      expect({
+        adapter,
+        fixturePath,
+        rowCount: ledger.row_count,
+        sourceCandidateFixedMultisetSha256: ledger.source_candidate_fixed_multiset_sha256,
+        candidateProjectionFixedMultisetSha256: ledger.candidate_projection_fixed_multiset_sha256,
+      }).toMatchSnapshot()
       expect(revalidateCopierSnapshotProjectionLedger(storedEvidence(input, ledger))).toEqual(
         ledger
       )
