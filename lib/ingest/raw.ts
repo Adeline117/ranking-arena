@@ -9,6 +9,7 @@
 
 import { createHash } from 'node:crypto'
 import { TextDecoder } from 'node:util'
+import { isProxy } from 'node:util/types'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { PoolClient } from 'pg'
@@ -55,6 +56,11 @@ import {
   revalidateCopierSnapshotArtifact,
   type CopierSnapshotArtifact,
 } from './copier-snapshot-artifact'
+import {
+  COPIER_SNAPSHOT_ARTIFACT_V2_CONTRACT,
+  revalidateCopierSnapshotArtifactV2,
+  type CopierSnapshotArtifactV2,
+} from './copier-snapshot-artifact-v2'
 
 export const RAW_BUCKET = 'raw-snapshots'
 
@@ -63,11 +69,14 @@ let storageClient: SupabaseClient | null = null
 const RAW_UPLOAD_ATTEMPTS = 3
 const RAW_UPLOAD_RETRY_BASE_MS = 750
 const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_queue', 0)"
+const RAW_POINTER_MAX_COMPRESSED_BYTES = 2_147_483_647
 const POSITION_HISTORY_RAW_MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+const COPIER_SNAPSHOT_TRUST_RAW_MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 
 export const RAW_JSON_STRINGIFY_CONTRACT = 'arena.raw-json-stringify@1' as const
 export const POSITION_HISTORY_RAW_JOB_TYPE = 'history:position_history' as const
 export const EVENT_HISTORY_RAW_ARTIFACT_ROLE = 'event_history' as const
+export const COPIER_SNAPSHOT_TRUST_RAW_ARTIFACT_ROLE = 'copier_snapshot_trust' as const
 export const POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
   'arena.position-history-publication-evidence@1' as const
 export type RawSerializationContract =
@@ -535,12 +544,31 @@ async function verifyExistingDeterministicRaw(
     )
   }
 
+  const maxCompressedBytes = deterministicRawMaxCompressedBytes(artifact)
+  const declaredCompressedBytes: unknown = data.size
+  if (
+    declaredCompressedBytes !== undefined &&
+    (typeof declaredCompressedBytes !== 'number' ||
+      !Number.isSafeInteger(declaredCompressedBytes) ||
+      declaredCompressedBytes < 0 ||
+      declaredCompressedBytes > maxCompressedBytes)
+  ) {
+    throw createError(
+      `existing Storage object ${artifact.storagePath} exceeds its compressed byte limit`
+    )
+  }
+
   let gzipBytes: Buffer
   try {
     gzipBytes = Buffer.from(await data.arrayBuffer())
   } catch (cause) {
     throw createError(
       `cannot read existing Storage object ${artifact.storagePath}: ${asError(cause).message}`
+    )
+  }
+  if (gzipBytes.byteLength > maxCompressedBytes) {
+    throw createError(
+      `existing Storage object ${artifact.storagePath} exceeds its compressed byte limit`
     )
   }
   if (
@@ -554,7 +582,9 @@ async function verifyExistingDeterministicRaw(
 
   let jsonBytes: Buffer
   try {
-    jsonBytes = gunzipSync(gzipBytes)
+    jsonBytes = gunzipSync(gzipBytes, {
+      maxOutputLength: artifact.jsonBytes.byteLength,
+    })
   } catch {
     throw createError(`existing Storage object ${artifact.storagePath} has invalid gzip data`)
   }
@@ -578,10 +608,21 @@ async function verifyExistingDeterministicRaw(
   return gzipBytes.byteLength
 }
 
+function deterministicRawMaxCompressedBytes(
+  artifact: Pick<PreparedDeterministicRawArtifact, 'jsonBytes'>
+): number {
+  const uncompressedBytes = artifact.jsonBytes.byteLength
+  const boundedOverhead = Math.max(64 * 1024, Math.ceil(uncompressedBytes / 16_384) * 16)
+  return Math.min(RAW_POINTER_MAX_COMPRESSED_BYTES, uncompressedBytes + boundedOverhead)
+}
+
 async function uploadDeterministicRaw(
   artifact: PreparedDeterministicRawArtifact,
   createError: (detail: string) => Error = artifactSetError
 ): Promise<number> {
+  if (artifact.gzipBytes.byteLength > deterministicRawMaxCompressedBytes(artifact)) {
+    throw createError(`Storage upload exceeds compressed byte limit (${artifact.storagePath})`)
+  }
   const bucket = getStorageClient().storage.from(RAW_BUCKET)
   for (let attempt = 1; attempt <= RAW_UPLOAD_ATTEMPTS; attempt += 1) {
     const { error } = await bucket.upload(artifact.storagePath, artifact.gzipBytes, {
@@ -1640,6 +1681,322 @@ export async function writeCopierSnapshotRawArtifact(
   const prepared = prepareCopierSnapshotRawArtifact(normalized)
   prepared.durableCompressedBytes = await uploadDeterministicRaw(prepared, copierSnapshotRawError)
   return runTransaction((transaction) => persistCopierSnapshotRawPointer(transaction, prepared))
+}
+
+export interface WriteCopierSnapshotTrustRawArtifactV2Input {
+  readonly artifact: CopierSnapshotArtifactV2
+  /** Immutable SHA-256 of the complete outer @2 artifact, supplied by its build result. */
+  readonly sourceRunId: string
+}
+
+export interface CopierSnapshotTrustRawArtifactV2Receipt extends RawObjectReceipt {
+  /** Outer @2 identity. It is also the pointer source_run_id and content_hash. */
+  readonly sourceRunId: string
+  readonly snapshotSourceRunId: string
+  readonly candidateLedgerSha256: string
+  readonly parserConservationSha256: string
+  readonly projectionLedgerSha256: string
+}
+
+interface CapturedCopierSnapshotTrustRawArtifactV2Input {
+  readonly artifact: unknown
+  readonly sourceRunId: string
+}
+
+interface NormalizedCopierSnapshotTrustRawArtifactV2Input {
+  readonly artifact: CopierSnapshotArtifactV2
+  readonly sourceRunId: string
+  readonly storagePath: string
+  readonly jobType: 'tier_c' | 'history:copiers'
+}
+
+interface PreparedCopierSnapshotTrustRawArtifactV2 extends PreparedDeterministicRawArtifact {
+  readonly input: NormalizedCopierSnapshotTrustRawArtifactV2Input
+  readonly metaBase: Record<string, unknown>
+}
+
+interface CopierSnapshotTrustRawPointerRow {
+  readonly id: number
+  readonly source_id: number
+  readonly job_type: string
+  readonly trader_id: number | null
+  readonly timeframe: number | null
+  readonly fetched_at: string
+  readonly fetched_at_exact: boolean
+  readonly observed_at_not_future: boolean
+  readonly storage_path: string
+  readonly bytes: number
+  readonly content_hash: string
+  readonly quarantined: boolean
+  readonly meta: unknown
+  readonly source_run_id: string | null
+  readonly trust_artifact_role: string | null
+}
+
+function copierSnapshotTrustRawError(detail: string): Error {
+  return new Error(`[ingest] copier snapshot trust RAW artifact failed: ${detail}`)
+}
+
+/** Capture the external anchor as a primitive before inspecting untrusted evidence. */
+function captureCopierSnapshotTrustRawArtifactV2Input(
+  input: unknown
+): CapturedCopierSnapshotTrustRawArtifactV2Input {
+  if (typeof input !== 'object' || input === null || Array.isArray(input) || isProxy(input)) {
+    throw copierSnapshotTrustRawError('input must be a non-proxy plain object')
+  }
+  const prototype = Object.getPrototypeOf(input)
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw copierSnapshotTrustRawError('input must be a non-proxy plain object')
+  }
+  const ownKeys = Reflect.ownKeys(input)
+  if (ownKeys.length !== 2 || ownKeys.some((key) => key !== 'artifact' && key !== 'sourceRunId')) {
+    throw copierSnapshotTrustRawError('input must have the exact contract fields')
+  }
+
+  const sourceRunDescriptor = Object.getOwnPropertyDescriptor(input, 'sourceRunId')
+  if (
+    !sourceRunDescriptor ||
+    !sourceRunDescriptor.enumerable ||
+    !('value' in sourceRunDescriptor)
+  ) {
+    throw copierSnapshotTrustRawError('input must contain enumerable data properties')
+  }
+  const sourceRunId: unknown = sourceRunDescriptor.value
+  if (typeof sourceRunId !== 'string' || !/^[0-9a-f]{64}$/.test(sourceRunId)) {
+    throw copierSnapshotTrustRawError('source run id must be a lowercase SHA-256 digest')
+  }
+
+  const artifactDescriptor = Object.getOwnPropertyDescriptor(input, 'artifact')
+  if (!artifactDescriptor || !artifactDescriptor.enumerable || !('value' in artifactDescriptor)) {
+    throw copierSnapshotTrustRawError('input must contain enumerable data properties')
+  }
+  return { sourceRunId, artifact: artifactDescriptor.value }
+}
+
+function normalizeCopierSnapshotTrustRawArtifactV2Input(
+  captured: CapturedCopierSnapshotTrustRawArtifactV2Input
+): NormalizedCopierSnapshotTrustRawArtifactV2Input {
+  const verified = revalidateCopierSnapshotArtifactV2({
+    artifact: captured.artifact,
+    expectedSourceRunId: captured.sourceRunId,
+  })
+  const artifact = verified.artifact
+  const snapshot = artifact.snapshot
+  const sourceRunId = verified.sourceRunId
+  return {
+    artifact,
+    sourceRunId,
+    jobType: snapshot.lane === 'tier_b' ? 'history:copiers' : 'tier_c',
+    storagePath:
+      `${snapshot.source.slug}/copier_snapshot_trust/${snapshot.lane}/${sourceRunId}/` +
+      `copier_snapshot_trust_${sourceRunId}.json.gz`,
+  }
+}
+
+function copierSnapshotTrustRawMetaBase(
+  input: NormalizedCopierSnapshotTrustRawArtifactV2Input
+): Record<string, unknown> {
+  const artifact = input.artifact
+  const snapshot = artifact.snapshot
+  return {
+    surface: 'copiers',
+    data_contract: COPIER_SNAPSHOT_ARTIFACT_V2_CONTRACT,
+    source_run_id: input.sourceRunId,
+    source_id: snapshot.source.id,
+    source_slug: snapshot.source.slug,
+    trader_id: snapshot.trader.id,
+    lane: snapshot.lane,
+    observed_at: snapshot.observed_at,
+    snapshot_artifact_contract: snapshot.contract,
+    snapshot_source_run_id: artifact.snapshot_source_run_id,
+    candidate_ledger_contract: artifact.candidate_ledger.contract,
+    candidate_ledger_sha256: artifact.candidate_ledger_sha256,
+    parser_conservation_contract: artifact.parser_conservation.contract,
+    parser_conservation_sha256: artifact.parser_conservation_sha256,
+    projection_ledger_contract: artifact.projection_ledger.contract,
+    projection_ledger_sha256: artifact.projection_ledger_sha256,
+  }
+}
+
+function prepareCopierSnapshotTrustRawArtifactV2(
+  input: NormalizedCopierSnapshotTrustRawArtifactV2Input
+): PreparedCopierSnapshotTrustRawArtifactV2 {
+  const { json } = serializeRawPayload(input.artifact, STRICT_CANONICAL_JSON_CONTRACT)
+  const jsonBytes = Buffer.from(json, 'utf8')
+  if (jsonBytes.byteLength > COPIER_SNAPSHOT_TRUST_RAW_MAX_UNCOMPRESSED_BYTES) {
+    throw copierSnapshotTrustRawError('artifact exceeds the trusted replay limit')
+  }
+  const gzipBytes = gzipSync(jsonBytes)
+  const contentHash = createHash('sha256').update(jsonBytes).digest('hex')
+  if (contentHash !== input.sourceRunId) {
+    throw copierSnapshotTrustRawError('serialized artifact digest does not match source run id')
+  }
+  return {
+    input,
+    storagePath: input.storagePath,
+    jsonBytes,
+    gzipBytes,
+    contentHash,
+    durableCompressedBytes: gzipBytes.byteLength,
+    metaBase: copierSnapshotTrustRawMetaBase(input),
+  }
+}
+
+function copierSnapshotTrustRawMeta(
+  prepared: PreparedCopierSnapshotTrustRawArtifactV2
+): Record<string, unknown> {
+  return rawIntegrityMeta(
+    prepared.metaBase,
+    STRICT_CANONICAL_JSON_CONTRACT,
+    prepared.durableCompressedBytes,
+    prepared.jsonBytes.byteLength
+  )
+}
+
+async function loadCopierSnapshotTrustRawPointers(
+  transaction: IngestQueryExecutor,
+  prepared: PreparedCopierSnapshotTrustRawArtifactV2
+): Promise<CopierSnapshotTrustRawPointerRow[]> {
+  const artifact = prepared.input.artifact
+  const { rows } = await transaction.query<CopierSnapshotTrustRawPointerRow>(
+    `SELECT id, source_id, job_type, trader_id, timeframe,
+            fetched_at::text AS fetched_at,
+            fetched_at = $4::timestamptz AS fetched_at_exact,
+            fetched_at <= statement_timestamp() + interval '5 minutes'
+              AS observed_at_not_future,
+            storage_path, bytes, content_hash, quarantined, meta,
+            source_run_id, trust_artifact_role
+       FROM arena.raw_objects
+      WHERE storage_path = $1
+         OR (
+           source_run_id = $2
+           AND trust_artifact_role = $3
+         )
+      ORDER BY id
+      FOR UPDATE`,
+    [
+      prepared.storagePath,
+      prepared.input.sourceRunId,
+      COPIER_SNAPSHOT_TRUST_RAW_ARTIFACT_ROLE,
+      artifact.snapshot.observed_at,
+    ]
+  )
+  return rows
+}
+
+async function insertCopierSnapshotTrustRawPointer(
+  transaction: IngestQueryExecutor,
+  prepared: PreparedCopierSnapshotTrustRawArtifactV2
+): Promise<void> {
+  const snapshot = prepared.input.artifact.snapshot
+  await transaction.query(
+    `INSERT INTO arena.raw_objects
+       (source_id, job_type, trader_id, timeframe, fetched_at, storage_path,
+        bytes, content_hash, meta, source_run_id, trust_artifact_role)
+     VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (storage_path) DO NOTHING`,
+    [
+      snapshot.source.id,
+      prepared.input.jobType,
+      snapshot.trader.id,
+      snapshot.observed_at,
+      prepared.storagePath,
+      prepared.durableCompressedBytes,
+      prepared.contentHash,
+      JSON.stringify(copierSnapshotTrustRawMeta(prepared)),
+      prepared.input.sourceRunId,
+      COPIER_SNAPSHOT_TRUST_RAW_ARTIFACT_ROLE,
+    ]
+  )
+}
+
+function validateCopierSnapshotTrustRawPointer(
+  rows: readonly CopierSnapshotTrustRawPointerRow[],
+  prepared: PreparedCopierSnapshotTrustRawArtifactV2
+): CopierSnapshotTrustRawArtifactV2Receipt {
+  if (rows.length !== 1) {
+    throw copierSnapshotTrustRawError(`expected one database pointer, found ${rows.length}`)
+  }
+  const row = rows[0]
+  const artifact = prepared.input.artifact
+  const snapshot = artifact.snapshot
+  assertSafePositiveInteger(row.id, 'RAW pointer id', copierSnapshotTrustRawError)
+
+  let metaMatches = false
+  try {
+    metaMatches =
+      strictCanonicalJson(row.meta) === strictCanonicalJson(copierSnapshotTrustRawMeta(prepared))
+  } catch {
+    metaMatches = false
+  }
+  if (
+    row.source_id !== snapshot.source.id ||
+    row.job_type !== prepared.input.jobType ||
+    row.trader_id !== snapshot.trader.id ||
+    row.timeframe !== null ||
+    row.fetched_at_exact !== true ||
+    row.observed_at_not_future !== true ||
+    row.storage_path !== prepared.storagePath ||
+    row.bytes !== prepared.durableCompressedBytes ||
+    row.content_hash !== prepared.input.sourceRunId ||
+    row.quarantined !== false ||
+    row.source_run_id !== prepared.input.sourceRunId ||
+    row.trust_artifact_role !== COPIER_SNAPSHOT_TRUST_RAW_ARTIFACT_ROLE ||
+    !metaMatches
+  ) {
+    throw copierSnapshotTrustRawError(`database pointer ${row.id} does not match the artifact`)
+  }
+  return Object.freeze({
+    id: row.id,
+    storagePath: row.storage_path,
+    contentHash: row.content_hash,
+    sourceRunId: prepared.input.sourceRunId,
+    snapshotSourceRunId: artifact.snapshot_source_run_id,
+    candidateLedgerSha256: artifact.candidate_ledger_sha256,
+    parserConservationSha256: artifact.parser_conservation_sha256,
+    projectionLedgerSha256: artifact.projection_ledger_sha256,
+  })
+}
+
+async function persistCopierSnapshotTrustRawPointer(
+  transaction: IngestQueryExecutor,
+  prepared: PreparedCopierSnapshotTrustRawArtifactV2
+): Promise<CopierSnapshotTrustRawArtifactV2Receipt> {
+  await transaction.query(
+    `SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))`,
+    [`arena.copier-snapshot-trust-raw-artifact:${prepared.input.sourceRunId}`]
+  )
+  let rows = await loadCopierSnapshotTrustRawPointers(transaction, prepared)
+  if (rows.length === 0) {
+    await insertCopierSnapshotTrustRawPointer(transaction, prepared)
+    rows = await loadCopierSnapshotTrustRawPointers(transaction, prepared)
+  }
+  return validateCopierSnapshotTrustRawPointer(rows, prepared)
+}
+
+/**
+ * Persist independently replayable @2 copier evidence. The externally supplied
+ * outer digest is captured and semantically revalidated before Storage I/O.
+ * This receipt proves durable bytes and an exact private pointer only; it grants
+ * neither completeness nor ranking/publication authority.
+ */
+export async function writeCopierSnapshotTrustRawArtifactV2(
+  input: WriteCopierSnapshotTrustRawArtifactV2Input,
+  runTransaction: IngestTransactionRunner
+): Promise<CopierSnapshotTrustRawArtifactV2Receipt> {
+  if (typeof runTransaction !== 'function') {
+    throw copierSnapshotTrustRawError('a claimed transaction runner is required')
+  }
+  const captured = captureCopierSnapshotTrustRawArtifactV2Input(input)
+  const normalized = normalizeCopierSnapshotTrustRawArtifactV2Input(captured)
+  const prepared = prepareCopierSnapshotTrustRawArtifactV2(normalized)
+  prepared.durableCompressedBytes = await uploadDeterministicRaw(
+    prepared,
+    copierSnapshotTrustRawError
+  )
+  return runTransaction((transaction) =>
+    persistCopierSnapshotTrustRawPointer(transaction, prepared)
+  )
 }
 
 interface PreparedRawObjectPointer {
