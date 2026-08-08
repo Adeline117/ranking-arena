@@ -5,8 +5,8 @@
  * Core daily snapshot collection: fetch yesterday's data, gap-fill from leaderboard_ranks,
  * compute daily_return_pct, and upsert to trader_daily_snapshots.
  *
- * Derived metrics (Sharpe/MDD/WR) are computed by /api/cron/compute-derived-metrics (00:20 UTC).
- * Cleanup and metric refresh are handled by /api/cron/cleanup-data (01:00 UTC).
+ * Derived metrics (Sharpe/MDD/WR) are computed inside the atomic leaderboard build.
+ * Cleanup is handled by /api/cron/cleanup-data (01:06 UTC).
  *
  * Schedule: Daily at 00:05 UTC (Vercel cron sends GET)
  */

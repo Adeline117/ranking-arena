@@ -1168,5 +1168,5 @@ Redis consumers do **not** share one fail-open contract. Treat each boundary sep
 | **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 53 endpoints / 43 Vercel schedules, staggered        |
+| **Cron Schedule**    | 53 endpoints / 42 Vercel schedules, staggered        |
 | **Scraper PM2 name** | `arena-scraper`                                      |
