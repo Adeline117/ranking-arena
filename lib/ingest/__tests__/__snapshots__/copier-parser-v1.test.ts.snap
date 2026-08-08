@@ -52,5 +52,30 @@ exports[`append-only copier parser V1 keeps current adapters and retained replay
     "rowCount": 18,
     "sha256": "61686aaaad9b0d74650867577680ec5e6d072df3df2fe734af4d204e51e4de77",
   },
+  {
+    "case": "coinex followers",
+    "rowCount": 10,
+    "sha256": "5320fb49b3b3197d848bfe96869ffb6bba0be197756764bae7827c5edde5b668",
+  },
+  {
+    "case": "gate futures follow users",
+    "rowCount": 3,
+    "sha256": "befff2492a94fca7b3b03363947b79679aa1c82a4a1dcc6cf58e606cc5ce8ef5",
+  },
+  {
+    "case": "gate CFD followers",
+    "rowCount": 3,
+    "sha256": "9080acef73cbb9c403e7aeffa34a282f36613c0c3ef023d945617344c0461f72",
+  },
+  {
+    "case": "kucoin copy traders",
+    "rowCount": 3,
+    "sha256": "15bce6a8a3c034485a02736122bbac7b7e3a5c7e10f830acd85578149ac86fe4",
+  },
+  {
+    "case": "lbank followers",
+    "rowCount": 3,
+    "sha256": "cecc08e74820b308888961751d40446df4536bdc5532183764c6015112d9c842",
+  },
 ]
 `;
