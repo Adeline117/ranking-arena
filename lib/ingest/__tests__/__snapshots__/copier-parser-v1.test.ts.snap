@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
-exports[`append-only copier parser V1 first batch keeps current adapters and retained replay byte-equivalent on real fixtures 1`] = `
+exports[`append-only copier parser V1 keeps current adapters and retained replay byte-equivalent on real fixtures 1`] = `
 [
   {
     "case": "binance futures envelope",
@@ -31,6 +31,26 @@ exports[`append-only copier parser V1 first batch keeps current adapters and ret
     "case": "bitget bots follow rank",
     "rowCount": 10,
     "sha256": "97661108dcd8702a59284b2127e150b8815cfacb24878ba69bc3993ee4112ea9",
+  },
+  {
+    "case": "bitunix follow list",
+    "rowCount": 3,
+    "sha256": "3684ea7870816be86d5b632a17c766610ec8011496bfba4ae82288c5f43693e7",
+  },
+  {
+    "case": "blofin copiers",
+    "rowCount": 20,
+    "sha256": "36e2cda5a96c79a2d4bb4e71770ca64061b5b5bbe990528c52f5471fc113087a",
+  },
+  {
+    "case": "btcc followers",
+    "rowCount": 3,
+    "sha256": "3aa5d9b94061356af63709d4c2839b646a75f0757a77347b12765a2df1c524c5",
+  },
+  {
+    "case": "bybit copytrade followers",
+    "rowCount": 18,
+    "sha256": "61686aaaad9b0d74650867577680ec5e6d072df3df2fe734af4d204e51e4de77",
   },
 ]
 `;

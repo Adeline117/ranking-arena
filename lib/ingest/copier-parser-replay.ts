@@ -2,10 +2,10 @@ import { parseBinanceCopiersV1 } from './adapters/binance/copier-parser-v1'
 import { parseBingxCopiersV1 } from './adapters/bingx/copier-parser-v1'
 import { parseBitgetBotsCopiersV1 } from './adapters/bitget/bots-copier-parser-v1'
 import { parseBitgetCopiersV1 } from './adapters/bitget/copier-parser-v1'
-import { parseBitunixHistory } from './adapters/bitunix/parsers'
-import { parseBlofinHistory } from './adapters/blofin/parsers'
-import { parseBtccHistory } from './adapters/btcc/parsers'
-import { parseBybitCopytradeHistory } from './adapters/bybit-copytrade/parsers'
+import { parseBitunixCopiersV1 } from './adapters/bitunix/copier-parser-v1'
+import { parseBlofinCopiersV1 } from './adapters/blofin/copier-parser-v1'
+import { parseBtccCopiersV1 } from './adapters/btcc/copier-parser-v1'
+import { parseBybitCopytradeCopiersV1 } from './adapters/bybit-copytrade/copier-parser-v1'
 import { parseCoinexHistory } from './adapters/coinex/parsers'
 import { parseGateHistory } from './adapters/gate/parsers'
 import { parseKucoinHistory } from './adapters/kucoin/parsers'
@@ -84,17 +84,12 @@ const COPIER_SNAPSHOT_PARSER_IMPLEMENTATIONS: Readonly<
     'bitget_bots',
     parseBitgetBotsCopiersV1
   ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bitunix]: parserV1('bitunix', (raw, ctx) =>
-    parseBitunixHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.blofin]: parserV1('blofin', (raw, ctx) =>
-    parseBlofinHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.btcc]: parserV1('btcc', (raw, ctx) =>
-    parseBtccHistory(raw, 'copiers', ctx)
-  ),
-  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bybit_copytrade]: parserV1('bybit_copytrade', (raw, ctx) =>
-    parseBybitCopytradeHistory(raw, 'copiers', ctx)
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bitunix]: parserV1('bitunix', parseBitunixCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.blofin]: parserV1('blofin', parseBlofinCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.btcc]: parserV1('btcc', parseBtccCopiersV1),
+  [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.bybit_copytrade]: parserV1(
+    'bybit_copytrade',
+    parseBybitCopytradeCopiersV1
   ),
   [COPIER_SNAPSHOT_PARSER_V1_CONTRACTS.coinex]: parserV1('coinex', (raw, ctx) =>
     parseCoinexHistory(raw, 'copiers', ctx)
