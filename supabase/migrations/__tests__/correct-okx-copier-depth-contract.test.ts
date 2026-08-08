@@ -85,10 +85,13 @@ describe('OKX copier depth contract correction', () => {
     const postdeploy = runner.slice(postdeployStart, postdeployEnd)
     const authority = '20260804054000_copier_snapshot_publication_authority.sql'
     const provenance = '20260804054200_harden_copier_snapshot_receipt_provenance.sql'
+    const laneAuthority = '20260804054300_copier_snapshot_lane_v2_authority.sql'
     const correction = '20260804054500_correct_okx_copier_depth_contract.sql'
     const cutover = '20260804055000_copier_snapshot_direct_write_cutover.sql'
 
-    expect(predeploy).toContain(`${authority}\n  ${provenance}\n  ${correction}`)
+    expect(predeploy).toContain(
+      `${authority}\n  ${provenance}\n  ${laneAuthority}\n  ${correction}`
+    )
     expect(predeploy).not.toContain(cutover)
     expect(postdeploy).not.toContain(cutover)
   })

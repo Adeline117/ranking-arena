@@ -164,6 +164,7 @@ PREDEPLOY_MIGRATIONS=(
   20260804053000_copier_snapshot_publication_substrate.sql
   20260804054000_copier_snapshot_publication_authority.sql
   20260804054200_harden_copier_snapshot_receipt_provenance.sql
+  20260804054300_copier_snapshot_lane_v2_authority.sql
   20260804054500_correct_okx_copier_depth_contract.sql
 )
 
@@ -194,8 +195,9 @@ POSTDEPLOY_MIGRATIONS=(
 )
 
 # 20260804055000_copier_snapshot_direct_write_cutover.sql is intentionally in
-# no standard runner phase. It is an irreversible, separately attested manual
-# operation after the receipt-capable Tier-C release and coverage gate pass.
+# no standard runner phase and is HOLD / DO NOT APPLY. Its historical V1-only
+# reader would hide lane-aware V2 receipts installed by 20260804054300; a
+# separately reviewed forward migration must replace it.
 
 # Recovery repairs the immutable application snapshot whose original cutover
 # was exactly these 41 migrations. Keep this prerequisite frozen: later launch

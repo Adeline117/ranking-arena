@@ -134,11 +134,14 @@ describe('copier snapshot receipt provenance hardening', () => {
 
   it('is wired exactly between 054000 and 054500 while 055000 stays manual-only', () => {
     const authority = '20260804054000_copier_snapshot_publication_authority.sql'
+    const laneAuthority = '20260804054300_copier_snapshot_lane_v2_authority.sql'
     const correction = '20260804054500_correct_okx_copier_depth_contract.sql'
     const cutover = '20260804055000_copier_snapshot_direct_write_cutover.sql'
     const predeploy = runnerArray('PREDEPLOY_MIGRATIONS')
 
-    expect(predeploy).toContain(`${authority}\n  ${migrationName}\n  ${correction}`)
+    expect(predeploy).toContain(
+      `${authority}\n  ${migrationName}\n  ${laneAuthority}\n  ${correction}`
+    )
     for (const phase of [
       'PREDEPLOY_MIGRATIONS',
       'POSTDEPLOY_MIGRATIONS',
@@ -152,7 +155,7 @@ describe('copier snapshot receipt provenance hardening', () => {
     }
     expect(packageJson).toContain('qa:copier-snapshot-provenance-pg17')
     expect(ci).toContain('npm run qa:copier-snapshot-provenance-pg17')
-    expect(runbook).toContain('以下二十三个 2026-08 migration')
+    expect(runbook).toContain('以下二十四个 2026-08 migration')
     expect(runbook).toContain(migrationName)
   })
 })

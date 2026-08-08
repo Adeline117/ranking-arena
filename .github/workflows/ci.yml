@@ -223,6 +223,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:copier-snapshot-provenance-pg17
 
+      - name: Prove lane-bound copier snapshot V2 authority
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:copier-snapshot-lane-v2-pg17
+
       - name: Prove canonical OKX copier depth correction
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
