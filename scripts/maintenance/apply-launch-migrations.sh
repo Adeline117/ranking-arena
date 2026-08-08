@@ -166,6 +166,7 @@ PREDEPLOY_MIGRATIONS=(
   20260804054200_harden_copier_snapshot_receipt_provenance.sql
   20260804054300_copier_snapshot_lane_v2_authority.sql
   20260804054500_correct_okx_copier_depth_contract.sql
+  20260804054600_correct_copier_depth_contracts.sql
 )
 
 # 20260722054000_metric_trust_source_page_lineage.sql is retained as immutable

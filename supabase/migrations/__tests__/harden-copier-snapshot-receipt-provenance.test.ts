@@ -155,7 +155,7 @@ describe('copier snapshot receipt provenance hardening', () => {
     }
     expect(packageJson).toContain('qa:copier-snapshot-provenance-pg17')
     expect(ci).toContain('npm run qa:copier-snapshot-provenance-pg17')
-    expect(runbook).toContain('以下二十四个 2026-08 migration')
+    expect(runbook).toContain('以下二十五个 2026-08 migration')
     expect(runbook).toContain(migrationName)
   })
 })

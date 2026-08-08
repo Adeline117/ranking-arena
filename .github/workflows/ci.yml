@@ -233,6 +233,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:okx-copier-depth-contract-pg17
 
+      - name: Prove reviewed copier depth corrections
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:reviewed-copier-depth-contracts-pg17
+
       - name: Prove manually attested copier snapshot cutover
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
