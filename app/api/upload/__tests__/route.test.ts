@@ -197,12 +197,14 @@ describe('/api/upload report evidence lifecycle', () => {
     ['missing file', null, undefined, /No file/i],
     ['oversized file', createMockFile(3 * 1024 * 1024), undefined, /too large|2MB/i],
     ['invalid bucket', createMockFile(), 'malicious', /Invalid bucket/i],
+    ['post-media registry bypass', createMockFile(), 'posts', /Invalid bucket/i],
   ])('rejects %s before reserving', async (_label, file, bucket, message) => {
     const response = await POST(postRequest(file, bucket))
     const body = await response.json()
     expect(response.status).toBe(400)
     expect(body.error?.message ?? body.error).toMatch(message)
     expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockStorageFrom).not.toHaveBeenCalled()
   })
 
   it('rejects invalid magic bytes before reserving', async () => {

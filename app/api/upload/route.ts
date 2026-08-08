@@ -27,7 +27,10 @@ const logger = createLogger('upload')
 export const dynamic = 'force-dynamic'
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024
-const ALLOWED_BUCKETS = ['reports', 'avatars', 'posts']
+// Post media has a dedicated owner/path-bound reserve/finalize boundary.
+// Keeping `posts` here would let an authenticated caller mint an unregistered,
+// non-canonical object through this legacy generic endpoint.
+const ALLOWED_BUCKETS = ['reports', 'avatars']
 const NO_STORE = 'private, no-store'
 
 const ReservationSchema = z
