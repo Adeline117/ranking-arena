@@ -193,6 +193,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const commentReactionDesiredStateMigration =
     '20260803107000_set_comment_reaction_desired_state.sql'
   const commentReactionCausalIntentsMigration = '20260803108000_comment_reaction_causal_intents.sql'
+  const postMediaUploadRegistryMigration = '20260803110000_post_media_upload_registry.sql'
   const closeLegacyCommentReactionDesiredStateMigration =
     '20260803109000_close_legacy_comment_reaction_desired_state.sql'
   const accountHardDeleteRecoveryBarrierMigration =
@@ -271,11 +272,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     durableCommentReactionCountRepairMigration,
     commentReactionDesiredStateMigration,
     commentReactionCausalIntentsMigration,
+    postMediaUploadRegistryMigration,
   ]
   const inactiveAuthSubjectMutationBarrierMigration =
     '20260729154500_inactive_auth_subject_mutation_barrier.sql'
 
-  assert.equal(predeploy.length, 198)
+  assert.equal(predeploy.length, 199)
   assert.ok(predeploy.includes(accountHardDeleteRecoveryBarrierMigration))
   assert.ok(predeploy.includes(verifiedAuthProfileEmailMigration))
   assert.ok(predeploy.includes(accountRecoveryAuthEmailMigration))
@@ -423,7 +425,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 225)
+  assert.equal(new Set(all).size, 226)
   assert.equal(
     postdeploy.filter((migration) => migration === postCreateDirectWriteClosureMigration).length,
     1
@@ -619,7 +621,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(!quarantined.includes(legacyApiTierCleanupMigration))
   assert.ok(!superseded.includes(legacyApiTierCleanupMigration))
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-157), [
+  assert.deepEqual(predeploy.slice(-158), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -889,8 +891,22 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.indexOf(commentReactionCausalIntentsMigration),
     predeploy.indexOf(commentReactionDesiredStateMigration) + 1
   )
-  assert.equal(predeploy.at(-1), commentReactionCausalIntentsMigration)
-  assert.deepEqual(predeploy.slice(-86), [
+  assert.equal(
+    predeploy.filter((migration) => migration === postMediaUploadRegistryMigration).length,
+    1
+  )
+  assert.ok(!postdeploy.includes(postMediaUploadRegistryMigration))
+  assert.ok(!recoveryPrerequisites.includes(postMediaUploadRegistryMigration))
+  assert.ok(!concurrentRecovery.includes(postMediaUploadRegistryMigration))
+  assert.ok(!recovery.includes(postMediaUploadRegistryMigration))
+  assert.ok(!quarantined.includes(postMediaUploadRegistryMigration))
+  assert.ok(!superseded.includes(postMediaUploadRegistryMigration))
+  assert.equal(
+    predeploy.indexOf(postMediaUploadRegistryMigration),
+    predeploy.indexOf(commentReactionCausalIntentsMigration) + 1
+  )
+  assert.equal(predeploy.at(-1), postMediaUploadRegistryMigration)
+  assert.deepEqual(predeploy.slice(-87), [
     '20260729059000_atomic_referral_attribution.sql',
     '20260729060000_retryable_referral_qualification.sql',
     '20260729061000_source_legacy_platform_alias_contract.sql',
