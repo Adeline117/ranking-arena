@@ -1,10 +1,12 @@
 import { getLevelInfo } from '@/lib/utils/user-level'
+import { alpha, tokens } from '@/lib/design-tokens'
 
 interface LevelBadgeProps {
   exp: number
   isPro?: boolean
   size?: 'sm' | 'md' | 'lg'
   showName?: boolean
+  contrastSurface?: boolean
 }
 
 // SVG海洋生物图标
@@ -104,21 +106,43 @@ const SIZES = {
   lg: { icon: 24, text: 'text-base', gap: 'gap-1.5' },
 }
 
-export default function LevelBadge({ exp, isPro, size = 'sm', showName = false }: LevelBadgeProps) {
+export default function LevelBadge({
+  exp,
+  isPro,
+  size = 'sm',
+  showName = false,
+  contrastSurface = false,
+}: LevelBadgeProps) {
   const info = getLevelInfo(exp)
   const s = SIZES[size]
+  const foregroundColor = contrastSurface ? tokens.colors.white : info.colorHex
 
   return (
     <span
       className={`inline-flex items-center ${s.gap}`}
       aria-label={`Level ${info.level} - ${info.name}`}
+      style={
+        contrastSurface
+          ? {
+              padding: `2px ${tokens.spacing[2]}`,
+              borderRadius: tokens.radius.full,
+              border: `1px solid ${alpha(tokens.colors.white, 35)}`,
+              background: 'var(--color-backdrop-heavy)',
+              color: tokens.colors.white,
+              textShadow: 'var(--text-shadow-md)',
+            }
+          : undefined
+      }
     >
-      <LevelIcon level={info.level} color={info.colorHex} size={s.icon} />
-      <span className={`${s.text} font-medium`} style={{ color: info.colorHex }}>
+      <LevelIcon level={info.level} color={foregroundColor} size={s.icon} />
+      <span className={`${s.text} font-medium`} style={{ color: foregroundColor }}>
         Lv{info.level}
       </span>
       {showName && (
-        <span className={`${s.text} opacity-70`} style={{ color: info.colorHex }}>
+        <span
+          className={`${s.text}${contrastSurface ? '' : ' opacity-70'}`}
+          style={{ color: foregroundColor }}
+        >
           {info.name}
         </span>
       )}

@@ -122,7 +122,7 @@ interface StatItemProps {
 }
 
 export function StatItem({ icon, value, label, hasCover }: StatItemProps): React.ReactElement {
-  const textColor = hasCover ? 'var(--glass-bg-medium)' : tokens.colors.text.tertiary
+  const textColor = hasCover ? tokens.colors.white : tokens.colors.text.tertiary
   const valueColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
   const textShadow = hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined
 

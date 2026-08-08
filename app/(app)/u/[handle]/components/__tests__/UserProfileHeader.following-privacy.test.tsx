@@ -29,7 +29,9 @@ jest.mock('@/app/components/ui/ProBadge', () => ({
 }))
 jest.mock('@/app/components/user/LevelBadge', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ contrastSurface }: { contrastSurface?: boolean }) => (
+    <span data-testid="level-badge" data-contrast-surface={String(Boolean(contrastSurface))} />
+  ),
 }))
 
 import UserProfileHeader from '../UserProfileHeader'
@@ -119,6 +121,29 @@ describe('UserProfileHeader following privacy', () => {
     expect(avatar).not.toHaveAttribute('role', 'button')
     expect(avatar).not.toHaveAttribute('tabindex')
     expect(avatar).not.toHaveStyle({ cursor: 'pointer' })
+  })
+
+  it('uses opaque cover text and the contrast badge surface', () => {
+    render(
+      <UserProfileHeader
+        profile={{
+          ...profile(true),
+          bio: 'Readable biography',
+          cover_url: 'https://cdn.example.com/cover.jpg',
+        }}
+        handle="alice"
+        isOwnProfile={false}
+        currentUserId={null}
+        followersCount={3}
+        followingCount={7}
+        onFollowersCountChange={jest.fn()}
+        onFollowingClick={jest.fn()}
+        onFollowersClick={jest.fn()}
+      />
+    )
+
+    expect(screen.getByText('Readable biography')).toHaveStyle({ color: '#FFFFFF' })
+    expect(screen.getByTestId('level-badge')).toHaveAttribute('data-contrast-surface', 'true')
   })
 
   it.each([false, undefined])(

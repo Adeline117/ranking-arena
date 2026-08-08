@@ -56,7 +56,7 @@ export default function UserProfileHeader({
     ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${profile.cover_url}) center/cover no-repeat`
     : `linear-gradient(135deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 91)} 100%)`
   const textColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
-  const secondaryTextColor = hasCover ? 'var(--glass-bg-medium)' : tokens.colors.text.secondary
+  const secondaryTextColor = hasCover ? tokens.colors.white : tokens.colors.text.secondary
   const textShadow = hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined
 
   return (
@@ -222,7 +222,7 @@ export default function UserProfileHeader({
               {profile.handle}
             </Text>
 
-            <LevelBadge exp={profile.exp || 0} size="md" />
+            <LevelBadge exp={profile.exp || 0} size="md" contrastSurface={hasCover} />
 
             {profile.isVerifiedTrader && (
               <Box
