@@ -31,6 +31,7 @@
     ".dockerignore",
     ".editorconfig",
     ".env.example",
+    ".gitattributes",
     ".gitignore",
     ".gitmodules",
     ".npmrc",

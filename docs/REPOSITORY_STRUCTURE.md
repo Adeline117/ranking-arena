@@ -97,6 +97,16 @@ containing local or real values, and local state must stay untracked. Sanitized
 templates such as `.env.example` and `.env.template` remain tracked and must
 contain no credentials.
 
+The root `.gitattributes` file is authoritative for Git checkout and index
+normalization: repository text and Unix tooling use LF, native Windows batch
+launchers use CRLF in the working tree, and reviewed binary formats disable text
+conversion and automatic merge. `.editorconfig` mirrors editor behavior but does
+not replace the Git-level contract. Run `npm run qa:git-attributes` after changing
+either policy or introducing a new binary format. The local command validates the
+staged index—the same committed state CI receives—so stage new files before running
+it. Nested `.gitattributes` files and repository-local attribute overrides are
+rejected to keep that result deterministic.
+
 ## Internal conventions
 
 - Organize `lib/` by business capability first. New generic buckets such as
