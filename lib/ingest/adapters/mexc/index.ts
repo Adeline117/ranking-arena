@@ -36,6 +36,17 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
 import {
+  HISTORY_TERMINAL_CLAIM_CONTRACT,
+  type HistoryTerminalClaim,
+} from '../../history-acquisition'
+import {
+  MEXC_COPIER_HISTORY_URL,
+  mexcCopierHistoryUrl,
+  mexcCopierIdentity,
+  mexcCopierSnapshotVerifier,
+  validateMexcCopierPage,
+} from './copier-snapshot'
+import {
   parseMexcHistory,
   parseMexcLeaderboardPage,
   parseMexcPositions,
@@ -57,6 +68,33 @@ function endpoint(src: SourceRow, key: string, fallback: string): string {
   return endpoints[key] ?? fallback
 }
 
+function isCanonicalMexcCopierSource(src: SourceRow): boolean {
+  return (
+    src.slug === 'mexc_futures' &&
+    src.status === 'active' &&
+    src.serving_mode === 'serving' &&
+    src.adapter_slug === 'mexc' &&
+    src.product_type === 'futures' &&
+    src.trader_kind_scope === 'mixed' &&
+    src.currency === 'USDT' &&
+    src.copier_table_depth === 'full' &&
+    endpoint(src, 'copiers', MEXC_COPIER_HISTORY_URL) === MEXC_COPIER_HISTORY_URL
+  )
+}
+
+function copierMaxPages(src: SourceRow): number {
+  const value = src.meta.copier_max_pages ?? 100
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    Object.is(value, -0)
+  ) {
+    throw new TypeError('[mexc] copier_max_pages must be a positive safe integer')
+  }
+  return value
+}
+
 /**
  * One page load establishes cookies/fingerprint; everything after is pure
  * same-origin JSON replay (spec §2.2). www.mexc.com accepts the bundled
@@ -69,9 +107,11 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   const page = await session.page()
   const url = src.leaderboard_url ?? 'https://www.mexc.com/zh-CN/futures/copyTrade/home'
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
+  } catch {
     // networkidle is best-effort — a busy page still yields valid cookies
-  })
+  }
   warmedSessions.add(session)
 }
 
@@ -114,6 +154,10 @@ const mexcAdapter: SourceAdapter = {
     orders: false, // no public sub-order surface
     transfers: false, // no public balance-history surface
     copiers: true, // GET trader/followers/v2
+  },
+
+  verifyCopierSnapshot(src) {
+    return isCanonicalMexcCopierSource(src) ? mexcCopierSnapshotVerifier : null
   },
 
   /**
@@ -282,7 +326,7 @@ const mexcAdapter: SourceAdapter = {
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null
-  ): AsyncIterable<RawPage> {
+  ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     if (kind !== 'position_history' && kind !== 'copiers') {
       throw new Error(`[mexc] history surface ${kind} not supported`)
     }
@@ -315,22 +359,52 @@ const mexcAdapter: SourceAdapter = {
     }
 
     // copiers
-    const url = endpoint(src, 'copiers', `${BASE}/trader/followers/v2`)
-    const limit = 10 // verified server page size; larger limits unverified
-    const maxPages = Number(src.meta.copier_max_pages) || 30
+    const url = endpoint(src, 'copiers', MEXC_COPIER_HISTORY_URL)
+    const maxPages = copierMaxPages(src)
+    let stableTotal: number | null = null
+    let rowsSeen = 0
+    const identities = new Set<string>()
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+      const requestUrl =
+        url === MEXC_COPIER_HISTORY_URL
+          ? mexcCopierHistoryUrl(exchangeTraderId, pageIndex)
+          : `${url}?limit=10&page=${pageIndex}&uid=${encodeURIComponent(exchangeTraderId)}`
       const payload = await replayJson(session, fetcher, {
-        url: `${url}?limit=${limit}&page=${pageIndex}&uid=${encodeURIComponent(exchangeTraderId)}`,
+        url: requestUrl,
         method: 'GET',
         headers: HEADERS,
       })
-      const rows = parseMexcHistory(payload, 'copiers', ctx)
-      if (rows.length === 0) return
-      yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
-      const totalPage = Number((payload as { data?: { totalPage?: unknown } })?.data?.totalPage)
-      if (Number.isFinite(totalPage) && totalPage > 0 && pageIndex >= totalPage) return
-      if (rows.length < limit) return
+      yield { pageIndex, payload, url: requestUrl, fetchedAt: new Date().toISOString() }
+
+      const page = validateMexcCopierPage(payload, pageIndex)
+      if (page === null) {
+        throw new Error('[mexc] copiers returned a malformed exact page envelope')
+      }
+      if (stableTotal === null) stableTotal = page.total
+      else if (page.total !== stableTotal) {
+        throw new Error('[mexc] copiers changed total during pagination')
+      }
+      for (const row of page.rows) {
+        const identity = mexcCopierIdentity(row)
+        if (identity === null || identities.has(identity)) {
+          throw new Error('[mexc] copiers returned a duplicate follower identity')
+        }
+        identities.add(identity)
+      }
+      rowsSeen += page.rows.length
+
+      if (rowsSeen === stableTotal && identities.size === stableTotal) {
+        return {
+          contract: HISTORY_TERMINAL_CLAIM_CONTRACT,
+          observations: [
+            { segment_id: 'default', reason: 'reported_end', page_ordinal: pageIndex },
+          ],
+        }
+      }
     }
+    throw new Error(
+      `[mexc] copiers reached page cap ${maxPages} before reported total ${String(stableTotal)}`
+    )
   },
 
   parseLeaderboard: parseMexcLeaderboardPage,
