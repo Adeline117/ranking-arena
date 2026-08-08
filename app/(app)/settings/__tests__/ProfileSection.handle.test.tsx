@@ -135,4 +135,10 @@ describe('ProfileSection canonical handle behavior', () => {
       '.settings-profile-file-input:focus-visible + .settings-profile-file-trigger'
     )
   })
+
+  it('keeps the cover removal action touch-sized on desktop', () => {
+    render(<ProfileSection {...baseProps} coverUrl="https://cdn.example.com/cover.jpg" />)
+
+    expect(screen.getByRole('button', { name: 'remove' })).toHaveStyle({ minHeight: '44px' })
+  })
 })

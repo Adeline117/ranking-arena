@@ -189,6 +189,10 @@ export const ProfileSection = React.memo(function ProfileSection({
             <button
               onClick={onRemoveCover}
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: tokens.touchTarget.min,
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
                 border: `1px solid ${alpha(tokens.colors.accent.error, 25)}`,
