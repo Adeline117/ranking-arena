@@ -2,7 +2,7 @@
 
 import { Box, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
-import type { PollOption } from '../types'
+import { POLL_DURATION_OPTIONS, type PollOption } from '../types'
 
 interface PollEditorProps {
   pollEnabled: boolean
@@ -13,14 +13,19 @@ interface PollEditorProps {
   setPollType: (v: 'single' | 'multiple') => void
   pollDuration: number
   setPollDuration: (v: number) => void
-  durationOptions: { label: string; value: number }[]
   t: (key: string) => string
 }
 
 export function PollEditor({
-  pollEnabled, setPollEnabled, pollOptions, setPollOptions,
-  pollType, setPollType, pollDuration, setPollDuration,
-  durationOptions, t,
+  pollEnabled,
+  setPollEnabled,
+  pollOptions,
+  setPollOptions,
+  pollType,
+  setPollType,
+  pollDuration,
+  setPollDuration,
+  t,
 }: PollEditorProps) {
   return (
     <>
@@ -29,21 +34,33 @@ export function PollEditor({
         style={{
           padding: tokens.spacing[4],
           borderRadius: tokens.radius.md,
-          border: ('1px solid ' + pollEnabled ? tokens.colors.accent.brand : tokens.colors.border.primary),
+          border: `1px solid ${pollEnabled ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
           background: pollEnabled ? 'var(--color-accent-primary-10)' : tokens.colors.bg.secondary,
           transition: `all ${tokens.transition.base}`,
         }}
       >
-        <Box
+        <button
+          type="button"
+          role="switch"
+          aria-checked={pollEnabled}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: tokens.spacing[3],
+            width: '100%',
+            minHeight: tokens.touchTarget.min,
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            color: 'inherit',
+            textAlign: 'left',
+            font: 'inherit',
             cursor: 'pointer',
           }}
           onClick={() => setPollEnabled(!pollEnabled)}
         >
           <Box
+            aria-hidden="true"
             style={{
               width: 44,
               height: 24,
@@ -58,7 +75,7 @@ export function PollEditor({
               style={{
                 width: 20,
                 height: 20,
-                borderRadius: '50%',
+                borderRadius: tokens.radius.full,
                 background: tokens.colors.white,
                 position: 'absolute',
                 top: 2,
@@ -69,40 +86,70 @@ export function PollEditor({
             />
           </Box>
           <Box>
-            <Text size="sm" weight="bold" style={{ color: pollEnabled ? tokens.colors.accent.brand : tokens.colors.text.primary }}>
+            <Text
+              size="sm"
+              weight="bold"
+              style={{
+                color: pollEnabled ? tokens.colors.accent.brand : tokens.colors.text.primary,
+              }}
+            >
               {t('enablePoll')}
             </Text>
             <Text size="xs" color="tertiary">
               {t('pollDescription')}
             </Text>
           </Box>
-        </Box>
+        </button>
 
         {/* Poll settings */}
         {pollEnabled && (
-          <Box style={{ marginTop: tokens.spacing[4], display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+          <Box
+            style={{
+              marginTop: tokens.spacing[4],
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.spacing[3],
+            }}
+          >
             {/* Poll options */}
             <Box>
-              <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+              <Text
+                size="xs"
+                weight="bold"
+                style={{ marginBottom: tokens.spacing[2], display: 'block' }}
+              >
                 {t('pollOptionsLabel')}
               </Text>
               {pollOptions.map((option, index) => (
-                <Box key={index} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
-                  <Text size="xs" color="tertiary" style={{ width: 20 }}>{index + 1}.</Text>
+                <Box
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    marginBottom: tokens.spacing[2],
+                  }}
+                >
+                  <Text size="xs" color="tertiary" style={{ width: 20 }}>
+                    {index + 1}.
+                  </Text>
                   <input
                     type="text"
                     placeholder={`${t('pollOptionPlaceholder')} ${index + 1}`}
                     value={option.text}
+                    aria-label={`${t('pollOptionPlaceholder')} ${index + 1}`}
                     onChange={(e) => {
-                      const newOptions = [...pollOptions]
-                      newOptions[index].text = e.target.value
-                      setPollOptions(newOptions)
+                      setPollOptions(
+                        pollOptions.map((current, currentIndex) =>
+                          currentIndex === index ? { ...current, text: e.target.value } : current
+                        )
+                      )
                     }}
                     style={{
                       flex: 1,
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                       borderRadius: tokens.radius.md,
-                      border: ('1px solid ' + tokens.colors.border.primary),
+                      border: '1px solid ' + tokens.colors.border.primary,
                       background: tokens.colors.bg.primary,
                       color: tokens.colors.text.primary,
                       fontSize: tokens.typography.fontSize.sm,
@@ -110,17 +157,20 @@ export function PollEditor({
                     }}
                   />
                   {pollOptions.length > 2 && (
-                    <button aria-label="Close"
+                    <button
+                      type="button"
+                      aria-label={`${t('close')} ${index + 1}`}
                       onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
                       style={{
-                        width: 28,
-                        height: 28,
+                        width: tokens.touchTarget.min,
+                        height: tokens.touchTarget.min,
+                        flexShrink: 0,
                         border: 'none',
                         background: 'var(--color-accent-error-20)',
                         color: tokens.colors.accent.error,
                         borderRadius: tokens.radius.md,
                         cursor: 'pointer',
-                        fontSize: 16,
+                        fontSize: tokens.typography.fontSize.md,
                       }}
                     >
                       {'\u00d7'}
@@ -130,10 +180,12 @@ export function PollEditor({
               ))}
               {pollOptions.length < 6 && (
                 <button
+                  type="button"
                   onClick={() => setPollOptions([...pollOptions, { text: '', votes: 0 }])}
                   style={{
+                    minHeight: tokens.touchTarget.min,
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                    border: ('1px dashed ' + tokens.colors.border.primary),
+                    border: '1px dashed ' + tokens.colors.border.primary,
                     background: 'transparent',
                     color: tokens.colors.text.secondary,
                     borderRadius: tokens.radius.md,
@@ -151,38 +203,60 @@ export function PollEditor({
             <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
               {/* Poll type */}
               <Box style={{ flex: 1, minWidth: 150 }}>
-                <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                <Text
+                  size="xs"
+                  weight="bold"
+                  style={{ marginBottom: tokens.spacing[2], display: 'block' }}
+                >
                   {t('pollTypeLabel')}
                 </Text>
-                <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
+                <Box
+                  role="group"
+                  aria-label={t('pollTypeLabel')}
+                  style={{ display: 'flex', gap: tokens.spacing[2] }}
+                >
                   <button
+                    type="button"
+                    aria-pressed={pollType === 'single'}
                     onClick={() => setPollType('single')}
                     style={{
                       flex: 1,
+                      minHeight: tokens.touchTarget.min,
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      border: ('1px solid ' + pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.border.primary),
-                      background: pollType === 'single' ? 'var(--color-accent-primary-20)' : 'transparent',
-                      color: pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+                      border: `1px solid ${pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
+                      background:
+                        pollType === 'single' ? 'var(--color-accent-primary-20)' : 'transparent',
+                      color:
+                        pollType === 'single'
+                          ? tokens.colors.accent.brand
+                          : tokens.colors.text.secondary,
                       borderRadius: tokens.radius.md,
                       cursor: 'pointer',
                       fontSize: tokens.typography.fontSize.xs,
-                      fontWeight: 600,
+                      fontWeight: tokens.typography.fontWeight.semibold,
                     }}
                   >
                     {t('singleChoice')}
                   </button>
                   <button
+                    type="button"
+                    aria-pressed={pollType === 'multiple'}
                     onClick={() => setPollType('multiple')}
                     style={{
                       flex: 1,
+                      minHeight: tokens.touchTarget.min,
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      border: ('1px solid ' + pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.border.primary),
-                      background: pollType === 'multiple' ? 'var(--color-accent-primary-20)' : 'transparent',
-                      color: pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+                      border: `1px solid ${pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
+                      background:
+                        pollType === 'multiple' ? 'var(--color-accent-primary-20)' : 'transparent',
+                      color:
+                        pollType === 'multiple'
+                          ? tokens.colors.accent.brand
+                          : tokens.colors.text.secondary,
                       borderRadius: tokens.radius.md,
                       cursor: 'pointer',
                       fontSize: tokens.typography.fontSize.xs,
-                      fontWeight: 600,
+                      fontWeight: tokens.typography.fontWeight.semibold,
                     }}
                   >
                     {t('multipleChoice')}
@@ -192,17 +266,22 @@ export function PollEditor({
 
               {/* Duration */}
               <Box style={{ flex: 1, minWidth: 150 }}>
-                <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+                <Text
+                  size="xs"
+                  weight="bold"
+                  style={{ marginBottom: tokens.spacing[2], display: 'block' }}
+                >
                   {t('pollDurationLabel')}
                 </Text>
                 <select
+                  aria-label={t('pollDurationLabel')}
                   value={pollDuration}
                   onChange={(e) => setPollDuration(Number(e.target.value))}
                   style={{
                     width: '100%',
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
-                    border: ('1px solid ' + tokens.colors.border.primary),
+                    border: '1px solid ' + tokens.colors.border.primary,
                     background: tokens.colors.bg.primary,
                     color: tokens.colors.text.primary,
                     fontSize: tokens.typography.fontSize.sm,
@@ -210,8 +289,10 @@ export function PollEditor({
                     cursor: 'pointer',
                   }}
                 >
-                  {durationOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  {POLL_DURATION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {t(opt.labelKey)}
+                    </option>
                   ))}
                 </select>
               </Box>

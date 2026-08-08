@@ -50,12 +50,7 @@ import {
   type ProfilePostDraftScope,
 } from '@/lib/posts/post-draft-storage'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
-import {
-  TITLE_MAX_LENGTH,
-  CONTENT_MAX_LENGTH,
-  POLL_DURATION_OPTIONS_ZH,
-  POLL_DURATION_OPTIONS_EN,
-} from './types'
+import { TITLE_MAX_LENGTH, CONTENT_MAX_LENGTH } from './types'
 
 export default function NewPostPage() {
   if (!features.social) redirect('/')
@@ -64,9 +59,7 @@ export default function NewPostPage() {
   const handle = params.handle as string
   const router = useRouter()
   const { showToast } = useToast()
-  const { t, language } = useLanguage()
-  const POLL_DURATION_OPTIONS =
-    language === 'zh' ? POLL_DURATION_OPTIONS_ZH : POLL_DURATION_OPTIONS_EN
+  const { t } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const submitRef = useRef(false)
@@ -999,7 +992,6 @@ export default function NewPostPage() {
             setPollType={setPollType}
             pollDuration={pollDuration}
             setPollDuration={setPollDuration}
-            durationOptions={POLL_DURATION_OPTIONS}
             t={t}
           />
 
