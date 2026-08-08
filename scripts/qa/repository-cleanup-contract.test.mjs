@@ -72,6 +72,7 @@ test('retired one-off schema and VPS instructions stay removed', () => {
 test('retired pre-arena tools stay removed', () => {
   const retiredPreArenaTools = [
     'scripts/generate-trader-bios.ts',
+    'scripts/ingest-test-tier-a.ts',
     'scripts/lib/base-importer.mjs',
     'scripts/lib/data-validation.mjs',
     'scripts/lib/platform-config.mjs',
