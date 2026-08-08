@@ -12,6 +12,7 @@ import {
   recordsPageFromTierC,
   sanitizeRecordRow,
 } from '../records'
+import { COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT } from '../cache-policy'
 
 function rpcClient(data: unknown, error: unknown = null): SupabaseClient {
   return { rpc: jest.fn().mockResolvedValue({ data, error }) } as unknown as SupabaseClient
@@ -28,6 +29,7 @@ function verifiedCopierPayload(overrides: Record<string, unknown> = {}): Record<
     observedAt: '2026-06-10T12:00:00.000Z',
     publishedAt: '2026-06-10T12:01:00.000Z',
     receiptBound: true,
+    receiptReaderContract: COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT,
     receiptId: 77,
     sourceRunId: 'a'.repeat(64),
     evidenceState: 'verified',
@@ -165,6 +167,7 @@ describe('copier PII rule (spec §6)', () => {
   it('drops an unbound histogram and non-finite aggregate values', async () => {
     const aggregate = await getCopierAggregate(
       rpcClient({
+        receiptReaderContract: COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT,
         copierCount: 20,
         copierCountMax: -1,
         totalCopierPnl: Number.POSITIVE_INFINITY,
@@ -197,6 +200,7 @@ describe('copier PII rule (spec §6)', () => {
   it('getCopierAggregate returns aggregate-only fields', async () => {
     const aggregate = await getCopierAggregate(
       rpcClient({
+        receiptReaderContract: COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT,
         copierCount: 28,
         copierCountMax: null,
         totalCopierPnl: 900.5,
@@ -247,11 +251,26 @@ describe('copier PII rule (spec §6)', () => {
     expect(JSON.stringify(aggregate)).not.toMatch(/copier_label|copierLabel|email/)
   })
 
+  it.each([
+    ['missing', undefined],
+    ['legacy @3', 'arena.copier-snapshot-receipt-reader@3'],
+    ['malformed', 'arena.copier-snapshot-receipt-reader@4 '],
+  ])('rejects a %s reader marker before accepting receipt-bound values', async (_label, marker) => {
+    const aggregate = await getCopierAggregate(
+      rpcClient(verifiedCopierPayload({ receiptReaderContract: marker })),
+      'bitget_futures',
+      'abc'
+    )
+
+    expect(aggregate).toBeNull()
+  })
+
   it.each([0, -0])(
     'rejects malformed claimed copier receipt id %p instead of downgrading it',
     async (receiptId) => {
       const aggregate = await getCopierAggregate(
         rpcClient({
+          receiptReaderContract: COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT,
           copierCount: 10,
           currency: 'USDT',
           depth: 'full',
@@ -409,6 +428,7 @@ describe('copier PII rule (spec §6)', () => {
     async (_label, depth) => {
       const aggregate = await getCopierAggregate(
         rpcClient({
+          receiptReaderContract: COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT,
           copierCount: null,
           copierCountMax: null,
           totalCopierPnl: null,
@@ -429,6 +449,7 @@ describe('copier PII rule (spec §6)', () => {
   it('treats measured zero as aggregate evidence and preserves explicit source N/A', async () => {
     const measuredZero = await getCopierAggregate(
       rpcClient({
+        receiptReaderContract: COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT,
         copierCount: 0,
         copierCountMax: 0,
         totalCopierPnl: 0,
@@ -441,6 +462,7 @@ describe('copier PII rule (spec §6)', () => {
     )
     const notApplicable = await getCopierAggregate(
       rpcClient({
+        receiptReaderContract: COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT,
         copierCount: null,
         copierCountMax: null,
         totalCopierPnl: null,

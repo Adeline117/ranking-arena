@@ -6,14 +6,15 @@
 # response that is already resident in Vercel's persistent Data or CDN cache.
 # This command deliberately purges both cache classes for the exact linked
 # production project. It is separate from the database migration transaction:
-# operators run it only after the safe application release and authority
-# migration are both live.
+# operators run it after the fail-closed application release, before the
+# authority migration enables the new reader. This keeps old CDN/Data entries
+# out of the cutover while copier writers remain stopped.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODE="${1:-plan}"
-PURGE_CONTRACT='public-rank-policy-v4+serving-metric-authority-v1'
+PURGE_CONTRACT='public-rank-policy-v7+serving-metric-authority-v2+csr2'
 
 usage() {
   printf '%s\n' \
@@ -37,7 +38,7 @@ if [[ "$MODE" == 'plan' ]]; then
     "cache purge contract: $PURGE_CONTRACT" \
     'scope: the exact VERCEL_PROJECT_ID + VERCEL_ORG_ID supplied at execution' \
     'effect: purge the project Data cache and CDN cache' \
-    'ordering: safe application release -> authority migration -> this purge -> production probes' \
+    'ordering: safe application release -> this purge -> fail-closed production probes -> 0547 authority migration -> postflight -> writer restart' \
     'plan mode performs no network or cache mutation'
   exit 0
 fi
@@ -84,9 +85,11 @@ if [[ "$LIVE_MAIN_SHA" != "$EXPECTED_RELEASE" ]]; then
   echo 'cache purge release does not equal the live pushed origin/main SHA' >&2
   exit 1
 fi
-if ! grep -Fq "PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v4'" \
+if ! grep -Fq "PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v7'" \
   "$ROOT/lib/rankings/publication-policy.ts" \
-  || ! grep -Fq "SERVING_METRIC_AUTHORITY_CACHE_EPOCH = 'serving-metric-authority-v1'" \
+  || ! grep -Fq "SERVING_METRIC_AUTHORITY_CACHE_EPOCH = 'serving-metric-authority-v2'" \
+    "$ROOT/lib/data/serving/cache-policy.ts" \
+  || ! grep -Fq "COPIER_SNAPSHOT_RECORDS_CONTRACT = 'csr2'" \
     "$ROOT/lib/data/serving/cache-policy.ts"; then
   echo 'cache purge contract does not match the release cache authority epochs' >&2
   exit 1

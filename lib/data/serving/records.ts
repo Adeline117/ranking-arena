@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { money } from '@/lib/utils/money'
+import { COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT } from './cache-policy'
 import { logRpcError } from './log-rpc-error'
 import type {
   CopierAggregate,
@@ -488,6 +489,12 @@ export async function getCopierAggregate(
   logRpcError('arena_copier_aggregate', error)
   if (error || !isPlainRecord(data)) return null
   const d = data
+
+  // The @4 reader is the first one bound to the immutable per-source
+  // authority registry. An older or marker-less RPC result can look exactly
+  // like a receipt-bound aggregate while still accepting an unreviewed source
+  // configuration, so it is not a compatible fallback.
+  if (d.receiptReaderContract !== COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT) return null
 
   const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
   const currency = currencyOrNull(d.currency)

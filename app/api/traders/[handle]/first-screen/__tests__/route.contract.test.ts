@@ -258,5 +258,49 @@ describe('GET /api/traders/[handle]/first-screen boundary contract', () => {
       'bitunix_futures',
       'canonical-account-id'
     )
+    expect(mockGetSourceCapabilities).toHaveBeenCalledWith(mockSupabase)
+  })
+
+  it('bounds a slow request-scoped capability read at two seconds and fails closed', async () => {
+    jest.useFakeTimers()
+    mockResolveServingTrader.mockResolvedValueOnce({
+      source: 'bitunix_futures',
+      exchangeTraderId: 'slow-capability-account',
+      nickname: 'Slow Capability',
+      avatarMirrorUrl: null,
+      avatarOriginUrl: null,
+    })
+    mockGetFirstScreen.mockResolvedValueOnce({
+      source: 'bitunix_futures',
+      exchangeTraderId: 'slow-capability-account',
+      nickname: 'Slow Capability',
+      avatarMirrorUrl: null,
+      avatarOriginUrl: null,
+      avatarSrc: null,
+      walletAddress: null,
+      traderKind: 'human',
+      botStrategy: null,
+      entries: [],
+    })
+    mockGetSourceCapabilities.mockReturnValueOnce(new Promise(() => undefined))
+
+    try {
+      const responsePromise = GET(
+        new NextRequest(
+          'http://localhost/api/traders/Slow%20Capability/first-screen?source=bitunix_futures'
+        ),
+        { params: Promise.resolve({ handle: 'Slow%20Capability' }) }
+      )
+      await jest.advanceTimersByTimeAsync(2_000)
+      const response = await responsePromise
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expectMetricAuthorityNoStore(response)
+      expect(body.data.capability).toBeNull()
+      expect(mockGetSourceCapabilities).toHaveBeenCalledWith(mockSupabase)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

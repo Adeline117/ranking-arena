@@ -26,6 +26,10 @@ import {
 } from '@/lib/data/serving/records'
 import { requestTierC } from '@/lib/data/serving/tier-c'
 import {
+  COPIER_SNAPSHOT_RECORDS_CONTRACT,
+  METRIC_AUTHORITY_NO_STORE_HEADERS,
+} from '@/lib/data/serving/cache-policy'
+import {
   RECORDS_CURSOR_INVALIDATED_CODE,
   type RecordsPage,
   type ServingTimeframe,
@@ -55,6 +59,19 @@ function cursorInvalidatedResponse() {
   )
 }
 
+function copierContractMismatchResponse() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: 'copier_records_contract_mismatch',
+        message: 'Copier aggregate contract changed; refresh and retry',
+      },
+    },
+    { status: 409, headers: METRIC_AUTHORITY_NO_STORE_HEADERS }
+  )
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
@@ -70,6 +87,13 @@ export async function GET(
       const parsedKind = kindSchema.safeParse(req.nextUrl.searchParams.get('kind'))
       if (!parsedKind.success) throw ApiError.validation('Invalid kind parameter')
       const kind = parsedKind.data
+
+      if (kind === 'copiers') {
+        const contracts = req.nextUrl.searchParams.getAll('records_contract')
+        if (contracts.length !== 1 || contracts[0] !== COPIER_SNAPSHOT_RECORDS_CONTRACT) {
+          return copierContractMismatchResponse()
+        }
+      }
 
       const parsedTf = tfSchema.safeParse(req.nextUrl.searchParams.get('tf') ?? undefined)
       if (!parsedTf.success) throw ApiError.validation('Invalid tf parameter')
@@ -97,7 +121,7 @@ export async function GET(
         // actual aggregate must be bound to one immutable snapshot receipt;
         // legacy/profile-only values are a cold-start signal, never public data.
         if (aggregate && (aggregate.receiptBound || aggregate.depth === 'none')) {
-          return withCache(apiSuccess(aggregate), { maxAge: 300, staleWhileRevalidate: 600 })
+          return apiSuccess(aggregate, 200, METRIC_AUTHORITY_NO_STORE_HEADERS)
         }
 
         // Copier data is a window-independent snapshot. Canonical timeframe=0
@@ -121,12 +145,13 @@ export async function GET(
           refreshedAggregate &&
           (refreshedAggregate.receiptBound || refreshedAggregate.depth === 'none')
         ) {
-          return withCache(apiSuccess(refreshedAggregate), {
-            maxAge: 300,
-            staleWhileRevalidate: 600,
-          })
+          return apiSuccess(refreshedAggregate, 200, METRIC_AUTHORITY_NO_STORE_HEADERS)
         }
-        return apiSuccess({ cacheState: 'pending' as const }, 200, { 'Cache-Control': 'no-store' })
+        return apiSuccess(
+          { cacheState: 'pending' as const },
+          200,
+          METRIC_AUTHORITY_NO_STORE_HEADERS
+        )
       }
 
       const isAppendOnlyHistory = kind !== 'positions'

@@ -7,6 +7,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { COPIER_SNAPSHOT_SOURCE_AUTHORITY_CONTRACT } from './cache-policy'
 import type { RecordKind, ServingCurrency, SourceCapability, TfAvailability } from './types'
 
 const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
@@ -43,7 +44,12 @@ export async function getSourceCapabilities(
     const derived = intArray(c.timeframesDerived)
     const rawSurfaces = (c.surfaces as Record<string, unknown>) ?? {}
     const surfaces = {} as Record<RecordKind, boolean>
-    for (const kind of KINDS) surfaces[kind] = rawSurfaces[kind] === true
+    for (const kind of KINDS) {
+      surfaces[kind] =
+        rawSurfaces[kind] === true &&
+        (kind !== 'copiers' ||
+          c.copierAuthorityContract === COPIER_SNAPSHOT_SOURCE_AUTHORITY_CONTRACT)
+    }
 
     out[slug] = {
       timeframes: {

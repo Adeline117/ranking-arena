@@ -217,12 +217,31 @@ function CopiersPanel({
   exchangeTraderId: string
   exchangeName?: string
 }) {
-  const { aggregate, isLoading, refetch } = useCopierAggregate({
+  const { t } = useLanguage()
+  const { aggregate, isLoading, isPendingUpstream, refetch } = useCopierAggregate({
     source,
     exchangeTraderId,
     enabled: true,
   })
-  if (isLoading) return <ModuleSkeleton height={160} />
+  if (isLoading || isPendingUpstream) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={t('loading')}
+        data-copier-state={isLoading ? 'loading' : 'pending'}
+      >
+        <ModuleSkeleton height={160} />
+        <Text
+          size="sm"
+          color="tertiary"
+          style={{ display: 'block', marginTop: tokens.spacing[2], textAlign: 'center' }}
+        >
+          {t('moduleDataPending')}
+        </Text>
+      </div>
+    )
+  }
   return (
     <CopierAggregatePanel
       aggregate={aggregate}

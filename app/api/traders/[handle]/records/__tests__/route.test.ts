@@ -101,21 +101,32 @@ function provenance(observedAt: string | null = null) {
 function request(
   kind: RecordKind = 'position_history',
   cursor?: string,
-  tf: '7' | '30' | '90' | 'inception' = '30'
+  tf: '7' | '30' | '90' | 'inception' = '30',
+  recordsContract: string | null = kind === 'copiers' ? 'csr2' : null
 ): NextRequest {
   const url = new URL(
     `https://arena.example/api/traders/Trader%20One/records?kind=${kind}&source=bitget_futures&tf=${tf}`
   )
   if (cursor !== undefined) url.searchParams.set('cursor', cursor)
+  if (recordsContract !== null) url.searchParams.set('records_contract', recordsContract)
   return { nextUrl: url } as NextRequest
 }
 
 async function callRoute(
   kind: RecordKind = 'position_history',
   cursor?: string,
-  tf: '7' | '30' | '90' | 'inception' = '30'
+  tf: '7' | '30' | '90' | 'inception' = '30',
+  recordsContract?: string | null
 ) {
-  return GET(request(kind, cursor, tf), { params: Promise.resolve({ handle: 'Trader%20One' }) })
+  return GET(request(kind, cursor, tf, recordsContract), {
+    params: Promise.resolve({ handle: 'Trader%20One' }),
+  })
+}
+
+function expectAuthorityNoStore(response: { headers: { get(name: string): string | null } }) {
+  expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+  expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+  expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
 }
 
 function copierAggregate(overrides: Partial<CopierAggregate> = {}): CopierAggregate {
@@ -146,6 +157,42 @@ describe('records route history trust boundary', () => {
     mockGetCopierAggregate.mockResolvedValue(null)
     mockRequestTierC.mockResolvedValue(null)
     mockRecordsPageFromTierC.mockReturnValue(null)
+  })
+
+  it.each([
+    ['missing', null],
+    ['old', 'csr1'],
+    ['malformed', 'csr2 '],
+  ])('rejects a %s copier contract before any serving backend call', async (_label, contract) => {
+    const response = await callRoute('copiers', undefined, '30', contract)
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expectAuthorityNoStore(response)
+    expect(body).toMatchObject({
+      success: false,
+      error: { code: 'copier_records_contract_mismatch' },
+    })
+    expect(mockResolveServingTrader).not.toHaveBeenCalled()
+    expect(mockGetCopierAggregate).not.toHaveBeenCalled()
+    expect(mockGetRecordsPage).not.toHaveBeenCalled()
+    expect(mockRequestTierC).not.toHaveBeenCalled()
+  })
+
+  it('rejects duplicate copier contract values before any serving backend call', async () => {
+    const duplicateRequest = request('copiers')
+    duplicateRequest.nextUrl.searchParams.append('records_contract', 'csr2')
+
+    const response = await GET(duplicateRequest, {
+      params: Promise.resolve({ handle: 'Trader%20One' }),
+    })
+
+    expect(response.status).toBe(409)
+    expectAuthorityNoStore(response)
+    expect(mockResolveServingTrader).not.toHaveBeenCalled()
+    expect(mockGetCopierAggregate).not.toHaveBeenCalled()
+    expect(mockGetRecordsPage).not.toHaveBeenCalled()
+    expect(mockRequestTierC).not.toHaveBeenCalled()
   })
 
   it.each(['position_history', 'orders', 'transfers'] as const)(
@@ -465,7 +512,7 @@ describe('records route history trust boundary', () => {
     const body = await response.json()
 
     expect(body.data).toEqual(aggregate)
-    expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
+    expectAuthorityNoStore(response)
     expect(mockGetCopierAggregate).toHaveBeenCalledWith(mockSupabase, 'bitget_futures', 'trader-1')
     expect(mockGetRecordsPage).not.toHaveBeenCalled()
     expect(mockRequestTierC).not.toHaveBeenCalled()
@@ -492,7 +539,7 @@ describe('records route copier cold start', () => {
       const body = await response.json()
 
       expect(body.data).toEqual(aggregate)
-      expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
+      expectAuthorityNoStore(response)
       expect(mockGetCopierAggregate).toHaveBeenCalledTimes(1)
       expect(mockRequestTierC).not.toHaveBeenCalled()
     }
@@ -521,7 +568,7 @@ describe('records route copier cold start', () => {
       expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
       expect(body.data).toEqual(refreshed)
       expect(JSON.stringify(body)).not.toMatch(/private-user|secret@example\.invalid|"raw"/)
-      expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
+      expectAuthorityNoStore(response)
       expect(mockRecordsPageFromTierC).not.toHaveBeenCalled()
     }
   )
@@ -533,7 +580,7 @@ describe('records route copier cold start', () => {
     expect(mockRequestTierC).toHaveBeenCalledTimes(1)
     expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
     expect(body.data).toEqual({ cacheState: 'pending' })
-    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expectAuthorityNoStore(response)
   })
 
   it('never exposes an unbound legacy aggregate before or after refresh', async () => {
@@ -551,7 +598,7 @@ describe('records route copier cold start', () => {
     expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
     expect(body.data).toEqual({ cacheState: 'pending' })
     expect(JSON.stringify(body)).not.toContain('99')
-    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expectAuthorityNoStore(response)
   })
 
   it('preserves an explicit source-level copier N/A without enqueueing collection', async () => {
@@ -568,7 +615,7 @@ describe('records route copier cold start', () => {
 
     expect(body.data).toEqual(notApplicable)
     expect(mockRequestTierC).not.toHaveBeenCalled()
-    expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
+    expectAuthorityNoStore(response)
   })
 
   it('serves a committed aggregate found by the mandatory post-timeout re-read', async () => {
@@ -581,6 +628,6 @@ describe('records route copier cold start', () => {
 
     expect(body.data).toEqual(committedDuringPoll)
     expect(mockGetCopierAggregate).toHaveBeenCalledTimes(2)
-    expect(response.headers.get('Cache-Control')).toContain('s-maxage=300')
+    expectAuthorityNoStore(response)
   })
 })

@@ -146,6 +146,31 @@ describe('ServingRecordsSection selection scope', () => {
     expect(RecordsTable).not.toHaveBeenCalled()
   })
 
+  it('renders an explicit collecting state while a copier receipt is pending', () => {
+    ;(useCopierAggregate as jest.Mock).mockReturnValue({
+      aggregate: null,
+      isPendingUpstream: true,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['copiers'])}
+        tf={90}
+      />
+    )
+
+    expect(screen.getByText('moduleDataPending')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'loading' })).toHaveAttribute(
+      'data-copier-state',
+      'pending'
+    )
+  })
+
   it('discloses a failed background refresh while retaining cached rows', () => {
     const refetch = jest.fn().mockResolvedValue(undefined)
     ;(useTraderRecords as jest.Mock).mockReturnValue({

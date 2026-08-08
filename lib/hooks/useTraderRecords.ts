@@ -13,6 +13,7 @@ import { useEffect, useMemo } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
+import { COPIER_SNAPSHOT_RECORDS_CONTRACT } from '@/lib/data/serving/cache-policy'
 import {
   RECORDS_CURSOR_INVALIDATED_CODE,
   type CopierAggregate,
@@ -25,7 +26,6 @@ import {
 import type { ApiSuccessResponse } from '@/lib/types/index'
 
 const POSITION_HISTORY_RECORDS_CONTRACT = 'vph3' as const
-const COPIER_SNAPSHOT_RECORDS_CONTRACT = 'csr1' as const
 
 export interface UseTraderRecordsOptions {
   source: string
@@ -72,6 +72,10 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const prototype = Object.getPrototypeOf(value)
   return prototype === Object.prototype || prototype === null
+}
+
+function isPendingCopierResponse(value: unknown): value is { cacheState: 'pending' } {
+  return isPlainRecord(value) && value.cacheState === 'pending'
 }
 
 function isRecordsCursorInvalidated(error: unknown): boolean {
@@ -240,8 +244,20 @@ export function useCopierAggregate(opts: {
       return res.data
     },
     enabled: enabled && Boolean(source) && Boolean(exchangeTraderId),
-    staleTime: STALE_STANDARD,
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
+    // A Tier-C bridge answers pending while the immutable receipt is being
+    // committed. Poll only that explicit state, only in the foreground, and
+    // stop immediately after either an aggregate or a failed poll. Fifteen
+    // pending responses cap one foreground polling window below 30 seconds.
+    refetchInterval: (activeQuery) =>
+      isPendingCopierResponse(activeQuery.state.data) &&
+      activeQuery.state.fetchFailureCount === 0 &&
+      activeQuery.state.dataUpdateCount < 15
+        ? 2_000
+        : false,
+    refetchIntervalInBackground: false,
+    retry: false,
   })
 
   const data = query.data

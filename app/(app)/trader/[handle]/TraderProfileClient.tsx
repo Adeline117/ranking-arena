@@ -22,7 +22,10 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
-import { useSourceCapabilities } from '@/lib/hooks/useSourceCapabilities'
+import {
+  selectLiveSourceCapability,
+  useSourceCapabilities,
+} from '@/lib/hooks/useSourceCapabilities'
 import { trackEvent } from '@/lib/analytics/track'
 import {
   claimedTraderCanonicalHref,
@@ -1127,15 +1130,17 @@ export default function TraderProfileClient({
         : baseIdentityReady
           ? serverCapability
           : null
-  // The route's capability RPC is intentionally bounded by a 2s cold-start
-  // race. Refill a missing matrix for the exact visible serving subject,
-  // including legacy-ISR → serving override and linked-account switches.
+  // The SSR/dynamic capability is only a first-paint seed. Every serving view
+  // subscribes to the request-scoped live matrix, including linked-account
+  // switches, and the live value always wins. While that read is pending or
+  // failed, the seed can preserve non-copier tabs but cannot authorize Copiers.
   const capabilitySource = servingViewFirstScreen?.source ?? visibleData.source
-  const { capabilities: clientCapabilities } = useSourceCapabilities(
-    visibleIsServing && !exactFirstScreenCapability
+  const { capabilities: clientCapabilities } = useSourceCapabilities(visibleIsServing)
+  const servingViewCapability = selectLiveSourceCapability(
+    capabilitySource,
+    clientCapabilities,
+    exactFirstScreenCapability
   )
-  const servingViewCapability =
-    exactFirstScreenCapability ?? clientCapabilities?.[capabilitySource] ?? null
   const servingTab = useServingTabData(
     {
       source: visibleData.source,

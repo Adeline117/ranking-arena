@@ -7,6 +7,7 @@ import { projectBoardExtras } from '../board-extras'
 import { getFirstScreen } from '../first-screen'
 import { getCoreModules, hasRequiredProfileSeries, isFresh, tfToInt } from '../core'
 import { getSourceCapabilities } from '../capabilities'
+import { COPIER_SNAPSHOT_SOURCE_AUTHORITY_CONTRACT } from '../cache-policy'
 
 function rpcClient(data: unknown, error: unknown = null): SupabaseClient {
   return { rpc: jest.fn().mockResolvedValue({ data, error }) } as unknown as SupabaseClient
@@ -203,6 +204,7 @@ describe('getSourceCapabilities', () => {
         currency: 'USDT',
         isOnchain: false,
         copierDepth: 'full',
+        copierAuthorityContract: COPIER_SNAPSHOT_SOURCE_AUTHORITY_CONTRACT,
         timeframesNative: [0, 7, 30, 90],
         timeframesDerived: [],
         metrics: ['roi', 'pnl', 'mdd'],
@@ -218,12 +220,26 @@ describe('getSourceCapabilities', () => {
         metrics: [],
         surfaces: {},
       },
+      legacy_copiers: {
+        copierDepth: 'full',
+        surfaces: { positions: true, copiers: true },
+      },
+      old_authority_copiers: {
+        copierDepth: 'full',
+        copierAuthorityContract: 'arena.copier-snapshot-source-authority@0',
+        surfaces: { copiers: true },
+      },
     })
     const caps = await getSourceCapabilities(supabase)
     expect(caps.bitget_bots.inceptionTf).toBe(true)
     expect(caps.bitget_bots.timeframes).toEqual({ '7': 'native', '30': 'native', '90': 'native' })
     expect(caps.bitget_bots.surfaces.positions).toBe(true)
+    expect(caps.bitget_bots.surfaces.copiers).toBe(true)
+    expect(caps.bitget_bots).not.toHaveProperty('copierAuthorityContract')
     expect(caps.bitget_bots.surfaces.orders).toBe(false)
+    expect(caps.legacy_copiers.surfaces.positions).toBe(true)
+    expect(caps.legacy_copiers.surfaces.copiers).toBe(false)
+    expect(caps.old_authority_copiers.surfaces.copiers).toBe(false)
     expect(caps.mexc_futures.timeframes).toEqual({
       '7': 'native',
       '30': 'derived',

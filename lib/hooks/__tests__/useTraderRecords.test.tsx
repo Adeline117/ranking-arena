@@ -38,6 +38,8 @@ function deferred<T>() {
 }
 
 describe('useCopierAggregate subject identity', () => {
+  beforeEach(() => jest.clearAllMocks())
+
   it('never exposes the previous subject as placeholder data', async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
@@ -106,10 +108,105 @@ describe('useCopierAggregate subject identity', () => {
 
     await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
     expect(view.result.current.aggregate).toBeNull()
-    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('records_contract=csr1'))
+    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('records_contract=csr2'))
+    expect(
+      queryClient.getQueryCache().find({
+        queryKey: ['trader-copiers', 'csr2', 'gmx', 'trader-a'],
+        exact: true,
+      })
+    ).toBeDefined()
 
     view.unmount()
     queryClient.clear()
+  })
+
+  it('polls an explicit pending bridge every two seconds and stops on aggregate success', async () => {
+    jest.useFakeTimers()
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    let reads = 0
+    ;(fetcher as jest.Mock).mockImplementation(() => {
+      reads += 1
+      return Promise.resolve(
+        reads < 3
+          ? { success: true, data: { cacheState: 'pending' as const } }
+          : response(aggregate('gmx', 4))
+      )
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useCopierAggregate({ source: 'gmx', exchangeTraderId: 'trader-a', enabled: true }),
+      { wrapper: Wrapper }
+    )
+
+    try {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0)
+      })
+      expect(view.result.current.isPendingUpstream).toBe(true)
+      expect(reads).toBe(1)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(4_000)
+        await Promise.resolve()
+      })
+      expect(reads).toBe(3)
+      await act(async () => {
+        await Promise.resolve()
+      })
+      await waitFor(() => expect(view.result.current.aggregate?.copierCount).toBe(4))
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10_000)
+      })
+      expect(reads).toBe(3)
+    } finally {
+      view.unmount()
+      queryClient.clear()
+      jest.useRealTimers()
+    }
+  })
+
+  it('caps a continuously pending foreground polling window at fifteen responses', async () => {
+    jest.useFakeTimers()
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    ;(fetcher as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { cacheState: 'pending' as const },
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useCopierAggregate({ source: 'gmx', exchangeTraderId: 'trader-a', enabled: true }),
+      { wrapper: Wrapper }
+    )
+
+    try {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(40_000)
+      })
+      expect(fetcher).toHaveBeenCalledTimes(15)
+      expect(view.result.current.isPendingUpstream).toBe(true)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10_000)
+      })
+      expect(fetcher).toHaveBeenCalledTimes(15)
+    } finally {
+      view.unmount()
+      queryClient.clear()
+      jest.useRealTimers()
+    }
   })
 })
 

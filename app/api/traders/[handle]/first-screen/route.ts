@@ -17,7 +17,6 @@
  */
 
 import { NextRequest } from 'next/server'
-import { unstable_cache } from 'next/cache'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
@@ -25,45 +24,35 @@ import { error as apiError, success as apiSuccess } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
-import {
-  METRIC_AUTHORITY_NO_STORE_HEADERS,
-  servingMetricAuthorityCacheKey,
-} from '@/lib/data/serving/cache-policy'
+import { METRIC_AUTHORITY_NO_STORE_HEADERS } from '@/lib/data/serving/cache-policy'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
-import { getReadReplica } from '@/lib/supabase/read-replica'
-import { logger } from '@/lib/logger'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
+import { logger } from '@/lib/logger'
 import type { TraderFirstScreen, TraderFirstScreenResponse } from '@/lib/data/serving/types'
 
 const handleSchema = z.string().min(1).max(255)
 const sourceSchema = z.string().min(1).max(64)
 
-// The capability-matrix RPC scans trader_stats for observed metric coverage —
-// ~30s cold. Near-static data (spec §6), so serve it from an authority-versioned
-// Next data-cache entry, and never let a cold miss stall this route past the
-// client's fetch timeout: race 2s → null capability
-// (the client degrades gracefully — record surfaces gate off, core still loads).
-const cachedCapabilitiesISR = unstable_cache(
-  async () => getSourceCapabilities(getReadReplica()),
-  [servingMetricAuthorityCacheKey('arena-source-capabilities')],
-  { revalidate: 300 }
-)
-const cachedCapabilities = async () => {
+async function requestScopedCapabilities(
+  supabase: Parameters<typeof getSourceCapabilities>[0]
+): Promise<Awaited<ReturnType<typeof getSourceCapabilities>>> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
-      cachedCapabilitiesISR(),
-      new Promise<Record<string, never>>((resolve) => setTimeout(() => resolve({}), 2_000)),
+      getSourceCapabilities(supabase),
+      new Promise<Record<string, never>>((resolve) => {
+        timeout = setTimeout(() => resolve({}), 2_000)
+      }),
     ])
-  } catch (err) {
-    // The 2s race resolves {} on cold-miss timeout (expected, no throw); this
-    // catch only fires on a genuine capability-RPC failure — surface it so a
-    // broken capability matrix (drift) doesn't silently gate off record surfaces.
+  } catch (error) {
     logger.warn(
-      '[first-screen] source capabilities fetch failed:',
-      err instanceof Error ? err.message : String(err)
+      '[first-screen] request-scoped source capabilities fetch failed:',
+      error instanceof Error ? error.message : String(error)
     )
     return {}
+  } finally {
+    if (timeout) clearTimeout(timeout)
   }
 }
 
@@ -117,7 +106,11 @@ export async function GET(
 
       const [firstScreenRaw, capabilities, verifiedKeys] = await Promise.all([
         getFirstScreen(supabase, resolved.source, resolved.exchangeTraderId),
-        cachedCapabilities(),
+        // Capability includes the live source-authority verdict. Do not read it
+        // through a process-global/read-replica cache. Keep the old 2s
+        // availability bound while pre-cutover databases still run the
+        // expensive metric scan; a timeout yields a fail-closed empty seed.
+        requestScopedCapabilities(supabase),
         getVerifiedTraderKeys(supabase),
       ])
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const SCRIPT = resolve(ROOT, 'scripts/maintenance/purge-ranking-authority-caches.sh')
-const CONTRACT = 'public-rank-policy-v4+serving-metric-authority-v1'
+const CONTRACT = 'public-rank-policy-v7+serving-metric-authority-v2+csr2'
 const SHA = 'a'.repeat(40)
 
 function run(args, env = {}) {
@@ -27,7 +27,10 @@ function writeExecutable(path, body) {
 test('plan mode is mutation-free and documents the exact cutover order', () => {
   const result = run(['plan'])
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, /safe application release -> authority migration -> this purge/)
+  assert.match(
+    result.stdout,
+    /safe application release -> this purge -> fail-closed production probes -> 0547 authority migration -> postflight -> writer restart/
+  )
   assert.match(result.stdout, /plan mode performs no network or cache mutation/)
 })
 
@@ -98,4 +101,6 @@ test('source never passes credentials on the Vercel command line', () => {
   const source = readFileSync(SCRIPT, 'utf8')
   assert.doesNotMatch(source, /--token/)
   assert.match(source, /vercel cache purge --yes/)
+  assert.match(source, /serving-metric-authority-v2/)
+  assert.match(source, /COPIER_SNAPSHOT_RECORDS_CONTRACT = 'csr2'/)
 })

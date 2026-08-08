@@ -15,6 +15,7 @@ import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
 import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
+import { servingMetricAuthorityCacheKey } from '@/lib/data/serving/cache-policy'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import { LR } from '@/lib/types/schema-mapping'
@@ -236,11 +237,13 @@ const cachedGetFirstScreen = async (
   }
 }
 
-// Capability matrix is near-static (spec §6) — 1h revalidate, best-effort.
+// Server capability is only a first-paint seed. Keep it in the current
+// authority epoch and short-lived; the client always replaces it with the
+// request-scoped live capability route before enabling the copier surface.
 const cachedCapabilitiesISR = unstable_cache(
   async () => getSourceCapabilities(getReadReplica()),
-  ['arena-source-capabilities'],
-  { revalidate: 3600 }
+  [servingMetricAuthorityCacheKey('arena-source-capabilities')],
+  { revalidate: 30 }
 )
 const cachedCapabilities = async () => {
   try {
