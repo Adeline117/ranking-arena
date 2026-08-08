@@ -262,6 +262,7 @@ export interface ExtractedCopierCandidateRecords {
 }
 
 interface CandidateLocator {
+  readonly adapterSlug: CopierCandidateAdapterSlug
   readonly contract: string
   extract(input: {
     binding: CopierCandidateReplayBinding
@@ -338,12 +339,14 @@ function locator(
   extract: CandidateLocator['extract']
 ): CandidateLocator {
   return Object.freeze({
+    adapterSlug: adapter,
     contract: `arena.ingest.copier-candidate-locator.${adapter}@1`,
     extract,
   })
 }
 
-const locators: Readonly<Record<CopierCandidateAdapterSlug, CandidateLocator>> = Object.freeze({
+/** Retained V1 locator implementations. Never retarget these contract identities. */
+const v1Locators: Readonly<Record<CopierCandidateAdapterSlug, CandidateLocator>> = Object.freeze({
   binance: locator('binance', ({ exchangeTraderId, pageIndex, payload }) => {
     if (
       !exactKeys(payload, ['contract', 'portfolioId', 'request', 'response', 'sort']) ||
@@ -416,6 +419,7 @@ const locators: Readonly<Record<CopierCandidateAdapterSlug, CandidateLocator>> =
     return pathArray(payload, ['data', 'data'], 'coinex')
   }),
   gate: Object.freeze({
+    adapterSlug: 'gate',
     contract: 'arena.ingest.copier-candidate-locator.gate@1',
     extract: (({ binding, payload }) => {
       if (
@@ -466,12 +470,61 @@ const locators: Readonly<Record<CopierCandidateAdapterSlug, CandidateLocator>> =
   }),
 })
 
+/** Active locators are used only when constructing a new replay binding. */
+const activeLocators: Readonly<Record<CopierCandidateAdapterSlug, CandidateLocator>> =
+  Object.freeze({ ...v1Locators })
+
+const GATE_FUTURES_LOCATOR_V1 = 'arena.ingest.copier-candidate-locator.gate.futures@1' as const
+const GATE_CFD_LOCATOR_V1 = 'arena.ingest.copier-candidate-locator.gate.cfd@1' as const
+
+/** Append-only contract catalog used by historical replay. */
+const locatorCatalog: Readonly<Record<string, CandidateLocator>> = Object.freeze({
+  [v1Locators.binance.contract]: v1Locators.binance,
+  [v1Locators.bingx.contract]: v1Locators.bingx,
+  [v1Locators.bitget.contract]: v1Locators.bitget,
+  [v1Locators.bitget_bots.contract]: v1Locators.bitget_bots,
+  [v1Locators.bitunix.contract]: v1Locators.bitunix,
+  [v1Locators.blofin.contract]: v1Locators.blofin,
+  [v1Locators.btcc.contract]: v1Locators.btcc,
+  [v1Locators.bybit_copytrade.contract]: v1Locators.bybit_copytrade,
+  [v1Locators.coinex.contract]: v1Locators.coinex,
+  [GATE_FUTURES_LOCATOR_V1]: v1Locators.gate,
+  [GATE_CFD_LOCATOR_V1]: v1Locators.gate,
+  [v1Locators.kucoin.contract]: v1Locators.kucoin,
+  [v1Locators.lbank.contract]: v1Locators.lbank,
+  [v1Locators.mexc.contract]: v1Locators.mexc,
+  [v1Locators.okx.contract]: v1Locators.okx,
+  [v1Locators.toobit.contract]: v1Locators.toobit,
+  [v1Locators.xt.contract]: v1Locators.xt,
+})
+
 function registeredLocator(adapterSlug: string): CandidateLocator {
-  if (!Object.prototype.hasOwnProperty.call(locators, adapterSlug)) {
+  if (!Object.prototype.hasOwnProperty.call(activeLocators, adapterSlug)) {
     throw conservationError(`adapter ${adapterSlug} is not registered`)
   }
-  const selected = locators[adapterSlug as CopierCandidateAdapterSlug]
+  const selected = activeLocators[adapterSlug as CopierCandidateAdapterSlug]
   if (!selected) throw conservationError(`adapter ${adapterSlug} is not registered`)
+  return selected
+}
+
+function retainedLocator(binding: CopierCandidateReplayBinding): CandidateLocator {
+  const contract = binding.candidate_locator_contract
+  if (!Object.prototype.hasOwnProperty.call(locatorCatalog, contract)) {
+    throw conservationError('candidate replay binding locator contract is not retained')
+  }
+  const selected = locatorCatalog[contract]
+  if (!selected || selected.adapterSlug !== binding.adapter_slug) {
+    throw conservationError('candidate replay binding locator does not match its adapter variant')
+  }
+  if (
+    selected.adapterSlug === 'gate' &&
+    !(
+      (binding.product_type === 'futures' && contract === GATE_FUTURES_LOCATOR_V1) ||
+      (binding.product_type === 'cfd' && contract === GATE_CFD_LOCATOR_V1)
+    )
+  ) {
+    throw conservationError('candidate replay binding locator does not match its adapter variant')
+  }
   return selected
 }
 
@@ -484,10 +537,10 @@ export function selectCopierCandidateLocatorContract(
   const selected = registeredLocator(adapterSlug)
   if (adapterSlug === 'gate') {
     if (parsedProductType.data === 'futures') {
-      return 'arena.ingest.copier-candidate-locator.gate.futures@1'
+      return GATE_FUTURES_LOCATOR_V1
     }
     if (parsedProductType.data === 'cfd') {
-      return 'arena.ingest.copier-candidate-locator.gate.cfd@1'
+      return GATE_CFD_LOCATOR_V1
     }
     throw conservationError('gate product type must be futures or cfd')
   }
@@ -558,10 +611,7 @@ export function revalidateCopierCandidateReplayBinding(
   value: unknown
 ): CopierCandidateReplayBinding {
   const binding = canonicalSchemaClone(replayBindingSchema, value, 'candidate replay binding')
-  const expected = selectCopierCandidateLocatorContract(binding.adapter_slug, binding.product_type)
-  if (binding.candidate_locator_contract !== expected) {
-    throw conservationError('candidate replay binding locator does not match its adapter variant')
-  }
+  retainedLocator(binding)
   return binding
 }
 
@@ -601,7 +651,7 @@ function extractCopierCandidateRecordsWithBinding(input: {
   const traderIdentity = exchangeTraderIdSchema.safeParse(input.exchangeTraderId)
   if (!traderIdentity.success) throw conservationError('exchange trader id is invalid')
   const adapterSlug = input.binding.adapter_slug
-  const selected = registeredLocator(adapterSlug)
+  const selected = retainedLocator(input.binding)
 
   const payload = canonicalClone(input.payload, `${adapterSlug} page payload`)
   if (!isPlainRecord(payload))
