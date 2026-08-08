@@ -175,7 +175,7 @@ export function TraderHeaderActions({
   return (
     <Box
       ref={actionsRef}
-      className="profile-header-actions action-buttons"
+      className="profile-header-actions trader-profile-header-actions action-buttons"
       style={{
         display: 'flex',
         alignItems: 'center',

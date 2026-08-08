@@ -197,6 +197,7 @@ describe('TraderHeaderActions', () => {
     const more = screen.getByRole('button', { name: 'More' })
 
     expect(actions).not.toBeNull()
+    expect(actions).toHaveClass('trader-profile-header-actions')
     expect(secondary).not.toBeNull()
     expect(actions?.querySelectorAll('[data-testid="message-action"]')).toHaveLength(1)
     expect(secondary).toContainElement(message)
@@ -230,7 +231,12 @@ describe('TraderHeaderActions', () => {
     // Bind the arithmetic to the responsive contract: the long Message label
     // is in the hidden secondary group until More opens, while the primary row
     // stays nowrap with only Follow, Watch, and More.
-    expect(mobileActionCss).toContain('flex-wrap: nowrap !important')
+    expect(mobileActionCss).toMatch(
+      /\.trader-profile-header-actions\s*\{[^}]*flex-wrap:\s*nowrap\s*!important;/s
+    )
+    expect(mobileActionCss).not.toMatch(
+      /(?:^|\n)\s*\.profile-header-actions\s*\{[^}]*flex-wrap:\s*nowrap\s*!important;/s
+    )
     expect(mobileActionCss).toMatch(/\.trader-secondary-actions\s*\{\s*display: none;/)
     expect(mobileActionCss).toContain(".trader-secondary-actions[data-open='true']")
 

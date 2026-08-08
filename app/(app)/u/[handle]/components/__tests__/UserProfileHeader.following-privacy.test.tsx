@@ -186,6 +186,7 @@ describe('UserProfileHeader following privacy', () => {
     expect(share).toHaveAttribute('data-share-handle', '爱丽丝 user')
     expect(share).toHaveAttribute('data-show-label', 'false')
     expect(share.getAttribute('data-share-url')).toMatch(/\/u\/%E7%88%B1%E4%B8%BD%E4%B8%9D%20user$/)
+    expect(share.closest('.profile-header-actions')).toHaveStyle({ flexWrap: 'wrap' })
   })
 
   it('uses opaque cover text and the contrast badge surface', () => {
