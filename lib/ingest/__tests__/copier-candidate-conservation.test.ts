@@ -8,9 +8,16 @@ import type { ParsedCopierRow, ParsedHistoryRow, RawPage, SourceRow } from '../c
 import {
   COPIER_CANDIDATE_ADAPTER_SLUGS,
   COPIER_CANDIDATE_MULTISET_CONTRACT,
+  COPIER_CANDIDATE_REPLAY_BINDING_CONTRACT,
   buildCopierCandidateLedger,
+  buildCopierCandidateLedgerFromReplayBinding,
+  deriveCopierCandidateReplayBinding,
   extractCopierCandidateRecords,
+  extractCopierCandidateRecordsFromReplayBinding,
   revalidateCopierCandidateLedger,
+  revalidateCopierCandidateLedgerFromReplayBinding,
+  revalidateCopierCandidateReplayBinding,
+  selectCopierCandidateLocatorContract,
   verifyCopierParserConservation,
   type CopierCandidateAdapterSlug,
 } from '../copier-candidate-conservation'
@@ -472,6 +479,169 @@ describe('copier candidate closed registry', () => {
         },
       })
     ).toThrow('exactly one aggregate block')
+  })
+})
+
+describe('durable copier candidate replay binding', () => {
+  it.each(shapes)(
+    'derives and replays the exact $adapter locator without a SourceRow',
+    ({ adapter, src = source(adapter), payload, locator }) => {
+      const binding = deriveCopierCandidateReplayBinding(src)
+      const expectedLocator = locator ?? `arena.ingest.copier-candidate-locator.${adapter}@1`
+      expect(binding).toEqual({
+        contract: COPIER_CANDIDATE_REPLAY_BINDING_CONTRACT,
+        serialization_contract: 'arena.strict-canonical-json@1',
+        adapter_slug: adapter,
+        product_type: src.product_type,
+        candidate_locator_contract: expectedLocator,
+      })
+      expect(Object.isFrozen(binding)).toBe(true)
+      expect(revalidateCopierCandidateReplayBinding(binding)).toEqual(binding)
+
+      const candidates = [{ uid: 'a' }, { uid: 'b' }]
+      const extracted = extractCopierCandidateRecordsFromReplayBinding({
+        binding,
+        exchangeTraderId,
+        pageIndex: 1,
+        payload: payload(candidates),
+      })
+      expect(extracted.locatorContract).toBe(expectedLocator)
+      expect(extracted.candidates).toEqual(candidates)
+    }
+  )
+
+  it('locks Gate to the exact futures/cfd product and locator pair', () => {
+    const futures = deriveCopierCandidateReplayBinding(
+      source('gate', { meta: { boardKey: 'futures' } })
+    )
+    const cfd = deriveCopierCandidateReplayBinding(
+      source('gate', {
+        slug: 'gate_cfd',
+        product_type: 'cfd',
+        meta: { boardKey: 'cfd' },
+      })
+    )
+    expect(futures.candidate_locator_contract).toBe(
+      'arena.ingest.copier-candidate-locator.gate.futures@1'
+    )
+    expect(cfd.candidate_locator_contract).toBe('arena.ingest.copier-candidate-locator.gate.cfd@1')
+
+    expect(() =>
+      deriveCopierCandidateReplayBinding(
+        source('gate', { product_type: 'futures', meta: { boardKey: 'cfd' } })
+      )
+    ).toThrow('gate source variant must be explicit')
+    expect(() =>
+      deriveCopierCandidateReplayBinding(
+        source('gate', { product_type: 'spot', meta: { boardKey: 'spot' } })
+      )
+    ).toThrow('gate product type must be futures or cfd')
+    expect(() =>
+      revalidateCopierCandidateReplayBinding({
+        ...futures,
+        candidate_locator_contract: 'arena.ingest.copier-candidate-locator.gate.cfd@1',
+      })
+    ).toThrow('locator does not match its adapter variant')
+    expect(() =>
+      revalidateCopierCandidateReplayBinding({
+        ...futures,
+        adapter_slug: 'bingx',
+      })
+    ).toThrow('locator does not match its adapter variant')
+  })
+
+  it('uses own-property closed lookup for unknown and prototype property names', () => {
+    for (const adapterSlug of ['future_adapter', '__proto__', 'constructor', 'toString']) {
+      expect(() => selectCopierCandidateLocatorContract(adapterSlug, 'futures')).toThrow(
+        `adapter ${adapterSlug} is not registered`
+      )
+      expect(() =>
+        deriveCopierCandidateReplayBinding(source(adapterSlug, { slug: 'safe_source' }))
+      ).toThrow(`adapter ${adapterSlug} is not registered`)
+    }
+  })
+
+  it('rejects accessors, hidden fields, exotic prototypes, and extra binding fields', () => {
+    const valid = deriveCopierCandidateReplayBinding(source('bingx'))
+    let reads = 0
+    const accessor = { ...valid }
+    Object.defineProperty(accessor, 'adapter_slug', {
+      enumerable: true,
+      get() {
+        reads += 1
+        return 'bingx'
+      },
+    })
+    expect(() => revalidateCopierCandidateReplayBinding(accessor)).toThrow('object accessors')
+    expect(reads).toBe(0)
+
+    const hidden = { ...valid }
+    Object.defineProperty(hidden, 'hidden', { enumerable: false, value: true })
+    expect(() => revalidateCopierCandidateReplayBinding(hidden)).toThrow(
+      'non-enumerable object properties'
+    )
+    expect(() => revalidateCopierCandidateReplayBinding({ ...valid, unreviewed: true })).toThrow(
+      'violates its contract'
+    )
+    const exotic = Object.assign(Object.create({ inherited: true }) as Dict, { ...valid })
+    expect(() => revalidateCopierCandidateReplayBinding(exotic)).toThrow('non-plain objects')
+
+    const liveAccessor = source('bingx')
+    Object.defineProperty(liveAccessor, 'adapter_slug', {
+      enumerable: true,
+      get() {
+        throw new Error('must not execute')
+      },
+    })
+    expect(() => deriveCopierCandidateReplayBinding(liveAccessor)).toThrow('object accessors')
+  })
+
+  it('rebuilds and exact-revalidates a candidate ledger from artifact coordinates', () => {
+    const src = source('bingx')
+    const binding = deriveCopierCandidateReplayBinding(src)
+    const pages = [
+      page(shape('bingx').payload([{ uid: 'a' }]), 1),
+      page(shape('bingx').payload([{ uid: 'b' }, { uid: 'b' }]), 2),
+    ]
+    const live = buildCopierCandidateLedger({ src, exchangeTraderId, pages })
+    const replayed = buildCopierCandidateLedgerFromReplayBinding({
+      binding,
+      source: { id: src.id, slug: src.slug },
+      exchangeTraderId,
+      pages,
+    })
+    expect(replayed).toEqual(live)
+    expect(Object.isFrozen(replayed)).toBe(true)
+    expect(Object.isFrozen(replayed.pages[1].occurrences[1])).toBe(true)
+    expect(
+      revalidateCopierCandidateLedgerFromReplayBinding({
+        binding,
+        source: { id: src.id, slug: src.slug },
+        exchangeTraderId,
+        pages,
+        ledger: replayed,
+      })
+    ).toEqual(replayed)
+
+    const drifted = JSON.parse(JSON.stringify(replayed)) as typeof replayed
+    drifted.source.slug = 'another_source'
+    expect(() =>
+      revalidateCopierCandidateLedgerFromReplayBinding({
+        binding,
+        source: { id: src.id, slug: src.slug },
+        exchangeTraderId,
+        pages,
+        ledger: drifted,
+      })
+    ).toThrow('does not match replayed RAW pages')
+    expect(() =>
+      buildCopierCandidateLedgerFromReplayBinding({
+        binding,
+        source: { id: src.id, slug: src.slug, extra: true } as never,
+        exchangeTraderId,
+        pages,
+      })
+    ).toThrow('violates its contract')
   })
 })
 
