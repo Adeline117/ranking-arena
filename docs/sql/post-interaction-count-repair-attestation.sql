@@ -1,9 +1,10 @@
 -- Read-only production attestation for
 -- 20260803104000_durable_post_interaction_count_repair.sql and
--- 20260803104500_close_hot_score_batch_public_execute.sql.
+-- 20260803104500_close_hot_score_batch_public_execute.sql and
+-- 20260803105000_bind_bookmark_count_consistency.sql.
 -- Run with a catalog-visible maintenance role after the repair worker has
 -- drained the migration backfill. A queue item older than fifteen minutes or any
--- mismatch between the five cached counters and canonical child rows fails.
+-- mismatch between the six cached counters and canonical child rows fails.
 
 BEGIN;
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY;
@@ -15,6 +16,7 @@ DO $attestation$
 DECLARE
   v_postgres_oid oid := pg_catalog.to_regrole('postgres');
   v_service_oid oid := pg_catalog.to_regrole('service_role');
+  v_authenticated_oid oid := pg_catalog.to_regrole('authenticated');
   v_plpgsql_oid oid := (
     SELECT language_row.oid
     FROM pg_catalog.pg_language AS language_row
@@ -36,6 +38,13 @@ DECLARE
   v_expected record;
   v_trigger record;
   v_post_lock_position integer;
+  v_actor_lock_position integer;
+  v_account_lock_position integer;
+  v_auth_lock_position integer;
+  v_profile_lock_position integer;
+  v_audience_lock_position integer;
+  v_folder_lock_position integer;
+  v_child_lock_position integer;
   v_post_row_lock_position integer;
   v_queue_lock_position integer;
   v_queue_delete_position integer;
@@ -51,6 +60,7 @@ DECLARE
   v_bull_drift_count bigint;
   v_bear_drift_count bigint;
   v_wait_drift_count bigint;
+  v_bookmark_drift_count bigint;
   v_drift_post_count bigint;
 BEGIN
   SELECT pg_catalog.array_agg(required_role ORDER BY required_role)
@@ -69,6 +79,7 @@ BEGIN
   IF v_missing_roles IS NOT NULL
      OR v_postgres_oid IS NULL
      OR v_service_oid IS NULL
+     OR v_authenticated_oid IS NULL
      OR v_plpgsql_oid IS NULL
   THEN
     RAISE EXCEPTION
@@ -82,6 +93,18 @@ BEGIN
      OR pg_catalog.to_regclass('public.posts') IS NULL
      OR pg_catalog.to_regclass('public.post_likes') IS NULL
      OR pg_catalog.to_regclass('public.post_votes') IS NULL
+     OR pg_catalog.to_regclass('public.post_bookmarks') IS NULL
+     OR pg_catalog.to_regclass('public.bookmark_folders') IS NULL
+     OR pg_catalog.to_regclass('public.user_profiles') IS NULL
+     OR pg_catalog.to_regprocedure(
+       'public.toggle_post_bookmark_atomic(uuid,uuid,uuid)'
+     ) IS NULL
+     OR pg_catalog.to_regprocedure(
+       'public.save_post_bookmark_to_folder_atomic(uuid,uuid)'
+     ) IS NULL
+     OR pg_catalog.to_regprocedure(
+       'public.remove_post_bookmark_from_folder_atomic(uuid,uuid,uuid)'
+     ) IS NULL
   THEN
     RAISE EXCEPTION 'post interaction repair substrate is incomplete';
   END IF;
@@ -235,20 +258,25 @@ BEGIN
     FROM pg_catalog.pg_class AS index_relation
     JOIN pg_catalog.pg_index AS index_row
       ON index_row.indexrelid = index_relation.oid
+    JOIN pg_catalog.pg_am AS access_method
+      ON access_method.oid = index_relation.relam
     WHERE index_relation.relnamespace = 'public'::pg_catalog.regnamespace
       AND index_relation.relname =
         'idx_post_interaction_count_repair_queue_oldest'
       AND index_relation.relkind = 'i'
       AND index_relation.relpersistence = 'p'
       AND index_relation.relowner = v_postgres_oid
+      AND access_method.amname = 'btree'
       AND index_row.indrelid = v_queue
       AND index_row.indisvalid
       AND index_row.indisready
+      AND index_row.indislive
       AND NOT index_row.indisunique
       AND index_row.indpred IS NULL
       AND index_row.indexprs IS NULL
       AND index_row.indnatts = 3
       AND index_row.indnkeyatts = 3
+      AND index_row.indoption = '0 0 0'::pg_catalog.int2vector
       AND (
         SELECT pg_catalog.array_agg(
           attribute.attname::text ORDER BY key_column.ordinality
@@ -348,10 +376,12 @@ BEGIN
     ]::text[];
 
   IF v_comment IS DISTINCT FROM
-       'Trigger-only enqueue path that deliberately takes no post or auth locks.'
+       'post-interaction-count-repair:enqueue-v2:' ||
+         pg_catalog.md5(v_source)
      OR pg_catalog.strpos(v_source, 'pg_advisory') <> 0
      OR pg_catalog.strpos(v_source, 'auth.users') <> 0
      OR pg_catalog.strpos(v_source, 'UPDATE public.posts') <> 0
+     OR pg_catalog.strpos(v_source, '''post_bookmarks''') = 0
      OR pg_catalog.strpos(
           v_source,
           'INSERT INTO public.post_interaction_count_repair_queue'
@@ -404,10 +434,15 @@ BEGIN
     'DELETE FROM public.post_interaction_count_repair_queue'
   );
   v_count_position := pg_catalog.strpos(v_source, 'count(*) FILTER');
+  v_child_lock_position := pg_catalog.strpos(
+    v_source,
+    'FROM public.post_bookmarks AS bookmark'
+  );
   v_post_update_position := pg_catalog.strpos(v_source, 'UPDATE public.posts');
 
   IF v_comment IS DISTINCT FROM
-       'Service-only bounded repair worker; canonical post advisory lock always precedes queue ownership.'
+       'post-interaction-count-repair:worker-v2:' ||
+         pg_catalog.md5(v_source)
      OR v_post_lock_position = 0
      OR v_post_row_lock_position <= v_post_lock_position
      OR v_queue_lock_position <= v_post_row_lock_position
@@ -420,6 +455,26 @@ BEGIN
      OR pg_catalog.strpos(v_source, 'LIMIT 1') = 0
      OR pg_catalog.strpos(v_source, 'next_attempt_at') = 0
      OR pg_catalog.strpos(v_source, 'attempt_count') = 0
+     OR v_child_lock_position <= v_queue_delete_position
+     OR pg_catalog.strpos(
+       v_source,
+       'bookmark_count = v_bookmark_count::integer'
+     ) <= v_child_lock_position
+     OR v_post_update_position <= v_child_lock_position
+     OR pg_catalog.strpos(
+       v_source,
+       $$RETURN pg_catalog.jsonb_build_object(
+    'status', 'processed',
+    'selected_count', v_selected_count,
+    'processed_count', v_processed_count,
+    'repaired_count', v_repaired_count,
+    'discarded_count', v_discarded_count,
+    'contended_count', v_contended_count,
+    'has_more', v_has_more,
+    'remaining_count', v_remaining_count,
+    'oldest_enqueued_at', v_oldest_enqueued_at
+  );$$
+     ) = 0
   THEN
     RAISE EXCEPTION
       'repair worker P -> posts -> Q lock/source contract drifted';
@@ -438,6 +493,11 @@ BEGIN
           'public.post_votes'::pg_catalog.regclass,
           'trg_post_votes_90_enqueue_count_repair',
           ARRAY['post_id', 'choice']::text[]
+        ),
+        (
+          'public.post_bookmarks'::pg_catalog.regclass,
+          'trg_post_bookmarks_90_enqueue_count_repair',
+          ARRAY['post_id']::text[]
         )
     ) AS expected_trigger(relation_oid, trigger_name, update_columns)
   LOOP
@@ -474,7 +534,7 @@ BEGIN
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgfoid = v_enqueue_function
       AND NOT trigger_row.tgisinternal
-  ) <> 2 THEN
+  ) <> 3 THEN
     RAISE EXCEPTION 'post interaction repair trigger cardinality drifted';
   END IF;
 
@@ -530,7 +590,11 @@ BEGIN
       ARRAY['anon', 'authenticated', 'authenticator', 'service_role']::text[]
     ) AS role_name
     CROSS JOIN pg_catalog.unnest(
-      ARRAY['public.post_likes', 'public.post_votes']::text[]
+      ARRAY[
+        'public.post_likes',
+        'public.post_votes',
+        'public.post_bookmarks'
+      ]::text[]
     ) AS relation_name
     WHERE pg_catalog.has_table_privilege(role_name, relation_name, 'TRUNCATE')
   ) THEN
@@ -542,7 +606,9 @@ BEGIN
     FROM pg_catalog.unnest(
       ARRAY[
         pg_catalog.to_regprocedure('public.increment_like_count(uuid)'),
-        pg_catalog.to_regprocedure('public.decrement_like_count(uuid)')
+        pg_catalog.to_regprocedure('public.decrement_like_count(uuid)'),
+        pg_catalog.to_regprocedure('public.increment_bookmark_count(uuid)'),
+        pg_catalog.to_regprocedure('public.decrement_bookmark_count(uuid)')
       ]::regprocedure[]
     ) AS legacy_function
     CROSS JOIN pg_catalog.unnest(
@@ -565,12 +631,38 @@ BEGIN
     ) AS acl_entry
     WHERE function_row.oid IN (
       pg_catalog.to_regprocedure('public.increment_like_count(uuid)'),
-      pg_catalog.to_regprocedure('public.decrement_like_count(uuid)')
+      pg_catalog.to_regprocedure('public.decrement_like_count(uuid)'),
+      pg_catalog.to_regprocedure('public.increment_bookmark_count(uuid)'),
+      pg_catalog.to_regprocedure('public.decrement_bookmark_count(uuid)')
     )
       AND acl_entry.privilege_type = 'EXECUTE'
       AND acl_entry.grantee <> v_postgres_oid
   ) THEN
-    RAISE EXCEPTION 'legacy arithmetic like counter RPC remains callable';
+    RAISE EXCEPTION 'legacy arithmetic post counter RPC remains callable';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.pronamespace = 'public'::pg_catalog.regnamespace
+      AND function_row.proname IN (
+        'increment_like_count',
+        'decrement_like_count',
+        'increment_bookmark_count',
+        'decrement_bookmark_count'
+      )
+      AND function_row.oid IS DISTINCT FROM CASE function_row.proname
+        WHEN 'increment_like_count' THEN
+          pg_catalog.to_regprocedure('public.increment_like_count(uuid)')::oid
+        WHEN 'decrement_like_count' THEN
+          pg_catalog.to_regprocedure('public.decrement_like_count(uuid)')::oid
+        WHEN 'increment_bookmark_count' THEN
+          pg_catalog.to_regprocedure('public.increment_bookmark_count(uuid)')::oid
+        WHEN 'decrement_bookmark_count' THEN
+          pg_catalog.to_regprocedure('public.decrement_bookmark_count(uuid)')::oid
+      END
+  ) THEN
+    RAISE EXCEPTION 'legacy arithmetic post counter RPC overload remains';
   END IF;
 
   FOREACH v_function IN ARRAY ARRAY[
@@ -599,6 +691,217 @@ BEGIN
         v_function;
     END IF;
   END LOOP;
+
+  FOR v_expected IN
+    SELECT *
+    FROM (
+      VALUES
+        (
+          'public.toggle_post_bookmark_atomic(uuid,uuid,uuid)',
+          ARRAY['p_actor_id', 'p_post_id', 'p_folder_id']::text[],
+          1,
+          v_service_oid,
+          'bookmark-count-consistency:toggle-v1:'
+        ),
+        (
+          'public.save_post_bookmark_to_folder_atomic(uuid,uuid)',
+          ARRAY['p_post_id', 'p_folder_id']::text[],
+          0,
+          v_authenticated_oid,
+          'bookmark-count-consistency:save-v1:'
+        ),
+        (
+          'public.remove_post_bookmark_from_folder_atomic(uuid,uuid,uuid)',
+          ARRAY['p_post_id', 'p_bookmark_id', 'p_folder_id']::text[],
+          0,
+          v_authenticated_oid,
+          'bookmark-count-consistency:remove-v1:'
+        )
+    ) AS expected(
+      signature,
+      argument_names,
+      default_count,
+      role_oid,
+      comment_prefix
+    )
+  LOOP
+    v_function := pg_catalog.to_regprocedure(v_expected.signature);
+
+    SELECT function_row.prosrc,
+           pg_catalog.obj_description(function_row.oid, 'pg_proc')
+    INTO STRICT v_source, v_comment
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.oid = v_function
+      AND function_row.prokind = 'f'
+      AND function_row.prorettype = 'jsonb'::pg_catalog.regtype
+      AND NOT function_row.proretset
+      AND function_row.proowner = v_postgres_oid
+      AND function_row.prosecdef
+      AND function_row.provolatile = 'v'
+      AND function_row.prolang = v_plpgsql_oid
+      AND NOT function_row.proisstrict
+      AND function_row.proparallel = 'u'
+      AND NOT function_row.proleakproof
+      AND function_row.pronargs =
+        pg_catalog.cardinality(v_expected.argument_names)
+      AND function_row.pronargdefaults = v_expected.default_count
+      AND function_row.proargnames = v_expected.argument_names
+      AND pg_catalog.cardinality(function_row.proconfig) = 4
+      AND function_row.proconfig @> ARRAY[
+        'search_path=pg_catalog, pg_temp',
+        'row_security=off',
+        'lock_timeout=5s',
+        'statement_timeout=15s'
+      ]::text[];
+
+    v_post_lock_position := pg_catalog.strpos(
+      v_source,
+      '''post-reaction-counts:'''
+    );
+    v_actor_lock_position := pg_catalog.strpos(v_source, '''post-bookmark:''');
+    v_account_lock_position := pg_catalog.strpos(
+      v_source,
+      '''account-recovery-admission:'''
+    );
+    v_auth_lock_position := pg_catalog.strpos(
+      v_source,
+      'FROM auth.users AS actor_account'
+    );
+    v_profile_lock_position := pg_catalog.strpos(
+      v_source,
+      'FROM public.user_profiles AS profile'
+    );
+    v_audience_lock_position := pg_catalog.strpos(
+      v_source,
+      'public.lock_actor_can_interact_with_post'
+    );
+    v_folder_lock_position := pg_catalog.strpos(
+      v_source,
+      'FROM public.bookmark_folders AS folder'
+    );
+    v_child_lock_position := pg_catalog.strpos(
+      v_source,
+      'FROM public.post_bookmarks AS bookmark'
+    );
+    v_count_position := pg_catalog.strpos(
+      v_source,
+      'SELECT pg_catalog.count(*)'
+    );
+    v_post_update_position := pg_catalog.strpos(v_source, 'UPDATE public.posts');
+
+    IF v_comment IS DISTINCT FROM
+         v_expected.comment_prefix || pg_catalog.md5(v_source)
+       OR v_post_lock_position = 0
+       OR v_actor_lock_position <= v_post_lock_position
+       OR (
+         v_expected.signature =
+           'public.toggle_post_bookmark_atomic(uuid,uuid,uuid)'
+         AND (
+           v_auth_lock_position <= v_actor_lock_position
+           OR v_audience_lock_position <= v_auth_lock_position
+           OR v_folder_lock_position <= v_audience_lock_position
+         )
+       )
+       OR (
+         v_expected.signature =
+           'public.save_post_bookmark_to_folder_atomic(uuid,uuid)'
+         AND (
+           v_account_lock_position <= v_actor_lock_position
+           OR v_auth_lock_position <= v_account_lock_position
+           OR v_profile_lock_position <= v_auth_lock_position
+           OR v_audience_lock_position <= v_profile_lock_position
+           OR v_folder_lock_position <= v_audience_lock_position
+         )
+       )
+       OR (
+         v_expected.signature =
+           'public.remove_post_bookmark_from_folder_atomic(uuid,uuid,uuid)'
+         AND (
+           v_account_lock_position <= v_actor_lock_position
+           OR v_auth_lock_position <= v_account_lock_position
+           OR v_profile_lock_position <= v_auth_lock_position
+           OR v_folder_lock_position <= v_profile_lock_position
+         )
+       )
+       OR v_child_lock_position <= v_folder_lock_position
+       OR v_count_position <= v_child_lock_position
+       OR v_post_update_position <= v_count_position
+       OR NOT pg_catalog.has_function_privilege(
+         v_expected.role_oid,
+         v_function,
+         'EXECUTE'
+       )
+       OR pg_catalog.has_function_privilege('anon', v_function, 'EXECUTE')
+       OR pg_catalog.has_function_privilege(
+         'authenticator',
+         v_function,
+         'EXECUTE'
+       )
+       OR (
+         v_expected.role_oid = v_service_oid
+         AND pg_catalog.has_function_privilege(
+           'authenticated',
+           v_function,
+           'EXECUTE'
+         )
+       )
+       OR (
+         v_expected.role_oid = v_authenticated_oid
+         AND pg_catalog.has_function_privilege(
+           'service_role',
+           v_function,
+           'EXECUTE'
+         )
+       )
+       OR EXISTS (
+         SELECT 1
+         FROM pg_catalog.pg_proc AS function_row
+         CROSS JOIN LATERAL pg_catalog.aclexplode(
+           COALESCE(
+             function_row.proacl,
+             pg_catalog.acldefault('f', function_row.proowner)
+           )
+         ) AS acl_entry
+         WHERE function_row.oid = v_function
+           AND acl_entry.privilege_type = 'EXECUTE'
+           AND acl_entry.grantee NOT IN (
+             v_postgres_oid,
+             v_expected.role_oid
+           )
+       )
+       OR EXISTS (
+         SELECT 1
+         FROM pg_catalog.pg_proc AS function_row
+         CROSS JOIN LATERAL pg_catalog.aclexplode(function_row.proacl)
+           AS acl_entry
+         WHERE function_row.oid = v_function
+           AND acl_entry.privilege_type = 'EXECUTE'
+           AND acl_entry.grantee = v_expected.role_oid
+           AND acl_entry.is_grantable
+       )
+    THEN
+      RAISE EXCEPTION 'post bookmark authority drifted: %',
+        v_expected.signature;
+    END IF;
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.pronamespace = 'public'::pg_catalog.regnamespace
+      AND function_row.proname IN (
+        'toggle_post_bookmark_atomic',
+        'save_post_bookmark_to_folder_atomic',
+        'remove_post_bookmark_from_folder_atomic'
+      )
+      AND function_row.oid NOT IN (
+        'public.toggle_post_bookmark_atomic(uuid,uuid,uuid)'::regprocedure,
+        'public.save_post_bookmark_to_folder_atomic(uuid,uuid)'::regprocedure,
+        'public.remove_post_bookmark_from_folder_atomic(uuid,uuid,uuid)'::regprocedure
+      )
+  ) THEN
+    RAISE EXCEPTION 'post bookmark authority overload set drifted';
+  END IF;
 
   FOR v_expected IN
     SELECT *
@@ -758,6 +1061,11 @@ BEGIN
            ) AS wait_count
     FROM public.post_votes AS vote
     GROUP BY vote.post_id
+  ), bookmark_counts AS (
+    SELECT bookmark.post_id,
+           pg_catalog.count(*) AS bookmark_count
+    FROM public.post_bookmarks AS bookmark
+    GROUP BY bookmark.post_id
   )
   SELECT pg_catalog.count(*) FILTER (
            WHERE COALESCE(target.like_count, 0)::bigint IS DISTINCT FROM
@@ -780,6 +1088,10 @@ BEGIN
              COALESCE(vote_counts.wait_count, 0::bigint)
          ),
          pg_catalog.count(*) FILTER (
+           WHERE COALESCE(target.bookmark_count, 0)::bigint IS DISTINCT FROM
+             COALESCE(bookmark_counts.bookmark_count, 0::bigint)
+         ),
+         pg_catalog.count(*) FILTER (
            WHERE COALESCE(target.like_count, 0)::bigint IS DISTINCT FROM
                    COALESCE(reaction_counts.like_count, 0::bigint)
               OR COALESCE(target.dislike_count, 0)::bigint IS DISTINCT FROM
@@ -790,21 +1102,26 @@ BEGIN
                    COALESCE(vote_counts.bear_count, 0::bigint)
               OR COALESCE(target.poll_wait, 0)::bigint IS DISTINCT FROM
                    COALESCE(vote_counts.wait_count, 0::bigint)
+              OR COALESCE(target.bookmark_count, 0)::bigint IS DISTINCT FROM
+                   COALESCE(bookmark_counts.bookmark_count, 0::bigint)
          )
   INTO v_like_drift_count,
        v_dislike_drift_count,
        v_bull_drift_count,
        v_bear_drift_count,
        v_wait_drift_count,
+       v_bookmark_drift_count,
        v_drift_post_count
   FROM public.posts AS target
   LEFT JOIN reaction_counts
     ON reaction_counts.post_id = target.id
   LEFT JOIN vote_counts
-    ON vote_counts.post_id = target.id;
+    ON vote_counts.post_id = target.id
+  LEFT JOIN bookmark_counts
+    ON bookmark_counts.post_id = target.id;
 
   RAISE NOTICE
-    'post interaction repair report: backlog=%, due_backlog=%, oldest=%, oldest_age=%, max_attempt=%, drift_posts=%, like=%, dislike=%, bull=%, bear=%, wait=%',
+    'post interaction repair report: backlog=%, due_backlog=%, oldest=%, oldest_age=%, max_attempt=%, drift_posts=%, like=%, dislike=%, bull=%, bear=%, wait=%, bookmark=%',
     v_backlog_count,
     v_due_backlog_count,
     v_oldest_enqueued_at,
@@ -815,7 +1132,8 @@ BEGIN
     v_dislike_drift_count,
     v_bull_drift_count,
     v_bear_drift_count,
-    v_wait_drift_count;
+    v_wait_drift_count,
+    v_bookmark_drift_count;
 
   IF v_oldest_enqueued_at IS NOT NULL
      AND v_oldest_enqueued_at <
@@ -830,13 +1148,14 @@ BEGIN
 
   IF v_drift_post_count <> 0 THEN
     RAISE EXCEPTION
-      'post interaction cached-counter drift remains: posts %, like %, dislike %, bull %, bear %, wait %',
+      'post interaction cached-counter drift remains: posts %, like %, dislike %, bull %, bear %, wait %, bookmark %',
       v_drift_post_count,
       v_like_drift_count,
       v_dislike_drift_count,
       v_bull_drift_count,
       v_bear_drift_count,
-      v_wait_drift_count;
+      v_wait_drift_count,
+      v_bookmark_drift_count;
   END IF;
 
   RAISE NOTICE
