@@ -240,6 +240,7 @@ export default function ApplyGroupPage() {
 
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('purpose', 'group_avatar')
       formData.append('userId', requestUserId)
 
       // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token

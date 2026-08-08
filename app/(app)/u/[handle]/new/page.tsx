@@ -273,6 +273,7 @@ export default function NewPostPage() {
         const compressed = await compressImage(file)
         const formData = new FormData()
         formData.append('file', compressed)
+        formData.append('purpose', 'post_image')
         formData.append('userId', userId)
 
         // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token

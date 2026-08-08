@@ -430,6 +430,7 @@ export default function EditPostPage() {
       try {
         const formData = new FormData()
         formData.append('file', file)
+        formData.append('purpose', 'post_image')
         formData.append('userId', userId)
 
         // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token

@@ -367,6 +367,7 @@ export default function NewGroupPostPage(): React.ReactElement {
           const compressed = await compressImage(file)
           const formData = new FormData()
           formData.append('file', compressed)
+          formData.append('purpose', 'post_image')
           formData.append('userId', userId)
 
           // Use XHR for upload progress tracking
