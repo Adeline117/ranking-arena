@@ -39,11 +39,28 @@ class TestMutationObserver {
 
 const nativeMutationObserver = globalThis.MutationObserver
 const mountedSections: HTMLElement[] = []
+const propertyRestorers: Array<() => void> = []
 
-function mountSection(id: string) {
+function overrideProperty(target: object, property: string, value: unknown) {
+  const descriptor = Object.getOwnPropertyDescriptor(target, property)
+  Object.defineProperty(target, property, { configurable: true, value })
+  propertyRestorers.push(() => {
+    if (descriptor) {
+      Object.defineProperty(target, property, descriptor)
+    } else {
+      Reflect.deleteProperty(target, property)
+    }
+  })
+}
+
+function mountSection(id: string, offsetTop = 0) {
   const element = document.createElement('section')
   const scrollIntoView = jest.fn()
   element.id = id
+  Object.defineProperty(element, 'offsetTop', {
+    configurable: true,
+    value: offsetTop,
+  })
   Object.defineProperty(element, 'scrollIntoView', {
     configurable: true,
     value: scrollIntoView,
@@ -78,6 +95,10 @@ describe('useActiveSection', () => {
   afterEach(() => {
     cleanup()
     mountedSections.splice(0).forEach((element) => element.remove())
+    propertyRestorers
+      .splice(0)
+      .reverse()
+      .forEach((restore) => restore())
     jest.clearAllTimers()
     jest.useRealTimers()
   })
@@ -209,6 +230,24 @@ describe('useActiveSection', () => {
     const account = mountSection('account')
     act(() => observer.trigger())
     expect(account.scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('keeps the last section active within the trailing offset region', () => {
+    mountSection('privacy', 600)
+    const account = mountSection('account', 924)
+    overrideProperty(window, 'innerHeight', 800)
+    overrideProperty(window, 'scrollY', 700)
+    overrideProperty(document.documentElement, 'scrollHeight', 1_600)
+    const { result } = renderHook(() => useActiveSection())
+
+    expect(account.element.offsetTop - window.scrollY).toBe(224)
+    expect(document.documentElement.scrollHeight - (window.innerHeight + window.scrollY)).toBe(100)
+
+    act(() => {
+      window.dispatchEvent(new Event('scroll'))
+    })
+
+    expect(result.current.activeSection).toBe('account')
   })
 
   it('does not add a duplicate history update for the current section', () => {

@@ -3,6 +3,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { SECTION_IDS, type SectionId } from '../components/shared'
 
 const DEEP_LINK_RESTORE_TIMEOUT_MS = 10_000
+const ACTIVE_SECTION_TOP_OFFSET = 120
 
 /**
  * Hook to manage active section state for settings page.
@@ -74,19 +75,19 @@ export function useActiveSection() {
   // Scroll-based active section detection
   useEffect(() => {
     const handleScroll = () => {
-      // Bottom clamp: when the page is scrolled to (or within a couple px of) the
-      // very bottom, the last section may still start below scrollY+120 — the
-      // reverse loop would then pick the previous section forever. Force-select
-      // the last section instead (also fixes ?section=<last> deep links).
+      // Bottom clamp: the page keeps 100px of trailing content padding, so the
+      // last card can be fully visible while its top still sits below the active
+      // section offset. Treat the final offset-sized region as the last section
+      // instead of leaving the previous section highlighted.
       if (
         Math.ceil(window.innerHeight + window.scrollY) >=
-        document.documentElement.scrollHeight - 2
+        document.documentElement.scrollHeight - ACTIVE_SECTION_TOP_OFFSET
       ) {
         setActiveSection(SECTION_IDS[SECTION_IDS.length - 1])
         return
       }
       const sections = SECTION_IDS.map((id) => document.getElementById(id))
-      const scrollTop = window.scrollY + 120
+      const scrollTop = window.scrollY + ACTIVE_SECTION_TOP_OFFSET
       for (let i = sections.length - 1; i >= 0; i--) {
         const section = sections[i]
         if (section && section.offsetTop <= scrollTop) {
