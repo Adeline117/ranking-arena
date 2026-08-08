@@ -38,6 +38,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { parseBybitCopytradeCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -457,24 +458,7 @@ export function parseBybitCopytradePositionHistory(
  * rendered (spec §6 PII).
  */
 export function parseBybitCopytradeCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const list = result(raw).data
-  if (!Array.isArray(list)) return []
-  const out: ParsedHistoryRow[] = []
-  for (const item of list as Dict[]) {
-    const label = item.nickName
-    if (typeof label !== 'string' || label === '') continue
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: label,
-      copierPnl: e(item.cumYieldE8, 8),
-      copierInvested: e(item.cumFollowCostE8, 8),
-      copyDurationDays: int(item.cumFollowDays),
-      dedupeHash: dedupeHash('bybitct_cp', label, item.cumFollowCostE8, item.cumFollowDays),
-      raw: item,
-    })
-  }
-  return out
+  return parseBybitCopytradeCopiersV1(raw, ctx)
 }
 
 export function parseBybitCopytradeHistory(
@@ -486,7 +470,7 @@ export function parseBybitCopytradeHistory(
     case 'position_history':
       return parseBybitCopytradePositionHistory(raw, ctx)
     case 'copiers':
-      return parseBybitCopytradeCopiers(raw, ctx)
+      return parseBybitCopytradeCopiersV1(raw, ctx)
     default:
       // orders/transfers: not exposed publicly. The 机器人带单数据 (bot
       // lead data) tab endpoint is still UNDISCOVERED — no bot-running

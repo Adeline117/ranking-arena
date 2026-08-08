@@ -10,6 +10,14 @@ import { parseBitgetBotsCopiersV1 } from '../adapters/bitget/bots-copier-parser-
 import { parseBitgetBotsCopiers } from '../adapters/bitget/bots-parsers'
 import { parseBitgetCopiersV1 } from '../adapters/bitget/copier-parser-v1'
 import { parseBitgetCopiers, parseBitgetHistory } from '../adapters/bitget/parsers'
+import { parseBitunixCopiersV1 } from '../adapters/bitunix/copier-parser-v1'
+import { parseBitunixHistory } from '../adapters/bitunix/parsers'
+import { parseBlofinCopiersV1 } from '../adapters/blofin/copier-parser-v1'
+import { parseBlofinHistory } from '../adapters/blofin/parsers'
+import { parseBtccCopiersV1 } from '../adapters/btcc/copier-parser-v1'
+import { parseBtccHistory } from '../adapters/btcc/parsers'
+import { parseBybitCopytradeCopiersV1 } from '../adapters/bybit-copytrade/copier-parser-v1'
+import { parseBybitCopytradeHistory } from '../adapters/bybit-copytrade/parsers'
 import type { CopierCandidateAdapterSlug } from '../copier-candidate-conservation'
 import { buildCopierSnapshotParserContextV1 } from '../copier-parser-context-v1'
 import {
@@ -41,14 +49,14 @@ function context(sourceSlug: string): ParseCtx {
   }
 }
 
-type FirstBatchAdapter = Extract<
+type VersionedAdapter = Extract<
   CopierCandidateAdapterSlug,
-  'binance' | 'bingx' | 'bitget' | 'bitget_bots'
+  'binance' | 'bingx' | 'bitget' | 'bitget_bots' | 'bitunix' | 'blofin' | 'btcc' | 'bybit_copytrade'
 >
 
 interface ParityCase {
   name: string
-  adapterSlug: FirstBatchAdapter
+  adapterSlug: VersionedAdapter
   raw: unknown
   ctx: ParseCtx
   expectedCount: number
@@ -61,6 +69,10 @@ const binanceSpot = fixture('binance/__tests__/fixtures/spot-copy-traders-p1.jso
 const bingxFollowers = fixture('bingx/__tests__/fixtures/records-followers.json')
 const bitgetFollowers = fixture('bitget/__tests__/fixtures/copiers-p1.json')
 const bitgetBotsFollowers = fixture('bitget/__tests__/fixtures/bots-follow-rank.json')
+const bitunixFollowers = fixture('bitunix/__tests__/fixtures/follow-list-p1.json')
+const blofinFollowers = fixture('blofin/__tests__/fixtures/records-copiers.json')
+const btccFollowers = fixture('btcc/__tests__/fixtures/followers-p1.json')
+const bybitCopytradeFollowers = fixture('bybit-copytrade/__tests__/fixtures/other-follower-p1.json')
 
 function wrapBinance(response: unknown): unknown {
   return {
@@ -136,9 +148,45 @@ const cases: readonly ParityCase[] = [
     parseV1: parseBitgetBotsCopiersV1,
     parseCurrent: parseBitgetBotsCopiers,
   },
+  {
+    name: 'bitunix follow list',
+    adapterSlug: 'bitunix',
+    raw: bitunixFollowers,
+    ctx: context('bitunix_futures'),
+    expectedCount: 3,
+    parseV1: parseBitunixCopiersV1,
+    parseCurrent: (raw, ctx) => parseBitunixHistory(raw, 'copiers', ctx),
+  },
+  {
+    name: 'blofin copiers',
+    adapterSlug: 'blofin',
+    raw: blofinFollowers,
+    ctx: context('blofin_futures'),
+    expectedCount: 20,
+    parseV1: parseBlofinCopiersV1,
+    parseCurrent: (raw, ctx) => parseBlofinHistory(raw, 'copiers', ctx),
+  },
+  {
+    name: 'btcc followers',
+    adapterSlug: 'btcc',
+    raw: btccFollowers,
+    ctx: context('btcc_futures'),
+    expectedCount: 3,
+    parseV1: parseBtccCopiersV1,
+    parseCurrent: (raw, ctx) => parseBtccHistory(raw, 'copiers', ctx),
+  },
+  {
+    name: 'bybit copytrade followers',
+    adapterSlug: 'bybit_copytrade',
+    raw: bybitCopytradeFollowers,
+    ctx: context('bybit_copytrade_futures'),
+    expectedCount: 18,
+    parseV1: parseBybitCopytradeCopiersV1,
+    parseCurrent: (raw, ctx) => parseBybitCopytradeHistory(raw, 'copiers', ctx),
+  },
 ]
 
-describe('append-only copier parser V1 first batch', () => {
+describe('append-only copier parser V1', () => {
   it('keeps current adapters and retained replay byte-equivalent on real fixtures', () => {
     const digests = cases.map((testCase) => {
       const versioned = testCase.parseV1(testCase.raw, testCase.ctx)
@@ -177,7 +225,17 @@ describe('append-only copier parser V1 first batch', () => {
   })
 
   it('retains the exact V1 context policy behind the public dispatcher', () => {
-    for (const adapterSlug of ['binance', 'bingx', 'bitget', 'bitget_bots', 'gate'] as const) {
+    for (const adapterSlug of [
+      'binance',
+      'bingx',
+      'bitget',
+      'bitget_bots',
+      'bitunix',
+      'blofin',
+      'btcc',
+      'bybit_copytrade',
+      'gate',
+    ] as const) {
       const input = {
         productType: adapterSlug === 'gate' ? ('cfd' as const) : ('futures' as const),
         sourceSlug: `${adapterSlug}_futures`,
@@ -206,6 +264,10 @@ describe('append-only copier parser V1 first batch', () => {
       './adapters/bingx/parsers',
       './adapters/bitget/parsers',
       './adapters/bitget/bots-parsers',
+      './adapters/bitunix/parsers',
+      './adapters/blofin/parsers',
+      './adapters/btcc/parsers',
+      './adapters/bybit-copytrade/parsers',
     ]
     for (const importPath of forbiddenReplayImports) {
       expect(replaySource).not.toContain(`from '${importPath}'`)
@@ -216,6 +278,10 @@ describe('append-only copier parser V1 first batch', () => {
       './adapters/bingx/copier-parser-v1',
       './adapters/bitget/copier-parser-v1',
       './adapters/bitget/bots-copier-parser-v1',
+      './adapters/bitunix/copier-parser-v1',
+      './adapters/blofin/copier-parser-v1',
+      './adapters/btcc/copier-parser-v1',
+      './adapters/bybit-copytrade/copier-parser-v1',
       './copier-parser-context-v1',
     ]) {
       expect(replaySource).toContain(importPath)
@@ -230,6 +296,14 @@ describe('append-only copier parser V1 first batch', () => {
         './bots-copier-parser-v1',
         'parseBitgetBotsCopiersV1(raw, ctx)',
       ],
+      ['adapters/bitunix/parsers.ts', './copier-parser-v1', 'parseBitunixCopiersV1(raw, ctx)'],
+      ['adapters/blofin/parsers.ts', './copier-parser-v1', 'parseBlofinCopiersV1(raw, ctx)'],
+      ['adapters/btcc/parsers.ts', './copier-parser-v1', 'parseBtccCopiersV1(raw, ctx)'],
+      [
+        'adapters/bybit-copytrade/parsers.ts',
+        './copier-parser-v1',
+        'parseBybitCopytradeCopiersV1(raw, ctx)',
+      ],
     ] as const
     for (const [file, importPath, delegation] of currentDelegates) {
       const contents = source(file)
@@ -242,6 +316,10 @@ describe('append-only copier parser V1 first batch', () => {
       'adapters/bingx/copier-parser-v1.ts',
       'adapters/bitget/copier-parser-v1.ts',
       'adapters/bitget/bots-copier-parser-v1.ts',
+      'adapters/bitunix/copier-parser-v1.ts',
+      'adapters/blofin/copier-parser-v1.ts',
+      'adapters/btcc/copier-parser-v1.ts',
+      'adapters/bybit-copytrade/copier-parser-v1.ts',
     ]
     for (const file of versionedSources) {
       const contents = source(file)
