@@ -123,7 +123,11 @@ function wrappedResponse(payload: Dict): Dict {
 }
 
 function completeSnapshot(): Dict[] {
-  return [response(1, 23, syntheticRows(20, 0)), response(2, 23, syntheticRows(3, 20))]
+  const total = BITUNIX_COPIER_PAGE_SIZE + 3
+  return [
+    response(1, total, syntheticRows(BITUNIX_COPIER_PAGE_SIZE, 0)),
+    response(2, total, syntheticRows(3, BITUNIX_COPIER_PAGE_SIZE)),
+  ]
 }
 
 function session(responses: readonly unknown[]): {
@@ -194,8 +198,12 @@ function parseRows(
 
 describe('Bitunix futures full copier snapshot authority', () => {
   it('selects only the canonical active-serving futures human USDT full source', () => {
+    expect(BITUNIX_COPIER_PAGE_ENVELOPE_CONTRACT).toBe(
+      'arena.ingest.bitunix.copier-page-envelope@2'
+    )
+    expect(BITUNIX_COPIER_PAGE_SIZE).toBe(500)
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@2',
     })
     expect(bitunixAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(bitunixAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -215,7 +223,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     ).toBeNull()
   })
 
-  it('binds exact POST requests into RAW and proves a complete 20+3 snapshot', async () => {
+  it('binds exact POST requests into RAW and proves a complete 500+3 crawl interval', async () => {
     const responses = completeSnapshot()
     const { acquisition, post } = await capture(responses)
 
@@ -238,13 +246,14 @@ describe('Bitunix futures full copier snapshot authority', () => {
       claim_observations: [{ segment_id: 'default', reason: 'reported_end', page_ordinal: 2 }],
       scan_terminal_state: 'exhausted',
       blocker_reasons: [],
+      verifier_contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@2',
     })
 
     const parsed = parseRows(acquisition.pages)
     const sourceRows = acquisition.pages.flatMap((page) =>
       responseRows(wrappedResponse(page.payload as Dict))
     )
-    expect(parsed).toHaveLength(23)
+    expect(parsed).toHaveLength(BITUNIX_COPIER_PAGE_SIZE + 3)
     parsed.forEach((row, index) => expect(row.raw).toBe(sourceRows[index]))
     expect(parsed.every((row) => row.ts === PARSED_AT)).toBe(true)
     expect(
@@ -253,7 +262,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
         pages: acquisition.pages,
         rows: parsed,
       })
-    ).toEqual({ verified: true, envelopeRowCount: 23 })
+    ).toEqual({ verified: true, envelopeRowCount: BITUNIX_COPIER_PAGE_SIZE + 3 })
   })
 
   it('retains and proves an explicit successful zero page', async () => {
@@ -278,8 +287,8 @@ describe('Bitunix futures full copier snapshot authority', () => {
     ).toEqual({ verified: true, envelopeRowCount: 0 })
   })
 
-  it('accepts an exact full 20-row terminal page without probing empty page two', async () => {
-    const full = response(1, 20, syntheticRows(20, 0))
+  it('accepts an exact full 500-row terminal page without probing empty page two', async () => {
+    const full = response(1, BITUNIX_COPIER_PAGE_SIZE, syntheticRows(BITUNIX_COPIER_PAGE_SIZE, 0))
     const { acquisition, post } = await capture([full])
 
     expect(post).toHaveBeenCalledTimes(1)
@@ -290,14 +299,14 @@ describe('Bitunix futures full copier snapshot authority', () => {
         pages: acquisition.pages,
         rows: parseRows(acquisition.pages),
       })
-    ).toEqual({ verified: true, envelopeRowCount: 20 })
+    ).toEqual({ verified: true, envelopeRowCount: BITUNIX_COPIER_PAGE_SIZE })
   })
 
   it('binds a canonical numeric trader id and rejects lossy request coordinates', () => {
     expect(bitunixCopierRequest(TRADER_ID, 2)).toEqual({
       traderUid: 348686197,
       page: 2,
-      pageSize: 20,
+      pageSize: BITUNIX_COPIER_PAGE_SIZE,
     })
     expect(() => bitunixCopierRequest(`0${TRADER_ID}`, 1)).toThrow(
       'request coordinates are invalid'
@@ -328,7 +337,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(acquisition.pages).toHaveLength(1)
     expect(acquisition.error).toEqual(
       expect.objectContaining({
-        message: '[bitunix] copiers reached page cap 1 before reported total 23',
+        message: `[bitunix] copiers reached page cap 1 before reported total ${BITUNIX_COPIER_PAGE_SIZE + 3}`,
       })
     )
     expect(acquisition.artifact.termination.evidence_state).toBe('upstream_error')
@@ -348,7 +357,11 @@ describe('Bitunix futures full copier snapshot authority', () => {
   })
 
   it('retains both pages but rejects total drift', async () => {
-    const drifting = response(2, 24, syntheticRows(4, 20))
+    const drifting = response(
+      2,
+      BITUNIX_COPIER_PAGE_SIZE + 4,
+      syntheticRows(4, BITUNIX_COPIER_PAGE_SIZE)
+    )
     const { acquisition } = await capture([completeSnapshot()[0], drifting])
 
     expect(acquisition.pages).toHaveLength(2)
@@ -359,7 +372,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
   })
 
   it('retains then rejects an early empty page while total remains', async () => {
-    const earlyEmpty = response(2, 23, [])
+    const earlyEmpty = response(2, BITUNIX_COPIER_PAGE_SIZE + 3, [])
     const { acquisition } = await capture([completeSnapshot()[0], earlyEmpty])
 
     expect(acquisition.pages).toHaveLength(2)
@@ -529,6 +542,20 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(
       selected.verifyTerminal({
         ...baseInput,
+        pages: [
+          {
+            ...acquisition.pages[0],
+            payload: {
+              ...payload,
+              contract: 'arena.ingest.bitunix.copier-page-envelope@1',
+            },
+          },
+        ],
+      })
+    ).toEqual({ verified: false })
+    expect(
+      selected.verifyTerminal({
+        ...baseInput,
         pages: [{ ...acquisition.pages[0], url: `${BITUNIX_COPIER_HISTORY_URL}?page=1` }],
       })
     ).toEqual({ verified: false })
@@ -623,7 +650,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     ).toEqual({ verified: false })
   })
 
-  it('keeps the real three-row capture as schema evidence, not a terminal 20-row page', () => {
+  it('keeps the real three-row capture as schema evidence, not a terminal exact page', () => {
     const captured = fixture()
     expect(captured).toMatchObject({
       code: 0,

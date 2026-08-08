@@ -11,8 +11,14 @@ import {
 } from './copier-contract'
 import { dedupeHash } from './parsers'
 
+/**
+ * "Exhausted" means a complete crawl whose reported total/totalPage remained
+ * stable and whose observed identity keys were non-duplicated. Bitunix does
+ * not issue a point-in-time snapshot token, so this contract does not claim
+ * database-snapshot semantics at the crawl-completion observedAt clock.
+ */
 export const BITUNIX_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.bitunix.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.bitunix.copiers@2' as const
 
 const WRAPPER_FIELDS = ['contract', 'exchangeTraderId', 'request', 'response'] as const
 const REQUEST_FIELDS = ['page', 'pageSize', 'traderUid'] as const

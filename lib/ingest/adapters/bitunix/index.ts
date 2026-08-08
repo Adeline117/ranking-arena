@@ -210,7 +210,8 @@ const bitunixAdapter: SourceAdapter = {
   /**
    * 歷史帶單: newest-first numeric pages; stop on empty/short page, on
    * cursor overlap (oldest mtime ≤ cursor) or at the safety cap.
-   * 跟單者: snapshot-style pagination via reported totalPage.
+   * 跟單者: reported-total crawl-interval pagination. The upstream endpoint
+   * exposes no point-in-time snapshot token; observedAt is crawl completion.
    */
   async *getHistory(
     session: FetchSession,
