@@ -11,6 +11,7 @@ import {
 } from '@/lib/auth/viewer-scope'
 
 let mockAuth: AuthSessionReturn
+let mockSearchParams = new URLSearchParams()
 const mockRouter = { replace: jest.fn() }
 const mockShowToast = jest.fn()
 const mockTranslate = (key: string) => key
@@ -21,7 +22,7 @@ jest.mock('@/lib/hooks/useAuthSession', () => ({
 
 jest.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams,
   usePathname: () => '/u/profile',
 }))
 
@@ -167,6 +168,7 @@ function serverProfile(id: string, handle = id): ServerProfile {
 describe('useUserProfile viewer and provisioning ownership', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSearchParams = new URLSearchParams()
     mockProfileMaybeSingle.mockReset()
     mockBlockExecute.mockReset()
     __resetViewerScopeForTests()
@@ -390,5 +392,97 @@ describe('useUserProfile viewer and provisioning ownership', () => {
     expect(hook.result.current.currentUserId).toBe('user-b')
     expect(hook.result.current.isBlocked).toBe(false)
     expect(mockBlockQuery.abortSignal.mock.calls[0][0]).toHaveProperty('aborted', true)
+  })
+
+  it.each(['stats', 'posts'] as const)(
+    'restores the canonical %s tab directly for a bound trader profile',
+    (tab) => {
+      mockSearchParams = new URLSearchParams(`tab=${tab}`)
+      const trader = {
+        ...serverProfile('user-a', 'alice'),
+        traderHandle: 'exchange-alice',
+      }
+
+      const hook = renderHook(() =>
+        useUserProfile({ handle: 'alice', serverProfile: trader, serverTraderData: null })
+      )
+
+      expect(hook.result.current.isTrader).toBe(true)
+      expect(hook.result.current.availableProfileTabs).toEqual([
+        'overview',
+        'stats',
+        'portfolio',
+        'posts',
+      ])
+      expect(hook.result.current.activeProfileTab).toBe(tab)
+      expect(mockRouter.replace).not.toHaveBeenCalled()
+    }
+  )
+
+  it('tracks browser search-param changes instead of retaining stale local tab state', () => {
+    mockSearchParams = new URLSearchParams('tab=stats')
+    const trader = {
+      ...serverProfile('user-a', 'alice'),
+      traderHandle: 'exchange-alice',
+    }
+    const hook = renderHook(() =>
+      useUserProfile({ handle: 'alice', serverProfile: trader, serverTraderData: null })
+    )
+    expect(hook.result.current.activeProfileTab).toBe('stats')
+
+    act(() => {
+      mockSearchParams = new URLSearchParams('tab=posts')
+      hook.rerender()
+    })
+    expect(hook.result.current.activeProfileTab).toBe('posts')
+
+    act(() => {
+      mockSearchParams = new URLSearchParams()
+      hook.rerender()
+    })
+    expect(hook.result.current.activeProfileTab).toBe('overview')
+  })
+
+  it('canonicalizes a verified profile without a trader handle to overview', async () => {
+    mockSearchParams = new URLSearchParams('ref=campaign&tab=stats')
+    const verifiedWithoutTrader = {
+      ...serverProfile('user-a', 'alice'),
+      isVerifiedTrader: true,
+    }
+
+    const hook = renderHook(() =>
+      useUserProfile({
+        handle: 'alice',
+        serverProfile: verifiedWithoutTrader,
+        serverTraderData: null,
+      })
+    )
+
+    expect(hook.result.current.isTrader).toBe(false)
+    expect(hook.result.current.availableProfileTabs).toEqual(['overview'])
+    expect(hook.result.current.activeProfileTab).toBe('overview')
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith('/u/profile?ref=campaign', { scroll: false })
+    )
+  })
+
+  it('writes a posts click to the canonical URL and follows the resulting query state', () => {
+    const trader = {
+      ...serverProfile('user-a', 'alice'),
+      traderHandle: 'exchange-alice',
+    }
+    const hook = renderHook(() =>
+      useUserProfile({ handle: 'alice', serverProfile: trader, serverTraderData: null })
+    )
+
+    act(() => hook.result.current.handleProfileTabChange('posts'))
+    expect(mockRouter.replace).toHaveBeenCalledWith('/u/profile?tab=posts', { scroll: false })
+    expect(hook.result.current.activeProfileTab).toBe('overview')
+
+    act(() => {
+      mockSearchParams = new URLSearchParams('tab=posts')
+      hook.rerender()
+    })
+    expect(hook.result.current.activeProfileTab).toBe('posts')
   })
 })

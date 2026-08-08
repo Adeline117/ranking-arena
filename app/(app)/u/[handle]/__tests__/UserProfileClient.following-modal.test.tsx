@@ -56,11 +56,27 @@ jest.mock('../components/UserProfileHeader', () => ({
 }))
 jest.mock('../components/UserProfileTabs', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({
+    activeTab,
+    availableTabs,
+  }: {
+    activeTab: string
+    availableTabs: readonly string[]
+  }) => (
+    <div role="tablist">
+      {availableTabs.map((tab) => (
+        <button key={tab} id={`uprofile-tab-${tab}`} role="tab" aria-selected={activeTab === tab}>
+          {tab}
+        </button>
+      ))}
+    </div>
+  ),
 }))
 jest.mock('../components/UserProfileContent', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ activeTab }: { activeTab: string }) => (
+    <div data-testid="profile-content" data-active-tab={activeTab} />
+  ),
 }))
 jest.mock('../hooks/useUserProfile', () => ({
   useUserProfile: (...args: unknown[]) => mockUseUserProfile(...args),
@@ -102,6 +118,7 @@ function useProfileFixture() {
     setFollowersCount,
     followingCount: mockProfile.following,
     activeProfileTab: 'overview' as const,
+    availableProfileTabs: ['overview'] as const,
     handleProfileTabChange: jest.fn(),
     isTrader: false,
     traderData: null,
@@ -172,4 +189,12 @@ describe('UserProfileClient following modal privacy', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     }
   )
+
+  it('uses the same canonical tab key for the visible tab, panel label, and content', () => {
+    render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)
+
+    expect(screen.getByRole('tab', { name: 'overview' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'uprofile-tab-overview')
+    expect(screen.getByTestId('profile-content')).toHaveAttribute('data-active-tab', 'overview')
+  })
 })

@@ -18,6 +18,11 @@ import {
 } from './profile-viewer-scope'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from '../components/types'
+import {
+  canonicalProfileTab,
+  getAvailableProfileTabs,
+  profileTabIsAvailable,
+} from '../components/profile-tabs'
 
 // #31: traderFetcher extracted to lib/hooks/traderFetcher.ts (shared with TraderProfileClient)
 
@@ -104,16 +109,15 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   }, [])
 
   // Trader data - React Query with server fallback
-  const isTrader = !!serverProfile?.traderHandle
-  const traderUrl = isTrader
-    ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}`
-    : ''
+  const traderHandle = profile?.traderHandle?.trim() || null
+  const isTrader = traderHandle !== null
+  const traderUrl = traderHandle ? `/api/traders/${encodeURIComponent(traderHandle)}` : ''
   const {
     data: traderData,
     error: traderError,
     isLoading: traderLoading,
   } = useQuery<TraderPageData>({
-    queryKey: ['user-trader-data', serverProfile?.traderHandle],
+    queryKey: ['user-trader-data', traderHandle],
     queryFn: () => traderFetcher(traderUrl),
     enabled: isTrader,
     refetchOnWindowFocus: false,
@@ -124,16 +128,18 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   })
 
   // Tabs
+  const availableProfileTabs = getAvailableProfileTabs({
+    hasTraderBinding: isTrader,
+    hasPostsContent:
+      isTrader && Boolean(profile && (profile.isRegistered || currentUserId === profile.id)),
+  })
   const urlTab = searchParams.get('tab')
-  const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab)
-      ? (urlTab as ProfileTabKey)
-      : 'overview'
-  )
+  const activeProfileTab = canonicalProfileTab(urlTab, availableProfileTabs)
+  const serializedSearchParams = searchParams.toString()
 
   const updateUrl = useCallback(
     (tab: string) => {
-      const params = new URLSearchParams(searchParams.toString())
+      const params = new URLSearchParams(serializedSearchParams)
       if (tab === 'overview') {
         params.delete('tab')
       } else {
@@ -142,16 +148,25 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
       const qs = params.toString()
       router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
     },
-    [searchParams, pathname, router]
+    [serializedSearchParams, pathname, router]
   )
 
   const handleProfileTabChange = useCallback(
     (tab: ProfileTabKey) => {
-      setActiveProfileTab(tab)
-      updateUrl(tab)
+      updateUrl(profileTabIsAvailable(tab, availableProfileTabs) ? tab : 'overview')
     },
-    [updateUrl]
+    [availableProfileTabs, updateUrl]
   )
+
+  // The query string is the synchronizable tab authority. This keeps direct
+  // reloads and browser back/forward aligned with the selected tab and panel.
+  // `overview` has one canonical URL shape: no `tab` query parameter.
+  useEffect(() => {
+    if (urlTab === null) return
+    if (urlTab !== activeProfileTab || activeProfileTab === 'overview') {
+      updateUrl(activeProfileTab)
+    }
+  }, [activeProfileTab, updateUrl, urlTab])
 
   // SSR can time out and return no profile for the signed-in user's own route.
   // Recover by reading the trigger-provisioned row only. The browser must never
@@ -350,6 +365,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
 
     // Tab state
     activeProfileTab,
+    availableProfileTabs,
     handleProfileTabChange,
 
     // Trader state

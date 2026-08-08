@@ -6,37 +6,32 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 import type { ProfileTabKey } from './types'
+import { canonicalProfileTab } from './profile-tabs'
 
 interface UserProfileTabsProps {
   activeTab: ProfileTabKey
+  availableTabs: readonly ProfileTabKey[]
   onTabChange: (tab: ProfileTabKey) => void
-  /** Stats + Portfolio are trading-data tabs — hidden for non-trader users
-   *  where they would only ever render "no stats yet" dead-ends. */
-  isVerifiedTrader?: boolean
 }
 
 export default function UserProfileTabs({
   activeTab,
+  availableTabs,
   onTabChange,
-  isVerifiedTrader = false,
 }: UserProfileTabsProps) {
   const { t } = useLanguage()
 
-  const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
-    { key: 'overview', label: t('overview') },
-    ...(isVerifiedTrader
-      ? ([
-          { key: 'stats', label: t('stats') },
-          { key: 'portfolio', label: t('portfolio') },
-        ] as Array<{ key: ProfileTabKey; label: string }>)
-      : []),
-  ]
+  const canonicalActiveTab = canonicalProfileTab(activeTab, availableTabs)
+  const profileTabs: Array<{ key: ProfileTabKey; label: string }> = availableTabs.map((key) => ({
+    key,
+    label: t(key),
+  }))
 
   // B2 tabs a11y: panel is rendered by the parent (UserProfileClient wraps
   // UserProfileContent with id="uprofile-panel").
   const tabsA11y = useTabsA11y({
     tabs: profileTabs.map((tab) => tab.key),
-    active: activeTab,
+    active: canonicalActiveTab,
     onChange: onTabChange,
     idPrefix: 'uprofile',
     sharedPanelId: 'uprofile-panel',
@@ -63,7 +58,7 @@ export default function UserProfileTabs({
       }}
     >
       {profileTabs.map((tab) => {
-        const isActive = activeTab === tab.key
+        const isActive = canonicalActiveTab === tab.key
         return (
           <button
             key={tab.key}

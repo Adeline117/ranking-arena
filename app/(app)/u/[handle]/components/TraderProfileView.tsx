@@ -24,6 +24,7 @@ import OverviewPerformanceCard, {
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
 import { profileStyles } from './profileStyles'
+import { canonicalProfileTab } from './profile-tabs'
 
 const EquityCurveSection = dynamic(
   () =>
@@ -61,6 +62,7 @@ interface TraderProfileViewProps {
   currentUserId: string | null
   isPro: boolean
   activeTab: ProfileTabKey
+  availableTabs: readonly ProfileTabKey[]
   onTabChange: (tab: ProfileTabKey) => void
   traderData: TraderPageData | null | undefined
 }
@@ -73,6 +75,7 @@ export default function TraderProfileView({
   currentUserId,
   isPro,
   activeTab,
+  availableTabs,
   onTabChange,
   traderData,
 }: TraderProfileViewProps) {
@@ -100,12 +103,8 @@ export default function TraderProfileView({
   const [activeAccount, setActiveAccount] = useState<string>('all')
   const [proUpsellOpen, setProUpsellOpen] = useState(false)
 
-  // Tabs — include 'posts' for own profile or claimed user
-  type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
-  const showPosts = isOwn || profile.isRegistered
-  const traderActiveTab = ['overview', 'stats', 'portfolio', 'posts'].includes(activeTab)
-    ? (activeTab as TraderTabKey)
-    : 'overview'
+  const canonicalActiveTab = canonicalProfileTab(activeTab, availableTabs)
+  const showPosts = availableTabs.includes('posts')
 
   const handleAccountChange = useCallback((account: string) => {
     setActiveAccount(account)
@@ -188,8 +187,8 @@ export default function TraderProfileView({
 
         {/* TraderTabs */}
         <TraderTabs
-          activeTab={traderActiveTab}
-          onTabChange={(tab) => onTabChange(tab as ProfileTabKey)}
+          activeTab={canonicalActiveTab}
+          onTabChange={onTabChange}
           isPro={isPro}
           onProRequired={() => {
             trackEvent('paywall_blocked', { source: 'claimed_profile_tab' })
@@ -205,6 +204,9 @@ export default function TraderProfileView({
 
         {/* Tab Content — dims while loading account switch */}
         <div
+          id={`panel-${canonicalActiveTab}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${canonicalActiveTab}`}
           style={{
             opacity: activeAccount !== 'all' && isLoading ? 0.5 : 1,
             transition: 'opacity 0.2s ease',
@@ -212,12 +214,12 @@ export default function TraderProfileView({
           }}
         >
           <Box
-            key={traderActiveTab}
+            key={canonicalActiveTab}
             style={{
               animation: 'fadeInUp 0.4s ease-out forwards',
             }}
           >
-            {traderActiveTab === 'overview' && (
+            {canonicalActiveTab === 'overview' && (
               <>
                 {/* Aggregated stats for multi-account "All" view */}
                 {hasMultipleAccounts && activeAccount === 'all' && aggregatedData && (
@@ -257,7 +259,7 @@ export default function TraderProfileView({
               </>
             )}
 
-            {traderActiveTab === 'stats' &&
+            {canonicalActiveTab === 'stats' &&
               (traderStats ? (
                 <StatsPage
                   stats={traderStats}
@@ -284,7 +286,7 @@ export default function TraderProfileView({
                 </Box>
               ))}
 
-            {traderActiveTab === 'portfolio' && (
+            {canonicalActiveTab === 'portfolio' && (
               <PortfolioTable
                 items={traderPortfolio}
                 history={traderPositionHistory}
@@ -293,7 +295,7 @@ export default function TraderProfileView({
               />
             )}
 
-            {traderActiveTab === 'posts' && showPosts && (
+            {canonicalActiveTab === 'posts' && showPosts && (
               <Box style={{ maxWidth: 900 }}>
                 <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
               </Box>

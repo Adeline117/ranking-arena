@@ -45,6 +45,7 @@ export default function UserProfileClient({
     followingCount,
 
     activeProfileTab,
+    availableProfileTabs,
     handleProfileTabChange,
 
     isTrader,
@@ -94,6 +95,7 @@ export default function UserProfileClient({
         currentUserId={currentUserId}
         isPro={isPro}
         activeTab={activeProfileTab}
+        availableTabs={availableProfileTabs}
         onTabChange={handleProfileTabChange}
         traderData={traderData}
       />
@@ -142,8 +144,8 @@ export default function UserProfileClient({
         {/* Tabs */}
         <UserProfileTabs
           activeTab={activeProfileTab}
+          availableTabs={availableProfileTabs}
           onTabChange={handleProfileTabChange}
-          isVerifiedTrader={profile.isVerifiedTrader}
         />
 
         {/* Tab Content — tabpanel for the UserProfileTabs tablist (B2 a11y) */}
@@ -158,7 +160,6 @@ export default function UserProfileClient({
             isOwnProfile={isOwnProfile}
             activeTab={activeProfileTab}
             traderData={traderData}
-            isVerifiedTrader={profile.isVerifiedTrader}
           />
         </div>
 

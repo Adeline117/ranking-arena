@@ -77,7 +77,7 @@ export type TraderPageData = {
   lastUpdated?: string | null
 }
 
-export type ProfileTabKey = 'overview' | 'stats' | 'portfolio'
+export type ProfileTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
 export interface UserProfileClientProps {
   handle: string

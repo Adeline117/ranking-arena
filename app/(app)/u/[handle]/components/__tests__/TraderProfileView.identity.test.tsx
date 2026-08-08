@@ -1,7 +1,12 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ServerProfile, TraderPageData } from '../types'
 
 const mockTraderHeader = jest.fn(() => null)
+const mockTraderTabs = jest.fn(({ onTabChange }: { onTabChange: (tab: 'posts') => void }) => (
+  <button type="button" onClick={() => onTabChange('posts')}>
+    posts tab
+  </button>
+))
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -22,7 +27,10 @@ jest.mock('@/app/components/trader/TraderHeader', () => ({
   default: (props: unknown) => mockTraderHeader(props),
 }))
 
-jest.mock('@/app/components/trader/TraderTabs', () => () => null)
+jest.mock('@/app/components/trader/TraderTabs', () => ({
+  __esModule: true,
+  default: (props: unknown) => mockTraderTabs(props as { onTabChange: (tab: 'posts') => void }),
+}))
 jest.mock('@/app/components/ui/Breadcrumb', () => () => null)
 jest.mock('@/app/components/trader/OverviewPerformanceCard', () => () => null)
 
@@ -85,6 +93,7 @@ describe('TraderProfileView identity wiring', () => {
         currentUserId={null}
         isPro={false}
         activeTab="overview"
+        availableTabs={['overview', 'stats', 'portfolio', 'posts']}
         onTabChange={jest.fn()}
         traderData={traderData}
       />
@@ -97,5 +106,45 @@ describe('TraderProfileView identity wiring', () => {
         isRegistered: true,
       })
     )
+  })
+
+  it('shares the canonical posts key across the tab, panel ARIA, and click callback', () => {
+    const onTabChange = jest.fn()
+    const traderData: TraderPageData = {
+      profile: {
+        id: 'exchange-account-id',
+        trader_key: 'exchange-account-id',
+        handle: 'exchange-handle',
+        source: 'binance',
+        isRegistered: false,
+      },
+    }
+
+    render(
+      <TraderProfileView
+        email="viewer@example.com"
+        handle={profile.handle}
+        profile={profile}
+        serverProfile={profile}
+        currentUserId={null}
+        isPro={false}
+        activeTab="posts"
+        availableTabs={['overview', 'stats', 'portfolio', 'posts']}
+        onTabChange={onTabChange}
+        traderData={traderData}
+      />
+    )
+
+    expect(mockTraderTabs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeTab: 'posts',
+        extraTabs: ['posts'],
+      })
+    )
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'panel-posts')
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'tab-posts')
+
+    fireEvent.click(screen.getByRole('button', { name: 'posts tab' }))
+    expect(onTabChange).toHaveBeenCalledWith('posts')
   })
 })

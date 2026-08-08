@@ -34,7 +34,6 @@ interface UserProfileContentProps {
   isOwnProfile: boolean
   activeTab: ProfileTabKey
   traderData: TraderPageData | null | undefined
-  isVerifiedTrader?: boolean
 }
 
 export default function UserProfileContent({
@@ -43,15 +42,9 @@ export default function UserProfileContent({
   isOwnProfile,
   activeTab,
   traderData,
-  isVerifiedTrader = false,
 }: UserProfileContentProps) {
   const router = useRouter()
   const { t } = useLanguage()
-
-  // Stats + Portfolio tabs are hidden for non-trader users; if one is forced via
-  // ?tab= URL, fall back to overview rather than rendering a dead-end panel.
-  const effectiveTab: ProfileTabKey =
-    !isVerifiedTrader && activeTab !== 'overview' ? 'overview' : activeTab
 
   const traderStats = traderData?.stats ?? null
   const traderPortfolio = traderData?.portfolio ?? []
@@ -61,8 +54,8 @@ export default function UserProfileContent({
   const traderProfile = traderData?.profile ?? null
 
   return (
-    <Box key={effectiveTab} style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}>
-      {effectiveTab === 'overview' && (
+    <Box key={activeTab} style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}>
+      {activeTab === 'overview' && (
         <Box className="profile-content" style={{ maxWidth: 900 }}>
           {features.social ? (
             /* Posts — only shown when social features are enabled */
@@ -122,7 +115,7 @@ export default function UserProfileContent({
         </Box>
       )}
 
-      {effectiveTab === 'stats' && (
+      {activeTab === 'stats' && (
         <Box style={{ maxWidth: 900 }}>
           {traderStats ? (
             <StatsPage
@@ -152,7 +145,7 @@ export default function UserProfileContent({
         </Box>
       )}
 
-      {effectiveTab === 'portfolio' && (
+      {activeTab === 'portfolio' && (
         <Box style={{ maxWidth: 900 }}>
           <PortfolioTable
             items={traderPortfolio}
