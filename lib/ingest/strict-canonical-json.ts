@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { isProxy } from 'node:util/types'
 
 export const STRICT_CANONICAL_JSON_CONTRACT = 'arena.strict-canonical-json@1'
 
@@ -72,6 +73,7 @@ function canonicalValue(value: unknown, ancestors: Set<object>): string {
     return JSON.stringify(value)
   }
   if (typeof value !== 'object') reject(typeof value)
+  if (isProxy(value)) reject('proxy objects')
   if (ancestors.has(value)) reject('cycles')
 
   ancestors.add(value)
