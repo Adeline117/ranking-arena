@@ -537,7 +537,8 @@ function parseCopiers(wrapper: HistoryWrapper, ctx: ParseCtx): ParsedHistoryRow[
   const scrapedMs = Date.parse(ctx.scrapedAt)
   const out: ParsedHistoryRow[] = []
   for (const item of listOf(wrapper.response)) {
-    const label = item.copyPortfolioId ?? item.nickname
+    const rawLabel = item.copyPortfolioId ?? item.nickname
+    const label = typeof rawLabel === 'string' ? rawLabel.trim() : rawLabel
     if (!label) continue
     const started = num(item.createTime ?? item.startTime)
     out.push({

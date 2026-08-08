@@ -6,15 +6,40 @@ import type {
   HistoryTerminalClaimReason,
   HistoryTerminalVerificationInput,
 } from '../../history-acquisition'
+import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import {
   BINANCE_COPIER_HISTORY_URLS,
   BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
 } from './history-contract'
+import { dedupeHash } from './parsers'
 
 export const BINANCE_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
   'arena.ingest.history-terminal-verifier.binance.copiers@1' as const
 
 const PAGE_SIZE = 50
+const RESPONSE_FIELDS = ['code', 'data', 'message', 'messageDetail', 'success'] as const
+const DATA_FIELDS = ['indexValue', 'list', 'total'] as const
+const FUTURES_COPIER_FIELDS = [
+  'avatarUrl',
+  'copyPortfolioId',
+  'createTime',
+  'marginBalance',
+  'marginBalanceAsset',
+  'nickname',
+  'totalPnl',
+  'totalPnlAsset',
+  'totalRoi',
+] as const
+const SPOT_COPIER_FIELDS = [
+  'avatarUrl',
+  'balanceAmount',
+  'balanceAsset',
+  'nickname',
+  'startTime',
+  'totalPnl',
+  'totalPnlAsset',
+  'totalRoi',
+] as const
 type Dict = Record<string, unknown>
 
 function isRecord(value: unknown): value is Dict {
@@ -30,9 +55,17 @@ function exactKeys(value: Dict, expected: readonly string[]): boolean {
   )
 }
 
-function canonicalLabel(value: unknown): string | null {
+function canonicalIdentity(value: unknown): string | null {
   if (typeof value === 'string') {
     return value.length > 0 && value.trim() === value ? value : null
+  }
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null
+}
+
+function normalizedLabel(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : null
   }
   return Number.isSafeInteger(value) && Number(value) >= 0 ? String(value) : null
 }
@@ -45,6 +78,68 @@ function reportedTotal(value: unknown): number | null | undefined {
 interface ValidatedPage {
   rows: Dict[]
   total: number | null
+}
+
+interface BinanceCopierProjection {
+  label: string
+  pnl: number
+  invested: number
+  startedAt: number
+}
+
+function canonicalFiniteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && !/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value)) {
+    return null
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && !Object.is(parsed, -0) ? parsed : null
+}
+
+function canonicalPositiveEpoch(value: unknown): number | null {
+  const parsed = canonicalFiniteNumber(value)
+  return parsed !== null && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function copierProjection(value: unknown, url: string): BinanceCopierProjection | null {
+  if (!isRecord(value)) return null
+  const futures = url === BINANCE_COPIER_HISTORY_URLS.futures
+  const spot = url === BINANCE_COPIER_HISTORY_URLS.spot
+  if (
+    (!futures && !spot) ||
+    !exactKeys(value, futures ? FUTURES_COPIER_FIELDS : SPOT_COPIER_FIELDS) ||
+    typeof value.avatarUrl !== 'string' ||
+    normalizedLabel(value.nickname) === null ||
+    (futures && canonicalIdentity(value.copyPortfolioId) === null) ||
+    (futures && value.marginBalanceAsset !== 'USDT') ||
+    (spot && value.balanceAsset !== 'USDT') ||
+    value.totalPnlAsset !== 'USDT'
+  ) {
+    return null
+  }
+  const identity = futures
+    ? canonicalIdentity(value.copyPortfolioId)
+    : normalizedLabel(value.nickname)
+  const pnl = canonicalFiniteNumber(value.totalPnl)
+  const invested = canonicalFiniteNumber(futures ? value.marginBalance : value.balanceAmount)
+  const roi = canonicalFiniteNumber(value.totalRoi)
+  const startedAt = canonicalPositiveEpoch(futures ? value.createTime : value.startTime)
+  if (
+    identity === null ||
+    pnl === null ||
+    invested === null ||
+    invested < 0 ||
+    roi === null ||
+    startedAt === null
+  ) {
+    return null
+  }
+  return {
+    label: String(identity),
+    pnl,
+    invested,
+    startedAt,
+  }
 }
 
 function expectedUrl(sourceSlug: string): string | null {
@@ -78,14 +173,23 @@ function validatePages(
       envelope.request.pageSize !== PAGE_SIZE ||
       envelope.request.portfolioId !== exchangeTraderId ||
       !isRecord(envelope.response) ||
+      !exactKeys(envelope.response, RESPONSE_FIELDS) ||
       envelope.response.code !== '000000' ||
       envelope.response.success !== true ||
+      envelope.response.message !== null ||
+      envelope.response.messageDetail !== null ||
       !isRecord(envelope.response.data)
     ) {
       return null
     }
     const data = envelope.response.data
-    if (!Array.isArray(data.list) || !data.list.every(isRecord) || data.list.length > PAGE_SIZE) {
+    if (
+      !exactKeys(data, DATA_FIELDS) ||
+      data.indexValue !== null ||
+      !Array.isArray(data.list) ||
+      !data.list.every(isRecord) ||
+      data.list.length > PAGE_SIZE
+    ) {
       return null
     }
     const total = reportedTotal(data.total)
@@ -93,9 +197,9 @@ function validatePages(
     if (stableTotal === undefined) stableTotal = total
     const rows = data.list.filter(isRecord)
     for (const row of rows) {
-      const label = canonicalLabel(row.copyPortfolioId ?? row.nickname)
-      if (label === null || labels.has(label)) return null
-      labels.add(label)
+      const projection = copierProjection(row, url)
+      if (projection === null || labels.has(projection.label)) return null
+      labels.add(projection.label)
     }
     rowsSeen += rows.length
     if (total !== null && rowsSeen > total) return null
@@ -152,14 +256,46 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   const sourceRows = pages.flatMap((page) => page.rows)
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
+  // Binance exposes no copier event clock. Production parsing stamps every
+  // row with one job-scoped clock captured before the first response. Bind
+  // that clock as well as every publishable projection; a raw-object reference
+  // and a caller-supplied non-empty hash are not conservation proofs.
+  const parsedAt = input.rows[0]?.ts ?? null
+  const firstFetchedAt = input.pages[0]?.fetchedAt
+  if (
+    sourceRows.length > 0 &&
+    (parsedAt === null ||
+      !isCanonicalPostgresTimestamp(parsedAt) ||
+      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+  ) {
+    return { verified: false } as const
+  }
+  const parsedAtMs = parsedAt === null ? Number.NaN : Date.parse(parsedAt)
+
   const dedupeHashes = new Set<string>()
   for (const [index, row] of input.rows.entries()) {
+    const sourceRow = sourceRows[index]
+    const projection = copierProjection(sourceRow, url)
+    const expectedDuration =
+      projection !== null && Number.isFinite(parsedAtMs)
+        ? Math.max(0, Math.floor((parsedAtMs - projection.startedAt) / 86_400_000))
+        : null
+    const expectedHash =
+      projection === null
+        ? null
+        : dedupeHash('binance_cp', input.exchangeTraderId, projection.label, projection.startedAt)
     if (
+      projection === null ||
       row.kind !== 'copiers' ||
-      row.raw !== sourceRows[index] ||
-      typeof row.dedupeHash !== 'string' ||
-      row.dedupeHash.length === 0 ||
-      dedupeHashes.has(row.dedupeHash)
+      row.ts !== parsedAt ||
+      row.copierLabel !== projection.label ||
+      !Object.is(row.copierPnl, projection.pnl) ||
+      !Object.is(row.copierInvested, projection.invested) ||
+      !Object.is(row.copyDurationDays, expectedDuration) ||
+      row.dedupeHash !== expectedHash ||
+      dedupeHashes.has(row.dedupeHash) ||
+      row.raw !== sourceRow
     ) {
       return { verified: false } as const
     }

@@ -3,6 +3,7 @@ import type {
   SelectedCopierSnapshotVerifier,
 } from '../../core/adapter'
 import type { HistoryTerminalVerificationInput } from '../../history-acquisition'
+import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { dedupeHash } from './parsers'
 
 export const TOOBIT_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
@@ -178,19 +179,32 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
     return { verified: false } as const
   }
 
+  // The endpoint has no follower event timestamp. Production parsing uses one
+  // job-scoped clock captured before either response, so require canonical
+  // snapshot-wide equality and prevent a forged post-fetch timestamp.
+  const parsedAt = input.rows[0]?.ts ?? null
+  const firstFetchedAt = input.pages[0]?.fetchedAt
+  if (
+    snapshot.followers.length > 0 &&
+    (parsedAt === null ||
+      !isCanonicalPostgresTimestamp(parsedAt) ||
+      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+  ) {
+    return { verified: false } as const
+  }
+
   const hashes = new Set<string>()
   for (const [index, row] of input.rows.entries()) {
     const sourceRow = snapshot.followers[index]
     const label = canonicalLabel(sourceRow.followerNickname)
-    const rowTimestamp = Date.parse(row.ts)
     const expectedHash = dedupeHash('toobit_cp', label, sourceRow.followRunningMills)
     const expectedDuration = Math.floor(Number(sourceRow.followRunningMills) / DAY_MS)
 
     if (
       label === null ||
       row.kind !== 'copiers' ||
-      !Number.isFinite(rowTimestamp) ||
-      new Date(rowTimestamp).toISOString() !== row.ts ||
+      row.ts !== parsedAt ||
       row.copierLabel !== label ||
       row.copierPnl !== Number(sourceRow.totalFollowProfit) ||
       row.copierInvested !== Number(sourceRow.totalFollowAmount) ||

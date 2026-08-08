@@ -50,6 +50,14 @@ function source(meta: Record<string, unknown> = {}): SourceRow {
   }
 }
 
+function copierSource(meta: Record<string, unknown> = {}): SourceRow {
+  return {
+    ...source(meta),
+    copier_table_depth: 'full',
+    serving_mode: 'serving',
+  }
+}
+
 function session(
   respond: (request: ReplayRequestTemplate) => Promise<{ status: number; json: unknown }>
 ): { session: FetchSession; page: { goto: jest.Mock; waitForLoadState: jest.Mock } } {
@@ -57,14 +65,24 @@ function session(
     goto: jest.fn(async () => undefined),
     waitForLoadState: jest.fn(async () => undefined),
   }
+  const playwrightPage = page as Awaited<ReturnType<FetchSession['page']>>
+  const fetchSession: FetchSession = {
+    sourceSlug: 'binance_futures',
+    page: async () => playwrightPage,
+    api: async () => {
+      throw new Error('api() is not used by this test session')
+    },
+    pageFetch: respond,
+    capture: async () => {
+      throw new Error('capture() is not used by this test session')
+    },
+    paced: async <T>(fn: () => Promise<T>) => fn(),
+    saveState: async () => undefined,
+    close: async () => undefined,
+  }
   return {
     page,
-    session: {
-      sourceSlug: 'binance_futures',
-      page: async () => page,
-      pageFetch: respond,
-      paced: async <T>(fn: () => Promise<T>) => fn(),
-    } as unknown as FetchSession,
+    session: fetchSession,
   }
 }
 
@@ -92,6 +110,19 @@ function historyEnvelope(rows: unknown[], total: number | null): Record<string, 
       ),
       total,
     },
+  }
+}
+
+function copierEnvelope(
+  rows: unknown[],
+  total: number | null = rows.length
+): Record<string, unknown> {
+  return {
+    code: '000000',
+    success: true,
+    message: null,
+    messageDetail: null,
+    data: { indexValue: null, list: rows, total },
   }
 }
 
@@ -839,23 +870,47 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     }
 
     it('selects only the reviewed board endpoint', () => {
-      expect(copierVerifier(source())).toMatchObject({
+      expect(copierVerifier(copierSource())).toMatchObject({
         contract: 'arena.ingest.history-terminal-verifier.binance.copiers@1',
       })
       expect(
         binanceAdapter.verifyCopierSnapshot?.(
-          source({ endpoints: { copiers: 'https://proxy.example.test/copiers' } })
+          copierSource({ endpoints: { copiers: 'https://proxy.example.test/copiers' } })
         )
+      ).toBeNull()
+      expect(
+        binanceAdapter.verifyCopierSnapshot?.({ ...copierSource(), status: 'inactive' })
+      ).toBeNull()
+      expect(
+        binanceAdapter.verifyCopierSnapshot?.({ ...copierSource(), serving_mode: 'shadow' })
+      ).toBeNull()
+      expect(
+        binanceAdapter.verifyCopierSnapshot?.({
+          ...copierSource(),
+          trader_kind_scope: 'mixed',
+        })
+      ).toBeNull()
+      expect(
+        binanceAdapter.verifyCopierSnapshot?.({
+          ...copierSource(),
+          copier_table_depth: 'top10',
+        })
+      ).toBeNull()
+      expect(
+        binanceAdapter.verifyCopierSnapshot?.({
+          ...copierSource(),
+          meta: { boardKey: 'spot' },
+        })
       ).toBeNull()
     })
 
     it.each(['copy-traders-p1.json', 'empty'])(
       'proves terminal and parser conservation for %s',
       async (fixtureName) => {
-        const src = source()
+        const src = copierSource()
         const response =
           fixtureName === 'empty'
-            ? { code: '000000', success: true, data: { total: 0, list: [] } }
+            ? copierEnvelope([])
             : (() => {
                 const payload = fixture(fixtureName)
                 const data = payload.data as { list: unknown[]; total: number }
@@ -875,7 +930,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
             sourceSlug: src.slug,
             currency: src.currency,
             tfLabelMap: src.tf_label_map,
-            scrapedAt: page.fetchedAt,
+            scrapedAt: acquisition.artifact.attempt_started_at,
             meta: src.meta,
           })
         )
@@ -890,11 +945,46 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       }
     )
 
+    it('binds the reviewed spot board to its distinct exact row schema', async () => {
+      const src: SourceRow = {
+        ...copierSource({ boardKey: 'spot' }),
+        slug: 'binance_spot',
+        product_type: 'spot',
+        leaderboard_url: 'https://www.binance.com/en/copy-trading/spot',
+      }
+      const response = fixture('spot-copy-traders-p1.json')
+      const data = response.data as { list: unknown[]; total: number }
+      data.total = data.list.length
+      const acquisition = await captureCopiers(src, response)
+      const rows = acquisition.pages
+        .flatMap((page) =>
+          binanceAdapter.parseHistory(page.payload, 'copiers', {
+            sourceSlug: src.slug,
+            currency: src.currency,
+            tfLabelMap: src.tf_label_map,
+            scrapedAt: acquisition.artifact.attempt_started_at,
+            meta: src.meta,
+          })
+        )
+        .filter((row) => row.kind === 'copiers')
+
+      expect(acquisition.artifact.termination.evidence_state).toBe('verified')
+      expect(
+        copierVerifier(src).verifyConservation({
+          exchangeTraderId: 'portfolio-1',
+          pages: acquisition.pages,
+          rows,
+        })
+      ).toEqual({ verified: true, envelopeRowCount: rows.length })
+    })
+
     it('rejects a parser-empty schema drift instead of publishing a false empty snapshot', async () => {
-      const acquisition = await captureCopiers(source(), {
+      const acquisition = await captureCopiers(copierSource(), {
         code: '000000',
         success: true,
-        data: { total: 0, items: [] },
+        message: null,
+        messageDetail: null,
+        data: { indexValue: null, total: 0, items: [] },
       })
 
       expect(acquisition.artifact.termination.evidence_state).toBe('upstream_error')
@@ -906,14 +996,77 @@ describe('Binance evidence-preserving leaderboard capture', () => {
         fixture('copy-traders-p1.json').data as { list: Array<Record<string, unknown>> }
       ).list.slice(0, 2)
       rows[1] = { ...rows[1], copyPortfolioId: rows[0].copyPortfolioId }
-      const acquisition = await captureCopiers(source(), {
-        code: '000000',
-        success: true,
-        data: { total: rows.length, list: rows },
-      })
+      const acquisition = await captureCopiers(copierSource(), copierEnvelope(rows))
 
       expect(acquisition.error).toBeNull()
       expect(acquisition.artifact.termination.evidence_state).toBe('rejected')
+    })
+
+    it.each([
+      ['missing numeric fields', { copyPortfolioId: 'only-identity' }],
+      [
+        'invalid numeric field',
+        {
+          ...(fixture('copy-traders-p1.json').data as { list: Array<Record<string, unknown>> })
+            .list[0],
+          totalPnl: 'garbage',
+        },
+      ],
+    ])('rejects parser-consistent copier schema drift: %s', async (_label, row) => {
+      const acquisition = await captureCopiers(copierSource(), copierEnvelope([row]))
+      expect(acquisition.error).toBeNull()
+      expect(acquisition.artifact.termination.evidence_state).toBe('rejected')
+    })
+
+    it('binds every parsed value, hash, raw row and the shared pre-fetch clock', async () => {
+      const src = copierSource()
+      const response = fixture('copy-traders-p1.json')
+      const data = response.data as { list: unknown[]; total: number }
+      data.total = data.list.length
+      const acquisition = await captureCopiers(src, response)
+      const rows = acquisition.pages
+        .flatMap((page) =>
+          binanceAdapter.parseHistory(page.payload, 'copiers', {
+            sourceSlug: src.slug,
+            currency: src.currency,
+            tfLabelMap: src.tf_label_map,
+            scrapedAt: acquisition.artifact.attempt_started_at,
+            meta: src.meta,
+          })
+        )
+        .filter((row) => row.kind === 'copiers')
+      const verify = (candidate: typeof rows) =>
+        copierVerifier(src).verifyConservation({
+          exchangeTraderId: 'portfolio-1',
+          pages: acquisition.pages,
+          rows: candidate,
+        })
+
+      expect(rows.length).toBeGreaterThan(1)
+      expect(
+        verify(rows.map((row, index) => (index === 0 ? { ...row, copierPnl: 123456 } : row)))
+      ).toEqual({ verified: false })
+      expect(
+        verify(
+          rows.map((row, index) =>
+            index === 0 ? { ...row, copierInvested: 123456, copierLabel: 'forged' } : row
+          )
+        )
+      ).toEqual({ verified: false })
+      expect(
+        verify(rows.map((row, index) => (index === 0 ? { ...row, dedupeHash: 'forged' } : row)))
+      ).toEqual({ verified: false })
+      expect(
+        verify(rows.map((row, index) => (index === 0 ? { ...row, raw: { ...row.raw } } : row)))
+      ).toEqual({ verified: false })
+      expect(
+        verify(
+          rows.map((row, index) => (index === 1 ? { ...row, ts: '2000-01-01T00:00:00.000Z' } : row))
+        )
+      ).toEqual({ verified: false })
+      expect(verify(rows.map((row) => ({ ...row, ts: '2999-01-01T00:00:00.000Z' })))).toEqual({
+        verified: false,
+      })
     })
   })
 })

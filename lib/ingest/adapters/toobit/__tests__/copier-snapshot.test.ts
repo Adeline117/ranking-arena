@@ -91,7 +91,7 @@ function installFetch(
     if (url === toobitCopierFollowersUrl(exchangeTraderId)) return httpOk(followersPayload)
     throw new Error(`unexpected Toobit request: ${url}`)
   })
-  global.fetch = fetchMock as unknown as typeof fetch
+  global.fetch = fetchMock
   return fetchMock
 }
 
@@ -397,6 +397,31 @@ describe('Toobit full copier snapshot authority', () => {
         rows.map((row, index) => (index === 1 ? { ...row, dedupeHash: rows[0].dedupeHash } : row))
       )
     ).toEqual({ verified: false })
+  })
+
+  it('requires one canonical parser clock no later than the first captured response', async () => {
+    installFetch(detailFixture(), fixture<Dict>('followers.json'))
+    const acquisition = await capture(session())
+    const rows = parseRows(acquisition.pages)
+    const selected = verifier()
+    const verify = (candidate: readonly ParsedCopierRow[]) =>
+      selected.verifyConservation({
+        exchangeTraderId: LEADER_ID,
+        pages: acquisition.pages,
+        rows: candidate,
+      })
+
+    expect(
+      verify(
+        rows.map((row, index) => (index === 1 ? { ...row, ts: '2000-01-01T00:00:00.000Z' } : row))
+      )
+    ).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2999-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2026-8-3T10:00:00Z' })))).toEqual({
+      verified: false,
+    })
   })
 
   it('performs both network requests again on the same session instead of memoizing detail', async () => {

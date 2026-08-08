@@ -140,9 +140,11 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   const page = await session.page()
   const url = src.leaderboard_url ?? 'https://www.binance.com/en/copy-trading'
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 })
-  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
+  } catch {
     // networkidle is best-effort — a busy page still yields valid cookies
-  })
+  }
   // Park on a near-empty same-origin document: the copy-trading SPA keeps
   // websockets/charts/timers running, and holding it open for a multi-TF
   // crawl crashed the remote SG chromium mid-session ("Browser closed",
@@ -255,9 +257,13 @@ const binanceAdapter: SourceAdapter = {
           ? BINANCE_COPIER_HISTORY_URLS.spot
           : null
     return src.adapter_slug === 'binance' &&
+      src.status === 'active' &&
+      src.serving_mode === 'serving' &&
+      src.trader_kind_scope === 'human' &&
       src.currency === 'USDT' &&
-      ((src.slug === 'binance_futures' && src.product_type === 'futures') ||
-        (src.slug === 'binance_spot' && src.product_type === 'spot')) &&
+      src.copier_table_depth === 'full' &&
+      ((src.slug === 'binance_futures' && src.product_type === 'futures' && board === 'futures') ||
+        (src.slug === 'binance_spot' && src.product_type === 'spot' && board === 'spot')) &&
       expectedCopierUrl !== null &&
       endpoint(src, 'copiers') === expectedCopierUrl
       ? binanceCopierSnapshotVerifier
