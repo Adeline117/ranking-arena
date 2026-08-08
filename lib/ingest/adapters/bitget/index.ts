@@ -39,7 +39,7 @@ import {
   BITGET_POSITION_HISTORY_URL,
   bitgetPositionHistoryTerminalVerifier,
 } from './history-terminal'
-import { BITGET_COPIER_HISTORY_URL, bitgetCopierSnapshotVerifier } from './copier-snapshot'
+import { BITGET_COPIER_HISTORY_URL } from './copier-snapshot'
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
 /** UTA portfolio-trader profile family (board rows with type=2; keyed by
@@ -134,7 +134,11 @@ const bitgetAdapter: SourceAdapter = {
     // 余额历史 no longer exists in the UTA profile UI (2026-06-11): all
     // balance/transfer endpoint candidates demand an auth token (00005).
     transfers: false,
-    copiers: true, // POST trace/trader/followerList (top-50 only, PII rules apply)
+    // Evidence-only: followerList is a top-50 view and cannot authorize the
+    // source-level `full` publication contract. The endpoint remains available
+    // to explicit non-publication captures, but this adapter deliberately
+    // exposes no reviewed snapshot verifier.
+    copiers: true,
   },
 
   historyTerminalVerifier(src, kind) {
@@ -143,16 +147,6 @@ const bitgetAdapter: SourceAdapter = {
       kind === 'position_history' &&
       endpoint(src, 'positionHistory', BITGET_POSITION_HISTORY_URL) === BITGET_POSITION_HISTORY_URL
       ? bitgetPositionHistoryTerminalVerifier
-      : null
-  },
-
-  verifyCopierSnapshot(src) {
-    return src.slug === 'bitget_futures' &&
-      src.adapter_slug === 'bitget' &&
-      src.product_type === 'futures' &&
-      src.currency === 'USDT' &&
-      endpoint(src, 'copiers', BITGET_COPIER_HISTORY_URL) === BITGET_COPIER_HISTORY_URL
-      ? bitgetCopierSnapshotVerifier
       : null
   },
 
