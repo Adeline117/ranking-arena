@@ -3,6 +3,11 @@ import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
+import {
+  finalizePostMediaUpload,
+  reservePostMediaUpload,
+  type PostMediaUploadPurpose,
+} from '@/lib/posts/post-media-upload-registry'
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
@@ -18,6 +23,15 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
     const file = fileEntry
+
+    const purposeEntry = formData.get('purpose')
+    let purpose: PostMediaUploadPurpose = 'legacy_image'
+    if (purposeEntry !== null) {
+      if (purposeEntry !== 'post_image' && purposeEntry !== 'group_avatar') {
+        return NextResponse.json({ error: 'Invalid upload purpose' }, { status: 400 })
+      }
+      purpose = purposeEntry
+    }
 
     // 验证文件大小 (5MB) — check size BEFORE sniffing so we don't load
     // a 100MB attacker payload into memory just to read its magic bytes.
@@ -47,8 +61,24 @@ export const POST = withAuth(
     // 生成唯一文件名 — use SERVER-derived extension from sniffed magic
     // bytes, NOT the client-supplied filename. Prevents .php / .html /
     // .svg uploads that pass the type check via spoofed file.type.
+    const uploadId = crypto.randomUUID()
     const objectName = `${crypto.randomUUID()}.${sniffed.extension}`
     const fileName = `${userId}/${objectName}`
+
+    const registryIdentity = {
+      uploadId,
+      ownerId: userId,
+      objectName: fileName,
+      purpose,
+      mimeType: sniffed.mime,
+      sizeBytes: file.size,
+    } as const
+
+    const reservation = await reservePostMediaUpload(supabase, registryIdentity)
+    if (!reservation.ok) {
+      logger.error('Post image upload reservation failed', reservation)
+      return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    }
 
     // 上传到 Supabase Storage with SNIFFED Content-Type, not client-supplied.
     const { data, error } = await supabase.storage.from('posts').upload(fileName, file, {
@@ -117,6 +147,20 @@ export const POST = withAuth(
         },
         { status: 500 }
       )
+    }
+
+    const finalization = await finalizePostMediaUpload(supabase, registryIdentity)
+    if (!finalization.ok) {
+      logger.error('Post image upload finalization failed', finalization)
+      if (finalization.canCleanupObject) {
+        try {
+          const { error: cleanupError } = await supabase.storage.from('posts').remove([fileName])
+          if (cleanupError) logger.error('Failed to clean up unfinalized upload:', cleanupError)
+        } catch (cleanupError) {
+          logger.error('Failed to clean up unfinalized upload:', cleanupError)
+        }
+      }
+      return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
     }
 
     // 获取公共 URL

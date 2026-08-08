@@ -4,6 +4,10 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { sniffVideoFile } from '@/lib/utils/video-magic-bytes'
+import {
+  finalizePostMediaUpload,
+  reservePostMediaUpload,
+} from '@/lib/posts/post-media-upload-registry'
 
 // 最大文件大小: 100MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024
@@ -69,9 +73,25 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     // 生成唯一文件名
+    const uploadId = crypto.randomUUID()
     const objectName = `${crypto.randomUUID()}.${fileExt}`
     const directory = `${userId}/videos`
     const fileName = `${directory}/${objectName}`
+
+    const registryIdentity = {
+      uploadId,
+      ownerId: userId,
+      objectName: fileName,
+      purpose: 'post_video',
+      mimeType: contentType,
+      sizeBytes: file.size,
+    } as const
+
+    const reservation = await reservePostMediaUpload(supabase, registryIdentity)
+    if (!reservation.ok) {
+      logger.error('Post video upload reservation failed', reservation)
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
 
     // 上传到 Supabase Storage — use sniffed content type
     const { data, error } = await supabase.storage.from('posts').upload(fileName, file, {
@@ -110,6 +130,20 @@ export async function POST(request: NextRequest) {
         logger.error('Failed to clean up unverifiable video:', cleanupError)
       }
       return NextResponse.json({ error: 'Video upload verification failed' }, { status: 500 })
+    }
+
+    const finalization = await finalizePostMediaUpload(supabase, registryIdentity)
+    if (!finalization.ok) {
+      logger.error('Post video upload finalization failed', finalization)
+      if (finalization.canCleanupObject) {
+        try {
+          const { error: cleanupError } = await supabase.storage.from('posts').remove([fileName])
+          if (cleanupError) logger.error('Failed to clean up unfinalized video:', cleanupError)
+        } catch (cleanupError) {
+          logger.error('Failed to clean up unfinalized video:', cleanupError)
+        }
+      }
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
     // 获取公共 URL

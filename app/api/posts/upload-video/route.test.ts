@@ -28,13 +28,14 @@ const mockUpload = jest.fn()
 const mockList = jest.fn()
 const mockRemove = jest.fn()
 const mockGetPublicUrl = jest.fn()
+const mockRpc = jest.fn()
 const mockFrom = jest.fn(() => ({
   upload: mockUpload,
   list: mockList,
   remove: mockRemove,
   getPublicUrl: mockGetPublicUrl,
 }))
-const mockSupabase = { storage: { from: mockFrom } }
+const mockSupabase = { rpc: mockRpc, storage: { from: mockFrom } }
 
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
@@ -71,6 +72,26 @@ function request(fileEntry: FormDataEntryValue | null) {
   }
 }
 
+function registryResult(
+  name: string,
+  args: Record<string, unknown>,
+  override: Record<string, unknown> = {}
+) {
+  return {
+    data: {
+      status: name === 'reserve_post_media_upload_atomic' ? 'reserved' : 'uploaded',
+      upload_id: args.p_upload_id,
+      object_name: args.p_object_name,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      replayed: false,
+      ...override,
+    },
+    error: null,
+    status: 200,
+    statusText: 'OK',
+  }
+}
+
 describe('post video upload authority', () => {
   let uploadedPath = ''
 
@@ -95,6 +116,9 @@ describe('post video upload authority', () => {
     mockGetPublicUrl.mockImplementation((path: string) => ({
       data: { publicUrl: `https://storage.test/${path}` },
     }))
+    mockRpc.mockImplementation(async (name: string, args: Record<string, unknown>) =>
+      registryResult(name, args)
+    )
   })
 
   it('requires an active authenticated user before reading the form body', async () => {
@@ -130,13 +154,23 @@ describe('post video upload authority', () => {
     expect(mockUpload).not.toHaveBeenCalled()
   })
 
-  it('accepts only an exact upload and listing acknowledgement', async () => {
+  it('reserves, uploads, lists, and finalizes a video in authority order', async () => {
     const response = await POST(request(file()) as never)
     const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store')
     expect(uploadedPath).toMatch(new RegExp(`^${USER_ID}/videos/[0-9a-f-]{36}\\.mp4$`))
+    const reserveArgs = mockRpc.mock.calls[0][1]
+    expect(mockRpc.mock.calls[0][0]).toBe('reserve_post_media_upload_atomic')
+    expect(reserveArgs).toEqual({
+      p_upload_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      p_owner_id: USER_ID,
+      p_object_name: uploadedPath,
+      p_purpose: 'post_video',
+      p_mime_type: 'video/mp4',
+      p_size_bytes: 24,
+    })
     expect(mockUpload).toHaveBeenCalledWith(uploadedPath, expect.anything(), {
       contentType: 'video/mp4',
       upsert: false,
@@ -145,12 +179,74 @@ describe('post video upload authority', () => {
       search: uploadedPath.slice(uploadedPath.lastIndexOf('/') + 1),
       limit: 1,
     })
+    expect(mockRpc.mock.calls[1]).toEqual(['finalize_post_media_upload_atomic', reserveArgs])
+    expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(mockUpload.mock.invocationCallOrder[0])
+    expect(mockUpload.mock.invocationCallOrder[0]).toBeLessThan(
+      mockList.mock.invocationCallOrder[0]
+    )
+    expect(mockList.mock.invocationCallOrder[0]).toBeLessThan(mockRpc.mock.invocationCallOrder[1])
+    expect(mockRpc.mock.invocationCallOrder[1]).toBeLessThan(
+      mockGetPublicUrl.mock.invocationCallOrder[0]
+    )
     expect(body).toEqual({
       url: `https://storage.test/${uploadedPath}`,
       fileName: uploadedPath,
       fileSize: 24,
       fileType: 'video/mp4',
     })
+  })
+
+  it.each(['error', 'throw', 'uploaded', 'mismatch', 'malformed'] as const)(
+    'fails closed before Storage when reservation returns %s evidence',
+    async (failure) => {
+      if (failure === 'error') {
+        mockRpc.mockResolvedValueOnce({
+          data: null,
+          error: {
+            code: '22023',
+            details: null,
+            hint: null,
+            message: 'registry unavailable',
+          },
+          status: 400,
+          statusText: 'Bad Request',
+        })
+      } else if (failure === 'throw') {
+        mockRpc.mockRejectedValueOnce(new Error('network failure'))
+        mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'still unavailable' } })
+      } else {
+        mockRpc.mockImplementation(async (name: string, args: Record<string, unknown>) =>
+          registryResult(
+            name,
+            args,
+            failure === 'uploaded'
+              ? { status: 'uploaded' }
+              : failure === 'mismatch'
+                ? { upload_id: '22222222-2222-4222-8222-222222222222' }
+                : { expires_at: 'not-a-timestamp' }
+          )
+        )
+      }
+
+      const response = await POST(request(file()) as never)
+
+      expect(response.status).toBe(500)
+      expect(await response.json()).toEqual({ error: 'Internal server error' })
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockRpc).toHaveBeenCalledTimes(failure === 'error' ? 1 : 2)
+    }
+  )
+
+  it('rejects a first-attempt reservation replay without retrying or touching Storage', async () => {
+    mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+      registryResult(name, args, { replayed: true })
+    )
+
+    const response = await POST(request(file()) as never)
+
+    expect(response.status).toBe(500)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('fails closed and cleans only the requested path on a mismatched upload acknowledgement', async () => {
@@ -164,6 +260,7 @@ describe('post video upload authority', () => {
     expect(response.status).toBe(500)
     expect(mockList).not.toHaveBeenCalled()
     expect(mockRemove).toHaveBeenCalledWith([uploadedPath])
+    expect(mockRpc).toHaveBeenCalledTimes(1)
   })
 
   it('removes the requested object when exact listing verification fails', async () => {
@@ -173,5 +270,89 @@ describe('post video upload authority', () => {
 
     expect(response.status).toBe(500)
     expect(mockRemove).toHaveBeenCalledWith([uploadedPath])
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('cleans only the generated path after a conclusive database finalization rejection', async () => {
+    mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+      registryResult(name, args)
+    )
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '22023', details: null, hint: null, message: 'finalize rejected' },
+      status: 400,
+      statusText: 'Bad Request',
+    })
+
+    const response = await POST(request(file()) as never)
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Internal server error' })
+    expect(mockRemove).toHaveBeenCalledTimes(1)
+    expect(mockRemove).toHaveBeenCalledWith([uploadedPath])
+    expect(mockGetPublicUrl).not.toHaveBeenCalled()
+  })
+
+  it.each(['throw', 'mismatch', 'malformed'] as const)(
+    'preserves the tracked object when finalization remains ambiguous after %s',
+    async (failure) => {
+      mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+        registryResult(name, args)
+      )
+      if (failure === 'throw') {
+        mockRpc.mockRejectedValueOnce(new Error('response lost after commit'))
+        mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'network unavailable' } })
+      } else {
+        const override =
+          failure === 'mismatch'
+            ? { object_name: `${USER_ID}/videos/attacker.mp4` }
+            : { expires_at: 'not-a-timestamp' }
+        mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+          registryResult(name, args, override)
+        )
+        mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+          registryResult(name, args, override)
+        )
+      }
+
+      const response = await POST(request(file()) as never)
+
+      expect(response.status).toBe(500)
+      expect(mockRpc).toHaveBeenCalledTimes(3)
+      expect(mockRemove).not.toHaveBeenCalled()
+      expect(mockGetPublicUrl).not.toHaveBeenCalled()
+    }
+  )
+
+  it('confirms a commit-ambiguous finalization with one exact replay', async () => {
+    mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+      registryResult(name, args)
+    )
+    mockRpc.mockRejectedValueOnce(new Error('response lost after commit'))
+    mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+      registryResult(name, args, { replayed: true })
+    )
+
+    const response = await POST(request(file()) as never)
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledTimes(3)
+    expect(mockRemove).not.toHaveBeenCalled()
+  })
+
+  it('rejects a first-attempt finalization replay without retrying or deleting', async () => {
+    mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+      registryResult(name, args)
+    )
+    mockRpc.mockImplementationOnce(async (name: string, args: Record<string, unknown>) =>
+      registryResult(name, args, { replayed: true })
+    )
+
+    const response = await POST(request(file()) as never)
+
+    expect(response.status).toBe(500)
+    expect(mockRpc).toHaveBeenCalledTimes(2)
+    expect(mockRemove).not.toHaveBeenCalled()
+    expect(mockGetPublicUrl).not.toHaveBeenCalled()
   })
 })
