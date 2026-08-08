@@ -31,6 +31,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { BITUNIX_COPIER_PAGE_ENVELOPE_CONTRACT } from './copier-contract'
 
 type Dict = Record<string, unknown>
 
@@ -313,20 +314,32 @@ export function parseBitunixPositionHistory(raw: unknown, _ctx: ParseCtx): Parse
  * `day` = copy duration in days; followAmount = invested.
  */
 export function parseBitunixCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const d = data(raw)
+  const wrapper = raw as Dict
+  const response =
+    wrapper?.contract === BITUNIX_COPIER_PAGE_ENVELOPE_CONTRACT &&
+    wrapper.response !== null &&
+    typeof wrapper.response === 'object' &&
+    !Array.isArray(wrapper.response)
+      ? wrapper.response
+      : raw
+  const d = data(response)
   const list = Array.isArray(d?.records) ? (d.records as Dict[]) : []
   const out: ParsedHistoryRow[] = []
   for (const item of list) {
     const uid = item.uid
-    if (uid === undefined || uid === null) continue
+    const nickname = typeof item.nickname === 'string' ? item.nickname : ''
+    const followDate = typeof item.followDate === 'string' ? item.followDate : ''
+    const dedupeIdentity =
+      typeof uid === 'number' && Number.isSafeInteger(uid) && uid > 0 ? uid : nickname
+    if (dedupeIdentity === '' || followDate === '') continue
     out.push({
       kind: 'copiers',
       ts: ctx.scrapedAt,
-      copierLabel: String((item.nickname as string) || uid),
+      copierLabel: nickname || String(uid),
       copierPnl: num(item.pl),
       copierInvested: num(item.followAmount),
       copyDurationDays: int(item.day),
-      dedupeHash: dedupeHash('bitunix_cp', uid, item.followDate),
+      dedupeHash: dedupeHash('bitunix_cp', dedupeIdentity, followDate),
       raw: item,
     })
   }
