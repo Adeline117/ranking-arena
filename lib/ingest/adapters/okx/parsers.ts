@@ -28,6 +28,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { parseOkxCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -368,34 +369,7 @@ export function parseOkxPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedHis
  * copier PII; sources row pins copier_table_depth='top10').
  */
 export function parseOkxCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const block = dataRows(raw)[0]
-  if (!block) return []
-  const list = Array.isArray(block.copyTraders) ? (block.copyTraders as Dict[]) : []
-  const scrapedMs = Date.parse(ctx.scrapedAt)
-
-  const out: ParsedHistoryRow[] = []
-  for (const item of list) {
-    const label = str(item.nickName)
-    if (!label) continue
-    const begin = num(item.beginCopyTime)
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: label,
-      copierPnl: num(item.pnl),
-      copierInvested: null, // not exposed
-      copyDurationDays:
-        begin !== null && Number.isFinite(scrapedMs) && scrapedMs > begin
-          ? Math.floor((scrapedMs - begin) / 86_400_000)
-          : null,
-      dedupeHash: dedupeHash('okx_cp', label, item.beginCopyTime),
-      // Preserve the exact upstream candidate. Capture-level aggregate fields
-      // remain available in the immutable RAW page and must not be projected
-      // into a row that later participates in candidate conservation.
-      raw: item,
-    })
-  }
-  return out
+  return parseOkxCopiersV1(raw, ctx)
 }
 
 export function parseOkxHistory(
@@ -407,7 +381,7 @@ export function parseOkxHistory(
     case 'position_history':
       return parseOkxPositionHistory(raw, ctx)
     case 'copiers':
-      return parseOkxCopiers(raw, ctx)
+      return parseOkxCopiersV1(raw, ctx)
     default:
       // order-level records and transfers are not exposed publicly.
       throw new Error(`[okx] history surface ${kind} not supported`)
