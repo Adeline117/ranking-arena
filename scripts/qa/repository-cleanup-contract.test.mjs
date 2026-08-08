@@ -6,6 +6,26 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const packageJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
+const productionAllowlist = JSON.parse(
+  readFileSync(join(repoRoot, 'scripts/PRODUCTION_ALLOWLIST.json'), 'utf8')
+)
+
+test('production script allowlist names only concrete boundary-scanned entrypoints', () => {
+  assert.deepEqual(
+    productionAllowlist.allowed,
+    [...new Set(productionAllowlist.allowed)].sort(),
+    'production script allowlist must remain unique and sorted'
+  )
+
+  for (const entrypoint of productionAllowlist.allowed) {
+    assert.match(entrypoint, /^[a-z0-9][a-z0-9_-]*\.(?:mjs|sh)$/)
+    assert.equal(
+      existsSync(join(repoRoot, 'scripts', entrypoint)),
+      true,
+      `production allowlist entry does not exist: ${entrypoint}`
+    )
+  }
+})
 
 test('retired standalone diagnostics stay removed in favor of supported entrypoints', () => {
   const retiredEntrypoints = ['scripts/arena-status-check.mjs', 'scripts/validate-data.mjs']
