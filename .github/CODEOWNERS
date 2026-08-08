@@ -26,6 +26,8 @@
 # CI / 部署 / 质量门禁（改这些影响所有会话与生产部署）
 /.github/workflows/         @Adeline117
 /vercel.json                @Adeline117
+/.gitattributes             @Adeline117
+/.editorconfig              @Adeline117
 /.githooks/                 @Adeline117
 /scripts/qa/                @Adeline117
 /eslint.config.mjs          @Adeline117
