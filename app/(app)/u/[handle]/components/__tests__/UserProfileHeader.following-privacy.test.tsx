@@ -134,6 +134,19 @@ describe('UserProfileHeader following privacy', () => {
     expect(avatar).not.toHaveStyle({ cursor: 'pointer' })
   })
 
+  it('uses a page heading and valid inline content inside social buttons', () => {
+    const { followersButton, followingButton } = renderHeader({
+      showFollowing: true,
+      showFollowers: true,
+    })
+
+    expect(screen.getByRole('heading', { level: 1, name: 'alice' })).toBeInTheDocument()
+    expect(followingButton.querySelector('p')).toBeNull()
+    expect(followersButton.querySelector('p')).toBeNull()
+    expect(followingButton.querySelector('span')).not.toBeNull()
+    expect(followersButton.querySelector('span')).not.toBeNull()
+  })
+
   it('uses opaque cover text and the contrast badge surface', () => {
     render(
       <UserProfileHeader

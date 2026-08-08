@@ -158,6 +158,7 @@ export default function UserProfileHeader({
             }}
           >
             <Text
+              as="span"
               size="2xl"
               weight="black"
               style={{
@@ -206,6 +207,7 @@ export default function UserProfileHeader({
             }}
           >
             <Text
+              as="h1"
               size="2xl"
               weight="black"
               className="trader-name-truncate"
@@ -376,7 +378,7 @@ export default function UserProfileHeader({
                       aria-label={`${followingCount} ${t('following')}`}
                       style={statButtonStyle(followingInteractive)}
                     >
-                      <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                      <Text as="span" size="sm" style={{ color: secondaryTextColor, textShadow }}>
                         <Text
                           as="span"
                           weight="bold"
@@ -395,7 +397,7 @@ export default function UserProfileHeader({
                       aria-label={`${followersCount} ${t('followers')}`}
                       style={statButtonStyle(followersInteractive)}
                     >
-                      <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                      <Text as="span" size="sm" style={{ color: secondaryTextColor, textShadow }}>
                         <Text
                           as="span"
                           weight="bold"
