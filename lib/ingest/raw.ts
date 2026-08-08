@@ -47,6 +47,7 @@ import {
 import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
+  strictCanonicalJsonDigestWithinLimit,
   strictCanonicalSha256,
 } from './strict-canonical-json'
 import {
@@ -1988,6 +1989,18 @@ export async function writeCopierSnapshotTrustRawArtifactV2(
     throw copierSnapshotTrustRawError('a claimed transaction runner is required')
   }
   const captured = captureCopierSnapshotTrustRawArtifactV2Input(input)
+  const outerDigest = strictCanonicalJsonDigestWithinLimit(
+    captured.artifact,
+    COPIER_SNAPSHOT_TRUST_RAW_MAX_UNCOMPRESSED_BYTES
+  )
+  if (!outerDigest.withinLimit) {
+    throw copierSnapshotTrustRawError('artifact exceeds the trusted replay limit')
+  }
+  if (outerDigest.sha256 !== captured.sourceRunId) {
+    throw copierSnapshotTrustRawError(
+      'outer artifact does not match its immutable source-run anchor'
+    )
+  }
   const normalized = normalizeCopierSnapshotTrustRawArtifactV2Input(captured)
   const prepared = prepareCopierSnapshotTrustRawArtifactV2(normalized)
   prepared.durableCompressedBytes = await uploadDeterministicRaw(

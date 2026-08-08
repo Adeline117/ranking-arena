@@ -493,6 +493,35 @@ describe('copier snapshot trust RAW artifact v2 writer', () => {
     expect(database.runTransaction).not.toHaveBeenCalled()
   })
 
+  it('checks the bounded outer digest before semantic replay or RAW side effects', async () => {
+    const database = databaseHarness()
+
+    await expect(
+      Reflect.apply(writeCopierSnapshotTrustRawArtifactV2, undefined, [
+        { artifact: {}, sourceRunId: 'f'.repeat(64) },
+        database.runTransaction,
+      ])
+    ).rejects.toThrow('outer artifact does not match its immutable source-run anchor')
+
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(database.runTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects an over-limit outer stream before semantic replay or RAW side effects', async () => {
+    const database = databaseHarness()
+    const artifact = { rows: new Array(134_217_728) }
+
+    await expect(
+      Reflect.apply(writeCopierSnapshotTrustRawArtifactV2, undefined, [
+        { artifact, sourceRunId: 'f'.repeat(64) },
+        database.runTransaction,
+      ])
+    ).rejects.toThrow('artifact exceeds the trusted replay limit')
+
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(database.runTransaction).not.toHaveBeenCalled()
+  })
+
   it('requires a caller-owned transaction before reading input or doing Storage I/O', async () => {
     let wrapperTraps = 0
     const wrapped = new Proxy(artifactV2(), {
