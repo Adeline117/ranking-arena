@@ -225,6 +225,13 @@ function SearchContent() {
     didYouMean,
   } = mapped
 
+  // A platform-filtered response only contains traders from the selected
+  // platform. Keep that URL state in the option set so the filter does not
+  // remove its own active indicator and clear action after a selection.
+  const platformOptions = platformFilter
+    ? [...new Set([platformFilter, ...availablePlatforms])]
+    : availablePlatforms
+
   const loading = swrLoading && !!debouncedQuery
   const hasLastGoodSearchData = !!searchFetchError && !!debouncedQuery && !!rawSearchData?.results
   const searchError = !!searchFetchError && !!debouncedQuery && !hasLastGoodSearchData
@@ -841,13 +848,14 @@ function SearchContent() {
           </nav>
         )}
 
-        {/* Platform filter pills (when viewing traders tab and multiple platforms exist) */}
+        {/* Platform filter pills (also remain visible while a platform is active) */}
         {query &&
           !loading &&
           !searchError &&
           (activeTab === 'all' || activeTab === 'traders') &&
-          availablePlatforms.length > 1 && (
-            <div
+          (platformOptions.length > 1 || !!platformFilter) && (
+            <nav
+              aria-label={t('platform')}
               style={{
                 display: 'flex',
                 gap: 6,
@@ -870,6 +878,8 @@ function SearchContent() {
               </span>
               <Link
                 href={`/search?q=${encodeURIComponent(query)}${activeTab !== 'all' ? `&tab=${activeTab}` : ''}`}
+                className="touch-target-sm"
+                aria-current={!platformFilter ? 'page' : undefined}
                 style={{
                   padding: '4px 12px',
                   borderRadius: tokens.radius.full,
@@ -886,13 +896,15 @@ function SearchContent() {
               >
                 {t('searchTabAll')}
               </Link>
-              {availablePlatforms.slice(0, 8).map((p) => {
+              {platformOptions.slice(0, 8).map((p) => {
                 const name = EXCHANGE_CONFIG[p as keyof typeof EXCHANGE_CONFIG]?.name || p
                 const isActive = platformFilter === p
                 return (
                   <Link
                     key={p}
                     href={`/search?q=${encodeURIComponent(query)}${activeTab !== 'all' ? `&tab=${activeTab}` : ''}&platform=${encodeURIComponent(p)}`}
+                    className="touch-target-sm"
+                    aria-current={isActive ? 'page' : undefined}
                     style={{
                       padding: '4px 12px',
                       borderRadius: tokens.radius.full,
@@ -911,7 +923,7 @@ function SearchContent() {
                   </Link>
                 )
               })}
-            </div>
+            </nav>
           )}
 
         {loading ? (
