@@ -232,6 +232,21 @@ export default function TraderHeader({
         overflow: 'visible',
       }}
     >
+      {hasCover && (
+        <Box
+          aria-hidden="true"
+          className="trader-cover-scrim"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: tokens.radius.lg,
+            background: 'var(--color-backdrop-heavy)',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
+      )}
+
       {/* Profile Info — compact single-row layout */}
       <Box
         className="profile-header-info"
@@ -368,7 +383,8 @@ export default function TraderHeader({
                 <Text
                   size="xs"
                   style={{
-                    color: hasCover ? alpha(tokens.colors.white, 70) : tokens.colors.text.tertiary,
+                    color: hasCover ? tokens.colors.white : tokens.colors.text.tertiary,
+                    textShadow: hasCover ? 'var(--text-shadow-md)' : undefined,
                     fontSize: tokens.typography.fontSize.xs,
                     lineHeight: 1.3,
                     // #34: Brief scale animation when follower count changes
@@ -383,9 +399,10 @@ export default function TraderHeader({
                 <Text
                   size="xs"
                   style={{
-                    color: tokens.colors.text.tertiary,
+                    color: hasCover ? tokens.colors.white : tokens.colors.text.tertiary,
                     fontSize: tokens.typography.fontSize.xs,
-                    opacity: 0.6,
+                    opacity: hasCover ? 1 : 0.6,
+                    textShadow: hasCover ? 'var(--text-shadow-md)' : undefined,
                   }}
                   title={new Date(lastUpdated).toLocaleString()}
                 >
@@ -402,6 +419,8 @@ export default function TraderHeader({
               size="xs"
               color="secondary"
               style={{
+                color: hasCover ? tokens.colors.white : tokens.colors.text.secondary,
+                textShadow: hasCover ? 'var(--text-shadow-md)' : undefined,
                 marginTop: 2,
                 maxWidth: 400,
                 lineHeight: 1.4,

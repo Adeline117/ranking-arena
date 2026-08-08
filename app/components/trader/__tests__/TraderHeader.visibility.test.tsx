@@ -57,6 +57,34 @@ describe('TraderHeader first render', () => {
     expect(header?.style.opacity).toBe('')
     expect(header?.style.transition).not.toContain('opacity')
   })
+
+  it('backs opaque cover text with a deterministic contrast surface in server markup', () => {
+    const markup = renderToStaticMarkup(
+      <TraderHeader
+        handle="claimed_trader"
+        displayName="Claimed Bound Trader"
+        traderId="trader-1"
+        currentUserId={null}
+        isRegistered
+        coverUrl="https://cdn.example.com/white-cover.jpg"
+        linkedAccountCount={2}
+        claimedBio="Readable profile"
+        lastUpdated="2026-08-08T00:00:00.000Z"
+      />
+    )
+    const host = document.createElement('div')
+    host.innerHTML = markup
+    const scrim = host.querySelector<HTMLElement>('.trader-cover-scrim')
+    const textNodes = Array.from(host.querySelectorAll<HTMLElement>('p'))
+    const subtitle = textNodes.find((node) => node.textContent?.includes('verifiedAccounts'))
+    const updated = textNodes.find((node) => node.textContent?.includes('updated'))
+    const bio = textNodes.find((node) => node.textContent === 'Readable profile')
+
+    expect(scrim).toHaveStyle({ background: 'var(--color-backdrop-heavy)' })
+    for (const node of [subtitle, updated, bio]) {
+      expect(node).toHaveStyle({ color: '#FFFFFF', textShadow: 'var(--text-shadow-md)' })
+    }
+  })
 })
 
 describe('TraderHeaderAvatar semantics', () => {
