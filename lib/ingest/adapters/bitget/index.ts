@@ -298,7 +298,8 @@ const bitgetAdapter: SourceAdapter = {
    * Incremental history pages, newest→oldest (spec §2.3).
    *   position_history: POST trace/order/historyList (sorted by closeTime
    *     desc) — stops on cursor overlap (oldest closeTime ≤ stored cursor).
-   *   copiers: POST trace/trader/followerList — small (top-50), always full.
+   *   copiers: POST trace/trader/followerList — capped top-50 evidence only;
+   *     never a source-level full-publication proof.
    * NOT replayPaged: its completeness assertion treats an early cursor stop
    * as a truncated crawl; incremental stops are the point here.
    */
