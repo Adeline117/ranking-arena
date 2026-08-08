@@ -27,14 +27,11 @@ interface TraderHeaderAvatarProps {
 }
 
 /**
- * 48×48 trader avatar with hover lift, gradient placeholder, blockie
- * fallback for wallet addresses, and Pro badge overlay.
+ * Static 48×48 trader avatar with a gradient placeholder, blockie fallback
+ * for wallet addresses, and Pro badge overlay.
  *
- * Self-contained: hover/load/error state lives here so the parent
- * TraderHeader doesn't have to wire setters.
- *
- * Click scrolls the page back to the top — historically this was the
- * cheapest "reset view" affordance on long trader pages.
+ * Load/error state stays local so the parent TraderHeader does not have to
+ * wire image setters. The avatar is identity content, not an action.
  */
 export function TraderHeaderAvatar({
   traderId,
@@ -43,19 +40,13 @@ export function TraderHeaderAvatar({
   claimedAvatarUrl,
   proBadgeTier,
 }: TraderHeaderAvatarProps) {
-  const [hovered, setHovered] = useState(false)
   const [errored, setErrored] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
   const effectiveAvatarUrl = claimedAvatarUrl || avatarUrl
 
   return (
-    <Box
-      style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}
-      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <Box style={{ position: 'relative', flexShrink: 0 }}>
       <Box
         className="profile-header-avatar"
         style={{
@@ -65,19 +56,14 @@ export function TraderHeaderAvatar({
           // Always use the gradient as background — it shows through as a blur
           // placeholder until the real avatar image loads (and then gets covered).
           background: getAvatarGradient(traderId),
-          border: `2px solid ${hovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+          border: `2px solid ${tokens.colors.border.primary}`,
           display: 'grid',
           placeItems: 'center',
           fontWeight: tokens.typography.fontWeight.black,
           fontSize: tokens.typography.fontSize.base,
           color: tokens.colors.white,
           overflow: 'hidden',
-          boxShadow: hovered
-            ? `0 4px 16px var(--color-accent-primary-40)`
-            : `0 2px 8px var(--color-overlay-light)`,
-          transition: 'all 0.3s ease',
-          transform: hovered ? 'scale(1.05)' : 'scale(1)',
-          cursor: 'pointer',
+          boxShadow: `0 2px 8px var(--color-overlay-light)`,
           position: 'relative',
         }}
       >

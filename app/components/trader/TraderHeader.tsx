@@ -230,8 +230,6 @@ export default function TraderHeader({
         boxShadow: '0 4px 16px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
         position: 'relative',
         overflow: 'visible',
-        opacity: mounted ? 1 : 0,
-        transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       {/* Profile Info — compact single-row layout */}
@@ -247,7 +245,7 @@ export default function TraderHeader({
           zIndex: 1,
         }}
       >
-        {/* Avatar — compact 48px, scrolls to top on click */}
+        {/* Avatar — compact 48px static identity */}
         <TraderHeaderAvatar
           traderId={traderId}
           handle={handle}
