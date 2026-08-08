@@ -33,6 +33,25 @@ jest.mock('@/app/components/user/LevelBadge', () => ({
     <span data-testid="level-badge" data-contrast-surface={String(Boolean(contrastSurface))} />
   ),
 }))
+jest.mock('@/app/components/common/ShareButton', () => ({
+  __esModule: true,
+  default: ({
+    data,
+    showLabel,
+  }: {
+    data: { type: string; url: string; userHandle?: string }
+    showLabel?: boolean
+  }) => (
+    <button
+      type="button"
+      aria-label="share profile"
+      data-share-type={data.type}
+      data-share-url={data.url}
+      data-share-handle={data.userHandle}
+      data-show-label={String(showLabel)}
+    />
+  ),
+}))
 
 import UserProfileHeader from '../UserProfileHeader'
 
@@ -145,6 +164,28 @@ describe('UserProfileHeader following privacy', () => {
     expect(followersButton.querySelector('p')).toBeNull()
     expect(followingButton.querySelector('span')).not.toBeNull()
     expect(followersButton.querySelector('span')).not.toBeNull()
+  })
+
+  it('offers the canonical encoded profile URL to the share action', () => {
+    render(
+      <UserProfileHeader
+        profile={{ ...profile(true, true), handle: '爱丽丝 user' }}
+        handle="爱丽丝 user"
+        isOwnProfile={false}
+        currentUserId={null}
+        followersCount={3}
+        followingCount={7}
+        onFollowersCountChange={jest.fn()}
+        onFollowingClick={jest.fn()}
+        onFollowersClick={jest.fn()}
+      />
+    )
+
+    const share = screen.getByRole('button', { name: 'share profile' })
+    expect(share).toHaveAttribute('data-share-type', 'user')
+    expect(share).toHaveAttribute('data-share-handle', '爱丽丝 user')
+    expect(share).toHaveAttribute('data-show-label', 'false')
+    expect(share.getAttribute('data-share-url')).toMatch(/\/u\/%E7%88%B1%E4%B8%BD%E4%B8%9D%20user$/)
   })
 
   it('uses opaque cover text and the contrast badge surface', () => {

@@ -4202,6 +4202,7 @@ const ja = {
 
   shareTraderText: 'Arenaでトップトレーダー{name}を発見、{period} ROI {roi}% {url}',
   sharePostText: '{title} - Arena コミュニティより {url}',
+  shareUserText: 'Arenaで @{handle} をチェック {url}',
   shareLibraryText: 'おすすめの読書：「{title}」{author}著 {url}',
 
   bookshelfLoginPrompt: 'ログインして本棚を表示',

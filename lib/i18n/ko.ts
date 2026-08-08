@@ -4476,6 +4476,7 @@ const ko = {
   // Share text templates
   shareTraderText: 'Arena에서 탑 트레이더 {name}을(를) 발견했습니다, {period} ROI {roi}% {url}',
   sharePostText: '{title} - Arena 커뮤니티에서 {url}',
+  shareUserText: 'Arena에서 @{handle} 프로필 보기 {url}',
   shareLibraryText: '추천 도서: "{title}" 저자 {author} {url}',
 
   // BookshelfTab

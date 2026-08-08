@@ -11,6 +11,8 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatDateLocalized } from '@/lib/utils/format'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 import LevelBadge from '@/app/components/user/LevelBadge'
+import ShareButton from '@/app/components/common/ShareButton'
+import { BASE_URL } from '@/lib/constants/urls'
 
 import { features } from '@/lib/features'
 import { avatarSrc, isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
@@ -479,6 +481,17 @@ export default function UserProfileHeader({
         >
           ← {t('back')}
         </button>
+
+        <ShareButton
+          data={{
+            type: 'user',
+            url: `${BASE_URL.replace(/\/$/, '')}/u/${encodeURIComponent(profile.handle)}`,
+            userHandle: profile.handle,
+          }}
+          size="sm"
+          variant="ghost"
+          showLabel={false}
+        />
 
         {isOwnProfile && (
           <button

@@ -4518,6 +4518,7 @@ const zh = {
   // Share text templates (分享文案模板)
   shareTraderText: '在Arena发现了一位表现优异的交易员 {name}，{period} ROI {roi}% {url}',
   sharePostText: '{title} - 来自Arena社区 {url}',
+  shareUserText: '在 Arena 发现 @{handle} {url}',
   shareLibraryText: '推荐阅读《{title}》by {author} {url}',
 
   // BookshelfTab (书架)

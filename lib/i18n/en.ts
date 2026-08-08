@@ -4628,6 +4628,7 @@ const en = {
   // Share text templates
   shareTraderText: 'Found a top trader {name} on Arena, {period} ROI {roi}% {url}',
   sharePostText: '{title} - from Arena Community {url}',
+  shareUserText: 'Discover @{handle} on Arena {url}',
   shareLibraryText: 'Recommended reading: "{title}" by {author} {url}',
 
   // BookshelfTab

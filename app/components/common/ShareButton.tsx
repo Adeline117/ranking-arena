@@ -6,7 +6,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { trackEvent } from '@/lib/analytics/track'
 
-export type ShareContentType = 'trader' | 'post'
+export type ShareContentType = 'trader' | 'post' | 'user'
 
 /** Append UTM tracking params to a share URL for marketing attribution */
 function withUtm(url: string, medium: string): string {
@@ -30,6 +30,8 @@ interface ShareData {
   roi?: number
   // Post
   title?: string
+  // User profile
+  userHandle?: string
 }
 
 function buildShareText(data: ShareData, t: (key: string) => string): string {
@@ -47,6 +49,10 @@ function buildShareText(data: ShareData, t: (key: string) => string): string {
     case 'post': {
       const title = data.title || ''
       return t('sharePostText').replace('{title}', title).replace('{url}', data.url)
+    }
+    case 'user': {
+      const handle = data.userHandle || ''
+      return t('shareUserText').replace('{handle}', handle).replace('{url}', data.url)
     }
     default:
       return data.url
@@ -189,7 +195,7 @@ export default function ShareButton({
     const shareText = text.replace(data.url, shareUrl)
     trackShare('whatsapp')
     openPopup(`https://wa.me/?text=${encodeURIComponent(shareText)}`)
-  }, [text, data.url, openPopup])
+  }, [text, data.url, openPopup, trackShare])
 
   const pad =
     size === 'sm'
@@ -205,6 +211,7 @@ export default function ShareButton({
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
+        type="button"
         onClick={handleClick}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -212,6 +219,7 @@ export default function ShareButton({
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[2],
+          minHeight: tokens.touchTarget.min,
           padding: pad,
           fontSize,
           borderRadius: tokens.radius.lg,
@@ -342,6 +350,7 @@ function DropdownItem({
 }) {
   return (
     <button
+      type="button"
       role="menuitem"
       onClick={onClick}
       style={{
@@ -349,6 +358,7 @@ function DropdownItem({
         alignItems: 'center',
         gap: 10,
         width: '100%',
+        minHeight: tokens.touchTarget.min,
         padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
         background: 'transparent',
         border: 'none',
