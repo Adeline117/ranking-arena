@@ -180,7 +180,7 @@ function completeSnapshot(): Dict[] {
 describe('BTCC full copier snapshot authority', () => {
   it('selects only the canonical active-serving futures human USDT full source', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.btcc.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.btcc.copiers@2',
     })
     expect(btccAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(btccAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -234,6 +234,7 @@ describe('BTCC full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -255,6 +256,7 @@ describe('BTCC full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: [],
       })
@@ -270,6 +272,7 @@ describe('BTCC full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parseRows(acquisition.pages),
       })
@@ -301,6 +304,7 @@ describe('BTCC full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -514,12 +518,16 @@ describe('BTCC full copier snapshot authority', () => {
     const verify = (candidate: ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
 
     expect(verify(rows.slice(0, -1))).toEqual({ verified: false })
     expect(verify([rows[1], rows[0], ...rows.slice(2)])).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
 
     const drifts: ParsedCopierRow[] = [
       { ...rows[0], kind: 'copiers', ts: '2026-08-04T12:00:00Z' },

@@ -203,7 +203,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     )
     expect(BITUNIX_COPIER_PAGE_SIZE).toBe(500)
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@2',
+      contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@3',
     })
     expect(bitunixAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(bitunixAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -246,7 +246,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
       claim_observations: [{ segment_id: 'default', reason: 'reported_end', page_ordinal: 2 }],
       scan_terminal_state: 'exhausted',
       blocker_reasons: [],
-      verifier_contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@2',
+      verifier_contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@3',
     })
 
     const parsed = parseRows(acquisition.pages)
@@ -259,6 +259,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parsed,
       })
@@ -281,6 +282,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: [],
       })
@@ -296,6 +298,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parseRows(acquisition.pages),
       })
@@ -422,6 +425,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parseRows(acquisition.pages),
       })
@@ -445,6 +449,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parsed,
       })
@@ -612,12 +617,16 @@ describe('Bitunix futures full copier snapshot authority', () => {
     const verify = (candidate: ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
 
     expect(verify(parsed.slice(0, -1))).toEqual({ verified: false })
     expect(verify([parsed[1], parsed[0], ...parsed.slice(2)])).toEqual({ verified: false })
+    expect(verify(parsed.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
 
     const drifts: ParsedCopierRow[] = [
       { ...parsed[0], kind: 'copiers', ts: '2026-08-04T12:00:00Z' },
@@ -644,6 +653,7 @@ describe('Bitunix futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parsed,
       })

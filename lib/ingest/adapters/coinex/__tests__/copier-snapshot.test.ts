@@ -108,10 +108,18 @@ function session(respond: (url: string) => unknown): {
     pageFetch,
     fetchSession: {
       sourceSlug: 'coinex_futures',
-      page: async () => page,
+      page: async () => page as Awaited<ReturnType<FetchSession['page']>>,
+      api: async () => {
+        throw new Error('API context is not used by this test session')
+      },
       pageFetch,
+      capture: async () => {
+        throw new Error('request capture is not used by this test session')
+      },
       paced: async <T>(fn: () => Promise<T>) => fn(),
-    } as unknown as FetchSession,
+      saveState: async () => undefined,
+      close: async () => undefined,
+    },
   }
 }
 
@@ -174,7 +182,7 @@ function completeSnapshot(): Dict[] {
 describe('CoinEx full copier snapshot authority', () => {
   it('selects only the canonical active-serving futures human USDT full source', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.coinex.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.coinex.copiers@2',
     })
     expect(coinexAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(coinexAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -219,6 +227,7 @@ describe('CoinEx full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -240,6 +249,7 @@ describe('CoinEx full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: [],
       })
@@ -421,6 +431,7 @@ describe('CoinEx full copier snapshot authority', () => {
     ) =>
       selected.verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: candidatePages,
         rows: candidateRows,
       })
@@ -443,6 +454,9 @@ describe('CoinEx full copier snapshot authority', () => {
         )
       )
     ).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
     expect(verify(rows.map((row) => ({ ...row, ts: '2026-08-03T10:00:00Z' })))).toEqual({
       verified: false,
     })

@@ -139,7 +139,7 @@ describe('Toobit full copier snapshot authority', () => {
 
   it('selects only the canonical active-serving futures human USDT full source', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.toobit.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.toobit.copiers@2',
     })
     expect(toobitAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(toobitAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -194,6 +194,7 @@ describe('Toobit full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: LEADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -216,6 +217,7 @@ describe('Toobit full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: LEADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -361,6 +363,7 @@ describe('Toobit full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: LEADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -375,6 +378,7 @@ describe('Toobit full copier snapshot authority', () => {
     const verify = (candidate: readonly ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: LEADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
@@ -407,6 +411,7 @@ describe('Toobit full copier snapshot authority', () => {
     const verify = (candidate: readonly ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: LEADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
@@ -416,6 +421,9 @@ describe('Toobit full copier snapshot authority', () => {
         rows.map((row, index) => (index === 1 ? { ...row, ts: '2000-01-01T00:00:00.000Z' } : row))
       )
     ).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
     expect(verify(rows.map((row) => ({ ...row, ts: '2999-01-01T00:00:00.000Z' })))).toEqual({
       verified: false,
     })

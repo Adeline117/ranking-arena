@@ -7,7 +7,7 @@ import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { dedupeHash } from './parsers'
 
 export const GATE_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.gate.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.gate.copiers@2' as const
 export const GATE_COPIER_HISTORY_URL =
   'https://www.gate.com/api/copytrade/copy_trading/trader/follow_user' as const
 export const GATE_COPIER_PAGE_SIZE = 10 as const
@@ -288,17 +288,14 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   const sourceRows = pages.flatMap((page) => page.rows)
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
-  // This endpoint's create_time is the beginning of a follow relationship,
-  // not the observation time of the live snapshot. The parser therefore owns
-  // one job-scoped clock, captured before acquisition and shared by every row.
-  const parsedAt = input.rows[0]?.ts ?? null
+  // create_time is relationship age, not snapshot time. Bind rows to the exact
+  // job-scoped ParseCtx clock captured before acquisition.
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    sourceRows.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }

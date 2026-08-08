@@ -5,10 +5,11 @@ import type {
   SelectedCopierSnapshotVerifier,
 } from '../../core/adapter'
 import type { HistoryTerminalVerificationInput } from '../../history-acquisition'
+import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 
 export const BITGET_BOTS_COPIER_PAGE_CONTRACT = 'arena.ingest.bitget-bots-copier-page@1' as const
 export const BITGET_BOTS_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.bitget_bots.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.bitget_bots.copiers@2' as const
 export const BITGET_BOTS_COPIER_URL =
   'https://www.bitget.com/v1/strategyPlatform/public/followRank' as const
 
@@ -183,6 +184,17 @@ function copierHash(...fields: unknown[]): string {
 function verifyConservation(input: CopierSnapshotVerificationInput) {
   const snapshot = validatePages(input.pages, input.exchangeTraderId)
   if (!snapshot || snapshot.followers.length !== input.rows.length) {
+    return { verified: false } as const
+  }
+
+  // Row time is source-authored lastUpdateTime, not parserClock. Still bind the
+  // parser invocation to one canonical pre-fetch acquisition clock.
+  const firstFetchedAt = input.pages[0]?.fetchedAt
+  if (
+    !isCanonicalPostgresTimestamp(input.parserClock) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(input.parserClock) > Date.parse(firstFetchedAt)
+  ) {
     return { verified: false } as const
   }
 

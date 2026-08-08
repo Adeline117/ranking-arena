@@ -111,10 +111,18 @@ function session(respond: (url: string) => unknown): {
     pageFetch,
     fetchSession: {
       sourceSlug: 'gate_futures',
-      page: async () => page,
+      page: async () => page as Awaited<ReturnType<FetchSession['page']>>,
+      api: async () => {
+        throw new Error('API context is not used by this test session')
+      },
       pageFetch,
+      capture: async () => {
+        throw new Error('request capture is not used by this test session')
+      },
       paced: async <T>(fn: () => Promise<T>) => fn(),
-    } as unknown as FetchSession,
+      saveState: async () => undefined,
+      close: async () => undefined,
+    },
   }
 }
 
@@ -171,7 +179,7 @@ function completeSnapshot(): Dict[] {
 describe('Gate futures full copier snapshot authority', () => {
   it('selects only the canonical active-serving futures human USDT full source', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.gate.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.gate.copiers@2',
     })
     expect(gateAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(gateAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -229,6 +237,7 @@ describe('Gate futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -250,6 +259,7 @@ describe('Gate futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: [],
       })
@@ -427,12 +437,16 @@ describe('Gate futures full copier snapshot authority', () => {
     const verify = (candidate: ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
 
     expect(verify(rows.slice(0, -1))).toEqual({ verified: false })
     expect(verify([rows[1], rows[0], ...rows.slice(2)])).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
 
     const drifts: ParsedCopierRow[] = [
       { ...rows[0], kind: 'copiers', ts: '2026-08-04T12:00:00Z' },

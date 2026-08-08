@@ -853,6 +853,7 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockVerifyCopierTerminal).toHaveBeenCalledTimes(1)
     expect(mockVerifyCopierConservation).toHaveBeenCalledWith({
       exchangeTraderId: job.data.exchangeTraderId,
+      parserClock: wrapper.acquisition.attempt_started_at,
       pages: expect.any(Array),
       rows: [copierRow, copierRow, copierRow],
     })

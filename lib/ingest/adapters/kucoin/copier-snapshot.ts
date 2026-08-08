@@ -7,7 +7,7 @@ import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { dedupeHash } from './parsers'
 
 export const KUCOIN_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.kucoin.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.kucoin.copiers@2' as const
 export const KUCOIN_COPIER_HISTORY_URL =
   'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/leadShow/copyTraders' as const
 export const KUCOIN_COPIER_PAGE_SIZE = 10 as const
@@ -255,15 +255,13 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
   // KuCoin exposes relationship age, not an observation clock. Bind every
-  // parsed row to the one job clock captured before the first response.
-  const parsedAt = input.rows[0]?.ts ?? null
+  // parsed row to the exact ParseCtx clock captured before acquisition.
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    sourceRows.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }

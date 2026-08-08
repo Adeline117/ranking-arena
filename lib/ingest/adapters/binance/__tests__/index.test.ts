@@ -871,7 +871,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
 
     it('selects only the reviewed board endpoint', () => {
       expect(copierVerifier(copierSource())).toMatchObject({
-        contract: 'arena.ingest.history-terminal-verifier.binance.copiers@1',
+        contract: 'arena.ingest.history-terminal-verifier.binance.copiers@2',
       })
       expect(
         binanceAdapter.verifyCopierSnapshot?.(
@@ -938,6 +938,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
         expect(
           copierVerifier(src).verifyConservation({
             exchangeTraderId: 'portfolio-1',
+            parserClock: acquisition.artifact.attempt_started_at,
             pages: acquisition.pages,
             rows: copierRows,
           })
@@ -972,6 +973,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       expect(
         copierVerifier(src).verifyConservation({
           exchangeTraderId: 'portfolio-1',
+          parserClock: acquisition.artifact.attempt_started_at,
           pages: acquisition.pages,
           rows,
         })
@@ -1038,6 +1040,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       const verify = (candidate: typeof rows) =>
         copierVerifier(src).verifyConservation({
           exchangeTraderId: 'portfolio-1',
+          parserClock: acquisition.artifact.attempt_started_at,
           pages: acquisition.pages,
           rows: candidate,
         })
@@ -1064,6 +1067,9 @@ describe('Binance evidence-preserving leaderboard capture', () => {
           rows.map((row, index) => (index === 1 ? { ...row, ts: '2000-01-01T00:00:00.000Z' } : row))
         )
       ).toEqual({ verified: false })
+      expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+        verified: false,
+      })
       expect(verify(rows.map((row) => ({ ...row, ts: '2999-01-01T00:00:00.000Z' })))).toEqual({
         verified: false,
       })

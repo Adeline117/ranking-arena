@@ -179,7 +179,7 @@ function parseRows(
 describe('MEXC futures full copier snapshot authority', () => {
   it('selects only the canonical active-serving futures mixed USDT full source', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.mexc.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.mexc.copiers@2',
     })
     expect(mexcAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(mexcAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -227,6 +227,7 @@ describe('MEXC futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parsed,
       })
@@ -248,6 +249,7 @@ describe('MEXC futures full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: [],
       })
@@ -439,12 +441,16 @@ describe('MEXC futures full copier snapshot authority', () => {
     const verify = (candidate: ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
 
     expect(verify(parsed.slice(0, -1))).toEqual({ verified: false })
     expect(verify([parsed[1], parsed[0], ...parsed.slice(2)])).toEqual({ verified: false })
+    expect(verify(parsed.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
 
     const drifts: ParsedCopierRow[] = [
       { ...parsed[0], kind: 'copiers', ts: '2026-08-04T12:00:00Z' },

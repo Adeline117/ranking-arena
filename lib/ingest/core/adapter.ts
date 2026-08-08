@@ -52,6 +52,8 @@ export interface LeaderboardValidationOptions {
 
 export interface CopierSnapshotVerificationInput {
   exchangeTraderId: string
+  /** Exact job-scoped parser clock supplied to ParseCtx.scrapedAt. */
+  parserClock: string
   pages: readonly Readonly<RawPage>[]
   rows: readonly Readonly<ParsedCopierRow>[]
 }

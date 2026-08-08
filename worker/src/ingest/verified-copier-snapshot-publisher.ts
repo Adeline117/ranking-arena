@@ -336,6 +336,7 @@ export async function publishCapturedVerifiedCopierSnapshot(
   const rows = parseCopierRows(input.adapter, pages, ctx)
   const conservation = verifier.verifyConservation({
     exchangeTraderId: input.trader.exchange_trader_id,
+    parserClock: wrapper.acquisition.attempt_started_at,
     pages,
     rows,
   })

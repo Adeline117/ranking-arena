@@ -18,7 +18,7 @@ import { dedupeHash } from './parsers'
  * database-snapshot semantics at the crawl-completion observedAt clock.
  */
 export const BITUNIX_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.bitunix.copiers@2' as const
+  'arena.ingest.history-terminal-verifier.bitunix.copiers@3' as const
 
 const WRAPPER_FIELDS = ['contract', 'exchangeTraderId', 'request', 'response'] as const
 const REQUEST_FIELDS = ['page', 'pageSize', 'traderUid'] as const
@@ -361,14 +361,12 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   const sourceRows = pages.flatMap((page) => page.rows)
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
-  const parsedAt = input.rows[0]?.ts ?? null
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    sourceRows.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }
@@ -380,7 +378,6 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
     const projection = bitunixCopierProjection(sourceRow)
     if (
       projection === null ||
-      parsedAt === null ||
       Date.parse(projection.followedAt) > Date.parse(parsedAt) ||
       projection.identityKeys.some((identity) => identities.has(identity)) ||
       row.kind !== 'copiers' ||

@@ -7,7 +7,7 @@ import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { dedupeHash } from './parsers'
 
 export const TOOBIT_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.toobit.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.toobit.copiers@2' as const
 export const TOOBIT_COPIER_DETAIL_URL =
   'https://bapi.toobit.com/bapi/v1/copy-trading/leader-detail' as const
 export const TOOBIT_COPIER_FOLLOWERS_URL =
@@ -179,17 +179,14 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
     return { verified: false } as const
   }
 
-  // The endpoint has no follower event timestamp. Production parsing uses one
-  // job-scoped clock captured before either response, so require canonical
-  // snapshot-wide equality and prevent a forged post-fetch timestamp.
-  const parsedAt = input.rows[0]?.ts ?? null
+  // The endpoint has no follower event timestamp. Bind every row to the exact
+  // job-scoped ParseCtx clock captured before either response.
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    snapshot.followers.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }

@@ -12,7 +12,7 @@ import {
 import { dedupeHash } from './parsers'
 
 export const BTCC_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.btcc.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.btcc.copiers@2' as const
 
 const WRAPPER_FIELDS = ['contract', 'exchangeTraderId', 'request', 'response'] as const
 const REQUEST_FIELDS = ['pageNum', 'pageSize', 'traderId'] as const
@@ -246,14 +246,12 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   const sourceRows = pages.flatMap((page) => page.rows)
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
-  const parsedAt = input.rows[0]?.ts ?? null
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    sourceRows.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }
@@ -264,7 +262,7 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
     const sourceRow = sourceRows[index]
     const projection = btccCopierProjection(sourceRow)
     const durationDays =
-      projection === null || parsedAt === null
+      projection === null
         ? null
         : Math.floor((Date.parse(parsedAt) - projection.followedAt) / DAY_MS)
     if (

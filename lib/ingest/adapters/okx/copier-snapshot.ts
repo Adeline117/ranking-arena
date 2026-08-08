@@ -7,7 +7,7 @@ import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { dedupeHash } from './parsers'
 
 export const OKX_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.okx.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.okx.copiers@2' as const
 export const OKX_COPIER_HISTORY_URL =
   'https://www.okx.com/api/v5/copytrading/public-copy-traders' as const
 
@@ -160,15 +160,9 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
     return { verified: false } as const
   }
 
-  if (snapshot.candidates.length === 0) {
-    return { verified: true, envelopeRowCount: 0 } as const
-  }
-
   // OKX exposes no copier event timestamp. The parser stamps every candidate
-  // with one job-scoped clock captured before the immutable page was fetched.
-  // Prove that shared clock instead of accepting independently forged row
-  // timestamps whose derived durations merely happen to be self-consistent.
-  const parsedAt = input.rows[0]?.ts ?? null
+  // with the exact job-scoped ParseCtx clock captured before acquisition.
+  const parsedAt = input.parserClock
   const fetchedAt = input.pages[0]?.fetchedAt
   if (
     !isCanonicalPostgresTimestamp(parsedAt) ||
@@ -176,6 +170,10 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
     Date.parse(parsedAt) > Date.parse(fetchedAt)
   ) {
     return { verified: false } as const
+  }
+
+  if (snapshot.candidates.length === 0) {
+    return { verified: true, envelopeRowCount: 0 } as const
   }
   const parsedAtMs = Date.parse(parsedAt)
 

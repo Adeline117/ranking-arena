@@ -7,7 +7,7 @@ import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { xtCopierDedupeHash } from './parsers'
 
 export const XT_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.xt.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.xt.copiers@2' as const
 export const XT_COPIER_HISTORY_URL =
   'https://www.xt.com/fapi/user/v1/public/copy-trade/leader-follower-page' as const
 export const XT_COPIER_PAGE_SIZE = 20 as const
@@ -228,18 +228,14 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   const sourceRows = pages.flatMap((page) => page.rows)
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
-  // XT exposes no copier event timestamp. Tier-C stamps every row with one
-  // job-scoped parser clock captured before acquisition starts. Do not treat a
-  // per-page fetch clock as source time: prove only canonical form,
-  // snapshot-wide equality, and the production ordering constraint.
-  const parsedAt = input.rows[0]?.ts ?? null
+  // XT exposes no copier event timestamp. Bind rows to the exact job-scoped
+  // ParseCtx clock captured before acquisition starts.
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    sourceRows.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }

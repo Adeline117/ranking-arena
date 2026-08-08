@@ -178,7 +178,7 @@ function completeSnapshot(): Dict[] {
 describe('KuCoin full copier snapshot authority', () => {
   it('selects only the canonical active-serving futures mixed USDT full source', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.kucoin.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.kucoin.copiers@2',
     })
     expect(kucoinAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(kucoinAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -224,6 +224,7 @@ describe('KuCoin full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -253,6 +254,7 @@ describe('KuCoin full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -274,6 +276,7 @@ describe('KuCoin full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: [],
       })
@@ -442,6 +445,7 @@ describe('KuCoin full copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -458,6 +462,7 @@ describe('KuCoin full copier snapshot authority', () => {
     ) =>
       selected.verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: candidatePages,
         rows: candidateRows,
       })
@@ -478,6 +483,9 @@ describe('KuCoin full copier snapshot authority', () => {
         )
       )
     ).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
     expect(verify(rows.map((row) => ({ ...row, ts: '2026-08-03T10:00:00Z' })))).toEqual({
       verified: false,
     })

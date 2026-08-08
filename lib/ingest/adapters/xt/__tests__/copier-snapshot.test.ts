@@ -151,7 +151,7 @@ function parseRows(
 describe('XT futures copier snapshot authority', () => {
   it('selects only the canonical XT futures USDT full-depth source', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.xt.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.xt.copiers@2',
     })
     expect(xtAdapter.verifyCopierSnapshot?.(source({ copier_table_depth: 'top10' }))).toBeNull()
     expect(xtAdapter.verifyCopierSnapshot?.(source({ currency: 'USDC' }))).toBeNull()
@@ -212,6 +212,7 @@ describe('XT futures copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -233,6 +234,7 @@ describe('XT futures copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: [],
       })
@@ -254,6 +256,7 @@ describe('XT futures copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parseRows(acquisition.pages),
       })
@@ -390,6 +393,7 @@ describe('XT futures copier snapshot authority', () => {
     const verify = (candidate: readonly ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: TRADER_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
@@ -404,6 +408,9 @@ describe('XT futures copier snapshot authority', () => {
         )
       )
     ).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
     expect(verify(rows.map((row) => ({ ...row, ts: '2026-08-04T00:00:00Z' })))).toEqual({
       verified: false,
     })

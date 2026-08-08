@@ -35,6 +35,7 @@ import {
   type VerifiedCopierSnapshotPublisherRuntime,
 } from '../verified-copier-snapshot-publisher'
 
+const parserClock = '2026-08-04T10:00:00.000Z'
 const fetchedAt = '2026-08-04T10:00:01.000Z'
 const source = {
   id: 7,
@@ -60,7 +61,7 @@ function artifact(
     source: { id: source.id, slug: source.slug },
     trader: { id: trader.id, exchange_trader_id: trader.exchange_trader_id },
     history_kind: 'copiers',
-    attempt_started_at: '2026-08-04T10:00:00.000Z',
+    attempt_started_at: parserClock,
     starting_cursor: null,
     capture_config: { caller_page_cap: null },
     pages:
@@ -124,7 +125,7 @@ function publicationReceipt(
 function copierRow(raw: Record<string, unknown>): ParsedCopierRow {
   return {
     kind: 'copiers',
-    ts: fetchedAt,
+    ts: parserClock,
     copierLabel: 'copier-1',
     copierPnl: 12.5,
     copierInvested: null,
@@ -230,6 +231,13 @@ describe('verified Tier-B copier snapshot publisher', () => {
       artifact: acquisition.artifact,
       sourceRunId: acquisition.sourceRunId,
     })
+    expect(parseHistory).toHaveBeenCalledWith(rawPayload, 'copiers', {
+      sourceSlug: source.slug,
+      currency: source.currency,
+      tfLabelMap: source.tf_label_map,
+      scrapedAt: parserClock,
+      meta: source.meta,
+    })
     expect(persistLaneRawArtifact).toHaveBeenCalledWith({
       artifact: expect.objectContaining({
         publication_lane: 'tier_b',
@@ -239,6 +247,7 @@ describe('verified Tier-B copier snapshot publisher', () => {
     })
     expect(verifyConservation).toHaveBeenCalledWith({
       exchangeTraderId: trader.exchange_trader_id,
+      parserClock,
       pages: [
         {
           pageIndex: 1,

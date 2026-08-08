@@ -68,10 +68,18 @@ function session(
   }
   return {
     sourceSlug: 'bitget_bots_futures',
-    page: async () => page,
+    page: async () => page as Awaited<ReturnType<FetchSession['page']>>,
+    api: async () => {
+      throw new Error('API context is not used by this test session')
+    },
     pageFetch: respond,
+    capture: async () => {
+      throw new Error('request capture is not used by this test session')
+    },
     paced: async <T>(fn: () => Promise<T>) => fn(),
-  } as unknown as FetchSession
+    saveState: async () => undefined,
+    close: async () => undefined,
+  }
 }
 
 function verifier(src = source()) {
@@ -124,10 +132,10 @@ function parseRows(
 describe('Bitget bots copier snapshot authority', () => {
   it('selects only canonical active-serving top-10 futures and spot sources', () => {
     expect(verifier(source('futures'))).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.bitget_bots.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.bitget_bots.copiers@2',
     })
     expect(verifier(source('spot'))).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.bitget_bots.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.bitget_bots.copiers@2',
     })
     expect(
       bitgetBotsAdapter.verifyCopierSnapshot?.(source('futures', { copier_table_depth: 'full' }))
@@ -186,6 +194,7 @@ describe('Bitget bots copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: STRATEGY_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -203,6 +212,7 @@ describe('Bitget bots copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: STRATEGY_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -227,6 +237,7 @@ describe('Bitget bots copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: STRATEGY_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parseRows(acquisition.pages),
       })
@@ -315,6 +326,7 @@ describe('Bitget bots copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: STRATEGY_ID,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: fallbackRows,
       })
@@ -355,9 +367,10 @@ describe('Bitget bots copier snapshot authority', () => {
     const { acquisition } = await capture(fixture('bots-follow-rank.json'))
     const rows = parseRows(acquisition.pages)
     const selected = verifier()
-    const verify = (candidate: readonly ParsedCopierRow[]) =>
+    const verify = (candidate: readonly ParsedCopierRow[], parserClock = PARSED_AT) =>
       selected.verifyConservation({
         exchangeTraderId: STRATEGY_ID,
+        parserClock,
         pages: acquisition.pages,
         rows: candidate,
       })
@@ -369,6 +382,10 @@ describe('Bitget bots copier snapshot authority', () => {
     ).toEqual({ verified: false })
     expect(
       verify(rows.map((row, index) => (index === 0 ? { ...row, ts: PARSED_AT } : row)))
+    ).toEqual({ verified: false })
+    expect(verify(rows, '2026-8-3T10:00:00Z')).toEqual({ verified: false })
+    expect(
+      verify(rows, new Date(Date.parse(acquisition.pages[0].fetchedAt) + 1).toISOString())
     ).toEqual({ verified: false })
     expect(
       verify(

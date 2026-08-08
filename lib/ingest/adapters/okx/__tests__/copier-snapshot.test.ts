@@ -75,7 +75,7 @@ function verifier(src = source()) {
 }
 
 async function capture(payload: unknown, exchangeTraderId = UNIQUE_CODE) {
-  global.fetch = jest.fn(async () => httpOk(payload)) as unknown as typeof fetch
+  global.fetch = jest.fn(async () => httpOk(payload)) as jest.MockedFunction<typeof fetch>
   const src = source()
   const selected = verifier(src)
   return captureHistoryAcquisition({
@@ -114,7 +114,7 @@ describe('OKX copier snapshot authority', () => {
 
   it('selects only the canonical futures SWAP USDT top-10 contract', () => {
     expect(verifier()).toMatchObject({
-      contract: 'arena.ingest.history-terminal-verifier.okx.copiers@1',
+      contract: 'arena.ingest.history-terminal-verifier.okx.copiers@2',
     })
     expect(okxAdapter.verifyCopierSnapshot?.(source({ status: 'inactive' }))).toBeNull()
     expect(okxAdapter.verifyCopierSnapshot?.(source({ serving_mode: 'shadow' }))).toBeNull()
@@ -166,6 +166,7 @@ describe('OKX copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -193,6 +194,7 @@ describe('OKX copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows,
       })
@@ -256,6 +258,7 @@ describe('OKX copier snapshot authority', () => {
     expect(
       verifier().verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: parseRows(acquisition.pages),
       })
@@ -351,6 +354,7 @@ describe('OKX copier snapshot authority', () => {
     const verify = (candidate: readonly ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
@@ -367,6 +371,7 @@ describe('OKX copier snapshot authority', () => {
     const verify = (candidate: readonly ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
@@ -399,6 +404,7 @@ describe('OKX copier snapshot authority', () => {
     const verify = (candidate: readonly ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })
@@ -406,6 +412,9 @@ describe('OKX copier snapshot authority', () => {
     expect(verify(rows.slice(1))).toEqual({ verified: false })
     expect(verify([...rows, rows[0]])).toEqual({ verified: false })
     expect(verify([...rows].reverse())).toEqual({ verified: false })
+    expect(verify(rows.map((row) => ({ ...row, ts: '2000-01-01T00:00:00.000Z' })))).toEqual({
+      verified: false,
+    })
   })
 
   it('rejects expected-hash drift and duplicate hashes independently', async () => {
@@ -415,6 +424,7 @@ describe('OKX copier snapshot authority', () => {
     const verify = (candidate: readonly ParsedCopierRow[]) =>
       selected.verifyConservation({
         exchangeTraderId: UNIQUE_CODE,
+        parserClock: PARSED_AT,
         pages: acquisition.pages,
         rows: candidate,
       })

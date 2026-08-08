@@ -7,7 +7,7 @@ import { isCanonicalPostgresTimestamp } from '../../postgres-timestamp'
 import { dedupeHash } from './parsers'
 
 export const MEXC_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.mexc.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.mexc.copiers@2' as const
 export const MEXC_COPIER_HISTORY_URL =
   'https://www.mexc.com/api/platform/futures/copyFutures/api/v1/trader/followers/v2' as const
 export const MEXC_COPIER_PAGE_SIZE = 10 as const
@@ -244,14 +244,12 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   const sourceRows = pages.flatMap((page) => page.rows)
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
-  const parsedAt = input.rows[0]?.ts ?? null
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    sourceRows.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }

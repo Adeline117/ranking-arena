@@ -14,7 +14,7 @@ import {
 import { dedupeHash } from './parsers'
 
 export const BINANCE_COPIER_SNAPSHOT_VERIFIER_CONTRACT =
-  'arena.ingest.history-terminal-verifier.binance.copiers@1' as const
+  'arena.ingest.history-terminal-verifier.binance.copiers@2' as const
 
 const PAGE_SIZE = 50
 const RESPONSE_FIELDS = ['code', 'data', 'message', 'messageDetail', 'success'] as const
@@ -256,22 +256,18 @@ function verifyConservation(input: CopierSnapshotVerificationInput) {
   const sourceRows = pages.flatMap((page) => page.rows)
   if (sourceRows.length !== input.rows.length) return { verified: false } as const
 
-  // Binance exposes no copier event clock. Production parsing stamps every
-  // row with one job-scoped clock captured before the first response. Bind
-  // that clock as well as every publishable projection; a raw-object reference
-  // and a caller-supplied non-empty hash are not conservation proofs.
-  const parsedAt = input.rows[0]?.ts ?? null
+  // Binance exposes no copier event clock. Bind every row to the exact clock
+  // supplied to ParseCtx instead of trusting a clock self-selected by row 0.
+  const parsedAt = input.parserClock
   const firstFetchedAt = input.pages[0]?.fetchedAt
   if (
-    sourceRows.length > 0 &&
-    (parsedAt === null ||
-      !isCanonicalPostgresTimestamp(parsedAt) ||
-      !isCanonicalPostgresTimestamp(firstFetchedAt) ||
-      Date.parse(parsedAt) > Date.parse(firstFetchedAt))
+    !isCanonicalPostgresTimestamp(parsedAt) ||
+    !isCanonicalPostgresTimestamp(firstFetchedAt) ||
+    Date.parse(parsedAt) > Date.parse(firstFetchedAt)
   ) {
     return { verified: false } as const
   }
-  const parsedAtMs = parsedAt === null ? Number.NaN : Date.parse(parsedAt)
+  const parsedAtMs = Date.parse(parsedAt)
 
   const dedupeHashes = new Set<string>()
   for (const [index, row] of input.rows.entries()) {
