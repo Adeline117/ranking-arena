@@ -1,6 +1,7 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ServingRecordsSection, { RECORD_COLUMNS } from '../ServingRecordsSection'
+import CopierAggregatePanel from '../CopierAggregatePanel'
 import RecordsTable from '../RecordsTable'
 import { useCopierAggregate, useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import type { RecordKind, SourceCapability } from '@/lib/data/serving/types'
@@ -13,7 +14,7 @@ jest.mock('@/lib/hooks/useTraderRecords', () => ({
   useCopierAggregate: jest.fn(),
 }))
 jest.mock('../RecordsTable', () => jest.fn(() => null))
-jest.mock('../CopierAggregatePanel', () => () => null)
+jest.mock('../CopierAggregatePanel', () => jest.fn(() => null))
 jest.mock('../ModuleDegraded', () => () => null)
 jest.mock('@/app/components/common/RecordProvenanceFooter', () => () => null)
 
@@ -169,6 +170,32 @@ describe('ServingRecordsSection selection scope', () => {
       'data-copier-state',
       'pending'
     )
+  })
+
+  it('routes a failed copier pending poll to the degraded retry panel', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined)
+    ;(useCopierAggregate as jest.Mock).mockReturnValue({
+      aggregate: null,
+      isPendingUpstream: false,
+      isLoading: false,
+      error: new Error('pending poll failed'),
+      refetch,
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['copiers'])}
+        tf={90}
+      />
+    )
+
+    expect(screen.queryByText('moduleDataPending')).not.toBeInTheDocument()
+    const props = (CopierAggregatePanel as jest.Mock).mock.calls.at(-1)?.[0]
+    expect(props).toEqual(expect.objectContaining({ aggregate: null, isLoading: false }))
+    props.onRetry()
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 
   it('discloses a failed background refresh while retaining cached rows', () => {

@@ -9,7 +9,7 @@
  * a plain query, never paginated rows.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
@@ -235,27 +235,50 @@ export function useCopierAggregate(opts: {
   enabled?: boolean
 }) {
   const { source, exchangeTraderId, enabled = false } = opts
+  const shouldFetch = enabled && Boolean(source) && Boolean(exchangeTraderId)
+  const subjectKey = JSON.stringify([source, exchangeTraderId])
+  const pendingPoll = useRef({ subjectKey, count: 0 })
+  if (pendingPoll.current.subjectKey !== subjectKey) {
+    pendingPoll.current = { subjectKey, count: 0 }
+  }
+
   const query = useQuery<CopierAggregate | { cacheState: 'pending' }>({
     queryKey: ['trader-copiers', COPIER_SNAPSHOT_RECORDS_CONTRACT, source, exchangeTraderId],
     queryFn: async () => {
       const res = await fetcher<ApiSuccessResponse<CopierAggregate | { cacheState: 'pending' }>>(
         recordsUrl(exchangeTraderId, source, 'copiers', 90)
       )
+      // Count consecutive pending responses for this exact subject. The
+      // query's lifetime dataUpdateCount also includes every successful
+      // aggregate revalidation, so using it would disable cold-start polling
+      // after a long-lived tab had refreshed fifteen times.
+      if (pendingPoll.current.subjectKey === subjectKey) {
+        pendingPoll.current.count = isPendingCopierResponse(res.data)
+          ? pendingPoll.current.count + 1
+          : 0
+      }
       return res.data
     },
-    enabled: enabled && Boolean(source) && Boolean(exchangeTraderId),
+    enabled: shouldFetch,
     staleTime: 0,
+    // A receipt can be invalidated independently of this component (for
+    // example by a newer failed snapshot or RAW quarantine). Do not retain a
+    // subject aggregate after its last observer disappears.
+    gcTime: 0,
     refetchOnWindowFocus: 'always',
     // A Tier-C bridge answers pending while the immutable receipt is being
-    // committed. Poll only that explicit state, only in the foreground, and
-    // stop immediately after either an aggregate or a failed poll. Fifteen
-    // pending responses cap one foreground polling window below 30 seconds.
-    refetchInterval: (activeQuery) =>
-      isPendingCopierResponse(activeQuery.state.data) &&
-      activeQuery.state.fetchFailureCount === 0 &&
-      activeQuery.state.dataUpdateCount < 15
-        ? 2_000
-        : false,
+    // committed. Poll that state for at most one bounded foreground window;
+    // once published, revalidate the authority-bearing aggregate every 15s.
+    refetchInterval: (activeQuery) => {
+      const activeData = activeQuery.state.data
+      if (isPendingCopierResponse(activeData)) {
+        if (activeQuery.state.fetchFailureCount > 0) return 15_000
+        return activeQuery.state.fetchFailureCount === 0 && pendingPoll.current.count < 15
+          ? 2_000
+          : false
+      }
+      return activeData && 'copierCount' in activeData ? 15_000 : false
+    },
     refetchIntervalInBackground: false,
     retry: false,
   })
@@ -278,10 +301,23 @@ export function useCopierAggregate(opts: {
         }
       : null
 
+  // React Query deliberately retains successful data during a background
+  // refresh error. That default is unsafe for an authority verdict: a newer
+  // invalid receipt must not leave the previous aggregate visible. Hide the
+  // cached value throughout revalidation and after any current query error.
+  const authorityIsCurrent =
+    shouldFetch &&
+    query.isFetchedAfterMount &&
+    query.fetchStatus === 'idle' &&
+    !query.isFetching &&
+    !query.error
+
   return {
-    aggregate,
-    isPendingUpstream: Boolean(data && (!isAggregate || !isServeableAggregate)),
-    isLoading: query.isLoading,
+    aggregate: authorityIsCurrent ? aggregate : null,
+    isPendingUpstream: !query.isError && Boolean(data && (!isAggregate || !isServeableAggregate)),
+    isLoading:
+      shouldFetch &&
+      (!query.isFetchedAfterMount || query.fetchStatus !== 'idle' || query.isFetching),
     error: query.error,
     refetch: query.refetch,
   }
