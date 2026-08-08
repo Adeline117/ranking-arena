@@ -48,19 +48,28 @@ export function useSourceCapabilities(enabled = true) {
     },
     enabled,
     staleTime: 0,
-    gcTime: 60 * 60 * 1000,
+    gcTime: 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: 'always',
     refetchInterval: 15_000,
   })
 
+  const authorityIsCurrent =
+    enabled &&
+    query.isFetchedAfterMount &&
+    query.fetchStatus === 'idle' &&
+    !query.isFetching &&
+    !query.error &&
+    query.data !== undefined
+
   return {
-    // A background refetch error cannot preserve a formerly authorized
-    // copiers=true value indefinitely. Drop the live matrix on any current
-    // query error; TraderProfileClient then falls back to its copier-stripped
-    // server seed until a later successful read restores authority.
-    capabilities: query.isError ? null : (query.data ?? null),
-    isLoading: query.isLoading,
+    // Cached data is not live authority for a new mount. A background error,
+    // in-flight refresh, disabled observer, or offline-paused request must all
+    // drop the matrix; TraderProfileClient then uses its copier-stripped seed.
+    capabilities: authorityIsCurrent ? query.data : null,
+    isLoading:
+      enabled && (!query.isFetchedAfterMount || query.fetchStatus !== 'idle' || query.isFetching),
     error: query.error,
+    refetch: query.refetch,
   }
 }

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { selectLiveSourceCapability, useSourceCapabilities } from '../useSourceCapabilities'
 import { fetcher } from '@/lib/hooks/fetchers'
 import type { SourceCapability } from '@/lib/data/serving/types'
@@ -34,7 +34,12 @@ function wrapper(client: QueryClient) {
 }
 
 describe('useSourceCapabilities authority refresh', () => {
-  beforeEach(() => jest.clearAllMocks())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    onlineManager.setOnline(true)
+  })
+
+  afterEach(() => onlineManager.setOnline(true))
 
   it('uses the v2 query generation, direct route, and live refresh policy', async () => {
     ;(fetcher as jest.Mock).mockResolvedValue({
@@ -59,6 +64,7 @@ describe('useSourceCapabilities authority refresh', () => {
       refetchOnMount: 'always',
       refetchOnWindowFocus: 'always',
       refetchInterval: 15_000,
+      gcTime: 0,
     })
 
     view.unmount()
@@ -122,6 +128,93 @@ describe('useSourceCapabilities authority refresh', () => {
       selectLiveSourceCapability('bitunix_futures', view.result.current.capabilities, seed)
         ?.surfaces.copiers
     ).toBe(false)
+
+    view.unmount()
+    client.clear()
+  })
+
+  it('does not authorize a cached matrix while a new mount revalidates it', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    const key = ['source-capabilities', 'serving-metric-authority-v2']
+    client.setQueryData(key, { bitunix_futures: capability(true) })
+    let resolveFresh!: (value: { success: true; data: Record<string, SourceCapability> }) => void
+    const fresh = new Promise<{
+      success: true
+      data: Record<string, SourceCapability>
+    }>((resolve) => {
+      resolveFresh = resolve
+    })
+    ;(fetcher as jest.Mock).mockReturnValue(fresh)
+
+    const view = renderHook(() => useSourceCapabilities(true), { wrapper: wrapper(client) })
+
+    expect(view.result.current.capabilities).toBeNull()
+    expect(view.result.current.isLoading).toBe(true)
+
+    await act(async () => {
+      resolveFresh({
+        success: true,
+        data: { bitunix_futures: capability(false) },
+      })
+      await fresh
+    })
+    await waitFor(() =>
+      expect(view.result.current.capabilities?.bitunix_futures.surfaces.copiers).toBe(false)
+    )
+
+    view.unmount()
+    client.clear()
+  })
+
+  it('drops live copier authority while an offline refresh is paused', async () => {
+    ;(fetcher as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { bitunix_futures: capability(true) },
+    })
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    const view = renderHook(() => useSourceCapabilities(true), { wrapper: wrapper(client) })
+
+    await waitFor(() =>
+      expect(view.result.current.capabilities?.bitunix_futures.surfaces.copiers).toBe(true)
+    )
+
+    await act(async () => {
+      onlineManager.setOnline(false)
+      void view.result.current.refetch()
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(view.result.current.capabilities).toBeNull())
+    expect(view.result.current.isLoading).toBe(true)
+
+    await act(async () => {
+      onlineManager.setOnline(true)
+      await Promise.resolve()
+    })
+    await waitFor(() =>
+      expect(view.result.current.capabilities?.bitunix_futures.surfaces.copiers).toBe(true)
+    )
+
+    view.unmount()
+    client.clear()
+  })
+
+  it('never returns cached authority while disabled', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    client.setQueryData(['source-capabilities', 'serving-metric-authority-v2'], {
+      bitunix_futures: capability(true),
+    })
+
+    const view = renderHook(() => useSourceCapabilities(false), { wrapper: wrapper(client) })
+
+    expect(view.result.current.capabilities).toBeNull()
+    expect(view.result.current.isLoading).toBe(false)
+    expect(fetcher).not.toHaveBeenCalled()
 
     view.unmount()
     client.clear()
