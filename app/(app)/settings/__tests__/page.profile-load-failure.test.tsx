@@ -2,6 +2,7 @@ import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 
 const mockLoadProfile = jest.fn()
+const mockMobileSectionNavRef = { current: null }
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
@@ -38,6 +39,7 @@ jest.mock('@/lib/hooks/useAuthSession', () => ({
 
 jest.mock('../hooks/useActiveSection', () => ({
   useActiveSection: () => ({ activeSection: 'profile', scrollToSection: jest.fn() }),
+  useActiveMobileSectionVisibility: () => mockMobileSectionNavRef,
 }))
 
 jest.mock('../hooks/useSettingsHandlers', () => ({

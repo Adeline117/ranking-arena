@@ -9,7 +9,7 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams,
 }))
 
-import { useActiveSection } from '../useActiveSection'
+import { useActiveMobileSectionVisibility, useActiveSection } from '../useActiveSection'
 
 class TestMutationObserver {
   static instances: TestMutationObserver[] = []
@@ -74,6 +74,59 @@ function latestObserver() {
   const observer = TestMutationObserver.instances.at(-1)
   if (!observer) throw new Error('Expected a settings deep-link observer')
   return observer
+}
+
+function testRect(left: number, right: number): DOMRect {
+  return {
+    x: left,
+    y: 0,
+    left,
+    right,
+    top: 0,
+    bottom: 44,
+    width: right - left,
+    height: 44,
+    toJSON: () => ({}),
+  }
+}
+
+function createMobileNavFixture(accountRect: DOMRect) {
+  const nav = document.createElement('div')
+  const profile = document.createElement('button')
+  const account = document.createElement('button')
+  const accountScrollIntoView = jest.fn()
+  const navScrollTo = jest.fn((options: ScrollToOptions) => {
+    if (typeof options.left === 'number') nav.scrollLeft = options.left
+    if (typeof options.top === 'number') nav.scrollTop = options.top
+  })
+
+  profile.dataset.settingsSection = 'profile'
+  account.dataset.settingsSection = 'account'
+  Object.defineProperty(profile, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => testRect(24, 100),
+  })
+  Object.defineProperty(account, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => accountRect,
+  })
+  Object.defineProperty(account, 'scrollIntoView', {
+    configurable: true,
+    value: accountScrollIntoView,
+  })
+  Object.defineProperties(nav, {
+    clientWidth: { configurable: true, value: 272 },
+    scrollWidth: { configurable: true, value: 1_107 },
+    getBoundingClientRect: { configurable: true, value: () => testRect(24, 296) },
+    scrollTo: { configurable: true, value: navScrollTo },
+  })
+  nav.scrollLeft = 0
+  nav.scrollTop = 7
+  nav.append(profile, account)
+  document.body.appendChild(nav)
+  mountedSections.push(nav)
+
+  return { nav, accountScrollIntoView, navScrollTo }
 }
 
 describe('useActiveSection', () => {
@@ -248,6 +301,73 @@ describe('useActiveSection', () => {
     })
 
     expect(result.current.activeSection).toBe('account')
+  })
+
+  it('horizontally reveals an offscreen active mobile pill without moving the page', () => {
+    overrideProperty(window, 'innerWidth', 320)
+    overrideProperty(window, 'scrollY', 500)
+    const windowScrollTo = jest.fn()
+    overrideProperty(window, 'scrollTo', windowScrollTo)
+    const { nav, accountScrollIntoView, navScrollTo } = createMobileNavFixture(
+      testRect(1_039.1875, 1_130.703125)
+    )
+    type VisibilityProps = {
+      section: Parameters<typeof useActiveMobileSectionVisibility>[0]
+      ready: boolean
+    }
+    const { result, rerender } = renderHook(
+      ({ section, ready }: VisibilityProps) => useActiveMobileSectionVisibility(section, ready),
+      { initialProps: { section: 'profile', ready: false } as VisibilityProps }
+    )
+    Object.defineProperty(result.current, 'current', {
+      configurable: true,
+      writable: true,
+      value: nav,
+    })
+
+    rerender({ section: 'profile', ready: true })
+    expect(navScrollTo).not.toHaveBeenCalled()
+
+    rerender({ section: 'account', ready: true })
+
+    expect(navScrollTo).toHaveBeenCalledTimes(1)
+    expect(navScrollTo).toHaveBeenCalledWith({
+      left: 834.703125,
+      top: 7,
+      behavior: 'auto',
+    })
+    expect(nav.scrollLeft).toBe(834.703125)
+    expect(nav.scrollTop).toBe(7)
+    expect(accountScrollIntoView).not.toHaveBeenCalled()
+    expect(windowScrollTo).not.toHaveBeenCalled()
+    expect(window.scrollY).toBe(500)
+  })
+
+  it('preserves a manual mobile-nav position when the active pill is already visible', () => {
+    overrideProperty(window, 'innerWidth', 375)
+    overrideProperty(window, 'scrollY', 700)
+    const windowScrollTo = jest.fn()
+    overrideProperty(window, 'scrollTo', windowScrollTo)
+    const { nav, accountScrollIntoView, navScrollTo } = createMobileNavFixture(testRect(100, 190))
+    nav.scrollLeft = 400
+    const { result, rerender } = renderHook(
+      ({ ready }: { ready: boolean }) => useActiveMobileSectionVisibility('account', ready),
+      { initialProps: { ready: false } }
+    )
+    Object.defineProperty(result.current, 'current', {
+      configurable: true,
+      writable: true,
+      value: nav,
+    })
+
+    rerender({ ready: true })
+
+    expect(navScrollTo).not.toHaveBeenCalled()
+    expect(nav.scrollLeft).toBe(400)
+    expect(nav.scrollTop).toBe(7)
+    expect(accountScrollIntoView).not.toHaveBeenCalled()
+    expect(windowScrollTo).not.toHaveBeenCalled()
+    expect(window.scrollY).toBe(700)
   })
 
   it('does not add a duplicate history update for the current section', () => {

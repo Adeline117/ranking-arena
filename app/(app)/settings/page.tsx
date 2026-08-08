@@ -34,7 +34,7 @@ import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import ErrorState from '@/app/components/ui/ErrorState'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import PageHeader from '@/app/components/ui/PageHeader'
-import { useActiveSection } from './hooks/useActiveSection'
+import { useActiveMobileSectionVisibility, useActiveSection } from './hooks/useActiveSection'
 import { useSettingsHandlers } from './hooks/useSettingsHandlers'
 
 import {
@@ -74,6 +74,10 @@ export function SettingsContent() {
   const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
 
   const h = useSettingsHandlers({ auth, showToast, showConfirm, t })
+  const mobileSectionNavRef = useActiveMobileSectionVisibility(
+    activeSection,
+    !h.loading && !h.profileLoadFailed
+  )
   const hasUnsavedChanges = h.hasUnsavedChanges()
   useBottomOverlayReservation(saveBarRef, hasUnsavedChanges)
   const { loadBlockedUsers, loadPasskeys, loadingBlockedUsers, loadingPasskeys, userId } = h
@@ -333,6 +337,7 @@ export function SettingsContent() {
 
           {/* Mobile Section Navigation */}
           <Box
+            ref={mobileSectionNavRef}
             className="settings-mobile-nav"
             style={{
               display: 'none',
@@ -347,6 +352,7 @@ export function SettingsContent() {
             {SECTION_IDS.map((sectionId) => (
               <button
                 key={sectionId}
+                data-settings-section={sectionId}
                 onClick={() => scrollToSection(sectionId)}
                 aria-current={activeSection === sectionId ? 'true' : undefined}
                 style={{

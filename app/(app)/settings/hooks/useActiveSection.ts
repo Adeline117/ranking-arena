@@ -4,6 +4,7 @@ import { SECTION_IDS, type SectionId } from '../components/shared'
 
 const DEEP_LINK_RESTORE_TIMEOUT_MS = 10_000
 const ACTIVE_SECTION_TOP_OFFSET = 120
+const MOBILE_SETTINGS_NAV_MAX_WIDTH = 768
 
 /**
  * Hook to manage active section state for settings page.
@@ -121,4 +122,44 @@ export function useActiveSection() {
   )
 
   return { activeSection, setActiveSection, scrollToSection }
+}
+
+/**
+ * Keep the selected mobile settings pill discoverable without moving the page.
+ * The nav is intentionally left alone while the selected pill is already in
+ * view, so a user's horizontal position is preserved across ordinary renders.
+ */
+export function useActiveMobileSectionVisibility(activeSection: SectionId, contentReady: boolean) {
+  const mobileNavRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!contentReady || window.innerWidth > MOBILE_SETTINGS_NAV_MAX_WIDTH) return
+
+    const nav = mobileNavRef.current
+    const activeButton = nav?.querySelector<HTMLButtonElement>(
+      `button[data-settings-section="${activeSection}"]`
+    )
+    if (!nav || !activeButton) return
+
+    const navRect = nav.getBoundingClientRect()
+    const buttonRect = activeButton.getBoundingClientRect()
+    let nextScrollLeft: number | null = null
+
+    if (buttonRect.left < navRect.left) {
+      nextScrollLeft = nav.scrollLeft + buttonRect.left - navRect.left
+    } else if (buttonRect.right > navRect.right) {
+      nextScrollLeft = nav.scrollLeft + buttonRect.right - navRect.right
+    }
+
+    if (nextScrollLeft === null) return
+
+    const maximumScrollLeft = Math.max(0, nav.scrollWidth - nav.clientWidth)
+    nav.scrollTo({
+      left: Math.min(maximumScrollLeft, Math.max(0, nextScrollLeft)),
+      top: nav.scrollTop,
+      behavior: 'auto',
+    })
+  }, [activeSection, contentReady])
+
+  return mobileNavRef
 }
