@@ -1,4 +1,4 @@
-import type { SourceAdapter } from '@/lib/ingest/core/adapter'
+import type { SelectedCopierSnapshotVerifier, SourceAdapter } from '@/lib/ingest/core/adapter'
 import type { ParseCtx, ParsedCopierRow, RawPage, SourceRow } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import {
@@ -21,8 +21,10 @@ import {
 } from '@/lib/ingest/copier-publication-lane-raw'
 import type { RawObjectReceipt, WriteHistoryRawArtifactInput } from '@/lib/ingest/raw'
 import {
+  preflightCopierSnapshotV2Publication,
   publishCopierSnapshotV2,
   type CopierSnapshotPublicationV2Receipt,
+  type PreflightCopierSnapshotV2PublicationInput,
   type PublishCopierSnapshotV2Input,
 } from '@/lib/ingest/serving/publish'
 import { runHistoryTransaction } from './history-transaction'
@@ -188,7 +190,20 @@ function parseCopierRows(
   if (rows.some((row) => row.kind !== 'copiers')) {
     throw publisherError('history row kind does not match copiers')
   }
-  return rows as ParsedCopierRow[]
+  return Object.freeze(
+    (rows as ParsedCopierRow[]).map((row) =>
+      Object.freeze({
+        kind: 'copiers' as const,
+        ts: row.ts,
+        copierLabel: row.copierLabel,
+        copierPnl: row.copierPnl,
+        copierInvested: row.copierInvested,
+        copyDurationDays: row.copyDurationDays,
+        dedupeHash: row.dedupeHash,
+        raw: row.raw,
+      })
+    )
+  )
 }
 
 function asError(cause: unknown): Error {
@@ -218,8 +233,9 @@ async function rejectAfterFallbackRaw(
 
 /**
  * Publish an already captured whole copier snapshot. Invalid or interrupted
- * acquisitions retain generic RAW audit evidence; only a verified exhaustive
- * capture can be promoted into the immutable lane wrapper and copier_snapshot
+ * acquisitions retain generic RAW audit evidence. Even a terminally verified
+ * capture first commits that non-publication RAW evidence; only after parsing
+ * and conservation may its immutable lane wrapper acquire the copier_snapshot
  * RAW role consumed by V2.
  */
 export async function publishCapturedVerifiedCopierSnapshot(
@@ -256,7 +272,12 @@ export async function publishCapturedVerifiedCopierSnapshot(
     )
   }
 
-  const verifier = input.adapter.verifyCopierSnapshot?.(input.source) ?? null
+  let verifier: SelectedCopierSnapshotVerifier | null
+  try {
+    verifier = input.adapter.verifyCopierSnapshot?.(input.source) ?? null
+  } catch (cause) {
+    return rejectAfterFallbackRaw(acquisition, cause, runtime)
+  }
   if (verifier === null) {
     return rejectAfterFallbackRaw(
       acquisition,
@@ -292,13 +313,15 @@ export async function publishCapturedVerifiedCopierSnapshot(
     return rejectAfterFallbackRaw(acquisition, cause, runtime)
   }
 
-  let rawObject: CopierPublicationLaneRawReceipt
-  try {
-    rawObject = await runtime.persistLaneRawArtifact(Object.freeze({ artifact: wrapper }))
-    assertLaneRawObjectReceipt(rawObject, wrapper)
-  } catch (cause) {
-    return rejectAfterFallbackRaw(acquisition, cause, runtime)
-  }
+  // Keep an audit-grade, explicitly non-publication RAW object durable before
+  // executing adapter parsing. This closes the crash window without granting
+  // the stronger copier_snapshot role before parser/envelope conservation.
+  await runtime.persistFallbackRawArtifact(
+    Object.freeze({
+      artifact: acquisition.artifact,
+      sourceRunId: acquisition.sourceRunId,
+    })
+  )
 
   const pages = rawPagesFromArtifact(wrapper.acquisition)
   const ctx: ParseCtx = {
@@ -308,6 +331,8 @@ export async function publishCapturedVerifiedCopierSnapshot(
     scrapedAt: wrapper.acquisition.attempt_started_at,
     meta: input.source.meta,
   }
+  // Parser or conservation rejection leaves only the copier_audit role
+  // behind, which neither copier publication RPC may consume.
   const rows = parseCopierRows(input.adapter, pages, ctx)
   const conservation = verifier.verifyConservation({
     exchangeTraderId: input.trader.exchange_trader_id,
@@ -318,27 +343,44 @@ export async function publishCapturedVerifiedCopierSnapshot(
 
   const sourceRunId = copierPublicationLaneSourceRunId(wrapper)
   const observedAt = wrapper.acquisition.pages.at(-1)!.fetched_at
-  const receipt = await runtime.publishSnapshot({
+  const publication = Object.freeze({
     lane: input.lane,
     sourceId: input.source.id,
     traderId: input.trader.id,
-    rawObject,
     sourceRunId,
     acquisitionSourceRunId: wrapper.acquisition_source_run_id,
     observedAt,
     currency: input.source.currency,
-    evidenceState: 'verified',
-    scanTerminalState: 'exhausted',
+    evidenceState: 'verified' as const,
+    scanTerminalState: 'exhausted' as const,
     blockerReasons: termination.blocker_reasons,
     rows,
-  })
+  }) satisfies PreflightCopierSnapshotV2PublicationInput
+
+  // Reject every locally knowable V2 payload/value defect before granting
+  // the publication-eligible copier_snapshot RAW role. The full publisher
+  // repeats this exact preflight after the durable RAW receipt is available.
+  preflightCopierSnapshotV2Publication(publication)
+
+  // Grant the copier_snapshot role only after every semantic gate has passed.
+  // If promotion fails, the non-publication audit RAW remains queryable.
+  const rawObject = await runtime.persistLaneRawArtifact(Object.freeze({ artifact: wrapper }))
+  assertLaneRawObjectReceipt(rawObject, wrapper)
+
+  const receipt = await runtime.publishSnapshot(
+    Object.freeze({
+      ...publication,
+      rawObject,
+    })
+  )
   return Object.freeze({ rawObject, receipt })
 }
 
 /**
  * Complete Tier-B copier flow. The unbounded whole-snapshot acquisition and
- * its adapter-selected terminal verifier run first. Immutable RAW commits as
- * an independent phase before any parser, conservation check, or receipt RPC.
+ * its adapter-selected terminal verifier run first. Non-publication RAW commits
+ * before parsing; the lane RAW role is granted only after conservation and
+ * before the receipt RPC.
  */
 export async function captureAndPublishVerifiedCopierSnapshot(
   input: CaptureAndPublishVerifiedCopierSnapshotInput,

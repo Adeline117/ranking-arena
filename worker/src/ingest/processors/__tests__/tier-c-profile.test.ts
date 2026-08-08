@@ -23,6 +23,7 @@ const mockRecordStagingRejects = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockPublishPositions = jest.fn()
 const mockPublishCopierSnapshot = jest.fn()
+const mockPreflightCopierSnapshotV2Publication = jest.fn()
 const mockDbQuery = jest.fn()
 const mockIngestClientQuery = jest.fn()
 const mockIngestClientRelease = jest.fn()
@@ -51,6 +52,8 @@ jest.mock('@/lib/ingest/staging/rejects', () => ({
   recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
+  preflightCopierSnapshotV2Publication: (...args: unknown[]) =>
+    mockPreflightCopierSnapshotV2Publication(...args),
   publishCopierSnapshotV2: (...args: unknown[]) => mockPublishCopierSnapshot(...args),
   publishPositions: (...args: unknown[]) => mockPublishPositions(...args),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
@@ -835,7 +838,7 @@ describe('Tier-C incomplete profile window gate', () => {
       aggregateReady: true,
     })
 
-    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
     const wrapper = mockWriteCopierPublicationLaneRawArtifact.mock.calls[0][0]
       .artifact as CopierPublicationLaneArtifact
@@ -851,6 +854,19 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockVerifyCopierConservation).toHaveBeenCalledWith({
       exchangeTraderId: job.data.exchangeTraderId,
       pages: expect.any(Array),
+      rows: [copierRow, copierRow, copierRow],
+    })
+    expect(mockPreflightCopierSnapshotV2Publication).toHaveBeenCalledWith({
+      lane: 'tier_c',
+      sourceId: src.id,
+      traderId: 42,
+      sourceRunId: copierPublicationLaneSourceRunId(wrapper),
+      acquisitionSourceRunId: wrapper.acquisition_source_run_id,
+      observedAt: wrapper.acquisition.pages[2].fetched_at,
+      currency: 'USDC',
+      evidenceState: 'verified',
+      scanTerminalState: 'exhausted',
+      blockerReasons: [],
       rows: [copierRow, copierRow, copierRow],
     })
     expect(mockPublishCopierSnapshot).toHaveBeenCalledWith({
@@ -871,10 +887,19 @@ describe('Tier-C incomplete profile window gate', () => {
       blockerReasons: [],
       rows: [copierRow, copierRow, copierRow],
     })
-    expect(mockWriteCopierPublicationLaneRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockWriteHistoryRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
+      mockParseHistory.mock.invocationCallOrder[0]
+    )
+    expect(mockParseHistory.mock.invocationCallOrder[0]).toBeLessThan(
       mockVerifyCopierConservation.mock.invocationCallOrder[0]
     )
     expect(mockVerifyCopierConservation.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPreflightCopierSnapshotV2Publication.mock.invocationCallOrder[0]
+    )
+    expect(mockPreflightCopierSnapshotV2Publication.mock.invocationCallOrder[0]).toBeLessThan(
+      mockWriteCopierPublicationLaneRawArtifact.mock.invocationCallOrder[0]
+    )
+    expect(mockWriteCopierPublicationLaneRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
       mockPublishCopierSnapshot.mock.invocationCallOrder[0]
     )
     expect(mockPublishCopierSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
@@ -907,7 +932,7 @@ describe('Tier-C incomplete profile window gate', () => {
       'copier receipt RPC failed'
     )
 
-    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockPublishCopierSnapshot).toHaveBeenCalledTimes(1)
     expect(mockWriteCopierPublicationLaneRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
@@ -930,7 +955,7 @@ describe('Tier-C incomplete profile window gate', () => {
       aggregateReady: true,
     })
 
-    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
     expect(mockParseHistory).toHaveBeenCalledTimes(3)
     expect(mockVerifyCopierConservation).toHaveBeenCalledWith(expect.objectContaining({ rows: [] }))
@@ -1027,8 +1052,8 @@ describe('Tier-C incomplete profile window gate', () => {
 
     await expect(processTierC(historyJob('copiers'), 'local')).rejects.toThrow(message)
 
-    expect(mockWriteHistoryRawArtifact).not.toHaveBeenCalled()
-    expect(mockWriteCopierPublicationLaneRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteHistoryRawArtifact).toHaveBeenCalledTimes(1)
+    expect(mockWriteCopierPublicationLaneRawArtifact).not.toHaveBeenCalled()
     expect(mockParseHistory).toHaveBeenCalledTimes(3)
     expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
     expect(mockRedisSet).not.toHaveBeenCalled()

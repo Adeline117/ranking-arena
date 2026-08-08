@@ -9,7 +9,9 @@ jest.mock('@/lib/ingest/db', () => ({
 import type { ParsedCopierRow } from '../../core/types'
 import {
   COPIER_SNAPSHOT_PUBLICATION_V2_CONTRACT,
+  preflightCopierSnapshotV2Publication,
   publishCopierSnapshotV2,
+  type PreflightCopierSnapshotV2PublicationInput,
   type PublishCopierSnapshotV2Input,
 } from '../publish'
 
@@ -55,6 +57,26 @@ function input(
   }
 }
 
+function preflightInput(
+  overrides: Partial<PreflightCopierSnapshotV2PublicationInput> = {}
+): PreflightCopierSnapshotV2PublicationInput {
+  const publication = input()
+  return {
+    lane: publication.lane,
+    sourceId: publication.sourceId,
+    traderId: publication.traderId,
+    sourceRunId: publication.sourceRunId,
+    acquisitionSourceRunId: publication.acquisitionSourceRunId,
+    observedAt: publication.observedAt,
+    currency: publication.currency,
+    evidenceState: publication.evidenceState,
+    scanTerminalState: publication.scanTerminalState,
+    blockerReasons: publication.blockerReasons,
+    rows: publication.rows,
+    ...overrides,
+  }
+}
+
 function receipt(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
   return {
     receiptId: 501,
@@ -80,6 +102,31 @@ describe('lane-bound copier snapshot V2 publication', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockPoolQuery.mockResolvedValue(rpcResult())
+  })
+
+  it('accepts an exact synchronous preflight without database I/O', () => {
+    expect(preflightCopierSnapshotV2Publication(preflightInput())).toBeUndefined()
+    expect(mockPoolQuery).not.toHaveBeenCalled()
+    expect(mockIngestClientConnect).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'label beyond the database limit',
+      { ...copierRow, copierLabel: 'x'.repeat(513) },
+      'rows[0].copierLabel is invalid',
+    ],
+    [
+      'duration beyond the database int32 range',
+      { ...copierRow, copyDurationDays: 2_147_483_648 },
+      'rows[0].copyDurationDays is invalid',
+    ],
+  ])('shares the V2 row rejection before I/O: %s', (_label, row, message) => {
+    expect(() => preflightCopierSnapshotV2Publication(preflightInput({ rows: [row] }))).toThrow(
+      message
+    )
+    expect(mockPoolQuery).not.toHaveBeenCalled()
+    expect(mockIngestClientConnect).not.toHaveBeenCalled()
   })
 
   it('sends the exact lane and dual-digest request through only the V2 owner RPC', async () => {

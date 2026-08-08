@@ -92,7 +92,8 @@ const VERIFIED_POSITION_HISTORY_RECONCILE_SQL = `
 const HISTORY_RAW_RECONCILE_SQL = `
   SELECT id, source_id, job_type, trader_id, timeframe,
          fetched_at::text AS fetched_at, storage_path,
-         bytes, content_hash, quarantined, meta
+         bytes, content_hash, quarantined, meta,
+         source_run_id, trust_artifact_role
     FROM arena.raw_objects
    WHERE storage_path = $1
    ORDER BY id
@@ -129,6 +130,8 @@ interface HistoryRawReconciliationRow {
   content_hash: unknown
   quarantined: unknown
   meta: unknown
+  source_run_id: unknown
+  trust_artifact_role: unknown
 }
 
 export interface VerifiedPositionHistoryHead {
@@ -308,6 +311,8 @@ async function reconcileRawObject(
     durableCompressedBytes !== expected.bytes ||
     row.content_hash !== expected.contentHash ||
     row.quarantined !== false ||
+    row.source_run_id !== input.sourceRunId ||
+    row.trust_artifact_role !== expected.trustArtifactRole ||
     !expected.metaCandidatesCanonicalJson.includes(metaCanonicalJson)
   ) {
     throw publisherError('RAW source-run reconciliation does not match the captured artifact')

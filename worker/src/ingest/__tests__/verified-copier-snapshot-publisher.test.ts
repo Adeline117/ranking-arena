@@ -188,6 +188,8 @@ describe('verified Tier-B copier snapshot publisher', () => {
   })
 
   it('publishes only after unbounded capture, durable RAW, exact proof, and conservation', async () => {
+    const acquisition = capture()
+    mockCaptureHistoryAcquisition.mockResolvedValue(acquisition)
     const result = await captureAndPublishVerifiedCopierSnapshot(input, runtime)
     const wrapper = persistLaneRawArtifact.mock.calls[0][0]
       .artifact as CopierPublicationLaneArtifact
@@ -224,7 +226,10 @@ describe('verified Tier-B copier snapshot publisher', () => {
     expect(selectCopierVerifier).toHaveBeenCalledTimes(2)
     expect(selectCopierVerifier).toHaveBeenNthCalledWith(1, source)
     expect(selectCopierVerifier).toHaveBeenNthCalledWith(2, source)
-    expect(persistFallbackRawArtifact).not.toHaveBeenCalled()
+    expect(persistFallbackRawArtifact).toHaveBeenCalledWith({
+      artifact: acquisition.artifact,
+      sourceRunId: acquisition.sourceRunId,
+    })
     expect(persistLaneRawArtifact).toHaveBeenCalledWith({
       artifact: expect.objectContaining({
         publication_lane: 'tier_b',
@@ -258,13 +263,16 @@ describe('verified Tier-B copier snapshot publisher', () => {
       blockerReasons: [],
       rows: [expect.objectContaining({ kind: 'copiers' })],
     })
-    expect(persistLaneRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(persistFallbackRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
       parseHistory.mock.invocationCallOrder[0]
     )
     expect(parseHistory.mock.invocationCallOrder[0]).toBeLessThan(
       verifyConservation.mock.invocationCallOrder[0]
     )
     expect(verifyConservation.mock.invocationCallOrder[0]).toBeLessThan(
+      persistLaneRawArtifact.mock.invocationCallOrder[0]
+    )
+    expect(persistLaneRawArtifact.mock.invocationCallOrder[0]).toBeLessThan(
       publishSnapshot.mock.invocationCallOrder[0]
     )
   })
@@ -331,30 +339,27 @@ describe('verified Tier-B copier snapshot publisher', () => {
     expect(publishSnapshot).not.toHaveBeenCalled()
   })
 
-  it('never parses or publishes when RAW durability fails', async () => {
+  it('never parses or grants the lane role when audit RAW durability fails', async () => {
     const failure = new Error('object storage unavailable')
-    persistLaneRawArtifact.mockRejectedValue(failure)
+    persistFallbackRawArtifact.mockRejectedValue(failure)
 
     await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toBe(failure)
     expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
+    expect(persistLaneRawArtifact).not.toHaveBeenCalled()
     expect(parseHistory).not.toHaveBeenCalled()
     expect(verifyConservation).not.toHaveBeenCalled()
     expect(publishSnapshot).not.toHaveBeenCalled()
   })
 
-  it('reports lane and fallback RAW failures together without parsing', async () => {
-    persistLaneRawArtifact.mockRejectedValue(new Error('lane RAW pointer unavailable'))
-    persistFallbackRawArtifact.mockRejectedValue(new Error('fallback RAW unavailable'))
+  it('retains audit RAW when post-conservation lane promotion fails', async () => {
+    const failure = new Error('lane RAW pointer unavailable')
+    persistLaneRawArtifact.mockRejectedValue(failure)
 
-    await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toMatchObject({
-      name: 'AggregateError',
-      message: expect.stringContaining('fallback RAW persistence failed'),
-      errors: [
-        expect.objectContaining({ message: 'lane RAW pointer unavailable' }),
-        expect.objectContaining({ message: 'fallback RAW unavailable' }),
-      ],
-    })
-    expect(parseHistory).not.toHaveBeenCalled()
+    await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toBe(failure)
+    expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
+    expect(parseHistory).toHaveBeenCalledTimes(1)
+    expect(verifyConservation).toHaveBeenCalledTimes(1)
+    expect(persistLaneRawArtifact).toHaveBeenCalledTimes(1)
     expect(publishSnapshot).not.toHaveBeenCalled()
   })
 
@@ -364,6 +369,19 @@ describe('verified Tier-B copier snapshot publisher', () => {
     await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toThrow(
       'source/adapter pair has no reviewed copier publication contract'
     )
+    expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
+    expect(persistLaneRawArtifact).not.toHaveBeenCalled()
+    expect(parseHistory).not.toHaveBeenCalled()
+    expect(publishSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('persists copier audit RAW when the post-capture selector throws', async () => {
+    const failure = new Error('selector configuration drifted')
+    selectCopierVerifier.mockReturnValueOnce(verifier).mockImplementationOnce(() => {
+      throw failure
+    })
+
+    await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toBe(failure)
     expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
     expect(persistLaneRawArtifact).not.toHaveBeenCalled()
     expect(parseHistory).not.toHaveBeenCalled()
@@ -414,14 +432,28 @@ describe('verified Tier-B copier snapshot publisher', () => {
     expect(publishSnapshot).not.toHaveBeenCalled()
   })
 
+  it('retains audit RAW and never grants the lane role when parsing fails', async () => {
+    const failure = new Error('copier parser rejected the response')
+    parseHistory.mockImplementationOnce(() => {
+      throw failure
+    })
+
+    await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toBe(failure)
+    expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
+    expect(parseHistory).toHaveBeenCalledTimes(1)
+    expect(verifyConservation).not.toHaveBeenCalled()
+    expect(persistLaneRawArtifact).not.toHaveBeenCalled()
+    expect(publishSnapshot).not.toHaveBeenCalled()
+  })
+
   it('rejects failed conservation without reaching the receipt authority', async () => {
     verifyConservation.mockReturnValue({ verified: false })
 
     await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toThrow(
       'copier snapshot conservation was not verified'
     )
-    expect(persistLaneRawArtifact).toHaveBeenCalledTimes(1)
-    expect(persistFallbackRawArtifact).not.toHaveBeenCalled()
+    expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
+    expect(persistLaneRawArtifact).not.toHaveBeenCalled()
     expect(parseHistory).toHaveBeenCalledTimes(1)
     expect(publishSnapshot).not.toHaveBeenCalled()
   })
@@ -432,8 +464,38 @@ describe('verified Tier-B copier snapshot publisher', () => {
     await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toThrow(
       'copier snapshot envelope/parser conservation mismatch'
     )
+    expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
+    expect(persistLaneRawArtifact).not.toHaveBeenCalled()
     expect(publishSnapshot).not.toHaveBeenCalled()
   })
+
+  it.each([
+    [
+      'label beyond the database limit',
+      { copierLabel: 'x'.repeat(513) },
+      'rows[0].copierLabel is invalid',
+    ],
+    [
+      'duration beyond the database int32 range',
+      { copyDurationDays: 2_147_483_648 },
+      'rows[0].copyDurationDays is invalid',
+    ],
+  ] as const)(
+    'keeps only copier audit RAW when local V2 preflight rejects %s',
+    async (_label, rowOverride, message) => {
+      parseHistory.mockImplementationOnce((payload: typeof rawPayload) => [
+        { ...copierRow(payload.data[0]), ...rowOverride },
+      ])
+
+      await expect(captureAndPublishVerifiedCopierSnapshot(input, runtime)).rejects.toThrow(message)
+
+      expect(persistFallbackRawArtifact).toHaveBeenCalledTimes(1)
+      expect(parseHistory).toHaveBeenCalledTimes(1)
+      expect(verifyConservation).toHaveBeenCalledTimes(1)
+      expect(persistLaneRawArtifact).not.toHaveBeenCalled()
+      expect(publishSnapshot).not.toHaveBeenCalled()
+    }
+  )
 
   it('propagates a lane-aware receipt publication failure after all prior gates', async () => {
     const failure = new Error('receipt RPC rejected tier_b lane')
@@ -443,5 +505,24 @@ describe('verified Tier-B copier snapshot publisher', () => {
     expect(persistLaneRawArtifact).toHaveBeenCalledTimes(1)
     expect(verifyConservation).toHaveBeenCalledTimes(1)
     expect(publishSnapshot).toHaveBeenCalledWith(expect.objectContaining({ lane: 'tier_b' }))
+  })
+
+  it('freezes the conserved row snapshot across asynchronous lane promotion', async () => {
+    persistLaneRawArtifact.mockImplementationOnce(
+      async ({ artifact: wrapper }: WriteCopierPublicationLaneRawInput) => {
+        const conservedRows = verifyConservation.mock.calls[0][0].rows as ParsedCopierRow[]
+        expect(Object.isFrozen(conservedRows)).toBe(true)
+        expect(Object.isFrozen(conservedRows[0])).toBe(true)
+        expect(Reflect.set(conservedRows[0], 'copierPnl', 999)).toBe(false)
+        await Promise.resolve()
+        return laneRawObject(wrapper)
+      }
+    )
+
+    await captureAndPublishVerifiedCopierSnapshot(input, runtime)
+
+    const published = (publishSnapshot.mock.calls[0][0] as PublishCopierSnapshotV2Input).rows
+    expect(published[0].copierPnl).toBe(12.5)
+    expect(published).toBe(verifyConservation.mock.calls[0][0].rows)
   })
 })

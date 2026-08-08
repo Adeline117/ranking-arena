@@ -64,8 +64,11 @@ const RAW_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_object_gc_q
 export const RAW_JSON_STRINGIFY_CONTRACT = 'arena.raw-json-stringify@1' as const
 export const POSITION_HISTORY_RAW_JOB_TYPE = 'history:position_history' as const
 export const EVENT_HISTORY_RAW_ARTIFACT_ROLE = 'event_history' as const
+export const COPIER_AUDIT_RAW_ARTIFACT_ROLE = 'copier_audit' as const
 export const EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
   'arena.event-history-publication-evidence@1' as const
+export const COPIER_AUDIT_RAW_EVIDENCE_CONTRACT =
+  'arena.ingest.copier-audit-raw-evidence@1' as const
 export const POSITION_HISTORY_AUDIT_EVIDENCE_CONTRACT =
   'arena.position-history-audit-evidence@1' as const
 const PREVIOUS_POSITION_HISTORY_PUBLICATION_EVIDENCE_CONTRACT =
@@ -1064,6 +1067,7 @@ interface NormalizedPositionHistoryRawArtifactInput {
 interface PreparedPositionHistoryRawArtifact extends PreparedDeterministicRawArtifact {
   metaBase: Readonly<object>
   publicationMetaBase: PositionHistoryPublicationRawMetaBase | null
+  trustArtifactRole: typeof EVENT_HISTORY_RAW_ARTIFACT_ROLE | typeof COPIER_AUDIT_RAW_ARTIFACT_ROLE
 }
 
 const INVALID_JSONB_TEXT_AUDIT_MARKER = 'invalid_jsonb_text'
@@ -1102,6 +1106,12 @@ function positionHistoryAuditReason(
     return 'terminal_evidence_not_verified'
   }
   return reviewedPositionHistoryRejectionCode(cause) ?? 'reviewed_contract_rejected'
+}
+
+function historyRawArtifactRole(
+  kind: HistoryKind
+): typeof EVENT_HISTORY_RAW_ARTIFACT_ROLE | typeof COPIER_AUDIT_RAW_ARTIFACT_ROLE {
+  return kind === 'copiers' ? COPIER_AUDIT_RAW_ARTIFACT_ROLE : EVENT_HISTORY_RAW_ARTIFACT_ROLE
 }
 
 function normalizePositionHistoryRawArtifactInput(
@@ -1150,6 +1160,7 @@ function preparePositionHistoryRawArtifact(
   if (contentHash !== input.sourceRunId) {
     throw positionHistoryArtifactError('serialized artifact digest does not match source run id')
   }
+  const trustArtifactRole = historyRawArtifactRole(input.artifact.history_kind)
   let publicationMetaBase: PositionHistoryPublicationRawMetaBase | null = null
   let metaBase: Readonly<object>
   if (input.artifact.history_kind === 'position_history') {
@@ -1180,6 +1191,26 @@ function preparePositionHistoryRawArtifact(
         termination: input.artifact.termination,
       }
     }
+  } else if (input.artifact.history_kind === 'copiers') {
+    metaBase = {
+      surface: 'copiers_audit',
+      publication_eligible: false,
+      data_contract: input.artifact.contract,
+      history_evidence_contract: COPIER_AUDIT_RAW_EVIDENCE_CONTRACT,
+      source_run_id: input.sourceRunId,
+      source_slug: input.sourceSlug,
+      exchange_trader_id: input.exchangeTraderId,
+      history_kind: input.artifact.history_kind,
+      attempt_started_at: input.artifact.attempt_started_at,
+      starting_cursor: input.artifact.starting_cursor,
+      capture_config: input.artifact.capture_config,
+      observed_at: input.fetchedAt,
+      page_count: input.artifact.pages.length,
+      terminal_evidence_state: input.artifact.termination.evidence_state,
+      scan_terminal_state: input.artifact.termination.scan_terminal_state,
+      verifier_contract: input.artifact.termination.verifier_contract,
+      termination: input.artifact.termination,
+    }
   } else {
     metaBase = {
       surface: input.artifact.history_kind,
@@ -1203,13 +1234,14 @@ function preparePositionHistoryRawArtifact(
   return {
     storagePath:
       `${input.sourceSlug}/history_trust/${input.artifact.history_kind}/${input.sourceRunId}/` +
-      `${EVENT_HISTORY_RAW_ARTIFACT_ROLE}_${contentHash}.json.gz`,
+      `${trustArtifactRole}_${contentHash}.json.gz`,
     jsonBytes,
     gzipBytes,
     contentHash,
     durableCompressedBytes: gzipBytes.byteLength,
     metaBase,
     publicationMetaBase,
+    trustArtifactRole,
   }
 }
 
@@ -1317,6 +1349,9 @@ export interface HistoryRawArtifactReconciliationExpectation {
   readonly fetchedAt: string
   readonly metaCandidatesCanonicalJson: readonly string[]
   readonly storagePath: string
+  readonly trustArtifactRole:
+    | typeof EVENT_HISTORY_RAW_ARTIFACT_ROLE
+    | typeof COPIER_AUDIT_RAW_ARTIFACT_ROLE
 }
 
 /**
@@ -1361,6 +1396,7 @@ export function prepareHistoryRawArtifactReconciliationExpectation(
     fetchedAt: normalizedInput.fetchedAt,
     metaCandidatesCanonicalJson: Object.freeze(canonicalMetaCandidates),
     storagePath: artifact.storagePath,
+    trustArtifactRole: artifact.trustArtifactRole,
   })
 }
 
@@ -1378,11 +1414,11 @@ async function loadPositionHistoryTrustPointers(
       WHERE storage_path = $1
          OR (
            source_run_id = $2
-           AND trust_artifact_role = 'event_history'
+           AND trust_artifact_role = $3
          )
       ORDER BY id
       FOR UPDATE`,
-    [artifact.storagePath, sourceRunId]
+    [artifact.storagePath, sourceRunId, artifact.trustArtifactRole]
   )
   return rows
 }
@@ -1427,7 +1463,7 @@ function validatePositionHistoryTrustPointer(
     row.content_hash !== input.sourceRunId ||
     row.quarantined !== false ||
     row.source_run_id !== input.sourceRunId ||
-    row.trust_artifact_role !== EVENT_HISTORY_RAW_ARTIFACT_ROLE ||
+    row.trust_artifact_role !== artifact.trustArtifactRole ||
     !metaMatches
   ) {
     throw positionHistoryArtifactError(`database pointer ${row.id} does not match the artifact`)
@@ -1460,7 +1496,7 @@ async function insertPositionHistoryTrustPointer(
       artifact.contentHash,
       JSON.stringify(positionHistoryArtifactMeta(artifact)),
       input.sourceRunId,
-      EVENT_HISTORY_RAW_ARTIFACT_ROLE,
+      artifact.trustArtifactRole,
     ]
   )
 }
@@ -1503,10 +1539,11 @@ async function writeHistoryRawArtifactInternal(
 }
 
 /**
- * Persist one immutable history acquisition artifact. The event_history object
- * contains every captured upstream page plus terminal proof or an explicit
- * partial/unknown blocker. Storage is durable before the caller-owned
- * transaction publishes the exact source/trader pointer.
+ * Persist one immutable history acquisition artifact. Copier captures always
+ * receive the audit-only copier_audit role; other event history retains the
+ * event_history role. Every object contains all captured pages plus terminal
+ * proof or an explicit partial/unknown blocker. Storage is durable before the
+ * caller-owned transaction publishes the exact source/trader pointer.
  */
 export async function writeHistoryRawArtifact(
   input: WriteHistoryRawArtifactInput,

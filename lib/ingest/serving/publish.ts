@@ -1642,6 +1642,16 @@ export interface PublishCopierSnapshotV2Input {
   readonly rows: readonly ParsedCopierRow[]
 }
 
+/**
+ * Every locally knowable V2 publication field except the lane RAW receipt.
+ * Workers must run this synchronous preflight before granting the stronger
+ * `copier_snapshot` RAW role; the full publisher repeats it after promotion.
+ */
+export type PreflightCopierSnapshotV2PublicationInput = Omit<
+  PublishCopierSnapshotV2Input,
+  'rawObject'
+>
+
 export interface CopierSnapshotPublicationV2Receipt {
   readonly receiptId: number
   readonly lane: CopierPublicationLane
@@ -1723,7 +1733,7 @@ function copierNullableNumber(value: unknown, label: string): number | null {
   return value
 }
 
-function prepareCopierSnapshotPayload(input: PublishCopierSnapshotInput): {
+function prepareCopierSnapshotPayload(input: unknown): {
   payload: Record<string, unknown>
   sourceRunId: string
   observedAt: string
@@ -1979,6 +1989,95 @@ function validateCopierLaneRawReceipt(
   }) as CopierPublicationLaneRawReceipt
 }
 
+interface PreparedCopierSnapshotV2Preflight {
+  readonly lane: CopierPublicationLane
+  readonly sourceRunId: string
+  readonly acquisitionSourceRunId: string
+  readonly observedAt: string
+  readonly rowCount: number
+  readonly legacyPayload: Record<string, unknown>
+}
+
+function prepareCopierSnapshotV2Preflight(input: unknown): PreparedCopierSnapshotV2Preflight {
+  const value = exactCopierSnapshotObject(
+    input,
+    [
+      'lane',
+      'sourceId',
+      'traderId',
+      'sourceRunId',
+      'acquisitionSourceRunId',
+      'observedAt',
+      'currency',
+      'evidenceState',
+      'scanTerminalState',
+      'blockerReasons',
+      'rows',
+    ],
+    'v2 preflight input'
+  )
+  const lane = value.lane
+  if (lane !== 'tier_b' && lane !== 'tier_c') {
+    throw copierSnapshotError('lane must be tier_b or tier_c')
+  }
+  const sourceRunId = value.sourceRunId
+  if (
+    typeof sourceRunId !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(sourceRunId) ||
+    sourceRunId === '0'.repeat(64)
+  ) {
+    throw copierSnapshotError('sourceRunId must be a nonzero lowercase SHA-256 digest')
+  }
+  const acquisitionSourceRunId = value.acquisitionSourceRunId
+  if (
+    typeof acquisitionSourceRunId !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(acquisitionSourceRunId) ||
+    acquisitionSourceRunId === '0'.repeat(64)
+  ) {
+    throw copierSnapshotError('acquisitionSourceRunId must be a nonzero lowercase SHA-256 digest')
+  }
+
+  // Reuse the frozen V1 row/value validator. Its prepared request is never
+  // sent; V2 replaces the contract and binds the lane plus both RAW digests.
+  const legacyValidated = prepareCopierSnapshotPayload({
+    sourceId: value.sourceId,
+    traderId: value.traderId,
+    // The V2 preflight runs before the real lane RAW receipt exists. This
+    // sentinel exercises the shared value/row validator without granting or
+    // claiming a durable RAW object; the full V2 path validates the real id.
+    rawObjectId: 1,
+    sourceRunId,
+    observedAt: value.observedAt,
+    currency: value.currency,
+    evidenceState: value.evidenceState,
+    scanTerminalState: value.scanTerminalState,
+    blockerReasons: value.blockerReasons,
+    rows: value.rows,
+  })
+  if (legacyValidated.sourceRunId === acquisitionSourceRunId) {
+    throw copierSnapshotError('wrapper and acquisition source runs must be distinct')
+  }
+  return Object.freeze({
+    lane,
+    sourceRunId: legacyValidated.sourceRunId,
+    acquisitionSourceRunId,
+    observedAt: legacyValidated.observedAt,
+    rowCount: legacyValidated.rowCount,
+    legacyPayload: legacyValidated.payload,
+  })
+}
+
+/**
+ * Synchronously reject any V2 payload/value/row defect that is knowable
+ * before publication-lane RAW promotion. No database or object-store I/O is
+ * performed, and callers retain ownership of the exact frozen row snapshot.
+ */
+export function preflightCopierSnapshotV2Publication(
+  input: PreflightCopierSnapshotV2PublicationInput
+): void {
+  prepareCopierSnapshotV2Preflight(input)
+}
+
 function prepareCopierSnapshotV2Payload(input: PublishCopierSnapshotV2Input): {
   readonly payload: Record<string, unknown>
   readonly lane: CopierPublicationLane
@@ -2005,68 +2104,48 @@ function prepareCopierSnapshotV2Payload(input: PublishCopierSnapshotV2Input): {
     ],
     'v2 input'
   )
-  if (value.lane !== 'tier_b' && value.lane !== 'tier_c') {
-    throw copierSnapshotError('lane must be tier_b or tier_c')
-  }
-  const sourceRunId = value.sourceRunId
-  if (
-    typeof sourceRunId !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(sourceRunId) ||
-    sourceRunId === '0'.repeat(64)
-  ) {
-    throw copierSnapshotError('sourceRunId must be a nonzero lowercase SHA-256 digest')
-  }
-  const acquisitionSourceRunId = value.acquisitionSourceRunId
-  if (
-    typeof acquisitionSourceRunId !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(acquisitionSourceRunId) ||
-    acquisitionSourceRunId === '0'.repeat(64)
-  ) {
-    throw copierSnapshotError('acquisitionSourceRunId must be a nonzero lowercase SHA-256 digest')
-  }
-  const rawObject = validateCopierLaneRawReceipt(value.rawObject, value.lane, sourceRunId)
-
-  // Reuse the frozen V1 row/value validator. Its prepared request is never
-  // sent; V2 replaces the contract and binds the lane plus both RAW digests.
-  const legacyValidated = prepareCopierSnapshotPayload({
-    sourceId: input.sourceId,
-    traderId: input.traderId,
-    rawObjectId: rawObject.id,
-    sourceRunId,
-    observedAt: input.observedAt,
-    currency: input.currency,
-    evidenceState: input.evidenceState,
-    scanTerminalState: input.scanTerminalState,
-    blockerReasons: input.blockerReasons,
-    rows: input.rows,
+  const preflight = prepareCopierSnapshotV2Preflight({
+    lane: value.lane,
+    sourceId: value.sourceId,
+    traderId: value.traderId,
+    sourceRunId: value.sourceRunId,
+    acquisitionSourceRunId: value.acquisitionSourceRunId,
+    observedAt: value.observedAt,
+    currency: value.currency,
+    evidenceState: value.evidenceState,
+    scanTerminalState: value.scanTerminalState,
+    blockerReasons: value.blockerReasons,
+    rows: value.rows,
   })
-  if (legacyValidated.sourceRunId === acquisitionSourceRunId) {
-    throw copierSnapshotError('wrapper and acquisition source runs must be distinct')
-  }
-  const legacyPayload = legacyValidated.payload
+  const rawObject = validateCopierLaneRawReceipt(
+    value.rawObject,
+    preflight.lane,
+    preflight.sourceRunId
+  )
+  const legacyPayload = preflight.legacyPayload
   const payload = {
-    acquisitionSourceRunId,
+    acquisitionSourceRunId: preflight.acquisitionSourceRunId,
     blockerReasons: legacyPayload.blockerReasons,
     contract: COPIER_SNAPSHOT_PUBLICATION_V2_CONTRACT,
     currency: legacyPayload.currency,
     evidenceState: legacyPayload.evidenceState,
-    lane: value.lane,
-    observedAt: legacyValidated.observedAt,
+    lane: preflight.lane,
+    observedAt: preflight.observedAt,
     rawObjectId: rawObject.id,
     rows: legacyPayload.rows,
     scanTerminalState: legacyPayload.scanTerminalState,
     sourceId: legacyPayload.sourceId,
-    sourceRunId: legacyValidated.sourceRunId,
+    sourceRunId: preflight.sourceRunId,
     traderId: legacyPayload.traderId,
   }
   cloneStrictJsonb(payload, 'v2 publication payload')
   return Object.freeze({
     payload,
-    lane: value.lane,
-    sourceRunId: legacyValidated.sourceRunId,
-    acquisitionSourceRunId,
-    observedAt: legacyValidated.observedAt,
-    rowCount: legacyValidated.rowCount,
+    lane: preflight.lane,
+    sourceRunId: preflight.sourceRunId,
+    acquisitionSourceRunId: preflight.acquisitionSourceRunId,
+    observedAt: preflight.observedAt,
+    rowCount: preflight.rowCount,
   })
 }
 

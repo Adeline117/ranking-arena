@@ -220,6 +220,8 @@ function rawReconciliationFixture() {
     bytes: compressedBytes,
     content_hash: rawSourceRunId,
     quarantined: false,
+    source_run_id: rawSourceRunId,
+    trust_artifact_role: 'event_history',
     meta: {
       surface: 'orders',
       data_contract: artifact.contract,
@@ -758,8 +760,8 @@ describe('verified Tier-B position-history publisher', () => {
     expect(mockPoolQuery).toHaveBeenCalledTimes(1)
     const [reconciliationSql, reconciliationValues] = mockPoolQuery.mock.calls[0]
     expect(String(reconciliationSql)).toContain('WHERE storage_path = $1')
-    expect(String(reconciliationSql)).not.toContain('source_run_id')
-    expect(String(reconciliationSql)).not.toContain('trust_artifact_role')
+    expect(String(reconciliationSql)).toContain('source_run_id')
+    expect(String(reconciliationSql)).toContain('trust_artifact_role')
     expect(reconciliationValues).toEqual([storagePath])
   })
 
@@ -774,6 +776,8 @@ describe('verified Tier-B position-history publisher', () => {
       ['storage path', { storage_path: `${row.storage_path}.tampered` }],
       ['content hash', { content_hash: 'f'.repeat(64) }],
       ['quarantine state', { quarantined: true }],
+      ['pointer source run', { source_run_id: 'f'.repeat(64) }],
+      ['trust artifact role', { trust_artifact_role: 'copier_audit' }],
       ['metadata source run', { meta: { ...row.meta, source_run_id: 'f'.repeat(64) } }],
       [
         'metadata durable byte count',

@@ -31,6 +31,8 @@ import {
   type SelectedHistoryTerminalVerifier,
 } from '@/lib/ingest/history-acquisition'
 import {
+  COPIER_AUDIT_RAW_ARTIFACT_ROLE,
+  COPIER_AUDIT_RAW_EVIDENCE_CONTRACT,
   EVENT_HISTORY_RAW_ARTIFACT_ROLE,
   EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
   historyRawJobType,
@@ -183,8 +185,7 @@ function databaseHarness(initialRows: PointerRow[] = []) {
         rows: pointers.filter(
           (pointer) =>
             pointer.storage_path === params[0] ||
-            (pointer.source_run_id === params[1] &&
-              pointer.trust_artifact_role === EVENT_HISTORY_RAW_ARTIFACT_ROLE)
+            (pointer.source_run_id === params[1] && pointer.trust_artifact_role === params[2])
         ),
       }
     }
@@ -211,7 +212,7 @@ function databaseHarness(initialRows: PointerRow[] = []) {
     }
     throw new Error(`Unexpected SQL: ${sql}`)
   })
-  const transaction = { query } as unknown as IngestQueryExecutor
+  const transaction: IngestQueryExecutor = { query }
   const runTransaction = jest.fn(
     async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> =>
       operation(transaction)
@@ -709,9 +710,8 @@ describe('writePositionHistoryRawArtifact', () => {
 
   it('requires a claimed transaction runner before Storage or database I/O', async () => {
     const input = await artifactInput()
-    const unsafeWrite = writePositionHistoryRawArtifact as unknown as (
-      value: WritePositionHistoryRawArtifactInput
-    ) => Promise<unknown>
+    const unsafeWrite = (value: WritePositionHistoryRawArtifactInput): Promise<unknown> =>
+      Reflect.apply(writePositionHistoryRawArtifact, undefined, [value]) as Promise<unknown>
 
     await expect(unsafeWrite(input)).rejects.toThrow('a claimed transaction runner is required')
     expect(mockUpload).not.toHaveBeenCalled()
@@ -737,7 +737,7 @@ describe('writePositionHistoryRawArtifact', () => {
     expect(database.runTransaction).not.toHaveBeenCalled()
   })
 
-  it.each<HistoryKind>(['orders', 'transfers', 'copiers'])(
+  it.each<HistoryKind>(['orders', 'transfers'])(
     'persists %s as its own deterministic event-history artifact',
     async (kind) => {
       const input = await artifactInput({ kind })
@@ -761,6 +761,39 @@ describe('writePositionHistoryRawArtifact', () => {
       })
     }
   )
+
+  it('persists copiers as an audit-only role that no publication RPC may consume', async () => {
+    const input = await artifactInput({ kind: 'copiers' })
+    const database = databaseHarness()
+
+    const first = await writeHistoryRawArtifact(input, database.runTransaction)
+    const second = await writeHistoryRawArtifact(input, database.runTransaction)
+
+    expect(second).toEqual(first)
+    expect(first.storagePath).toBe(
+      `binance_futures/history_trust/copiers/${input.sourceRunId}/` +
+        `copier_audit_${input.sourceRunId}.json.gz`
+    )
+    expect(database.pointers).toHaveLength(1)
+    expect(database.pointers[0]).toMatchObject({
+      job_type: historyRawJobType('copiers'),
+      trust_artifact_role: COPIER_AUDIT_RAW_ARTIFACT_ROLE,
+    })
+    expect(database.pointers[0].meta).toMatchObject({
+      surface: 'copiers_audit',
+      publication_eligible: false,
+      data_contract: input.artifact.contract,
+      history_evidence_contract: COPIER_AUDIT_RAW_EVIDENCE_CONTRACT,
+      history_kind: 'copiers',
+      source_run_id: input.sourceRunId,
+      termination: input.artifact.termination,
+    })
+    expect(database.pointers[0].meta).not.toMatchObject({
+      history_evidence_contract: EVENT_HISTORY_PUBLICATION_EVIDENCE_CONTRACT,
+    })
+    expect(mockUpload).toHaveBeenCalledTimes(2)
+    expect(mockDownload).toHaveBeenCalledTimes(1)
+  })
 
   it('replays an exact generic artifact without duplicating its pointer', async () => {
     const input = await artifactInput({ kind: 'orders' })
