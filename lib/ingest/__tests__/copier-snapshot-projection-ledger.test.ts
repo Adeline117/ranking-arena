@@ -475,6 +475,30 @@ describe('copier snapshot projection ledger', () => {
     expect(revalidateCopierSnapshotProjectionLedger(stored)).toEqual(ledger)
   })
 
+  it('historically replays through its retained contract without the live adapter registry', async () => {
+    const input = evidence([[candidateA]])
+    const ledger = build(input)
+    let registryCalls = 0
+
+    try {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('../core/adapter', () => ({
+          getAdapter: () => {
+            registryCalls += 1
+            throw new Error('live adapter registry is unavailable')
+          },
+        }))
+        const isolated = await import('../copier-snapshot-projection-ledger')
+        expect(
+          isolated.revalidateCopierSnapshotProjectionLedger(storedEvidence(input, ledger))
+        ).toEqual(ledger)
+      })
+      expect(registryCalls).toBe(0)
+    } finally {
+      jest.dontMock('../core/adapter')
+    }
+  })
+
   it('keeps historical replay valid after the operational copier capability is retired', () => {
     const input = evidence([[candidateA]])
     const ledger = build(input)

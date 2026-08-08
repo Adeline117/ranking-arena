@@ -31,6 +31,13 @@ import {
   type CanonicalCopierSnapshotProjectionTuple,
   type CopierSnapshotCandidateProjectionPair,
 } from './copier-snapshot-projection'
+import {
+  buildCopierSnapshotParserContext,
+  replayCopierSnapshotParser,
+  revalidateCopierSnapshotParserContract,
+  selectCopierSnapshotParserContract,
+  type CopierSnapshotParserContract,
+} from './copier-parser-replay'
 import { getAdapter } from './core/adapter'
 import { supportsSourceSurface } from './core/surface-capabilities'
 import type {
@@ -77,41 +84,11 @@ const COPIER_SNAPSHOT_PROJECTION_REVALIDATION_INPUT_FIELDS = Object.freeze([
   'expectedProjectionLedgerSha256',
 ] as const)
 
-export type CopierSnapshotParserContract =
-  `arena.ingest.copier-parser.${CopierCandidateAdapterSlug}@1`
-
-/** Closed parser implementation identities; any semantic parser change bumps this version. */
-export const COPIER_SNAPSHOT_PARSER_CONTRACTS = Object.freeze({
-  binance: 'arena.ingest.copier-parser.binance@1',
-  bingx: 'arena.ingest.copier-parser.bingx@1',
-  bitget: 'arena.ingest.copier-parser.bitget@1',
-  bitget_bots: 'arena.ingest.copier-parser.bitget_bots@1',
-  bitunix: 'arena.ingest.copier-parser.bitunix@1',
-  blofin: 'arena.ingest.copier-parser.blofin@1',
-  btcc: 'arena.ingest.copier-parser.btcc@1',
-  bybit_copytrade: 'arena.ingest.copier-parser.bybit_copytrade@1',
-  coinex: 'arena.ingest.copier-parser.coinex@1',
-  gate: 'arena.ingest.copier-parser.gate@1',
-  kucoin: 'arena.ingest.copier-parser.kucoin@1',
-  lbank: 'arena.ingest.copier-parser.lbank@1',
-  mexc: 'arena.ingest.copier-parser.mexc@1',
-  okx: 'arena.ingest.copier-parser.okx@1',
-  toobit: 'arena.ingest.copier-parser.toobit@1',
-  xt: 'arena.ingest.copier-parser.xt@1',
-} satisfies Readonly<Record<CopierCandidateAdapterSlug, CopierSnapshotParserContract>>)
-
-export function selectCopierSnapshotParserContract(
-  adapterSlug: CopierCandidateAdapterSlug
-): CopierSnapshotParserContract {
-  if (!Object.prototype.hasOwnProperty.call(COPIER_SNAPSHOT_PARSER_CONTRACTS, adapterSlug)) {
-    throw projectionLedgerError(`adapter ${String(adapterSlug)} has no closed parser contract`)
-  }
-  const selected = COPIER_SNAPSHOT_PARSER_CONTRACTS[adapterSlug]
-  if (!selected) {
-    throw projectionLedgerError(`adapter ${String(adapterSlug)} has no closed parser contract`)
-  }
-  return selected
-}
+export {
+  COPIER_SNAPSHOT_PARSER_CONTRACTS,
+  selectCopierSnapshotParserContract,
+  type CopierSnapshotParserContract,
+} from './copier-parser-replay'
 
 export interface CopierSnapshotProjectionLedgerRow {
   readonly row_ordinal: number
@@ -347,8 +324,10 @@ function revalidateParserBinding(value: unknown): CopierSnapshotParserReplayBind
     candidate_locator_contract: value.candidate_locator_contract,
   })
   const adapterSlug = candidateBinding.adapter_slug
-  const parserContract = selectCopierSnapshotParserContract(adapterSlug)
-  if (value.parser_contract !== parserContract) {
+  let parserContract: CopierSnapshotParserContract
+  try {
+    parserContract = revalidateCopierSnapshotParserContract(adapterSlug, value.parser_contract)
+  } catch {
     throw projectionLedgerError('parser replay binding parser contract is invalid')
   }
   return deepFreeze({
@@ -391,15 +370,14 @@ function parserContextForBinding(
   artifact: CopierSnapshotArtifact,
   binding: CopierSnapshotParserReplayBinding
 ): Readonly<ParseCtx> {
-  const meta =
-    binding.adapter_slug === 'gate' ? { boardKey: binding.product_type as 'futures' | 'cfd' } : {}
-  return deepFreeze({
+  return buildCopierSnapshotParserContext({
+    adapterSlug: binding.adapter_slug,
+    parserContract: binding.parser_contract,
+    productType: binding.product_type,
     sourceSlug: artifact.source.slug,
     currency: artifact.source.currency,
-    tfLabelMap: {},
     scrapedAt: artifact.observed_at,
-    meta,
-  } satisfies ParseCtx)
+  })
 }
 
 interface CanonicalProjectionInputs {
@@ -418,21 +396,27 @@ function replayCopierParser(
   liveSource?: SourceRow
 ): ParsedCopierRow[] {
   const adapterSlug = binding.adapter_slug
-  const adapter = getAdapter(adapterSlug)
   // Operational capability is a live publication gate, not historical
   // evidence. A source may be retired later while its versioned parser must
   // remain able to replay already anchored artifacts.
-  const authorized = liveSource ? supportsSourceSurface(adapter, liveSource, 'copiers') : true
-  if (adapter.slug !== adapterSlug || !authorized) {
-    throw projectionLedgerError(
-      `adapter ${adapterSlug} is not a copier parser authority${liveSource ? ' for this source' : ''}`
-    )
+  if (liveSource) {
+    const adapter = getAdapter(adapterSlug)
+    if (adapter.slug !== adapterSlug || !supportsSourceSurface(adapter, liveSource, 'copiers')) {
+      throw projectionLedgerError(
+        `adapter ${adapterSlug} is not a copier parser authority for this source`
+      )
+    }
   }
 
   let replayed: ParsedHistoryRow[] = []
   try {
     for (const page of artifact.pages) {
-      const parsedPage = adapter.parseHistory(page.payload, 'copiers', parserContext)
+      const parsedPage = replayCopierSnapshotParser({
+        adapterSlug,
+        parserContract: binding.parser_contract,
+        raw: page.payload,
+        ctx: parserContext,
+      })
       if (!Array.isArray(parsedPage)) {
         throw projectionLedgerError(`adapter ${adapterSlug} returned a non-array parser result`)
       }
