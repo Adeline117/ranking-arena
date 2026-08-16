@@ -1,100 +1,45 @@
-# Debug Cron Job
+# Debug a scheduled job
 
-Troubleshoot failing or stuck Vercel cron jobs.
+Diagnose first; do not trigger production, change a schedule, read secrets, or deploy
+unless that action is separately authorized.
 
-## Quick Diagnosis
+## Establish the real job
 
-```bash
-# Check recent cron executions
-vercel logs --filter cron --limit 50
+1. Confirm the exact path and cadence in vercel.json.
+2. Confirm the handler exists under app/api/cron/\*\*/route.ts.
+3. Check whether it is an active job, an unscheduled endpoint, or an auth-first
+   retired tombstone.
+4. Record the commit, environment, and observation time.
 
-# Check specific cron job
-vercel logs --filter "batch-fetch-traders"
-```
+An endpoint name in an old note is not schedule evidence.
 
-## Common Issues
+## Read-only diagnosis
 
-### 1. Timeout (504 Gateway Timeout)
-**Cause:** Job exceeds 60s limit (Pro) or 10s (Hobby)
+- Inspect the route's authentication, timeout, lock, and PipelineLogger boundary.
+- Inspect current tests and recent history for the exact route.
+- When access is approved, read Vercel/Sentry/pipeline logs without printing tokens
+  or private payloads.
+- For worker adapters, inspect lib/ingest/adapters and
+  lib/ingest/fetch/rate-limiter.ts; external ingest cadence may come from the worker
+  registry rather than Vercel.
+- For database errors, use an approved read-only catalog/log surface. Do not query a
+  guessed postgres_logs relation.
 
-**Fix:**
-- Reduce batch size in query params
-- Add pagination
-- Move to VPS for long-running jobs
+## Common findings
 
-### 2. Auth Failure (401/403)
-**Cause:** Missing or invalid `CRON_SECRET`
+- Timeout: bound work per invocation, paginate, and move long work to the existing
+  worker path through a reviewed design.
+- Authentication: test the verifier with inert local values; never print or rotate
+  CRON_SECRET during diagnosis.
+- Rate limiting: classify 429/timeout/5xx, cap retry/backoff, and bound concurrency.
+- Geo restriction: report the missing network witness; proxy/VPS changes are a
+  separate infrastructure action.
+- False success: ensure data/RPC/alert errors reach the job result and tests.
 
-**Check:**
-```bash
-# Verify env var is set
-vercel env ls | grep CRON_SECRET
-```
+## Verification
 
-**Fix:**
-- Set `CRON_SECRET` in Vercel dashboard
-- Ensure route checks `Authorization: Bearer ${CRON_SECRET}`
+Use focused unit tests with mocked dependencies. If a local route invocation is
+needed, use an inert local environment and a non-production database fixture. Run
+typecheck, lint, schedule-contract QA, and the relevant job tests.
 
-### 3. Rate Limited (429)
-**Cause:** Exchange API rate limit exceeded
-
-**Fix:**
-- Increase delay between requests
-- Reduce concurrency
-- Check `lib/connectors/rate-limiter.ts` settings
-
-### 4. Geo-Blocked
-**Cause:** Vercel region (hnd1) blocked by exchange
-
-**Symptoms:**
-- Works locally but fails in prod
-- 403 or connection timeout
-
-**Fix:**
-- Enable proxy fallback in connector
-- Deploy Cloudflare Worker
-- Use VPS for that platform
-
-### 5. Database Error
-**Cause:** Supabase connection or query issue
-
-**Check:**
-```sql
--- Check recent errors in Supabase logs
-SELECT * FROM postgres_logs
-WHERE error_severity = 'ERROR'
-ORDER BY timestamp DESC
-LIMIT 20;
-```
-
-## Manual Trigger
-
-```bash
-# Test cron locally
-curl -X POST http://localhost:3000/api/cron/batch-fetch-traders?group=a \
-  -H "Authorization: Bearer $CRON_SECRET"
-
-# Test on production (be careful)
-curl -X POST https://www.arenafi.org/api/cron/batch-fetch-traders?group=a \
-  -H "Authorization: Bearer $CRON_SECRET"
-```
-
-## Cron Schedule Reference
-
-```
-*/5 * * * *   = Every 5 minutes
-0 * * * *     = Every hour at :00
-0 */4 * * *   = Every 4 hours
-0 0 * * *     = Daily at midnight
-```
-
-## Key Files
-- `vercel.json` - Cron definitions
-- `app/api/cron/*/route.ts` - Cron handlers
-- `lib/connectors/circuit-breaker.ts` - Fault tolerance
-- `lib/cron/` - Cron utilities
-
-## Monitoring
-- Vercel Dashboard > Functions > Cron
-- Sentry for error tracking
-- `npm run diagnose` for data freshness
+Never use curl against a production cron route as a diagnostic shortcut.

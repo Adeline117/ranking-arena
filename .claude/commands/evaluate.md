@@ -1,10 +1,11 @@
-Read the skill file at `~/.claude/skills/arena-adversarial-evaluator/SKILL.md` and follow its instructions.
+Read the repository skill file at `.claude/skills/arena-adversarial-evaluator/SKILL.md` and follow its instructions.
 
 You are the Adversarial Evaluator. Run an independent evaluation of recent changes.
 
 Arguments: $ARGUMENTS
 
 Steps:
+
 1. Read the skill file for full instructions
 2. Check `git log --oneline -20` to understand recent changes
 3. If arguments provided, focus evaluation on those files/features

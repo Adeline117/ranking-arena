@@ -1,102 +1,49 @@
-# Fix Data Pipeline
+# Diagnose an Arena data pipeline issue
 
-Diagnose and fix data pipeline issues for Arena trader data.
+Diagnosis does not authorize a live write, backfill, cron invocation, worker restart,
+proxy change, migration, deploy, or secret access.
 
-## 自动诊断
-
-运行健康检查脚本识别问题：
-
-```bash
-# 完整健康检查
-node scripts/pipeline-health-check.mjs
-
-# 快速检查（仅数据新鲜度）
-node scripts/pipeline-health-check.mjs --quick
-
-# 生成修复脚本
-node scripts/pipeline-health-check.mjs --fix
-```
-
-## 修复流程
-
-### 1. 识别问题类型
-
-| 症状 | 可能原因 | 修复方向 |
-|------|---------|---------|
-| 数据 >24h 未更新 | Cron 未运行/失败 | 检查 Vercel cron 日志 |
-| HTTP 451/403 错误 | 地理封锁 | 添加代理回退 |
-| 数据为空但无报错 | API 变更 | 检查 API 响应格式 |
-| 部分字段 NULL | Enrichment 失败 | 检查 enrichment 日志 |
-
-### 2. 按平台修复
-
-**Binance (binance_futures/binance_spot):**
-```bash
-# 地理封锁，需要代理
-# 检查 CLOUDFLARE_PROXY_URL 环境变量
-# 检查 lib/cron/fetchers/binance-futures.ts 中的 fetchWithProxyFallback
-```
-
-**Bybit:**
-```bash
-# WAF 拦截，需要代理
-# 部分 API 需要特定 headers
-```
-
-**OKX:**
-```bash
-# 通常稳定，检查 API 格式变化
-curl 'https://www.okx.com/priapi/v5/ecotrade/public/copy-trade/total-lead-traders-new?leadPlatform=1&size=10'
-```
-
-**Bitget:**
-```bash
-# 检查 API v2 和 v1 兼容性
-# 可能需要 BITGET_PROXY_URL
-```
-
-### 3. 标准修复步骤
+## 1. Capture current evidence
 
 ```bash
-# 1. 检查 Vercel 日志
-vercel logs --filter cron --project ranking-arena
-
-# 2. 手动触发 cron
-curl "https://www.arenafi.org/api/cron/fetch-traders/[platform]" \
-  -H "Authorization: Bearer $CRON_SECRET"
-
-# 3. 检查数据库
-node scripts/check-data-distribution.mjs
-
-# 4. 如果需要回填
-node scripts/backfill-24h.mjs --platform [platform]
+npm run check:status
+npm run check:freshness
+npm run check:platforms
 ```
 
-### 4. 验证修复
+Treat each output as a probe, not truth. Record commit, environment, observation
+time, release identity, and any unavailable dependency. These commands diagnose;
+they do not authorize a generated remediation or automatic fix mode.
 
-```bash
-# 等待下一个 cron 周期后
-node scripts/pipeline-health-check.mjs --quick
+## 2. Identify the current authority path
 
-# 检查前端是否正常显示
-open https://www.arenafi.org/rankings
-```
+- Vercel schedules: vercel.json and the exact app/api/cron route.
+- External ingest: worker/src/ingest-worker.ts, the worker registry, and
+  lib/ingest/adapters/register.ts.
+- Source implementation: lib/ingest/adapters/<source>/.
+- Ranking freshness: arena_freshness_expected_sources(),
+  arena_visible_sources(), and leaderboard_source_freshness.source_as_of.
+- Serving output: publication/eligibility-gated leaderboard_ranks.
 
-## 常见错误处理模板
+Do not use removed per-source fetch routes, legacy lib/cron/fetchers paths, or the
+retired traders/trader_snapshots relations.
 
-如果 fetcher 缺少标准错误处理，参考技能：
-`/.claude/skills/arena-fetcher-error-handling.md`
+## 3. Reproduce safely
 
-## Key Files
-- `vercel.json` - Cron schedules
-- `app/api/cron/batch-fetch-traders/route.ts` - 批量抓取入口
-- `lib/cron/fetchers/` - 各平台 fetcher 实现
-- `lib/cron/fetchers/enrichment.ts` - Enrichment 逻辑
-- `scripts/pipeline-health-check.mjs` - 健康检查脚本
+1. Locate the adapter and tests with rg.
+2. Reproduce parsing against an existing redacted fixture or add a deterministic one.
+3. Check identity, window, units, pagination, timestamps, and null behavior.
+4. Verify errors reach the worker/job result instead of being recorded as success.
+5. If live network/database evidence is missing, report that witness as missing.
 
-## 紧急联系
+Never curl a production cron route, run a manual backfill, invoke exec_sql, or use
+trader_daily_snapshots to fill metrics.
 
-如果问题持续无法解决：
-1. 检查 Sentry 告警
-2. 查看 Supabase Dashboard 数据库连接状态
-3. 确认 Vercel 部署状态
+## 4. Implement and verify
+
+Make the smallest code/test change. Preserve null when evidence is absent; bound
+remote work and retries. Run focused adapter/job tests, both typechecks, lint,
+relevant publication QA, and a no-write dry run.
+
+Infrastructure, scheduling, database apply, deployment, and production verification
+remain separate reviewed steps.

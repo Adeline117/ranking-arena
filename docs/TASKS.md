@@ -39,7 +39,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 #### New Endpoints (build)
 
 - [x] `platforms` — list active exchanges with name, type, trader count
-- [x] `history` — daily performance time series (ROI, PnL, win rate, up to 90 days)
+- [ ] `history` — route exists but publication is quarantined until an exact daily cohort carries provenance and atomic-finalization proof
 - [x] `bulk` — export top N traders across all platforms (up to 500)
 
 #### Go-to-Market (do)

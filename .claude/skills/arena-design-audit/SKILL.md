@@ -12,25 +12,31 @@ You are a senior product designer auditing Arena's live UI. You produce a compre
 ## Audit Process
 
 ### Step 1: Identify Pages to Audit
+
 Read the app router structure to identify all user-facing pages:
+
 ```bash
 find app -name "page.tsx" | head -30
 ```
 
 Focus on core path first:
+
 1. Homepage (`/`)
-2. Rankings (`/rankings`)
-3. Trader Detail (`/trader/[id]`)
+2. Exchange rankings (`/rankings/exchanges`); `/rankings` permanently redirects to `/`
+3. Trader Detail (`/trader/[handle]`)
 4. Search results
 5. Auth flow (login/signup)
 6. Pro subscription
 
 ### Step 2: Read Design Tokens
-Read `lib/design-tokens.ts` and Tailwind config to understand the current design system.
+
+Read `lib/design-tokens.ts`, the Tailwind v4 theme in `app/globals.css`, and
+`postcss.config.mjs` to understand the current design system.
 
 ### Step 3: Audit Categories (10 categories, 8 items each = 80 checks)
 
 #### 1. Typography (8 checks)
+
 - [ ] Font hierarchy clear (h1 > h2 > h3 > body > caption)
 - [ ] Line heights readable (1.4-1.6 for body)
 - [ ] Font sizes consistent across similar elements
@@ -41,6 +47,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] CJK text (zh) properly sized and spaced
 
 #### 2. Color System (8 checks)
+
 - [ ] Primary/secondary/accent colors consistent
 - [ ] Semantic colors correct (green=profit, red=loss)
 - [ ] Dark mode: sufficient contrast, no pure white text
@@ -51,6 +58,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Brand colors used consistently
 
 #### 3. Spacing & Layout (8 checks)
+
 - [ ] Consistent spacing scale (4px/8px/16px/24px/32px)
 - [ ] Content width appropriate (max-width on readable text)
 - [ ] Grid alignment consistent
@@ -61,6 +69,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Three-column layout doesn't break on narrow screens
 
 #### 4. Components (8 checks)
+
 - [ ] Buttons have consistent sizing and styles
 - [ ] Input fields match across forms
 - [ ] Cards have consistent border radius and shadow
@@ -71,6 +80,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Tooltips positioned correctly
 
 #### 5. Navigation (8 checks)
+
 - [ ] Current page clearly indicated
 - [ ] Navigation hierarchy logical
 - [ ] Mobile menu works properly
@@ -81,6 +91,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Footer links organized
 
 #### 6. Data Visualization (8 checks)
+
 - [ ] Charts readable at all sizes
 - [ ] Axes labeled properly
 - [ ] Color-blind safe chart colors
@@ -91,6 +102,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Period switcher doesn't cause layout jump
 
 #### 7. Interaction & Animation (8 checks)
+
 - [ ] Hover effects on interactive elements
 - [ ] Click targets large enough (44px min)
 - [ ] Transitions smooth (150-300ms)
@@ -101,6 +113,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Infinite scroll or pagination clear
 
 #### 8. Content & Copy (8 checks)
+
 - [ ] Labels clear and concise
 - [ ] Error messages helpful
 - [ ] CTAs action-oriented ("View Trader" not "Click Here")
@@ -111,6 +124,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Legal/disclaimer text present where needed
 
 #### 9. Trust & Credibility (8 checks)
+
 - [ ] Exchange logos/icons present and correct
 - [ ] Data freshness indicated (last updated)
 - [ ] Methodology explained or linked
@@ -121,6 +135,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 - [ ] Professional tone throughout
 
 #### 10. AI Slop Detection (8 checks)
+
 - [ ] No generic stock imagery
 - [ ] No overly polished "AI-generated" graphics
 - [ ] Copy doesn't read like ChatGPT output
@@ -133,6 +148,7 @@ Read `lib/design-tokens.ts` and Tailwind config to understand the current design
 ### Step 4: Scoring
 
 Grade each category A-F:
+
 - **A** (7-8 pass): Excellent
 - **B** (5-6 pass): Good
 - **C** (3-4 pass): Needs improvement
@@ -147,18 +163,22 @@ Grade each category A-F:
 ## Overall Grade: [A-F]
 
 ## Scores by Category
-| Category | Grade | Pass | Fail | Critical Issues |
-|----------|-------|------|------|-----------------|
-| Typography | B | 6/8 | 2 | [issue] |
-| ... | ... | ... | ... | ... |
+
+| Category   | Grade | Pass | Fail | Critical Issues |
+| ---------- | ----- | ---- | ---- | --------------- |
+| Typography | B     | 6/8  | 2    | [issue]         |
+| ...        | ...   | ...  | ...  | ...             |
 
 ## Critical Issues (fix first)
+
 1. [Issue]: [Where] — [Why it matters]
 
 ## Improvements (nice to have)
+
 1. [Issue]: [Where] — [Suggested fix]
 
 ## What's Working Well
+
 - [Positive finding 1]
 - [Positive finding 2]
 ```

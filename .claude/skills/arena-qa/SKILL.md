@@ -1,143 +1,112 @@
 ---
 name: arena-qa
-description: QA lead with auto-fix. Systematically tests Arena, finds bugs, fixes them, commits atomically, re-verifies. Produces health score.
+description: Evidence-first QA for Arena. Tests the current authority paths, applies scoped fixes, and reports verified results without touching production state.
 ---
 
-# Arena QA — Test & Fix
+# Arena QA — Verify, Fix, Re-verify
 
-> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy and effort estimates.
+> **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for effort estimates and repository conventions.
 
-Systematically QA test Arena and automatically fix bugs found. Each fix is committed atomically with verification.
+Use the requested scope. If no tier is specified, begin with Quick and expand only
+when the evidence or task requires it.
 
-## Tier Selection
+- **Quick**: homepage ranking, trader detail, search, focused tests
+- **Standard**: Quick + auth, published API contracts, freshness probes, typecheck/lint
+- **Exhaustive**: Standard + exchange/token/weekly pages, edge cases, performance, i18n
 
-Ask the user which tier (use AskUserQuestion):
-- **Quick** (5 min): Core path only — homepage, rankings, trader detail, search
-- **Standard** (15 min): Quick + auth, pro features, API routes, data freshness
-- **Exhaustive** (30 min): Standard + all exchange pages, edge cases, performance, i18n
+Diagnosis and local code changes do not authorize a deploy, production cron call,
+backfill, migration apply, cache purge, process restart, secret read, or database
+write.
 
-## QA Process
+## 1. Establish the environment
 
-### Phase 1: Environment Check
+Record the commit, worktree status, Node version, target URL, and observation time.
+Use an already running local server only when browser/runtime QA is in scope. Do not
+silently start a background server, switch the target to production, or assume a
+missing dependency is healthy.
+
+## 2. Inspect the current product paths
+
+### Homepage ranking
+
+- Read `app/page.tsx` and `app/components/home/`.
+- The main ranking table is on `/`; `/rankings` permanently redirects to `/`.
+- Check publication/eligibility gates, sorting, pagination, filters, empty states,
+  and negative/zero/null metric behavior.
+
+### Ranking subpages
+
+- Read `app/(app)/rankings/`.
+- Test only implemented routes such as `/rankings/exchanges`, `/rankings/tokens`,
+  and `/rankings/weekly`; do not invent a standalone `/rankings` page.
+
+### Trader detail and search
+
+- Read `app/(app)/trader/[handle]/` and `app/(app)/search/`.
+- Verify a real fixture/test handle discovered from the repository; never substitute
+  a literal placeholder and call a 404 a product result.
+- Historical daily-derived series may be intentionally quarantined. Validate the
+  documented unavailable/no-store contract instead of expecting legacy data.
+
+## 3. Exercise published API contracts
+
+Against an explicitly selected local target, quote URLs containing `&`:
+
 ```bash
-# Verify dev server is running
-curl -s http://localhost:3000 | head -5
-
-# If not running:
-npm run dev &
-sleep 10
+curl -i 'http://localhost:3000/api/health'
+curl -i 'http://localhost:3000/api/rankings?window=30d&limit=10'
+curl -i 'http://localhost:3000/api/search?q=test'
 ```
 
-### Phase 2: Core Path Testing
+Discover a trader handle before calling `GET /api/traders/<handle>`. The rankings
+parameter is required and named `window` (`7d`, `30d`, `90d`, or `composite`), not
+`period`. Check status, exact response shape, publication evidence, cache headers,
+and sanitized failures; a 200 response alone is not a pass.
 
-#### 2a. Homepage
-- Read `app/page.tsx` and related components
-- Check: data loads, no console errors, layout correct
-- Verify: top traders display, Arena Scores visible, exchange logos render
+## 4. Capture data-authority evidence
 
-#### 2b. Rankings Page
-- Read `app/rankings/` pages
-- Check: table renders, sorting works, period switching (7D/30D/90D)
-- Verify: pagination, exchange filter, market type filter
-- Edge cases: empty exchange, 0 ROI trader, negative PnL
+Use the canonical read-only diagnostic entry points:
 
-#### 2c. Trader Detail
-- Read `app/trader/[id]/` pages
-- Check: profile loads, stats display, chart renders
-- Verify: period switching, score breakdown, trading history
-- Edge cases: trader with no snapshots, deleted trader, bot trader
-
-#### 2d. Search
-- Read search components and API
-- Check: search returns results, ranking correct, no stale results
-- Verify: Meilisearch integration, fallback behavior
-
-### Phase 3: API Route Testing
 ```bash
-# Test critical API routes
-curl -s http://localhost:3000/api/health
-curl -s http://localhost:3000/api/rankings?period=30d&limit=10
-curl -s http://localhost:3000/api/trader/[sample-id]
-curl -s http://localhost:3000/api/search?q=test
+npm run check:status
+npm run check:freshness
+npm run check:platforms
 ```
 
-Check for:
-- 200 status codes
-- Correct response shape
-- No leaked error details
-- Proper cache headers
+Record unavailable witnesses and the environment being observed. Do not use
+`scripts/pipeline-health-check.mjs`: it still references retired schema and cannot
+serve as current authority. Do not backfill, invoke a cron, or repair production as
+part of QA.
 
-### Phase 4: Data Quality
-```bash
-# Run data freshness check
-node scripts/pipeline-health-check.mjs --quick
-```
+## 5. Run repository checks
 
-Verify:
-- All active platforms have data < 48h old (CEX) / < 72h (DEX)
-- No null Arena Scores on ranked traders
-- ROI/PnL values reasonable (no Infinity, no -100% without explanation)
+Start with focused tests for changed code, then expand in proportion to risk:
 
-### Phase 5: Type & Lint Check
 ```bash
 npm run type-check
 npm run lint
 ```
 
-### Phase 6: Bug Fix Loop
+Also run the ingest-worker typecheck and relevant publication/migration QA when the
+change touches those surfaces. Report skipped checks and missing prerequisites.
 
-For each bug found:
+## 6. Scoped fix loop
 
-1. **Document**: What's broken, where, reproduction steps
-2. **Root cause**: Read the relevant code, understand why
-3. **Fix**: Make the minimal fix
-4. **Verify**: Confirm the fix works
-5. **Commit**: Atomic commit with descriptive message
-```bash
-git add [specific files]
-git commit -m "fix: [what was broken] — [what was fixed]
+For each defect:
 
-Found by Arena QA (tier: [quick/standard/exhaustive])
+1. Capture the failing behavior and authority source.
+2. Identify the root cause in current code or versioned schema.
+3. Make the smallest in-scope change and add a behavior/regression test.
+4. Re-run the focused failure, then the broader checks required by risk.
+5. Commit only when the task authorizes repository changes, using the repository's
+   shared-index-safe commit helper and explicit paths.
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-6. **Continue**: Move to next bug
+Do not change ranking formulas, publication authority, API compatibility, database
+schema, or external state merely to make a check green. Missing evidence stays
+missing; do not replace it with defaults, mocks, or stale legacy rows.
 
-### Phase 7: Health Score
+## 7. Report
 
-Calculate and output:
-
-```markdown
-# Arena QA Report — [Date]
-
-## Health Score: [0-100]
-
-Scoring:
-- Core path works:        /30
-- API routes respond:     /20
-- Data freshness OK:      /20
-- Type check passes:      /15
-- No console errors:      /15
-
-## Bugs Found: [N]
-## Bugs Fixed: [N]
-## Bugs Remaining: [N] (need user input)
-
-### Fixed Bugs
-1. [commit hash] — [description]
-
-### Remaining Issues (need user input)
-1. [description] — [why it needs human decision]
-
-### Before → After
-- Health Score: [before] → [after]
-```
-
-## Important Rules
-
-- NEVER fix business logic without asking (Arena Score formula, ranking algorithm)
-- NEVER modify database schema
-- NEVER change API response shapes (breaking change)
-- OK to fix: null handling, missing error boundaries, broken imports, wrong types, CSS issues
-- Each fix MUST be a separate commit
-- If unsure about a fix, add to "Remaining Issues" instead
+State verified passes, observed failures, skipped checks, environment/commit, and
+remaining gates. If a health score is requested, show the evidence behind every
+component and never score unavailable data as healthy.

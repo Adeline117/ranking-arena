@@ -42,7 +42,7 @@ app/                    # Next.js App Router pages
   hot/                  # Hot/trending content page
 
 lib/                    # Core business logic
-  connectors/           # Exchange API connectors
+  ingest/adapters/      # Worker-loaded exchange/source adapters
   data/                 # Data fetching functions
   services/             # Business logic services
   hooks/                # React hooks
@@ -107,24 +107,28 @@ stripe_customers        # Stripe integration
 
 ## Data Pipeline
 
-62 Vercel cron jobs refresh trader data continuously:
+38 Vercel schedules are declared in `vercel.json`. Representative current jobs:
 
-- `batch-fetch-traders` (groups a-f): Fetch rankings from exchanges
-- `batch-enrich`: Enrich trader details (7D, 30D periods)
-- `compute-leaderboard`: Compute Arena Scores
-- `fetch-details`: Hot/normal tier detail fetching
-- `aggregate-daily-snapshots`: Daily rollups
+- `batch-5min` and `batch-discover`: bounded inline discovery/maintenance work
+- `compute-leaderboard-watchdog`: guarded leaderboard generation trigger
+- `check-data-freshness`: source-watermark freshness monitoring
+- `precompute-composite` and `sync-ranking-store`: serving projection/cache work
+- `backfill-avatars`: independently scheduled avatar maintenance
 
-## Exchange Connectors (`lib/connectors/`)
+Do not infer a live schedule from an endpoint name or an old runbook; `vercel.json`
+is the Vercel schedule source of truth and external ingest uses the worker registry.
+
+Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
+
+## Exchange Adapters (`lib/ingest/adapters/`)
 
 CEX: binance-futures, binance-spot, bybit, okx, bitget, mexc, kucoin, htx, coinex
 DEX: hyperliquid, gmx, dydx, vertex, drift, aevo, gains, kwenta
 
-Each connector implements:
-
-- `fetchLeaderboard(period)` - Get ranked traders
-- `fetchTraderDetails(traderId)` - Get trader profile
-- Rate limiting + circuit breaker built-in
+Adapters register through `lib/ingest/adapters/register.ts` and are loaded by
+`worker/src/ingest-worker.ts`. Verify the current `SourceAdapter` contract and
+source-specific fixtures before changing an adapter; do not infer a path or API
+shape from old connector notes.
 
 ## Arena Score Formula
 
@@ -616,31 +620,31 @@ try {
 
 ## Quick Reference
 
-| Action                 | Command/Location                                     |
-| ---------------------- | ---------------------------------------------------- |
-| Add migration          | `scripts/new-migration.sh <description>`             |
-| Add API route          | `app/api/{name}/route.ts`                            |
-| Add connector          | `lib/connectors/{exchange}.ts`                       |
-| **Add ingest source**  | `docs/ADAPTER_ONBOARDING.md`(checklist,含指标声明门) |
-| Add cron job           | `vercel.json` crons array                            |
-| Check logs             | `vercel logs` or Sentry dashboard                    |
-| Fix pipeline           | `/fix-pipeline`                                      |
-| Deploy preview         | `/deploy-staging`                                    |
-| Implement feature      | `/implement-spec specs/xxx.md`                       |
-| Weekly self-check      | `/weekly-self-check`                                 |
-| Health dashboard       | `/admin/monitoring`                                  |
-| **CEO product review** | `/plan-ceo-review`                                   |
-| **Eng manager review** | `/plan-eng-review` (gates `/ship`)                   |
-| **Design audit**       | `/design-audit` (report-only, 80 checks)             |
-| **Design system**      | `/design-system` (creates docs/DESIGN.md)            |
-| **Ship release**       | `/ship` (test → version bump → CHANGELOG → PR)       |
-| **QA test + fix**      | `/qa` (quick/standard/exhaustive)                    |
-| **QA report only**     | `/qa-report` (no code changes)                       |
-| **Design QA + fix**    | `/qa-design` (fix visual issues)                     |
-| **Retrospective**      | `/retro` (weekly engineering retro)                  |
-| **Post-ship docs**     | `/doc-release` (sync all docs after ship)            |
-| **Headless browser**   | `/browse` (screenshots, interactions, responsive)    |
-| **Auth for browser**   | `/setup-browser-cookies` (import real cookies)       |
+| Action                 | Command/Location                                      |
+| ---------------------- | ----------------------------------------------------- |
+| Add migration          | `scripts/new-migration.sh <description>`              |
+| Add API route          | `app/api/{name}/route.ts`                             |
+| Add ingest adapter     | `docs/ADAPTER_ONBOARDING.md` + `lib/ingest/adapters/` |
+| **Add ingest source**  | `docs/ADAPTER_ONBOARDING.md`(checklist,含指标声明门)  |
+| Add cron job           | `vercel.json` crons array                             |
+| Check logs             | `vercel logs` or Sentry dashboard                     |
+| Fix pipeline           | `/fix-pipeline`                                       |
+| Deploy preview         | `/deploy-staging`                                     |
+| Implement feature      | `/implement-spec specs/xxx.md`                        |
+| Weekly self-check      | `/weekly-self-check`                                  |
+| Health dashboard       | `/admin/monitoring`                                   |
+| **CEO product review** | `/plan-ceo-review`                                    |
+| **Eng manager review** | `/plan-eng-review` (gates `/ship`)                    |
+| **Design audit**       | `/design-audit` (report-only, 80 checks)              |
+| **Design system**      | `/design-system` (creates docs/DESIGN.md)             |
+| **Ship release**       | `/ship` (test → version bump → CHANGELOG → PR)        |
+| **QA test + fix**      | `/qa` (quick/standard/exhaustive)                     |
+| **QA report only**     | `/qa-report` (no code changes)                        |
+| **Design QA + fix**    | `/qa-design` (fix visual issues)                      |
+| **Retrospective**      | `/retro` (weekly engineering retro)                   |
+| **Post-ship docs**     | `/doc-release` (sync all docs after ship)             |
+| **Headless browser**   | `/browse` (screenshots, interactions, responsive)     |
+| **Auth for browser**   | `/setup-browser-cookies` (import real cookies)        |
 
 ## Emergency Rollback
 

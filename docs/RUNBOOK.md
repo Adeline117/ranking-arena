@@ -895,7 +895,13 @@ ORDER BY pg_total_relation_size(relid) DESC LIMIT 10;
 VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 ```
 
-**WARNING**: Never DELETE historical data (daily snapshots, equity curves, timeseries). These are retained for long-term analysis.
+**WARNING**: Never DELETE historical data (daily snapshots, equity curves, timeseries). These are retained for forensic and long-term analysis, but retention is not publication authority.
+
+### Daily-snapshot containment gate
+
+`aggregate-daily-snapshots`, `cleanup-violations`, and `scan-data-quality` are unscheduled auth-first 401/410 tombstones. The former scanner RPC has no versioned function body and is not trusted as read-only. Do not manually invoke a legacy backfill, cleanup, scan, or general-purpose SQL RPC; restore a retired Vercel schedule; or treat a recent date/nonzero row count as proof of trustworthy history. `trader_daily_snapshots` lacks season, generation, cohort, and publication-proof identity; Movers and every derived public consumer must remain fail closed. A schedule may be restored only after independent review proves a provenance-bound producer, an exact complete cohort, and atomic finalization. `cleanup-data` no longer touches this table or invokes `exec_sql`.
+
+The checked-in `20260808090000_quarantine_legacy_trader_daily_snapshots.sql` is not self-executing and must not be applied ad hoc. Before the protected migration runner is authorized, inspect the live catalog for unknown policies, inherited grants, and SECURITY DEFINER helpers. After application, prove anon/authenticated direct table and REST reads fail, service-role DML fails, every retired overload (including `exec_sql`) is non-executable by application roles, service-role SELECT remains forensic-only, and the preserved row/OID evidence is unchanged.
 
 ---
 
@@ -1168,5 +1174,5 @@ Redis consumers do **not** share one fail-open contract. Treat each boundary sep
 | **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 53 endpoints / 42 Vercel schedules, staggered        |
+| **Cron Schedule**    | 53 endpoints / 38 Vercel schedules, staggered        |
 | **Scraper PM2 name** | `arena-scraper`                                      |

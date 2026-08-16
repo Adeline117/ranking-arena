@@ -1,152 +1,86 @@
 # Arena Supabase Operations
 
-Arena 项目 Supabase 数据库操作规范。
+Operate conservatively. This guide describes repository-side inspection and migration
+preparation; it does not authorize a production connection or mutation.
 
-## 数据库连接
+## Sources of truth
 
-```bash
-# 直连（本地）
-export DATABASE_URL="postgresql://postgres.xxx:password@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
+1. lib/supabase/database.types.ts for the generated public client surface
+2. supabase/migrations for versioned public and private arena schema intent
+3. current application queries for real access patterns
+4. an approved read-only live catalog capture for deployed state
 
-# 通过 Supabase CLI
-supabase db remote sql --sql "SELECT 1"
-```
+Generated types and migration files can drift from production. Record the commit,
+project, timestamp, and query before drawing a live conclusion.
 
-## 关键表结构
+## Current ranking relations
 
 ### trader_sources
-- **主键**: `(source, source_trader_id)` 
-- **用途**: 存储交易员基础信息
-- **注意**: `handle` 可为 NULL（数字 only handle 设为 NULL）
 
-### trader_snapshots
-- **主键**: `id` (auto)
-- **唯一约束**: `(source, source_trader_id, season_id, captured_at)`
-- **关键字段**: `roi`, `pnl`, `win_rate`, `max_drawdown`, `sharpe_ratio`, `sortino_ratio`
-- **坑**: `captured_at` 必须每次更新
-
-### trader_daily_snapshots
-- **用途**: 存储每日快照用于计算 Sharpe/Sortino
-- **唯一约束**: `(platform, trader_key, date)`
-- **当前状态**: 26,137 rows（2026-02-23 backfill）
+- Primary key: id; unique lookup key: source plus source_trader_id
+- Legacy public serving/enrichment identity projection; private arena.traders is
+  the canonical ingest identity layer
+- last_seen_at and last_refreshed_at are activity inventory, not publication freshness
+- Profile fields include handle, avatar_url, source_kind, and source_type
 
 ### leaderboard_ranks
-- **用途**: 排行榜预计算结果
-- **关键字段**: `rank`, `score`, `source`, `period`
-- **刷新**: VPS cron 每小时跑 `compute-leaderboard-local.mjs`
 
-## 常见操作
+- Unique identity key: season_id, source, source_trader_id
+- Fields include rank, arena_score_v4, computed_at, metrics_estimated,
+  score_completeness, and is_outlier
+- Consumers must also enforce the repository publication/eligibility policy
+- computed_at is row compute time; it does not replace
+  leaderboard_source_freshness.source_as_of or a sealed cohort proof
 
-### 1. 检查 null 统计
+### trader_daily_snapshots
+
+- Primary key: id; unique legacy key: platform, trader_key, and date
+- No season, generation, cohort, or publication proof
+- Producer, cleanup, scanner, and public derived consumers remain quarantined
+- Never use it to fill ranking metrics or restore a historical product response
+
+The old traders and trader_snapshots names are not present in current generated
+types and must not be used in new SQL or client code.
+
+Private arena relations are intentionally absent from the generated public client
+surface. Verify them against versioned migrations and the worker database boundary,
+not by assuming their absence from database.types.ts.
+
+## Safe read-only checks
 
 ```sql
-SELECT 
-  source,
-  COUNT(*) as total,
-  COUNT(win_rate) as has_wr,
-  COUNT(max_drawdown) as has_mdd,
-  COUNT(sharpe_ratio) as has_sharpe
-FROM trader_snapshots
+SELECT source, season_id, COUNT(*) AS rows, MAX(computed_at) AS latest
+FROM leaderboard_ranks
+GROUP BY source, season_id
+ORDER BY source, season_id;
+
+SELECT source, COUNT(*) AS identities, MAX(last_seen_at) AS latest_seen
+FROM trader_sources
 GROUP BY source
-ORDER BY total DESC;
+ORDER BY source;
 ```
 
-### 2. 查找 stale 数据
+Validate relation and column existence before running even these queries.
 
-```sql
-SELECT 
-  source,
-  MAX(captured_at) as last_update,
-  NOW() - MAX(captured_at) as age
-FROM trader_snapshots
-GROUP BY source
-HAVING NOW() - MAX(captured_at) > INTERVAL '3 hours'
-ORDER BY age DESC;
-```
+## Migration workflow
 
-### 3. Upsert 冲突处理
+1. Add a forward-only migration; never edit applied history.
+2. Add static contract coverage and an isolated PG17 behavior test when PostgreSQL
+   semantics matter.
+3. Run migration-history shape tests and replay/idempotency checks.
+4. Review grants, RLS, SECURITY DEFINER routines, triggers, cron jobs, and rollback behavior.
+5. Treat the SQL as a candidate until an approved runner verifies the exact live
+   migration ledger and drift.
 
-```sql
-INSERT INTO trader_snapshots (source, source_trader_id, season_id, roi, captured_at)
-VALUES ($1, $2, $3, $4, NOW())
-ON CONFLICT (source, source_trader_id, season_id, captured_at) 
-DO UPDATE SET 
-  roi = EXCLUDED.roi,
-  captured_at = NOW();
-```
+Do not use CASCADE without an explicit dependency inventory. Do not use dynamic
+general-purpose SQL RPCs. exec_sql and legacy daily cleanup/read RPCs are retired by
+the daily-snapshot quarantine candidate.
 
-**Supabase JS:**
-```javascript
-const { error } = await supabase
-  .from('trader_snapshots')
-  .upsert(rows, { 
-    onConflict: 'source,source_trader_id,season_id,captured_at' 
-  })
-```
+## Prohibited without explicit authorization
 
-### 4. 批量更新（分批避免超时）
-
-```javascript
-const BATCH = 50
-for (let i = 0; i < rows.length; i += BATCH) {
-  const batch = rows.slice(i, i + BATCH)
-  const { error } = await supabase
-    .from('trader_snapshots')
-    .upsert(batch, { onConflict: '...' })
-  if (error) console.error(`Batch ${i}:`, error.message)
-  await sleep(100)
-}
-```
-
-## RLS 策略
-
-Arena 使用 Supabase RLS（Row Level Security）。关键策略：
-
-- `anon` 角色：可以 SELECT 公开表
-- `authenticated`：可以读写自己的数据
-- `service_role`：绕过 RLS（仅服务端）
-
-**检查 RLS:**
-```sql
-SELECT tablename, rowsecurity 
-FROM pg_tables 
-WHERE schemaname = 'public';
-```
-
-## 性能优化
-
-### 索引
-
-```sql
--- trader_snapshots 常用查询索引
-CREATE INDEX IF NOT EXISTS idx_snapshots_source_season 
-ON trader_snapshots(source, season_id);
-
-CREATE INDEX IF NOT EXISTS idx_snapshots_captured 
-ON trader_snapshots(captured_at DESC);
-
--- leaderboard_ranks
-CREATE INDEX IF NOT EXISTS idx_ranks_source_period_rank 
-ON leaderboard_ranks(source, period, rank);
-```
-
-### 分页
-
-```javascript
-// 使用 range 而不是 offset/limit
-const { data } = await supabase
-  .from('trader_snapshots')
-  .select('*')
-  .range(0, 99)  // 第一页 100 条
-```
-
-## 迁移记录
-
-| 日期 | 内容 | Commit |
-|------|------|--------|
-| 2026-02-22 | 添加 monitoring RPC | - |
-| 2026-02-22 | season_id 索引 | - |
-
-## 更新日志
-
-- 2026-02-23: 创建 skill，记录表结构、常见操作、性能优化
+- Reading or printing credentials
+- Connecting to or mutating production
+- Applying migrations
+- Running DML/DDL, cleanup, backfill, or repair RPCs
+- Changing grants, RLS, schedules, workers, or deployment state
+- Restoring any legacy daily snapshot writer or consumer
