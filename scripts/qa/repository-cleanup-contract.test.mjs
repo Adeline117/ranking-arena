@@ -137,6 +137,10 @@ test('retired duplicate post hooks stay removed', () => {
 test('retired trader cards and fabricated comparison stay removed', () => {
   const retiredComponents = [
     'app/components/trader/TraderAboutCard.tsx',
+    'app/components/trader/TraderAnimatedAvatar.tsx',
+    'app/components/trader/TraderSocialLinks.tsx',
+    'app/components/trader/TraderStatItem.tsx',
+    'app/components/trader/MarketCorrelationCard.tsx',
     'app/components/trader/stats/components/ComparePortfolioSection.tsx',
   ]
 
@@ -151,4 +155,9 @@ test('retired trader cards and fabricated comparison stay removed', () => {
     'utf8'
   )
   assert.doesNotMatch(statsExports, /ComparePortfolioSection/)
+
+  for (const locale of ['en', 'ja', 'ko', 'zh']) {
+    const translations = readFileSync(join(repoRoot, `lib/i18n/${locale}.ts`), 'utf8')
+    assert.doesNotMatch(translations, /\baddBioHint\b/)
+  }
 })

@@ -1648,9 +1648,6 @@ const zh = {
   deletePostTitle: '删除帖子',
   deletePostMessage: '确定要删除这篇帖子吗？删除后无法恢复。',
 
-  // TraderAboutCard
-  addBioHint: '点击下方按钮添加个人简介',
-
   // Favorites page (additional keys)
   delete: '删除',
   loadFoldersFailedRetry: '加载收藏夹失败，请稍后重试',

@@ -1682,9 +1682,6 @@ const en = {
   deletePostTitle: 'Delete Post',
   deletePostMessage: 'Are you sure you want to delete this post? This cannot be undone.',
 
-  // TraderAboutCard
-  addBioHint: 'Click below to add a bio',
-
   // Favorites page (additional keys)
   delete: 'Delete',
   loadFoldersFailedRetry: 'Failed to load folders, please try again later',

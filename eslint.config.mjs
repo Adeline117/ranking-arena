@@ -210,7 +210,6 @@ const eslintConfig = defineConfig([
       'app/components/ranking/RankingFilters.tsx',
       'app/components/post/components/PostDetailView.tsx',
       'app/components/trader/AdvancedMetricsCard.tsx',
-      'app/components/trader/MarketCorrelationCard.tsx',
       'app/components/trader/CopyTradeSimulator.tsx',
       'app/components/home/RankingControls.tsx',
       'app/components/onboarding/WelcomeModal.tsx',

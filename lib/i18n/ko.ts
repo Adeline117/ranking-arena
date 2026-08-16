@@ -1605,9 +1605,6 @@ const ko = {
   deletePostTitle: '게시글 삭제',
   deletePostMessage: '이 게시글을 삭제하시겠습니까? 되돌릴 수 없습니다.',
 
-  // TraderAboutCard
-  addBioHint: '아래를 클릭하여 소개를 추가하세요',
-
   // Favorites page (additional keys)
   delete: '삭제',
   loadFoldersFailedRetry: '폴더를 불러오지 못했습니다. 나중에 다시 시도해 주세요',

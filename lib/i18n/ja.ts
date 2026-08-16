@@ -1529,8 +1529,6 @@ const ja = {
   deletePostTitle: '投稿を削除',
   deletePostMessage: 'この投稿を削除してもよろしいですか？この操作は取り消せません。',
 
-  addBioHint: '下をクリックして自己紹介を追加',
-
   delete: '削除',
   loadFoldersFailedRetry: 'フォルダの読み込みに失敗しました。後ほどお試しください',
   myFoldersTab: 'マイフォルダ',
