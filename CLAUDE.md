@@ -53,7 +53,7 @@ lib/                    # Core business logic
 
 scripts/                # CLI tools and maintenance
   import/               # Data import scripts
-  backfill-*.ts         # Backfill jobs
+  backfill-*.ts         # Legacy compatibility tombstones (no V1 direct invocation)
 
 supabase/migrations/    # SQL migration files
 worker/                 # Background job runner
@@ -75,8 +75,10 @@ npm run diagnose        # Serving checks + DB inventories (controlled DB credent
 npm run check:platforms # Platform status
 ```
 
-Backfill commands are write operations and require a separate reviewed plan and
-explicit owner authorization; they are intentionally not part of routine diagnostics.
+The retained legacy `backfill-*.ts` paths are compatibility tombstones: during V1
+they report `RETIRED` and exit 2 rather than performing a write. A future backfill
+would need its own reviewed, provenance-bound release plan and explicit owner GO;
+it is intentionally not part of routine diagnostics.
 
 ## Database Schema (Core Tables)
 
@@ -541,8 +543,9 @@ npm run check:enrichment  # enrichment 库存，非发布权威（需受控读�
 ```
 
 这些命令只读。表库存成功不证明 freshness、cohort 或 serving authority，且不授权
-backfill、cron、迁移、缓存清理或生产修复。`pipeline-health-check.mjs` 仍引用退役
-schema，不能作为当前证据，也不得运行其历史 `--fix` 路径。
+backfill、cron、迁移、缓存清理或生产修复。V1 tombstone contract 中列出的旧 health、
+local-recompute、source-fetch、checkpoint 与 legacy-backfill 入口会明确报 `RETIRED`
+并以退出码 2 失败，不能作为诊断、修复或生产入口。
 
 ### Schema 契约检查（防迁移漂移 — 每周必跑 / 任何迁移后必跑）
 

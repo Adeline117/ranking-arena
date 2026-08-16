@@ -70,8 +70,6 @@
     "check:enrichment": "node scripts/check_enrichment.mjs",
     "check:scripts-boundary": "node scripts/check-production-boundary.mjs",
     "lighthouse": "node scripts/lighthouse-test.mjs",
-    "backfill:24h": "npx tsx scripts/backfill-window-24h.ts",
-    "backfill:risk:7d30d": "npx tsx scripts/backfill-risk-metrics-7d30d.ts",
     "census:dex": "tsx scripts/dex-census-baseline.mts",
     "census:dex:golden-wallets": "tsx scripts/generate-dex-golden-wallets.mts",
     "census:dex:golden-wallets:verify": "tsx scripts/generate-dex-golden-wallets.mts --verify-pinned",
