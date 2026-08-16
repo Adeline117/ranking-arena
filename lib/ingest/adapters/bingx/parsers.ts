@@ -27,6 +27,7 @@ import type {
   ParsedPosition,
   RankingTimeframe,
 } from '../../core/types'
+import { parseBingxCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -303,23 +304,7 @@ export function parseBingxHistory(
   ctx: ParseCtx
 ): ParsedHistoryRow[] {
   if (kind === 'copiers') {
-    const list = ((raw as Dict)?.data as Dict | undefined)?.followerDetailsVoList
-    const rows = Array.isArray(list) ? (list as Dict[]) : []
-    const out: ParsedHistoryRow[] = []
-    for (const c of rows) {
-      const label = typeof c.nickName === 'string' ? c.nickName : null
-      out.push({
-        kind: 'copiers',
-        ts: ctx.scrapedAt,
-        copierLabel: label,
-        copierPnl: num(c.followingProfitLoss),
-        copierInvested: num(c.copyAmount),
-        copyDurationDays: int(c.followingDays),
-        dedupeHash: dedupeHash('bingx_cp', label, c.copyAmount),
-        raw: c,
-      })
-    }
-    return out
+    return parseBingxCopiersV1(raw, ctx)
   }
 
   if (kind === 'orders') {
