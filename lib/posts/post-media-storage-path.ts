@@ -169,9 +169,10 @@ function compareAscii(left: string, right: string): number {
 
 /**
  * Builds the complete, owner-bound Storage manifest for the final post state.
- * Managed images may only come from `images`, while managed videos may only
- * come from URL candidates in `content`. Client-provided upload file names are
- * deliberately not accepted as an input to this authority boundary.
+ * Managed images may come from `images` or Markdown in `content`, while
+ * managed videos may only come from URL candidates in `content`.
+ * Client-provided upload file names are deliberately not accepted as an input
+ * to this authority boundary.
  */
 export function collectPostMediaClaimObjectPaths(
   images: readonly unknown[] | null,
@@ -216,13 +217,13 @@ export function collectPostMediaClaimObjectPaths(
     switch (classification.kind) {
       case 'external':
         break
+      case 'owned-image':
       case 'owned-video':
         if (!addObjectPath(classification.objectPath)) return { kind: 'invalid-reference' }
         break
       case 'invalid-configuration':
         return { kind: 'invalid-configuration' }
       case 'none':
-      case 'owned-image':
       case 'invalid-internal':
         return { kind: 'invalid-reference' }
     }

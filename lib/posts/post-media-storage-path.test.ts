@@ -176,7 +176,7 @@ describe('post media storage paths', () => {
       ).toEqual({ kind: 'ok', objectPaths: [] })
     })
 
-    it('collects final images and Markdown videos once in deterministic ASCII order', () => {
+    it('collects final images and Markdown media once in deterministic ASCII order', () => {
       const firstImageObject = '11111111-1111-4111-8111-111111111111'
       const secondImageObject = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
       const videoObject = '22222222-2222-4222-8222-222222222222'
@@ -184,11 +184,12 @@ describe('post media storage paths', () => {
       const secondImagePath = `${OWNER}/${secondImageObject}.png`
       const videoPath = `${OWNER}/videos/${videoObject}.mp4`
       const videoUrl = publicUrl(videoPath)
+      const firstImageUrl = publicUrl(firstImagePath)
 
       expect(
         collectPostMediaClaimObjectPaths(
-          [publicUrl(secondImagePath), publicUrl(firstImagePath), publicUrl(firstImagePath)],
-          [`[video](${videoUrl})`, videoUrl].join('\n'),
+          [publicUrl(secondImagePath), firstImageUrl, firstImageUrl],
+          [`![image](${firstImageUrl})`, `[video](${videoUrl})`, videoUrl].join('\n'),
           OWNER,
           STORAGE_BASE_URL
         )
@@ -198,13 +199,30 @@ describe('post media storage paths', () => {
       })
     })
 
-    it.each([
-      ['managed video in the final image list', [publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)], ''],
-      ['managed image in final content', [], `![image](${publicUrl(`${OWNER}/${OBJECT}.webp`)})`],
-    ])('fails closed for a %s', (_label, images, content) => {
-      expect(collectPostMediaClaimObjectPaths(images, content, OWNER, STORAGE_BASE_URL)).toEqual({
-        kind: 'invalid-reference',
+    it('collects a managed image referenced only by Markdown content', () => {
+      const imagePath = `${OWNER}/${OBJECT}.webp`
+      expect(
+        collectPostMediaClaimObjectPaths(
+          [],
+          `![image](${publicUrl(imagePath)})`,
+          OWNER,
+          STORAGE_BASE_URL
+        )
+      ).toEqual({
+        kind: 'ok',
+        objectPaths: [imagePath],
       })
+    })
+
+    it('fails closed for a managed video in the final image list', () => {
+      expect(
+        collectPostMediaClaimObjectPaths(
+          [publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)],
+          '',
+          OWNER,
+          STORAGE_BASE_URL
+        )
+      ).toEqual({ kind: 'invalid-reference' })
     })
 
     it.each([
