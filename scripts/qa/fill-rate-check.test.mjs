@@ -232,13 +232,10 @@ test('scheduled mode requires DATABASE_URL while local mode may skip', () => {
   assert.match(local.stdout, /SKIPPED/)
 })
 
-test('the scheduled schema canary opts into the required database gate', () => {
+test('V1 NO-GO does not schedule a write-capable schema canary', () => {
   const workflow = readFileSync('.github/workflows/openclaw-sentinels.yml', 'utf8')
 
-  assert.match(
-    workflow,
-    /schema-canary:[\s\S]*DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}[\s\S]*REQUIRE_DATABASE_URL: '1'[\s\S]*run: node scripts\/openclaw\/schema-canary-sentinel\.mjs/
-  )
+  assert.doesNotMatch(workflow, /schema-canary:|schema-canary-sentinel/)
 })
 
 test('a configured but unreachable database fails closed', () => {

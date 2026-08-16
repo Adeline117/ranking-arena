@@ -1,6 +1,6 @@
 # OpenClaw 诊断哨兵 — Mac Mini 冗余（企业级差距 Phase 2 / #2 单点消除）
 #
-# 把只读诊断类 openclaw 脚本加成 GH Actions schedule，与 Mac Mini 的 OpenClaw
+# 把诊断类 OpenClaw 脚本加成 GH Actions schedule，与 Mac Mini 的 OpenClaw
 # cron 错峰冗余：Mac Mini down 时监控/告警继续（同 health-monitor.yml 的 M-17）。
 # 全部用现有 GH secrets，零新凭据。抓取类脚本(住宅 IP 反封锁)不在此——必须留本地。
 #
@@ -21,7 +21,6 @@ on:
   schedule:
     - cron: '10,40 * * * *' # pipeline-health（错峰 health-monitor 的 15,45 / OpenClaw 的 0,30）
     - cron: '0 9 * * 1' # weekly-metrics 周一 09:00 UTC
-    - cron: '30 6 * * *' # schema-canary 每日 06:30 UTC（错峰 Mac Mini 本地 07:30）
     - cron: '0 8 * * *' # daily-pipeline-report 每日 08:00 UTC
     - cron: '20 7 * * *' # ux-patrol 每日 07:20 UTC
     - cron: '40 8 * * *' # backup-freshness 每日 08:40 UTC（R2 备份 >26h 告警）
@@ -120,32 +119,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/openclaw/weekly-metrics.mjs
-
-  schema-canary:
-    # Resume condition: github.event.schedule == '30 6 * * *'
-    if: ${{ false }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci --ignore-scripts
-      - name: schema-canary-sentinel（契约 + 填充率 + 写路径金丝雀，自清理）
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # 定时环境必须提供直连 arena schema；缺失、查询失败或证据写入失败
-          # 都硬红，不能把监控失明当成数据健康。
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          REQUIRE_DATABASE_URL: '1'
-        run: node scripts/openclaw/schema-canary-sentinel.mjs
 
   daily-pipeline-report:
     # Resume condition: github.event.schedule == '0 8 * * *'

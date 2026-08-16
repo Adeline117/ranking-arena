@@ -35,14 +35,19 @@ fi
 
 PROXY_KEY=topology-test node - "$SG_CONFIG" "$JP_CONFIG" <<'NODE'
 const [sgPath, jpPath] = process.argv.slice(2)
-const names = (configPath) => require(configPath).apps.map((app) => app.name)
-const sg = names(sgPath)
-const jp = names(jpPath)
+const load = (configPath) => require(configPath)
+const sgConfig = load(sgPath)
+const jpConfig = load(jpPath)
+const sg = sgConfig.apps.map((app) => app.name)
+const jp = jpConfig.apps.map((app) => app.name)
 if (JSON.stringify(sg) !== JSON.stringify(['arena-scraper', 'arena-proxy'])) {
   throw new Error(`unexpected SG PM2 topology: ${sg.join(',')}`)
 }
 if (JSON.stringify(jp) !== JSON.stringify(['arena-proxy'])) {
   throw new Error(`unexpected JP PM2 topology: ${jp.join(',')}`)
+}
+if ([...sgConfig.apps, ...jpConfig.apps].some((app) => Object.hasOwn(app, 'cron_restart'))) {
+  throw new Error('V1 NO-GO PM2 configs must not schedule autonomous process restarts')
 }
 NODE
 

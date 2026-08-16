@@ -41,14 +41,15 @@ test('verifies rollback on the public health endpoint before claiming success', 
   assert.doesNotMatch(workflow, /Vercel confirmed rollback/)
 })
 
-test('makes both Telegram notification paths bounded and observable', () => {
-  assert.equal(workflow.match(/send_telegram_alert\(\)/g)?.length, 2)
-  assert.equal(workflow.match(/--connect-timeout 5 --max-time 10/g)?.length, 2)
-  assert.equal(workflow.match(/--output \/dev\/null --write-out '%\{http_code\}'/g)?.length, 2)
-  assert.equal(workflow.match(/::warning title=Telegram alert delivery failed::curl=/g)?.length, 2)
-  assert.equal(workflow.match(/Telegram alert delivery failed — curl=/g)?.length, 2)
+test('keeps the remaining Telegram notification path bounded and observable', () => {
+  assert.equal(workflow.match(/send_telegram_alert\(\)/g)?.length, 1)
+  assert.equal(workflow.match(/--connect-timeout 5 --max-time 10/g)?.length, 1)
+  assert.equal(workflow.match(/--output \/dev\/null --write-out '%\{http_code\}'/g)?.length, 1)
+  assert.equal(workflow.match(/::warning title=Telegram alert delivery failed::curl=/g)?.length, 1)
+  assert.equal(workflow.match(/Telegram alert delivery failed — curl=/g)?.length, 1)
   assert.doesNotMatch(workflow, /api\.telegram\.org[^\n]*\$\{\{ secrets\./)
   assert.doesNotMatch(workflow, /api\.telegram\.org[^\n]*\|\| true/)
+  assert.doesNotMatch(workflow, /schema-canary-sentinel|Write-path canary|steps\.canary/)
 })
 
 test('passes dynamic smoke output through the environment instead of shell interpolation', () => {
