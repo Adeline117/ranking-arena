@@ -156,7 +156,7 @@ export default function CopierAggregatePanel({
       )}
 
       <Text size="xs" color="tertiary" style={{ display: 'block', opacity: 0.6, marginTop: 8 }}>
-        {t('copierAggregateNotice')}
+        {aggregate.receiptBound ? t('copierVerifiedCaptureNotice') : t('copierAggregateNotice')}
       </Text>
 
       <RecordProvenanceFooter provenance={aggregate.provenance} exchangeName={exchangeName} />

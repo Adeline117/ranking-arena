@@ -6206,6 +6206,8 @@ const ko = {
   copierDepthTop3: '이 거래소는 상위 3명의 카피어 미리보기만 공개합니다.',
   copierDepthNone: '이 거래소는 카피어 데이터를 공개하지 않습니다.',
   copierAggregateNotice: '집계 데이터만 표시 — 개별 카피어는 절대 표시되지 않습니다.',
+  copierVerifiedCaptureNotice:
+    '검증된 수집 결과이며 실시간 목록이 아닙니다. 개별 카피어는 표시되지 않습니다.',
   traderKindBot: '봇',
   traderKindHuman: '휴먼',
   botStrategyMartingale: '마틴게일',

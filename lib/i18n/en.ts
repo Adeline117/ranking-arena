@@ -6328,6 +6328,8 @@ const en = {
   copierDepthTop3: 'This exchange publishes only a top-3 copier preview.',
   copierDepthNone: 'This exchange does not publish copier data.',
   copierAggregateNotice: 'Aggregated data only — individual copiers are never shown.',
+  copierVerifiedCaptureNotice:
+    'Verified for this capture, not a live roster — individual copiers are never shown.',
   traderKindBot: 'Bot',
   traderKindHuman: 'Human',
   botStrategyMartingale: 'Martingale',

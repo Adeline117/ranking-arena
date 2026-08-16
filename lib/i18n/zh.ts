@@ -6166,6 +6166,7 @@ const zh = {
   copierDepthTop3: '该交易所仅公开前 3 名跟单者预览。',
   copierDepthNone: '该交易所不公开跟单者数据。',
   copierAggregateNotice: '仅展示聚合数据 — 绝不展示单个跟单者身份。',
+  copierVerifiedCaptureNotice: '数据已按本次抓取验证，并非实时名单；绝不展示单个跟单者身份。',
   traderKindBot: '机器人',
   traderKindHuman: '真人',
   botStrategyMartingale: '马丁格尔',

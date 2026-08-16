@@ -5975,6 +5975,8 @@ const ja = {
   copierDepthTop3: 'この取引所は上位3名のコピーユーザープレビューのみ公開しています。',
   copierDepthNone: 'この取引所はコピーユーザーデータを公開していません。',
   copierAggregateNotice: '集計データのみ表示 — 個々のコピーユーザーは表示されません。',
+  copierVerifiedCaptureNotice:
+    'これは検証済みの取得結果であり、リアルタイムの一覧ではありません。個々のコピーユーザーは表示されません。',
   traderKindBot: 'ボット',
   traderKindHuman: '人間',
   botStrategyMartingale: 'マーチンゲール',

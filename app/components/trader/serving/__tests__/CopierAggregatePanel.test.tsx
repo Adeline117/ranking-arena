@@ -68,4 +68,38 @@ describe('CopierAggregatePanel history completeness', () => {
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
+
+  it('describes receipt-bound figures as a verified capture, not a live roster', () => {
+    render(
+      <CopierAggregatePanel
+        aggregate={aggregate({
+          completeness: {
+            state: 'complete',
+            reason: 'verified_copier_snapshot',
+            evidenceState: 'verified',
+            scanTerminalState: 'exhausted',
+            blockerReasons: [],
+          },
+        })}
+      />
+    )
+
+    expect(screen.getByText('copierVerifiedCaptureNotice')).toBeInTheDocument()
+    expect(screen.queryByText('copierAggregateNotice')).not.toBeInTheDocument()
+  })
+
+  it('does not describe an unbound N/A response as a verified capture', () => {
+    render(
+      <CopierAggregatePanel
+        aggregate={aggregate({
+          depth: 'none',
+          receiptBound: false,
+          completeness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+        })}
+      />
+    )
+
+    expect(screen.getByText('copierAggregateNotice')).toBeInTheDocument()
+    expect(screen.queryByText('copierVerifiedCaptureNotice')).not.toBeInTheDocument()
+  })
 })

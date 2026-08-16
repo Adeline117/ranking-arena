@@ -15,4 +15,15 @@ describe('record provenance copy', () => {
     expect(dictionary.recordProvenanceUnknown.trim()).not.toBe('')
     expect(dictionary.recordProvenanceSourceAsOf).not.toBe(dictionary.recordProvenanceObservedAt)
   })
+
+  it.each([
+    ['en', en],
+    ['zh', zh],
+    ['ja', ja],
+    ['ko', ko],
+  ])('keeps verified copier figures distinct from a live roster in %s', (_language, dictionary) => {
+    expect(dictionary.copierAggregateNotice.trim()).not.toBe('')
+    expect(dictionary.copierVerifiedCaptureNotice.trim()).not.toBe('')
+    expect(dictionary.copierVerifiedCaptureNotice).not.toBe(dictionary.copierAggregateNotice)
+  })
 })
