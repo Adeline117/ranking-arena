@@ -39,6 +39,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { parseXtCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -367,6 +368,8 @@ function normalizeSymbol(v: unknown): string | null {
 }
 
 export function parseXtHistory(raw: unknown, kind: HistoryKind, ctx: ParseCtx): ParsedHistoryRow[] {
+  if (kind === 'copiers') return parseXtCopiersV1(raw, ctx)
+
   const rows = ((raw as Dict)?.result as Dict | undefined)?.items
   const list = Array.isArray(rows) ? (rows as Dict[]) : []
 
@@ -388,26 +391,6 @@ export function parseXtHistory(raw: unknown, kind: HistoryKind, ctx: ParseCtx): 
         realizedPnl: num(r.realizedPnl),
         dedupeHash: xtDedupeHash('xt_ph', r.id ?? r.orderId, r.openTime),
         raw: r,
-      })
-    }
-    return out
-  }
-
-  if (kind === 'copiers') {
-    // leader-follower-page → copiers. followerName is PII → stored for dedupe/
-    // aggregation only; the render path emits aggregates (spec §6).
-    const out: ParsedHistoryRow[] = []
-    for (const c of list) {
-      const label = typeof c.followerName === 'string' ? c.followerName : null
-      out.push({
-        kind: 'copiers',
-        ts: ctx.scrapedAt,
-        copierLabel: label,
-        copierPnl: num(c.followProfitU),
-        copierInvested: num(c.followMarginU ?? c.followAmountTotal),
-        copyDurationDays: int(c.days),
-        dedupeHash: xtDedupeHash('xt_cp', c.id ?? label),
-        raw: c,
       })
     }
     return out

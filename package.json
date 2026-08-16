@@ -108,6 +108,7 @@
     "qa:legacy-portfolio-retirement-pg17": "bash supabase/migrations/__tests__/legacy-portfolios-v1-retirement.pg17.sh",
     "qa:trader-claim-v2-pg17": "bash supabase/migrations/__tests__/trader-claim-v2-cutover.pg17.sh",
     "qa:b2c-activation-v2-pg17": "bash supabase/migrations/__tests__/b2c-activation-v2.pg17.sh",
+    "qa:copier-trust-publisher-v2-pg17": "bash supabase/migrations/__tests__/copier-snapshot-trust-raw-role.pg17.sh && bash supabase/migrations/__tests__/copier-snapshot-trust-publication-substrate.pg17.sh && bash supabase/migrations/__tests__/publish-copier-snapshot-trust-v2.pg17.sh",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",
     "qa:auth-e2e": "playwright test --config=playwright.authenticated.config.ts",
     "qa:controlled-write": "node scripts/qa/controlled-write-sweep.mjs",
