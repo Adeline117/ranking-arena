@@ -31,6 +31,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { parseBitunixCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -303,24 +304,7 @@ export function parseBitunixPositionHistory(raw: unknown, _ctx: ParseCtx): Parse
  * `day` = copy duration in days; followAmount = invested.
  */
 export function parseBitunixCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.records) ? (d.records as Dict[]) : []
-  const out: ParsedHistoryRow[] = []
-  for (const item of list) {
-    const uid = item.uid
-    if (uid === undefined || uid === null) continue
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: String((item.nickname as string) || uid),
-      copierPnl: num(item.pl),
-      copierInvested: num(item.followAmount),
-      copyDurationDays: int(item.day),
-      dedupeHash: dedupeHash('bitunix_cp', uid, item.followDate),
-      raw: item,
-    })
-  }
-  return out
+  return parseBitunixCopiersV1(raw, ctx)
 }
 
 export function parseBitunixHistory(
@@ -332,7 +316,7 @@ export function parseBitunixHistory(
     case 'position_history':
       return parseBitunixPositionHistory(raw, ctx)
     case 'copiers':
-      return parseBitunixCopiers(raw, ctx)
+      return parseBitunixCopiersV1(raw, ctx)
     default:
       // order-level records and transfers are not exposed publicly.
       throw new Error(`[bitunix] history surface ${kind} not supported`)

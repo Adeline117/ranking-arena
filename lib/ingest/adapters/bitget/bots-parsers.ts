@@ -8,11 +8,9 @@
  * runTime / followerTime are MILLISECOND durations.
  */
 
-import { createHash } from 'crypto'
 import { LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT } from '../../acquisition-manifest'
 import type {
   ParseCtx,
-  ParsedCopierRow,
   ParsedHistoryRow,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
@@ -23,6 +21,7 @@ import type {
   Timeframe,
 } from '../../core/types'
 import type { LeaderboardValidationOptions } from '../../core/adapter'
+import { parseBitgetBotsCopiersV1 } from './bots-copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -40,12 +39,6 @@ function int(v: unknown): number | null {
 function isoFromMs(v: unknown): string | null {
   const n = num(v)
   return n === null ? null : new Date(n).toISOString()
-}
-
-function botsHash(...fields: unknown[]): string {
-  return createHash('sha1')
-    .update(fields.map((f) => String(f ?? '')).join('|'))
-    .digest('hex')
 }
 
 const BOARD_FIELDS: Record<
@@ -670,30 +663,5 @@ export function parseBitgetBotsProfile(raw: unknown, ctx: ParseCtx): ParsedProfi
  * copier_label stored for dedupe/aggregates only — NEVER rendered (§6 PII).
  */
 export function parseBitgetBotsCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const data = ((raw as Dict)?.data ?? null) as Dict | null
-  const followers = Array.isArray(data?.followers) ? (data.followers as Dict[]) : []
-  const ts = isoFromMs(data?.lastUpdateTime) ?? ctx.scrapedAt
-
-  const out: ParsedCopierRow[] = []
-  for (const f of followers) {
-    const label = (f.followerUserName ?? f.followerUserDisplayName) as string | undefined
-    if (!label) continue
-    const durMs = num(f.followerTime)
-    out.push({
-      kind: 'copiers',
-      ts,
-      copierLabel: String(label),
-      copierPnl: num(f.followerProfitAmount),
-      copierInvested: num(f.followerInvestmentAmount),
-      copyDurationDays: durMs === null ? null : Math.round(durMs / 86_400_000),
-      dedupeHash: botsHash(
-        'bitget_bot_cp',
-        label,
-        f.followerProfitAmount,
-        f.followerInvestmentAmount
-      ),
-      raw: f,
-    })
-  }
-  return out
+  return parseBitgetBotsCopiersV1(raw, ctx)
 }
