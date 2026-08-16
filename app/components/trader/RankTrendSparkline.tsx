@@ -6,12 +6,8 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface HistoryDataPoint {
   date: string
-  roi: number
-  pnl: number | null
   rank: number | null
   arenaScore: number | null
-  winRate: number | null
-  maxDrawdown: number | null
 }
 
 interface RankTrendSparklineProps {
@@ -33,19 +29,50 @@ export default function RankTrendSparkline({
   const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
+    setData(null)
+    setTooltip(null)
     if (!platform || !traderKey) return
     let cancelled = false
 
     const fetchHistory = async () => {
       try {
         const res = await fetch(
-          `/api/trader/${encodeURIComponent(platform)}/${encodeURIComponent(traderKey)}/history?period=30D`
+          `/api/trader/rank-history?platform=${encodeURIComponent(platform)}&trader_key=${encodeURIComponent(traderKey)}&period=90D&days=30`
         )
         if (!res.ok) return
-        const json = await res.json()
-        if (!cancelled && json.history?.['30D']) {
-          setData(json.history['30D'])
+        const json: unknown = await res.json()
+        if (!json || typeof json !== 'object') return
+        const envelope = json as Record<string, unknown>
+        if (
+          envelope.platform !== platform ||
+          envelope.trader_key !== traderKey ||
+          envelope.period !== '90D' ||
+          !Array.isArray(envelope.history)
+        ) {
+          return
         }
+        const history = envelope.history
+          .filter(
+            (row): row is Record<string, unknown> =>
+              !!row &&
+              typeof row === 'object' &&
+              typeof (row as Record<string, unknown>).date === 'string' &&
+              (typeof (row as Record<string, unknown>).rank === 'number' ||
+                (row as Record<string, unknown>).rank === null) &&
+              (typeof (row as Record<string, unknown>).arena_score === 'number' ||
+                (row as Record<string, unknown>).arena_score === null)
+          )
+          .map((row) => ({
+            date: row.date as string,
+            rank: row.rank as number | null,
+            arenaScore: row.arena_score as number | null,
+          }))
+          .filter(
+            (row) =>
+              (row.rank === null || Number.isFinite(row.rank)) &&
+              (row.arenaScore === null || Number.isFinite(row.arenaScore))
+          )
+        if (!cancelled) setData(history)
       } catch {
         // Silently fail -- sparkline is non-critical
       }

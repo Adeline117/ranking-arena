@@ -2,13 +2,13 @@
  * GET /api/cron/broadcast-trader-events
  *
  * Proactive alerts (Option B): when a trader that users FOLLOW makes a notable
- * day-over-day move (rank / ROI / PnL past the thresholds in
- * lib/constants/trader-events), notify ALL their followers — not just users who
+ * day-over-day rank move, notify ALL their followers — not just users who
  * hand-configured a per-trader alert. Following a trader is the opt-in; users
  * can opt out via user_profiles.notify_trader_events.
  *
  * Reuses existing infra: trader_follows (audience), leaderboard_ranks (current),
- * rank_history + trader_daily_snapshots (yesterday), notifications table + push.
+ * rank_history (yesterday), notifications table + push. ROI/PnL events remain
+ * disabled because legacy daily rows have no publication provenance.
  *
  * Schedule: daily (add to vercel.json). Sends GET with CRON_SECRET.
  */
@@ -20,11 +20,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 import { getPushNotificationService } from '@/lib/services/push-notification'
-import {
-  EVENT_RANK_MOVE,
-  EVENT_ROI_MOVE_PCT,
-  EVENT_PNL_MOVE_USD,
-} from '@/lib/constants/trader-events'
+import { EVENT_RANK_MOVE } from '@/lib/constants/trader-events'
 import { loadBroadcastEventPreferences, loadBroadcastEventRows } from './event-data'
 import { traderEventLink, traderEventReference } from './notification-identity'
 
@@ -61,7 +57,6 @@ export async function GET(request: NextRequest) {
       follows,
       currentRanks: lr,
       rankHistory: rh,
-      dailySnapshots: ds,
     } = await loadBroadcastEventRows({
       follows: (from, to) =>
         supabase
@@ -72,7 +67,7 @@ export async function GET(request: NextRequest) {
       currentRanks: (traderIds, from, to) =>
         supabase
           .from('leaderboard_ranks')
-          .select('source_trader_id, source, rank, roi, pnl')
+          .select('source_trader_id, source, rank')
           .in('source_trader_id', traderIds)
           .eq('season_id', '90D')
           .order('id', { ascending: true })
@@ -84,14 +79,6 @@ export async function GET(request: NextRequest) {
           .in('trader_key', traderIds)
           .eq('period', '90D')
           .eq('snapshot_date', yStr)
-          .order('id', { ascending: true })
-          .range(from, to),
-      dailySnapshots: (traderIds, from, to) =>
-        supabase
-          .from('trader_daily_snapshots')
-          .select('trader_key, platform, roi, pnl')
-          .in('trader_key', traderIds)
-          .eq('date', yStr)
           .order('id', { ascending: true })
           .range(from, to),
     })
@@ -112,16 +99,11 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Current metrics (90D serving).
-    const curMap = new Map<
-      string,
-      { rank: number | null; roi: number | null; pnl: number | null }
-    >()
+    const curMap = new Map<string, { rank: number | null }>()
     const sourcesByTrader = new Map<string, Set<string>>()
     for (const r of lr ?? []) {
       curMap.set(`${r.source_trader_id}|${r.source ?? ''}`, {
         rank: r.rank ?? null,
-        roi: r.roi ?? null,
-        pnl: r.pnl ?? null,
       })
       const sources = sourcesByTrader.get(r.source_trader_id)
       if (sources) sources.add(r.source)
@@ -144,28 +126,19 @@ export async function GET(request: NextRequest) {
       followersByTrader.delete(key)
     }
 
-    // 3. Yesterday: rank from rank_history, roi/pnl from daily snapshots.
+    // 3. Yesterday: rank from the season-scoped rank history.
     const prevRank = new Map<string, number>()
     for (const r of rh ?? []) {
       if (r.rank != null) prevRank.set(`${r.trader_key}|${r.platform ?? ''}`, r.rank)
     }
 
-    const prevMetric = new Map<string, { roi: number | null; pnl: number | null }>()
-    for (const s of ds ?? []) {
-      prevMetric.set(`${s.trader_key}|${s.platform ?? ''}`, {
-        roi: s.roi ?? null,
-        pnl: s.pnl ?? null,
-      })
-    }
-
-    // 4. Detect one notable event per followed trader (priority rank > roi > pnl).
+    // 4. Detect one notable rank event per followed trader.
     const events = new Map<string, TraderEvent>() // key → event
     for (const key of followersByTrader.keys()) {
       const [traderId] = key.split('|')
       const cur = curMap.get(key)
       if (!cur) continue
       const pRank = prevRank.get(key)
-      const pMet = prevMetric.get(key)
 
       let ev: TraderEvent | null = null
       if (cur.rank != null && pRank != null && Math.abs(cur.rank - pRank) >= EVENT_RANK_MOVE) {
@@ -173,27 +146,6 @@ export async function GET(request: NextRequest) {
         ev = {
           title: up ? 'A trader you follow is climbing' : 'A trader you follow dropped',
           message: `${traderId} moved ${up ? 'up' : 'down'} ${Math.abs(cur.rank - pRank)} ranks (#${pRank} → #${cur.rank})`,
-        }
-      } else if (
-        cur.roi != null &&
-        pMet?.roi != null &&
-        Math.abs(cur.roi - pMet.roi) >= EVENT_ROI_MOVE_PCT
-      ) {
-        const up = cur.roi > pMet.roi
-        ev = {
-          title: 'Big ROI move from a trader you follow',
-          message: `${traderId} ROI ${up ? 'up' : 'down'} ${Math.abs(cur.roi - pMet.roi).toFixed(1)}% (${pMet.roi.toFixed(1)}% → ${cur.roi.toFixed(1)}%)`,
-        }
-      } else if (
-        cur.pnl != null &&
-        pMet?.pnl != null &&
-        Math.abs(cur.pnl - pMet.pnl) >= EVENT_PNL_MOVE_USD
-      ) {
-        const up = cur.pnl > pMet.pnl
-        const d = Math.abs(cur.pnl - pMet.pnl)
-        ev = {
-          title: 'Big PnL move from a trader you follow',
-          message: `${traderId} PnL ${up ? 'up' : 'down'} $${d.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
         }
       }
       if (ev) events.set(key, ev)

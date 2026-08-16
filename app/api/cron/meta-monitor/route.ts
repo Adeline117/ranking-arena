@@ -11,7 +11,6 @@ import { NextRequest } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { withCron } from '@/lib/api/with-cron'
 import { findStuckCronJobs } from '@/lib/cron/meta-monitor-policy'
 
@@ -26,7 +25,6 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'batch-fetch-traders': 360, // groups run every 3-6h
   'batch-enrich': 480,
   'fetch-details': 60,
-  'aggregate-daily-snapshots': 1440, // daily
   'precompute-composite': 240,
   'backfill-data': 240,
 
@@ -102,44 +100,8 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
     )
   }
 
-  // Check if historical data cleanup is complete
-  let cleanupComplete = false
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data: cleanupStatus } = await supabase
-      .from('pipeline_logs')
-      .select('metadata')
-      .eq('job_name', 'cleanup-violations')
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .single()
-    if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
-      const meta = cleanupStatus.metadata as Record<string, unknown>
-      if (meta.done === true || meta.fixed === 0) {
-        cleanupComplete = true
-        await sendRateLimitedAlert(
-          {
-            title: '历史数据清理完成!',
-            message:
-              '所有历史违规数据已清理完毕。请运行:\nbash scripts/post-cleanup-orchestrate.sh\n\n此脚本将: VALIDATE 约束 → 重算指标 → 重算 composite',
-            level: 'info',
-            details: { action: 'run post-cleanup-orchestrate.sh' },
-          },
-          'cleanup-complete',
-          24 * 60 * 60 * 1000
-        )
-      }
-    }
-  } catch (err) {
-    // Best-effort check — but never silent. If this query breaks, the
-    // cleanup-complete notification would stop firing with zero warning.
-    logger.warn('[meta-monitor] cleanup-complete status check failed', {
-      error: err instanceof Error ? err.message : String(err),
-    })
-  }
-
   logger.info(
-    `[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`
+    `[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck`
   )
 
   return {
@@ -147,6 +109,5 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
     monitored: Object.keys(EXPECTED_INTERVALS).length,
     stuck: stuckJobs.length,
     stuckJobs,
-    cleanupComplete,
   }
 })

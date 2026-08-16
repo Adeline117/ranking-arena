@@ -18,6 +18,10 @@ import {
   REFETCH_STATIC,
 } from './cache-presets'
 import { getQueryClient } from './queryClient'
+import {
+  acceptPublishedEquity,
+  type PublishedEquity,
+} from '@/lib/rankings/daily-publication-contract'
 
 // Re-export pure fetchers from the shared module
 export { fetcher, fetcherWithAuth, fetchWithTimeout } from './fetchers'
@@ -104,11 +108,7 @@ export function useTraderDetail(handle: string | undefined) {
   })
 }
 
-interface EquityResponse {
-  equity: Array<{ date: string; value: number }>
-  pnl: Array<{ date: string; value: number }>
-  drawdown: Array<{ date: string; value: number }>
-}
+type EquityResponse = PublishedEquity
 
 /**
  * 获取交易员资金曲线
@@ -116,10 +116,9 @@ interface EquityResponse {
 export function useTraderEquity(handle: string | undefined) {
   const url = handle ? `/api/traders/${encodeURIComponent(handle)}/equity` : ''
 
-  return useQuery<EquityResponse>({
-    queryKey: ['trader-equity', handle],
-    placeholderData: (prev) => prev,
-    queryFn: () => fetcher(url),
+  return useQuery<EquityResponse | null>({
+    queryKey: ['trader-equity', 'daily-publication-v1', handle],
+    queryFn: async () => acceptPublishedEquity(await fetcher<unknown>(url)),
     enabled: !!handle,
     refetchOnWindowFocus: false,
     refetchInterval: REFETCH_STATIC,

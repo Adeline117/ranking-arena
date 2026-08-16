@@ -3,13 +3,13 @@
  *
  * Handles data maintenance tasks:
  * - Cleanup ephemeral data (hot_topics, flash_news, notifications, pipeline_logs, trader_activities, authorization_sync_logs)
- * - Run orphaned/stale data cleanup via RPC
  *
- * IMPORTANT: trader_daily_snapshots and trader_position_history are NEVER
- * deleted — historical data is accumulated for years.
+ * IMPORTANT: This route does not reference trader_daily_snapshots or
+ * trader_position_history. Legacy history maintenance is quarantined together
+ * with the general-purpose exec_sql RPC.
  * See CLAUDE.md: "绝对不要删除数据库历史数据"
  *
- * Schedule: Daily at 01:06 UTC (runs after daily aggregation)
+ * Schedule: Daily at 01:06 UTC.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -369,30 +369,6 @@ export async function GET(request: NextRequest) {
       skippedSteps.push('pipeline_state')
     }
 
-    // ── ANALYZE on large tables (with per-table timeout) ─────────
-    // Run ANALYZE periodically to keep planner stats fresh on growing tables
-    if (hasTimeBudget()) {
-      for (const table of ['trader_daily_snapshots']) {
-        if (!hasTimeBudget()) {
-          skippedSteps.push(`analyze_${table}`)
-          break
-        }
-        try {
-          await Promise.race([
-            supabase.rpc('exec_sql', { sql: `ANALYZE ${table}` }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`ANALYZE ${table} timed out after 25s`)), 25_000)
-            ),
-          ])
-          logger.info(`[cleanup-data] ANALYZE ${table} completed`)
-        } catch (analyzeErr) {
-          logger.warn(`[cleanup-data] ANALYZE ${table} failed: ${analyzeErr}`)
-        }
-      }
-    } else {
-      skippedSteps.push('analyze_tables')
-    }
-
     // Cleanup old search_analytics (>90 days) — unbounded growth from search tracking
     let searchAnalyticsCleaned = 0
     if (hasTimeBudget()) {
@@ -482,7 +458,7 @@ export async function GET(request: NextRequest) {
       pipelineStateCleaned,
       skippedSteps: skippedSteps.length > 0 ? skippedSteps : undefined,
       stepErrors: hasErrors ? stepErrors : undefined,
-      note: 'trader snapshots/daily/positions are NEVER deleted (long-term archival)',
+      note: 'this route does not read, write, or maintain daily/position history',
     }
 
     if (skippedSteps.length > 0 || hasErrors) {

@@ -103,7 +103,6 @@ export class PipelineLogger {
     'batch-fetch-traders',
     'batch-enrich',
     'compute-leaderboard',
-    'aggregate-daily-snapshots',
     'check-data-freshness',
     'pipeline-fetch',
     'fetch-details',
@@ -130,7 +129,6 @@ export class PipelineLogger {
     'cleanup-stuck-logs',
     'cleanup-data',
     'cleanup-deleted-accounts',
-    'cleanup-violations',
     'meta-monitor',
 
     // Snapshots & ranks

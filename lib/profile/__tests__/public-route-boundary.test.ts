@@ -41,7 +41,7 @@ describe('public profile service-route audience boundary', () => {
     expect(audienceRead).toBeGreaterThan(-1)
     expect(inactiveCheck).toBeGreaterThan(audienceRead)
     expect(candidateCache).toBeGreaterThan(inactiveCheck)
-    expect(source).toContain('users-full:v3:')
+    expect(source).toContain('users-full:v4:')
     expect(source).toContain('`user:${audience.profile.id}`')
     expect(source).toContain("`${profile.source || 'unknown'}:${profile.id}`")
     expect(source).toContain("'Cache-Control': 'private, no-store, max-age=0'")

@@ -4,7 +4,6 @@ import {
   loadBroadcastEventRows,
   type BroadcastEventPageLoaders,
   type CurrentRankRow,
-  type DailySnapshotRow,
   type RankHistoryRow,
   type TraderEventPreferenceRow,
   type TraderFollowRow,
@@ -28,21 +27,12 @@ const currentRank: CurrentRankRow = {
   source_trader_id: 'trader-0',
   source: 'bybit',
   rank: 1,
-  roi: 12,
-  pnl: 100,
 }
 
 const rankHistory: RankHistoryRow = {
   trader_key: 'trader-0',
   platform: 'bybit',
   rank: 3,
-}
-
-const dailySnapshot: DailySnapshotRow = {
-  trader_key: 'trader-0',
-  platform: 'bybit',
-  roi: 8,
-  pnl: 70,
 }
 
 describe('broadcast trader event data pagination', () => {
@@ -64,23 +54,20 @@ describe('broadcast trader event data pagination', () => {
       })
     const currentRanks = pagedChunkLoader(currentRank)
     const rankHistoryRows = pagedChunkLoader(rankHistory)
-    const dailySnapshots = pagedChunkLoader(dailySnapshot)
 
     const result = await loadBroadcastEventRows({
       follows,
       currentRanks,
       rankHistory: rankHistoryRows,
-      dailySnapshots,
     })
 
     expect(result.follows).toHaveLength(1001)
     expect(result.currentRanks).toHaveLength(1001)
     expect(result.rankHistory).toHaveLength(1001)
-    expect(result.dailySnapshots).toHaveLength(1001)
     expect(follows).toHaveBeenNthCalledWith(1, 0, 999)
     expect(follows).toHaveBeenNthCalledWith(2, 1000, 1999)
 
-    for (const loader of [currentRanks, rankHistoryRows, dailySnapshots]) {
+    for (const loader of [currentRanks, rankHistoryRows]) {
       expect(loader).toHaveBeenNthCalledWith(1, firstChunk, 0, 999)
       expect(loader).toHaveBeenNthCalledWith(2, firstChunk, 1000, 1999)
       expect(loader.mock.calls).toHaveLength(5)
@@ -88,7 +75,7 @@ describe('broadcast trader event data pagination', () => {
     }
   })
 
-  it.each(['follows', 'currentRanks', 'rankHistory', 'dailySnapshots'] as const)(
+  it.each(['follows', 'currentRanks', 'rankHistory'] as const)(
     'discards the whole input set when a later %s page fails',
     async (failureTarget) => {
       const follows = jest.fn(async (from: number) => {
@@ -106,13 +93,11 @@ describe('broadcast trader event data pagination', () => {
         })
       const currentRanks = loader('currentRanks', currentRank)
       const rankHistoryRows = loader('rankHistory', rankHistory)
-      const dailySnapshots = loader('dailySnapshots', dailySnapshot)
 
       const result = loadBroadcastEventRows({
         follows,
         currentRanks,
         rankHistory: rankHistoryRows,
-        dailySnapshots,
       })
 
       await expect(result).rejects.toMatchObject<Partial<BroadcastEventDataReadError>>({
@@ -123,12 +108,8 @@ describe('broadcast trader event data pagination', () => {
       if (failureTarget === 'follows') {
         expect(currentRanks).not.toHaveBeenCalled()
         expect(rankHistoryRows).not.toHaveBeenCalled()
-        expect(dailySnapshots).not.toHaveBeenCalled()
       } else if (failureTarget === 'currentRanks') {
         expect(rankHistoryRows).not.toHaveBeenCalled()
-        expect(dailySnapshots).not.toHaveBeenCalled()
-      } else if (failureTarget === 'rankHistory') {
-        expect(dailySnapshots).not.toHaveBeenCalled()
       }
     }
   )
