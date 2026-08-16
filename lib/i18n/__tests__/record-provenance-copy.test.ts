@@ -26,4 +26,13 @@ describe('record provenance copy', () => {
     expect(dictionary.copierVerifiedCaptureNotice.trim()).not.toBe('')
     expect(dictionary.copierVerifiedCaptureNotice).not.toBe(dictionary.copierAggregateNotice)
   })
+
+  it.each([
+    ['en', en, 'not a live roster'],
+    ['zh', zh, '并非实时名单'],
+    ['ja', ja, 'リアルタイムの一覧ではありません'],
+    ['ko', ko, '실시간 목록이 아닙니다'],
+  ])('does not present a verified capture as live data in %s', (_language, dictionary, copy) => {
+    expect(dictionary.copierVerifiedCaptureNotice).toContain(copy)
+  })
 })
