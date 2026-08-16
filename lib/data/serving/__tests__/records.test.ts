@@ -293,7 +293,7 @@ describe('copier PII rule (spec §6)', () => {
   )
 
   it.each([undefined, 'BTC', 'usdt'])(
-    'does not invent a copier PnL unit for %s currency',
+    'fails closed for a receipt-bound aggregate with %s currency',
     async (currency) => {
       const aggregate = await getCopierAggregate(
         rpcClient(
@@ -308,10 +308,30 @@ describe('copier PII rule (spec §6)', () => {
         'abc'
       )
 
-      expect(aggregate?.totalCopierPnl).toBeNull()
-      expect(aggregate?.pnlDistribution).toEqual([])
+      expect(aggregate).toBeNull()
     }
   )
+
+  it.each([
+    ['a missing copier count', { copierCount: null }],
+    ['a non-full depth', { depth: 'top10' }],
+    ['a non-null upper-bound field', { copierCountMax: 10 }],
+    [
+      'a source freshness clock that @4 never discloses',
+      { sourceAsOf: '2026-06-10T11:00:00.000Z' },
+    ],
+    ['a non-finite PnL', { totalCopierPnl: Number.POSITIVE_INFINITY }],
+    ['negative zero PnL', { totalCopierPnl: -0 }],
+    ['a nonzero PnL for a measured zero-count snapshot', { copierCount: 0, totalCopierPnl: 1 }],
+  ] as const)('fails closed for a receipt-bound aggregate with %s', async (_label, overrides) => {
+    const aggregate = await getCopierAggregate(
+      rpcClient(verifiedCopierPayload(overrides)),
+      'bitget_futures',
+      'abc'
+    )
+
+    expect(aggregate).toBeNull()
+  })
 
   it('accepts only exact, ordered, k-anonymous bucket projections', async () => {
     const aggregate = await getCopierAggregate(

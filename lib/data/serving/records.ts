@@ -496,11 +496,6 @@ export async function getCopierAggregate(
   // configuration, so it is not a compatible fallback.
   if (d.receiptReaderContract !== COPIER_SNAPSHOT_RECEIPT_READER_CONTRACT) return null
 
-  const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
-  const currency = currencyOrNull(d.currency)
-  const depth =
-    d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
-  const explicitlyNotApplicable = d.depth === 'none'
   const receiptCompleteness = verifiedCopierCompleteness(d)
   const receiptBound = receiptCompleteness !== null
 
@@ -510,6 +505,29 @@ export async function getCopierAggregate(
   if (d.receiptBound === true && !receiptBound) return null
 
   const copierCount = nonNegativeSafeIntegerOrNull(d.copierCount)
+  const totalPnl = finiteNumberOrNull(d.totalCopierPnl)
+  const currency = currencyOrNull(d.currency)
+  const depth =
+    d.depth === 'full' || d.depth === 'top10' || d.depth === 'top3_preview' ? d.depth : 'none'
+  const explicitlyNotApplicable = d.depth === 'none'
+
+  // The @4 reader's receipt branch has an intentionally narrow projection:
+  // it is a full, source-clock-unknown snapshot with no upper-bound field.
+  // A payload that keeps the reader marker but changes any of those semantics
+  // must not be softened into a partly displayed "verified" aggregate.
+  if (
+    receiptBound &&
+    (copierCount === null ||
+      currency === null ||
+      depth !== 'full' ||
+      d.copierCountMax !== null ||
+      d.sourceAsOf !== null ||
+      (d.totalCopierPnl !== null && (totalPnl === null || Object.is(totalPnl, -0))) ||
+      (copierCount === 0 && totalPnl !== 0))
+  ) {
+    return null
+  }
+
   const distribution = verifiedCopierPnlDistribution(
     d.pnlDistribution,
     currency,
