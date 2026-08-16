@@ -238,7 +238,12 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:reviewed-copier-depth-contracts-pg17
 
-      - name: Prove manually attested copier snapshot cutover
+      - name: Prove exact copier snapshot source authority
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:copier-snapshot-source-authority-pg17
+
+      - name: Prove historical held copier snapshot cutover in isolated PG17
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:copier-snapshot-cutover-pg17

@@ -162,6 +162,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const copierLaneV2Migration = '20260804054300_copier_snapshot_lane_v2_authority.sql'
   const okxCopierDepthMigration = '20260804054500_correct_okx_copier_depth_contract.sql'
   const reviewedCopierDepthMigration = '20260804054600_correct_copier_depth_contracts.sql'
+  const copierSourceAuthorityMigration = '20260804054700_bind_copier_snapshot_source_authority.sql'
   const copierCutoverMigration = '20260804055000_copier_snapshot_direct_write_cutover.sql'
 
   assert.equal(predeploy.length, 138)
@@ -400,6 +401,13 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     predeploy.indexOf(reviewedCopierDepthMigration),
     predeploy.indexOf(okxCopierDepthMigration) + 1
   )
+  assert.ok(!predeploy.includes(copierSourceAuthorityMigration))
+  assert.ok(!postdeploy.includes(copierSourceAuthorityMigration))
+  assert.ok(!recoveryPrerequisites.includes(copierSourceAuthorityMigration))
+  assert.ok(!concurrentRecovery.includes(copierSourceAuthorityMigration))
+  assert.ok(!recovery.includes(copierSourceAuthorityMigration))
+  assert.ok(!quarantined.includes(copierSourceAuthorityMigration))
+  assert.ok(!superseded.includes(copierSourceAuthorityMigration))
   assert.ok(!predeploy.includes(copierCutoverMigration))
   assert.ok(!postdeploy.includes(copierCutoverMigration))
   assert.ok(!recoveryPrerequisites.includes(copierCutoverMigration))

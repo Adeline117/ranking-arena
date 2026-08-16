@@ -105,6 +105,7 @@
     "qa:copier-snapshot-lane-v2-pg17": "bash supabase/migrations/__tests__/copier-snapshot-lane-v2-authority.pg17.sh",
     "qa:okx-copier-depth-contract-pg17": "bash supabase/migrations/__tests__/correct-okx-copier-depth-contract.pg17.sh",
     "qa:reviewed-copier-depth-contracts-pg17": "bash supabase/migrations/__tests__/correct-copier-depth-contracts.pg17.sh",
+    "qa:copier-snapshot-source-authority-pg17": "bash supabase/migrations/__tests__/copier-snapshot-source-authority.pg17.sh",
     "qa:copier-snapshot-cutover-pg17": "bash supabase/migrations/__tests__/copier-snapshot-direct-write-cutover.pg17.sh",
     "qa:score-v5-pg17": "bash supabase/migrations/__tests__/pure-arena-score-v5-zero-metrics.pg17.sh",
     "qa:score-manifest-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-score-input-manifest.pg17.sh",

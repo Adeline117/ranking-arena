@@ -195,10 +195,14 @@ POSTDEPLOY_MIGRATIONS=(
   20260729062500_close_trader_follow_direct_writes.sql
 )
 
+# 20260804054700_bind_copier_snapshot_source_authority.sql is also in no
+# standard runner phase. It is a manual single-file authority cutover only
+# after the RUNBOOK's app-first exact production deployment, rolling-release,
+# Data/CDN purge, and fail-closed probes have all passed.
 # 20260804055000_copier_snapshot_direct_write_cutover.sql is intentionally in
 # no standard runner phase and is HOLD / DO NOT APPLY. Its historical V1-only
-# reader would hide lane-aware V2 receipts installed by 20260804054300; a
-# separately reviewed forward migration must replace it.
+# reader would overwrite the registry-bound V2-only @4 reader installed by
+# 20260804054700; a separately reviewed forward migration must replace it.
 
 # Recovery repairs the immutable application snapshot whose original cutover
 # was exactly these 41 migrations. Keep this prerequisite frozen: later launch
