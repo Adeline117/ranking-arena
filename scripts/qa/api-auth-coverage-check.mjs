@@ -68,6 +68,10 @@ const PUBLIC_API_ROUTES = new Set([
   'rankings/live',
   'rankings/movers',
   'rankings/platform-stats',
+  // 隔离态热门推荐存根（2026-08-16）：momentum 输入来自未经证明的 legacy daily 行，
+  // 已按 NO-GO 收敛为恒定空响应——无 DB 访问、无用户数据、无参数，仅返回
+  // available:false 契约。等价的封存 cohort 就绪后若恢复真实数据，须重新判定鉴权。
+  'recommendations/hot',
   'trader/[platform]/[trader_key]/history',
   'traders/[handle]/badges',
   'traders/[handle]/equity',

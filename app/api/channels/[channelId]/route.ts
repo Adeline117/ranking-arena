@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Json } from '@/lib/supabase/database.types'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { channelIdSchema } from '../contracts'
@@ -225,35 +226,37 @@ export async function PATCH(
     const { channelId } = await params
     const supabase = getSupabaseAdmin()
 
-    // Check admin/owner role
-    const { data: membership } = await supabase
-      .from('channel_members')
-      .select('role')
-      .eq('channel_id', channelId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
-    }
-
     const body = await request.json()
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    // Only keys present here are written; an explicit null still clears the
+    // column. The role check lives inside the RPC, under the same advisory key
+    // add/remove/dissolve take, so a demotion committed mid-request cannot let
+    // a just-demoted member land this write.
+    const updates: Record<string, unknown> = {}
 
     if (body.name !== undefined) updates.name = body.name.trim()
     if (body.avatar_url !== undefined) updates.avatar_url = body.avatar_url
     if (body.description !== undefined) updates.description = body.description?.trim() || null
 
-    const { data: channel, error } = await supabase
-      .from('chat_channels')
-      .update(updates)
-      .eq('id', channelId)
-      .select()
-      .single()
+    const { data, error } = await supabase.rpc('update_group_channel_atomic', {
+      p_channel_id: channelId,
+      p_actor_id: user.id,
+      p_updates: updates as Json,
+    })
 
-    if (error) return NextResponse.json({ error: 'Failed to update channel' }, { status: 500 })
+    if (error) {
+      logger.error('PATCH_CHANNEL rpc failed', { error: error.message })
+      return NextResponse.json({ error: 'Failed to update channel' }, { status: 500 })
+    }
 
-    return NextResponse.json({ channel })
+    const outcome = data as { status?: string; channel?: unknown } | null
+    if (outcome?.status === 'forbidden') {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    }
+    if (outcome?.status !== 'updated') {
+      return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ channel: outcome.channel })
   } catch (error) {
     logger.error('PATCH_CHANNEL failed', {
       error: error instanceof Error ? error.message : String(error),

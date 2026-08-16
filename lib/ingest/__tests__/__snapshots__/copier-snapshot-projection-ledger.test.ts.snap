@@ -1,0 +1,171 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`copier snapshot projection ledger replays all 2 rows from bitget/__tests__/fixtures/copiers-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "bitget",
+  "candidateProjectionFixedMultisetSha256": "5bfea09b4cc2b716d24224263d9b13accadae15bf34da7f00d8db2070be3a9b3",
+  "fixturePath": "bitget/__tests__/fixtures/copiers-p1.json",
+  "rowCount": 2,
+  "sourceCandidateFixedMultisetSha256": "223a68948cfc8de3d2483447059db86ebd0f7957769e864f9b667755ddb4d6e5",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 3 rows from bitunix/__tests__/fixtures/follow-list-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "bitunix",
+  "candidateProjectionFixedMultisetSha256": "3dfd0f18223bee9e4b1ee1a527776f5967b6d39bd9ea696f57f140975a07f13b",
+  "fixturePath": "bitunix/__tests__/fixtures/follow-list-p1.json",
+  "rowCount": 3,
+  "sourceCandidateFixedMultisetSha256": "e96f37e0e99f7a4ca6e2b1e13630b2ce409e709e0486bea40415d080fd760fe4",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 3 rows from btcc/__tests__/fixtures/followers-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "btcc",
+  "candidateProjectionFixedMultisetSha256": "71202baacf618cfd16f26a743a2c08934b46393afdd10505f2f1fbc9497122ec",
+  "fixturePath": "btcc/__tests__/fixtures/followers-p1.json",
+  "rowCount": 3,
+  "sourceCandidateFixedMultisetSha256": "38672964fd37595aceb93e20e1fba612ea3d7cb477252fd2b5d1a1634b94493d",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 3 rows from gate/__tests__/fixtures/follow-user-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "gate",
+  "candidateProjectionFixedMultisetSha256": "d758ae67ab0c56e025e067c10446b869443655d7ffe2ea3f9a48fdb7e798240a",
+  "fixturePath": "gate/__tests__/fixtures/follow-user-p1.json",
+  "rowCount": 3,
+  "sourceCandidateFixedMultisetSha256": "d6e8edc7313508d39ca68b4e35e303a5759e78391cc6b9c12a939ff3c8ac9572",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 3 rows from gate/__tests__/fixtures/followers-cfd-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "gate",
+  "candidateProjectionFixedMultisetSha256": "0715c651e3baf12280454cc70a73edec7e64f51fbd33c00d471a21db7f6a2b77",
+  "fixturePath": "gate/__tests__/fixtures/followers-cfd-p1.json",
+  "rowCount": 3,
+  "sourceCandidateFixedMultisetSha256": "5d09aa73fd20baeb743e6da604d3096b70e8f028d44ab0cb447d2d7db3a1c03c",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 3 rows from kucoin/__tests__/fixtures/copy-traders-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "kucoin",
+  "candidateProjectionFixedMultisetSha256": "031956e4c6dcf8ef12f278c5ad9f15ed1cbc0faee1b60a750c3d6519cd85d1c8",
+  "fixturePath": "kucoin/__tests__/fixtures/copy-traders-p1.json",
+  "rowCount": 3,
+  "sourceCandidateFixedMultisetSha256": "ac25670f55c89673a1dedcbb59632d55e0284a4055573224a20c41f64b755f7b",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 3 rows from lbank/__tests__/fixtures/followers-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "lbank",
+  "candidateProjectionFixedMultisetSha256": "39fa9df41e4eb0be7d0d186c33436622f6a88e64dc6bb730c7bc01414a835199",
+  "fixturePath": "lbank/__tests__/fixtures/followers-p1.json",
+  "rowCount": 3,
+  "sourceCandidateFixedMultisetSha256": "a60f7d002fb6f8785173efa32feff0c1b713293e3c80fedcc2ff78c76bc3d759",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 6 rows from toobit/__tests__/fixtures/followers.json through the projection ledger 1`] = `
+{
+  "adapter": "toobit",
+  "candidateProjectionFixedMultisetSha256": "6fa78333513256d7bd8893ff81da2ffc1496af0afdf3ae82e722f1644695d11e",
+  "fixturePath": "toobit/__tests__/fixtures/followers.json",
+  "rowCount": 6,
+  "sourceCandidateFixedMultisetSha256": "b0c04ccf55eb3292a6c5e366695f809f3a1f001e62281094d20858e42fa31a05",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 10 rows from bitget/__tests__/fixtures/bots-follow-rank.json through the projection ledger 1`] = `
+{
+  "adapter": "bitget_bots",
+  "candidateProjectionFixedMultisetSha256": "797e33608e7a8cec42cba8c5f7861bc0dac98944146bf8647b435d8b9997d24c",
+  "fixturePath": "bitget/__tests__/fixtures/bots-follow-rank.json",
+  "rowCount": 10,
+  "sourceCandidateFixedMultisetSha256": "b5a50cd7f2c47904e651a9361329f4b0a18ceaafce2cef8002bfadedaecd5d03",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 10 rows from coinex/__tests__/fixtures/followers-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "coinex",
+  "candidateProjectionFixedMultisetSha256": "cefa90396e5d751eb431c51f50c5dc0c301ee67b273ba713a3ad380d60b009aa",
+  "fixturePath": "coinex/__tests__/fixtures/followers-p1.json",
+  "rowCount": 10,
+  "sourceCandidateFixedMultisetSha256": "cdbe3d30af44bed390fbb6c4c0b5a0ffd1ca44fa45c8b9b7880fa2749a7fa87d",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 10 rows from mexc/__tests__/fixtures/followers-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "mexc",
+  "candidateProjectionFixedMultisetSha256": "f557313288364f7c76ede597e6cf88ac03313e787403b7094ac05ea2bdd046c7",
+  "fixturePath": "mexc/__tests__/fixtures/followers-p1.json",
+  "rowCount": 10,
+  "sourceCandidateFixedMultisetSha256": "e720e42d36d07f6da64001613370f382899eac8d2ad13e4b8edef3b976cfbed0",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 10 rows from okx/__tests__/fixtures/copy-traders.json through the projection ledger 1`] = `
+{
+  "adapter": "okx",
+  "candidateProjectionFixedMultisetSha256": "d6cbe00d38877830726eb02cfe9310e50b572f6ba2d4b3c52c2caa7b8458c76a",
+  "fixturePath": "okx/__tests__/fixtures/copy-traders.json",
+  "rowCount": 10,
+  "sourceCandidateFixedMultisetSha256": "734f5a881c35ce1676a4518a518de13a141c32f33079dc74b47306bee7ee6dcf",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 12 rows from bingx/__tests__/fixtures/records-followers.json through the projection ledger 1`] = `
+{
+  "adapter": "bingx",
+  "candidateProjectionFixedMultisetSha256": "fec9a32c3ab99bca55de8bbd3dacb0fec6b788a1b35ae792e3868b0853e1f2d8",
+  "fixturePath": "bingx/__tests__/fixtures/records-followers.json",
+  "rowCount": 12,
+  "sourceCandidateFixedMultisetSha256": "ea0e71837e68f0eec317506d913d910edbc90a5f9cacd9c64c4710e54c2326dd",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 18 rows from bybit-copytrade/__tests__/fixtures/other-follower-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "bybit_copytrade",
+  "candidateProjectionFixedMultisetSha256": "3f4487ed98e8e25ee62ad002702a6c21dd4284445e8a99709924b600938547bd",
+  "fixturePath": "bybit-copytrade/__tests__/fixtures/other-follower-p1.json",
+  "rowCount": 18,
+  "sourceCandidateFixedMultisetSha256": "7fddfb425d50fe60d5e85cac972c1879e635a24016ea6c5943e751fd24a0f99f",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 20 rows from blofin/__tests__/fixtures/records-copiers.json through the projection ledger 1`] = `
+{
+  "adapter": "blofin",
+  "candidateProjectionFixedMultisetSha256": "ac61b943f9601b88e48beb720c00f7561ac5c09e3044eb5c94d7214c5752e7ca",
+  "fixturePath": "blofin/__tests__/fixtures/records-copiers.json",
+  "rowCount": 20,
+  "sourceCandidateFixedMultisetSha256": "961d0928aa5946c1069199c5a4241c06ca595ad0a2c20ce84bd6367c2f5edf14",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 20 rows from xt/__tests__/fixtures/records-followers.json through the projection ledger 1`] = `
+{
+  "adapter": "xt",
+  "candidateProjectionFixedMultisetSha256": "5865743c5d617d0ce00fef3ce1d3d06b926d1abd4ba74663954f2c190bd7d475",
+  "fixturePath": "xt/__tests__/fixtures/records-followers.json",
+  "rowCount": 20,
+  "sourceCandidateFixedMultisetSha256": "7affa51dc17777e5212ad40ffefcc8dd903ac78d4d2b7ad6d81fd5664ec5dd82",
+}
+`;
+
+exports[`copier snapshot projection ledger replays all 50 rows from binance/__tests__/fixtures/copy-traders-p1.json through the projection ledger 1`] = `
+{
+  "adapter": "binance",
+  "candidateProjectionFixedMultisetSha256": "a10276493bb2d816cff4b2172bfb7cf3381074f7052b9120d7c0d61f78c99324",
+  "fixturePath": "binance/__tests__/fixtures/copy-traders-p1.json",
+  "rowCount": 50,
+  "sourceCandidateFixedMultisetSha256": "396177f829ec57ccaed6325369e956329e30ba53beacb75be030a1f4cc69574e",
+}
+`;
