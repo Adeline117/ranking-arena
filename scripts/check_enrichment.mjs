@@ -1,147 +1,173 @@
+#!/usr/bin/env node
 /**
- * Enrichment Data Validation Script
- * Checks data fill rates across all enrichment tables
+ * Read-only enrichment inventory.
+ *
+ * This reports the current public enrichment relations for forensic/operator
+ * inventory only. It is not proof that an enrichment row is current, belongs
+ * to a published ranking cohort, or may be served as a ranking metric.
+ *
+ * Usage:
+ *   node scripts/check_enrichment.mjs
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { readFileSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = join(__dirname, '../.env.local')
+const SAMPLE_LIMIT = 5_000
 
-// Load env
-try {
-  for (const l of readFileSync(envPath, 'utf8').split('\n')) {
-    const m = l.match(/^([^#=]+)=["']?(.+?)["']?$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
+function loadEnvFileIfPresent(path) {
+  if (!existsSync(path)) return
+
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
+    const match = line.match(/^([^#=]+)=["']?(.+?)["']?$/)
+    if (match && !process.env[match[1]]) process.env[match[1]] = match[2]
   }
-} catch {}
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
-async function checkData() {
-  console.log('=== Enrichment Data Validation ===\n')
-
-  // 1. Check trader_stats_detail
-  console.log('📊 trader_stats_detail 数据统计:')
-  const { data: statsDetail } = await supabase
-    .from('trader_stats_detail')
-    .select('source, season_id')
-
-  if (statsDetail && statsDetail.length > 0) {
-    const stats = {}
-    statsDetail.forEach(r => {
-      const key = `${r.source}|${r.season_id}`
-      stats[key] = (stats[key] || 0) + 1
-    })
-    Object.entries(stats).sort().forEach(([k, v]) => {
-      const [source, period] = k.split('|')
-      console.log(`  ${source.padEnd(18)} ${period.padEnd(5)} : ${v} 条记录`)
-    })
-  } else {
-    console.log('  (无数据)')
-  }
-
-  // 2. Check trader_equity_curve
-  console.log('\n📈 trader_equity_curve 数据统计:')
-  const { data: equityCurve } = await supabase
-    .from('trader_equity_curve')
-    .select('source, season_id')
-
-  if (equityCurve && equityCurve.length > 0) {
-    const stats = {}
-    equityCurve.forEach(r => {
-      const key = `${r.source}|${r.season_id}`
-      stats[key] = (stats[key] || 0) + 1
-    })
-    Object.entries(stats).sort().forEach(([k, v]) => {
-      const [source, period] = k.split('|')
-      console.log(`  ${source.padEnd(18)} ${period.padEnd(5)} : ${v} 条记录`)
-    })
-  } else {
-    console.log('  (无数据)')
-  }
-
-  // 3. Check trader_asset_breakdown
-  console.log('\n💰 trader_asset_breakdown 数据统计:')
-  const { data: assetBreakdown } = await supabase
-    .from('trader_asset_breakdown')
-    .select('source, season_id')
-
-  if (assetBreakdown && assetBreakdown.length > 0) {
-    const stats = {}
-    assetBreakdown.forEach(r => {
-      const key = `${r.source}|${r.season_id}`
-      stats[key] = (stats[key] || 0) + 1
-    })
-    Object.entries(stats).sort().forEach(([k, v]) => {
-      const [source, period] = k.split('|')
-      console.log(`  ${source.padEnd(18)} ${period.padEnd(5)} : ${v} 条记录`)
-    })
-  } else {
-    console.log('  (无数据)')
-  }
-
-  // 4. Check key fields in stats_detail
-  console.log('\n🔍 trader_stats_detail 关键字段填充率:')
-  const { data: detailFields } = await supabase
-    .from('trader_stats_detail')
-    .select('source, avg_profit, avg_loss, sharpe_ratio, volatility, avg_holding_time')
-    .limit(2000)
-
-  if (detailFields && detailFields.length > 0) {
-    const fieldStats = {}
-    detailFields.forEach(r => {
-      if (!fieldStats[r.source]) {
-        fieldStats[r.source] = { total: 0, avg_profit: 0, avg_loss: 0, sharpe_ratio: 0, volatility: 0, avg_holding_time: 0 }
-      }
-      fieldStats[r.source].total++
-      if (r.avg_profit != null) fieldStats[r.source].avg_profit++
-      if (r.avg_loss != null) fieldStats[r.source].avg_loss++
-      if (r.sharpe_ratio != null) fieldStats[r.source].sharpe_ratio++
-      if (r.volatility != null) fieldStats[r.source].volatility++
-      if (r.avg_holding_time != null) fieldStats[r.source].avg_holding_time++
-    })
-
-    Object.entries(fieldStats).sort().forEach(([source, s]) => {
-      console.log(`  ${source}:`)
-      console.log(`    avg_profit: ${s.avg_profit}/${s.total} (${(s.avg_profit/s.total*100).toFixed(0)}%)`)
-      console.log(`    avg_loss: ${s.avg_loss}/${s.total} (${(s.avg_loss/s.total*100).toFixed(0)}%)`)
-      console.log(`    sharpe_ratio: ${s.sharpe_ratio}/${s.total} (${(s.sharpe_ratio/s.total*100).toFixed(0)}%)`)
-      console.log(`    volatility: ${s.volatility}/${s.total} (${(s.volatility/s.total*100).toFixed(0)}%)`)
-      console.log(`    avg_holding_time: ${s.avg_holding_time}/${s.total} (${(s.avg_holding_time/s.total*100).toFixed(0)}%)`)
-    })
-  } else {
-    console.log('  (无数据)')
-  }
-
-  // 5. Check trader_snapshots sharpe_ratio
-  console.log('\n📌 trader_snapshots sharpe_ratio 填充率:')
-  const { data: snapshots } = await supabase
-    .from('trader_snapshots')
-    .select('source, sharpe_ratio')
-    .limit(3000)
-
-  if (snapshots && snapshots.length > 0) {
-    const snapshotStats = {}
-    snapshots.forEach(r => {
-      if (!snapshotStats[r.source]) snapshotStats[r.source] = { total: 0, has_sharpe: 0 }
-      snapshotStats[r.source].total++
-      if (r.sharpe_ratio != null) snapshotStats[r.source].has_sharpe++
-    })
-    Object.entries(snapshotStats).sort().forEach(([source, s]) => {
-      console.log(`  ${source.padEnd(18)}: ${s.has_sharpe}/${s.total} (${(s.has_sharpe/s.total*100).toFixed(0)}%)`)
-    })
-  } else {
-    console.log('  (无数据)')
-  }
-
-  console.log('\n✅ 数据验证完成')
 }
 
-checkData().catch(console.error)
+function requiredConfig() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      'NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY are required'
+    )
+  }
+
+  return { url, serviceRoleKey }
+}
+
+function stringCell(value, fallback = 'unknown') {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback
+}
+
+function summarizeBySourceAndPeriod(rows) {
+  const counts = new Map()
+
+  for (const row of rows) {
+    const source = stringCell(row.source)
+    const period = stringCell(row.period, 'null')
+    const key = `${source}\u0000${period}`
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+
+  return [...counts.entries()]
+    .map(([key, count]) => {
+      const [source, period] = key.split('\u0000')
+      return { source, period, count }
+    })
+    .sort((left, right) =>
+      left.source === right.source
+        ? left.period.localeCompare(right.period)
+        : left.source.localeCompare(right.source)
+    )
+}
+
+function printSourcePeriodInventory(rows) {
+  if (rows.length === 0) {
+    console.log('  (no rows returned)')
+    return
+  }
+
+  for (const { source, period, count } of summarizeBySourceAndPeriod(rows)) {
+    console.log(`  ${source.padEnd(18)} ${period.padEnd(8)} : ${count} rows`)
+  }
+}
+
+function queryError(label, error) {
+  if (!error) return
+  throw new Error(`${label} query failed: ${error.message}`)
+}
+
+function printFieldCoverage(rows) {
+  if (rows.length === 0) {
+    console.log('  (no rows returned)')
+    return
+  }
+
+  const fields = ['avg_profit', 'avg_loss', 'sharpe_ratio', 'volatility', 'avg_holding_time_hours']
+  const bySource = new Map()
+
+  for (const row of rows) {
+    const source = stringCell(row.source)
+    const summary = bySource.get(source) || {
+      total: 0,
+      fields: Object.fromEntries(fields.map((f) => [f, 0])),
+    }
+    summary.total += 1
+    for (const field of fields) {
+      if (row[field] != null) summary.fields[field] += 1
+    }
+    bySource.set(source, summary)
+  }
+
+  for (const [source, summary] of [...bySource.entries()].sort(([left], [right]) =>
+    left.localeCompare(right)
+  )) {
+    console.log(`  ${source}:`)
+    for (const field of fields) {
+      const count = summary.fields[field]
+      const percentage = ((count / summary.total) * 100).toFixed(0)
+      console.log(`    ${field}: ${count}/${summary.total} (${percentage}%)`)
+    }
+  }
+}
+
+export async function runEnrichmentInventory(supabase) {
+  console.log('=== Enrichment Inventory (non-authoritative) ===')
+  console.log(`Sampling at most ${SAMPLE_LIMIT.toLocaleString()} rows per relation.\n`)
+
+  console.log('📊 trader_stats_detail by source × period:')
+  const { data: statsDetail, error: statsDetailError } = await supabase
+    .from('trader_stats_detail')
+    .select('source, period')
+    .limit(SAMPLE_LIMIT)
+  queryError('trader_stats_detail', statsDetailError)
+  printSourcePeriodInventory(statsDetail || [])
+
+  console.log('\n📈 trader_equity_curve by source × period:')
+  const { data: equityCurve, error: equityCurveError } = await supabase
+    .from('trader_equity_curve')
+    .select('source, period')
+    .limit(SAMPLE_LIMIT)
+  queryError('trader_equity_curve', equityCurveError)
+  printSourcePeriodInventory(equityCurve || [])
+
+  console.log('\n💰 trader_asset_breakdown by source × period:')
+  const { data: assetBreakdown, error: assetBreakdownError } = await supabase
+    .from('trader_asset_breakdown')
+    .select('source, period')
+    .limit(SAMPLE_LIMIT)
+  queryError('trader_asset_breakdown', assetBreakdownError)
+  printSourcePeriodInventory(assetBreakdown || [])
+
+  console.log('\n🔍 trader_stats_detail field coverage:')
+  const { data: detailFields, error: detailFieldsError } = await supabase
+    .from('trader_stats_detail')
+    .select('source, avg_profit, avg_loss, sharpe_ratio, volatility, avg_holding_time_hours')
+    .limit(SAMPLE_LIMIT)
+  queryError('trader_stats_detail field coverage', detailFieldsError)
+  printFieldCoverage(detailFields || [])
+
+  console.log('\nResult: COMPLETE (inventory only; not publication/freshness proof)')
+}
+
+async function main() {
+  loadEnvFileIfPresent(envPath)
+  const { url, serviceRoleKey } = requiredConfig()
+  const supabase = createClient(url, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  await runEnrichmentInventory(supabase)
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`\nResult: ERROR — ${error instanceof Error ? error.message : String(error)}`)
+    process.exitCode = 1
+  })
+}

@@ -25,9 +25,9 @@ npm run check:platforms
 3. Keep serving authority separate from table inventory. A row count or recent
    timestamp never proves an exact published cohort.
 
-Do not use npm run check:enrichment as evidence: its current implementation still
-references retired relations and stale columns and can false-pass after swallowed
-query errors.
+Do not use `npm run check:enrichment` as serving evidence. It is a current,
+read-only inventory of public enrichment tables and fails closed on query errors, but
+it does not prove freshness, exact cohort membership, or publication authority.
 
 ## Current read-only inventory
 

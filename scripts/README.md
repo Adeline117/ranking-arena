@@ -27,13 +27,17 @@ Use the single diagnostics entrypoint for routine checks:
 npm run diagnose
 ```
 
+The default run includes the credentialed season and enrichment inventories. Without
+controlled Supabase read credentials it exits nonzero rather than claiming success;
+use the individual public checks when only public observation is available.
+
 This runs:
 
-- seasons check
-- status check
-- freshness check
-- platform freshness check
-- enrichment check
+- current-ranking season inventory
+- public serving status check
+- public freshness check
+- public platform coverage check
+- non-authoritative enrichment inventory
 
 Run one check only:
 
@@ -57,12 +61,16 @@ npm run check:enrichment
 
 ## 📝 Environment Requirements
 
-Most scripts require:
+The season and enrichment inventories require:
 
-- `SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-Some enrichment/fetch scripts may also require proxy credentials.
+They are read-only diagnostics: a successful inventory query does not prove source
+freshness, published cohort membership, or authority to serve an enrichment metric.
+Use `npm run check:freshness` for the public ranking authority verdict. Never add a
+proxy credential, backfill, cron invocation, or cleanup step to make a diagnostic
+pass.
 
 ## 🔧 Operations Rhythm
 
@@ -81,4 +89,4 @@ Some enrichment/fetch scripts may also require proxy credentials.
 
 ---
 
-Last updated: 2026-02-22
+Last updated: 2026-08-16

@@ -15,8 +15,10 @@ npm run check:platforms
 Record command time, commit SHA, environment, and failures. Do not turn a failed
 probe into a write or schedule change.
 
-The check:enrichment script is excluded until its retired-relation and stale-column
-queries are replaced; its current success status is not usable audit evidence.
+`npm run check:enrichment` now reports only current public enrichment-table inventory
+and fails closed on configuration or query errors. It is useful for a bounded
+read-only inventory, but it is not serving, freshness, or publication-authority
+evidence.
 
 ## Authority map
 
