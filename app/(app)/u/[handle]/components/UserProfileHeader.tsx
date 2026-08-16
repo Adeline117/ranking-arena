@@ -370,10 +370,6 @@ export default function UserProfileHeader({
                       type="button"
                       onClick={() => {
                         if (!followingInteractive) return
-                        if (isOwnProfile) {
-                          router.push('/following')
-                          return
-                        }
                         onFollowingClick()
                       }}
                       disabled={!followingInteractive}

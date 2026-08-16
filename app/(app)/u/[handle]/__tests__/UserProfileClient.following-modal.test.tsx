@@ -40,9 +40,13 @@ jest.mock('../components/UserProfileHeader', () => ({
   default: ({
     onFollowersClick,
     onFollowingClick,
+    followersCount,
+    onFollowersCountChange,
   }: {
     onFollowersClick: () => void
     onFollowingClick: () => void
+    followersCount: number
+    onFollowersCountChange: (delta: number) => void
   }) => (
     <>
       <button type="button" onClick={onFollowingClick}>
@@ -50,6 +54,10 @@ jest.mock('../components/UserProfileHeader', () => ({
       </button>
       <button type="button" onClick={onFollowersClick}>
         followers entry
+      </button>
+      <output aria-label="followers count">{followersCount}</output>
+      <button type="button" onClick={() => onFollowersCountChange(-1)}>
+        decrement followers
       </button>
     </>
   ),
@@ -178,7 +186,7 @@ describe('UserProfileClient following modal privacy', () => {
   )
 
   it.each([true, false, undefined])(
-    'leaves the owner following action to the full-page route instead of a modal (%s)',
+    'opens the owner user-following modal instead of the mixed management page (%s)',
     (showFollowing) => {
       mockProfile = profile(showFollowing, true)
       mockIsOwnProfile = true
@@ -186,9 +194,22 @@ describe('UserProfileClient following modal privacy', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'following entry' }))
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toHaveAttribute('data-list-type', 'following')
+      expect(screen.getByRole('dialog')).toHaveAttribute(
+        'data-list-public',
+        String(showFollowing === true)
+      )
     }
   )
+
+  it('never renders a negative follower count when a stale zero counter is decremented', () => {
+    mockProfile = { ...profile(true, true), followers: 0 }
+    render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'decrement followers' }))
+
+    expect(screen.getByRole('status', { name: 'followers count' })).toHaveTextContent('0')
+  })
 
   it('uses the same canonical tab key for the visible tab, panel label, and content', () => {
     render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)

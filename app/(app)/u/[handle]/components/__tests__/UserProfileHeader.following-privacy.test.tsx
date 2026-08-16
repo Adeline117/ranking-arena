@@ -244,7 +244,7 @@ describe('UserProfileHeader following privacy', () => {
   )
 
   it.each([false, undefined])(
-    'routes the owner non-public following entry to the full management page (%s)',
+    'opens the owner following list without routing to the mixed management page (%s)',
     (showFollowing) => {
       const { followingButton, onFollowingClick } = renderHeader({
         showFollowing,
@@ -255,8 +255,8 @@ describe('UserProfileHeader following privacy', () => {
       expect(followingButton).toBeEnabled()
       fireEvent.click(followingButton)
 
-      expect(mockPush).toHaveBeenCalledWith('/following')
-      expect(onFollowingClick).not.toHaveBeenCalled()
+      expect(onFollowingClick).toHaveBeenCalledTimes(1)
+      expect(mockPush).not.toHaveBeenCalled()
     }
   )
 })

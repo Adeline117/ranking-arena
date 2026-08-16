@@ -128,9 +128,9 @@ export default function UserProfileClient({
           currentUserId={currentUserId}
           followersCount={followersCount}
           followingCount={followingCount}
-          onFollowersCountChange={(delta) => setFollowersCount((prev) => prev + delta)}
+          onFollowersCountChange={(delta) => setFollowersCount((prev) => Math.max(0, prev + delta))}
           onFollowingClick={() => {
-            if (!isOwnProfile && profile.isRegistered && profile.show_following === true) {
+            if (profile.isRegistered && (isOwnProfile || profile.show_following === true)) {
               setModalType('following')
             }
           }}
