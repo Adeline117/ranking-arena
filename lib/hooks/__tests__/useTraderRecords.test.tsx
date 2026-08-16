@@ -94,7 +94,7 @@ describe('useCopierAggregate subject identity', () => {
     queryClient.clear()
   })
 
-  it('quarantines an unbound cached aggregate and uses the receipt cache generation', async () => {
+  it('quarantines an unbound aggregate without presenting it as active collection', async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
     })
@@ -111,7 +111,8 @@ describe('useCopierAggregate subject identity', () => {
       { wrapper: Wrapper }
     )
 
-    await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
+    expect(view.result.current.isPendingUpstream).toBe(false)
     expect(view.result.current.aggregate).toBeNull()
     expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('records_contract=csr2'))
     expect(
@@ -419,7 +420,7 @@ describe('useCopierAggregate subject identity', () => {
     }
   })
 
-  it('caps a continuously pending foreground polling window at fifteen responses', async () => {
+  it('caps a continuously pending foreground window, exposes recovery, and restarts only on retry', async () => {
     jest.useFakeTimers()
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
@@ -443,12 +444,25 @@ describe('useCopierAggregate subject identity', () => {
         await jest.advanceTimersByTimeAsync(40_000)
       })
       expect(fetcher).toHaveBeenCalledTimes(15)
-      expect(view.result.current.isPendingUpstream).toBe(true)
+      expect(view.result.current.isPendingUpstream).toBe(false)
+      expect(view.result.current.aggregate).toBeNull()
+      expect(view.result.current.isLoading).toBe(false)
 
       await act(async () => {
         await jest.advanceTimersByTimeAsync(10_000)
       })
       expect(fetcher).toHaveBeenCalledTimes(15)
+
+      await act(async () => {
+        await view.result.current.refetch()
+      })
+      expect(fetcher).toHaveBeenCalledTimes(16)
+      await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(4_000)
+      })
+      expect(fetcher).toHaveBeenCalledTimes(18)
     } finally {
       view.unmount()
       queryClient.clear()

@@ -198,6 +198,32 @@ describe('ServingRecordsSection selection scope', () => {
     expect(refetch).toHaveBeenCalledTimes(1)
   })
 
+  it('routes an expired copier collection window to the same retry panel', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined)
+    ;(useCopierAggregate as jest.Mock).mockReturnValue({
+      aggregate: null,
+      isPendingUpstream: false,
+      isLoading: false,
+      error: null,
+      refetch,
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['copiers'])}
+        tf={90}
+      />
+    )
+
+    expect(screen.queryByText('moduleDataPending')).not.toBeInTheDocument()
+    const props = (CopierAggregatePanel as jest.Mock).mock.calls.at(-1)?.[0]
+    expect(props).toEqual(expect.objectContaining({ aggregate: null, isLoading: false }))
+    props.onRetry()
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
   it('discloses a failed background refresh while retaining cached rows', () => {
     const refetch = jest.fn().mockResolvedValue(undefined)
     ;(useTraderRecords as jest.Mock).mockReturnValue({

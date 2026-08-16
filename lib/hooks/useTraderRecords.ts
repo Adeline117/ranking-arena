@@ -9,7 +9,7 @@
  * a plain query, never paginated rows.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
@@ -282,6 +282,7 @@ export function useCopierAggregate(opts: {
     refetchIntervalInBackground: false,
     retry: false,
   })
+  const queryRefetch = query.refetch
 
   const data = query.data
   const isAggregate = Boolean(data && 'copierCount' in data)
@@ -301,6 +302,23 @@ export function useCopierAggregate(opts: {
         }
       : null
 
+  // The collection bridge is intentionally bounded. Once its foreground
+  // window expires, a retained `{ cacheState: 'pending' }` must not leave a
+  // B2C user under a permanent skeleton with no recovery action.
+  const pendingWindowActive =
+    !query.isError &&
+    isPendingCopierResponse(data) &&
+    pendingPoll.current.subjectKey === subjectKey &&
+    pendingPoll.current.count > 0 &&
+    pendingPoll.current.count < 15
+
+  const refetch = useCallback(() => {
+    // A deliberate user retry opens one new bounded foreground window for
+    // this subject. Background revalidations never reset the cap.
+    if (pendingPoll.current.subjectKey === subjectKey) pendingPoll.current.count = 0
+    return queryRefetch()
+  }, [queryRefetch, subjectKey])
+
   // React Query deliberately retains successful data during a background
   // refresh error. That default is unsafe for an authority verdict: a newer
   // invalid receipt must not leave the previous aggregate visible. Hide the
@@ -314,11 +332,11 @@ export function useCopierAggregate(opts: {
 
   return {
     aggregate: authorityIsCurrent ? aggregate : null,
-    isPendingUpstream: !query.isError && Boolean(data && (!isAggregate || !isServeableAggregate)),
+    isPendingUpstream: pendingWindowActive,
     isLoading:
       shouldFetch &&
       (!query.isFetchedAfterMount || query.fetchStatus !== 'idle' || query.isFetching),
     error: query.error,
-    refetch: query.refetch,
+    refetch,
   }
 }
