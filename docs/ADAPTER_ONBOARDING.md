@@ -14,14 +14,17 @@
 
 ## Checklist(顺序执行)
 
-1. **截图核实指标清单**:逐指标截交易所页面,确认它真提供什么
-   (Sharpe/Sortino 尤其别凭先验说"不提供")。结论进 docx / 记忆。
+1. **核实指标清单**:以带日期、可审查且不含凭据/私有标识的来源证据，
+   逐指标确认交易所实际提供什么(Sharpe/Sortino 尤其别凭先验说“不提供”)。
+   证据位置和结论写入版本控制文档；不要只留在个人记忆。
 2. **适配器模块** `lib/ingest/adapters/<name>/`:
    - `parsers.ts` 纯函数(不碰网络/时钟/模块态),RAW 进 Parsed 出
    - `index.ts` 声明 `capabilities`(surface 布尔,逐字段注释引用端点)
-   - `register.ts` 加 import(自注册)
-3. **fixtures**:真实 RAW 捕获存 `__tests__/fixtures/`,**覆盖每个声明指标**
-   (board + 各 TF profile;截断可以,合成不行)。`parsers.test.ts` 跑通。
+   - 在唯一注册入口 `lib/ingest/adapters/register.ts` 加 import(自注册)
+3. **fixtures**:把脱敏后的真实捕获或确定性的合成负载存入
+   `__tests__/fixtures/`,**覆盖每个声明指标**(board + 各 TF profile)。
+   不得提交 cookie、token、钱包秘密、用户私有标识或未审查的原始捕获。
+   在外部证据记录中保留捕获时间/来源/脱敏方法；`parsers.test.ts` 跑通。
 4. **expectedMetrics 声明**:`expected-metrics.ts` 加条目(编辑规则见文件头:
    加指标必须 parity 证明;删指标必须 UNREACHABLE_FIELDS_LEDGER 结论)。
    多源变体(spot/cfd)指标集不同 → `EXPECTED_METRICS_BY_SOURCE` 按源覆盖。
@@ -32,11 +35,11 @@
 7. **sources seed 行**:迁移经 `scripts/new-migration.sh`,INSERT `arena.sources`
    (slug/adapter_slug/timeframes_native/tf_label_map/expected_count/cadence)。
    **别漏 `meta.series_backfill_topn`**(>300 的板才吃回填带;设 100000=全板)。
-8. **上线首夜核对四哨兵**:
+8. **获授权上线后的四哨兵**（本清单不授权部署、生产读取或写入）:
    - `node scripts/qa/fill-rate-check.mjs`(声明指标有真数据)
    - `node scripts/qa/render-coverage-check.mjs`(DB 有的 API 不丢)
-   - worker 日志无 challenge/429/wedge;`npm run qa:schema` 仍绿
-   - 次日 06:30 UTC schema-canary Telegram 无新告警
+   - 经批准的可观测性通道中无 challenge/429/wedge；`npm run qa:schema` 仍绿
+   - schema-canary 的预期告警证据已由负责人与运行环境确认
 
 ## 相关文件速查
 

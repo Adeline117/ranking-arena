@@ -172,7 +172,7 @@ node scripts/pipeline-health-check.mjs --fix     # Generate fix script
 ```
 app/                    # Next.js pages and API routes
   api/                  #   100+ API endpoints
-    cron/               #   Scheduled jobs (62 Vercel crons)
+    cron/               #   53 endpoints (38 scheduled by Vercel)
   components/           #   All React components
   rankings/             #   Leaderboard pages
   trader/[id]/          #   Trader profile pages

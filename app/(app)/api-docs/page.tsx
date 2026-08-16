@@ -163,7 +163,7 @@ const ENDPOINTS = [
     method: 'GET',
     path: '/api/v3?endpoint=history',
     description:
-      'Get daily performance time series for a specific trader. Returns ROI, PnL, win rate, and more.',
+      'Temporarily unavailable while daily-series provenance and atomic publication are being rebuilt. Requests do not consume API quota.',
     params: [
       { name: 'platform', required: true, description: 'Exchange platform key' },
       { name: 'trader_key', required: true, description: 'Trader identifier on the platform' },
@@ -172,20 +172,11 @@ const ENDPOINTS = [
     example: {
       curl: `curl "https://www.arenafi.org/api/v3?endpoint=history&platform=binance_futures&trader_key=abc123&days=7"`,
       response: `{
-  "success": true,
-  "data": [
-    {
-      "date": "2026-05-05",
-      "roi": 12.5,
-      "pnl": 1250,
-      "daily_return_pct": 1.2,
-      "win_rate": 72.0,
-      "max_drawdown": -5.3,
-      "followers": 840,
-      "trades_count": 15
-    }
-  ],
-  "meta": { "total": 7, "endpoint": "history", "version": "v3" }
+  "success": false,
+  "error": {
+    "code": "TRADER_HISTORY_NOT_PUBLISHED",
+    "message": "Trader history is not published: snapshot provenance is unverified"
+  }
 }`,
     },
   },

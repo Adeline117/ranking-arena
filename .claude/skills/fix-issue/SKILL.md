@@ -1,100 +1,66 @@
-# Skill: Fix GitHub Issue — Standard Flow
+# Fix GitHub Issue
 
-## Step 1: Understand Before Touching Code
+Use a reproducible, reviewable change. Reading an issue does not authorize a
+production mutation, deploy, merge, migration apply, or push to main.
+
+## 1. Establish current truth
+
+1. Read the full issue, expected behavior, affected identity/window, and observation time.
+2. Inspect the current call chain and recent history with rg and git log.
+3. Verify referenced routes, files, tables, and columns exist in this commit.
+4. Separate repository evidence from live evidence. Use only approved read-only
+   access for live diagnosis and never print secrets or private rows.
+
+For ranking/source issues, use current relations and authority:
+
+- private arena.traders and arena.trader_stats are the ingest layer;
+- public leaderboard_ranks is the per-season serving projection;
+- public leaderboard_source_freshness.source_as_of is the source watermark;
+- public trader_sources is a legacy identity projection, not publication freshness;
+- trader_daily_snapshots is quarantined forensic inventory and cannot supply metrics.
+
+Do not query the removed traders or trader_snapshots relations.
+
+## 2. Reproduce
+
+- Prefer an existing focused test or deterministic fixture.
+- For UI behavior, reproduce locally and capture the exact request/identity state.
+- For source data, locate the current adapter under lib/ingest/adapters with rg;
+  never guess worker/src/scrapers paths or run a guessed script.
+- If live state is required but unavailable, report the missing witness instead of
+  inventing a root cause.
+
+## 3. Write the failing contract
+
+Add the smallest test that proves the bug and would catch a regression. Include
+identity, season/window, time bounds, null behavior, and authorization/cache
+boundaries when relevant.
+
+## 4. Implement narrowly
+
+- Change only the confirmed path.
+- Preserve null when evidence is absent.
+- Do not add an ad hoc backfill, exec_sql call, unversioned RPC, or schedule.
+- Adapter changes need redacted/synthetic fixtures, bounded retries/concurrency,
+  and a dry-run/no-write verification path.
+
+## 5. Verify
+
+Run focused tests first, then the checks proportional to risk:
+
 ```bash
-# Read the issue fully. Identify:
-# - What is the expected behavior?
-# - What is the actual behavior?
-# - Which exchange / component / API route is affected?
-
-# Check if there's a related failing test:
-npm test -- --testPathPattern=<component>
-
-# Check recent git history for context:
-git log --oneline -20 -- <affected-file>
+npm run type-check
+npm run type-check:ingest-worker
+npm run lint
+npm test -- --runInBand
+npm run build
 ```
 
-## Step 2: Reproduce Locally
-- Never fix what you can't reproduce
-- For data issues: query Supabase directly
-  ```sql
-  -- Example: check data freshness
-  SELECT exchange, COUNT(*), MAX(updated_at) FROM traders GROUP BY exchange;
-  ```
-- For UI bugs: run `npm run dev`, navigate to the broken page, check console
+Database semantics also require the relevant isolated PG17 proof. Never point a
+test at an application or production database.
 
-## Step 3: Root Cause (mandatory — do not guess)
-- Read the error message completely before writing any fix
-- Check the call chain: UI → API route → service → DB query
-- For scraper issues: check if it's auth failure, rate limit, schema change, or selector change
-- Skill reference: `.claude/skills/data-quality/SKILL.md` for data pipeline issues
+## 6. Hand off
 
-## Step 4: Write Failing Test First
-```bash
-# Red phase — test must fail before you write the fix
-npm test -- --testPathPattern=<affected>
-# If no test exists, write one in __tests__/ or colocated *.test.ts
-```
-
-## Step 5: Implement Fix
-- Minimum change — do not refactor while fixing
-- One issue per commit
-- For data pipeline bugs: always add a dry-run mode first
-
-## Step 6: Self-Verify Loop (Anthropic best practice)
-```bash
-npx tsc --noEmit           # zero type errors
-npm run lint               # zero lint errors
-npm test                   # all tests green
-npm run build              # build succeeds
-```
-Iterate until all four pass without manual intervention.
-
-## Step 7: Checkpoint Commit
-```bash
-git add -A
-git commit -m "fix: <exchange/component> — <one-line description of root cause>"
-# Example: "fix: gains upsert conflict key — use (uid, exchange, date) not (uid)"
-```
-
-## Step 8: Push and Verify Deploy
-```bash
-git push origin main
-# Monitor Vercel deploy — see skills/deploy/SKILL.md
-```
-
-## Arena-Specific Issue Patterns
-
-### Exchange connector stale (GMX, Hyperliquid)
-1. Check worker logs: `npm run check:status`
-2. Check if cron is running: look at `vercel.json` cron schedule
-3. Check connector file: `worker/src/scrapers/<exchange>.ts`
-4. Test connector standalone: `npx tsx worker/src/scrapers/<exchange>.ts --dry-run`
-
-### Data field null/wrong (WR, MDD, Sharpe)
-1. Check DB: `SELECT wr, mdd, sharpe FROM traders WHERE exchange='<x>' LIMIT 5`
-2. Check if the raw API returns the field: add console.log in connector
-3. Check field mapping in connector: raw field name → DB column name
-4. If semantic error (e.g. ROI = total not annualized): fix the transform function
-
-### UI component broken after deploy
-1. Check for TypeScript errors that slipped through
-2. Check for missing env var in Vercel dashboard
-3. Check Sentry for client-side errors: look at recent issues
-
-### Cloudflare 403 blocking scraper (BloFin pattern)
-Options in priority order:
-1. Add `puppeteer-extra` + `puppeteer-extra-plugin-stealth`
-2. Rotate User-Agent headers
-3. Add residential proxy (Smartproxy / Oxylabs) via `PROXY_URL` env var
-4. Use exchange's official API if available (preferred)
-
-## End-of-Session Documentation
-After fixing, append to `docs/session-notes/YYYY-MM-DD.md`:
-```markdown
-## Fixed: <issue title>
-- Root cause: <one sentence>
-- Files changed: <list>
-- Verification: tsc ✓ lint ✓ tests ✓ build ✓
-- Remaining risk: <any known edge cases>
-```
+Commit on the issue branch with evidence in the message or PR. Push/create a draft
+PR only when that external write is in scope. Do not merge, deploy, apply migrations,
+or alter production without separate explicit authority.

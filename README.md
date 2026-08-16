@@ -7,7 +7,7 @@
 [![Production](https://img.shields.io/badge/production-live-brightgreen)](https://www.arenafi.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![Ingest adapters](https://img.shields.io/badge/ingest_adapters-26-blue)]()
-[![Vercel schedules](https://img.shields.io/badge/Vercel_schedules-42-orange)]()
+[![Vercel schedules](https://img.shields.io/badge/Vercel_schedules-38-orange)]()
 
 [Live Site](https://www.arenafi.org) · [Data API](#data-api) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
 
@@ -24,13 +24,14 @@ Arena provides a REST API for programmatic access to trader rankings, performanc
 curl "https://www.arenafi.org/api/v3?endpoint=rankings&period=90D&limit=10"
 ```
 
-**6 endpoints**: `rankings`, `trader`, `search`, `platforms`, `history`, `bulk`
+**5 published endpoints**: `rankings`, `trader`, `search`, `platforms`, `bulk`.
+The `history` compatibility endpoint is currently a no-store 503 quarantine response and does not consume API quota.
 
 Full documentation and API keys: [arenafi.org/api-docs](https://www.arenafi.org/api-docs)
 
 ## Overview
 
-Arena aggregates, normalizes, and ranks public traders from centralized and decentralized sources selected by the active-serving database registry. Arena Score v4 combines profitability, drawdown, risk-adjusted return, consistency, and sample confidence on a 0-100 peer-relative scale. The system has 53 cron/worker endpoints: 42 are production Vercel schedules, while database-driven ingest also runs on external workers. Its 26 registered ingest adapters collect leaderboard and profile surfaces, then the Next.js 16 frontend serves normalized results with ISR and edge caching.
+Arena aggregates, normalizes, and ranks public traders from centralized and decentralized sources selected by the active-serving database registry. Arena Score v4 combines profitability, drawdown, risk-adjusted return, consistency, and sample confidence on a 0-100 peer-relative scale. The system has 53 cron/worker endpoints: 38 are production Vercel schedules, while database-driven ingest also runs on external workers. Its 26 registered ingest adapters collect leaderboard and profile surfaces, then the Next.js 16 frontend serves normalized results with ISR and edge caching.
 
 Beyond rankings, Arena provides an educational library (books, research papers, whitepapers), market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
 
@@ -167,7 +168,7 @@ Each trader profile includes:
      |  Auth + RLS  |  +---------+  +-----------+   |
      +--------------+                                |
                                        +-------------+---+
-                                       | 42 Schedules     |
+                                       | 38 Schedules     |
                   +------------------->| Data Pipeline   |
                   |                    +--------+--------+
                   |                             |
@@ -197,9 +198,13 @@ Each trader profile includes:
 
 ## Data Pipeline
 
-The data pipeline combines 42 production schedules declared in `vercel.json` with external database-driven ingest workers. The repository has 53 cron/worker route implementations, but an endpoint's existence is not proof that Vercel schedules it. `vercel.json` is the only source of truth for Vercel cadence; the database registry and worker scheduler are the sources of truth for first-party ingest.
+The data pipeline combines 38 production schedules declared in `vercel.json` with external database-driven ingest workers. The repository has 53 cron/worker route implementations, but an endpoint's existence is not proof that Vercel schedules it. `vercel.json` is the only source of truth for Vercel cadence; the database registry and worker scheduler are the sources of truth for first-party ingest.
 
-This README intentionally does not duplicate all 42 schedule rows. Inspect the deployed declarations directly:
+**Daily-snapshot containment.** `aggregate-daily-snapshots`, `cleanup-violations`, and `scan-data-quality` are unscheduled auth-first tombstones: anonymous requests return 401 and authenticated requests return 410 without touching data. The scanner's former admin RPC has no versioned function body, so it is not accepted as a read-only replacement. Legacy daily rows have no season, generation, cohort, or publication-proof identity and are not ranking authority. Movers, equity, indicators, public history, V3 history, and hot-trader recommendations now return fixed empty/unavailable, three-layer `no-store` contracts; the homepage does not request Movers, and the equity hook rejects old cached positive bodies without explicit availability plus publication proof. Daily-derived ROI/PnL broadcast events are disabled while independent rank and position events remain active. Do not run a manual backfill, cleanup, or general-purpose SQL RPC, or restore any retired schedule, until a separately reviewed provenance-bound publisher can atomically finalize an exact complete cohort.
+
+The forward migration `20260808090000_quarantine_legacy_trader_daily_snapshots.sql` is a reviewed deployment candidate, not proof that the live database already has these ACLs. It preserves the table and rows, removes browser/service write authority and legacy RPC execution, and retains service-role forensic SELECT. Apply it only through the protected ordered migration process after live catalog drift review; then verify direct REST/table/RPC denial before treating database containment as active.
+
+This README intentionally does not duplicate all 38 schedule rows. Inspect the deployed declarations directly:
 
 ```bash
 jq -r '.crons[] | [.path, .schedule] | @tsv' vercel.json
@@ -225,7 +230,7 @@ Cron handlers that adopt `PipelineLogger` write structured execution state to Su
 ```
 app/                          # Next.js App Router
   api/                        # Public, authenticated, admin, health, and worker routes
-    cron/                     # 53 cron/worker endpoints (42 scheduled by Vercel)
+    cron/                     # 53 cron/worker endpoints (38 scheduled by Vercel)
     v2/, v3/                  # Versioned API endpoints
     admin/                    # Admin-only endpoints (metrics, monitoring)
     health/                   # Health check endpoints (pipeline, dependencies)
@@ -310,7 +315,7 @@ Core tables (all with Row Level Security enabled):
 | `trader_position_history` | Frozen forensic archive; no application reads and never ranking authority |
 | `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period   |
 | `trader_asset_breakdown`  | Asset allocation analysis per period                                      |
-| `trader_daily_snapshots`  | Daily ROI/PnL rollups                                                     |
+| `trader_daily_snapshots`  | Frozen legacy daily rows; producer retired; never ranking authority       |
 | `trader_portfolio`        | Current open positions                                                    |
 | `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`           |
 
@@ -428,13 +433,13 @@ All environment variables must be configured in the Vercel dashboard. The primar
 
 ### Cron Jobs
 
-Cron schedules are defined in `vercel.json`. The 42 production schedules call authenticated endpoints with `Authorization: Bearer CRON_SECRET`; Vercel injects that header from the Production environment. Schedules are staggered and should be checked with `node scripts/cron-schedule-heatmap.mjs` before adding another job.
+Cron schedules are defined in `vercel.json`. The 38 production schedules call authenticated endpoints with `Authorization: Bearer CRON_SECRET`; Vercel injects that header from the Production environment. Schedules are staggered and should be checked with `node scripts/cron-schedule-heatmap.mjs` before adding another job.
 
 ### Infrastructure
 
 | Component                  | Details                                                            |
 | -------------------------- | ------------------------------------------------------------------ |
-| **Vercel**                 | Edge + Serverless, region hnd1, 42 production cron schedules       |
+| **Vercel**                 | Edge + Serverless, region hnd1, 38 production cron schedules       |
 | **SG VPS** (45.76.152.169) | Proxy :3456 + Playwright Scraper :3457 (PM2)                       |
 | **JP VPS** (149.28.27.242) | Polymarket + exchange proxy                                        |
 | **Mac Mini** (OpenClaw)    | Health monitor (30min), daily reports, auto-fix, weekly self-check |
@@ -455,7 +460,7 @@ Cron schedules are defined in `vercel.json`. The 42 production schedules call au
 | ---------------- | --------------- |
 | Ingest Adapters  | 26 registered   |
 | Cron Endpoints   | 53              |
-| Vercel Schedules | 42              |
+| Vercel Schedules | 38              |
 | UI Languages     | 4 (en/zh/ja/ko) |
 
 ## License

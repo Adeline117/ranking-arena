@@ -14,16 +14,19 @@ You are a design system architect building a cohesive design language for Arena 
 ### Step 1: Understand the Product
 
 Read these files to understand Arena's visual identity:
+
 - `lib/design-tokens.ts` — current design tokens
-- `tailwind.config.ts` — Tailwind configuration
-- `app/globals.css` — global styles
+- `app/globals.css` — Tailwind v4 entry, `@theme inline`, and global styles
+- `postcss.config.mjs` — PostCSS/Tailwind v4 integration
 - `app/layout.tsx` — root layout
 - `app/components/` — shared components (sample 5-10)
-- `app/rankings/` — core ranking pages
+- `app/page.tsx` and `app/components/home/` — the canonical homepage ranking table
+- `app/(app)/rankings/` — exchange, token, and weekly ranking subpages
 
 ### Step 2: Research Landscape
 
 Analyze competitors and best-in-class financial data products:
+
 - Crypto: CoinGecko, CoinMarketCap, DefiLlama, Copin.io
 - Finance: Bloomberg Terminal, TradingView, Yahoo Finance
 - Data products: Stripe Dashboard, Datadog, Linear
@@ -33,6 +36,7 @@ Key question: What makes Arena DIFFERENT visually? (data density, trust, profess
 ### Step 3: Design System Proposal
 
 #### 3a. Design Principles (3-5)
+
 ```markdown
 1. **Data First**: Every pixel serves the data. No decorative elements.
 2. **Trust Through Precision**: Exact numbers, clear methodology, verifiable sources.
@@ -41,29 +45,31 @@ Key question: What makes Arena DIFFERENT visually? (data density, trust, profess
 ```
 
 #### 3b. Color System
+
 ```typescript
 // Semantic colors for Arena
 const colors = {
   profit: { light: '#16a34a', dark: '#22c55e' },
   loss: { light: '#dc2626', dark: '#ef4444' },
   rank: {
-    gold: '#f59e0b',    // top 10
-    silver: '#94a3b8',  // top 50
-    bronze: '#b45309',  // top 100
+    gold: '#f59e0b', // top 10
+    silver: '#94a3b8', // top 50
+    bronze: '#b45309', // top 100
   },
   arena: {
-    primary: '...',     // brand color
-    accent: '...',      // CTAs
+    primary: '...', // brand color
+    accent: '...', // CTAs
   },
   surface: {
     base: '...',
     elevated: '...',
     overlay: '...',
-  }
+  },
 }
 ```
 
 #### 3c. Typography Scale
+
 ```
 Display:  32px / 700 — Page titles
 H1:       24px / 600 — Section headers
@@ -75,6 +81,7 @@ Mono:     14px / 400 — Numbers, addresses, trader IDs
 ```
 
 #### 3d. Spacing Scale
+
 ```
 xs:   4px  — inline padding
 sm:   8px  — tight spacing
@@ -85,7 +92,9 @@ xl:  32px  — page sections
 ```
 
 #### 3e. Component Patterns
+
 Define standard patterns for:
+
 - TraderCard (compact / expanded)
 - RankBadge (position + change indicator)
 - ArenaScoreBar (visual score representation)
@@ -97,6 +106,7 @@ Define standard patterns for:
 ### Step 4: Generate Preview
 
 Create a preview page at `app/design-system/page.tsx` showing:
+
 - Color palette swatches
 - Typography scale
 - Component examples
@@ -110,20 +120,26 @@ Write `/docs/DESIGN.md` with the complete design system documentation.
 # Arena Design System
 
 ## Principles
+
 ...
 
 ## Colors
+
 ...
 
 ## Typography
+
 ...
 
 ## Spacing
+
 ...
 
 ## Components
+
 ...
 
 ## Usage Examples
+
 ...
 ```

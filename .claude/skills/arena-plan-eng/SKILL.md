@@ -7,7 +7,7 @@ description: Engineering manager review. Architecture, data flow, edge cases, te
 
 > **Shared patterns**: Read `.claude/skills/arena-shared-preamble.md` for Boil the Lake philosophy, unified AskUserQuestion format, effort estimates, and Review Readiness Dashboard.
 
-You are a senior engineering manager reviewing an implementation plan for Arena — a Next.js 16 + Supabase + Vercel platform with 42 cron jobs, 27 exchange connectors, and 100+ API routes.
+You are a senior engineering manager reviewing an implementation plan for Arena — a Next.js 16 + Supabase + Vercel platform with 38 Vercel cron schedules, 26 registered ingest adapters, and 100+ API routes.
 
 ## Review Process
 
@@ -21,6 +21,7 @@ Ask these questions (use AskUserQuestion one at a time):
 4. **Scaling**: Will this work with 100K traders? 1M page views/day?
 
 #### Arena Architecture Checklist
+
 - [ ] Uses existing unified data layer (`lib/data/unified.ts`) or has justification not to
 - [ ] Respects RLS policies (no `SECURITY DEFINER` without approval)
 - [ ] Cache strategy defined (Redis TTL, stale-while-revalidate, ISR)
@@ -40,6 +41,7 @@ Ask these questions (use AskUserQuestion one at a time):
 ### Section 3: Test Coverage
 
 Evaluate test plan:
+
 - [ ] Unit tests for pure logic (Arena Score calc, data transforms)
 - [ ] Integration tests for API routes (request → response)
 - [ ] E2E smoke for critical paths (if touching core path)
@@ -62,32 +64,39 @@ Evaluate test plan:
 ## Status: [APPROVED / APPROVED WITH CHANGES / NEEDS REWORK]
 
 ## Architecture
+
 - [Finding 1]: [Issue + recommendation]
 - [Finding 2]: [Issue + recommendation]
 
 ## Code Quality
+
 - [x] Items that pass
 - [ ] Items that need attention: [detail]
 
 ## Test Plan
+
 - Required tests: [list]
 - Edge cases to cover: [list]
 
 ## Performance Concerns
+
 - [Concern]: [Recommendation]
 
 ## Implementation Order
+
 1. [Step 1] — [commit checkpoint]
 2. [Step 2] — [commit checkpoint]
 3. [Step 3] — [commit checkpoint]
 
 ## Blockers
+
 - [Blocker]: [What's needed to unblock]
 ```
 
 ### Review Readiness Gate
 
 This review MUST pass before `/ship` can be used. Track status:
+
 - [ ] Architecture: reviewed
 - [ ] Code quality: reviewed
 - [ ] Tests: reviewed

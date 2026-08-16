@@ -1,101 +1,55 @@
 # Arena Enrichment Patterns
 
-专属 Arena 项目的数据 enrichment 经验沉淀。
+Use evidence-first enrichment. Missing data stays null; do not fabricate or infer a
+metric from an unrelated period, table, or identity.
 
-## 核心原则
+## Discover the current path
 
-1. **NEVER fabricate data** — 空 null 比假数据好
-2. **CEX API → CF blocked → Puppeteer fallback** — 标准降级链
-3. **Upsert 用 ON CONFLICT (source, source_trader_id, season_id)** — 唯一约束
-4. **每脚本独立运行，不依赖 master loop** — 可单独 debug
-
-## 已踩坑记录
-
-### 1. Gains Network
-- **直连 API**: 429 rate limit（Mac Mini 也会被限）
-- **CF Worker**: 必须有 `/gains/leaderboard-all?chain=arbitrum` 路由
-- **ROI 计算**: 用 `avgLoss × count_loss` 作为 capital proxy
-- **Fix**: 脚本已有直连 → CF fallback，但 CF Worker 需要部署最新版
-
-### 2. Hyperliquid
-- **API**: `https://api.hyperliquid.xyz/info` — POST 请求
-- **WR/MDD**: 必须从 `userFillsByTime` 算，不能直接取字段
-- **坑**: `portfolio` API 返回的 `pnlHistory` 不是 Win Rate
-- **最佳实践**: 
-  ```javascript
-  // WR from fills
-  const closed = fills.filter(f => parseFloat(f.closedPnl) !== 0)
-  const wins = closed.filter(f => parseFloat(f.closedPnl) > 0).length
-  const winRate = (wins / closed.length) * 100
-  ```
-
-### 3. dYdX
-- **API**: `https://indexer.dydx.trade/v4/historical-pnl`
-- **坑**: 大部分地址返回 "no fills" — 可能是链类型不对（v3 vs v4）
-- **CF Worker 路由**: `/dydx/historical-pnl?address=xxx`
-- **待查**: 需要 `subaccountNumber` 参数吗？
-
-### 4. BitMart / BloFin / BingX
-- **BitMart**: CF 1015 拦截 → **必须 Puppeteer**
-- **BloFin**: `openapi.blofin.com` — CF Worker 有路由
-- **BingX**: REST API 可用，但 CF Worker 路由缺失（404）
-
-### 5. Sharpe/Sortino 计算
-- **CEX traders**: 从 ROI + MDD 估算
-  ```javascript
-  // σ ≈ MDD / 2 (empirical)
-  const sharpe = (roi/100) / (mdd/100/2) * sqrt(365/periodDays)
-  ```
-- **DEX traders**: 从 daily returns 实际算
-- **DB 表**: `trader_daily_snapshots` — 需要 backfill 才能用
-
-### 6. CF Worker 部署
-- **需要**: `CLOUDFLARE_API_TOKEN` 环境变量
-- **命令**: `cd cloudflare-worker && npx wrangler deploy`
-- **当前状态**: Worker 健康但路由 404 → 需要重新部署最新代码
-
-## 常用诊断命令
+Old notes and filenames are not authority. Before proposing a change:
 
 ```bash
-# 检查数据新鲜度
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  https://www.arenafi.org/api/admin/data-freshness
-
-# 检查某平台的 null 统计
-node scripts/diagnose.mjs --source=hyperliquid
-
-# 手动跑 enrichment
-node scripts/import/enrich_hyperliquid_full.mjs 30D --resume
-
-# backfill daily snapshots
-node scripts/import/backfill_daily_snapshots.mjs --limit=5000
+rg -n "source_name|metric_name" worker app lib scripts
+rg --files worker app lib scripts | rg "source_name|metric_name"
 ```
 
-## VPS Cron 配置
+Confirm the referenced file exists and is reachable from a current schedule or
+worker. Check public relations against generated types; check private arena
+relations against versioned migrations and the worker database boundary. Do not run
+a guessed import script.
 
-位置: `/opt/arena/cron_refresh.sh`
+When approved read-only application access is available, the canonical freshness
+inspection surface is `/api/admin/data-freshness`. Retired monitoring contracts
+and legacy snapshot timestamps are not freshness authority.
 
-```bash
-# 主要刷新（每小时）
-0 * * * * /opt/arena/cron_refresh.sh major
+## Evidence and identity rules
 
-# 数据新鲜度监控由 Vercel /api/cron/check-data-freshness 唯一调度；
-# VPS 不再重复触发。
-```
+- Bind every metric to the exact source identity, season/window, observation time,
+  and upstream evidence used to calculate it.
+- Preserve null when the upstream payload cannot prove the metric.
+- Reject stale or future-dated enrichment rather than carrying it into a new cohort.
+- Do not combine periodless history with 7D, 30D, or 90D ranking rows.
+- trader_daily_snapshots is quarantined legacy inventory and cannot support
+  Sharpe, Sortino, profit factor, equity, indicators, Movers, or history products.
 
-## 脚本开发规范
+## Code-change workflow
 
-- 脚本路径: `scripts/`，ESM (.mjs) 或 TypeScript (.ts via tsx)
-- 命名: `scripts/<action>-<exchange>-<field>.mjs`（如 `backfill-binance-avatars.mjs`）
-- 初始化: `createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)`
-- 增量运行: `WHERE field IS NULL LIMIT 100`
-- 并发控制: `p-limit`，默认 concurrency 3
-- 写入: 永远 `UPSERT`，不用 `INSERT`
-- 干跑模式: 加 `--dry-run` 参数
-- 运行: `node --env-file=.env.local scripts/<script>.mjs`
+1. Capture a redacted upstream fixture or a deterministic synthetic fixture.
+2. Add a parser/unit test for field mapping, units, nulls, timestamps, and identity.
+3. Add a dry-run path that performs no database or external-state write.
+4. Bound concurrency and retries; avoid unbounded Promise.all.
+5. Use explicit typed table operations or a versioned purpose-specific RPC.
+6. Keep publication atomic: an exact expected cohort must be complete before serving.
+7. Run focused tests, typecheck, lint, and the relevant publication QA.
 
-## Debug Checklist
-- `SUPABASE_SERVICE_ROLE_KEY` 已加载？
-- RLS 阻止写入？用 service role key
-- 交易所 API 返回 429？降低并发 + sleep
-- 数据未持久化？检查 upsert conflict keys
+## Operational boundary
+
+- Do not manually backfill, clean, or write trader_daily_snapshots.
+- Do not call exec_sql or an unversioned cleanup/scanner RPC.
+- Do not restore or add a schedule until code, provenance, and atomic-finalization
+  tests are reviewed.
+- Do not deploy a worker, Cloudflare route, Vercel change, or database migration
+  without explicit authorization.
+- Never log credentials, raw private account data, or secret-bearing URLs.
+
+When evidence is incomplete, report the missing witness and leave the product
+dimension unavailable.
