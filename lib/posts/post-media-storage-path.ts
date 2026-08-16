@@ -21,19 +21,24 @@ export type PostMediaClaimObjectPathCollectionResult =
   | Readonly<{ kind: 'invalid-reference' }>
   | Readonly<{ kind: 'invalid-configuration' }>
 
-function readStorageOrigin(storageBaseUrl: string): string | null {
+/**
+ * Reads the canonical HTTP(S) origin used to identify managed post media.
+ * Only a root URL, optionally followed by one trailing slash, is accepted so
+ * deployment configuration cannot silently widen the managed-media boundary.
+ */
+export function readCanonicalPostMediaStorageOrigin(value: unknown): string | null {
   if (
-    typeof storageBaseUrl !== 'string' ||
-    storageBaseUrl.length < 1 ||
-    storageBaseUrl.length > 2048 ||
-    storageBaseUrl !== storageBaseUrl.trim() ||
-    /[\u0000-\u001f\u007f]/.test(storageBaseUrl)
+    typeof value !== 'string' ||
+    value.length < 1 ||
+    value.length > 2048 ||
+    value !== value.trim() ||
+    /[\u0000-\u001f\u007f]/.test(value)
   ) {
     return null
   }
 
   try {
-    const parsed = new URL(storageBaseUrl)
+    const parsed = new URL(value)
     if (
       (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') ||
       parsed.username ||
@@ -41,7 +46,7 @@ function readStorageOrigin(storageBaseUrl: string): string | null {
       parsed.pathname !== '/' ||
       parsed.search ||
       parsed.hash ||
-      (storageBaseUrl !== parsed.origin && storageBaseUrl !== `${parsed.origin}/`)
+      (value !== parsed.origin && value !== `${parsed.origin}/`)
     ) {
       return null
     }
@@ -67,7 +72,7 @@ export function classifyPostMediaStorageUrl(
   if (value === null || value === undefined) return { kind: 'none' }
   if (typeof value === 'string' && value.trim().length === 0) return { kind: 'none' }
 
-  const storageOrigin = readStorageOrigin(storageBaseUrl)
+  const storageOrigin = readCanonicalPostMediaStorageOrigin(storageBaseUrl)
   if (!storageOrigin || typeof ownerId !== 'string' || !UUID_PATTERN.test(ownerId)) {
     return { kind: 'invalid-configuration' }
   }
@@ -185,7 +190,7 @@ export function collectPostMediaClaimObjectPaths(
 
   // Validate server configuration even when the final post has no media. Empty
   // manifests still cross the same claim authority boundary as populated ones.
-  if (!readStorageOrigin(storageBaseUrl) || !UUID_PATTERN.test(ownerId)) {
+  if (!readCanonicalPostMediaStorageOrigin(storageBaseUrl) || !UUID_PATTERN.test(ownerId)) {
     return { kind: 'invalid-configuration' }
   }
 

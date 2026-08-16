@@ -5,6 +5,7 @@ import {
   MAX_POST_MEDIA_CLAIM_OBJECT_PATHS,
   MAX_POST_VIDEO_CLEANUP_CANDIDATES,
   postVideoPublicPathMarker,
+  readCanonicalPostMediaStorageOrigin,
   readOwnedPostVideoObjectPath,
 } from './post-media-storage-path'
 
@@ -18,6 +19,36 @@ function publicUrl(path: string): string {
 }
 
 describe('post media storage paths', () => {
+  describe('readCanonicalPostMediaStorageOrigin', () => {
+    it.each([
+      ['canonical HTTPS origin', STORAGE_BASE_URL],
+      ['canonical HTTPS origin with one trailing slash', `${STORAGE_BASE_URL}/`],
+      ['canonical HTTP origin', 'http://localhost:54321'],
+      ['canonical HTTP origin with one trailing slash', 'http://localhost:54321/'],
+    ])('normalizes a %s', (_label, value) => {
+      expect(readCanonicalPostMediaStorageOrigin(value)).toBe(new URL(value).origin)
+    })
+
+    it.each([
+      ['non-string value', 42],
+      ['empty URL', ''],
+      ['malformed URL', 'not a URL'],
+      ['non-http URL', 'ftp://project.supabase.co'],
+      ['credentials', 'https://user:pass@project.supabase.co'],
+      ['path', 'https://project.supabase.co/project'],
+      ['query', 'https://project.supabase.co?project=one'],
+      ['fragment', 'https://project.supabase.co#project'],
+      ['leading whitespace', ' https://project.supabase.co'],
+      ['trailing whitespace', 'https://project.supabase.co '],
+      ['control character', 'https://project.supabase.co\n'],
+      ['two trailing slashes', 'https://project.supabase.co//'],
+      ['non-canonical host case', 'https://PROJECT.SUPABASE.CO'],
+      ['explicit default port', 'https://project.supabase.co:443'],
+    ])('rejects a %s', (_label, value) => {
+      expect(readCanonicalPostMediaStorageOrigin(value)).toBeNull()
+    })
+  })
+
   describe('classifyPostMediaStorageUrl', () => {
     it.each(['jpg', 'png', 'gif', 'webp', 'avif'])(
       'classifies a canonical owner-bound %s image and exposes its object path',
