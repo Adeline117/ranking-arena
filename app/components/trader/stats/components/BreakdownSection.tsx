@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
@@ -20,14 +20,9 @@ interface BreakdownSectionProps {
 
 export function BreakdownSection({ assetBreakdown, fallbackData, delay }: BreakdownSectionProps) {
   const { t } = useLanguage()
+  void delay
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
-  const [mounted, setMounted] = useState(false)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), delay * 1000)
-    return () => clearTimeout(timer)
-  }, [delay])
 
   const currentData = assetBreakdown?.[period] || fallbackData
 
@@ -57,9 +52,6 @@ export function BreakdownSection({ assetBreakdown, fallbackData, delay }: Breakd
         border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
         padding: tokens.spacing[6],
         boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       <Box

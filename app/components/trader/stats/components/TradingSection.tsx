@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { t as i18nT } from '@/lib/i18n'
 import { NULL_DISPLAY } from '@/lib/utils/format'
@@ -39,12 +39,7 @@ export function TradingSection({
   t,
   delay,
 }: TradingSectionProps) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), delay * 1000)
-    return () => clearTimeout(timer)
-  }, [delay])
+  void delay
 
   // 判断trading数据是否全部为空
   const hasTradingData = trading && (trading.totalTrades12M > 0 || trading.profitableTradesPct > 0)
@@ -69,9 +64,6 @@ export function TradingSection({
         border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
         padding: tokens.spacing[6],
         boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       <Box

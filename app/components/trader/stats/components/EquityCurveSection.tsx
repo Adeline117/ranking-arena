@@ -41,7 +41,6 @@ export function EquityCurveSection({
   const setPeriod = usePeriodStore((s) => s.setPeriod)
   const didInitPeriodRef = useRef(false)
   const [chartType, setChartType] = useState<'roi' | 'pnl'>(() => getBestChartType(equityCurve))
-  const [mounted, setMounted] = useState(false)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
   const [showFullscreen, setShowFullscreen] = useState(false)
 
@@ -53,14 +52,7 @@ export function EquityCurveSection({
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  useEffect(() => {
-    if (prefersReducedMotion) {
-      setMounted(true)
-      return
-    }
-    const timer = setTimeout(() => setMounted(true), delay * 1000)
-    return () => clearTimeout(timer)
-  }, [delay, prefersReducedMotion])
+  void delay
 
   // Preserve the "pick the best available period on load" UX. The shared store
   // defaults to 90D and isn't equity-curve-aware, so if the current period has
@@ -101,8 +93,6 @@ export function EquityCurveSection({
     border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
     padding: tokens.spacing[6],
     boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
-    opacity: mounted ? 1 : 0,
-    transform: mounted ? 'translateY(0)' : 'translateY(20px)',
     transition: prefersReducedMotion ? 'none' : 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
   }
 

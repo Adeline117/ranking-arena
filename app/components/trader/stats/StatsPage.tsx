@@ -1,6 +1,5 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box } from '../../base'
 import ProGate from '../../ui/ProGate'
@@ -68,57 +67,6 @@ export default function StatsPage({
   onUnlock: _onUnlock, // ProGate handles the upgrade CTA itself
 }: ExtendedStatsPageProps) {
   const { t, language: _language } = useLanguage()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // UF10: Skeleton placeholder while chart is loading
-  if (!mounted) {
-    return (
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-        {/* Breakdown skeleton */}
-        <Box
-          style={{
-            height: 200,
-            borderRadius: tokens.radius.xl,
-            background: `linear-gradient(90deg, ${tokens.colors.bg.secondary} 25%, ${tokens.colors.bg.tertiary} 50%, ${tokens.colors.bg.secondary} 75%)`,
-            backgroundSize: '200% 100%',
-            animation: 'statsSkeletonPulse 1.5s ease-in-out infinite',
-          }}
-        />
-        {/* Chart skeletons */}
-        <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6] }}>
-          {[1, 2].map((i) => (
-            <Box
-              key={i}
-              style={{
-                height: 280,
-                borderRadius: tokens.radius.xl,
-                background: `linear-gradient(90deg, ${tokens.colors.bg.secondary} 25%, ${tokens.colors.bg.tertiary} 50%, ${tokens.colors.bg.secondary} 75%)`,
-                backgroundSize: '200% 100%',
-                animation: 'statsSkeletonPulse 1.5s ease-in-out infinite',
-                animationDelay: `${i * 0.2}s`,
-              }}
-            />
-          ))}
-        </Box>
-        {/* Trading section skeleton */}
-        <Box
-          style={{
-            height: 300,
-            borderRadius: tokens.radius.xl,
-            background: `linear-gradient(90deg, ${tokens.colors.bg.secondary} 25%, ${tokens.colors.bg.tertiary} 50%, ${tokens.colors.bg.secondary} 75%)`,
-            backgroundSize: '200% 100%',
-            animation: 'statsSkeletonPulse 1.5s ease-in-out infinite',
-            animationDelay: '0.4s',
-          }}
-        />
-        {/* statsSkeletonPulse keyframes moved to globals.css (#26) */}
-      </Box>
-    )
-  }
 
   const frequentlyTraded = stats?.frequentlyTraded || []
   const trading = stats?.trading
@@ -171,9 +119,6 @@ export default function StatsPage({
         display: 'flex',
         flexDirection: 'column',
         gap: tokens.spacing[6],
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       {/* Pro gate — blurred preview + unified upsell card (Wave-3 ProGate) */}
