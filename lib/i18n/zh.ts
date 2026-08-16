@@ -402,7 +402,7 @@ const zh = {
   proRequired: '此功能需要 Pro 会员',
   // PremiumGate 上下文化优势文案 (audit P1-PROD-1)
   gateAdvancedAlertsTitle: '解锁高级警报',
-  gateBenefitAlertsRealtime: '每 30 分钟检测到异动后发送站内、邮件或推送提醒',
+  gateBenefitAlertsRealtime: 'V1 验证期间交易员提醒暂不可用',
   gateBenefitAlertsConditions: '每条警报支持 5+ 条件组合',
   gateBenefitAlertsHistory: '完整警报历史 + 分析',
   gateComparisonTitle: '交易员并排对比',
@@ -1688,7 +1688,7 @@ const zh = {
 
   // AdvancedAlerts
   alertMonitoring: '监控: {handle}',
-  alertCheckCadence: '有效 Pro 会员每 30 分钟检测一次。',
+  alertCheckCadence: 'V1 验证期间交易员提醒监控暂不可用。',
   alertRoiChangeLabel: 'ROI 变化',
   alertRoiChangeDesc: '当 ROI 变化超过阈值时提醒',
   alertDrawdownLabel: '回撤警告',
@@ -5070,7 +5070,7 @@ const zh = {
   traderShareFactRoi: 'ROI {roi}',
   pricingProUnlockTitle: 'Pro 解锁内容',
   pricingProDetailedAnalytics: '详细交易员分析与评分拆解',
-  pricingProAlerts: '交易员提醒每 30 分钟检测一次',
+  pricingProAlerts: 'V1 验证期间交易员提醒暂不可用',
   pricingProApiAccess: 'API 访问（即将推出）',
   pricingProCsvExport: 'CSV 数据导出',
   pricingProAdvancedFilters: '高级多条件筛选',

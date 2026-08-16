@@ -3,6 +3,9 @@
 > 2026-07-02 首版（Phase 2 知识文档化）。之前审计指出全项目无架构图——本文补上。
 > 与 `docs/system-principles.md`（设计原则）、`docs/INGEST_WORKER_TOPOLOGY.md`（worker 节点）、
 > `docs/DECISIONS.md`（为什么这么做）配套。数值以 `memory/MEMORY.md` 的实测为准。
+> **V1 NO-GO:** these diagrams are source/design context, not live runtime or
+> provider-control-plane evidence. They do not authorize a deployment, host access,
+> scheduler, queue, credential, proxy, or data operation.
 
 ## 一、系统全景
 
@@ -81,21 +84,21 @@ Overall     = 90D×0.70 + 30D×0.25 + 7D×0.05
 
 ```mermaid
 graph LR
-  subgraph Vercel[Vercel hnd1]
+  subgraph Vercel[Vercel]
     APP[Next.js App + API]
-    CRON[44 Vercel Crons]
-    GATE[deploy-gate.yml CI 门禁部署]
+    CRON[0 source Vercel schedules during V1 NO-GO]
+    GATE[Git deployment disabled in source]
   end
-  subgraph Supabase[Supabase us-west-2 ~24GB]
+  subgraph Supabase[Managed Postgres]
     PG[(Postgres 17 · arena.* + public.*)]
     AUTH[Auth]
     RLS[RLS on all tables]
   end
   subgraph Nodes[Ingest Worker 双节点]
-    MM[Mac Mini · region local · PM2/BullMQ]
-    SG[SG VPS 45.76.152.169 · region vps_sg · rsync copy]
+    MM[Local owner-managed node]
+    SG[Regional owner-managed node]
   end
-  MEILI[Meilisearch @ SG VPS]
+  MEILI[Meilisearch]
   REDIS[(Upstash Redis)]
   R2[(Cloudflare R2 · 日备)]
   GH[GitHub Actions · CI + 哨兵冗余]
@@ -110,28 +113,21 @@ graph LR
   GATE --> APP
 ```
 
-**单点提示（差距 #2，见 `docs/PHASE2_INFRA_PLAN.md`）**：Mac Mini（运维+备份编排+
-phemex 抓取）、SG/JP VPS（scraper/proxy/Meilisearch）仍是单点；抓取类因住宅 IP
-反封锁**必须**留本地。监控/告警已有 GH Actions 冗余（`health-monitor.yml` +
-`openclaw-sentinels.yml`，2026-07-02）。
+**Historical/design gap (see `docs/PHASE2_INFRA_PLAN.md`):** older designs assigned
+collection, backup, and monitoring responsibilities to local and regional nodes.
+This does not prove that any node, proxy, worker, or GitHub monitor is running; V1
+does not authorize starting, accessing, or restoring one.
 
-## 五、部署与质量门禁流
+## 五、发布与质量门禁 — V1 NO-GO
 
-```mermaid
-graph TD
-  PUSH[git push main] --> CI[ci.yml: 4 门禁作业]
-  CI -->|全绿| DG[deploy-gate.yml]
-  CI -->|红| HOLD[扣留部署 + Telegram]
-  DG --> ANC{ancestry: 比线上新?}
-  ANC -->|是| DEPLOY[Vercel CLI 部署 --meta gateSha]
-  ANC -->|否/超越| SKIP[跳过]
-  DEPLOY --> SMOKE[内嵌 smoke 5 URL]
-  SMOKE -->|失败| RB[promote 上一个 READY 回滚 v10]
-  SMOKE -->|绿| DONE[生产更新]
-  PUSH -. "[deploy-force] 逃生口" .-> DEPLOY
-```
+没有启用的发布流。已检查入库的 Vercel 配置禁用 Git 触发部署并声明零个 Vercel
+schedules；这只是源码候选，不证明或改变任何已部署 provider、worker、Redis、QStash
+或数据库调度状态。不得用 Git push、CI、Vercel CLI、Preview、dashboard、cron、smoke
+或 rollback 作为替代路径。
 
-详见 DECISIONS ADR-011 + `docs/RUNBOOK.md` 部署管线。
+未来的发布流程必须由 owner 重新定义并单独批准：精确 candidate SHA、隔离目标、受保护
+source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界和保留的审计材料。具体操作
+步骤不在本文档中；参见 `docs/RUNBOOK.md` 的 owner escalation boundary。
 
 ## 六、关键文件索引
 
