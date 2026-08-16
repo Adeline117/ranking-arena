@@ -23,6 +23,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { parseBitgetCopiersV1 } from './copier-parser-v1'
 import { BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT } from './history-terminal'
 
 type Dict = Record<string, unknown>
@@ -433,24 +434,7 @@ export function parseBitgetPositionHistory(raw: unknown, _ctx: ParseCtx): Parsed
  * ctx.scrapedAt. copierLabel is stored for dedupe only — NEVER rendered.
  */
 export function parseBitgetCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const rows = ((raw as Dict)?.data as Dict)?.rows
-  if (!Array.isArray(rows)) return []
-  const out: ParsedHistoryRow[] = []
-  for (const item of rows as Dict[]) {
-    const label = (item.userName ?? item.displayName ?? item.followerNickName) as string | undefined
-    if (!label) continue
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: String(label),
-      copierPnl: num(item.totalProfit),
-      copierInvested: num(item.totalMargin),
-      copyDurationDays: null, // not exposed by this endpoint
-      dedupeHash: dedupeHash('bitget_cp', label, item.totalProfit, item.totalMargin),
-      raw: item,
-    })
-  }
-  return out
+  return parseBitgetCopiersV1(raw, ctx)
 }
 
 export function parseBitgetHistory(
@@ -458,12 +442,11 @@ export function parseBitgetHistory(
   kind: HistoryKind,
   ctx: ParseCtx
 ): ParsedHistoryRow[] {
-  const response = unwrapHistoryPage(raw)
   switch (kind) {
     case 'position_history':
-      return parseBitgetPositionHistory(response, ctx)
+      return parseBitgetPositionHistory(unwrapHistoryPage(raw), ctx)
     case 'copiers':
-      return parseBitgetCopiers(response, ctx)
+      return parseBitgetCopiersV1(raw, ctx)
     default:
       // orders: no public endpoint; transfers: 余额历史 removed from the UTA
       // UI and all candidates are auth-gated (verified 2026-06-11).
