@@ -1,6 +1,22 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { binanceAdapter } from '../../../lib/ingest/adapters/binance'
+import { bitgetAdapter } from '../../../lib/ingest/adapters/bitget'
+import { bitgetBotsAdapter } from '../../../lib/ingest/adapters/bitget/bots'
+import { bitunixAdapter } from '../../../lib/ingest/adapters/bitunix'
+import { btccAdapter } from '../../../lib/ingest/adapters/btcc'
+import { coinexAdapter } from '../../../lib/ingest/adapters/coinex'
+import { gateAdapter } from '../../../lib/ingest/adapters/gate'
+import { kucoinAdapter } from '../../../lib/ingest/adapters/kucoin'
+import { lbankAdapter } from '../../../lib/ingest/adapters/lbank'
+import { mexcAdapter } from '../../../lib/ingest/adapters/mexc'
+import { okxAdapter } from '../../../lib/ingest/adapters/okx'
+import { toobitAdapter } from '../../../lib/ingest/adapters/toobit'
+import { xtAdapter } from '../../../lib/ingest/adapters/xt'
+import type { SourceAdapter } from '../../../lib/ingest/core/adapter'
+import type { SourceRow } from '../../../lib/ingest/core/types'
+
 const root = process.cwd()
 const migrationName = '20260804054700_bind_copier_snapshot_source_authority.sql'
 const migration = readFileSync(resolve(root, 'supabase/migrations', migrationName), 'utf8')
@@ -29,6 +45,60 @@ function runnerArray(name: string): string {
   const end = runner.indexOf('\n)', start)
   expect(end).toBeGreaterThan(start)
   return runner.slice(start, end)
+}
+
+type CopierSourceConfig = Readonly<{
+  slug: string
+  adapterSlug: string
+  productType: SourceRow['product_type']
+  traderKindScope: SourceRow['trader_kind_scope']
+  copierTableDepth: SourceRow['copier_table_depth']
+  meta?: Record<string, unknown>
+  pageSize?: number | null
+  timeframesNative?: number[]
+  timeframesDerived?: number[]
+}>
+
+type ReviewedCopierSource = Readonly<{
+  adapter: SourceAdapter
+  source: SourceRow
+  contract: string
+}>
+
+function copierSource(config: CopierSourceConfig): SourceRow {
+  return {
+    id: 1,
+    slug: config.slug,
+    exchange_id: 1,
+    product_type: config.productType,
+    trader_kind_scope: config.traderKindScope,
+    adapter_slug: config.adapterSlug,
+    leaderboard_url: null,
+    timeframes_native: config.timeframesNative ?? [30],
+    timeframes_derived: config.timeframesDerived ?? [],
+    tf_label_map: {},
+    expected_count: null,
+    deep_profile_topn: 100,
+    positions_topn: 100,
+    profile_cache_ttl: '6 hours',
+    copier_table_depth: config.copierTableDepth,
+    currency: 'USDT',
+    page_size: config.pageSize ?? 20,
+    pagination_kind: 'numeric',
+    cadence_tier_a: '4 hours',
+    cadence_tier_b: '12 hours',
+    cadence_tier_d: '1 hour',
+    fetch_region: 'local',
+    rate_budget_ms: 0,
+    phase: 0,
+    serving_mode: 'serving',
+    status: 'active',
+    meta: config.meta ?? {},
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 describe('exact copier snapshot source authority', () => {
@@ -121,6 +191,238 @@ describe('exact copier snapshot source authority', () => {
       /'lbank_futures'[\s\S]{0,160}'top3_preview', 'top3_preview', false, NULL/
     )
     expect(migration).toContain(') <> 14 OR EXISTS (')
+  })
+
+  it('keeps every database-eligible source in lockstep with its runtime selector', () => {
+    const reviewed: readonly ReviewedCopierSource[] = [
+      {
+        adapter: binanceAdapter,
+        source: copierSource({
+          slug: 'binance_futures',
+          adapterSlug: 'binance',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+          meta: { boardKey: 'futures' },
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.binance.copiers@2',
+      },
+      {
+        adapter: binanceAdapter,
+        source: copierSource({
+          slug: 'binance_spot',
+          adapterSlug: 'binance',
+          productType: 'spot',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+          meta: { boardKey: 'spot' },
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.binance.copiers@2',
+      },
+      {
+        adapter: bitgetBotsAdapter,
+        source: copierSource({
+          slug: 'bitget_bots_futures',
+          adapterSlug: 'bitget_bots',
+          productType: 'futures',
+          traderKindScope: 'bot',
+          copierTableDepth: 'top10',
+          meta: { boards: ['futures_grid', 'futures_martingale'] },
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.bitget_bots.copiers@2',
+      },
+      {
+        adapter: bitgetBotsAdapter,
+        source: copierSource({
+          slug: 'bitget_bots_spot',
+          adapterSlug: 'bitget_bots',
+          productType: 'spot',
+          traderKindScope: 'bot',
+          copierTableDepth: 'top10',
+          meta: { boards: ['spot_grid', 'spot_martingale'] },
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.bitget_bots.copiers@2',
+      },
+      {
+        adapter: bitunixAdapter,
+        source: copierSource({
+          slug: 'bitunix_futures',
+          adapterSlug: 'bitunix',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.bitunix.copiers@3',
+      },
+      {
+        adapter: btccAdapter,
+        source: copierSource({
+          slug: 'btcc_futures',
+          adapterSlug: 'btcc',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.btcc.copiers@2',
+      },
+      {
+        adapter: coinexAdapter,
+        source: copierSource({
+          slug: 'coinex_futures',
+          adapterSlug: 'coinex',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.coinex.copiers@2',
+      },
+      {
+        adapter: gateAdapter,
+        source: copierSource({
+          slug: 'gate_futures',
+          adapterSlug: 'gate',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+          meta: { boardKey: 'futures' },
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.gate.copiers@2',
+      },
+      {
+        adapter: kucoinAdapter,
+        source: copierSource({
+          slug: 'kucoin_futures',
+          adapterSlug: 'kucoin',
+          productType: 'futures',
+          traderKindScope: 'mixed',
+          copierTableDepth: 'full',
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.kucoin.copiers@2',
+      },
+      {
+        adapter: mexcAdapter,
+        source: copierSource({
+          slug: 'mexc_futures',
+          adapterSlug: 'mexc',
+          productType: 'futures',
+          traderKindScope: 'mixed',
+          copierTableDepth: 'full',
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.mexc.copiers@2',
+      },
+      {
+        adapter: okxAdapter,
+        source: copierSource({
+          slug: 'okx_futures',
+          adapterSlug: 'okx',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'top10',
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.okx.copiers@2',
+      },
+      {
+        adapter: toobitAdapter,
+        source: copierSource({
+          slug: 'toobit_futures',
+          adapterSlug: 'toobit',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.toobit.copiers@2',
+      },
+      {
+        adapter: xtAdapter,
+        source: copierSource({
+          slug: 'xt_futures',
+          adapterSlug: 'xt',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'full',
+          meta: { boardKey: 'futures' },
+        }),
+        contract: 'arena.ingest.history-terminal-verifier.xt.copiers@2',
+      },
+    ]
+
+    expect(reviewed).toHaveLength(13)
+
+    for (const reviewedSource of reviewed) {
+      const selected = reviewedSource.adapter.verifyCopierSnapshot?.(reviewedSource.source)
+      expect(selected).toMatchObject({ contract: reviewedSource.contract })
+
+      const tuple = new RegExp(
+        `\\(\\s*'${escapeRegExp(reviewedSource.source.slug)}'\\s*,\\s*'[^']+'\\s*,\\s*` +
+          `'${escapeRegExp(reviewedSource.source.adapter_slug)}'\\s*,\\s*` +
+          `'${reviewedSource.source.product_type}'\\s*,\\s*` +
+          `'${reviewedSource.source.trader_kind_scope}'\\s*,\\s*'USDT'\\s*,\\s*` +
+          `'${reviewedSource.source.copier_table_depth}'\\s*,\\s*` +
+          `'${reviewedSource.source.copier_table_depth}'\\s*,\\s*true\\s*,\\s*` +
+          `'${escapeRegExp(reviewedSource.contract)}'\\s*\\)`
+      )
+      expect(migration).toMatch(tuple)
+
+      expect(
+        reviewedSource.adapter.verifyCopierSnapshot?.({
+          ...reviewedSource.source,
+          status: 'inactive',
+        }) ?? null
+      ).toBeNull()
+      expect(
+        reviewedSource.adapter.verifyCopierSnapshot?.({
+          ...reviewedSource.source,
+          serving_mode: 'shadow',
+        }) ?? null
+      ).toBeNull()
+      expect(
+        reviewedSource.adapter.verifyCopierSnapshot?.({
+          ...reviewedSource.source,
+          copier_table_depth: 'none',
+        }) ?? null
+      ).toBeNull()
+    }
+
+    const unavailable: readonly Readonly<{ adapter: SourceAdapter; source: SourceRow }>[] = [
+      {
+        adapter: bitgetAdapter,
+        source: copierSource({
+          slug: 'bitget_futures',
+          adapterSlug: 'bitget',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'none',
+          meta: { boardKey: 'futures' },
+        }),
+      },
+      {
+        adapter: lbankAdapter,
+        source: copierSource({
+          slug: 'lbank_futures',
+          adapterSlug: 'lbank',
+          productType: 'futures',
+          traderKindScope: 'human',
+          copierTableDepth: 'top3_preview',
+        }),
+      },
+      {
+        adapter: xtAdapter,
+        source: copierSource({
+          slug: 'xt_spot',
+          adapterSlug: 'xt',
+          productType: 'spot',
+          traderKindScope: 'human',
+          copierTableDepth: 'none',
+          meta: { boardKey: 'spot' },
+        }),
+      },
+    ]
+
+    for (const unavailableSource of unavailable) {
+      expect(
+        unavailableSource.adapter.verifyCopierSnapshot?.(unavailableSource.source) ?? null
+      ).toBeNull()
+    }
   })
 
   it('makes the registry catalog, rows, privacy, and replay definition exact', () => {
