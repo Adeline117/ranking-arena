@@ -19,6 +19,24 @@ export type ProfileViewerSnapshot = ViewerScope & {
   email: string | null
 }
 
+/**
+ * True only after auth has resolved to either an exact signed-in viewer or the
+ * canonical anonymous scope. Identity-dependent profile actions stay inert
+ * while a session restore/account transition is still pending.
+ */
+export function profileViewerIsResolved(auth: CanonicalProfileAuth): boolean {
+  if (auth.loading || !auth.authChecked) return false
+  if (auth.userId) return captureProfileViewer(auth) !== null
+  if (auth.accessToken !== null || auth.viewerKey !== 'anon') return false
+
+  const processScope = getViewerScope()
+  return (
+    processScope.viewerKey === 'anon' &&
+    processScope.userId === null &&
+    processScope.sessionGeneration === auth.sessionGeneration
+  )
+}
+
 /** Captures one resolved viewer and the exact token that starts profile work. */
 export function captureProfileViewer(auth: CanonicalProfileAuth): ProfileViewerSnapshot | null {
   if (

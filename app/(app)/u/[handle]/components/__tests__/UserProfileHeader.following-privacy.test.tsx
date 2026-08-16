@@ -10,7 +10,10 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('next/dynamic', () => ({
   __esModule: true,
-  default: () => () => null,
+  default: (loader: () => unknown) => {
+    const label = String(loader).includes('UserFollowButton') ? 'follow user' : 'message user'
+    return () => <button type="button">{label}</button>
+  },
 }))
 
 jest.mock('next/image', () => ({
@@ -76,10 +79,12 @@ function renderHeader({
   showFollowing,
   showFollowers,
   isOwnProfile = false,
+  authResolved = true,
 }: {
   showFollowing: boolean | undefined
   showFollowers: boolean | undefined
   isOwnProfile?: boolean
+  authResolved?: boolean
 }) {
   const onFollowingClick = jest.fn()
   const onFollowersClick = jest.fn()
@@ -90,6 +95,7 @@ function renderHeader({
       handle="alice"
       isOwnProfile={isOwnProfile}
       currentUserId={isOwnProfile ? 'target-user' : 'viewer-user'}
+      authResolved={authResolved}
       followersCount={3}
       followingCount={7}
       onFollowersCountChange={jest.fn()}
@@ -122,6 +128,50 @@ describe('UserProfileHeader following privacy', () => {
     fireEvent.click(followingButton)
 
     expect(onFollowingClick).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('profile-social-actions')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'follow user' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'message user' })).toBeInTheDocument()
+  })
+
+  it('keeps identity actions inert until auth resolves, then exposes only the owner action', () => {
+    const baseProps = {
+      profile: profile(true, true),
+      handle: 'alice',
+      followersCount: 3,
+      followingCount: 7,
+      onFollowersCountChange: jest.fn(),
+      onFollowingClick: jest.fn(),
+      onFollowersClick: jest.fn(),
+    }
+    const view = render(
+      <UserProfileHeader
+        {...baseProps}
+        isOwnProfile={false}
+        currentUserId={null}
+        authResolved={false}
+      />
+    )
+
+    expect(screen.getByTestId('profile-auth-actions-pending')).toBeInTheDocument()
+    expect(screen.queryByTestId('profile-social-actions')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'follow user' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'message user' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'editProfile' })).not.toBeInTheDocument()
+
+    view.rerender(
+      <UserProfileHeader
+        {...baseProps}
+        isOwnProfile={true}
+        currentUserId="target-user"
+        authResolved={true}
+      />
+    )
+
+    expect(screen.queryByTestId('profile-auth-actions-pending')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('profile-social-actions')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'editProfile' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'follow user' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'message user' })).not.toBeInTheDocument()
   })
 
   it('keeps server-rendered profile identity visible before hydration', () => {
@@ -131,6 +181,7 @@ describe('UserProfileHeader following privacy', () => {
         handle="alice"
         isOwnProfile={false}
         currentUserId={null}
+        authResolved={false}
         followersCount={3}
         followingCount={7}
         onFollowersCountChange={jest.fn()}
@@ -173,6 +224,7 @@ describe('UserProfileHeader following privacy', () => {
         handle="爱丽丝 user"
         isOwnProfile={false}
         currentUserId={null}
+        authResolved={true}
         followersCount={3}
         followingCount={7}
         onFollowersCountChange={jest.fn()}
@@ -200,6 +252,7 @@ describe('UserProfileHeader following privacy', () => {
         handle="alice"
         isOwnProfile={false}
         currentUserId={null}
+        authResolved={true}
         followersCount={3}
         followingCount={7}
         onFollowersCountChange={jest.fn()}

@@ -28,6 +28,7 @@ interface UserProfileHeaderProps {
   handle: string
   isOwnProfile: boolean
   currentUserId: string | null
+  authResolved: boolean
   followersCount: number
   followingCount: number
   onFollowersCountChange: (delta: number) => void
@@ -40,6 +41,7 @@ export default function UserProfileHeader({
   handle,
   isOwnProfile,
   currentUserId,
+  authResolved,
   followersCount,
   followingCount,
   onFollowersCountChange,
@@ -489,7 +491,21 @@ export default function UserProfileHeader({
           showLabel={false}
         />
 
-        {isOwnProfile && (
+        {!authResolved && (
+          <Box
+            data-testid="profile-auth-actions-pending"
+            aria-hidden="true"
+            style={{
+              width: 96,
+              minWidth: 96,
+              height: tokens.touchTarget.min,
+              borderRadius: tokens.radius.lg,
+              background: alpha(tokens.colors.text.primary, 8),
+            }}
+          />
+        )}
+
+        {authResolved && isOwnProfile && (
           <button
             onClick={() => router.push('/settings')}
             style={{
@@ -524,8 +540,11 @@ export default function UserProfileHeader({
           </button>
         )}
 
-        {features.social && !isOwnProfile && profile.isRegistered && (
-          <>
+        {authResolved && features.social && !isOwnProfile && profile.isRegistered && (
+          <Box
+            data-testid="profile-social-actions"
+            style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}
+          >
             <UserFollowButton
               targetUserId={profile.id}
               currentUserId={currentUserId}
@@ -541,7 +560,7 @@ export default function UserProfileHeader({
               size="sm"
               loginReturnPath={`/u/${encodeURIComponent(handle)}`}
             />
-          </>
+          </Box>
         )}
       </Box>
     </Box>

@@ -14,6 +14,7 @@ import { logger } from '@/lib/logger'
 import {
   captureProfileViewer,
   isProfileViewerCurrent,
+  profileViewerIsResolved,
   type ProfileViewerSnapshot,
 } from './profile-viewer-scope'
 
@@ -73,6 +74,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   const authRef = useRef(auth)
   authRef.current = auth
   const currentViewer = captureProfileViewer(auth)
+  const authResolved = profileViewerIsResolved(auth)
   const email = currentViewer?.email ?? null
   const currentUserId = currentViewer?.userId ?? null
 
@@ -349,6 +351,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     // Core state
     email,
     currentUserId,
+    authResolved,
     profile,
     isPro,
     isOwnProfile,

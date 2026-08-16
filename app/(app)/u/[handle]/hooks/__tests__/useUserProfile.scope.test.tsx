@@ -189,6 +189,37 @@ describe('useUserProfile viewer and provisioning ownership', () => {
     )
 
     expect(result.current.followingCount).toBe(2)
+    expect(result.current.authResolved).toBe(true)
+  })
+
+  it('keeps identity actions pending until the viewer resolves anonymously', () => {
+    const pendingGeneration = beginViewerTransition(null)
+    mockAuth = {
+      userId: null,
+      email: null,
+      accessToken: null,
+      isLoggedIn: false,
+      loading: true,
+      authChecked: false,
+      viewerKey: 'pending',
+      sessionGeneration: pendingGeneration,
+    } as unknown as AuthSessionReturn
+    const hook = renderHook(() =>
+      useUserProfile({
+        handle: 'alice',
+        serverProfile: serverProfile('target-user', 'alice'),
+        serverTraderData: null,
+      })
+    )
+
+    expect(hook.result.current.authResolved).toBe(false)
+    expect(hook.result.current.currentUserId).toBeNull()
+
+    setAnonymousViewer()
+    hook.rerender()
+
+    expect(hook.result.current.authResolved).toBe(true)
+    expect(hook.result.current.currentUserId).toBeNull()
   })
 
   it('contains no browser profile mutation or secondary auth source', () => {

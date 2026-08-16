@@ -33,6 +33,7 @@ export default function UserProfileClient({
   const {
     email,
     currentUserId,
+    authResolved,
     profile,
     isPro,
     isOwnProfile,
@@ -126,6 +127,7 @@ export default function UserProfileClient({
           handle={handle}
           isOwnProfile={isOwnProfile}
           currentUserId={currentUserId}
+          authResolved={authResolved}
           followersCount={followersCount}
           followingCount={followingCount}
           onFollowersCountChange={(delta) => setFollowersCount((prev) => Math.max(0, prev + delta))}

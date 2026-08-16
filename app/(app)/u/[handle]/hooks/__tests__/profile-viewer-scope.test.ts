@@ -4,7 +4,11 @@ import {
   commitViewerTransition,
   synchronizeViewerScope,
 } from '@/lib/auth/viewer-scope'
-import { captureProfileViewer, isProfileViewerCurrent } from '../profile-viewer-scope'
+import {
+  captureProfileViewer,
+  isProfileViewerCurrent,
+  profileViewerIsResolved,
+} from '../profile-viewer-scope'
 
 function jwt(userId: string, signature = 'signature'): string {
   const encode = (value: unknown) =>
@@ -37,6 +41,36 @@ describe('profile viewer scope', () => {
     })
     expect(captureProfileViewer({ ...auth, accessToken: jwt('user-b') })).toBeNull()
     expect(captureProfileViewer({ ...auth, loading: true })).toBeNull()
+    expect(profileViewerIsResolved(auth)).toBe(true)
+    expect(profileViewerIsResolved({ ...auth, authChecked: false, loading: true })).toBe(false)
+    expect(profileViewerIsResolved({ ...auth, accessToken: jwt('user-b') })).toBe(false)
+  })
+
+  it('distinguishes a canonical anonymous viewer from a pending transition', () => {
+    const anonymousScope = synchronizeViewerScope(true, null)
+    const anonymous = {
+      accessToken: null,
+      authChecked: true,
+      email: null,
+      loading: false,
+      sessionGeneration: anonymousScope.sessionGeneration,
+      userId: null,
+      viewerKey: 'anon' as const,
+    }
+
+    expect(profileViewerIsResolved(anonymous)).toBe(true)
+
+    const pendingGeneration = beginViewerTransition(null)
+    expect(
+      profileViewerIsResolved({
+        ...anonymous,
+        authChecked: false,
+        loading: true,
+        sessionGeneration: pendingGeneration,
+        viewerKey: 'pending',
+      })
+    ).toBe(false)
+    expect(profileViewerIsResolved(anonymous)).toBe(false)
   })
 
   it('invalidates an operation when its exact dispatch token rotates', () => {

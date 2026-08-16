@@ -116,6 +116,7 @@ function useProfileFixture() {
   return {
     email: null,
     currentUserId: mockIsOwnProfile ? mockProfile.id : 'viewer-user',
+    authResolved: true,
     profile: mockProfile,
     isPro: false,
     isOwnProfile: mockIsOwnProfile,
