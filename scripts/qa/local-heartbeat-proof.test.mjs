@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { tsImport } from 'tsx/esm/api'
+import { register } from 'tsx/esm/api'
+
+const unregister = register()
+const heartbeatProof = await (async () => {
+  try {
+    return await import('../../worker/verify-local-heartbeat.ts')
+  } finally {
+    await unregister()
+  }
+})()
 
 const {
   discoverExistingLocalNode,
   discoveryRequestTimeoutMs,
   validateLocalHeartbeatPayload,
   waitForExpectedLocalHeartbeat,
-} = await tsImport('../../worker/verify-local-heartbeat.ts', import.meta.url)
+} = heartbeatProof
 
 const NOW = 1_800_000_000_000
 const SHA = 'a'.repeat(40)
