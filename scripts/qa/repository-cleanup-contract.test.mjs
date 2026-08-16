@@ -79,6 +79,7 @@ test('retired ad hoc UI screenshot entrypoint stays removed', () => {
 test('retired one-off schema and VPS instructions stay removed', () => {
   const retiredOperationalFiles = [
     'scripts/get-schema.mjs',
+    'scripts/ingest-test-surfaces.ts',
     'scripts/show-trader-sources-schema.ts',
     'scripts/DEPLOY_TO_VPS.md',
   ]
@@ -86,7 +87,7 @@ test('retired one-off schema and VPS instructions stay removed', () => {
   assert.deepEqual(
     retiredOperationalFiles.filter((path) => existsSync(join(repoRoot, path))),
     [],
-    'retired probes and deployment instructions must not bypass supported schema and ingest workflows'
+    'retired probes and direct-serving drivers must not bypass supported schema and ingest workflows'
   )
 
   assert.equal(existsSync(join(repoRoot, 'docs/INGEST_WORKER_DEPLOY.md')), true)

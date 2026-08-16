@@ -41,6 +41,7 @@ const directSqlWriter = new RegExp(
 const queryBuilderWriter =
   /\.from\s*\(\s*(['"`])bots\1\s*\)\s*\.\s*(?:insert|upsert|update|delete)\s*\(/i
 const legacyPublisher = /\bpublishBots\b|publish-bots/
+const directServingPublisher = /\b(?:publishProfile|publishPositions|publishHistoryRows)\b/
 
 function hasArenaBotsWriter(source) {
   return (
@@ -106,5 +107,19 @@ test('repository production TS/JS has no arena.bots writer or legacy publisher',
     offenders,
     [],
     `arena.bots must remain a read-only legacy table; direct writers found: ${offenders.join(', ')}`
+  )
+})
+
+test('operator scripts cannot bypass region queues into serving publishers', () => {
+  const scriptsRoot = resolve(ROOT, 'scripts')
+  const offenders = productionSources(scriptsRoot).filter((file) => {
+    const source = readFileSync(resolve(ROOT, file), 'utf8')
+    return directServingPublisher.test(source)
+  })
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `operator scripts must enqueue region-owned jobs instead of mutating serving: ${offenders.join(', ')}`
   )
 })
