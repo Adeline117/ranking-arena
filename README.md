@@ -281,8 +281,10 @@ lib/                          # Core business logic
   validation/                 # Zod schemas
 
 scripts/                      # CLI tools and maintenance (110+ files)
-  pipeline-health-check.mjs   # Full pipeline health diagnostic
-  diagnose-enrichment.mjs     # Enrichment API diagnostic
+  diagnose.mjs                # Unified read-only diagnostics entrypoint
+  check_status.mjs            # Public serving/freshness/platform checks
+  check_seasons.mjs           # Current leaderboard inventory
+  check_enrichment.mjs        # Non-authoritative enrichment inventory
   backfill-*.ts               # Data backfill jobs
   openclaw/                   # Mac Mini autonomous monitoring
   vps-scrapers/               # VPS Playwright scraper code
@@ -413,46 +415,52 @@ npm run test:e2e       # Playwright E2E tests
 ### Diagnostic Scripts
 
 ```bash
-node scripts/pipeline-health-check.mjs          # Full pipeline health check
-node scripts/pipeline-health-check.mjs --quick   # Quick data freshness check
-node scripts/pipeline-health-check.mjs --fix     # Generate fix scripts
-node scripts/diagnose-enrichment.mjs             # Enrichment API diagnostic
-node scripts/check-data-distribution.mjs         # Data distribution analysis
+npm run check:status      # Public serving health and release identity
+npm run check:freshness   # Published ranking freshness authority
+npm run check:platforms   # Public source/ranking coverage
+npm run check:seasons     # Current leaderboard inventory (credentialed)
+npm run check:enrichment  # Enrichment inventory, not serving authority (credentialed)
 ```
+
+These commands are read-only. Inventory results do not authorize a backfill, cron
+invocation, migration, cache action, or production repair. The retired
+`pipeline-health-check.mjs` and `diagnose-enrichment.mjs` scripts are not current
+diagnostic evidence.
 
 ## Deployment
 
-The application is deployed on Vercel through the repository's CI deployment gate. A push to `main` must pass the required checks before the production deployment is created; a pushed commit alone is not proof that production advanced.
-
-```bash
-vercel --prod          # Manual production deploy; verify the linked project first
-git push origin main   # Starts CI; deploy-gate promotes only after required checks pass
-```
+Production release is currently suspended by the V1 NO-GO in
+[`docs/RUNBOOK.md`](./docs/RUNBOOK.md). A pushed commit, preview, or local build is
+not proof that production advanced. Do not invoke a manual production deployment,
+migration, cache purge, or release promotion without the separately recorded owner
+GO and release gates.
 
 All environment variables must be configured in the Vercel dashboard. The primary serverless function region is `hnd1` (Tokyo) to minimize latency to Asian exchange APIs and avoid geo-blocking.
 
-### Cron Jobs
+### Scheduled jobs
 
-Cron schedules are defined in `vercel.json`. The 38 production schedules call authenticated endpoints with `Authorization: Bearer CRON_SECRET`; Vercel injects that header from the Production environment. Schedules are staggered and should be checked with `node scripts/cron-schedule-heatmap.mjs` before adding another job.
+Schedules are versioned in `vercel.json`, but their existence is not authorization to
+invoke, alter, or add a production job. Under the V1 NO-GO, treat schedule review as
+read-only code review; any scheduler/control-plane change requires its own approved
+release plan and owner GO.
 
 ### Infrastructure
 
-| Component                  | Details                                                            |
-| -------------------------- | ------------------------------------------------------------------ |
-| **Vercel**                 | Edge + Serverless, region hnd1, 38 production cron schedules       |
-| **SG VPS** (45.76.152.169) | Proxy :3456 + Playwright Scraper :3457 (PM2)                       |
-| **JP VPS** (149.28.27.242) | Polymarket + exchange proxy                                        |
-| **Mac Mini** (OpenClaw)    | Health monitor (30min), daily reports, auto-fix, weekly self-check |
-| **Cloudflare Worker**      | Geo-block bypass proxy with ALLOWED_HOSTS whitelist                |
+| Component                       | Current boundary                                                          |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| **Vercel**                      | Edge + Serverless; deployment/control-plane actions require release gates |
+| **Managed workers and proxies** | Source routing and credentials are private managed configuration          |
+| **Mac Mini automation**         | Observation only; no auto-fix or release authority during V1 NO-GO        |
+| **Cloudflare Worker**           | Managed routing boundary; changes require a separate reviewed plan        |
 
 ### Monitoring
 
-- Pipeline health: `/api/health/pipeline` (used by OpenClaw Mac Mini monitor)
+- Public serving/freshness evidence: `npm run check:status`, `check:freshness`, and `check:platforms`
 - Dependency health: `/api/health/detailed?section=dependencies` (checks Supabase, Redis, Stripe connectivity)
 - Admin metrics: `/api/admin/metrics/trends` (pipeline success rates, error rates, active users)
 - Healthchecks.io: dead man's switch for the configured monitored `PipelineLogger` subset
 - Sentry: client/server/edge error tracking
-- Telegram alerts: automatic on cron job failures and data staleness
+- Alerts and monitors are observations, not remediation authority
 
 ### Key Metrics
 

@@ -47,52 +47,36 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 
 ### Symptom: Platform has no fresh data
 
-1. **Diagnose** which platform is stale:
+1. **Capture read-only evidence** from the current public contracts:
 
    ```bash
-   node scripts/pipeline-health-check.mjs
-   # or quick mode:
-   node scripts/pipeline-health-check.mjs --quick
+   npm run check:status
+   npm run check:freshness
+   npm run check:platforms
    ```
 
-2. **Check pipeline logs** for the failing job:
+2. Record the commit, release identity, observation time, source, and unavailable
+   dependency. A missing heartbeat, unavailable secret channel, or absent source
+   witness is unknown, not a healthy result.
 
-   ```bash
-   npx tsx scripts/pipeline-report.ts
-   ```
+3. **Common investigation directions** (code/fixture work only):
 
-3. **Check Vercel function logs** for errors:
+   | Observation            | Safe next step                                                        |
+   | ---------------------- | --------------------------------------------------------------------- |
+   | Exchange payload drift | Reproduce against a redacted fixture; update the current adapter/test |
+   | Rate limit or timeout  | Review bounded retry/circuit behavior and source routing in code      |
+   | Missing source witness | Record the gate; do not invent a proxy, replay, or data backfill      |
+   | Schema mismatch        | Compare types/migrations/catalog under a separate reviewed DB plan    |
 
-   ```bash
-   vercel logs --since 2h
-   ```
-
-4. **Common causes and fixes**:
-
-   | Cause                       | Fix                                                                   |
-   | --------------------------- | --------------------------------------------------------------------- |
-   | Exchange API changed format | Update the fetcher/connector to match new response shape              |
-   | VPS scraper down            | SSH to VPS, check PM2: `pm2 status`, `pm2 restart arena-scraper`      |
-   | Rate limited (429)          | Wait for cooldown or increase delay in connector config               |
-   | Geo-blocked                 | Route through VPS proxy or Cloudflare Worker                          |
-   | Timeout (524/504)           | Reduce batch size or increase `timeoutMs` in connector config         |
-   | Supabase error 42P10        | Missing unique constraint on target table -- check ON CONFLICT clause |
-
-5. **Generate automated fix script**:
-   ```bash
-   node scripts/pipeline-health-check.mjs --fix
-   ```
+Do not SSH to a worker, restart PM2, invoke a cron, alter a proxy, backfill rows,
+or generate/apply a fix script from this runbook. Those are separate owner-approved
+operations under the V1 NO-GO.
 
 ### Symptom: Cron job stuck in "running" status
 
-```sql
--- Find stuck jobs (running > 10 minutes)
-UPDATE pipeline_logs
-SET status = 'error',
-    error_message = 'Force-closed: stuck job',
-    ended_at = NOW()
-WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
-```
+Record the job identity and timestamp through an approved read-only log/catalog
+channel. Do not force-close a pipeline row with SQL; that can hide the actual writer
+or release failure and is not an authorized remediation.
 
 ---
 
@@ -155,15 +139,13 @@ WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
 1. Read the shared authority without firing pager side effects:
 
    ```bash
-   curl -sS \
-     -H "Authorization: Bearer $CRON_SECRET" \
-     "https://www.arenafi.org/api/admin/data-freshness" | jq
+   npm run check:freshness
    ```
 
    `unknown` means the registry/visible/watermark closure is broken; `stale` or
    `critical` means the authority is available and the upstream watermark is
-   genuinely old. Do not call `/api/cron/check-data-freshness` just to inspect
-   state: that endpoint intentionally triggers real alerts.
+   genuinely old. Do not call a cron or authenticated admin endpoint merely to
+   inspect state.
 
 2. Inspect each published source watermark and the last successful monitor run:
 
@@ -227,8 +209,8 @@ WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
      credentials, or upstream availability first.
    - Fresh PASSED snapshot but old `source_as_of`: inspect the complete
      leaderboard publish and its freshness upsert.
-   - Only after fresh upstream data exists should you trigger
-     [Manual Leaderboard Recompute](#manual-leaderboard-recompute).
+   - Even after fresh upstream data exists, record the release gate. Do not trigger
+     a manual recompute under the current V1 NO-GO.
 
 Never update `source_as_of` manually and never substitute
 `leaderboard_ranks.computed_at` or `now()`. A score recompute over unchanged
@@ -276,51 +258,30 @@ delivery deduplication.
 
 ---
 
-## Manual Ingest Canary
+## Manual Ingest Canary — disabled during V1 NO-GO
 
 The retired `unified-connector`, `batch-fetch-traders`, and `batch-enrich` HTTP
-routes must not be used. First-party collection is owned by the region-affine
-BullMQ ingest workers.
+routes must not be used. First-party collection is owned by region-affine ingest
+workers, and a canary creates real work rather than a dry run.
 
-1. Read the source's authoritative execution region:
-
-   ```sql
-   SELECT slug, status, serving_mode, fetch_region
-   FROM arena.sources
-   WHERE slug = 'binance_spot';
-   ```
-
-2. From an operator checkout with `worker/.env`, enqueue one fail-fast Tier-A
-   canary using the exact `fetch_region` returned above:
-
-   ```bash
-   npx tsx scripts/ingest-enqueue-region-smoke.mts binance_spot vps_sg
-   ```
-
-3. Watch the region worker and verify a new RAW capture, a count-check-PASSED
-   leaderboard snapshot, and only then a serving publish. The canary enqueues
-   real work and is not a dry run.
-
-Never move a job to a different region merely to make the canary pass. See
-`docs/INGEST_WORKER_TOPOLOGY.md` for node ownership, deploy paths, and heartbeat
-verification.
+Do not enqueue a canary, read worker credentials, select a region, or inspect a
+worker directly from this runbook. A future owner-approved ingest plan must specify
+the exact source, region witness, immutable RAW capture, count gate, publication
+proof, rollback boundary, and observation window before one controlled canary may be
+considered.
 
 ---
 
-## Manual Leaderboard Recompute
+## Manual Leaderboard Recompute — disabled during V1 NO-GO
 
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.arenafi.org/api/cron/compute-leaderboard?season=90D"
-```
+`compute-leaderboard` writes serving rows. It must not be invoked manually, by a
+cron replay, or through an automation workaround. A score recompute over unchanged
+evidence does not advance `leaderboard_source_freshness.source_as_of` and cannot
+repair a missing source/publication witness.
 
-This recomputes one serving season from the configured `COMPUTE_READ_SOURCE` and
-writes `leaderboard_ranks`. It does not fetch upstream data and must not be used
-to advance `leaderboard_source_freshness.source_as_of`.
-
-The Mac Mini BullMQ worker normally schedules each season every 2 hours, staggered
-by 5 minutes. Vercel's `compute-leaderboard-watchdog` checks twice per hour and
-only intervenes when a season's serving compute is more than 3 hours old.
+Any future recompute requires a separately approved release plan with exact source
+evidence, cohort and freshness proof, write target, rollback witness, and post-write
+public-contract verification.
 
 ---
 
@@ -338,14 +299,9 @@ The serving leaderboard uses Arena Score v4:
 The older ROI+PnL score remains in `arena_score_v3` as a rollback value; it is
 not the flagship `arena_score`.
 
-To force recalculation:
-
-1. Trigger `compute-leaderboard` (see above).
-2. For composite scores, also trigger:
-   ```bash
-   curl -H "Authorization: Bearer $CRON_SECRET" \
-     "https://www.arenafi.org/api/cron/precompute-composite"
-   ```
+Do not force an Arena Score or composite recalculation during the V1 NO-GO. It is a
+serving write and follows the same separate release-plan requirements as a manual
+leaderboard recompute.
 
 Sources: `lib/utils/arena-score.ts`,
 `app/api/cron/compute-leaderboard/score-traders.ts`
@@ -1095,20 +1051,16 @@ launch.
 
 ### Response steps
 
-1. Confirm outage on https://status.supabase.com or Supabase Dashboard > Project Health
-2. If total outage (DB unreachable):
-   - Declare or continue incident **NO-GO**. Do not assume the app has degraded safely merely because Redis contains data; verify `/api/health`, canonical generation, freshness, and LKG proof. Unproven cache data must be unavailable, not green.
-   - Watch PM2/release logs for authentication failures, rapid restarts, concentrated 5xx, or repeated queue retries. A restart storm is active load amplification, not an expected no-op.
-   - If a writer, ingest worker, or cron is looping, stop the exact affected process, save PM2 state, record host/process/release ID, and preserve logs. Do not stop unrelated scraper/proxy services.
-   - Keep write workers and all backup/sentinel jobs stopped until credentials, ordered migrations, exact release ID, one controlled queue consumption, and heartbeat are all proved. The local candidate fixes GitHub backup/sentinel jobs false, and all 16 repository workflows are already `disabled_manually`; Dependabot's dynamic workflow remains active. Keep the repository workflows disabled until governance provides native protected source/reviewer capability or an independently approved equivalent auditable boundary. Do not use an automatic restart loop as a recovery test.
-   - After the database recovers, inspect `pipeline_logs` and source freshness before any staged restart; restore one canary first and observe a complete scheduling cycle before the remaining Mac mini and Singapore processes.
-3. If prolonged (>1 hour):
-   - Consider enabling read-only mode via feature flag: set `FEATURE_READ_ONLY=true` in Vercel env
-   - This disables write operations (posts, comments, follows) while keeping rankings browsable
-4. PITR restore (nuclear option):
-   - Supabase Dashboard > Project Settings > Database > Point in Time Recovery
-   - Select a timestamp before the incident
-   - **WARNING**: This rolls back ALL data changes after that timestamp
+1. Confirm the vendor incident through its official status page and record the
+   observation time, release identity, affected public contract, and evidence source.
+2. Continue the incident **NO-GO**. Unproven cache data must be unavailable, not
+   reported healthy; a row count, stale log, or assumed worker state is not proof.
+3. Use only the approved read-only checks in this runbook to capture public serving,
+   freshness, and platform evidence. Preserve error context without copying secrets.
+4. Do not restart/stop a worker, invoke a cron, alter a feature flag, change a
+   Vercel/Supabase control-plane setting, or attempt PITR from this runbook. Those
+   are high-impact operations requiring a separately reviewed incident plan, explicit
+   owner authorization, and verified rollback/recovery witnesses.
 
 ---
 

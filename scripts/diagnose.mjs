@@ -3,13 +3,13 @@
  * Unified diagnostics entrypoint.
  *
  * Usage:
- *   node scripts/diagnose.mjs                # run all checks
- *   node scripts/diagnose.mjs --all          # run all checks
- *   node scripts/diagnose.mjs --seasons
+ *   node scripts/diagnose.mjs                # run all checks (DB credentials required)
+ *   node scripts/diagnose.mjs --all          # run all checks (DB credentials required)
+ *   node scripts/diagnose.mjs --seasons      # current leaderboard inventory
  *   node scripts/diagnose.mjs --status
  *   node scripts/diagnose.mjs --freshness
  *   node scripts/diagnose.mjs --platforms
- *   node scripts/diagnose.mjs --enrichment
+ *   node scripts/diagnose.mjs --enrichment   # non-authoritative enrichment inventory
  */
 
 import { spawnSync } from 'node:child_process'

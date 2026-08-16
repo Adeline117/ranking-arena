@@ -153,17 +153,22 @@ npm run test             # Jest unit tests
 ```bash
 npm run build            # Full production build
 npm run test:e2e         # Playwright E2E tests
-npm run diagnose         # Check data freshness across exchanges
+npm run diagnose         # Read-only serving checks + DB inventories (controlled DB credentials required)
 npm run check:platforms  # Platform status overview
 ```
 
 ### Pipeline diagnostics (when data looks wrong)
 
 ```bash
-node scripts/pipeline-health-check.mjs          # Full health check
-node scripts/pipeline-health-check.mjs --quick   # Quick freshness check
-node scripts/pipeline-health-check.mjs --fix     # Generate fix script
+npm run check:status      # Public serving health and release identity
+npm run check:freshness   # Published ranking freshness authority
+npm run check:platforms   # Public source/ranking coverage
+npm run check:seasons     # Current leaderboard inventory (credentialed)
+npm run check:enrichment  # Non-authoritative enrichment inventory (credentialed)
 ```
+
+These commands are read-only. Do not use legacy `pipeline-health-check.mjs` or an
+automatic fix mode as evidence or remediation.
 
 ---
 
@@ -249,7 +254,9 @@ gh pr create --title "fix: describe what you changed" --body "## Summary\n- ..."
 
 # 6. Adeline reviews → address feedback → merge
 
-# 7. After merge, wait for Vercel deploy (5-8 min), then check live site
+# 7. After merge, record the PR/commit outcome. A merge does not prove a deployment.
+#    Do not invoke a production check or release action unless a separately recorded
+#    owner GO opens the V1 release gate.
 ```
 
 Look in [TASKS.md](./TASKS.md) for a P2/P3 task, or ask Adeline which one is good for getting started.

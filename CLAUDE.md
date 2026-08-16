@@ -70,11 +70,13 @@ npm run lint            # ESLint
 npm run test            # Jest tests
 npm run test:e2e        # Playwright E2E
 
-# Data scripts
-npm run diagnose        # Check data freshness
+# Read-only data diagnostics
+npm run diagnose        # Serving checks + DB inventories (controlled DB credentials required)
 npm run check:platforms # Platform status
-npm run backfill:24h    # Backfill 24h window metrics
 ```
+
+Backfill commands are write operations and require a separate reviewed plan and
+explicit owner authorization; they are intentionally not part of routine diagnostics.
 
 ## Database Schema (Core Tables)
 
@@ -481,15 +483,14 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 
 ## Agent Work Rules (MUST FOLLOW)
 
-### Git Commit Rule (MANDATORY — 铁律)
+### Git Commit & Review Rule (MANDATORY — 铁律)
 
-**每修一个问题立即 git commit + git push origin main。绝不攒多个修改一起提交。**
+**所有改动必须在隔离分支/工作树中完成；不得直接提交或推送 `main`。**
 
-- No asking "should I commit?" - just do it
-- After ANY file edit: `git add → git commit → git push origin main` immediately
-- One fix = one commit. Never batch multiple fixes into one commit.
+- 完成一个经验证的、边界清晰的改动后，创建小而原子的 commit
+- 推送该分支并开 Draft PR；合并、生产部署、迁移和缓存操作仍需要各自的门禁与授权
 - Commit message 必须写清楚修了什么（中英文均可）
-- Small, atomic commits preferred — 宁可多 commit 也不要少 commit
+- 不要为了“每次编辑”制造噪声 commit；先完成相关测试，再提交可审查的最小变更
 - **记住所有终端输出** — 每个命令的结果都要记住，不要丢失上下文
 
 ### Checkpoint Protocol
@@ -499,22 +500,16 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 3. **Sprint scope only** - Focus on current sprint tasks (see docs/TASKS.md)
 4. **Test before done** - Run `npm run type-check && npm run test` before claiming complete
 
-### Post-Push Verification (MANDATORY — 铁律)
+### Release Verification Boundary (MANDATORY — 铁律)
 
-**每次 git push 后必须运行 `scripts/post-deploy-check.sh`。**
-等 Vercel 部署完成后（通常 5-8 分钟），验证线上 5 个核心 URL 全部非 500。
-如果任何一个返回 500，立即回滚（Vercel Dashboard → 上一个绿色部署 → Promote）。
+**A branch push or Draft PR is not a deployment.** During the V1 NO-GO, do not
+invoke production probes, promote/rollback a deployment, change a Vercel setting, or
+assume that a Git push released anything. Git integration is not evidence of a
+production transition.
 
-**为什么**：2026-04-22 事件——629 个 commit 无人验证，累积 3 个 BLOCKER + 8 个 HIGH。
-所有交易员详情页 500 崩溃持续数天无人发现。根因：改了代码没人看线上。
-
-```bash
-# 部署后验证（等 Vercel 部署完成后运行）
-scripts/post-deploy-check.sh
-
-# 如果失败，立即回滚
-# Vercel Dashboard → Deployments → 上一个 ✅ → ⋯ → Promote to Production
-```
+When a separately recorded owner GO opens a release window, the designated release
+owner—not an implementation agent—must record the exact release target, required
+checks, public contract probes, and rollback witness before any control-plane action.
 
 ### Failure Prevention
 
@@ -535,18 +530,19 @@ Write code → Run tests → Tests pass?
 
 ## Automation & Health Checks
 
-### Pipeline 健康检查
+### 发布与数据诊断（只读）
 
 ```bash
-# 完整健康检查（推荐每日运行）
-node scripts/pipeline-health-check.mjs
-
-# 快速检查（仅数据新鲜度）
-node scripts/pipeline-health-check.mjs --quick
-
-# 生成修复脚本
-node scripts/pipeline-health-check.mjs --fix
+npm run check:status      # 公共 serving health 与 release identity
+npm run check:freshness   # 已发布排行榜的 freshness authority
+npm run check:platforms   # 公共 source/ranking coverage
+npm run check:seasons     # leaderboard_ranks 库存（需受控读凭据）
+npm run check:enrichment  # enrichment 库存，非发布权威（需受控读凭据）
 ```
+
+这些命令只读。表库存成功不证明 freshness、cohort 或 serving authority，且不授权
+backfill、cron、迁移、缓存清理或生产修复。`pipeline-health-check.mjs` 仍引用退役
+schema，不能作为当前证据，也不得运行其历史 `--fix` 路径。
 
 ### Schema 契约检查（防迁移漂移 — 每周必跑 / 任何迁移后必跑）
 
@@ -582,11 +578,11 @@ cp specs/_template.md specs/my-feature.md
 
 ### OpenClaw Autonomous Operations (Mac Mini)
 
-- **Health Monitor**: Every 30 min, checks `/api/health/pipeline`, alerts via Telegram
-- **Daily Report**: 8 AM, pipeline success rates + anomaly summary
-- **Auto-Fix**: On pipeline failure, opens Claude Code session to diagnose and fix
-- **Weekly Self-Check**: Fridays, runs `/weekly-self-check` to find and fix recurring issues
-- Scripts: `scripts/openclaw/`
+`scripts/openclaw/` is historical automation code, not an authority to make
+production changes. Until the V1 gates are closed, treat any monitor output as an
+observation only: it must not trigger an auto-fix, worker restart, cron invocation,
+backfill, deployment, or database write. Record the observation and route it through
+the owner-approved incident/release process instead.
 
 ### Pipeline Logging
 
@@ -605,18 +601,18 @@ try {
 
 ### Fetcher 修复流程
 
-1. 运行 `node scripts/pipeline-health-check.mjs` 识别问题
-2. 参考 `/.claude/skills/arena-fetcher-error-handling.md` 获取标准模板
-3. 修复后运行 `/fix-pipeline` 验证
+1. 运行 `npm run check:status`、`check:freshness` 与 `check:platforms` 记录问题
+2. 参考 `.claude/skills/arena-fetcher-error-handling/SKILL.md` 获取当前边界
+3. 用现有 adapter fixture 重现，再运行 `/fix-pipeline` 的只读诊断与相关测试
 
 ### 关键诊断脚本
 
-| 脚本                                  | 用途                |
-| ------------------------------------- | ------------------- |
-| `scripts/pipeline-health-check.mjs`   | 全面健康检查        |
-| `scripts/diagnose-enrichment.mjs`     | Enrichment API 诊断 |
-| `scripts/check-data-distribution.mjs` | 数据分布检查        |
-| `scripts/backfill-sharpe-ratio.mjs`   | Sharpe ratio 回填   |
+| 脚本                           | 用途                                     |
+| ------------------------------ | ---------------------------------------- |
+| `scripts/check_status.mjs`     | 公共 serving / freshness / platform 诊断 |
+| `scripts/check_seasons.mjs`    | 当前 `leaderboard_ranks` season 库存     |
+| `scripts/check_enrichment.mjs` | 非权威 enrichment relation 库存          |
+| `scripts/diagnose.mjs`         | 组合运行上述只读诊断                     |
 
 ## Quick Reference
 
