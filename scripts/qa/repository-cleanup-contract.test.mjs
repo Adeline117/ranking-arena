@@ -133,3 +133,22 @@ test('retired duplicate post hooks stay removed', () => {
     assert.doesNotMatch(hooksIndex, new RegExp(retiredHook))
   }
 })
+
+test('retired trader cards and fabricated comparison stay removed', () => {
+  const retiredComponents = [
+    'app/components/trader/TraderAboutCard.tsx',
+    'app/components/trader/stats/components/ComparePortfolioSection.tsx',
+  ]
+
+  assert.deepEqual(
+    retiredComponents.filter((path) => existsSync(join(repoRoot, path))),
+    [],
+    'dead trader cards and fabricated benchmark data must not return'
+  )
+
+  const statsExports = readFileSync(
+    join(repoRoot, 'app/components/trader/stats/components/index.ts'),
+    'utf8'
+  )
+  assert.doesNotMatch(statsExports, /ComparePortfolioSection/)
+})

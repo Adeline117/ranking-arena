@@ -8,13 +8,9 @@ import { useLanguage } from '../../Providers/LanguageProvider'
 import { TradingSection } from './components/TradingSection'
 import { EquityCurveSection } from './components/EquityCurveSection'
 import { BreakdownSection } from './components/BreakdownSection'
-// U2-6: "对比分析 / Compare vs BTC" card removed. Its benchmark series was
-// FABRICATED (seeded-random, not a real BTC/SPX500 price series) and the legend
-// value was hardcoded to N/A, so the card only ever compared the trader against
-// noise while claiming to be a BTC benchmark. Until a real market-data series is
-// wired in, we do not ship a fake comparison. The equity curve now spans full
-// width. ComparePortfolioSection is kept in the tree (unrendered) for the future
-// real-data wiring.
+// U2-6: the fabricated "Compare vs BTC" component was deleted. Until a real
+// market-data series is wired in, the equity curve remains the only comparison
+// surface and spans the full width.
 import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
 import { PnlCalendarHeatmap } from '../charts/PnlCalendarHeatmap'
 
