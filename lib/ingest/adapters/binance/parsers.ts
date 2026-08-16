@@ -27,6 +27,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { parseBinanceCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -510,38 +511,6 @@ function parseTransfers(wrapper: HistoryWrapper): ParsedHistoryRow[] {
   return out
 }
 
-/**
- * Copy Traders (counts/aggregates only — PII rules §6 apply downstream):
- *   futures copy-traders: { copyPortfolioId, nickname (masked),
- *     marginBalance, totalPnl, totalRoi, createTime }
- *   spot get-copy-trader-result-by-page: { nickname (masked),
- *     balanceAmount, totalPnl, totalRoi, startTime } — no stable id.
- */
-function parseCopiers(wrapper: HistoryWrapper, ctx: ParseCtx): ParsedHistoryRow[] {
-  const pid = String(wrapper.portfolioId ?? '')
-  const scrapedMs = Date.parse(ctx.scrapedAt)
-  const out: ParsedHistoryRow[] = []
-  for (const item of listOf(wrapper.response)) {
-    const label = item.copyPortfolioId ?? item.nickname
-    if (!label) continue
-    const started = num(item.createTime ?? item.startTime)
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: String(label), // stored for dedupe only — NEVER rendered
-      copierPnl: num(item.totalPnl),
-      copierInvested: num(item.marginBalance ?? item.balanceAmount),
-      copyDurationDays:
-        started !== null && Number.isFinite(scrapedMs)
-          ? Math.max(0, Math.floor((scrapedMs - started) / 86_400_000))
-          : null,
-      dedupeHash: dedupeHash('binance_cp', pid, label, started),
-      raw: item,
-    })
-  }
-  return out
-}
-
 export function parseBinanceHistory(
   raw: unknown,
   kind: HistoryKind,
@@ -556,7 +525,7 @@ export function parseBinanceHistory(
     case 'transfers':
       return parseTransfers(wrapper)
     case 'copiers':
-      return parseCopiers(wrapper, ctx)
+      return parseBinanceCopiersV1(raw, ctx)
     default:
       throw new Error(`[binance] history surface ${kind as string} not supported`)
   }

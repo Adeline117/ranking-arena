@@ -45,6 +45,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { parseCoinexCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -310,27 +311,7 @@ export function parseCoinexPositionHistory(raw: unknown, _ctx: ParseCtx): Parsed
  * copier PII). No row timestamp → ts = ctx.scrapedAt.
  */
 export function parseCoinexCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const { items } = pagedData(raw)
-  const out: ParsedHistoryRow[] = []
-  for (const item of items) {
-    if (item.follower_name === undefined || item.follower_name === null) continue
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: String(item.follower_name),
-      copierPnl: num(item.total_copy_earn_amount),
-      copierInvested: num(item.fund_amount),
-      copyDurationDays: null, // not exposed by this endpoint
-      dedupeHash: dedupeHash(
-        'coinex_cp',
-        item.follower_name,
-        item.fund_amount,
-        item.total_copy_earn_amount
-      ),
-      raw: item,
-    })
-  }
-  return out
+  return parseCoinexCopiersV1(raw, ctx)
 }
 
 export function parseCoinexHistory(
@@ -342,7 +323,7 @@ export function parseCoinexHistory(
     case 'position_history':
       return parseCoinexPositionHistory(raw, ctx)
     case 'copiers':
-      return parseCoinexCopiers(raw, ctx)
+      return parseCoinexCopiersV1(raw, ctx)
     default:
       // order-level fills and transfers are not exposed publicly.
       throw new Error(`[coinex] history surface ${kind} not supported`)
