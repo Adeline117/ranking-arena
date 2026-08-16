@@ -36,6 +36,7 @@ import type {
   ParsedStats,
   RankingTimeframe,
 } from '../../core/types'
+import { parseBlofinCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -343,21 +344,7 @@ export function parseBlofinHistory(
   }
 
   if (kind === 'copiers') {
-    const out: ParsedHistoryRow[] = []
-    for (const c of dataRows(raw)) {
-      const label = typeof c.nick_name === 'string' ? c.nick_name : null
-      out.push({
-        kind: 'copiers',
-        ts: ctx.scrapedAt,
-        copierLabel: label, // exchange-masked; stored for dedupe/aggregation only (spec §6)
-        copierPnl: num(c.return_amount),
-        copierInvested: num(c.cum_invested ?? c.amount),
-        copyDurationDays: int(c.follower_days),
-        dedupeHash: blofinDedupeHash('blofin_cp', c.id ?? label, c.follow_time),
-        raw: c,
-      })
-    }
-    return out
+    return parseBlofinCopiersV1(raw, ctx)
   }
 
   return [] // orders / transfers not exposed by blofin

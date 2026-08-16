@@ -28,6 +28,7 @@ import type {
   SeriesPoint,
   Timeframe,
 } from '../../core/types'
+import { parseGateCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -485,43 +486,7 @@ export function parseGateTransfers(raw: unknown, _ctx: ParseCtx): ParsedHistoryR
  * Labels stored for dedupe only — NEVER rendered (spec §6 PII).
  */
 export function parseGateCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const data = (raw as Dict)?.data
-  const rows = Array.isArray(data) ? (data as Dict[]) : ((data as Dict)?.list as Dict[])
-  if (!Array.isArray(rows)) return []
-  const out: ParsedHistoryRow[] = []
-  for (const item of rows) {
-    if (item.follow_id !== undefined) {
-      // futures shape
-      out.push({
-        kind: 'copiers',
-        ts: isoSecs(item.create_time) ?? ctx.scrapedAt,
-        copierLabel: String(item.follow_id),
-        copierPnl: num(item.profit),
-        copierInvested: num(item.follow_money),
-        copyDurationDays: null,
-        dedupeHash: dedupeHash('gate_cp', item.follow_id, item.create_time),
-        raw: item,
-      })
-    } else if (item.nick_name !== undefined) {
-      // tradfi shape (no id — tuple hash)
-      out.push({
-        kind: 'copiers',
-        ts: ctx.scrapedAt,
-        copierLabel: String(item.nick_name),
-        copierPnl: num(item.total_profit),
-        copierInvested: num(item.total_follow_amount),
-        copyDurationDays: int(item.total_follow_day),
-        dedupeHash: dedupeHash(
-          'gate_cfd_cp',
-          item.nick_name,
-          item.total_follow_amount,
-          item.total_profit
-        ),
-        raw: item,
-      })
-    }
-  }
-  return out
+  return parseGateCopiersV1(raw, ctx)
 }
 
 export function parseGateHistory(
@@ -540,7 +505,7 @@ export function parseGateHistory(
     case 'transfers':
       return parseGateTransfers(raw, ctx)
     case 'copiers':
-      return parseGateCopiers(raw, ctx)
+      return parseGateCopiersV1(raw, ctx)
     default:
       throw new Error(`[gate] history surface ${kind} not supported`)
   }
