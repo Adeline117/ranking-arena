@@ -50,6 +50,8 @@ interface TraderHeaderProps {
   rank?: number | null
   /** Pre-fetched current user ID to avoid duplicate auth calls */
   currentUserId?: string | null
+  /** Actual route that should resume after an anonymous header action logs in. */
+  loginReturnPath?: string
   /** Whether this trader has been claimed and verified */
   isVerifiedTrader?: boolean
   /** Whether this trader is a bot/AI agent */
@@ -103,6 +105,7 @@ export default function TraderHeader({
   tradesCount,
   rank,
   currentUserId: externalUserId,
+  loginReturnPath,
   isVerifiedTrader = false,
   isBot = false,
   lastUpdated,
@@ -449,6 +452,7 @@ export default function TraderHeader({
         rank={rank}
         roi90d={roi90d}
         arenaScore={arenaScore}
+        loginReturnPath={loginReturnPath}
         onFollowChange={(delta) => setFollowerCount((prev) => Math.max(0, prev + delta))}
       />
     </Box>

@@ -317,6 +317,31 @@ describe('TraderHeaderActions', () => {
     )
   })
 
+  it('uses the claimed user route override for every login-gated action', () => {
+    render(
+      <TraderHeaderActions
+        traderId="exchange-account-id"
+        registeredUserId="11111111-1111-4111-8111-111111111111"
+        handle="Trader One"
+        source="binance"
+        isOwnProfile={false}
+        isRegistered
+        userId={null}
+        loginReturnPath="/u/arena-user"
+      />
+    )
+
+    expect(mockUserFollowButton).toHaveBeenCalledWith(
+      expect.objectContaining({ loginReturnPath: '/u/arena-user' })
+    )
+    expect(mockMessageButton).toHaveBeenCalledWith(
+      expect.objectContaining({ loginReturnPath: '/u/arena-user' })
+    )
+    expect(mockWatchlistToggleButton).toHaveBeenCalledWith(
+      expect.objectContaining({ loginReturnPath: '/u/arena-user' })
+    )
+  })
+
   it('keeps edit and suppresses follow actions for the authenticated profile owner', () => {
     render(
       <TraderHeaderActions

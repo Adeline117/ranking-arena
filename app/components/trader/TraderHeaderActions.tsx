@@ -31,6 +31,8 @@ interface TraderHeaderActionsProps {
   rank?: number | null
   roi90d?: number
   arenaScore?: number | null
+  /** Actual route that should resume after an anonymous action logs in. */
+  loginReturnPath?: string
   /** Called whenever the followers count changes (for the parent's animation) */
   onFollowChange?: (delta: 1 | -1) => void
 }
@@ -139,6 +141,7 @@ export function TraderHeaderActions({
   rank,
   roi90d,
   arenaScore,
+  loginReturnPath: loginReturnPathOverride,
   onFollowChange,
 }: TraderHeaderActionsProps) {
   const router = useRouter()
@@ -147,9 +150,11 @@ export function TraderHeaderActions({
   const actionsRef = useRef<HTMLDivElement>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
   const secondaryActionsId = useId()
-  const loginReturnPath = `/trader/${encodeURIComponent(handle)}${
-    source ? `?platform=${encodeURIComponent(source)}` : ''
-  }`
+  const loginReturnPath =
+    loginReturnPathOverride ??
+    `/trader/${encodeURIComponent(handle)}${
+      source ? `?platform=${encodeURIComponent(source)}` : ''
+    }`
 
   useEffect(() => {
     if (!moreOpen) return

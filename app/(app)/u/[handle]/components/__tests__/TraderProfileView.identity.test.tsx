@@ -104,6 +104,7 @@ describe('TraderProfileView identity wiring', () => {
         traderId: 'exchange-account-id',
         registeredUserId: USER_ID,
         isRegistered: true,
+        loginReturnPath: '/u/arena-user',
       })
     )
   })

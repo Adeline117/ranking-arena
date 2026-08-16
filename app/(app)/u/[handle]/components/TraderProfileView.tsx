@@ -147,6 +147,7 @@ export default function TraderProfileView({
           roi90d={traderPerformance?.roi_90d}
           arenaScore={(traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? null}
           currentUserId={currentUserId}
+          loginReturnPath={`/u/${encodeURIComponent(profile.handle)}`}
           isVerifiedTrader={profile.isVerifiedTrader}
           claimedBio={profile.bio}
           claimedAvatarUrl={profile.avatar_url}
