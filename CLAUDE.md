@@ -326,8 +326,9 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
    由生产 schema 生成，是编译时接地；cast 绕过它 = 自废 tsc 这道最早的防线。
 4. **catch / safeQuery 里的 DB 错误必须 log，不许静默吞** —— 静默失败让漂移
    隐形累积；会爆炸的系统会被立刻修，安静失败的系统积债到用户撞见。
-5. **每日哨兵** `scripts/openclaw/schema-canary-sentinel.mjs`（7:30 crontab）是
-   兜底，不是借口 —— 它每天替你跑契约检查 + 写路径金丝雀，失败 Telegram 告警。
+5. **V1 证据边界**：原 `schema-canary-sentinel.mjs` 写路径金丝雀已退休，
+   不得安装或恢复其 crontab/工作流。只读契约和数据质量证据不能替代迁移、部署或
+   生产写入的 owner GO。
 
 ### 多会话编排纪律 — MANDATORY（漂移与卡死的元层根源）
 

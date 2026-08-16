@@ -15,7 +15,14 @@
 
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { config as dotenvConfig } from 'dotenv'
+
+if (process.argv.includes('--auto-cleanup')) {
+  console.error('[RETIRED] pipeline-health-monitor --auto-cleanup is disabled during the V1 NO-GO.')
+  console.error('Observation must not mutate pipeline records.')
+  process.exit(2)
+}
+
+const { config: dotenvConfig } = await import('dotenv')
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
 
@@ -23,55 +30,6 @@ const CRON_SECRET = process.env.CRON_SECRET
 const API_URL = 'https://www.arenafi.org/api/health/pipeline'
 
 const VERBOSE = process.argv.includes('--verbose')
-const AUTO_CLEANUP = !process.argv.includes('--no-auto-cleanup')
-
-/**
- * Auto-cleanup stuck logs via direct DB connection
- * Marks running logs >30min as timeout
- */
-async function cleanupStuckLogs() {
-  try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
-
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-
-    const { data: stuckLogs } = await supabase
-      .from('pipeline_logs')
-      .select('id, job_name')
-      .eq('status', 'running')
-      .lt('started_at', thirtyMinutesAgo)
-
-    if (!stuckLogs || stuckLogs.length === 0) {
-      return { cleaned: 0 }
-    }
-
-    const ids = stuckLogs.map((l) => l.id)
-
-    const { error } = await supabase
-      .from('pipeline_logs')
-      .update({
-        status: 'timeout',
-        ended_at: new Date().toISOString(),
-        error_message: 'Auto-cleanup: running >30min without completion',
-      })
-      .in('id', ids)
-
-    if (error) throw error
-
-    if (VERBOSE) {
-      console.log(`✅ Auto-cleaned ${stuckLogs.length} stuck logs`)
-    }
-
-    return { cleaned: stuckLogs.length, jobs: stuckLogs.map((l) => l.job_name) }
-  } catch (err) {
-    console.error('⚠️  Auto-cleanup failed:', err.message)
-    return { cleaned: 0, error: err.message }
-  }
-}
 
 async function checkPipelineHealth() {
   try {
@@ -117,35 +75,6 @@ async function checkPipelineHealth() {
     // Alert logic - CRITICAL (only stuck jobs or >5 failed)
     // Note: 3-4 historical failed jobs during recovery is normal
     if (currentStuck.length > 0 || currentFailed.length > 5) {
-      // Auto-cleanup stuck logs before alerting
-      if (AUTO_CLEANUP && currentStuck.length > 0) {
-        const cleanupResult = await cleanupStuckLogs()
-        if (cleanupResult.cleaned > 0) {
-          console.log(`✅ Auto-cleaned ${cleanupResult.cleaned} stuck logs`)
-          // Re-check after cleanup
-          const recheckController = new AbortController()
-          const recheckTimeoutId = setTimeout(() => recheckController.abort(), 15000)
-          const recheckResponse = await fetch(API_URL, {
-            headers: { Authorization: `Bearer ${CRON_SECRET}` },
-            signal: recheckController.signal,
-          })
-          clearTimeout(recheckTimeoutId)
-          if (recheckResponse.ok) {
-            const recheckData = await recheckResponse.json()
-            const recheckStuck = recheckData.jobs.filter((j) => j.health_status === 'stuck')
-            if (recheckStuck.length === 0) {
-              // All stuck jobs were false alarms - return healthy
-              return {
-                alert: false,
-                level: 'HEALTHY',
-                message: `✅ Auto-cleaned ${cleanupResult.cleaned} stuck logs. Pipeline now healthy.`,
-                data: recheckData.summary,
-              }
-            }
-          }
-        }
-      }
-
       console.log('\n🚨 CRITICAL Issues:')
 
       if (currentStuck.length > 0) {

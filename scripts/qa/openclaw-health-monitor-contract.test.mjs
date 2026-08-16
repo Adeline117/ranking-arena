@@ -4,10 +4,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import {
-  findStaleActivePlatforms,
-  getActiveFetcherFailures,
-} from '../openclaw/health-monitor-contract.mjs'
+import { findStaleActivePlatforms } from '../openclaw/health-monitor-contract.mjs'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
@@ -38,21 +35,19 @@ test('invalid ages fail closed as missing data', () => {
   ])
 })
 
-test('auto-fix accepts exact active sources and rejects group job aliases', () => {
-  const failures = getActiveFetcherFailures({
-    platformHealth: [{ platform: 'lbank' }, { platform: 'bybit' }],
-    recentFailures: [
-      { job_name: 'fetch-traders-lbank', error_message: 'timeout' },
-      { job_name: 'batch-fetch-traders-bybit', error_message: '429' },
-      { job_name: 'batch-fetch-traders-a1', error_message: 'timeout' },
-      { job_name: 'fetch-traders-retired', error_message: '404' },
-    ],
-  })
+test('health observation cannot regain an auto-remediation path', () => {
+  const source = readFileSync(join(repoRoot, 'scripts/openclaw/health-monitor.mjs'), 'utf8')
+  const retiredFlag = source.indexOf("process.argv.includes('--with-auto-fix')")
+  const dotenvLoad = source.indexOf("await import('dotenv')")
 
-  assert.deepEqual(failures, [
-    { platform: 'lbank', errorMessage: 'timeout' },
-    { platform: 'bybit', errorMessage: '429' },
-  ])
+  assert.ok(retiredFlag >= 0)
+  assert.ok(dotenvLoad >= 0)
+  assert.ok(retiredFlag < dotenvLoad)
+  assert.match(source, /\[RETIRED\] health-monitor --with-auto-fix/)
+  assert.doesNotMatch(
+    source,
+    /triggerAutoFix|child_process|spawn\(|auto-fix\.mjs|getActiveFetcherFailures/
+  )
 })
 
 test('obsolete scraper sentinel cannot return through workflow drift', () => {
@@ -66,10 +61,11 @@ test('OpenClaw workflow installs deterministically and propagates hard failures'
   const workflow = readFileSync(join(repoRoot, '.github/workflows/openclaw-sentinels.yml'), 'utf8')
 
   assert.doesNotMatch(workflow, /npm ci[^\n]*\|\|[^\n]*npm install/)
-  // The production payment canary was removed from this scheduled workflow.
-  // Its rollback-only replacement has a separate protected, manually
-  // dispatched staging workflow, leaving eight read-only sentinels here.
-  assert.equal((workflow.match(/run: npm ci --ignore-scripts/g) || []).length, 8)
+  // The write-path canary was removed from this scheduled workflow.
+  // V1 removes the schema write canary, leaving seven suspended sentinel jobs
+  // in the workflow.
+  assert.equal((workflow.match(/run: npm ci --ignore-scripts/g) || []).length, 7)
+  assert.doesNotMatch(workflow, /schema-canary:|schema-canary-sentinel/)
 
   // Only the three independent checks in the shared pipeline-health job may
   // continue so all of them get evidence. Their outcomes are aggregated into

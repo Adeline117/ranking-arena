@@ -39,7 +39,8 @@
    - `node scripts/qa/fill-rate-check.mjs`(声明指标有真数据)
    - `node scripts/qa/render-coverage-check.mjs`(DB 有的 API 不丢)
    - 经批准的可观测性通道中无 challenge/429/wedge；`npm run qa:schema` 仍绿
-   - schema-canary 的预期告警证据已由负责人与运行环境确认
+   - V1 不运行 schema-canary 写路径金丝雀；记录已批准的只读契约证据，且不把它
+     当作上线或生产写入授权
 
 ## 相关文件速查
 

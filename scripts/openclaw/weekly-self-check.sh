@@ -1,17 +1,9 @@
-#!/bin/bash
-# Weekly self-check runner for OpenClaw
-# Schedule: Every Friday at 10:00 AM
+#!/usr/bin/env bash
+# Retired V1 compatibility tombstone.
 #
-# This script launches a Claude Code session to run the weekly self-check.
-# It should be configured as an OpenClaw scheduled task.
+# This path is retained only so a legacy invocation fails loudly instead of
+# autonomously changing code or external state.
 
-ARENA_DIR="${ARENA_DIR:-/Users/adelinewen/ranking-arena}"
-
-cd "$ARENA_DIR" || exit 1
-
-# Pull latest changes
-git checkout main && git pull
-
-# Run the weekly self-check via Claude Code
-# OpenClaw will invoke this; if running standalone, ensure claude is in PATH
-claude --print "/weekly-self-check"
+printf '%s\n' '[RETIRED] weekly-self-check.sh is disabled during the V1 NO-GO.' >&2
+printf '%s\n' 'Use the owner-approved incident and release process for any proposed remediation.' >&2
+exit 2

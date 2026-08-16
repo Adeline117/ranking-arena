@@ -7,7 +7,7 @@
  *
  * Usage:
  *   node scripts/openclaw/sentry-convergence.mjs
- *   node scripts/openclaw/sentry-convergence.mjs --resolve-stale  (auto-resolve issues not seen in 30d)
+ *   node scripts/openclaw/sentry-convergence.mjs --resolve-stale  (retired; exits 2)
  *
  * Environment:
  *   SENTRY_AUTH_TOKEN  - Sentry API auth token
@@ -19,7 +19,14 @@
 
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { config as dotenvConfig } from 'dotenv'
+
+if (process.argv.includes('--resolve-stale')) {
+  console.error('[RETIRED] sentry-convergence --resolve-stale is disabled during the V1 NO-GO.')
+  console.error('Observation must not resolve or otherwise mutate external issues.')
+  process.exit(2)
+}
+
+const { config: dotenvConfig } = await import('dotenv')
 
 const __dir = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dir, '../../.env') })
@@ -29,7 +36,6 @@ const SENTRY_ORG = (process.env.SENTRY_ORG || '').replace(/\\n/g, '').trim()
 const SENTRY_PROJECT = (process.env.SENTRY_PROJECT || 'javascript-nextjs').trim()
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
 const TELEGRAM_CHAT = process.env.TELEGRAM_ALERT_CHAT_ID || ''
-const RESOLVE_STALE = process.argv.includes('--resolve-stale')
 
 if (!SENTRY_TOKEN || !SENTRY_ORG) {
   console.error('SENTRY_AUTH_TOKEN and SENTRY_ORG are required')
@@ -63,20 +69,17 @@ async function getTopIssues() {
   return issues
 }
 
-async function getStaleIssues() {
-  // Issues not seen in 30 days
-  const issues = await sentryFetch(
-    `/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=is:unresolved+!is:assigned+lastSeen:-30d&sort=date&limit=50`
-  )
-  return issues
-}
-
 function categorizeIssue(issue) {
   const title = issue.title || ''
   const culprit = issue.culprit || ''
 
   if (title.includes('ChunkLoadError') || title.includes('Loading chunk')) return 'chunk-load'
-  if (title.includes('NetworkError') || title.includes('fetch') || title.includes('Failed to fetch')) return 'network'
+  if (
+    title.includes('NetworkError') ||
+    title.includes('fetch') ||
+    title.includes('Failed to fetch')
+  )
+    return 'network'
   if (title.includes('TypeError')) return 'type-error'
   if (title.includes('ReferenceError')) return 'reference-error'
   if (title.includes('hydration') || title.includes('Hydration')) return 'hydration'
@@ -88,36 +91,19 @@ function categorizeIssue(issue) {
 
 function getSuggestion(category, issues) {
   const suggestions = {
-    'chunk-load': 'Likely caused by deployment + cached old chunks. Consider adding retry logic or cache-busting.',
-    'network': 'Client-side fetch failures. Check API availability, CORS, and add error boundaries.',
+    'chunk-load':
+      'Likely caused by deployment + cached old chunks. Consider adding retry logic or cache-busting.',
+    network: 'Client-side fetch failures. Check API availability, CORS, and add error boundaries.',
     'type-error': 'Null/undefined access. Check optional chaining and null guards.',
     'reference-error': 'Undefined variable access. Check imports and build output.',
-    'hydration': 'SSR/client mismatch. Check conditional rendering, Date/random usage, browser-only APIs.',
+    hydration:
+      'SSR/client mismatch. Check conditional rendering, Date/random usage, browser-only APIs.',
     'api-error': 'Server-side route errors. Check error handling in API routes.',
     'resize-observer': 'Benign browser error. Can be safely ignored via Sentry beforeSend filter.',
-    'abort': 'Navigation-triggered request cancellation. Generally benign.',
-    'other': 'Review individually.',
+    abort: 'Navigation-triggered request cancellation. Generally benign.',
+    other: 'Review individually.',
   }
   return suggestions[category] || 'Review individually.'
-}
-
-async function resolveStaleIssues(staleIssues) {
-  if (staleIssues.length === 0) return 0
-  const ids = staleIssues.map(i => i.id)
-  // Bulk resolve via Sentry API
-  let resolved = 0
-  for (const id of ids) {
-    try {
-      await sentryFetch(`/issues/${id}/`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: 'resolved', statusDetails: { inNextRelease: false } }),
-      })
-      resolved++
-    } catch (e) {
-      console.error(`Failed to resolve issue ${id}: ${e.message}`)
-    }
-  }
-  return resolved
 }
 
 async function sendTelegram(text) {
@@ -146,10 +132,7 @@ async function sendTelegram(text) {
 async function main() {
   console.log(`Sentry Convergence: org=${SENTRY_ORG}, project=${SENTRY_PROJECT}`)
 
-  const [issues, staleIssues] = await Promise.all([
-    getTopIssues(),
-    RESOLVE_STALE ? getStaleIssues() : Promise.resolve([]),
-  ])
+  const issues = await getTopIssues()
 
   // Categorize
   const categories = {}
@@ -178,19 +161,13 @@ async function main() {
     lines.push('')
   }
 
-  // Stale resolution
-  if (RESOLVE_STALE && staleIssues.length > 0) {
-    const resolved = await resolveStaleIssues(staleIssues)
-    lines.push(`\nAuto-resolved ${resolved}/${staleIssues.length} stale issues (not seen in 30d)`)
-  }
-
   const report = lines.join('\n')
   console.log(report)
   await sendTelegram(report)
   console.log('\nReport sent.')
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('Sentry convergence failed:', e)
   process.exit(1)
 })

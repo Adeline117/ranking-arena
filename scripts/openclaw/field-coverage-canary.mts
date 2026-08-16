@@ -14,14 +14,23 @@
  *
  * Usage:
  *   npx tsx scripts/openclaw/field-coverage-canary.mts                 # check
- *   npx tsx scripts/openclaw/field-coverage-canary.mts --update-baseline  # re-baseline
+ *   npx tsx scripts/openclaw/field-coverage-canary.mts --update-baseline  # retired; exits 2
  *
  * Env: INGEST_DATABASE_URL / DATABASE_URL (+ TELEGRAM_* for alerts, optional).
  */
 
-import { getIngestPool, closeIngestPool } from '../../lib/ingest/db'
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+
+if (process.argv.includes('--update-baseline')) {
+  console.error(
+    '[RETIRED] field-coverage-canary --update-baseline is disabled during the V1 NO-GO.'
+  )
+  console.error('Baseline changes require a reviewed commit rather than a runtime write.')
+  process.exit(2)
+}
+
+const { getIngestPool, closeIngestPool } = await import('../../lib/ingest/db')
 
 const BASELINE_PATH = join(process.cwd(), 'docs', 'field-coverage-baseline.json')
 
@@ -33,8 +42,15 @@ const REGRESS_FLOOR = 0.02 // now <2% fill = considered lost
 const MIN_ROWS = 200
 
 const TYPED_COLS = [
-  'sharpe', 'mdd', 'win_rate', 'copier_pnl', 'copier_count', 'aum', 'volume',
-  'profit_share_rate', 'holding_duration_avg',
+  'sharpe',
+  'mdd',
+  'win_rate',
+  'copier_pnl',
+  'copier_count',
+  'aum',
+  'volume',
+  'profit_share_rate',
+  'holding_duration_avg',
 ] as const
 
 interface Cell {
@@ -55,7 +71,10 @@ async function sample(): Promise<Snapshot> {
       GROUP BY s.slug, ts.timeframe`
   )
   const { rows: extras } = await pool.query<{
-    slug: string; timeframe: number; key: string; n: number
+    slug: string
+    timeframe: number
+    key: string
+    n: number
   }>(
     `SELECT s.slug, ts.timeframe, kv.key, count(*)::int AS n
        FROM arena.sources s
@@ -125,16 +144,13 @@ async function alert(text: string): Promise<void> {
 }
 
 async function main() {
-  const update = process.argv.includes('--update-baseline')
-  const current = await sample()
-
-  if (update || !existsSync(BASELINE_PATH)) {
-    writeFileSync(BASELINE_PATH, JSON.stringify(current, null, 0) + '\n', 'utf8')
-    console.log(`✓ baseline written (${Object.keys(current).length} cells) → ${BASELINE_PATH}`)
-    await closeIngestPool()
-    return
+  if (!existsSync(BASELINE_PATH)) {
+    throw new Error(
+      'Committed field-coverage baseline is missing; refusing to create one at runtime.'
+    )
   }
 
+  const current = await sample()
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Snapshot
   const regressions = diff(baseline, current)
   await closeIngestPool()
@@ -146,14 +162,15 @@ async function main() {
 
   const lines = regressions
     .slice(0, 40)
-    .map((r) => `• ${r.cell} ${r.field}: ${(r.was * 100).toFixed(0)}% → ${(r.now * 100).toFixed(1)}%`)
+    .map(
+      (r) => `• ${r.cell} ${r.field}: ${(r.was * 100).toFixed(0)}% → ${(r.now * 100).toFixed(1)}%`
+    )
   const msg =
     `🕳️ <b>Field-coverage regression</b> (${regressions.length})\n` +
     `Fields that were populated dropped to ~0 (silent field loss):\n` +
     lines.join('\n') +
     (regressions.length > 40 ? `\n…+${regressions.length - 40} more` : '') +
-    `\n\nInvestigate the parser / upstream for those sources. If intentional, ` +
-    `re-baseline: npx tsx scripts/openclaw/field-coverage-canary.mts --update-baseline`
+    `\n\nInvestigate the parser / upstream. A baseline change requires a reviewed commit.`
   console.error(msg)
   await alert(msg)
   process.exit(1)
