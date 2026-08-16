@@ -39,8 +39,8 @@ test('registers exactly one three-hour freshness schedule without exceeding Verc
   const definitions = crons.filter((cron) => cron.path === FRESHNESS_PATH)
   const uniqueSchedulePaths = new Set(crons.map((cron) => cron.path))
   assert.deepEqual(definitions, [{ path: FRESHNESS_PATH, schedule: FRESHNESS_SCHEDULE }])
-  assert.equal(crons.length, 42)
-  assert.equal(uniqueSchedulePaths.size, 42)
+  assert.equal(crons.length, 38)
+  assert.equal(uniqueSchedulePaths.size, 38)
   assert.ok(crons.length <= 100, `expected at most 100 Vercel crons, found ${crons.length}`)
 
   const [minute, hourList, dayOfMonth, month, dayOfWeek] = FRESHNESS_SCHEDULE.split(' ')

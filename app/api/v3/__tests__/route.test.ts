@@ -206,4 +206,35 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     })
     expect(cachedDetail.positionHistory).toHaveLength(1)
   })
+
+  it('fails closed before reading unproven daily history', async () => {
+    const response = await GET(
+      request('/api/v3?endpoint=history&platform=bybit&trader_key=cached-trader&days=30', {
+        'x-api-key': 'would-consume-usage',
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('cache-control')).toBe(PRIVATE_NO_STORE)
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+    expect(body.error.code).toBe('TRADER_HISTORY_NOT_PUBLISHED')
+    expect(body.error.message).toContain('snapshot provenance is unverified')
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCheckRateLimitFull).not.toHaveBeenCalled()
+  })
+
+  it('keeps the quarantined history response as JSON when CSV is requested', async () => {
+    const response = await GET(
+      request('/api/v3?endpoint=history&platform=bybit&trader_key=cached-trader&format=csv')
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).not.toBe('text/csv; charset=utf-8')
+    expect(body.error.code).toBe('TRADER_HISTORY_NOT_PUBLISHED')
+    expect(mockCheckRateLimitFull).not.toHaveBeenCalled()
+  })
 })

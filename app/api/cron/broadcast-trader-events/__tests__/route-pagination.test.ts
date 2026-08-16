@@ -22,19 +22,11 @@ const mockRowByTable: Record<string, Record<string, unknown>> = {
     source_trader_id: 'trader-1',
     source: 'bybit',
     rank: 1,
-    roi: 12,
-    pnl: 100,
   },
   rank_history: {
     trader_key: 'trader-1',
     platform: 'bybit',
     rank: 100,
-  },
-  trader_daily_snapshots: {
-    trader_key: 'trader-1',
-    platform: 'bybit',
-    roi: 8,
-    pnl: 70,
   },
 }
 
@@ -139,7 +131,6 @@ describe('broadcast trader event route pagination', () => {
     ['trader_follows', 'follows'],
     ['leaderboard_ranks', 'currentRanks'],
     ['rank_history', 'rankHistory'],
-    ['trader_daily_snapshots', 'dailySnapshots'],
   ] as const)(
     'returns 500 and emits no notifications when a later %s page fails',
     async (table, dataset) => {
@@ -166,6 +157,12 @@ describe('broadcast trader event route pagination', () => {
       expect(mockReleaseLock).toHaveBeenCalledTimes(1)
     }
   )
+
+  it('never reads unproven daily metrics for ROI or PnL notifications', async () => {
+    await GET(new NextRequest('http://localhost/api/cron/broadcast-trader-events'))
+
+    expect(mockFrom).not.toHaveBeenCalledWith('trader_daily_snapshots')
+  })
 
   it('returns 500 and emits no notifications when a later preference id chunk fails', async () => {
     mockFailureTable = 'user_profiles'

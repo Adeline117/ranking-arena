@@ -71,7 +71,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
     const audienceIdentity =
       audience.status === 'active' ? `user:${audience.profile.id}` : 'unregistered'
     const traderIdentity = `${profile.source || 'unknown'}:${profile.id}`
-    const cacheKey = `users-full:v3:${handle.toLocaleLowerCase('en-US')}:${audienceIdentity}:${traderIdentity}`
+    const cacheKey = `users-full:v4:${handle.toLocaleLowerCase('en-US')}:${audienceIdentity}:${traderIdentity}`
     const result = await getOrSetWithLock(
       cacheKey,
       async () => {

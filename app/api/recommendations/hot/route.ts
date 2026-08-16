@@ -1,52 +1,34 @@
 /**
- * GET /api/recommendations/hot
+ * Quarantined hot-trader recommendations.
  *
- * Public endpoint returning globally hot traders ranked by composite hot score.
- * Results are cached in Upstash Redis with 5-minute TTL.
+ * The former momentum inputs came from unproven legacy daily rows. Keep the
+ * public response empty until equivalent sealed cohorts exist.
  */
 
 import { NextResponse } from 'next/server'
-import { withPublic } from '@/lib/api/middleware'
-import { computeHotTraders } from '@/lib/recommendations/hot-score'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
-import { createLogger } from '@/lib/utils/logger'
-import type { HotTrader } from '@/lib/recommendations/hot-score'
-import { socialFeatureGuard } from '@/lib/features'
-import { parseLimit } from '@/lib/utils/safe-parse'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 
-const _logger = createLogger('api-rec-hot')
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+}
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const preferredRegion = ['sfo1', 'hnd1']
+export const revalidate = 0
 
-const CACHE_KEY = publicRankingCacheKey('recommendations:hot')
-
-export const GET = withPublic(
-  async ({ request }) => {
-    const guard = socialFeatureGuard()
-    if (guard) return guard
-
-    const { searchParams } = new URL(request.url)
-    const limit = parseLimit(searchParams.get('limit'), 20, 100)
-
-    const traders = await tieredGetOrSet<HotTrader[]>(
-      CACHE_KEY,
-      () => computeHotTraders(100),
-      'hot',
-      ['recommendations']
-    )
-
-    const sliced = traders.slice(0, limit)
-
-    const response = NextResponse.json({
+export function GET() {
+  return NextResponse.json(
+    {
       success: true,
-      data: sliced,
-      meta: { count: sliced.length, cached: true },
-    })
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
-    return response
-  },
-  { name: 'get-recommendations-hot', rateLimit: 'public' }
-)
+      contract: 'arena.daily-history-publication@1',
+      available: false,
+      code: 'HOT_TRADERS_NOT_PUBLISHED',
+      reason: 'snapshot_provenance_unverified',
+      publication: null,
+      data: [],
+      meta: { count: 0, cached: false },
+    },
+    { status: 200, headers: NO_STORE_HEADERS }
+  )
+}
