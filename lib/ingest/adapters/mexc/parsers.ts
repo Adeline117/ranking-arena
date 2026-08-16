@@ -30,6 +30,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { parseMexcCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -368,24 +369,7 @@ export function parseMexcPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedHi
  * rendered (spec §6 copier PII). No row timestamp → ts = ctx.scrapedAt.
  */
 export function parseMexcCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.content) ? (d.content as Dict[]) : []
-  const out: ParsedHistoryRow[] = []
-  for (const item of list) {
-    const uid = item.followerUid
-    if (!uid) continue
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: String((item.nickname as string) ?? uid),
-      copierPnl: num(item.copyProfit),
-      copierInvested: num(item.copyFunds),
-      copyDurationDays: null, // not exposed by this endpoint
-      dedupeHash: dedupeHash('mexc_cp', uid, item.copyFunds, item.copyProfit),
-      raw: item,
-    })
-  }
-  return out
+  return parseMexcCopiersV1(raw, ctx)
 }
 
 export function parseMexcHistory(
@@ -397,7 +381,7 @@ export function parseMexcHistory(
     case 'position_history':
       return parseMexcPositionHistory(raw, ctx)
     case 'copiers':
-      return parseMexcCopiers(raw, ctx)
+      return parseMexcCopiersV1(raw, ctx)
     default:
       // orders (sub-order level) and transfers are not exposed publicly.
       throw new Error(`[mexc] history surface ${kind} not supported`)
