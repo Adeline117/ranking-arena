@@ -7,6 +7,8 @@ const proof = readFileSync(
   join(process.cwd(), 'supabase/migrations/__tests__/publish-copier-snapshot-trust-v2.pg17.sh'),
   'utf8'
 )
+const packageJson = readFileSync(join(process.cwd(), 'package.json'), 'utf8')
+const ciWorkflow = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8')
 const sqlWithoutLineComments = migration.replace(/^\s*--.*$/gm, '')
 
 describe('copier snapshot trust v2 atomic publisher', () => {
@@ -117,5 +119,13 @@ describe('copier snapshot trust v2 atomic publisher', () => {
     ]) {
       expect(proof).toContain(marker)
     }
+  })
+
+  it('runs the complete RAW role, substrate, and publisher proof chain in CI', () => {
+    expect(packageJson).toContain(
+      '"qa:copier-trust-publisher-v2-pg17": "bash supabase/migrations/__tests__/copier-snapshot-trust-raw-role.pg17.sh && bash supabase/migrations/__tests__/copier-snapshot-trust-publication-substrate.pg17.sh && bash supabase/migrations/__tests__/publish-copier-snapshot-trust-v2.pg17.sh"'
+    )
+    expect(ciWorkflow).toContain('name: Prove copier snapshot trust v2 publisher')
+    expect(ciWorkflow).toContain('run: npm run qa:copier-trust-publisher-v2-pg17')
   })
 })
