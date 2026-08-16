@@ -107,17 +107,13 @@ export default function OverviewPerformanceCard({
   const period = usePeriodStore((s) => s.period) as Period
   const setStorePeriod = usePeriodStore((s) => s.setPeriod)
   const [isAnimating, setIsAnimating] = useState(false)
-  const [isVisible, setIsVisible] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const selectedPeriodRef = useRef(period)
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   selectedPeriodRef.current = period
 
   useEffect(() => {
-    // Small delay to trigger bar animation after mount
-    const timer = setTimeout(() => setIsVisible(true), 150)
     return () => {
-      clearTimeout(timer)
       if (animationTimerRef.current) clearTimeout(animationTimerRef.current)
     }
   }, [])
@@ -315,7 +311,7 @@ export default function OverviewPerformanceCard({
               pnl={pnl}
               pnlDisclosure={pnlDisclosure}
               sparklineData={sparklineData}
-              isVisible={isVisible}
+              isVisible
             />
 
             {/* 二级指标 - 紧凑徽章布局 */}
@@ -333,7 +329,7 @@ export default function OverviewPerformanceCard({
               avgLeverage={positionSummary?.avgLeverage ?? undefined}
               longPositions={positionSummary?.longPositions ?? undefined}
               shortPositions={positionSummary?.shortPositions ?? undefined}
-              isVisible={isVisible}
+              isVisible
             />
 
             {/* 评分详情 - 免费展示 (period-specific) */}
@@ -345,7 +341,7 @@ export default function OverviewPerformanceCard({
               periodDrawdownScore={periodDrawdownScore}
               periodStabilityScore={periodStabilityScore}
               arenaScoreV3={arenaScoreV3}
-              isVisible={isVisible}
+              isVisible
             />
           </Box>
         </Box>

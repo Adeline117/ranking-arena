@@ -11,21 +11,31 @@ jest.mock('../performance/PeriodSelector', () => ({
   PeriodSelector: () => <div>period-selector</div>,
 }))
 
-jest.mock('../performance/HeroMetrics', () => ({
-  HeroMetrics: () => <div>hero-metrics</div>,
-}))
-
-jest.mock('../performance/MetricBadgesGrid', () => ({ MetricBadgesGrid: () => null }))
-jest.mock('../performance/ScoreBreakdownSection', () => ({ ScoreBreakdownSection: () => null }))
-
 describe('trader core content server visibility', () => {
-  it('does not hide the performance card before hydration', () => {
+  it('does not hide the real performance metrics before hydration', () => {
     const markup = renderToStaticMarkup(
-      <OverviewPerformanceCard performance={{ roi_90d: 12, pnl: 34 }} />
+      <OverviewPerformanceCard
+        performance={{
+          roi_90d: 12,
+          pnl: 34,
+          sharpe_ratio: 1.2,
+          max_drawdown: 8,
+          win_rate: 60,
+          winning_positions: 6,
+          total_positions: 10,
+          arena_score_90d: 75,
+          profitability_score: 80,
+          risk_control_score: 70,
+        }}
+      />
     )
 
-    expect(markup).toContain('hero-metrics')
+    expect(markup).toContain('hero-metric-value')
+    expect(markup).toContain('metric-badges-grid')
+    expect(markup).toContain('score-breakdown-layout')
     expect(markup).not.toMatch(/opacity:\s*0(?:;|\")/)
+    expect(markup).not.toContain('translateY(4px)')
+    expect(markup).not.toContain('translateY(10px)')
     expect(markup).not.toContain('translateY(20px)')
   })
 
