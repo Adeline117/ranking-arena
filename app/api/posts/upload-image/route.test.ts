@@ -116,7 +116,13 @@ describe('post image upload authority', () => {
       return { data: { path }, error: null }
     })
     mockList.mockImplementation(async () => ({
-      data: [{ name: uploadedPath.slice(uploadedPath.lastIndexOf('/') + 1) }],
+      data: [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          name: uploadedPath.slice(uploadedPath.lastIndexOf('/') + 1),
+          metadata: { size: 12, contentLength: 12, mimetype: 'image/jpeg' },
+        },
+      ],
       error: null,
     }))
     mockRemove.mockResolvedValue({ data: [], error: null })
@@ -352,6 +358,25 @@ describe('post image upload authority', () => {
 
   it('removes the requested object when exact listing verification fails', async () => {
     mockList.mockResolvedValue({ data: [{ name: 'different.jpg' }], error: null })
+
+    const response = await POST(request(file()) as never)
+
+    expect(response.status).toBe(500)
+    expect(mockRemove).toHaveBeenCalledWith([uploadedPath])
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to finalize an exact path whose Storage metadata differs', async () => {
+    mockList.mockImplementation(async () => ({
+      data: [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          name: uploadedPath.slice(uploadedPath.lastIndexOf('/') + 1),
+          metadata: { size: 13, contentLength: 13, mimetype: 'image/jpeg' },
+        },
+      ],
+      error: null,
+    }))
 
     const response = await POST(request(file()) as never)
 

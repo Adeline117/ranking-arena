@@ -8,6 +8,7 @@ import {
   finalizePostMediaUpload,
   reservePostMediaUpload,
 } from '@/lib/posts/post-media-upload-registry'
+import { hasExactPostMediaStorageEvidence } from '@/lib/posts/post-media-storage-evidence'
 
 // 最大文件大小: 100MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024
@@ -121,8 +122,18 @@ export async function POST(request: NextRequest) {
     const { data: fileList, error: listError } = await supabase.storage
       .from('posts')
       .list(directory, { search: objectName, limit: 1 })
-    if (listError || !fileList?.some((storedFile) => storedFile.name === objectName)) {
-      logger.error('Video upload verification failed - object not found:', listError)
+    if (
+      listError ||
+      !hasExactPostMediaStorageEvidence(fileList, {
+        objectName: fileName,
+        mimeType: contentType,
+        sizeBytes: file.size,
+      })
+    ) {
+      logger.error(
+        'Video upload verification failed - object identity or metadata mismatch:',
+        listError
+      )
       try {
         const { error: cleanupError } = await supabase.storage.from('posts').remove([fileName])
         if (cleanupError) logger.error('Failed to clean up unverifiable video:', cleanupError)

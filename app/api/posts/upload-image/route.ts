@@ -8,6 +8,7 @@ import {
   reservePostMediaUpload,
   type PostMediaUploadPurpose,
 } from '@/lib/posts/post-media-upload-registry'
+import { hasExactPostMediaStorageEvidence } from '@/lib/posts/post-media-storage-evidence'
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
@@ -132,8 +133,15 @@ export const POST = withAuth(
       limit: 1,
     })
 
-    if (listError || !fileList?.some((storedFile) => storedFile.name === objectName)) {
-      logger.error('Upload verification failed - file not found after upload:', listError)
+    if (
+      listError ||
+      !hasExactPostMediaStorageEvidence(fileList, {
+        objectName: fileName,
+        mimeType: sniffed.mime,
+        sizeBytes: file.size,
+      })
+    ) {
+      logger.error('Upload verification failed - object identity or metadata mismatch:', listError)
       try {
         const { error: cleanupError } = await supabase.storage.from('posts').remove([fileName])
         if (cleanupError) logger.error('Failed to clean up unverifiable upload:', cleanupError)
