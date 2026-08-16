@@ -167,8 +167,9 @@ npm run check:seasons     # Current leaderboard inventory (credentialed)
 npm run check:enrichment  # Non-authoritative enrichment inventory (credentialed)
 ```
 
-These commands are read-only. Do not use legacy `pipeline-health-check.mjs` or an
-automatic fix mode as evidence or remediation.
+These commands are read-only. Do not use the old health, local-recompute,
+source-fetch, checkpoint, or legacy-backfill entrypoints covered by the V1 tombstone
+contract as evidence or remediation; they report `RETIRED` and exit 2.
 
 ---
 

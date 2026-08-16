@@ -70,7 +70,10 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 
 Do not SSH to a worker, restart PM2, invoke a cron, alter a proxy, backfill rows,
 or generate/apply a fix script from this runbook. Those are separate owner-approved
-operations under the V1 NO-GO.
+operations under the V1 NO-GO. The old health, local-recompute, source-fetch,
+checkpoint, and legacy-backfill entrypoints covered by the V1 tombstone contract are
+RETIRED compatibility paths that exit 2 and cannot be used as an alternate operations
+route.
 
 ### Symptom: Cron job stuck in "running" status
 

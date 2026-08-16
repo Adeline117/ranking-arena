@@ -285,7 +285,7 @@ scripts/                      # CLI tools and maintenance (110+ files)
   check_status.mjs            # Public serving/freshness/platform checks
   check_seasons.mjs           # Current leaderboard inventory
   check_enrichment.mjs        # Non-authoritative enrichment inventory
-  backfill-*.ts               # Data backfill jobs
+  backfill-*.ts               # Legacy compatibility tombstones (V1 direct runs disabled)
   openclaw/                   # Mac Mini autonomous monitoring
   vps-scrapers/               # VPS Playwright scraper code
   maintenance/                # R2 backup, cleanup scripts
@@ -423,9 +423,10 @@ npm run check:enrichment  # Enrichment inventory, not serving authority (credent
 ```
 
 These commands are read-only. Inventory results do not authorize a backfill, cron
-invocation, migration, cache action, or production repair. The retired
-`pipeline-health-check.mjs` and `diagnose-enrichment.mjs` scripts are not current
-diagnostic evidence.
+invocation, migration, cache action, or production repair. The legacy paths covered
+by the V1 tombstone contract (old health, local-recompute, source-fetch, checkpoint,
+and legacy-backfill entrypoints) are retained only as compatibility tombstones: they
+report `RETIRED` and exit 2, so they are not current diagnostic evidence.
 
 ## Deployment
 

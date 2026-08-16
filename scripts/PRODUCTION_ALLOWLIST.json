@@ -1,11 +1,4 @@
 {
-  "description": "Scripts explicitly allowed for production/runtime operations.",
-  "allowed": [
-    "check_enrichment.mjs",
-    "check_seasons.mjs",
-    "check_status.mjs",
-    "daily-check.sh",
-    "diagnose.mjs",
-    "fetch_details_fast.mjs"
-  ]
+  "description": "Documented read-only diagnostics for V1 review; this manifest is not an execution sandbox.",
+  "allowed": ["check_enrichment.mjs", "check_seasons.mjs", "check_status.mjs", "diagnose.mjs"]
 }

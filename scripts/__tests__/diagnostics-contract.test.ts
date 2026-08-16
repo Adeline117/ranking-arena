@@ -41,6 +41,24 @@ describe('public diagnostics contract', () => {
     expect(scriptsReadme).not.toContain('--tables')
   })
 
+  it('does not advertise retired automatic recovery or legacy backfill commands', () => {
+    expect(packageJson.scripts['backfill:24h']).toBeUndefined()
+    expect(packageJson.scripts['backfill:risk:7d30d']).toBeUndefined()
+    expect(productionAllowlist.allowed).toEqual([
+      'check_enrichment.mjs',
+      'check_seasons.mjs',
+      'check_status.mjs',
+      'diagnose.mjs',
+    ])
+
+    for (const document of [readme, runbook, onboarding, scriptsReadme]) {
+      expect(document).toContain('RETIRED')
+      expect(document).not.toContain('node scripts/pipeline-health-check.mjs')
+      expect(document).not.toContain('npx tsx scripts/backfill-window-24h.ts')
+      expect(document).not.toContain('npx tsx scripts/backfill-risk-metrics-7d30d.ts')
+    }
+  })
+
   it('checks the user-visible serving contracts instead of retired snapshot tables', () => {
     expect(status).toContain("fetchJson(baseUrl, '/api/health')")
     expect(status).toContain("fetchJson(baseUrl, '/api/sources/visible?timeRange=90D')")

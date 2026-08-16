@@ -73,10 +73,10 @@ npm run check:freshness
 npm run check:platforms
 ```
 
-Record unavailable witnesses and the environment being observed. Do not use
-`scripts/pipeline-health-check.mjs`: it still references retired schema and cannot
-serve as current authority. Do not backfill, invoke a cron, or repair production as
-part of QA.
+Record unavailable witnesses and the environment being observed. The old health,
+local-recompute, source-fetch, checkpoint, and legacy-backfill paths covered by the
+V1 tombstone contract report `RETIRED` and exit 2; do not invoke them as QA evidence.
+Do not backfill, invoke a cron, or repair production as part of QA.
 
 ## 5. Run repository checks
 

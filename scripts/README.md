@@ -72,6 +72,11 @@ Use `npm run check:freshness` for the public ranking authority verdict. Never ad
 proxy credential, backfill, cron invocation, or cleanup step to make a diagnostic
 pass.
 
+The old health, local-recompute, source-fetch, checkpoint, and legacy-backfill paths
+covered by the V1 tombstone contract are compatibility tombstones. They report
+`RETIRED` and exit 2; use the commands above instead of attempting to revive or
+replace them.
+
 ## 🔧 Operations Rhythm
 
 ### Daily/Before release
@@ -84,8 +89,8 @@ pass.
 
 ### As needed
 
-- Platform-specific import/enrichment scripts
-- Verification scripts under `scripts/verify/`
+- Review a source-specific change only through its approved adapter/fixture plan
+- Run focused verification scripts that are current and explicitly in scope
 
 ---
 
