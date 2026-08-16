@@ -28,7 +28,11 @@ test('production script allowlist names only concrete boundary-scanned entrypoin
 })
 
 test('retired standalone diagnostics stay removed in favor of supported entrypoints', () => {
-  const retiredEntrypoints = ['scripts/arena-status-check.mjs', 'scripts/validate-data.mjs']
+  const retiredEntrypoints = [
+    'scripts/arena-status-check.mjs',
+    'scripts/health-check.mjs',
+    'scripts/validate-data.mjs',
+  ]
 
   assert.deepEqual(
     retiredEntrypoints.filter((path) => existsSync(join(repoRoot, path))),
