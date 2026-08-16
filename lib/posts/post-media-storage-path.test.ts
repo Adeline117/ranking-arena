@@ -1,11 +1,12 @@
 import {
+  classifyPostMediaStorageUrl,
   collectOwnedPostVideoObjectPaths,
   MAX_POST_VIDEO_CLEANUP_CANDIDATES,
   postVideoPublicPathMarker,
   readOwnedPostVideoObjectPath,
 } from './post-media-storage-path'
 
-const OWNER = '11111111-1111-4111-8111-111111111111'
+const OWNER = 'abcdefab-cdef-4abc-8def-abcdefabcdef'
 const OTHER = '22222222-2222-4222-8222-222222222222'
 const OBJECT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const STORAGE_BASE_URL = 'https://project.supabase.co'
@@ -15,6 +16,145 @@ function publicUrl(path: string): string {
 }
 
 describe('post media storage paths', () => {
+  describe('classifyPostMediaStorageUrl', () => {
+    it.each(['jpg', 'png', 'gif', 'webp', 'avif'])(
+      'classifies a canonical owner-bound %s image and exposes its object path',
+      (extension) => {
+        const objectPath = `${OWNER}/${OBJECT}.${extension}`
+        expect(classifyPostMediaStorageUrl(publicUrl(objectPath), OWNER, STORAGE_BASE_URL)).toEqual(
+          {
+            kind: 'owned-image',
+            objectPath,
+          }
+        )
+      }
+    )
+
+    it.each(['mp4', 'mov', 'webm', 'mkv', 'avi'])(
+      'classifies a canonical owner-bound %s video and exposes its object path',
+      (extension) => {
+        const objectPath = `${OWNER}/videos/${OBJECT}.${extension}`
+        expect(classifyPostMediaStorageUrl(publicUrl(objectPath), OWNER, STORAGE_BASE_URL)).toEqual(
+          {
+            kind: 'owned-video',
+            objectPath,
+          }
+        )
+      }
+    )
+
+    it.each([null, undefined, '', '   '])('classifies an absent value as none', (value) => {
+      expect(classifyPostMediaStorageUrl(value, OWNER, STORAGE_BASE_URL)).toEqual({ kind: 'none' })
+    })
+
+    it.each([
+      'https://cdn.example.test/media/photo.webp',
+      'http://legacy.example.test/video.mp4?token=one#preview',
+      `https://project.supabase.co.evil.example/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      'https://project.supabase.co/storage/v1/object/public/other-bucket/photo.webp',
+    ])('classifies a valid non-posts URL as external: %s', (value) => {
+      expect(classifyPostMediaStorageUrl(value, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'external',
+      })
+    })
+
+    it.each([
+      ['foreign image owner', publicUrl(`${OTHER}/${OBJECT}.webp`)],
+      ['foreign video owner', publicUrl(`${OTHER}/videos/${OBJECT}.mp4`)],
+      ['nested image path', publicUrl(`${OWNER}/images/${OBJECT}.webp`)],
+      ['missing video directory', publicUrl(`${OWNER}/${OBJECT}.mp4`)],
+      ['image path suffix', `${publicUrl(`${OWNER}/${OBJECT}.webp`)}/extra`],
+      ['video path suffix', `${publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)}/extra`],
+      ['unsupported image extension', publicUrl(`${OWNER}/${OBJECT}.jpeg`)],
+      ['unsupported video extension', publicUrl(`${OWNER}/videos/${OBJECT}.mpeg`)],
+      ['encoded image separator', publicUrl(`${OWNER}%2F${OBJECT}.webp`)],
+      ['encoded video separators', publicUrl(`${OWNER}%2Fvideos%2F${OBJECT}.mp4`)],
+      [
+        'encoded posts-prefix separator',
+        `${STORAGE_BASE_URL}/storage/v1/object/public/posts%2F${OWNER}%2F${OBJECT}.webp`,
+      ],
+      [
+        'encoded posts-prefix letter',
+        `${STORAGE_BASE_URL}/storage/v1/object/public/%70osts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'posts-prefix dot traversal',
+        `${STORAGE_BASE_URL}/storage/v1/object/public/posts/${OWNER}/../../../other/photo.webp`,
+      ],
+      ['image query string', `${publicUrl(`${OWNER}/${OBJECT}.webp`)}?download=1`],
+      ['video fragment', `${publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)}#preview`],
+      [
+        'credentials',
+        `https://user:pass@project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'posts-prefix case',
+        `${STORAGE_BASE_URL}/storage/v1/object/public/POSTS/${OWNER}/${OBJECT}.webp`,
+      ],
+      ['owner case', publicUrl(`${OWNER.toUpperCase()}/${OBJECT}.webp`)],
+      ['object case', publicUrl(`${OWNER}/${OBJECT.toUpperCase()}.WEBP`)],
+      [
+        'origin case',
+        `https://PROJECT.SUPABASE.CO/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'explicit default port',
+        `https://project.supabase.co:443/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+    ])('fails closed for a non-canonical internal %s', (_label, value) => {
+      expect(classifyPostMediaStorageUrl(value, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-internal',
+      })
+    })
+
+    it.each([
+      ['malformed non-empty value', 'not a URL'],
+      ['relative value', `/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`],
+      ['non-http value', `data:image/webp;base64,${OBJECT}`],
+      ['non-string value', 42],
+      ['external credentials', 'https://user:pass@cdn.example.test/photo.webp'],
+      ['leading whitespace', ` ${publicUrl(`${OWNER}/${OBJECT}.webp`)}`],
+      ['control character', `https://cdn.example.test/photo.webp\n`],
+    ])('does not downgrade an invalid non-empty %s to external', (_label, value) => {
+      expect(classifyPostMediaStorageUrl(value, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-internal',
+      })
+    })
+
+    it.each([
+      ['empty URL', ''],
+      ['malformed URL', 'not a URL'],
+      ['non-http URL', 'ftp://project.supabase.co'],
+      ['credentials', 'https://user:pass@project.supabase.co'],
+      ['path', 'https://project.supabase.co/project'],
+      ['query', 'https://project.supabase.co?project=one'],
+      ['fragment', 'https://project.supabase.co#project'],
+      ['whitespace', ' https://project.supabase.co'],
+      ['non-canonical origin case', 'https://PROJECT.SUPABASE.CO'],
+    ])('reports invalid storage configuration for %s', (_label, storageBaseUrl) => {
+      expect(
+        classifyPostMediaStorageUrl('https://cdn.example.test/photo.webp', OWNER, storageBaseUrl)
+      ).toEqual({ kind: 'invalid-configuration' })
+    })
+
+    it('reports an invalid owner identity as configuration failure', () => {
+      expect(
+        classifyPostMediaStorageUrl(
+          publicUrl(`${OWNER}/${OBJECT}.webp`),
+          'not-an-owner-id',
+          STORAGE_BASE_URL
+        )
+      ).toEqual({ kind: 'invalid-configuration' })
+    })
+
+    it('accepts the canonical storage origin with a trailing slash', () => {
+      const objectPath = `${OWNER}/${OBJECT}.webp`
+      expect(
+        classifyPostMediaStorageUrl(publicUrl(objectPath), OWNER, `${STORAGE_BASE_URL}/`)
+      ).toEqual({ kind: 'owned-image', objectPath })
+    })
+  })
+
   it.each(['mp4', 'mov', 'webm', 'mkv', 'avi'])(
     'reads an owner-bound %s video path',
     (extension) => {
