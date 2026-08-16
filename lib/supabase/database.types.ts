@@ -11704,6 +11704,10 @@ export type Database = {
           removed_trader_id: string
         }[]
       }
+      update_group_channel_atomic: {
+        Args: { p_actor_id: string; p_channel_id: string; p_updates: Json }
+        Returns: Json
+      }
       update_own_comment: {
         Args: {
           p_comment_id: string

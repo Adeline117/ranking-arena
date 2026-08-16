@@ -151,6 +151,14 @@ function parseAtomicModerationResult(
 export const dynamic = 'force-dynamic'
 
 /**
+ * Upper bound on pending reports pulled into memory for grouping. Sized well
+ * above any realistic moderation backlog so the visible queue is unaffected,
+ * while keeping a report spike from turning one admin page-load into a full
+ * table scan.
+ */
+const PENDING_REPORT_SCAN_CAP = 2000
+
+/**
  * GET — List content grouped by reported item, with all reports
  */
 export const GET = withAdminAuth(
@@ -159,13 +167,19 @@ export const GET = withAdminAuth(
     const page = parsePage(searchParams.get('page'))
     const limit = parseLimit(searchParams.get('limit'), 20, 100)
 
-    // Get all pending reports
+    // Grouping and pagination happen in JS below, so this read must stay
+    // bounded: without a cap it degrades into a full scan of every pending
+    // report, and the whole backlog lands in the Node process on each admin
+    // page-load. The cap is the ceiling on reports considered, not on rows
+    // returned — beyond it the queue reports truncation instead of silently
+    // dropping the tail.
     const { data: reports, error: reportsError } = await supabase
       .from('content_reports')
       .select('id, content_type, content_id, reporter_id, reason, description, created_at')
       .eq('status', 'pending')
       .in('content_type', ['post', 'comment'])
       .order('created_at', { ascending: false })
+      .limit(PENDING_REPORT_SCAN_CAP)
 
     if (reportsError) {
       logger.error('Error fetching pending reports', { error: reportsError })
@@ -207,6 +221,15 @@ export const GET = withAdminAuth(
     })
 
     const total = sortedGroups.length
+    // At the cap the oldest pending reports fall outside this page set, so
+    // `total` is a floor rather than the true backlog — say so instead of
+    // letting the UI present a truncated queue as complete.
+    const truncated = reports.length >= PENDING_REPORT_SCAN_CAP
+    if (truncated) {
+      logger.warn('Moderation queue hit the pending-report scan cap', {
+        cap: PENDING_REPORT_SCAN_CAP,
+      })
+    }
     const paginatedGroups = sortedGroups.slice((page - 1) * limit, page * limit)
 
     // Fetch content previews
@@ -305,7 +328,7 @@ export const GET = withAdminAuth(
       }
     })
 
-    return apiSuccess({ items, total })
+    return apiSuccess({ items, total, truncated })
   },
   { name: 'moderation-queue-get' }
 )
