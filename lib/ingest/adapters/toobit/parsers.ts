@@ -27,6 +27,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { parseToobitCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -318,24 +319,7 @@ export function parseToobitPositionHistory(raw: unknown, _ctx: ParseCtx): Parsed
  * dedupe/aggregates only, NEVER rendered (spec §6 copier PII).
  */
 export function parseToobitCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const list = objects(((raw ?? {}) as { data?: unknown }).data)
-  const out: ParsedHistoryRow[] = []
-  for (const item of list) {
-    const label = str(item.followerNickname)
-    if (!label) continue
-    const runningMs = num(item.followRunningMills)
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: label,
-      copierPnl: num(item.totalFollowProfit),
-      copierInvested: num(item.totalFollowAmount),
-      copyDurationDays: runningMs !== null ? Math.floor(runningMs / 86_400_000) : null,
-      dedupeHash: dedupeHash('toobit_cp', label, item.followRunningMills),
-      raw: item,
-    })
-  }
-  return out
+  return parseToobitCopiersV1(raw, ctx)
 }
 
 export function parseToobitHistory(
@@ -347,7 +331,7 @@ export function parseToobitHistory(
     case 'position_history':
       return parseToobitPositionHistory(raw, ctx)
     case 'copiers':
-      return parseToobitCopiers(raw, ctx)
+      return parseToobitCopiersV1(raw, ctx)
     default:
       // order-level records and transfers are not exposed publicly.
       throw new Error(`[toobit] history surface ${kind} not supported`)
