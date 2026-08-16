@@ -1,81 +1,86 @@
-# Arena SLO（Service Level Objectives）
+# Arena SLO（V1 NO-GO）
 
-> 2026-07-02 首版（企业级差距整改 E3）。原则：先少而真，宁可 4 条真执行，
-> 不要 20 条没人看。每条 SLO 必须有：测量方式（现有工具）+ 告警阈值 + 违约动作。
-> 复盘制度见 docs/postmortems/。
+> 状态：V1 NO-GO。本文只保留历史产品目标、数据语义和未来验收边界；不是生产
+> 操作手册，也不授权任何部署、定时任务、监控、通知、回滚、worker、备份或人工修复。
 
-## SLO 清单
+## 当前事实
+
+- V1 的源码配置包含 **0 个活动 Vercel schedules**，并禁用 Git 触发的 Vercel
+  deployment。这不是对任何已运行环境的断言，也不能替代 owner 的运行时核验。
+- 目前**没有自动 SLO 执行证据**：没有可据以声明当前可用性、延迟、新鲜度、备份或
+  写路径已经达标的自动测量、告警或修复记录。
+- 因此，下列目标均不得标记为“已通过”或“正在受监控”。历史报告、旧告警和旧任务
+  不能作为 V1 当前状态的证据。
+- 任何疑似违约只应记录已知事实并升级给 owner。只有获得明确、范围受限的 owner
+  GO 后，才可在另行批准的计划中定义取证、变更或恢复工作；本文件不提供其执行步骤。
+
+## 非执行的产品目标
 
 ### 1. 核心页面可用性 ≥ 99.5%（月）
 
-- **定义**：`/`、`/rankings`、trader 详情、`/login`、`/pricing` 非 5xx 比例
-- **测量**：post-deploy-smoke.yml（每次部署）+ health-monitor.yml（30min 轮询）
-- **告警**：任一 URL 500 → Telegram 立即（现有）；月累计 downtime > 3.6h → 复盘
-- **违约动作**：立即回滚 + 24h 内写 postmortem
+- **历史目标定义**：`/`、`/rankings`、trader 详情、`/login`、`/pricing` 的非 5xx
+  比例。
+- **V1 状态**：没有活动测量、告警、Telegram 通知或自动/人工回滚流程。
+- **未来验收边界**：owner 批准后，需先定义独立、可审计的可用性证据和违约处置计划，
+  才能重新将此目标作为运行中的 SLO。
 
 ### 2. API 健康端点 p95 < 200ms，错误率 < 1%（周）
 
-- **定义**：`/api/health`（edge，设计目标 <200ms）为代表的 API 层健康
-- **测量**：health-monitor 记录响应时间；Sentry 错误率
-- **告警**：health 端点连续 3 次 >1s 或不可达 → Telegram
-- **违约动作**：查 Vercel region/Supabase pool/Redis，参照 RUNBOOK
+- **历史目标定义**：以 `/api/health` 为代表的 API 层健康；p95 设计目标低于 200ms，
+  错误率低于 1%。
+- **V1 状态**：不进行自动测量、通知或基础设施排障；不能据此声称当前 API 达标。
+- **未来验收边界**：需要 owner 批准的证据定义、采样范围和响应责任后，才可恢复为
+  可执行 SLO。
 
-### 3. 数据新鲜度：默认源 < 8h（tier A 产品目标 ≤ 2h）
+### 3. 数据新鲜度：默认源 < 8h（Tier A 产品目标 ≤ 2h）
 
-- **定义**：这里有两只不能混用的时钟。serving publish lag 衡量一次完整排名发布
-  何时完成；upstream freshness 则取当前 active + serving registry 对每个公开来源、
-  每个 7D/30D/90D board 承诺的 `leaderboard_source_freshness.source_as_of`，
-  同一公开来源以最旧 board 为准。`leaderboard_ranks.computed_at` 只是重算分时间，
-  不能证明上游更新。
-- **当前执行门槛**：默认来源 `>=8h` 为 stale、`>=24h` 为 critical；
-  BloFin/GMX/Gains 等慢源按代码中的 48h/72h override。缺失、非法、超前或
-  registry 承诺但当前榜单不可见，一律为 unknown critical。Tier A `≤2h` 仍是
-  产品目标；在 registry 有可执行 tier 策略前，不把它伪装成已有 pager。
-- **测量**：无告警只读 `/api/admin/data-freshness`；生产
-  `/api/cron/check-data-freshness` 每 3 小时 UTC `:39` 执行；meta-monitor
-  每 6 小时检查其最近成功记录，并按 180 分钟期望间隔的 2 倍判定失联。
-- **告警**：unknown/critical → Telegram + Sentry；stale 进入 warning 路径。
-  检查成功发现旧数据仍记作 pipeline success，因为 meta-monitor 监控的是
-  “检查有没有运行”，不是把数据健康误写成执行失败。
-- **违约动作**：先查对应 ingest worker/adapter 和最近
-  count-check-PASSED snapshot，再完成一次无错误排名发布。不得手改
-  `source_as_of`，也不得用 `computed_at` 或 `now()` 回填来制造假新鲜；
-  数据不可信时宁可显示 stale 标记也不静默喂旧数据。
+- **语义**：这里有两只不能混用的时钟。serving publish lag 衡量一次完整排名发布何时
+  完成；upstream freshness 则取当前 active + serving registry 对每个公开来源、每个
+  7D/30D/90D board 承诺的 `leaderboard_source_freshness.source_as_of`，同一公开来源
+  以最旧 board 为准。`leaderboard_ranks.computed_at` 只是重算分时间，不能证明上游
+  更新。
+- **历史阈值**：默认来源 `>=8h` 为 stale、`>=24h` 为 critical；慢源可能有各自的
+  更宽阈值。缺失、非法、超前，或 registry 承诺但当前榜单不可见，都应在未来的证据模型
+  中视为 unknown critical。Tier A `≤2h` 仍只是产品目标。
+- **V1 状态**：没有活动检查、pager、worker 指令或修复路径。不得手改
+  `source_as_of`，也不得用 `computed_at` 或当前时间伪造新鲜度。
+- **未来验收边界**：重新启用前，owner 需批准来源登记、证据规则和对用户呈现 stale/
+  unknown 的方式；该批准不能由本 SLO 文档替代。
 
 ### 4. 应用数据备份新鲜度 ≤ 26h；完整恢复尚未达标
 
-- **定义**：R2 上最新、同时通过共享 schemas/full 文件名、`HeadObject`
-  大小/ETag、范围元数据与完成 token 契约的 pg_dump 距今 ≤ 26h（日备 + 2h 容差）。
-  任意 `.sql.gz`、旧无范围后缀 partial、`NaN` 大小或只有 LIST 元数据都不计入。
-- **测量**：备份新鲜度哨兵（`scripts/openclaw/backup-freshness-check.mjs`，
-  随 health monitor cron 跑）。最新候选的 HEAD 契约失败必须报红，不得回退旧对象报绿。
-- **告警**：无合格对象、HEAD 契约失败或 >26h → Telegram；告警发送非 2xx 也算检查失败。
-- **违约动作**：查 GitHub `backup-db` 与 Mac Mini `backup:r2` 日程；连续 2 天失败 = SEV2，
-  手动跑 `BACKUP_SCHEMAS=arena,public npm run backup:r2` 补一份应用数据备份。
-- **恢复状态**：本 SLO 的“完整恢复”门当前**未通过**。`arena+public` 不含托管
-  `auth`，plain dump 在 fresh PostgreSQL/managed Supabase 的既有 `public/auth`
-  catalog 上也有冲突。只有应用 dump、同一一致性点的 auth data-only sidecar、配对
-  manifest、目标 catalog 兼容检查和隔离 managed scratch 演练全部通过，才能改为
-  “可恢复”。此后仍须每季度重跑并记录 RPO/RTO。
+- **历史验收目标**：未来如恢复备份能力，应用数据快照的新鲜度目标为 ≤26h；证据应能
+  证明快照完整性，而不能仅凭对象列表或旧记录。
+- **恢复状态**：完整恢复当前**未通过且无自动证据**。应用数据、认证相关数据、配对
+  manifest、目标 catalog 兼容性和隔离恢复演练，均需在 owner 批准的计划中共同获得
+  证据，才能声明“可恢复”。
+- **V1 状态**：没有活动备份、备份新鲜度检查、告警或补救操作；不得把历史快照或任务
+  记录解释为当前恢复保证。
 
-### 5. 写路径可用性（V1 NO-GO，未测量）
+### 5. 写路径可用性（未测量）
 
-- **状态**：写路径金丝雀已退休；不得恢复每日或部署后自动写入检查。
-- **解释**：V1 期间没有该链路的自动 SLO 证据，不能据此声明核心社交写入可用。
-- **恢复条件**：仅在 owner 批准的隔离发布计划中重新设计并验证写路径证据；只读
-  契约或告警不能替代该批准。
+- **状态**：写路径金丝雀已退休；V1 期间不得恢复自动写入验证。
+- **结论**：没有自动 SLO 证据，不能声明核心社交写入或其他写路径可用。
+- **未来验收边界**：仅在 owner 批准的隔离发布计划中重新设计并验证写路径证据；只读
+  契约、告警或历史记录都不能替代该批准。
 
-## 错误预算的朴素用法（solo 模式）
+## Owner 升级原则
 
-不搞正式 error budget 记账。规则一条：**任一 SLO 单月第二次违约 → 该领域
-冻结新功能，先做可靠性整改**（防止"修了又坏"的循环消耗）。
+任何疑似 SLO 问题应只提交事实性证据和影响范围给 owner。owner 决定是否启动一个
+单独批准的调查、发布或恢复计划。本文件不包含生产访问、定时任务、监控、通知、
+CLI、dashboard、回滚、worker、备份或人工修复步骤。
 
-## 与告警的对应关系
+## 错误预算（历史决策原则）
 
-| 告警                                | 级别 | 响应                            |
-| ----------------------------------- | ---- | ------------------------------- |
-| smoke 失败 / 核心 URL 500           | SEV1 | 立即回滚（自动回滚上线后自动）  |
-| 写路径金丝雀（V1 已退休）           | n/a  | 不自动执行；等待 owner 批准计划 |
-| 数据 critical stale / 节点 SHA 漂移 | SEV2 | 当日查 worker                   |
-| 备份 >26h                           | SEV2 | 当日补备份                      |
-| health p95 劣化 / moderate stale    | SEV3 | 本周内处理                      |
+此前的 solo 原则是：同一 SLO 单月第二次违约时，优先讨论可靠性整改而非新增功能。
+V1 中它只是供 owner 决策的历史参考，不是自动冻结、自动修复或执行授权。
+
+## 状态汇总
+
+| 目标领域         | V1 当前状态                              | 可作出的结论   |
+| ---------------- | ---------------------------------------- | -------------- |
+| 核心页面可用性   | 无自动执行证据                           | 不可声明达标   |
+| API 延迟与错误率 | 无自动执行证据                           | 不可声明达标   |
+| 数据新鲜度       | 保留 `source_as_of` 语义；无自动执行证据 | 不可声明达标   |
+| 备份与恢复       | 无自动执行证据；完整恢复未通过           | 不可声明可恢复 |
+| 写路径           | 未测量                                   | 不可声明可用   |

@@ -4,14 +4,27 @@
 
 **Crypto trader discovery and ranking with registry-governed public CEX and DEX data.**
 
-[![Production](https://img.shields.io/badge/production-live-brightgreen)](https://www.arenafi.org)
+![V1 release status](https://img.shields.io/badge/V1_release-NO--GO-red)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![Ingest adapters](https://img.shields.io/badge/ingest_adapters-26-blue)]()
-[![Vercel schedules](https://img.shields.io/badge/Vercel_schedules-38-orange)]()
+[![V1 schedule plan](https://img.shields.io/badge/V1_schedules-0-blue)]()
 
-[Live Site](https://www.arenafi.org) · [Data API](#data-api) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
+[Product reference (owner-approved read-only)](https://www.arenafi.org) · [Data API](#data-api) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
 
 </div>
+
+## V1 NO-GO boundary
+
+V1 work is limited to local development, isolated branches, and Draft PR review.
+Production services, dashboards, hosts, schedulers, workers, and credentials are
+owner-controlled. An agent or contributor may collect production evidence only when
+the owner explicitly approves the exact read-only query; no approval authorizes a
+write, deployment, migration, cache action, cron invocation, restart, or recovery.
+
+The checked-in V1 source configuration has **zero Vercel schedules** and disables
+Git-triggered Vercel deployment. These are source-only containment changes: they do
+not prove or modify a deployed control plane. Historical route implementations are
+code-review context only and do not authorize an operation.
 
 ## Data API
 
@@ -19,19 +32,18 @@ Arena provides a REST API for programmatic access to trader rankings, performanc
 
 **Pricing**: Free (100 req/day) · Starter $49/mo (10K req/day) · Pro $199/mo (unlimited)
 
-```bash
-# Get top traders by Arena Score
-curl "https://www.arenafi.org/api/v3?endpoint=rankings&period=90D&limit=10"
-```
+The endpoint names below are API-contract reference only, not V1 operational checks.
+Calling any production endpoint requires the owner's prior, query-specific read-only
+approval.
 
 **5 published endpoints**: `rankings`, `trader`, `search`, `platforms`, `bulk`.
 The `history` compatibility endpoint is currently a no-store 503 quarantine response and does not consume API quota.
 
-Full documentation and API keys: [arenafi.org/api-docs](https://www.arenafi.org/api-docs)
+API-key issuance and live API documentation access are owner-controlled during V1.
 
 ## Overview
 
-Arena aggregates, normalizes, and ranks public traders from centralized and decentralized sources selected by the active-serving database registry. Arena Score v4 combines profitability, drawdown, risk-adjusted return, consistency, and sample confidence on a 0-100 peer-relative scale. The system has 53 cron/worker endpoints: 38 are production Vercel schedules, while database-driven ingest also runs on external workers. Its 26 registered ingest adapters collect leaderboard and profile surfaces, then the Next.js 16 frontend serves normalized results with ISR and edge caching.
+Arena aggregates, normalizes, and ranks public traders from centralized and decentralized sources selected by the active-serving database registry. Arena Score v4 combines profitability, drawdown, risk-adjusted return, consistency, and sample confidence on a 0-100 peer-relative scale. The repository contains 53 cron/worker route implementations and 26 registered ingest adapters; the checked-in V1 configuration schedules **none** of those routes through Vercel. Route code does not establish an active worker, schedule, or source connection.
 
 Beyond rankings, Arena provides an educational library (books, research papers, whitepapers), market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
 
@@ -54,9 +66,9 @@ Rankings are available across three time windows: 7 days, 30 days, and 90 days.
 
 Coverage is registry-driven, not a hard-coded exchange list. A registered adapter only means the parser/fetch implementation exists; a source appears in product navigation only when its `arena.sources` row is active, serving, and has a visible board for the requested 7D/30D/90D window.
 
-- Public current set: `/api/sources/visible?timeRange=90D` (change the time range as needed).
-- Operator authority: active-serving `arena.sources` plus `arena_visible_sources(...)`.
-- Upstream freshness authority: `leaderboard_source_freshness.source_as_of`.
+- The source route contract is defined in code; do not query the live route without owner approval.
+- Active-serving authority is modeled by `arena.sources` plus `arena_visible_sources(...)`.
+- Freshness authority is modeled by `leaderboard_source_freshness.source_as_of`.
 
 This fail-closed separation prevents retired, shadow, or empty integrations from being advertised as current coverage. Upstream staleness is surfaced separately; it does not silently remove an otherwise visible board from navigation.
 
@@ -85,8 +97,8 @@ Each trader profile includes:
 - TradingView-powered interactive charts and WebSocket price feeds for selected major assets
 - Sector performance treemap
 - Fear and Greed gauge
-- Funding rates and open interest data (fetched via dedicated cron jobs)
-- Flash news feed (aggregated every 30 minutes)
+- Funding-rate and open-interest UI surfaces, when published with valid evidence
+- Flash-news UI surfaces, when published with valid evidence
 
 ### Community
 
@@ -94,7 +106,7 @@ Each trader profile includes:
 - Post and comment system with voting, visibility controls (public/followers/group), and full-text search
 - User level progression (food chain theme): Krill, Sardine, Dolphin, Shark, Orca
 - Following system with activity feeds
-- Ranking change notifications and trader alerts
+- Ranking change notifications and trader alerts, when V1 publication is available
 
 ### Library
 
@@ -139,8 +151,8 @@ Each trader profile includes:
 | State         | Zustand + React Query + SWR               | Zustand for global state, React Query + SWR for server data fetching           |
 | Resilience    | Cockatiel                                 | Retry with exponential backoff + circuit breaker (`ConsecutiveBreaker`)        |
 | Validation    | Zod                                       | Runtime validation for pipeline payloads and protected request bodies          |
-| Monitoring    | Sentry + PipelineLogger + Healthchecks.io | Structured execution logs, health sentinels, and configured dead-man pings     |
-| Alerts        | Telegram Bot                              | Automatic alerts on cron failures and data staleness                           |
+| Monitoring    | Sentry + PipelineLogger + Healthchecks.io | Observability integrations; V1 is report-only and does not remediate           |
+| Alerts        | Telegram Bot                              | Alert integration code; no V1 automated recovery or delivery is authorized     |
 | Mobile        | Capacitor                                 | iOS + Android native apps with push, haptics, biometrics                       |
 | Web3          | viem + wagmi + RainbowKit + EAS           | Wallet login, on-chain attestation                                             |
 | Security      | CSP, HSTS, RLS, timingSafeEqual           | Security headers, route authorization, rate limiting, and input validation     |
@@ -167,16 +179,16 @@ Each trader profile includes:
      |Versioned schema|  |  Cache   |  |  Search    |   |
      |  Auth + RLS  |  +---------+  +-----------+   |
      +--------------+                                |
-                                       +-------------+---+
-                                       | 38 Schedules     |
-                  +------------------->| Data Pipeline   |
-                  |                    +--------+--------+
+                                       +-------------------+
+                                       | V1 schedule plan: |
+                  +------------------->| 0 Vercel jobs     |
+                  |                    +--------+----------+
                   |                             |
-         +--------+----------+        +--------+--------+
-         | CF Worker Proxy   |        | VPS Scrapers    |
-         | (geo-block bypass)|        | SG + JP nodes   |
-         +-------------------+        | Playwright      |
-                  |                    +-----------------+
+                  |                    +--------+----------+
+                  |                    | Adapter/parser   |
+                  |                    | code and evidence|
+                  |                    | contracts only   |
+                  |                    +-------------------+
          +--------+-------------------------------------------+
          | Registry-governed source APIs                     |
          | CEX + DEX leaderboards, profiles, and on-chain    |
@@ -186,56 +198,45 @@ Each trader profile includes:
 
 ### Key Architectural Decisions
 
-**Registry-Driven Ingest Adapters.** The worker bootstrap explicitly registers 26 `SourceAdapter` implementations in `lib/ingest/adapters/register.ts`; one adapter may serve multiple `arena.sources` rows. Each adapter declares its supported surfaces, fetches durable RAW payloads through a rate-budgeted `FetchSession`, and exposes pure parsers so stored evidence can be replayed without touching the network or clock. The database registry, not a static marketing list, decides which source/window promises are active and serving.
+**Registry-Driven Ingest Adapters.** The worker bootstrap explicitly registers 26 `SourceAdapter` implementations in `lib/ingest/adapters/register.ts`; one adapter may serve multiple `arena.sources` rows. Each adapter declares supported surfaces, models durable RAW capture through a rate-budgeted `FetchSession`, and exposes pure parsers so stored evidence can be replayed without touching the network or clock. The database registry, not a static marketing list, decides which source/window promises are active and serving.
 
-**Source-Native Fetch Paths.** Each ingest adapter owns the fetch path appropriate to its upstream: direct public API, region-pinned VPS egress, Playwright, or on-chain RPC/indexer. `FetchSession` applies rate budgets and captures durable RAW evidence before pure parsing; the source registry pins serving mode and execution region rather than assuming one proxy chain fits every source.
+**Source-Native Fetch Paths.** Adapter code models the source-specific interfaces and captures durable RAW evidence before pure parsing. During V1 NO-GO, it is not an instruction to operate a proxy, host, browser worker, or upstream fetch path. Source-network evidence must be specifically approved by the owner and remain read-only.
 
-**Snapshot Architecture.** The arena ingest worker writes scraped data to the partitioned **`arena.*` schema** (`arena.trader_stats`, `arena.leaderboard_entries`, etc.); `trader_snapshots_v2` was dropped 2026-06-16. `compute-leaderboard` derives `public.leaderboard_ranks` (+ `lr_7d/30d/90d`) as the precomputed read tables for rankings. This separation keeps writes fast and reads indexed. See `docs/ARENA_REBUILD_SPEC.md`.
+**Snapshot Architecture.** The codebase separates ingest staging from serving tables such as **`arena.*`** and `public.leaderboard_ranks`. `trader_snapshots_v2` was dropped 2026-06-16. This is an architectural description, not V1 authority to write, recompute, or publish data. See `docs/ARENA_REBUILD_SPEC.md`.
 
-**Gated Ingest Lifecycle.** External workers schedule source discovery and profile jobs, persist RAW and parsed evidence, apply count/quality gates in staging, and publish only complete boards into the serving schema. Vercel routes provide supporting orchestration and watchdogs; their existence does not prove that a first-party source is scheduled or healthy.
+**Gated Ingest Lifecycle.** The intended design gates RAW evidence, parsed data, and complete-board publication. V1 holds that lifecycle at NO-GO: no worker, Vercel route, OpenClaw process, or legacy recovery path has authority to discover, fetch, persist, backfill, publish, or self-repair. Their code may be reviewed locally but does not prove that a source is scheduled or healthy.
 
-**Incremental Static Regeneration.** Trader profile pages use ISR with `revalidate=300`. The `warm-cache` production schedule runs at UTC `:04` and `:34`, and a successful ingest chain may also trigger it after a complete leaderboard publish.
+**Incremental Static Regeneration.** Trader profile pages declare `revalidate=300` in code. Any historical cache-warming or ingest-triggered schedule is outside the V1 plan and must not be invoked.
 
 ## Data Pipeline
 
-The data pipeline combines 38 production schedules declared in `vercel.json` with external database-driven ingest workers. The repository has 53 cron/worker route implementations, but an endpoint's existence is not proof that Vercel schedules it. `vercel.json` is the only source of truth for Vercel cadence; the database registry and worker scheduler are the sources of truth for first-party ingest.
+The checked-in V1 source configuration contains **0 Vercel schedules**. The
+repository's 53 cron/worker route implementations are not operational authority,
+evidence of deployment, or permission to invoke a route. This source-only
+containment deliberately makes no claim about any deployed control plane or host.
 
-**Daily-snapshot containment.** `aggregate-daily-snapshots`, `cleanup-violations`, and `scan-data-quality` are unscheduled auth-first tombstones: anonymous requests return 401 and authenticated requests return 410 without touching data. The scanner's former admin RPC has no versioned function body, so it is not accepted as a read-only replacement. Legacy daily rows have no season, generation, cohort, or publication-proof identity and are not ranking authority. Movers, equity, indicators, public history, V3 history, and hot-trader recommendations now return fixed empty/unavailable, three-layer `no-store` contracts; the homepage does not request Movers, and the equity hook rejects old cached positive bodies without explicit availability plus publication proof. Daily-derived ROI/PnL broadcast events are disabled while independent rank and position events remain active. Do not run a manual backfill, cleanup, or general-purpose SQL RPC, or restore any retired schedule, until a separately reviewed provenance-bound publisher can atomically finalize an exact complete cohort.
+**Daily-snapshot containment.** `aggregate-daily-snapshots`, `cleanup-violations`, and `scan-data-quality` are unscheduled auth-first tombstones: anonymous requests return 401 and authenticated requests return 410 without touching data. The scanner's former admin RPC has no versioned function body, so it is not accepted as a read-only replacement. Legacy daily rows have no season, generation, cohort, or publication-proof identity and are not ranking authority. Movers, equity, indicators, public history, V3 history, and hot-trader recommendations now return fixed empty/unavailable, three-layer `no-store` contracts; the homepage does not request Movers, and the equity hook rejects old cached positive bodies without explicit availability plus publication proof. Daily-derived ROI/PnL broadcast events are disabled while independent rank and position events remain active. V1 does not authorize manual backfill, cleanup, general-purpose SQL RPC, or restoration of a retired schedule; any future design must be separately reviewed and provenance-bound.
 
-The forward migration `20260808090000_quarantine_legacy_trader_daily_snapshots.sql` is a reviewed deployment candidate, not proof that the live database already has these ACLs. It preserves the table and rows, removes browser/service write authority and legacy RPC execution, and retains service-role forensic SELECT. Apply it only through the protected ordered migration process after live catalog drift review; then verify direct REST/table/RPC denial before treating database containment as active.
+The forward migration `20260808090000_quarantine_legacy_trader_daily_snapshots.sql` is a reviewed deployment candidate, not proof that the live database has these ACLs. It is not to be applied, verified against production, or used to infer live state during V1 NO-GO. Any future release requires a separately recorded owner GO and a bounded release plan.
 
-This README intentionally does not duplicate all 38 schedule rows. Inspect the deployed declarations directly:
+### V1 scheduled work and monitoring
 
-```bash
-jq -r '.crons[] | [.path, .schedule] | @tsv' vercel.json
-```
-
-### Launch-Critical Monitoring and Maintenance
-
-| Job                        | Schedule                   | Description                                                                                              |
-| -------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `check-data-freshness`     | Every 3 hours at `:39` UTC | Compare every registry-promised visible board with its upstream `source_as_of`; page on unknown/critical |
-| `meta-monitor`             | Every 6 hours at `:23` UTC | Detect missing cron successes against twice each job's expected interval                                 |
-| `cleanup-data`             | Daily 01:06 UTC            | Clean up stale data                                                                                      |
-| `cleanup-deleted-accounts` | Daily 03:00 UTC            | Remove data for deleted user accounts                                                                    |
-| `cleanup-stuck-logs`       | Every 6 hours at `:27` UTC | Clean stuck pipeline log entries                                                                         |
-| `subscription-expiry`      | Mondays 00:09 UTC          | Process expired Pro subscriptions                                                                        |
-| `backfill-avatars`         | Daily 02:35 UTC            | Backfill missing trader avatar images                                                                    |
-| `check-trader-alerts`      | Every 30 minutes           | Check and send Pro trader metric alerts                                                                  |
-
-Cron handlers that adopt `PipelineLogger` write structured execution state to Supabase `pipeline_logs` and the ClickHouse dual-write path. A configured critical subset also pings Healthchecks.io; route-specific failures and health sentinels feed the shared alerting system.
+There is no V1 scheduled maintenance, fetch, cleanup, backfill, notification, or
+recovery job. Monitoring integrations are report-only. Collect production evidence
+only after the owner approves the exact read-only query; never turn an observation
+into a route invocation, task, mutation, or automatic fix.
 
 ## Directory Structure
 
 ```
 app/                          # Next.js App Router
   api/                        # Public, authenticated, admin, health, and worker routes
-    cron/                     # 53 cron/worker endpoints (38 scheduled by Vercel)
+    cron/                     # 53 route implementations; V1 schedule plan: none
     v2/, v3/                  # Versioned API endpoints
     admin/                    # Admin-only endpoints (metrics, monitoring)
     health/                   # Health check endpoints (pipeline, dependencies)
-  rankings/                   # Leaderboard pages (by exchange, by period)
-  trader/[id]/                # Trader profile pages
+  (app)/rankings/             # Supplementary rankings routes
+  (app)/trader/[handle]/      # Trader profile pages
   u/[handle]/                 # User profile pages
   groups/                     # Trading groups (create, join, manage)
   library/                    # Educational resource library with EPUB reader
@@ -260,7 +261,7 @@ lib/                          # Core business logic
     trader/                   # Trader data functions with fallback chains
   services/                   # Business logic
     pipeline-logger.ts        # 3-destination execution logging
-    pipeline-self-heal.ts     # Auto-recovery
+    pipeline-self-heal.ts     # Legacy recovery implementation; no V1 authority
     anomaly-detection.ts      # Statistical anomaly detection
     telegram-bot.ts           # Telegram alerts
     trader-alerts.ts          # Rank change notifications
@@ -286,13 +287,13 @@ scripts/                      # CLI tools and maintenance (110+ files)
   check_seasons.mjs           # Current leaderboard inventory
   check_enrichment.mjs        # Non-authoritative enrichment inventory
   backfill-*.ts               # Legacy compatibility tombstones (V1 direct runs disabled)
-  openclaw/                   # Mac Mini autonomous monitoring
-  vps-scrapers/               # VPS Playwright scraper code
+  openclaw/                   # Retired/observation-only V1 compatibility paths
+  vps-scrapers/               # Historical scraper source; no V1 host operation
   maintenance/                # R2 backup, cleanup scripts
 
 supabase/migrations/          # versioned PostgreSQL migration history
 
-cloudflare-worker/            # CF Worker proxy for geo-blocked exchange APIs
+cloudflare-worker/            # Managed routing implementation; no V1 operator action
 
 e2e/                          # Playwright E2E tests
 k6/                           # K6 load tests
@@ -362,37 +363,36 @@ npm install
 
 ### Environment Setup
 
-Copy the example environment file and fill in your credentials:
+Copy the example environment file for local development:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Required environment variables:
+Ask the owner for the smallest set of **non-production** values needed for the
+specific local task. Do not request, copy, inspect, or use production credentials,
+dashboard tokens, service-role keys, cron secrets, or host keys. The V1 default is
+no production-service access; an owner may separately approve an exact read-only
+evidence query.
 
-| Variable                        | Description                                  |
-| ------------------------------- | -------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL                         |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key (client-side)         |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role key (server-side only) |
-| `UPSTASH_REDIS_REST_URL`        | Upstash Redis REST endpoint                  |
-| `UPSTASH_REDIS_REST_TOKEN`      | Upstash Redis auth token                     |
-| `CRON_SECRET`                   | Bearer token for cron job authentication     |
-| `STRIPE_SECRET_KEY`             | Stripe API secret key                        |
-| `STRIPE_WEBHOOK_SECRET`         | Stripe webhook signing secret                |
+Common local configuration names:
 
-Optional variables for monitoring and proxy:
+| Variable                        | Description                               |
+| ------------------------------- | ----------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Owner-provisioned local/dev project URL   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Owner-provisioned local/dev anonymous key |
+| `UPSTASH_REDIS_REST_URL`        | Local/dev cache endpoint when needed      |
+| `UPSTASH_REDIS_REST_TOKEN`      | Local/dev cache token when needed         |
+| `STRIPE_SECRET_KEY`             | Test-mode key when payment work needs it  |
+| `STRIPE_WEBHOOK_SECRET`         | Test-mode webhook secret when needed      |
 
-| Variable                | Description                                    |
-| ----------------------- | ---------------------------------------------- |
-| `CLOUDFLARE_PROXY_URL`  | CF Worker proxy URL                            |
-| `VPS_PROXY_KEY`         | API key for VPS proxy authentication           |
-| `SENTRY_DSN`            | Sentry error tracking                          |
-| `HEALTHCHECKS_PING_URL` | Healthchecks.io ping URL for dead man's switch |
-| `TELEGRAM_BOT_TOKEN`    | Telegram bot token for alerts                  |
-| `TELEGRAM_CHAT_ID`      | Telegram chat ID for alerts                    |
-| `MEILISEARCH_HOST`      | Meilisearch host URL                           |
-| `MEILISEARCH_API_KEY`   | Meilisearch API key                            |
+Optional local observability/search variables:
+
+| Variable              | Description                                |
+| --------------------- | ------------------------------------------ |
+| `SENTRY_DSN`          | Local/dev error tracking when provisioned  |
+| `MEILISEARCH_HOST`    | Local/dev search endpoint when provisioned |
+| `MEILISEARCH_API_KEY` | Local/dev search key when provisioned      |
 
 ### Development
 
@@ -414,19 +414,20 @@ npm run test:e2e       # Playwright E2E tests
 
 ### Diagnostic Scripts
 
-```bash
-npm run check:status      # Public serving health and release identity
-npm run check:freshness   # Published ranking freshness authority
-npm run check:platforms   # Public source/ranking coverage
-npm run check:seasons     # Current leaderboard inventory (credentialed)
-npm run check:enrichment  # Enrichment inventory, not serving authority (credentialed)
-```
+The named `check:*` diagnostics may contact public services or controlled read
+credentials; they are not default local commands. Obtain the owner's prior approval
+for the exact read-only evidence query before running one. Inventory results do not
+authorize a backfill, cron invocation, migration, cache action, or production repair.
+The legacy paths covered by the V1 tombstone contract (old health, local-recompute,
+source-fetch, checkpoint, and legacy-backfill entrypoints) are compatibility
+tombstones: they report `RETIRED` and exit 2, so they are not current diagnostic
+evidence.
 
-These commands are read-only. Inventory results do not authorize a backfill, cron
-invocation, migration, cache action, or production repair. The legacy paths covered
-by the V1 tombstone contract (old health, local-recompute, source-fetch, checkpoint,
-and legacy-backfill entrypoints) are retained only as compatibility tombstones: they
-report `RETIRED` and exit 2, so they are not current diagnostic evidence.
+### Development and review workflow
+
+Use an isolated branch or worktree, make and verify the local code change, then open
+a Draft PR for review. A branch push, local build, preview, approval, or merge does
+not authorize a production operation or establish deployed state.
 
 ## Deployment
 
@@ -436,41 +437,39 @@ not proof that production advanced. Do not invoke a manual production deployment
 migration, cache purge, or release promotion without the separately recorded owner
 GO and release gates.
 
-All environment variables must be configured in the Vercel dashboard. The primary serverless function region is `hnd1` (Tokyo) to minimize latency to Asian exchange APIs and avoid geo-blocking.
+Production environment configuration and hosting control planes are owner-managed
+and outside this guide. Do not open or alter them as part of V1 development.
 
 ### Scheduled jobs
 
-Schedules are versioned in `vercel.json`, but their existence is not authorization to
-invoke, alter, or add a production job. Under the V1 NO-GO, treat schedule review as
-read-only code review; any scheduler/control-plane change requires its own approved
-release plan and owner GO.
+The checked-in V1 source configuration contains **0 Vercel schedules**. This is not
+a statement that a deployed control plane has changed. Do not invoke, alter, add, or
+inspect a scheduler except through an owner-approved, exact read-only evidence
+request.
 
 ### Infrastructure
 
-| Component                       | Current boundary                                                          |
-| ------------------------------- | ------------------------------------------------------------------------- |
-| **Vercel**                      | Edge + Serverless; deployment/control-plane actions require release gates |
-| **Managed workers and proxies** | Source routing and credentials are private managed configuration          |
-| **Mac Mini automation**         | Observation only; no auto-fix or release authority during V1 NO-GO        |
-| **Cloudflare Worker**           | Managed routing boundary; changes require a separate reviewed plan        |
+| Component                  | V1 boundary                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| **Vercel**                 | Owner-controlled; no deployment or control-plane action                        |
+| **Managed services**       | No direct operation; only owner-approved, exact read-only evidence             |
+| **OpenClaw compatibility** | Retired/report-only; no auto-fix, backfill, or release authority               |
+| **Source routing code**    | Local review only; no proxy, worker, or host operation from this documentation |
 
 ### Monitoring
 
-- Public serving/freshness evidence: `npm run check:status`, `check:freshness`, and `check:platforms`
-- Dependency health: `/api/health/detailed?section=dependencies` (checks Supabase, Redis, Stripe connectivity)
-- Admin metrics: `/api/admin/metrics/trends` (pipeline success rates, error rates, active users)
-- Healthchecks.io: dead man's switch for the configured monitored `PipelineLogger` subset
-- Sentry: client/server/edge error tracking
+- Owner-approved, query-specific read-only evidence only
+- Local test output and code review do not establish production state
 - Alerts and monitors are observations, not remediation authority
 
 ### Key Metrics
 
-| Metric           | Value           |
-| ---------------- | --------------- |
-| Ingest Adapters  | 26 registered   |
-| Cron Endpoints   | 53              |
-| Vercel Schedules | 38              |
-| UI Languages     | 4 (en/zh/ja/ko) |
+| Metric                            | Value                 |
+| --------------------------------- | --------------------- |
+| Ingest Adapters                   | 26 registered         |
+| Cron/worker route implementations | 53 (not V1-scheduled) |
+| V1 Vercel schedule plan           | 0                     |
+| UI Languages                      | 4 (en/zh/ja/ko)       |
 
 ## License
 

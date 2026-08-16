@@ -1579,7 +1579,7 @@ const ja = {
   sendMediaFile: '画像/動画/ファイルを送信',
 
   alertMonitoring: '監視中：{handle}',
-  alertCheckCadence: '有効な Pro メンバーは 30 分ごとにチェックされます。',
+  alertCheckCadence: 'V1 検証中はトレーダーアラートの監視を一時停止しています。',
   alertRoiChangeLabel: 'ROI変動',
   alertRoiChangeDesc: 'ROIが閾値を超えて変動した際にアラート',
   alertDrawdownLabel: 'ドローダウンアラート',
@@ -4797,7 +4797,7 @@ const ja = {
   // Pricing Pro features
   pricingProUnlockTitle: 'Pro で解放される機能',
   pricingProDetailedAnalytics: '詳細なトレーダー分析とスコア内訳',
-  pricingProAlerts: 'トレーダーアラートを30分ごとにチェック',
+  pricingProAlerts: 'V1 検証中はトレーダーアラートを一時停止しています',
   pricingProApiAccess: 'API アクセス（近日公開）',
   pricingProCsvExport: 'CSV データエクスポート',
   pricingProAdvancedFilters: '高度なマルチ条件フィルター',
@@ -5275,7 +5275,7 @@ const ja = {
 
   // ── 2026-06-02: 433 missing keys batch (synced with en.ts) ──
   gateAdvancedAlertsTitle: '高度なアラートを解放',
-  gateBenefitAlertsRealtime: '30分ごとのチェックで変化を検出後、プッシュとメールで通知',
+  gateBenefitAlertsRealtime: 'V1 検証中はトレーダーアラートを一時停止しています',
   gateBenefitAlertsConditions: '1つのアラートに5つ以上の条件を組み合わせ可能',
   gateBenefitAlertsHistory: 'アラート履歴と分析の完全版',
   gateComparisonTitle: 'トレーダーを並べて比較',

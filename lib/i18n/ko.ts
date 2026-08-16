@@ -1660,7 +1660,7 @@ const ko = {
 
   // AdvancedAlerts
   alertMonitoring: '모니터링 중: {handle}',
-  alertCheckCadence: '활성 Pro 회원은 30분마다 확인합니다.',
+  alertCheckCadence: 'V1 검증 기간에는 트레이더 알림 모니터링을 일시적으로 사용할 수 없습니다.',
   alertRoiChangeLabel: 'ROI 변동',
   alertRoiChangeDesc: 'ROI가 임계값만큼 변동하면 알림',
   alertDrawdownLabel: '낙폭 알림',
@@ -5046,7 +5046,7 @@ const ko = {
   // Pricing Pro features
   pricingProUnlockTitle: 'Pro 잠금 해제 기능',
   pricingProDetailedAnalytics: '상세 트레이더 분석 및 점수 분석',
-  pricingProAlerts: '트레이더 알림을 30분마다 확인',
+  pricingProAlerts: 'V1 검증 기간에는 트레이더 알림을 일시적으로 사용할 수 없습니다',
   pricingProApiAccess: 'API 접근 (출시 예정)',
   pricingProCsvExport: 'CSV 데이터 내보내기',
   pricingProAdvancedFilters: '고급 다중 조건 필터',
@@ -5514,7 +5514,7 @@ const ko = {
 
   // ── 2026-06-02: 433 missing keys batch (synced with en.ts) ──
   gateAdvancedAlertsTitle: '고급 알림 잠금 해제',
-  gateBenefitAlertsRealtime: '30분 확인에서 변화를 감지한 뒤 푸시 및 이메일 알림',
+  gateBenefitAlertsRealtime: 'V1 검증 기간에는 트레이더 알림을 일시적으로 사용할 수 없습니다',
   gateBenefitAlertsConditions: '알림당 5개 이상의 조건 결합',
   gateBenefitAlertsHistory: '전체 알림 기록 및 분석',
   gateComparisonTitle: '트레이더 나란히 비교',

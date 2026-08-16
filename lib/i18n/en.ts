@@ -409,7 +409,7 @@ const en = {
   proRequired: 'Pro membership required',
   // PremiumGate contextual benefits (audit P1-PROD-1)
   gateAdvancedAlertsTitle: 'Unlock Advanced Alerts',
-  gateBenefitAlertsRealtime: 'Push and email after 30-minute checks detect a change',
+  gateBenefitAlertsRealtime: 'Trader alerts are temporarily unavailable during V1 verification',
   gateBenefitAlertsConditions: 'Combine 5+ conditions per alert',
   gateBenefitAlertsHistory: 'Full alert history & analytics',
   gateComparisonTitle: 'Compare Traders Side-by-Side',
@@ -1738,7 +1738,7 @@ const en = {
 
   // AdvancedAlerts
   alertMonitoring: 'Monitoring: {handle}',
-  alertCheckCadence: 'Checked every 30 minutes for active Pro members.',
+  alertCheckCadence: 'Trader-alert monitoring is temporarily unavailable during V1 verification.',
   alertRoiChangeLabel: 'ROI Change',
   alertRoiChangeDesc: 'Alert when ROI changes by threshold',
   alertDrawdownLabel: 'Drawdown Alert',
@@ -5192,7 +5192,7 @@ const en = {
   traderShareFactRoi: '{roi} ROI',
   pricingProUnlockTitle: 'What Pro unlocks',
   pricingProDetailedAnalytics: 'Detailed trader analytics & score breakdowns',
-  pricingProAlerts: 'Trader alerts checked every 30 minutes',
+  pricingProAlerts: 'Trader alerts temporarily unavailable during V1 verification',
   pricingProApiAccess: 'API access (coming soon)',
   pricingProCsvExport: 'CSV data export',
   pricingProAdvancedFilters: 'Advanced multi-condition filters',

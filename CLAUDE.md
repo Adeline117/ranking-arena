@@ -34,7 +34,7 @@ Live site: https://www.arenafi.org
 ```
 app/                    # Next.js App Router pages
   api/                  # 100+ API route groups
-    cron/               # Scheduled jobs (Vercel Cron)
+    cron/               # Route implementations; V1 source schedules none through Vercel
   components/           # Shared UI components
   rankings/             # Leaderboard pages
   trader/[id]/          # Trader profile pages
@@ -69,11 +69,12 @@ npm run type-check      # TypeScript check
 npm run lint            # ESLint
 npm run test            # Jest tests
 npm run test:e2e        # Playwright E2E
-
-# Read-only data diagnostics
-npm run diagnose        # Serving checks + DB inventories (controlled DB credentials required)
-npm run check:platforms # Platform status
 ```
+
+`diagnose` and the `check:*` scripts are not default local commands: some contact
+public services or use controlled read credentials. During V1, run one only when
+the current task or owner grants an exact read-only evidence request; never treat
+the command names as permission to contact a production service.
 
 The retained legacy `backfill-*.ts` paths are compatibility tombstones: during V1
 they report `RETIRED` and exit 2 rather than performing a write. A future backfill
@@ -111,16 +112,12 @@ stripe_customers        # Stripe integration
 
 ## Data Pipeline
 
-38 Vercel schedules are declared in `vercel.json`. Representative current jobs:
-
-- `batch-5min` and `batch-discover`: bounded inline discovery/maintenance work
-- `compute-leaderboard-watchdog`: guarded leaderboard generation trigger
-- `check-data-freshness`: source-watermark freshness monitoring
-- `precompute-composite` and `sync-ranking-store`: serving projection/cache work
-- `backfill-avatars`: independently scheduled avatar maintenance
-
-Do not infer a live schedule from an endpoint name or an old runbook; `vercel.json`
-is the Vercel schedule source of truth and external ingest uses the worker registry.
+`vercel.json` has no Vercel `crons` property and disables Git-triggered Vercel
+deployment under the V1 source quarantine. The repository still contains 53
+cron/worker route implementations, but none is automatically scheduled by Vercel in
+checked-in source. Do not infer a live schedule or deployment state from a route
+name, historic configuration, or old runbook; these source-only changes do not prove
+the deployed control-plane state.
 
 Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
 
@@ -250,7 +247,8 @@ See docs/LINTING_GUIDE.md.
 
 ### API Routes
 
-- Cron routes require `Authorization: Bearer CRON_SECRET` header
+- Cron routes use service authentication in code; during V1 do not retrieve a
+  secret, construct an authorization header, or invoke a cron route
 - Use `lib/api/errors.ts` for consistent error responses
 - Cache headers configured in `vercel.json`
 
@@ -315,13 +313,15 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
 导致发帖/点赞/订阅/支付记录长期静默 500，无人发现。根因是 **AI 生成速度
 远超验证速度**。对策：把"接地"做成写代码前的反射，而非事后追。
 
-1. **写任何 `.from('x')` / `.rpc('y')` / `select('col')` 前，先确认 x/y/col 在
-   _生产_ 存在** —— 用 Supabase MCP（`execute_sql` / `list_tables`）或
-   `curl $SUPABASE_URL/rest/v1/<table>?select=<col>&limit=0`（42703=列不存在，
-   PGRST205=表不存在，PGRST202=函数不存在）。**绝不凭训练先验假设 schema。**
-2. **新迁移写完必须 `apply_migration` 到生产，并 `npm run qa:schema` 确认契约
-   仍绿** —— "迁移文件进了仓库"不等于"生产有这张表"。绝不用字母后缀命名
+1. **写任何 `.from('x')` / `.rpc('y')` / `select('col')` 前，先确认 x/y/col 的
+   受版本控制契约** —— 对照 migration、生成类型和本地 fixture；**绝不凭训练先验
+   假设 schema。** 当前 V1 NO-GO 下，agent 不得用 MCP、`curl` 或凭据对生产 schema
+   探测。只有 owner 明确授权的只读取证通道才可补充 live catalog 证据。
+2. **新迁移只能生成、评审和在隔离 fixture 验证，不得在 V1 直接应用到生产** ——
+   "迁移文件进了仓库"不等于"生产有这张表"，也不构成发布授权。绝不用字母后缀命名
    （`20260319h_*` 无法进 ledger）；只用 `scripts/new-migration.sh`（纯时间戳）。
+   `npm run qa:schema` 若需要受控凭据，只能由 owner 明确授权运行；其结果也不能替代
+   migration、部署或 owner GO。
 3. **禁止 `as any` / `as SupabaseClient` 绕过生成类型** —— `database.types.ts`
    由生产 schema 生成，是编译时接地；cast 绕过它 = 自废 tsc 这道最早的防线。
 4. **catch / safeQuery 里的 DB 错误必须 log，不许静默吞** —— 静默失败让漂移
@@ -335,13 +335,12 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
 Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓库目录**。
 2026-06 血泪教训(全部活生生发生过):
 
-1. **schema 变更走单一通道,串行化。** 多个会话各自手工 SQL-editor/MCP 应用
-   迁移、用任意名字 → 仓库↔ledger 失配、幻影表、~200 迁移漂移。规则:迁移
-   一次一个会话、经 `scripts/new-migration.sh`(纯时间戳)生成，优先用 Supabase MCP
-   `apply_migration` 单文件应用(name = 文件 description)。**当前远端历史与仓库仍不
-   完全可对应，禁止裸跑 `supabase db push`**；只有 `db push --dry-run` 明确只列出
-   目标文件时才可继续。应用后按目标 name 核对 ledger，再跑 `npm run qa:schema`。
-   `migration repair --status reverted` 只改账本、不回滚 schema，绝不能当回滚。
+1. **schema 变更走单一评审通道,串行化。** 多个会话各自手工 SQL-editor/MCP 应用
+   迁移、用任意名字 → 仓库↔ledger 失配、幻影表、~200 迁移漂移。当前 V1 下，迁移
+   只能经 `scripts/new-migration.sh`（纯时间戳）生成并在隔离环境验证；禁止 SQL editor、
+   MCP `apply_migration`、`supabase db push`、ledger repair 或任何生产 schema 动作。
+   远端历史与仓库尚未完成受控核对；恢复单文件应用必须由 owner 另行打开发布窗口并记录
+   exact target、ledger witness、回滚证据和批准范围。
 2. **绝不往 pre-push 关键路径塞无界操作。** 钩子在每次推送跑、共用于全部会话、
    只有 120s 看门狗。任何无界 git/网络/lint 操作在高负载下卡住 → **拖垮所有
    会话的推送**(本会话一个加了无界 `git diff` 的守卫干过这事)。钩子里的检查
@@ -350,10 +349,9 @@ Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓�
    立刻影响所有会话**(它们的 pre-push tsc/lint 当场用你改的版本)。高风险
    核心文件的改动先在隔离 worktree 验证(`git worktree` 或 Agent isolation),
    tsc/lint 干净再落共享树。
-4. **机器是生产 worker。** 并发会话 fork 风暴会把 macOS `syspolicyd`(Gatekeeper)
-   顶到 100%,所有 spawn 进程的命令(git/node)排队卡死,而 MCP/文件 IO 不受影响
-   (诊断信号:bash 挂但 MCP 秒回 = syspolicyd 饱和)。解药:`sudo killall
-syspolicyd`(launchd 重启)+ 减少并发会话。
+4. **机器可能承载受保护运行时。** 如果 macOS 进程压力导致命令卡住，降低并发并记录
+   症状；不得从此文档杀死系统服务、停止 worker 或重启任何 host 进程。主机修复只能由
+   owner 在单独的事故计划中执行。
 5. **交互会话用独立 worktree(强烈推荐,根治规则 3 的共享工作树之痛)。** 起新会话用
    `scripts/new-session-worktree.sh <name>` → 在 `~/arena-worktrees/<name>` 自己的
    `session/<name>` 分支干活(env + node_modules 已 symlink),经 push-lock 合 main。
@@ -361,10 +359,9 @@ syspolicyd`(launchd 重启)+ 减少并发会话。
    并发会话改 lock 害 SG 部署 npm-ci 崩溃循环;另一会话的过期 premium 测试卡死所有人推送。)
 6. **并发会话上限 2–4,不是 7。** 研究 + 实测:超过 ~4 个并行,协调/合并/syspolicyd
    fork 风暴成本盖过收益。conductor.json 的 review_phase(5 个)分两批跑,别一次 10 个全开。
-7. **worker 部署走单一通道(仿 schema 单一通道)。** 一次一个会话部署,优先经 CI
-   产物流水线;**绝不多会话各自手工 `deploy-ingest-sg.sh` 并发跑、绝不在 SG box 上
-   `npm ci`**(非并发安全、丢 .js → 崩溃循环)。dep 无变的改动走 `--code-only`;
-   手工脚本仅作 CI 不可用时的逃生口(默认已拒绝 npm ci,见脚本头)。
+7. **worker 部署在 V1 暂停。** 不得运行 `deploy-ingest-sg.sh`（包括 `--dry-run`）、
+   CI deploy、SSH、`npm ci`、PM2 或任何 host-side recovery。恢复时必须由 owner 用新的
+   发布计划重新评估单一通道、exact artifact、writer 排空和回滚 witness。
 
 ### Database Concurrency Safety — MANDATORY
 
@@ -406,27 +403,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 UPSTASH_REDIS_REST_URL
 UPSTASH_REDIS_REST_TOKEN
-CRON_SECRET
+CRON_SECRET (owner-held; do not retrieve or use during V1)
 STRIPE_SECRET_KEY
 ```
 
 ## Known Issues / Caveats
 
-1. **Geo-blocking**: Binance/OKX APIs blocked in some regions. Use cloudflare-worker proxy or VPS.
+1. **Geo-blocking**: Binance/OKX APIs may be blocked in some regions. Record the
+   missing public evidence and escalate it; V1 agents must not deploy a proxy,
+   use a VPS, or start a fetcher to work around the block.
 2. **Memory**: Dev server needs `--max-old-space-size=3584` (configured in npm scripts)
 3. **Build time**: Full build takes significant time; use Turbopack in dev
-4. **Concurrent push races**: Arena runs up to 7 `claude` sessions + openclaw cron
-   jobs simultaneously, all pushing to main with the same git identity. **Two
-   distinct locks** (not one, and the push lock is NOT `flock` — macOS has no
-   `flock(1)`):
-   - **Push**: an atomic `mkdir` lock DIR at `/tmp/arena-git-push.lock.d` (60s
-     deadline, steals a stale lock if the holder PID is dead). The pre-push hook
-     (`.git/hooks/pre-push`) acquires it + auto-rebases on divergence; raw `git
-push origin main` is safe. `scripts/git-push-safe.sh` is the standalone
-     wrapper and sets `ARENA_PUSH_LOCK_OWNER=$$` so the hook skips re-acquiring
-     (avoids self-deadlock).
-   - **Commit/index**: real `flock -w 120` on `/tmp/arena-git-index.lock`, used by
-     `scripts/git-commit-safe.sh` (a separate lock from push — see issue #5).
+4. **Concurrent changes**: use isolated worktrees and reviewable branches. During
+   V1, no autonomous process may commit, rebase, merge, or push `main`; a branch
+   push or Draft PR needs the task owner's explicit scope and remains separate
+   from any release action. Historical lock scripts do not make a raw production
+   push safe or authorized.
 5. **Stale staged files leaking into commits**: when a commit fails (pre-commit
    hook OR `git reset --soft HEAD^`) the previously-staged files REMAIN in the
    index. The next `git add foo && git commit` then bundles those leftover
@@ -450,26 +442,26 @@ See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash c
 
 ### Virtual Engineering Team (gstack-inspired)
 
-| Role              | Command            | Description                                                    |
-| ----------------- | ------------------ | -------------------------------------------------------------- |
-| CEO               | `/plan-ceo-review` | Challenge premises, 10-star vision, scope decision             |
-| Eng Manager       | `/plan-eng-review` | Architecture, code quality, tests, performance (gates `/ship`) |
-| Designer (audit)  | `/design-audit`    | 80-item visual audit, 10 categories, A-F grades                |
-| Designer (system) | `/design-system`   | Full design system proposal + docs/DESIGN.md                   |
-| Release Manager   | `/ship`            | Merge base → test → version bump → CHANGELOG → PR              |
-| QA Lead (fix)     | `/qa`              | Test + auto-fix + atomic commits + health score                |
-| QA Lead (report)  | `/qa-report`       | Same testing, report only, no code changes                     |
-| Design QA (fix)   | `/qa-design`       | Fix visual inconsistencies + AI slop                           |
-| Retro Facilitator | `/retro`           | Weekly retro with trend tracking                               |
-| Doc Engineer      | `/doc-release`     | Post-ship docs sync                                            |
+| Role              | Command            | Description                                                            |
+| ----------------- | ------------------ | ---------------------------------------------------------------------- |
+| CEO               | `/plan-ceo-review` | Challenge premises, 10-star vision, scope decision                     |
+| Eng Manager       | `/plan-eng-review` | Architecture, code quality, tests, performance (gates `/ship`)         |
+| Designer (audit)  | `/design-audit`    | 80-item visual audit, 10 categories, A-F grades                        |
+| Designer (system) | `/design-system`   | Full design system proposal + docs/DESIGN.md                           |
+| Release Manager   | `/ship`            | Suspended in V1; prepare a report or owner handoff only                |
+| QA Lead (fix)     | `/qa`              | Report-only unless the current task explicitly authorizes code changes |
+| QA Lead (report)  | `/qa-report`       | Same testing, report only, no code changes                             |
+| Design QA (fix)   | `/qa-design`       | Report-only unless the current task explicitly authorizes code changes |
+| Retro Facilitator | `/retro`           | Weekly retro with trend tracking                                       |
+| Doc Engineer      | `/doc-release`     | Report-only; no autonomous commit or publication                       |
 
 ### Orchestration Workflows (conductor.json)
 
 See `.claude/conductor.json` for multi-agent parallel orchestration:
 
-- **Full Review**: 5 reviews in parallel → fix phase → ship → doc-release
-- **Quick Ship**: eng-review → qa-fix → ship → doc-release
-- **Audit Only**: All reviews in parallel, reports only
+- **Full Review / Quick Ship**: suspended in V1; do not use them to trigger fixes,
+  commits, shipping, or document publication.
+- **Audit Only**: reviews may produce evidence and a proposed next step only.
 
 ### Shared Patterns
 
@@ -482,7 +474,9 @@ All virtual team skills share `.claude/skills/arena-shared-preamble.md`:
 
 ### Pipeline & Operations
 
-Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spec`, `/weekly-self-check`
+`/fix-pipeline`, `/debug-cron`, `/deploy-staging`, and `/weekly-self-check` are
+V1 report-only/tombstone interfaces. They must not invoke a cron, fetcher,
+deployment, backfill, worker, host, or production control plane.
 
 ## Agent Work Rules (MUST FOLLOW)
 
@@ -535,20 +529,17 @@ Write code → Run tests → Tests pass?
 
 ### 发布与数据诊断（只读）
 
-```bash
-npm run check:status      # 公共 serving health 与 release identity
-npm run check:freshness   # 已发布排行榜的 freshness authority
-npm run check:platforms   # 公共 source/ranking coverage
-npm run check:seasons     # leaderboard_ranks 库存（需受控读凭据）
-npm run check:enrichment  # enrichment 库存，非发布权威（需受控读凭据）
-```
+Owner-scoped evidence probes are named `check:status`, `check:freshness`,
+`check:platforms`, `check:seasons`, and `check:enrichment`. They can contact public
+endpoints or controlled read credentials, so they are not default local checks.
+Only the current task or owner may grant an exact read-only evidence request; never
+print credentials. A successful inventory does not prove freshness, cohort, or
+serving authority, and never authorizes a backfill, cron, migration, cache clear,
+or production repair. V1 tombstone-contract paths for old health, local-recompute,
+source-fetch, checkpoint, and legacy backfill report `RETIRED` and exit 2; they are
+not diagnostic, repair, or production entrypoints.
 
-这些命令只读。表库存成功不证明 freshness、cohort 或 serving authority，且不授权
-backfill、cron、迁移、缓存清理或生产修复。V1 tombstone contract 中列出的旧 health、
-local-recompute、source-fetch、checkpoint 与 legacy-backfill 入口会明确报 `RETIRED`
-并以退出码 2 失败，不能作为诊断、修复或生产入口。
-
-### Schema 契约检查（防迁移漂移 — 每周必跑 / 任何迁移后必跑）
+### Schema 契约检查（防迁移漂移）
 
 ```bash
 npm run qa:schema    # 代码 .rpc()/.from() 依赖 vs 生产实际清单，差集即漂移
@@ -556,10 +547,10 @@ npm run qa:buttons   # 全站按钮/交互运行时扫描（--lang-sweep 四语�
 ```
 
 **为什么是铁律**：2026-06 审计发现 ~200 个迁移从未应用到生产（字母后缀
-命名无法进 ledger），导致发帖/点赞/订阅按钮/支付记录长期静默断裂。
-任何新迁移必须经 `scripts/new-migration.sh`（纯时间戳命名）创建，
-应用后跑 `npm run qa:schema` 确认契约仍绿。豁免必须在
-`scripts/qa/schema-contract-check.mjs` 顶部注明理由。
+命名无法进 ledger），导致发帖/点赞/订阅按钮/支付记录长期静默断裂。任何新迁移
+必须经 `scripts/new-migration.sh`（纯时间戳命名）创建并在隔离环境验证。V1 下不要
+把该命令当成生产核验或应用步骤；受控 live catalog 核验和迁移 application 均需单独
+owner GO。豁免必须在 `scripts/qa/schema-contract-check.mjs` 顶部注明理由。
 
 ### 自动验证 Hooks
 
@@ -575,9 +566,9 @@ npm run qa:buttons   # 全站按钮/交互运行时扫描（--lang-sweep 四语�
 cp specs/_template.md specs/my-feature.md
 # Edit specs/my-feature.md with requirements + acceptance criteria
 
-# 2. Run it
+# 2. Review it locally
 /implement-spec specs/my-feature.md
-# Agent implements autonomously, commits after each criterion
+# V1: produce a proposed diff and evidence only; no autonomous commit, push, or deploy.
 ```
 
 ### OpenClaw Autonomous Operations (Mac Mini)
@@ -605,9 +596,11 @@ try {
 
 ### Fetcher 修复流程
 
-1. 运行 `npm run check:status`、`check:freshness` 与 `check:platforms` 记录问题
+1. 若 owner 已明确批准对应的只读取证，才运行 `npm run check:status`、
+   `check:freshness` 与 `check:platforms` 记录问题；否则只做本地代码与 fixture 审查
 2. 参考 `.claude/skills/arena-fetcher-error-handling/SKILL.md` 获取当前边界
-3. 用现有 adapter fixture 重现，再运行 `/fix-pipeline` 的只读诊断与相关测试
+3. 用现有 adapter fixture 重现，并运行相关本地测试；把结果交给 owner，
+   不运行 fetcher、cron、backfill 或生产修复。
 
 ### 关键诊断脚本
 
@@ -620,34 +613,36 @@ try {
 
 ## Quick Reference
 
-| Action                 | Command/Location                                      |
-| ---------------------- | ----------------------------------------------------- |
-| Add migration          | `scripts/new-migration.sh <description>`              |
-| Add API route          | `app/api/{name}/route.ts`                             |
-| Add ingest adapter     | `docs/ADAPTER_ONBOARDING.md` + `lib/ingest/adapters/` |
-| **Add ingest source**  | `docs/ADAPTER_ONBOARDING.md`(checklist,含指标声明门)  |
-| Add cron job           | `vercel.json` crons array                             |
-| Check logs             | `vercel logs` or Sentry dashboard                     |
-| Fix pipeline           | `/fix-pipeline`                                       |
-| Deploy preview         | `/deploy-staging`                                     |
-| Implement feature      | `/implement-spec specs/xxx.md`                        |
-| Weekly self-check      | `/weekly-self-check`                                  |
-| Health dashboard       | `/admin/monitoring`                                   |
-| **CEO product review** | `/plan-ceo-review`                                    |
-| **Eng manager review** | `/plan-eng-review` (gates `/ship`)                    |
-| **Design audit**       | `/design-audit` (report-only, 80 checks)              |
-| **Design system**      | `/design-system` (creates docs/DESIGN.md)             |
-| **Ship release**       | `/ship` (test → version bump → CHANGELOG → PR)        |
-| **QA test + fix**      | `/qa` (quick/standard/exhaustive)                     |
-| **QA report only**     | `/qa-report` (no code changes)                        |
-| **Design QA + fix**    | `/qa-design` (fix visual issues)                      |
-| **Retrospective**      | `/retro` (weekly engineering retro)                   |
-| **Post-ship docs**     | `/doc-release` (sync all docs after ship)             |
-| **Headless browser**   | `/browse` (screenshots, interactions, responsive)     |
-| **Auth for browser**   | `/setup-browser-cookies` (import real cookies)        |
+| Action                 | Command/Location                                                       |
+| ---------------------- | ---------------------------------------------------------------------- |
+| Propose migration      | `scripts/new-migration.sh <description>` + isolated fixture validation |
+| Add API route          | `app/api/{name}/route.ts`                                              |
+| Add ingest adapter     | `docs/ADAPTER_ONBOARDING.md` + `lib/ingest/adapters/`                  |
+| **Add ingest source**  | `docs/ADAPTER_ONBOARDING.md`(checklist,含指标声明门)                   |
+| Add cron job           | Suspended in V1; propose a contract, do not edit schedules for release |
+| Check logs             | Owner-approved read-only evidence only                                 |
+| Fix pipeline           | `/fix-pipeline` report-only                                            |
+| Deploy preview         | `/deploy-staging` suspended                                            |
+| Implement feature      | `/implement-spec specs/xxx.md` (current-task scope only)               |
+| Weekly self-check      | `/weekly-self-check` tombstone/report-only                             |
+| Health dashboard       | Owner-approved read-only evidence only                                 |
+| **CEO product review** | `/plan-ceo-review`                                                     |
+| **Eng manager review** | `/plan-eng-review` (gates `/ship`)                                     |
+| **Design audit**       | `/design-audit` (report-only, 80 checks)                               |
+| **Design system**      | `/design-system` (creates docs/DESIGN.md)                              |
+| **Ship release**       | Suspended in V1; owner-only release handoff                            |
+| **QA test + fix**      | `/qa` report-only unless current task authorizes code changes          |
+| **QA report only**     | `/qa-report` (no code changes)                                         |
+| **Design QA + fix**    | `/qa-design` report-only unless current task authorizes code changes   |
+| **Retrospective**      | `/retro` (weekly engineering retro)                                    |
+| **Post-ship docs**     | `/doc-release` report-only; no autonomous publication                  |
+| **Headless browser**   | `/browse` (screenshots, interactions, responsive)                      |
+| **Auth for browser**   | Suspended in V1; do not import production cookies                      |
 
-## Emergency Rollback
+## Emergency rollback
 
-1. **Vercel Dashboard** → Deployments → find last good deploy → "Promote to Production"
-2. **Database**: Migrations are forward-only. If a schema change breaks prod, write a compensating migration via `scripts/new-migration.sh rollback-<description>`.
-3. **Feature flags**: Toggle in Redis via `/admin/monitoring` or `lib/features.ts`
+V1 agents must not promote/roll back a deployment, change a feature flag, run a
+compensating migration, clear cache, or access a production dashboard. Capture only
+approved read-only evidence and escalate to the designated owner. A rollback can be
+considered only in a separately recorded release/incident plan with an exact target,
+database compatibility proof, public-contract witness, and accountable operator.
