@@ -107,7 +107,6 @@ export default function OverviewPerformanceCard({
   const period = usePeriodStore((s) => s.period) as Period
   const setStorePeriod = usePeriodStore((s) => s.setPeriod)
   const [isAnimating, setIsAnimating] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const selectedPeriodRef = useRef(period)
@@ -115,7 +114,6 @@ export default function OverviewPerformanceCard({
   selectedPeriodRef.current = period
 
   useEffect(() => {
-    setMounted(true)
     // Small delay to trigger bar animation after mount
     const timer = setTimeout(() => setIsVisible(true), 150)
     return () => {
@@ -272,9 +270,6 @@ export default function OverviewPerformanceCard({
           borderRadius: tokens.radius.xl,
           border: `1px solid ${tokens.colors.border.primary}`,
           overflow: 'hidden',
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           boxShadow: `0 4px 24px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)`,
         }}
       >

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import ProGate from '../ui/ProGate'
@@ -39,16 +39,11 @@ export default function PortfolioTable({
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'openTime' | 'closeTime' | 'pnl'>('openTime')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [mounted, setMounted] = useState(false)
   const [hoveredRow, setHoveredRow] = useState<number | null>(null)
   const [historyExpanded, setHistoryExpanded] = useState(false)
 
   // 默认只显示3条，展开后显示全部
   const COLLAPSED_COUNT = 3
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // 排序历史记录
   const sortedHistory = [...history].sort((a, b) => {
@@ -168,9 +163,6 @@ export default function PortfolioTable({
           border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
           overflow: 'hidden',
           boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           position: 'relative',
         }}
       >
