@@ -60,7 +60,10 @@ export function hasNonZeroRoi(data: Array<{ date: string; roi: number; pnl: numb
 
 // Determine the best initial chart type based on available data
 export function getBestChartType(equityCurve: EquityCurveData | undefined): 'roi' | 'pnl' {
-  const data = equityCurve?.['90D'] || equityCurve?.['30D'] || equityCurve?.['7D'] || []
+  const data =
+    (['90D', '30D', '7D'] as const)
+      .map((period) => equityCurve?.[period])
+      .find((periodData) => periodData && periodData.length > 0) ?? []
   if (!hasNonZeroRoi(data) && data.length > 0) {
     return 'pnl'
   }

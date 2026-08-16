@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
@@ -39,7 +39,8 @@ export function EquityCurveSection({
   // Switching the period anywhere now moves every chart together.
   const period = usePeriodStore((s) => s.period)
   const setPeriod = usePeriodStore((s) => s.setPeriod)
-  const didInitPeriodRef = useRef(false)
+  const effectivePeriod =
+    (equityCurve?.[period]?.length ?? 0) > 0 ? period : getBestInitialPeriod(equityCurve)
   const [chartType, setChartType] = useState<'roi' | 'pnl'>(() => getBestChartType(equityCurve))
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
   const [showFullscreen, setShowFullscreen] = useState(false)
@@ -54,30 +55,23 @@ export function EquityCurveSection({
 
   void delay
 
-  // Preserve the "pick the best available period on load" UX. The shared store
-  // defaults to 90D and isn't equity-curve-aware, so if the current period has
-  // no equity data fall back to the best available one (90D → 30D → 7D). Runs
-  // once; a URL/user-chosen period that already has data is left untouched.
+  // Keep the shared store aligned with the synchronous period used for the
+  // server and first client render. Rendering the fallback immediately keeps a
+  // real 30D/7D curve visible without waiting for hydration.
   useEffect(() => {
-    if (didInitPeriodRef.current) return
-    didInitPeriodRef.current = true
-    const hasDataForCurrent = (equityCurve?.[period]?.length ?? 0) > 0
-    if (!hasDataForCurrent) {
-      const best = getBestInitialPeriod(equityCurve)
-      if (best !== period) setPeriod(best)
-    }
-  }, [equityCurve, period, setPeriod])
+    if (effectivePeriod !== period) setPeriod(effectivePeriod)
+  }, [effectivePeriod, period, setPeriod])
 
   // Auto-switch chart type when the selected period has no data for current type
   useEffect(() => {
-    const periodData = equityCurve?.[period] || []
+    const periodData = equityCurve?.[effectivePeriod] || []
     if (periodData.length === 0) return
     if (chartType === 'roi' && !hasNonZeroRoi(periodData)) {
       setChartType('pnl')
     }
-  }, [period, equityCurve, chartType])
+  }, [effectivePeriod, equityCurve, chartType])
 
-  const currentData = equityCurve?.[period] || []
+  const currentData = equityCurve?.[effectivePeriod] || []
   const hasData = currentData.length > 0
 
   // Hide entire section when all periods are empty
@@ -207,7 +201,7 @@ export function EquityCurveSection({
           }}
         >
           {/* Period Selector */}
-          <PeriodSelector value={period} onChange={setPeriod} t={t} />
+          <PeriodSelector value={effectivePeriod} onChange={setPeriod} t={t} />
           {/* Export chart as image */}
           <button
             onClick={() => {
@@ -217,7 +211,7 @@ export function EquityCurveSection({
               if (svg) {
                 const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' })
                 const link = document.createElement('a')
-                link.download = `arena-chart-${period}-${chartType}.svg`
+                link.download = `arena-chart-${effectivePeriod}-${chartType}.svg`
                 link.href = URL.createObjectURL(blob)
                 link.click()
                 URL.revokeObjectURL(link.href)
@@ -351,7 +345,7 @@ export function EquityCurveSection({
         </Box>
       ) : hasData ? (
         <Box className="chart-container" style={{ height: 280 }}>
-          <SimpleLineChart data={currentData} dataKey={chartType} period={period} />
+          <SimpleLineChart data={currentData} dataKey={chartType} period={effectivePeriod} />
         </Box>
       ) : (
         <Box
@@ -377,7 +371,7 @@ export function EquityCurveSection({
         title={chartType === 'roi' ? t('roi') : t('pnl')}
       >
         {hasData && currentData.length > 3 ? (
-          <SimpleLineChart data={currentData} dataKey={chartType} period={period} />
+          <SimpleLineChart data={currentData} dataKey={chartType} period={effectivePeriod} />
         ) : (
           <Box
             style={{
