@@ -1,7 +1,14 @@
+import { findMarkdownImageTokens } from './markdown-images'
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const IMAGE_OBJECT_PATTERN = /^([0-9a-f-]{36})\/([0-9a-f-]{36})\.(jpg|png|gif|webp|avif)$/i
 const VIDEO_OBJECT_PATTERN = /^([0-9a-f-]{36})\/videos\/([0-9a-f-]{36})\.(mp4|mov|webm|mkv|avi)$/i
-const URL_CANDIDATE_PATTERN = /https?:\/\/[^\s<>"'`()\[\]]+/giu
+// WHATWG special-scheme URLs do not require the literal `//` spelling: one or
+// more forward/back slashes, mixed slashes, or no slash at all can still parse
+// to the same HTTP(S) origin. Capture from the scheme colon so those aliases
+// reach the canonical classifier and fail closed instead of disappearing from
+// a post's final media manifest.
+const URL_CANDIDATE_PATTERN = /https?:[^\s<>"'`()\[\]]+/giu
 const PUBLIC_POSTS_PATH_PREFIX = '/storage/v1/object/public/posts/'
 const PUBLIC_POSTS_PATH_STEM = PUBLIC_POSTS_PATH_PREFIX.slice(0, -1)
 
@@ -163,7 +170,16 @@ export function readOwnedPostVideoObjectPath(
 
 function readPostContentUrlCandidates(content: unknown): readonly string[] {
   if (typeof content !== 'string' || content.length === 0) return []
-  return content.match(URL_CANDIDATE_PATTERN) ?? []
+
+  const candidates: string[] = content.match(URL_CANDIDATE_PATTERN) ?? []
+  // Markdown destinations are already explicitly delimited. Keep their full
+  // value so WHATWG-valid userinfo containing token delimiters (quotes,
+  // brackets, tabs, or spaces) cannot hide a managed URL behind an apparently
+  // external truncated prefix. Reuse the composer grammar to avoid drift.
+  for (const token of findMarkdownImageTokens(content)) {
+    candidates.push(token.url)
+  }
+  return candidates
 }
 
 function compareAscii(left: string, right: string): number {

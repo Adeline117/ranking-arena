@@ -134,6 +134,26 @@ describe('post media storage paths', () => {
         'explicit default port',
         `https://project.supabase.co:443/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
       ],
+      [
+        'zero-padded default port',
+        `https://project.supabase.co:000443/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'percent-encoded host',
+        `https://%70roject.supabase%2Eco/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'backslash authority and path',
+        String.raw`https:\\project.supabase.co\storage\v1\object\public\posts\${OWNER}\${OBJECT}.webp`,
+      ],
+      [
+        'mixed slash authority',
+        String.raw`https:/\project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'slashless special-scheme URL',
+        `https:project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
     ])('fails closed for a non-canonical internal %s', (_label, value) => {
       expect(classifyPostMediaStorageUrl(value, OWNER, STORAGE_BASE_URL)).toEqual({
         kind: 'invalid-internal',
@@ -264,6 +284,77 @@ describe('post media storage paths', () => {
     ])('rejects a %s instead of omitting it from the claim manifest', (_label, images, content) => {
       expect(collectPostMediaClaimObjectPaths(images, content, OWNER, STORAGE_BASE_URL)).toEqual({
         kind: 'invalid-reference',
+      })
+    })
+
+    it.each([
+      [
+        'backslash authority and path',
+        String.raw`https:\\project.supabase.co\storage\v1\object\public\posts\${OWNER}\${OBJECT}.webp`,
+      ],
+      [
+        'mixed slash authority',
+        String.raw`https:/\project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'single forward slash authority',
+        `https:/project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'slashless special-scheme URL',
+        `https:project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'percent-encoded host',
+        `https://%70roject.supabase%2Eco/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'zero-padded default port',
+        `https://project.supabase.co:000443/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'userinfo',
+        `https://user:password@project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+    ])('rejects a WHATWG-equivalent managed content URL with %s', (_label, content) => {
+      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-reference',
+      })
+    })
+
+    it.each([
+      [
+        'quoted userinfo',
+        `![image](https://user'name@project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp)`,
+      ],
+      [
+        'bracketed userinfo',
+        `![image](https://user[name]@project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp)`,
+      ],
+      [
+        'spaced userinfo',
+        `![image](https://user name@project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp)`,
+      ],
+      [
+        'tab-normalized host',
+        `![image](https://project.supa\tbase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp)`,
+      ],
+    ])('rejects a managed Markdown destination with %s', (_label, content) => {
+      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-reference',
+      })
+    })
+
+    it.each([
+      ['slashless special-scheme URL', 'https:cdn.example.test/photo.webp'],
+      ['backslash special-scheme URL', String.raw`https:\\cdn.example.test\photo.webp`],
+      ['percent-encoded host', 'https://%63dn.example.test/photo.webp'],
+      ['zero-padded default port', 'https://cdn.example.test:00443/photo.webp'],
+      ['spaced Markdown path', '![image](https://cdn.example.test/photo name.webp)'],
+    ])('continues to ignore a genuine external content URL with %s', (_label, content) => {
+      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'ok',
+        objectPaths: [],
       })
     })
 
