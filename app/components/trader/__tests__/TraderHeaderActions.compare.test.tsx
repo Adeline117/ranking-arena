@@ -114,6 +114,7 @@ function renderActions() {
       source="binance"
       isOwnProfile={false}
       userId={null}
+      authResolved
     />
   )
 }
@@ -128,6 +129,7 @@ function renderClaimedActions(userId: string | null = null) {
       isOwnProfile={false}
       isRegistered
       userId={userId}
+      authResolved
     />
   )
 }
@@ -152,6 +154,7 @@ describe('TraderHeaderActions', () => {
         isOwnProfile={false}
         isRegistered
         userId="22222222-2222-4222-8222-222222222222"
+        authResolved
       />
     )
 
@@ -269,6 +272,7 @@ describe('TraderHeaderActions', () => {
         isOwnProfile={false}
         isRegistered
         userId="22222222-2222-4222-8222-222222222222"
+        authResolved
       />
     )
 
@@ -286,6 +290,7 @@ describe('TraderHeaderActions', () => {
         isOwnProfile={false}
         isRegistered={false}
         userId="22222222-2222-4222-8222-222222222222"
+        authResolved
       />
     )
 
@@ -305,6 +310,7 @@ describe('TraderHeaderActions', () => {
         isOwnProfile={false}
         isRegistered
         userId={null}
+        authResolved
       />
     )
 
@@ -327,6 +333,7 @@ describe('TraderHeaderActions', () => {
         isOwnProfile={false}
         isRegistered
         userId={null}
+        authResolved
         loginReturnPath="/u/arena-user"
       />
     )
@@ -352,6 +359,7 @@ describe('TraderHeaderActions', () => {
         isOwnProfile
         isRegistered
         userId="11111111-1111-4111-8111-111111111111"
+        authResolved
       />
     )
 
@@ -359,6 +367,28 @@ describe('TraderHeaderActions', () => {
     expect(mockUserFollowButton).not.toHaveBeenCalled()
     expect(mockMessageButton).not.toHaveBeenCalled()
     expect(mockTraderFollowButton).not.toHaveBeenCalled()
+  })
+
+  it('keeps login-gated actions inert while the viewer is unresolved', () => {
+    render(
+      <TraderHeaderActions
+        traderId="exchange-account-id"
+        registeredUserId="11111111-1111-4111-8111-111111111111"
+        handle="Trader One"
+        source="binance"
+        isOwnProfile={false}
+        isRegistered
+        userId={null}
+        authResolved={false}
+      />
+    )
+
+    expect(screen.getByTestId('trader-auth-actions-pending')).toBeInTheDocument()
+    expect(mockUserFollowButton).not.toHaveBeenCalled()
+    expect(mockTraderFollowButton).not.toHaveBeenCalled()
+    expect(mockMessageButton).not.toHaveBeenCalled()
+    expect(mockWatchlistToggleButton).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument()
   })
 
   it('warns when the store rejects a full-list add and does not report a selection', () => {

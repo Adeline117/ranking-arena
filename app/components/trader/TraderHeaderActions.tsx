@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '../base'
+import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import TraderFollowButton from '../ui/TraderFollowButton'
@@ -28,6 +29,7 @@ interface TraderHeaderActionsProps {
   isOwnProfile: boolean
   isRegistered?: boolean
   userId: string | null
+  authResolved: boolean
   rank?: number | null
   roi90d?: number
   arenaScore?: number | null
@@ -138,6 +140,7 @@ export function TraderHeaderActions({
   isOwnProfile,
   isRegistered,
   userId,
+  authResolved,
   rank,
   roi90d,
   arenaScore,
@@ -190,7 +193,21 @@ export function TraderHeaderActions({
         zIndex: 1,
       }}
     >
-      {isOwnProfile && (
+      {!authResolved && (
+        <Box
+          data-testid="trader-auth-actions-pending"
+          aria-hidden="true"
+          style={{
+            width: 96,
+            minWidth: 96,
+            height: tokens.touchTarget.min,
+            borderRadius: tokens.radius.md,
+            background: 'var(--overlay-hover)',
+          }}
+        />
+      )}
+
+      {authResolved && isOwnProfile && (
         <ActionButton
           onClick={() => router.push('/settings')}
           variant="accent"
@@ -218,7 +235,8 @@ export function TraderHeaderActions({
           exact trader route and intended action through full-page login. A
           registered profile must also carry its canonical user UUID; never
           fall back to the exchange account ID for user follow. */}
-      {!isOwnProfile &&
+      {authResolved &&
+        !isOwnProfile &&
         (isRegistered ? (
           registeredUserId ? (
             <UserFollowButton
@@ -241,7 +259,7 @@ export function TraderHeaderActions({
         ))}
 
       {/* Watchlist star */}
-      {source && (
+      {authResolved && source && (
         <WatchlistToggleButton
           source={source}
           sourceTraderID={traderId}
@@ -271,7 +289,7 @@ export function TraderHeaderActions({
         {/* Message stays directly visible on desktop. On narrow screens the
             existing responsive secondary group moves it behind More, keeping
             one mounted instance so a login intent can only be consumed once. */}
-        {!isOwnProfile && isRegistered && registeredUserId && (
+        {authResolved && !isOwnProfile && isRegistered && registeredUserId && (
           <MessageButton
             targetUserId={registeredUserId}
             currentUserId={userId}
@@ -282,7 +300,7 @@ export function TraderHeaderActions({
 
         {/* Alert bell — notify me when this trader's rank/ROI/score moves (A4).
             Explicit opt-in; opens the existing AlertConfig in a modal. */}
-        {!isOwnProfile && source && (
+        {authResolved && !isOwnProfile && source && (
           <AlertBellButton traderId={traderId} traderHandle={handle || traderId} source={source} />
         )}
 

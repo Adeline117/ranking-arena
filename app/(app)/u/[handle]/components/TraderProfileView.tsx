@@ -60,6 +60,7 @@ interface TraderProfileViewProps {
   profile: ServerProfile
   serverProfile: ServerProfile | null
   currentUserId: string | null
+  authResolved: boolean
   isPro: boolean
   activeTab: ProfileTabKey
   availableTabs: readonly ProfileTabKey[]
@@ -73,6 +74,7 @@ export default function TraderProfileView({
   profile,
   serverProfile,
   currentUserId,
+  authResolved,
   isPro,
   activeTab,
   availableTabs,
@@ -147,6 +149,7 @@ export default function TraderProfileView({
           roi90d={traderPerformance?.roi_90d}
           arenaScore={(traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? null}
           currentUserId={currentUserId}
+          authResolved={authResolved}
           loginReturnPath={`/u/${encodeURIComponent(profile.handle)}`}
           isVerifiedTrader={profile.isVerifiedTrader}
           claimedBio={profile.bio}

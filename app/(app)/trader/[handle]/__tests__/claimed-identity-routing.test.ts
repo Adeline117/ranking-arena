@@ -54,7 +54,10 @@ describe('claimed trader routing contract', () => {
   })
 
   it('wires the claimed user identity into serving profile social actions and ownership', () => {
-    expect(client).toContain('const { userId: currentUserId } = useAuthSession()')
+    expect(client).toContain('const auth = useAuthSession()')
+    expect(client).toContain('const currentUserId = auth.userId')
+    expect(client).toContain('const authResolved = auth.authChecked && !auth.loading')
+    expect(client).toContain('authResolved={authResolved}')
     expect(client).toContain('registeredUserId={claimedUser?.id}')
     expect(client).toContain('resolveTraderProfileOwnership({')
     expect(client).toContain('claimedUserId: claimedUser?.id')

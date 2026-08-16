@@ -7,10 +7,6 @@ jest.mock('next/dynamic', () => ({
   default: () => () => null,
 }))
 
-jest.mock('@/lib/supabase/client', () => ({
-  supabase: { auth: { getUser: jest.fn() } },
-}))
-
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
 }))
@@ -42,6 +38,7 @@ describe('TraderHeader first render', () => {
         displayName="Claimed Bound Trader"
         traderId="trader-1"
         currentUserId={null}
+        authResolved={false}
         isRegistered
         isVerifiedTrader
         isAuthorized
@@ -65,6 +62,7 @@ describe('TraderHeader first render', () => {
         displayName="Claimed Bound Trader"
         traderId="trader-1"
         currentUserId={null}
+        authResolved={false}
         isRegistered
         coverUrl="https://cdn.example.com/white-cover.jpg"
         linkedAccountCount={2}

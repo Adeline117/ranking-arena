@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens, alpha } from '@/lib/design-tokens'
-import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
@@ -48,8 +47,10 @@ interface TraderHeaderProps {
   tradesCount?: number | null
   /** Leaderboard rank for the Share on X wrapped card */
   rank?: number | null
-  /** Pre-fetched current user ID to avoid duplicate auth calls */
-  currentUserId?: string | null
+  /** Canonical viewer identity supplied by the route-level auth source. */
+  currentUserId: string | null
+  /** False while session restoration or an account transition is pending. */
+  authResolved: boolean
   /** Actual route that should resume after an anonymous header action logs in. */
   loginReturnPath?: string
   /** Whether this trader has been claimed and verified */
@@ -105,6 +106,7 @@ export default function TraderHeader({
   tradesCount,
   rank,
   currentUserId: externalUserId,
+  authResolved,
   loginReturnPath,
   isVerifiedTrader = false,
   isBot = false,
@@ -120,7 +122,7 @@ export default function TraderHeader({
   authorizedSince,
   tradingStyle,
 }: TraderHeaderProps): React.ReactElement {
-  const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
+  const userId = externalUserId
   const [mounted, setMounted] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
   // #34: Track follower count changes for animation
@@ -168,21 +170,7 @@ export default function TraderHeader({
 
   useEffect(() => {
     setMounted(true)
-    // Skip auth call if userId was passed from parent
-    if (externalUserId !== undefined) {
-      setUserId(externalUserId)
-      return
-    }
-
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        setUserId(data.user?.id ?? null)
-      })
-      .catch(() => {
-        /* Intentionally swallowed: auth check non-critical for trader header */
-      })
-  }, [externalUserId])
+  }, [])
 
   // Prefer claimed user avatar over exchange avatar
   const effectiveAvatarUrl = claimedAvatarUrl || avatarUrl
@@ -449,6 +437,7 @@ export default function TraderHeader({
         isOwnProfile={isOwnProfile}
         isRegistered={isRegistered}
         userId={userId}
+        authResolved={authResolved}
         rank={rank}
         roi90d={roi90d}
         arenaScore={arenaScore}

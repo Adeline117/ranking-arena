@@ -285,7 +285,9 @@ export default function TraderProfileClient({
   const routeParams = useParams<{ handle: string }>()
   const { t, language: _language } = useLanguage()
   const { isPro } = useSubscription()
-  const { userId: currentUserId } = useAuthSession()
+  const auth = useAuthSession()
+  const currentUserId = auth.userId
+  const authResolved = auth.authChecked && !auth.loading
 
   // ── ?platform= account disambiguation (serving mode) ─────────────────────
   // ROOT-CAUSE FIX (2026-07-02): the page is ISR-static, so the server
@@ -898,6 +900,7 @@ export default function TraderProfileClient({
             }
             rank={data.rank ?? null}
             currentUserId={currentUserId}
+            authResolved={authResolved}
             isVerifiedTrader={isVerifiedTrader}
             isBot={data.source === 'web3_bot'}
             lastUpdated={traderData?.lastUpdated ?? traderData?.trackedSince}

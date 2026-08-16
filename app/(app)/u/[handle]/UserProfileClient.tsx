@@ -94,6 +94,7 @@ export default function UserProfileClient({
         profile={profile}
         serverProfile={serverProfile}
         currentUserId={currentUserId}
+        authResolved={authResolved}
         isPro={isPro}
         activeTab={activeProfileTab}
         availableTabs={availableProfileTabs}
