@@ -12,6 +12,12 @@ interface AssetBreakdownData {
   '7D': Array<{ symbol: string; weightPct: number }>
 }
 
+type BreakdownPeriod = keyof AssetBreakdownData
+
+// Keep the existing product preference explicit: show the broadest populated
+// window first, then progressively shorter windows.
+const ASSET_PERIOD_PRIORITY = ['90D', '30D', '7D'] as const satisfies readonly BreakdownPeriod[]
+
 interface BreakdownSectionProps {
   assetBreakdown?: AssetBreakdownData
   fallbackData: Array<{ symbol: string; weightPct: number }>
@@ -24,18 +30,15 @@ export function BreakdownSection({ assetBreakdown, fallbackData, delay }: Breakd
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
-  const currentData = assetBreakdown?.[period] || fallbackData
-
-  // 没有数据时，检查所有周期是否都为空
-  const allPeriodsEmpty =
-    !assetBreakdown ||
-    ((!assetBreakdown['90D'] || assetBreakdown['90D'].length === 0) &&
-      (!assetBreakdown['30D'] || assetBreakdown['30D'].length === 0) &&
-      (!assetBreakdown['7D'] || assetBreakdown['7D'].length === 0))
-
-  if (allPeriodsEmpty && fallbackData.length === 0) {
-    return null
-  }
+  const selectedPeriodData = assetBreakdown?.[period]
+  const firstPopulatedPeriod = ASSET_PERIOD_PRIORITY.find(
+    (candidate) => (assetBreakdown?.[candidate]?.length ?? 0) > 0
+  )
+  const effectivePeriod =
+    selectedPeriodData && selectedPeriodData.length > 0 ? period : (firstPopulatedPeriod ?? period)
+  const effectivePeriodData = assetBreakdown?.[effectivePeriod]
+  const currentData =
+    effectivePeriodData && effectivePeriodData.length > 0 ? effectivePeriodData : fallbackData
 
   if (currentData.length === 0) {
     return null
@@ -67,7 +70,7 @@ export function BreakdownSection({ assetBreakdown, fallbackData, delay }: Breakd
             {t('assetBreakdown')}
           </Text>
         </Box>
-        <PeriodSelector value={period} onChange={setPeriod} t={t} />
+        <PeriodSelector value={effectivePeriod} onChange={setPeriod} t={t} />
       </Box>
 
       {/* Horizontal Bar Chart */}
@@ -185,6 +188,8 @@ function PeriodSelector({
       {(['7D', '30D', '90D'] as const).map((p) => (
         <button
           key={p}
+          type="button"
+          aria-pressed={value === p}
           onClick={() => onChange(p)}
           style={{
             padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
