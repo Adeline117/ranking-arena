@@ -396,6 +396,28 @@ describe('exact copier snapshot source authority', () => {
         }),
       },
       {
+        adapter: bitgetAdapter,
+        source: copierSource({
+          slug: 'bitget_spot',
+          adapterSlug: 'bitget',
+          productType: 'spot',
+          traderKindScope: 'human',
+          copierTableDepth: 'none',
+          meta: { boardKey: 'spot' },
+        }),
+      },
+      {
+        adapter: bitgetAdapter,
+        source: copierSource({
+          slug: 'bitget_cfd',
+          adapterSlug: 'bitget',
+          productType: 'cfd',
+          traderKindScope: 'human',
+          copierTableDepth: 'none',
+          meta: { boardKey: 'cfd' },
+        }),
+      },
+      {
         adapter: lbankAdapter,
         source: copierSource({
           slug: 'lbank_futures',
