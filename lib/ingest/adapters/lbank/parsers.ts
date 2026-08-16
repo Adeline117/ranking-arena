@@ -47,6 +47,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { parseLbankCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
 
@@ -316,22 +317,7 @@ export function parseLbankPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedH
  * dedupe/aggregates only, NEVER rendered (spec §6 copier PII).
  */
 export function parseLbankCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
-  const { records } = pagedRecords(raw)
-  const out: ParsedHistoryRow[] = []
-  for (const item of records) {
-    if (item.name === undefined || item.name === null) continue
-    out.push({
-      kind: 'copiers',
-      ts: ctx.scrapedAt,
-      copierLabel: String(item.name),
-      copierPnl: num(item.totalProfit),
-      copierInvested: null, // only lifetime volume exposed (raw.totalVol)
-      copyDurationDays: int(item.followDays),
-      dedupeHash: dedupeHash('lbank_cp', item.name, item.followDays, item.totalProfit),
-      raw: item,
-    })
-  }
-  return out
+  return parseLbankCopiersV1(raw, ctx)
 }
 
 export function parseLbankHistory(
@@ -343,7 +329,7 @@ export function parseLbankHistory(
     case 'position_history':
       return parseLbankPositionHistory(raw, ctx)
     case 'copiers':
-      return parseLbankCopiers(raw, ctx)
+      return parseLbankCopiersV1(raw, ctx)
     default:
       // order-level fills and transfers are not exposed publicly.
       throw new Error(`[lbank] history surface ${kind} not supported`)

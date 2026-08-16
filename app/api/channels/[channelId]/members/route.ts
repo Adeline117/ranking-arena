@@ -226,14 +226,27 @@ export async function DELETE(
         )
       }
 
-      const { error: leaveError } = await supabase
+      // The role read above is for the error message only. Carry the owner
+      // guard in the DELETE predicate too, so an ownership transfer that
+      // lands between the two statements cannot delete the channel's sole
+      // owner and leave it permanently ownerless.
+      const { data: leftRows, error: leaveError } = await supabase
         .from('channel_members')
         .delete()
         .eq('channel_id', channelId)
         .eq('user_id', actorId)
+        .neq('role', 'owner')
+        .select('user_id')
 
       if (leaveError) {
         return NextResponse.json({ error: 'Failed to leave channel' }, { status: 500 })
+      }
+      if (!leftRows || leftRows.length === 0) {
+        // Membership vanished or the actor became owner mid-request.
+        return NextResponse.json(
+          { error: 'Owner cannot leave. Please transfer ownership or disband the group first.' },
+          { status: 409 }
+        )
       }
 
       return NextResponse.json({ ok: true, action: 'left' })
@@ -276,14 +289,28 @@ export async function DELETE(
       return NextResponse.json({ error: 'Admins cannot remove other admins' }, { status: 403 })
     }
 
-    const { error: removeError } = await supabase
+    // Re-state the target-role rules as a DELETE predicate rather than
+    // trusting the read above: a promotion committed between the two
+    // statements would otherwise let an admin delete the channel owner.
+    // Owner may remove admins and members; admin may remove members only.
+    const removableRoles = myMembership.role === 'owner' ? ['admin', 'member'] : ['member']
+    const { data: removedRows, error: removeError } = await supabase
       .from('channel_members')
       .delete()
       .eq('channel_id', channelId)
       .eq('user_id', targetUserId)
+      .in('role', removableRoles)
+      .select('user_id')
 
     if (removeError) {
       return NextResponse.json({ error: 'Failed to remove member' }, { status: 500 })
+    }
+    if (!removedRows || removedRows.length === 0) {
+      // Membership vanished or the target was promoted mid-request.
+      return NextResponse.json(
+        { error: 'Member role changed during removal; retry.' },
+        { status: 409 }
+      )
     }
 
     return NextResponse.json({ ok: true, action: 'removed' })
