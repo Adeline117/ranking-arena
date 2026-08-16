@@ -464,7 +464,8 @@ export default function UserProfileHeader({
         }}
       >
         <button
-          onClick={() => router.push('/')}
+          type="button"
+          onClick={() => router.push('/hot')}
           style={{
             color: tokens.colors.text.tertiary,
             fontSize: tokens.typography.fontSize.sm,

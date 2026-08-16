@@ -9,7 +9,19 @@ const mockUseUserProfile = jest.fn()
 jest.mock('@/lib/features', () => ({ features: { social: true } }))
 jest.mock('@/app/components/ui/Breadcrumb', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ items }: { items: Array<{ label: string; href?: string }> }) => (
+    <nav aria-label="breadcrumb fixture">
+      {items.map((item) =>
+        item.href ? (
+          <a key={item.label} href={item.href}>
+            {item.label}
+          </a>
+        ) : (
+          <span key={item.label}>{item.label}</span>
+        )
+      )}
+    </nav>
+  ),
 }))
 jest.mock('@/app/components/ui/Dynamic', () => ({
   DynamicFollowListModal: ({
@@ -151,6 +163,15 @@ describe('UserProfileClient following modal privacy', () => {
 
     expect(screen.getByRole('dialog')).toHaveAttribute('data-list-type', 'following')
     expect(screen.getByRole('dialog')).toHaveAttribute('data-list-public', 'true')
+  })
+
+  it('uses the canonical community parent instead of duplicating the home URL', () => {
+    render(<UserProfileClient handle="alice" serverProfile={mockProfile} />)
+
+    expect(screen.getByRole('link', { name: 'userProfileCommunity' })).toHaveAttribute(
+      'href',
+      '/hot'
+    )
   })
 
   it.each([false, undefined])(

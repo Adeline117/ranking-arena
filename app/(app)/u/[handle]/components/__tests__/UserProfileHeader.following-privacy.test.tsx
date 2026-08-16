@@ -133,6 +133,14 @@ describe('UserProfileHeader following privacy', () => {
     expect(screen.getByRole('button', { name: 'message user' })).toBeInTheDocument()
   })
 
+  it('returns to the canonical community parent', () => {
+    renderHeader({ showFollowing: true, showFollowers: true })
+
+    fireEvent.click(screen.getByRole('button', { name: '← back' }))
+
+    expect(mockPush).toHaveBeenCalledWith('/hot')
+  })
+
   it('keeps identity actions inert until auth resolves, then exposes only the owner action', () => {
     const baseProps = {
       profile: profile(true, true),

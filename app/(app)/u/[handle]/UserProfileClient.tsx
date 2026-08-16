@@ -118,7 +118,10 @@ export default function UserProfileClient({
         style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
       >
         <Breadcrumb
-          items={[{ label: t('userProfileCommunity'), href: '/' }, { label: `@${profile.handle}` }]}
+          items={[
+            { label: t('userProfileCommunity'), href: '/hot' },
+            { label: `@${profile.handle}` },
+          ]}
         />
 
         {/* Profile Header */}
