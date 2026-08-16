@@ -29,19 +29,19 @@ authenticated writer that could otherwise bypass the canonical UUID path and reg
 
 ## Reachable lifecycle paths
 
-| Event                                                    | Current behavior                                                                                                                       | Risk/status                                              |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Image/video upload fails before verified acknowledgement | Upload errors leave the reservation for later lifecycle work; acknowledgement/list mismatch removes only the exact server-derived path | Fail-closed; lifecycle cleanup remains P1                |
-| Successful image/video upload                            | Dedicated routes reserve, upload, verify the exact acknowledgement/listing, then finalize the same immutable identity                  | Registered; Storage metadata attestation remains P1      |
-| Composer removes a selected image/video                  | Removes browser state/Markdown only                                                                                                    | P1 orphan; object remains                                |
-| Composer is cancelled, tab closes, or draft is abandoned | The upload remains registered, but there is no claim/cleanup admission or worker that may act on its expiry                            | P1 orphan                                                |
-| Atomic post creation fails after one or more uploads     | No claim/rollback link between upload and post RPC                                                                                     | P1 orphan                                                |
-| Post edit removes an image URL                           | Atomic edit updates the database but has no storage claim transition                                                                   | P1 orphan                                                |
-| Author hard-delete through `/api/posts/[id]/delete`      | Deletes only the database row; exact owner predicate/affected-row acknowledgement is enforced                                          | P1 orphan; unsafe online cleanup is statically blocked   |
-| Legacy hard-delete through `DELETE /api/posts/[id]`      | `lib/data/posts.ts` deletes only the database row; no internal client currently calls it                                               | P1 compatibility surface                                 |
-| Admin hard-delete through `/api/admin/moderate`          | Deletes only the database row                                                                                                          | P1 admin surface                                         |
-| Group-admin moderation delete                            | Soft-deletes through `moderate_group_post_atomic`; row and media references remain                                                     | Retention is consistent with soft-delete/audit semantics |
-| Account hard-delete                                      | Auth deletion does not remove posts; `posts.author_id` can become null                                                                 | Media remains referenced by retained posts               |
+| Event                                                    | Current behavior                                                                                                                                                                  | Risk/status                                              |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Image/video upload fails before verified acknowledgement | Upload errors leave the reservation for later lifecycle work; acknowledgement/list mismatch removes only the exact server-derived path                                            | Fail-closed; lifecycle cleanup remains P1                |
+| Successful image/video upload                            | Dedicated routes reserve, upload, verify one exact acknowledgement/listing row plus object id, MIME, size, and optional content length, then finalize the same immutable identity | Registered with route-level metadata attestation         |
+| Composer removes a selected image/video                  | Removes browser state/Markdown only                                                                                                                                               | P1 orphan; object remains                                |
+| Composer is cancelled, tab closes, or draft is abandoned | The upload remains registered, but there is no claim/cleanup admission or worker that may act on its expiry                                                                       | P1 orphan                                                |
+| Atomic post creation fails after one or more uploads     | No claim/rollback link between upload and post RPC                                                                                                                                | P1 orphan                                                |
+| Post edit removes an image URL                           | Atomic edit updates the database but has no storage claim transition                                                                                                              | P1 orphan                                                |
+| Author hard-delete through `/api/posts/[id]/delete`      | Deletes only the database row; exact owner predicate/affected-row acknowledgement is enforced                                                                                     | P1 orphan; unsafe online cleanup is statically blocked   |
+| Legacy hard-delete through `DELETE /api/posts/[id]`      | `lib/data/posts.ts` deletes only the database row; no internal client currently calls it                                                                                          | P1 compatibility surface                                 |
+| Admin hard-delete through `/api/admin/moderate`          | Deletes only the database row                                                                                                                                                     | P1 admin surface                                         |
+| Group-admin moderation delete                            | Soft-deletes through `moderate_group_post_atomic`; row and media references remain                                                                                                | Retention is consistent with soft-delete/audit semantics |
+| Account hard-delete                                      | Auth deletion does not remove posts; `posts.author_id` can become null                                                                                                            | Media remains referenced by retained posts               |
 
 ## Fail-closed hard-delete boundary
 
@@ -92,8 +92,11 @@ cleanup-inert predeploy foundation:
   `storage.objects(bucket_id = 'posts', name = object_name)` row before changing `reserved` to
   `uploaded`. Replay is idempotent and conflicting upload/object identities are rejected under real
   concurrent sessions.
-- Finalize currently proves only bucket/name presence. It does **not** attest the Storage object's
-  actual metadata against the reserved MIME and size, so it is not yet sufficient claim evidence.
+- Finalize itself currently proves only bucket/name presence. Commit `d24d69a15` separately makes
+  both service upload routes require exactly one matching Storage listing row with a non-empty
+  object id, exact reserved MIME and size, and exact `contentLength` when Storage supplies it before
+  finalization. A later atomic claim still has to revalidate durable registry/object identity rather
+  than treating the route's earlier HTTP observation as a claim transaction.
 - Both statuses remain non-reclaimable lifecycle evidence (`reserved` or `uploaded`), and
   `gc_admitted_at` is constrained to remain `NULL`. The migration creates no claim, lease, cleanup,
   lifecycle delete, cron, outbox, or GC Storage mutation authority.
@@ -117,8 +120,8 @@ The migration's dedicated Jest proof is 13/13, and its disposable PostgreSQL 17 
 install/replay, ACL and role-path drift, owner/path/MIME/expiry binding, privacy, and conflicting
 concurrent reservations. The route/caller proofs cover reserve-before-Storage ordering, exact
 finalization, explicit purposes, group-avatar CSRF, the closed generic bypass, stale/mismatched
-receipts, and commit/response ambiguity. These are repository proofs; they do not prove production
-deployment, real Storage metadata equality, claim ownership, or safe reclamation.
+receipts, commit/response ambiguity, and exact listing metadata. These are repository proofs; they
+do not prove production deployment, live Storage behavior, claim ownership, or safe reclamation.
 
 ## Why the registry substrate is not lifecycle completion
 
@@ -129,8 +132,9 @@ private `reports` bucket and cannot safely be reused for public post objects.
 A complete fix must extend `post_media_uploads`, not add a client URL deletion endpoint. Upload
 registration is complete in code; the remaining lifecycle work is:
 
-1. Strengthen finalization so the stored object's real Storage metadata is attested against the
-   reserved MIME and size, not merely bucket/name presence.
+1. Revalidate the durable registry/object identity when claiming; the upload routes now attest
+   listing MIME and size before finalization, while the database finalize RPC itself intentionally
+   remains bucket/name-only.
 2. Claim uploaded rows inside the same database transaction as `create_post_atomic` and
    `edit_post_atomic`.
 3. Quarantine or explicitly cover legacy object paths and include every non-post image consumer
@@ -159,12 +163,14 @@ npx jest --runInBand --runTestsByPath \
   app/api/posts/__tests__/post-media-upload-purpose-callers.test.ts \
   app/api/upload/__tests__/route.test.ts \
   'app/(app)/groups/apply/__tests__/page.viewer-scope.test.tsx' \
+  lib/posts/post-media-storage-evidence.test.ts \
   lib/posts/post-media-storage-path.test.ts \
   'app/api/posts/[id]/delete/__tests__/route.boundary.test.ts'
 npx eslint --max-warnings=0 \
   app/api/posts/upload-image/route.ts \
   app/api/posts/upload-video/route.ts \
   lib/posts/post-media-upload-registry.ts \
+  lib/posts/post-media-storage-evidence.ts \
   lib/posts/post-media-storage-path.ts \
   'app/api/posts/[id]/delete/route.ts'
 npx tsc --noEmit
