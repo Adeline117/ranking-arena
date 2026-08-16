@@ -1,6 +1,8 @@
 import {
   classifyPostMediaStorageUrl,
+  collectPostMediaClaimObjectPaths,
   collectOwnedPostVideoObjectPaths,
+  MAX_POST_MEDIA_CLAIM_OBJECT_PATHS,
   MAX_POST_VIDEO_CLEANUP_CANDIDATES,
   postVideoPublicPathMarker,
   readOwnedPostVideoObjectPath,
@@ -152,6 +154,90 @@ describe('post media storage paths', () => {
       expect(
         classifyPostMediaStorageUrl(publicUrl(objectPath), OWNER, `${STORAGE_BASE_URL}/`)
       ).toEqual({ kind: 'owned-image', objectPath })
+    })
+  })
+
+  describe('collectPostMediaClaimObjectPaths', () => {
+    it('returns an empty manifest for an empty final post', () => {
+      expect(collectPostMediaClaimObjectPaths([], '', OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'ok',
+        objectPaths: [],
+      })
+    })
+
+    it('ignores valid external image and content URLs', () => {
+      expect(
+        collectPostMediaClaimObjectPaths(
+          ['https://cdn.example.test/photo.webp'],
+          '[video](https://video.example.test/clip.mp4)',
+          OWNER,
+          STORAGE_BASE_URL
+        )
+      ).toEqual({ kind: 'ok', objectPaths: [] })
+    })
+
+    it('collects final images and Markdown videos once in deterministic ASCII order', () => {
+      const firstImageObject = '11111111-1111-4111-8111-111111111111'
+      const secondImageObject = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      const videoObject = '22222222-2222-4222-8222-222222222222'
+      const firstImagePath = `${OWNER}/${firstImageObject}.webp`
+      const secondImagePath = `${OWNER}/${secondImageObject}.png`
+      const videoPath = `${OWNER}/videos/${videoObject}.mp4`
+      const videoUrl = publicUrl(videoPath)
+
+      expect(
+        collectPostMediaClaimObjectPaths(
+          [publicUrl(secondImagePath), publicUrl(firstImagePath), publicUrl(firstImagePath)],
+          [`[video](${videoUrl})`, videoUrl].join('\n'),
+          OWNER,
+          STORAGE_BASE_URL
+        )
+      ).toEqual({
+        kind: 'ok',
+        objectPaths: [firstImagePath, secondImagePath, videoPath],
+      })
+    })
+
+    it.each([
+      ['managed video in the final image list', [publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)], ''],
+      ['managed image in final content', [], `![image](${publicUrl(`${OWNER}/${OBJECT}.webp`)})`],
+    ])('fails closed for a %s', (_label, images, content) => {
+      expect(collectPostMediaClaimObjectPaths(images, content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-reference',
+      })
+    })
+
+    it.each([
+      ['foreign image owner', [publicUrl(`${OTHER}/${OBJECT}.webp`)], ''],
+      ['foreign video owner', [], publicUrl(`${OTHER}/videos/${OBJECT}.mp4`)],
+      ['malformed managed image', [`${publicUrl(`${OWNER}/${OBJECT}.webp`)}?download=1`], ''],
+      ['malformed managed video', [], `${publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)}#preview`],
+    ])('rejects a %s instead of omitting it from the claim manifest', (_label, images, content) => {
+      expect(collectPostMediaClaimObjectPaths(images, content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-reference',
+      })
+    })
+
+    it('distinguishes invalid server configuration from an invalid media reference', () => {
+      expect(
+        collectPostMediaClaimObjectPaths(
+          ['https://cdn.example.test/photo.webp'],
+          '',
+          OWNER,
+          `${STORAGE_BASE_URL}/project`
+        )
+      ).toEqual({ kind: 'invalid-configuration' })
+    })
+
+    it('rejects a deduplicated manifest above the 64-object authority bound', () => {
+      const content = Array.from({ length: MAX_POST_MEDIA_CLAIM_OBJECT_PATHS + 1 }, (_, index) => {
+        const suffix = index.toString(16).padStart(12, '0')
+        return publicUrl(`${OWNER}/videos/aaaaaaaa-aaaa-4aaa-8aaa-${suffix}.mp4`)
+      }).join('\n')
+
+      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-reference',
+      })
     })
   })
 
