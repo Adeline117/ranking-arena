@@ -103,6 +103,8 @@ const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
   '/api/v1/market/candles',
   '/api/market/defi',
   '/api/v1/market/defi',
+  '/api/market/exchanges',
+  '/api/v1/market/exchanges',
   '/api/market/futures',
   '/api/v1/market/futures',
   '/api/market/fear-greed',

@@ -14,12 +14,12 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           marketDataError: 'Market data failed to load',
           loadFailedRetryShort: 'Failed to load, please retry',
           retry: 'Retry',
-          noDataGeneric: 'No data available',
           noGainers: 'No gainers',
           noLosers: 'No losers',
           gainersTop5: 'Top gainers',
           losersTop5: 'Top losers',
           fundFlow: 'Exchange volume',
+          dataUnavailable: 'Unavailable',
         }) as Record<string, string>
       )[key] ?? key,
   }),
@@ -27,7 +27,6 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 
 const mockedUseQuery = jest.mocked(useQuery)
 const refetchMarket = jest.fn()
-const refetchExchanges = jest.fn()
 
 type QueryState = {
   data?: unknown
@@ -37,11 +36,8 @@ type QueryState = {
   refetch: jest.Mock
 }
 
-function mockLanes(market: QueryState, exchanges: QueryState) {
-  mockedUseQuery.mockImplementation(
-    (options: { queryKey?: readonly unknown[] }) =>
-      (options.queryKey?.[0] === 'market-core' ? market : exchanges) as ReturnType<typeof useQuery>
-  )
+function mockMarket(market: QueryState) {
+  mockedUseQuery.mockImplementation(() => market as ReturnType<typeof useQuery>)
 }
 
 describe('CoreCards terminal load states', () => {
@@ -49,76 +45,61 @@ describe('CoreCards terminal load states', () => {
     jest.clearAllMocks()
   })
 
-  it('shows retryable failures for each failed lane instead of permanent card skeletons', () => {
-    mockLanes(
-      {
-        isLoading: false,
-        isError: true,
-        refetch: refetchMarket,
-      },
-      {
-        isLoading: false,
-        isError: true,
-        refetch: refetchExchanges,
-      }
-    )
+  it('keeps Fund Flow unavailable while market failures retain retry', () => {
+    mockMarket({
+      isLoading: false,
+      isError: true,
+      refetch: refetchMarket,
+    })
 
     const view = render(<CoreCards />)
 
-    expect(screen.getAllByRole('alert')).toHaveLength(3)
+    expect(screen.getAllByRole('alert')).toHaveLength(2)
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
     expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
 
     const retries = screen.getAllByRole('button', { name: 'Retry' })
     fireEvent.click(retries[0])
-    fireEvent.click(retries[2])
     expect(refetchMarket).toHaveBeenCalledTimes(1)
-    expect(refetchExchanges).toHaveBeenCalledTimes(1)
+    expect(mockedUseQuery).toHaveBeenCalledTimes(1)
+    expect(mockedUseQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ['market-core'], retry: false })
+    )
   })
 
   it('renders genuine successful empties as empty copy, not errors or loading', () => {
-    mockLanes(
-      {
-        data: { rows: [] },
-        dataUpdatedAt: 1,
-        isLoading: false,
-        isError: false,
-        refetch: refetchMarket,
-      },
-      {
-        data: [],
-        isLoading: false,
-        isError: false,
-        refetch: refetchExchanges,
-      }
-    )
+    mockMarket({
+      data: { rows: [] },
+      dataUpdatedAt: 1,
+      isLoading: false,
+      isError: false,
+      refetch: refetchMarket,
+    })
 
     const view = render(<CoreCards />)
 
     expect(screen.getByText('No gainers')).toBeInTheDocument()
     expect(screen.getByText('No losers')).toBeInTheDocument()
-    expect(screen.getByText('No data available')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
+    expect(mockedUseQuery).toHaveBeenCalledTimes(1)
   })
 
   it('limits skeletons to pending requests and disables automatic retry loops', () => {
-    mockLanes(
-      {
-        isLoading: true,
-        isError: false,
-        refetch: refetchMarket,
-      },
-      {
-        isLoading: true,
-        isError: false,
-        refetch: refetchExchanges,
-      }
-    )
+    mockMarket({
+      isLoading: true,
+      isError: false,
+      refetch: refetchMarket,
+    })
 
     const view = render(<CoreCards />)
 
-    expect(view.container.querySelectorAll('.skeleton')).toHaveLength(3)
-    expect(mockedUseQuery).toHaveBeenNthCalledWith(1, expect.objectContaining({ retry: false }))
-    expect(mockedUseQuery).toHaveBeenNthCalledWith(2, expect.objectContaining({ retry: false }))
+    expect(view.container.querySelectorAll('.skeleton')).toHaveLength(2)
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
+    expect(mockedUseQuery).toHaveBeenCalledTimes(1)
+    expect(mockedUseQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ['market-core'], retry: false })
+    )
   })
 })
