@@ -7,6 +7,26 @@ state must be established only through a separately approved owner inventory. On
 a separately recorded owner GO and reviewed release plan can authorize a host-side
 operation.
 
+## Checked-in V1 ingest source hold
+
+`V1_INGEST_EXECUTION_PUBLISHED=false` is a fixed checked-in source boundary, not an
+environment switch. It holds the native ingest command path: `worker/src/ingest-worker.ts`
+exits before dotenv/runtime dependency initialization; the scheduler and Redis connection
+end before DB, ioredis, or BullMQ work; Tier-C and first-party bridges admit no new
+ingest; and the covered direct ingest scripts do not initiate work. `POST
+/api/trader/onchain-enrich` is a fixed `410 INGEST_EXECUTION_NOT_PUBLISHED` response
+with three `no-store` headers before body parsing, rate limiting, provider, or
+serving-data work.
+
+The public profile `core` and `records` routes retain their warm serving-read branches.
+When they need Tier-C, the held bridge returns pending before bridge-provider, ioredis,
+BullMQ, or result-queue access. Their general public rate limiter may still use Redis,
+so this does not mean those routes make no Redis reads. The gate is source-only: it
+does not stop, inspect, or prove a running host, queue, or external schedule. It is
+also not a blanket ingestion claim: the separate legacy `refresh_jobs` pipeline
+(`batch-5min`, `batch-discover`, public trader refresh) and legacy proxy/import paths
+are outside this containment unit and require a separate review.
+
 Arena's ingest fleet is designed to serve customer-facing ranking freshness from two
 nodes sharing one Supabase database and Upstash Redis. A source's
 `arena.sources.fetch_region` selects a region-affine BullMQ queue.
@@ -92,12 +112,14 @@ Until that protocol is deployed to both nodes, do not claim that the heartbeat
 roster alone rules out a manually started or malicious duplicate process. The route
 is not an authorization to schedule, restart, or inspect a worker during V1.
 
-## On-chain enrichment owner
+## On-chain enrichment containment
 
-`maint:onchain-enrich` was historically reconciled every 12 hours on the local
-BullMQ queue. It must remain unscheduled during V1. The retired Mac crontab calls
-to `scripts/onchain-enrich-web3.mts` must stay disabled because the two paths have
-no shared lock and can duplicate provider spend and writes.
+`maint:onchain-enrich` was historically reconciled every 12 hours on the local BullMQ
+queue. In the checked-in V1 source, the fixed ingest gate makes scheduler reconciliation
+return before DB/BullMQ work, the native worker entry does not start, the direct script
+does not run, and `POST /api/trader/onchain-enrich` is the fixed 410/no-store contract
+above. This does not remove, stop, or prove any scheduler, crontab, worker, provider
+spend, or write path outside this checkout.
 
 ## SG dependency incident boundary
 
