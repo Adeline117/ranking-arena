@@ -59,7 +59,7 @@
 - i18n via `t('key')`, no hardcoded strings
 - No investment advice, no storing API secrets
 
-## V1 proxy/import and avatar-backfill guardrail
+## V1 proxy/import, avatar-backfill, and avatar-mirror guardrail
 
 No skill grants authority to deploy or invoke a Cloudflare Worker, configure/use a
 VPS proxy, start a browser scraper, run an import, add a schedule, or access an
@@ -74,6 +74,15 @@ handler, not permission to invoke a cron. It authenticates first: missing or inv
 service authentication returns `401`; valid authentication returns `410
 CRON_EXECUTION_NOT_PUBLISHED`. Both paths have three `no-store` headers and return
 before parameters, database access, logging, or upstream fetch. This cannot stop,
-inspect, or prove a deployed host, external scheduler, or healthcheck. Do not extend
-either containment into a claim that avatar helpers, the worker `avatar-mirror`,
-adapters, unlisted writers, or `GET /api/avatar` are closed.
+inspect, or prove a deployed host, external scheduler, or healthcheck. It does not
+cover `/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted writers.
+
+The checked-in `avatar-mirror` worker execution is separately source-only retired: its
+processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
+queued avatar-mirror job returns as a no-op within `route()` before that handler calls
+`getConnection()`, acquires its per-job source lease, or loads a processor. This makes
+no claim that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock. This cannot stop, inspect, or prove an
+already-running worker, Redis, host process, or schedule. Do not extend this boundary
+into a claim that `/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted
+writers are closed.

@@ -1,4 +1,4 @@
-# Arena CF Worker Legacy Proxy and Avatar-Backfill Containment — V1 NO-GO
+# Arena CF Worker, Avatar-Backfill, and Avatar-Mirror Containment — V1 NO-GO
 
 This skill is a report-only source-review aid during V1. It does not authorize a
 Cloudflare deployment, dashboard/API access, credential use, route invocation, proxy
@@ -24,9 +24,17 @@ handler. It authenticates first: missing or invalid service authentication retur
 carry the same three `no-store` headers and return before parameter parsing, database
 access, logging, or upstream fetch. It is not a cron-invocation or backfill procedure.
 
+Treat the checked-in `avatar-mirror` worker execution as separately source-only retired:
+its processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a
+legacy queued avatar-mirror job returns as a no-op within `route()` before that handler
+calls `getConnection()`, acquires its per-job source lease, or loads a processor. Do
+not infer that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock. Do not treat this as a worker-operation procedure.
+
 These are checked-in source contracts, not evidence that an external Worker, route,
-proxy, host, queue, external scheduler, or healthcheck is deployed, stopped, or
-healthy.
+proxy, host, queue, Redis, external scheduler, or healthcheck is deployed, stopped, or
+healthy. In particular, the avatar-mirror hold cannot stop, inspect, or prove an
+already-running worker, Redis, host process, or schedule.
 
 ## Scope boundary
 
@@ -44,9 +52,10 @@ entries plus these historical script entrypoints:
 
 The scripts report `RETIRED` and exit `2` before proxy, browser, import, or host work.
 Do not generalize this list into a claim that all source writers have been closed. The
-separate avatar-backfill tombstone covers only its canonical/rewrite-alias handler;
-avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers, and `GET
-/api/avatar` remain outside this skill's conclusion and need separate review.
+separate avatar-backfill tombstone covers only its canonical/rewrite-alias handler, and
+the separately retired avatar-mirror worker covers only its processor, scheduler, and
+legacy queued-job behavior. `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and
+unlisted writers remain outside this skill's conclusion and need separate review.
 
 ## Safe review output
 

@@ -29,12 +29,19 @@ authentication，缺失或无效认证返回 `401`；有效认证返回 `410
 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
 upstream fetch 前结束；它不是 backfill 操作说明。
 
+独立的 checked-in `avatar-mirror` worker execution 已 source-only retired：processor 为 no-op，
+scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `route()` 内以 no-op 返回，
+早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
+worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。它不是 worker 操作说明。
+
 ## 边界与真相
 
 上述只是源码封存，不能停止、检查或证明已经部署的 VPS scraper/proxy、Cloudflare Worker、
 host process、queue、external scheduler 或 healthcheck。它不表示所有 `scripts/import/**`、
-adapter、helper 或写路径都已关闭。avatar helper、worker `avatar-mirror`、adapter、未列 writer
-与 `GET /api/avatar` 均不在 avatar-backfill handler 或本文列出的 import/proxy 入口的结论中。
+adapter、helper 或写路径都已关闭。avatar-mirror boundary 同样不能停止、检查或证明已运行 worker、
+Redis、host process 或 schedule 已停止。`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与
+未列 writer 均不在 avatar-backfill handler、avatar-mirror worker 或本文列出的 import/proxy 入口的
+结论中。
 任何未列入口都必须由 owner 在独立、范围明确的审查中决定，不能从本文件推导出执行权限。
 
 ## 历史设计记录

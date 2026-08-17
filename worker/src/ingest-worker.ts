@@ -231,10 +231,8 @@ async function runJob(
       const { processDeriveBoards } = await import('./ingest/processors/derive-boards')
       return processDeriveBoards(job, context)
     }
-    case INGEST_JOB.AVATAR_MIRROR: {
-      const { processAvatarMirror } = await import('./ingest/processors/avatar-mirror')
-      return processAvatarMirror(job)
-    }
+    case INGEST_JOB.AVATAR_MIRROR:
+      return { mirrored: 0, failed: 0 }
     case INGEST_JOB.MAINTENANCE: {
       const { processMaintenance } = await import('./ingest/processors/maintenance')
       return processMaintenance(job)
@@ -262,6 +260,12 @@ async function route(
   bullJob: BullJobAuthority,
   signal?: AbortSignal
 ): Promise<unknown> {
+  // Old queue entries can remain after source publication is withdrawn. Drop
+  // this retired identity in route() before this handler's getConnection(),
+  // per-job source lease, or processor load. A running BullMQ worker can
+  // already have its shared Redis connection; this branch makes no claim about it.
+  if (job.name === INGEST_JOB.AVATAR_MIRROR) return { mirrored: 0, failed: 0 }
+
   return routeJobWithSourceLease({
     redis: getConnection(),
     job,

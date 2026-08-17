@@ -87,8 +87,9 @@ LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与同样三层 `no-store`，不做 upstream 
   browser、import 或 host 工作。
 
 这是 source-only containment，不停止、不检查也不证明已部署 Cloudflare Worker、VPS
-proxy/scraper、host process、queue 或 schedule。它不封存 avatar helper、worker
-`avatar-mirror`、adapter、未列 writer 或 `GET /api/avatar`；这些仍须独立审查。
+proxy/scraper、host process、queue 或 schedule。它不涵盖单独封存的 worker
+`avatar-mirror`；`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与未列 writer
+仍须独立审查。
 
 ### V1 avatar-backfill source boundary
 
@@ -98,8 +99,17 @@ canonical `GET /api/cron/backfill-avatars` 路由及其
 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均带 `Cache-Control`、`CDN-Cache-Control`、
 `Vercel-CDN-Cache-Control` 三层 `no-store`，并在参数解析、数据库、logging 或 upstream fetch 前
 结束。该源码契约不停止、不检查也不证明已部署 host、external scheduler 或 healthcheck。
-avatar helper、worker `avatar-mirror`、adapter、未列 writer 与 `GET /api/avatar` 都不在此 handler
-的封存结论内。
+此 handler 不涵盖 `GET /api/avatar`、avatar helper、UI/read RPC、adapter 或未列 writer；单独的
+worker `avatar-mirror` source hold 不扩大该 handler 的结论。
+
+### V1 avatar-mirror worker source boundary
+
+checked-in `avatar-mirror` worker execution 已单独 source-only retired：processor 为 no-op，
+scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `route()` 内以 no-op 返回，
+早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
+worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。该源码边界不停止、不检查也不
+证明已运行的 worker、Redis、host process 或 schedule 已停止。
+它不涵盖 `GET /api/avatar`、avatar helper、UI/read RPC、adapter 或未列 writer。
 
 ---
 
