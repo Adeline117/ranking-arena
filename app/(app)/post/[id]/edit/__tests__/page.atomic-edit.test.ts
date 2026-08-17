@@ -58,6 +58,48 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain('readPostMediaUploadError(responseBody)')
   })
 
+  it('serializes image uploads and closes save/navigation until the lane settles', () => {
+    const uploadStart = page.indexOf('const handleImageUpload = async')
+    const uploadEnd = page.indexOf('// 移除图片', uploadStart)
+    const upload = page.slice(uploadStart, uploadEnd)
+    const guard = upload.indexOf('if (imageUploadInFlightRef.current)')
+    const acquire = upload.indexOf('imageUploadInFlightRef.current = true')
+    const token = upload.indexOf('tokenRefreshCoordinator.getValidToken()')
+    const release = upload.indexOf('imageUploadInFlightRef.current = false')
+    const submitStart = page.indexOf('const handleSubmit = async')
+    const submitEnd = page.indexOf('if (loading)', submitStart)
+    const submit = page.slice(submitStart, submitEnd)
+
+    expect(uploadStart).toBeGreaterThanOrEqual(0)
+    expect(uploadEnd).toBeGreaterThan(uploadStart)
+    expect(guard).toBeGreaterThanOrEqual(0)
+    expect(acquire).toBeGreaterThan(guard)
+    expect(token).toBeGreaterThan(acquire)
+    expect(release).toBeGreaterThan(token)
+    expect(upload.slice(release - 80, release)).toContain('finally')
+    expect(submit).toContain('imageUploadInFlightRef.current')
+    expect(submit.indexOf('imageUploadInFlightRef.current')).toBeLessThan(
+      submit.indexOf('submitRef.current = true')
+    )
+    expect(page).toContain('onChange={handleImageUpload}\n              disabled={uploading}')
+    expect(page).toContain('disabled={saving || uploading}')
+    expect(page).toContain('disabled={saving || uploading || !title.trim()}')
+  })
+
+  it('names and touch-sizes edit tray actions without a generic close label', () => {
+    const trayStart = page.indexOf('{images.map((img, index) =>')
+    const trayEnd = page.indexOf('{images.length < 9 &&', trayStart)
+    const tray = page.slice(trayStart, trayEnd)
+
+    expect(trayStart).toBeGreaterThanOrEqual(0)
+    expect(trayEnd).toBeGreaterThan(trayStart)
+    expect(tray).toContain("aria-label={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}")
+    expect(tray).toContain("aria-label={t('deleteImage')}")
+    expect(tray).not.toContain('aria-label="Close"')
+    expect(tray.match(/width: tokens\.touchTarget\.min/g)).toHaveLength(2)
+    expect(tray.match(/height: tokens\.touchTarget\.min/g)).toHaveLength(2)
+  })
+
   it('keeps preview links consistent and rejects unsafe markdown image targets', () => {
     expect(page).toContain('linkifyTagsAndMentions(part')
     expect(page).toContain('for (const token of findMarkdownImageTokens(text))')

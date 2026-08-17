@@ -310,6 +310,7 @@ export default function EditPostPage() {
   const { showToast } = useToast()
   const { t } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageUploadInFlightRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mentionAutocomplete = useMentionAutocomplete()
 
@@ -426,73 +427,82 @@ export default function EditPostPage() {
       return
     }
 
+    if (imageUploadInFlightRef.current) {
+      e.currentTarget.value = ''
+      return
+    }
+
+    imageUploadInFlightRef.current = true
     setUploading(true)
-    const newImages: UploadedImage[] = []
+    try {
+      const newImages: UploadedImage[] = []
 
-    for (const file of Array.from(files)) {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-      if (!allowedTypes.includes(file.type)) {
-        showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
-        continue
-      }
-
-      if (file.size > 5 * 1024 * 1024) {
-        showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
-        continue
-      }
-
-      try {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('purpose', 'post_image')
-        formData.append('userId', userId)
-
-        // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
-        const uploadToken = await tokenRefreshCoordinator.getValidToken()
-        const response = await fetch('/api/posts/upload-image', {
-          method: 'POST',
-          headers: {
-            ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
-            ...getCsrfHeaders(),
-          },
-          body: formData,
-        })
-
-        const responseBody: unknown = await response.json()
-
-        if (!response.ok) {
-          showToast(readPostMediaUploadError(responseBody) ?? t('uploadFailed'), 'error')
+      for (const file of Array.from(files)) {
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        if (!allowedTypes.includes(file.type)) {
+          showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
           continue
         }
 
-        const acknowledgement = readPostImageUploadAcknowledgement(
-          responseBody,
-          userId,
-          process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-        )
-        if (!acknowledgement) {
+        if (file.size > 5 * 1024 * 1024) {
+          showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
+          continue
+        }
+
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+          formData.append('purpose', 'post_image')
+          formData.append('userId', userId)
+
+          // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+          const uploadToken = await tokenRefreshCoordinator.getValidToken()
+          const response = await fetch('/api/posts/upload-image', {
+            method: 'POST',
+            headers: {
+              ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
+              ...getCsrfHeaders(),
+            },
+            body: formData,
+          })
+
+          const responseBody: unknown = await response.json()
+
+          if (!response.ok) {
+            showToast(readPostMediaUploadError(responseBody) ?? t('uploadFailed'), 'error')
+            continue
+          }
+
+          const acknowledgement = readPostImageUploadAcknowledgement(
+            responseBody,
+            userId,
+            process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+          )
+          if (!acknowledgement) {
+            showToast(t('uploadFailed'), 'error')
+            continue
+          }
+
+          newImages.push({
+            url: acknowledgement.url,
+            fileName: acknowledgement.fileName,
+          })
+        } catch (error) {
+          logger.error('Upload error:', error)
           showToast(t('uploadFailed'), 'error')
-          continue
         }
-
-        newImages.push({
-          url: acknowledgement.url,
-          fileName: acknowledgement.fileName,
-        })
-      } catch (error) {
-        logger.error('Upload error:', error)
-        showToast(t('uploadFailed'), 'error')
       }
-    }
 
-    if (newImages.length > 0) {
-      setImages((prev) => [...prev, ...newImages])
-      showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
-    }
-
-    setUploading(false)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      if (newImages.length > 0) {
+        setImages((prev) => [...prev, ...newImages])
+        showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
+      }
+    } finally {
+      imageUploadInFlightRef.current = false
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
@@ -583,7 +593,7 @@ export default function EditPostPage() {
 
   // 提交更新
   const handleSubmit = async () => {
-    if (submitRef.current || saving) return
+    if (submitRef.current || saving || imageUploadInFlightRef.current || uploading) return
     submitRef.current = true
 
     if (!title.trim()) {
@@ -1010,6 +1020,7 @@ export default function EditPostPage() {
               accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
               multiple
               onChange={handleImageUpload}
+              disabled={uploading}
               style={{ display: 'none' }}
             />
 
@@ -1122,44 +1133,73 @@ export default function EditPostPage() {
                     >
                       <button
                         type="button"
+                        aria-label={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
                         onClick={() => insertImageToContent(img.url)}
                         style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: '50%',
+                          width: tokens.touchTarget.min,
+                          height: tokens.touchTarget.min,
+                          borderRadius: tokens.radius.sm,
                           border: 'none',
-                          background: 'var(--color-accent-primary)',
+                          background: 'transparent',
                           color: tokens.colors.white,
-                          fontSize: 12,
                           cursor: 'pointer',
+                          padding: tokens.spacing[2],
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                         title={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
                       >
-                        ↵
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: tokens.radius.sm,
+                            background: 'var(--color-accent-primary)',
+                            fontSize: tokens.typography.fontSize.xs,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          ↵
+                        </span>
                       </button>
                       <button
-                        aria-label="Close"
                         type="button"
+                        aria-label={t('deleteImage')}
                         onClick={() => removeImage(index)}
                         style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: '50%',
+                          width: tokens.touchTarget.min,
+                          height: tokens.touchTarget.min,
+                          borderRadius: tokens.radius.sm,
                           border: 'none',
-                          background: 'var(--color-accent-error)',
+                          background: 'transparent',
                           color: tokens.colors.white,
-                          fontSize: 12,
                           cursor: 'pointer',
+                          padding: tokens.spacing[2],
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                         title={t('deleteImage')}
                       >
-                        ×
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: tokens.radius.sm,
+                            background: 'var(--color-accent-error)',
+                            fontSize: tokens.typography.fontSize.base,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          ×
+                        </span>
                       </button>
                     </Box>
                   </Box>
@@ -1169,6 +1209,7 @@ export default function EditPostPage() {
               {images.length < 9 && (
                 <button
                   type="button"
+                  aria-label={uploading ? t('uploadingImage') : t('addImage')}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
                   style={{
@@ -1201,10 +1242,18 @@ export default function EditPostPage() {
               marginTop: tokens.spacing[4],
             }}
           >
-            <Button variant="secondary" onClick={() => router.push('/my-posts')} disabled={saving}>
+            <Button
+              variant="secondary"
+              onClick={() => router.push('/my-posts')}
+              disabled={saving || uploading}
+            >
               {t('cancel')}
             </Button>
-            <Button variant="primary" onClick={handleSubmit} disabled={saving || !title.trim()}>
+            <Button
+              variant="primary"
+              onClick={handleSubmit}
+              disabled={saving || uploading || !title.trim()}
+            >
               {saving ? t('savingChanges') : t('saveChanges')}
             </Button>
           </Box>
