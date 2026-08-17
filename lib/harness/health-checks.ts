@@ -115,7 +115,12 @@ export async function checkFrontendHealth(baseUrl: string): Promise<HealthCheck[
 
 const API_ENDPOINTS = [
   { path: '/api/traders?timeRange=90D&limit=5', name: 'Rankings API', expectKey: 'data' },
-  { path: '/api/rankings/platform-stats', name: 'Platform Stats', expectKey: 'platforms' },
+  {
+    path: '/api/rankings/platform-stats',
+    name: 'Platform Stats',
+    expectKey: 'platforms',
+    requireVerifiedRanking: true,
+  },
   { path: '/api/rankings/movers', name: 'Movers API', expectKey: 'movers' },
   { path: '/api/search?q=test&limit=3', name: 'Search API', expectKey: 'results' },
   { path: '/api/market/prices', name: 'Market Prices', expectKey: null },
@@ -153,6 +158,9 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
         } else if (ep.expectKey && body && !(ep.expectKey in body)) {
           status = 'warn'
           details = `Missing key "${ep.expectKey}" in response`
+        } else if (ep.requireVerifiedRanking && (!body || body.ranking_visibility !== 'verified')) {
+          status = 'warn'
+          details = 'Published ranking aggregate unavailable'
         }
 
         return {

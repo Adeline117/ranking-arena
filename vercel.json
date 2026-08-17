@@ -366,7 +366,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, s-maxage=300, stale-while-revalidate=600"
+          "value": "private, no-store, max-age=0, must-revalidate"
         }
       ]
     },
