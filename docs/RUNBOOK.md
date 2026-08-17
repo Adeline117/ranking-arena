@@ -60,6 +60,18 @@ checkpoint, and legacy-backfill entrypoints covered by the V1 tombstone contract
 RETIRED compatibility paths that exit 2 and cannot be used as an alternate operations
 route.
 
+### V1 ranking authority cache-purge source boundary
+
+Do not use `scripts/maintenance/purge-ranking-authority-caches.sh` as an incident workaround.
+This checked-in compatibility path writes `[RETIRED]` only to stderr and exits `2` for every
+argument; it does not read an environment, invoke Vercel or Git, contact a network, clear a
+cache, or perform host work.
+
+This is source-only containment. It does not clear, inspect, or prove an already deployed
+Data/CDN cache, release, project, or external state, and it does not change public ranking
+routes, cache policy, cache keys, or deployment procedure. A future cache operation requires
+an independently approved ADR-023 owner plan and separate evidence.
+
 ### V1 legacy proxy/import acquisition boundary
 
 Do not use a proxy, a browser scraper, an import script, or a Cloudflare deployment as
