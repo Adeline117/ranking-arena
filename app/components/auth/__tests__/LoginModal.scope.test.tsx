@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockSignInWithOtp = jest.fn()
+const mockSignInWithOAuth = jest.fn()
 const mockProfileMaybeSingle = jest.fn()
 const mockVerifyOtp = jest.fn()
 const mockSignOutIfCurrent = jest.fn()
@@ -11,7 +12,7 @@ const mockIsSnapshotCurrent = jest.fn()
 jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     auth: {
-      signInWithOAuth: jest.fn(),
+      signInWithOAuth: (...args: unknown[]) => mockSignInWithOAuth(...args),
       signInWithOtp: (...args: unknown[]) => mockSignInWithOtp(...args),
     },
     from: jest.fn(() => ({
@@ -106,6 +107,7 @@ describe('LoginModal provisioned identity boundary', () => {
     jest.clearAllMocks()
     const verifiedSession = session()
     mockSignInWithOtp.mockResolvedValue({ error: null })
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
     mockVerifyOtp.mockResolvedValue({
       data: { session: verifiedSession, user: verifiedSession.user },
       error: null,
@@ -125,6 +127,120 @@ describe('LoginModal provisioned identity boundary', () => {
     expect(screen.getByRole('link', { name: 'privacyPolicy' })).toHaveStyle({
       textDecoration: 'underline',
     })
+  })
+
+  it('single-flights Google OAuth before the disabled state renders', async () => {
+    const oauth = deferred<{ error: { message: string } }>()
+    mockSignInWithOAuth.mockReturnValue(oauth.promise)
+    render(<LoginModal open onClose={onClose} />)
+
+    const googleButton = screen.getByRole('button', { name: 'authGoogleLogin' })
+    act(() => {
+      googleButton.click()
+      googleButton.click()
+    })
+
+    expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'authEmailCode' })).toBeDisabled()
+
+    await act(async () => {
+      oauth.resolve({ error: { message: 'OAuth failed' } })
+      await oauth.promise
+    })
+    expect(await screen.findByText('OAuth failed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'authEmailCode' })).toBeEnabled()
+  })
+
+  it('single-flights an email code request before the loading state renders', async () => {
+    const send = deferred<{ error: null }>()
+    mockSignInWithOtp.mockReturnValue(send.promise)
+    render(<LoginModal open onClose={onClose} />)
+    fireEvent.click(screen.getByRole('button', { name: 'authEmailCode' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'authEnterEmail' }), {
+      target: { value: 'a@example.com' },
+    })
+
+    const sendButton = screen.getByRole('button', { name: 'authSendCode' })
+    act(() => {
+      sendButton.click()
+      sendButton.click()
+    })
+
+    expect(mockSignInWithOtp).toHaveBeenCalledTimes(1)
+    expect(mockSignInWithOtp).toHaveBeenCalledWith({
+      email: 'a@example.com',
+      options: { shouldCreateUser: true },
+    })
+
+    await act(async () => {
+      send.resolve({ error: null })
+      await send.promise
+    })
+    expect(await screen.findByRole('textbox', { name: 'authEnterCode' })).toBeInTheDocument()
+  })
+
+  it('does not let an old code request advance a reopened modal', async () => {
+    const send = deferred<{ error: null }>()
+    mockSignInWithOtp.mockReturnValue(send.promise)
+    const view = render(<LoginModal open onClose={onClose} />)
+    fireEvent.click(screen.getByRole('button', { name: 'authEmailCode' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'authEnterEmail' }), {
+      target: { value: 'old@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'authSendCode' }))
+    expect(mockSignInWithOtp).toHaveBeenCalledTimes(1)
+
+    view.rerender(<LoginModal open={false} onClose={onClose} />)
+    view.rerender(<LoginModal open onClose={onClose} />)
+    expect(await screen.findByRole('button', { name: 'authEmailCode' })).toBeInTheDocument()
+
+    await act(async () => {
+      send.resolve({ error: null })
+      await send.promise
+    })
+
+    expect(screen.getByRole('button', { name: 'authEmailCode' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'authEnterCode' })).not.toBeInTheDocument()
+  })
+
+  it('single-flights OTP verification before the loading state renders', async () => {
+    const verification = deferred<{
+      data: { session: Session; user: User }
+      error: null
+    }>()
+    const verifiedSession = session()
+    mockVerifyOtp.mockReturnValue(verification.promise)
+    render(<LoginModal open onClose={onClose} />)
+    await reachOtpStep()
+
+    const verifyButton = screen.getByRole('button', { name: 'authVerify' })
+    act(() => {
+      verifyButton.click()
+      verifyButton.click()
+    })
+
+    expect(mockVerifyOtp).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      verification.resolve({
+        data: { session: verifiedSession, user: verifiedSession.user },
+        error: null,
+      })
+      await verification.promise
+    })
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a verification transport failure before any session exists', async () => {
+    mockVerifyOtp.mockRejectedValue(new Error('network unavailable'))
+    render(<LoginModal open onClose={onClose} />)
+    await reachOtpStep()
+
+    fireEvent.click(screen.getByRole('button', { name: 'authVerify' }))
+
+    expect(await screen.findByText('loginAuthFailed')).toBeInTheDocument()
+    expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('closes only after the exact session and required profile are verified', async () => {

@@ -101,10 +101,12 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
   const emailRef = useRef<HTMLInputElement>(null)
   const otpRef = useRef<HTMLInputElement>(null)
   const authAttemptGenerationRef = useRef(0)
+  const authOperationRef = useRef<number | null>(null)
 
   // Reset state when modal opens/closes
   useEffect(() => {
     authAttemptGenerationRef.current += 1
+    authOperationRef.current = null
     if (open) {
       setStep('choose')
       setEmail('')
@@ -115,6 +117,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
     }
     return () => {
       authAttemptGenerationRef.current += 1
+      authOperationRef.current = null
     }
   }, [open])
 
@@ -134,60 +137,123 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
   // scroll lock + escape + focus handled by ModalOverlay
 
   const handleGoogle = useCallback(async () => {
+    if (authOperationRef.current !== null) return
+    const generation = ++authAttemptGenerationRef.current
+    authOperationRef.current = generation
+    let redirectStarted = false
     setError('')
     setLoading(true)
 
-    // Detect in-app browsers
-    const ua = navigator.userAgent || ''
-    if (/Telegram|FBAN|FBAV|Instagram|Line\/|WeChat|MicroMessenger/i.test(ua)) {
-      try {
-        await navigator.clipboard.writeText(window.location.href)
-      } catch {
-        /* clipboard unavailable */
+    try {
+      // Detect in-app browsers
+      const ua = navigator.userAgent || ''
+      if (/Telegram|FBAN|FBAV|Instagram|Line\/|WeChat|MicroMessenger/i.test(ua)) {
+        try {
+          await navigator.clipboard.writeText(window.location.href)
+        } catch {
+          /* clipboard unavailable */
+        }
+        if (
+          authOperationRef.current === generation &&
+          authAttemptGenerationRef.current === generation
+        ) {
+          setError(t('authInAppBrowserError'))
+        }
+        return
       }
-      setError(t('authInAppBrowserError'))
-      setLoading(false)
-      return
-    }
 
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`,
-      },
-    })
-    if (oauthError) {
-      setError(oauthError.message)
-      setLoading(false)
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+        },
+      })
+      if (
+        authOperationRef.current !== generation ||
+        authAttemptGenerationRef.current !== generation
+      ) {
+        return
+      }
+      if (oauthError) {
+        setError(oauthError.message)
+      } else {
+        // Keep every alternative disabled while the browser begins the redirect.
+        redirectStarted = true
+      }
+    } catch {
+      if (
+        authOperationRef.current === generation &&
+        authAttemptGenerationRef.current === generation
+      ) {
+        setError(t('loginAuthFailed'))
+      }
+    } finally {
+      if (
+        !redirectStarted &&
+        authOperationRef.current === generation &&
+        authAttemptGenerationRef.current === generation
+      ) {
+        authOperationRef.current = null
+        setLoading(false)
+      }
     }
   }, [t])
 
   const handleSendOTP = useCallback(async () => {
-    if (!email.trim() || loading) return
+    const operationEmail = email.trim()
+    if (!operationEmail || loading || authOperationRef.current !== null) return
+    const generation = ++authAttemptGenerationRef.current
+    authOperationRef.current = generation
     setError('')
     setLoading(true)
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: true },
-    })
-
-    setLoading(false)
-    if (otpError) {
-      const msg = otpError.message.toLowerCase()
-      if (msg.includes('rate') || msg.includes('limit') || msg.includes('too many')) {
-        setError(t('loginTimeout'))
-      } else {
-        setError(t('loginSendFailed'))
+    try {
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: operationEmail,
+        options: { shouldCreateUser: true },
+      })
+      if (
+        authOperationRef.current !== generation ||
+        authAttemptGenerationRef.current !== generation
+      ) {
+        return
       }
-    } else {
-      setStep('email-sent')
+
+      if (otpError) {
+        const msg = otpError.message.toLowerCase()
+        if (msg.includes('rate') || msg.includes('limit') || msg.includes('too many')) {
+          setError(t('loginTimeout'))
+        } else {
+          setError(t('loginSendFailed'))
+        }
+      } else {
+        setEmail(operationEmail)
+        setStep('email-sent')
+      }
+    } catch {
+      if (
+        authOperationRef.current === generation &&
+        authAttemptGenerationRef.current === generation
+      ) {
+        setError(t('loginSendFailedNetwork'))
+      }
+    } finally {
+      if (
+        authOperationRef.current === generation &&
+        authAttemptGenerationRef.current === generation
+      ) {
+        authOperationRef.current = null
+        setLoading(false)
+      }
     }
   }, [email, loading, t])
 
   const handleVerifyOTP = useCallback(async () => {
-    if (!otp.trim() || loading) return
+    const operationEmail = email.trim()
+    const operationOtp = otp.trim()
+    if (!operationEmail || !operationOtp || loading || authOperationRef.current !== null) return
     const generation = ++authAttemptGenerationRef.current
+    authOperationRef.current = generation
     let authenticatedUserId: string | null = null
     let authenticatedAccessToken: string | null = null
     let snapshot: VerifiedSessionSnapshot | null = null
@@ -201,8 +267,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
 
     try {
       const { data, error: verifyError } = await tokenRefreshCoordinator.verifyOtp({
-        email: email.trim(),
-        token: otp.trim(),
+        email: operationEmail,
+        token: operationOtp,
         type: 'email',
       })
 
@@ -240,18 +306,25 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
       onClose()
     } catch (loginError) {
       const attemptStillOwnedFailure = snapshot ? isVerifiedSessionSnapshotCurrent(snapshot) : true
+      const sessionWasCreated = Boolean(authenticatedUserId && authenticatedAccessToken)
       const rolledBack = await rollbackOwnedSession()
       if (
         generation !== authAttemptGenerationRef.current ||
         loginError instanceof StaleVerifiedSessionError ||
         !attemptStillOwnedFailure ||
-        !rolledBack
+        (sessionWasCreated && !rolledBack)
       ) {
         return
       }
-      setError(t('loadUserDataFailed'))
+      setError(t(sessionWasCreated ? 'loadUserDataFailed' : 'loginAuthFailed'))
     } finally {
-      if (generation === authAttemptGenerationRef.current) setLoading(false)
+      if (
+        authOperationRef.current === generation &&
+        generation === authAttemptGenerationRef.current
+      ) {
+        authOperationRef.current = null
+        setLoading(false)
+      }
     }
   }, [email, otp, loading, onClose, t])
 
@@ -363,7 +436,10 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
 
             {/* Email OTP */}
             <button
-              onClick={() => setStep('email-otp')}
+              onClick={() => {
+                if (authOperationRef.current === null) setStep('email-otp')
+              }}
+              disabled={loading}
               style={{
                 width: '100%',
                 padding: '12px 16px',
@@ -373,7 +449,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 color: 'var(--color-text-secondary)',
                 fontWeight: tokens.typography.fontWeight.semibold,
                 fontSize: tokens.typography.fontSize.base,
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -400,7 +476,12 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
             {/* Wallet */}
             <div style={{ marginTop: 4 }}>
               <LazyWeb3Boundary>
-                <OneClickWalletButton fullWidth size="md" onSuccess={() => onClose()} />
+                <OneClickWalletButton
+                  fullWidth
+                  size="md"
+                  disabled={loading}
+                  onSuccess={() => onClose()}
+                />
               </LazyWeb3Boundary>
             </div>
 
@@ -425,12 +506,15 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
         {step === 'email-otp' && (
           <>
             <button
-              onClick={() => setStep('choose')}
+              onClick={() => {
+                if (authOperationRef.current === null) setStep('choose')
+              }}
+              disabled={loading}
               style={{
                 background: 'none',
                 border: 'none',
                 color: 'var(--color-text-tertiary)',
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
                 padding: '0 0 16px',
                 display: 'flex',
@@ -469,6 +553,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
+              disabled={loading}
               placeholder="you@email.com"
               aria-required="true"
               aria-label={t('authEnterEmail')}
@@ -542,12 +627,15 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
         {step === 'email-sent' && (
           <>
             <button
-              onClick={() => setStep('email-otp')}
+              onClick={() => {
+                if (authOperationRef.current === null) setStep('email-otp')
+              }}
+              disabled={loading}
               style={{
                 background: 'none',
                 border: 'none',
                 color: 'var(--color-text-tertiary)',
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
                 padding: '0 0 16px',
                 display: 'flex',
@@ -598,6 +686,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
               onKeyDown={(e) => e.key === 'Enter' && handleVerifyOTP()}
+              disabled={loading}
               placeholder="000000"
               maxLength={6}
               aria-required="true"
