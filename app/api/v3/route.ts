@@ -18,29 +18,145 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
+import { getLeaderboard, getTraderDetail } from '@/lib/data/unified'
 import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
+import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
 import {
   EXCHANGE_CONFIG,
   DEAD_BLOCKED_PLATFORMS,
   ALL_SOURCES,
   SOURCE_TYPE_MAP,
 } from '@/lib/constants/exchanges'
+import type { TraderSource } from '@/lib/constants/exchanges'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { apiSuccess, apiError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import {
-  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_REDIS_TAG,
-  publicRankingCacheKey,
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 const log = createLogger('api:v3')
+
+// The public cohort view is intentionally additive while generated Supabase
+// types catch up. Keep this narrow read-only bridge local rather than widening
+// the generated client or falling back to the retained parent relation.
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
+const V3_PUBLIC_SEARCH_PERIOD = '90D'
+const V3_PLATFORM_COUNT_PERIOD = '90D'
+const PUBLIC_V3_SEARCH_COLUMNS =
+  'source,source_trader_id,handle,avatar_url,source_type,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,arena_score,rank,computed_at,season_id,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,trader_type,is_outlier'
+const PUBLIC_V3_PLATFORM_COUNT_COLUMNS =
+  'source,source_trader_id,season_id,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  or(expression: string): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: typeof PUBLIC_RANKED_LEADERBOARD): PublicRankedLeaderboardQuery
+}
+
+type V3RankingVisibility = 'partial' | 'unknown'
+
+interface V3HandlerResult {
+  data?: unknown
+  total?: number
+  totalCountIsExact?: boolean
+  hasMore?: boolean
+  rankingVisibility?: V3RankingVisibility
+  rankingVisibilityReason?: string
+  error?: string
+  status?: number
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function isPositivePublishedRank(row: unknown): row is Record<string, unknown> {
+  return (
+    isRecord(row) && typeof row.rank === 'number' && Number.isSafeInteger(row.rank) && row.rank > 0
+  )
+}
+
+function sanitizePublicSearchRows(value: unknown): {
+  rows: Record<string, unknown>[]
+  integrityCompromised: boolean
+} {
+  if (!Array.isArray(value)) return { rows: [], integrityCompromised: true }
+
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value, period: V3_PUBLIC_SEARCH_PERIOD },
+    { expectedPeriod: V3_PUBLIC_SEARCH_PERIOD }
+  ) as { traders?: unknown[] }
+  const rows = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter(isPositivePublishedRank)
+    : []
+
+  // A fresh database read from the security-barrier view must be an all-safe
+  // cohort. Returning a shorter result on any mismatch could look like a
+  // complete search result, so make the entire ranking portion unavailable.
+  return {
+    rows,
+    integrityCompromised: rows.length !== value.length,
+  }
+}
+
+function sanitizeSearchPattern(query: string): string {
+  // PostgREST's `or()` syntax treats commas, dots, parentheses, and wildcard
+  // characters as grammar. Keep user text literal enough for ILIKE while
+  // preserving Unicode handles and wallet fragments.
+  return query
+    .trim()
+    .slice(0, 100)
+    .replace(/[\\%_.,()'"`]/g, '')
+}
+
+function publicSearchRelevance(row: Record<string, unknown>, query: string): number {
+  const handle = typeof row.handle === 'string' ? row.handle.toLowerCase() : ''
+  const traderKey =
+    typeof row.source_trader_id === 'string' ? row.source_trader_id.toLowerCase() : ''
+  const queryLower = query.toLowerCase()
+  let relevance = 0
+
+  if (handle === queryLower || traderKey === queryLower) relevance += 10_000
+  if (handle.startsWith(queryLower) || traderKey.startsWith(queryLower)) relevance += 1_000
+  if (handle.includes(queryLower) || traderKey.includes(queryLower)) relevance += 100
+
+  const arenaScore = typeof row.arena_score === 'number' ? row.arena_score : 0
+  return relevance + arenaScore * 0.1
+}
+
+function activeV3PlatformSources(): TraderSource[] {
+  return ALL_SOURCES.filter(
+    (source) => !DEAD_BLOCKED_PLATFORMS.includes(source) && isPublicRankingSourceAllowed(source)
+  )
+}
 
 // ---------------------------------------------------------------------------
 // API Key validation
@@ -262,7 +378,7 @@ async function handleRankings(params: URLSearchParams) {
   // (Zod .catch(50) would silently fall back to 50 — that's misleading)
   const rawLimit = params.get('limit')
   if (rawLimit != null && Number(rawLimit) <= 0) {
-    return { data: [], total: 0 }
+    return { data: [], totalCountIsExact: false }
   }
 
   const parsed = v3RankingsSchema.safeParse(Object.fromEntries(params))
@@ -278,10 +394,24 @@ async function handleRankings(params: URLSearchParams) {
     limit,
     offset,
   })
+  if (result.error) {
+    return {
+      data: [],
+      totalCountIsExact: false,
+      hasMore: false,
+      rankingVisibility: 'unknown' as const,
+      rankingVisibilityReason: 'public_cohort_unavailable',
+    }
+  }
   const cleaned = result.traders
     .filter((trader) => trader.rank != null)
     .map((trader) => cleanTraderForApi(trader as unknown as Record<string, unknown>))
-  return { data: cleaned, total: result.total }
+  return {
+    data: cleaned,
+    ...(result.totalCountIsExact && result.total != null ? { total: result.total } : {}),
+    totalCountIsExact: result.totalCountIsExact,
+    hasMore: result.hasMore,
+  }
 }
 
 async function handleTrader(params: URLSearchParams) {
@@ -305,7 +435,7 @@ async function handleSearch(params: URLSearchParams) {
   // If limit is explicitly 0 or negative, return empty result immediately
   const rawLimit = params.get('limit')
   if (rawLimit != null && Number(rawLimit) <= 0) {
-    return { data: [], total: 0 }
+    return { data: [], totalCountIsExact: false }
   }
 
   const parsed = v3SearchSchema.safeParse(Object.fromEntries(params))
@@ -315,49 +445,181 @@ async function handleSearch(params: URLSearchParams) {
 
   const supabase = getSupabaseAdmin() as SupabaseClient
   const { q, limit, platform } = parsed.data
-  const traders = await searchTraders(supabase, { query: q, limit, platform })
-  const cleaned = traders.map((trader) =>
-    cleanTraderForApi(trader as unknown as Record<string, unknown>)
-  )
-  return { data: cleaned, total: cleaned.length }
+  if (platform && !isPublicRankingSourceAllowed(platform)) {
+    return {
+      data: [],
+      totalCountIsExact: false,
+      rankingVisibility: 'partial' as const,
+      rankingVisibilityReason: 'source_not_publicly_rankable',
+    }
+  }
+
+  const searchPattern = sanitizeSearchPattern(q)
+  if (!searchPattern) {
+    return {
+      data: [],
+      totalCountIsExact: false,
+      rankingVisibility: 'partial' as const,
+      rankingVisibilityReason: 'search_query_not_rankable',
+    }
+  }
+
+  try {
+    // Search identity and ranking fields in the same sealed 90D cohort. Do
+    // not route through the legacy fuzzy RPC: it joins the retained raw cohort
+    // and can return a rank/score outside the published population.
+    let query = publicRankedLeaderboardClient(supabase)
+      .from(PUBLIC_RANKED_LEADERBOARD)
+      .select(PUBLIC_V3_SEARCH_COLUMNS)
+      .eq('season_id', V3_PUBLIC_SEARCH_PERIOD)
+      .not('rank', 'is', null)
+      .or(`handle.ilike.%${searchPattern}%,source_trader_id.ilike.%${searchPattern}%`)
+
+    if (platform) query = query.eq('source', platform)
+
+    const { data, error } = await query
+      .order('arena_score', { ascending: false, nullsFirst: false })
+      .order('rank', { ascending: true, nullsFirst: false })
+      // Fetch a small score-ordered candidate set, then restore exact/prefix/
+      // contains relevance locally without ever synthesizing a rank.
+      .limit(limit * 4)
+
+    if (error || !Array.isArray(data)) {
+      return {
+        data: [],
+        totalCountIsExact: false,
+        rankingVisibility: 'unknown' as const,
+        rankingVisibilityReason: 'public_cohort_unavailable',
+      }
+    }
+
+    const cohort = sanitizePublicSearchRows(data)
+    if (cohort.integrityCompromised) {
+      return {
+        data: [],
+        totalCountIsExact: false,
+        rankingVisibility: 'partial' as const,
+        rankingVisibilityReason: 'public_cohort_unverified',
+      }
+    }
+
+    const cleaned = cohort.rows
+      .sort(
+        (left, right) =>
+          publicSearchRelevance(right, searchPattern) -
+            publicSearchRelevance(left, searchPattern) || Number(left.rank) - Number(right.rank)
+      )
+      .slice(0, limit)
+      .map((trader) => cleanTraderForApi({ ...mapLeaderboardRow(trader) }))
+
+    // This is a bounded candidate page, not a same-predicate total. Omitting
+    // `total` is intentional: a visible page length must not masquerade as
+    // the total number of public matching traders.
+    return { data: cleaned, totalCountIsExact: false }
+  } catch (err) {
+    log.warn('public search cohort unavailable', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return {
+      data: [],
+      totalCountIsExact: false,
+      rankingVisibility: 'unknown' as const,
+      rankingVisibilityReason: 'public_cohort_unavailable',
+    }
+  }
 }
 
 async function handlePlatforms() {
-  const activeSources = ALL_SOURCES.filter((s) => !DEAD_BLOCKED_PLATFORMS.includes(s))
+  const activeSources = activeV3PlatformSources()
 
-  // 2026-07-11 承载:此前每请求 `.select('source')` 全表拉 ~34k 行进内存数数
-  // (公开 API,100x 峰值下每 PV 多 MB PostgREST 传输)。语义不变,套 warm 档
-  // 分层缓存(Redis 15min/内存 2min)→ 全表扫描峰值大幅收敛;Redis 故障回退直算。
-  const countMap = await tieredGetOrSet<Record<string, number>>(
-    publicRankingCacheKey('v3:platform-counts'),
-    async () => {
-      const supabase = getSupabaseAdmin() as SupabaseClient
-      const { data: counts } = await supabase
-        .from('leaderboard_ranks')
-        .select('source')
-        .not('rank', 'is', null)
-      const m: Record<string, number> = {}
-      for (const row of counts ?? []) m[row.source] = (m[row.source] || 0) + 1
-      return m
-    },
-    'warm',
-    [PUBLIC_RANKING_REDIS_TAG, 'platform-counts'],
-    { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
-  )
+  try {
+    // A platform count has to remain bound to the current serving head and
+    // source-freshness lease. Do not cache this derivative: a cache hit cannot
+    // independently prove those authorities are still live.
+    const supabase = getSupabaseAdmin()
+    const { data, error } = await publicRankedLeaderboardClient(supabase)
+      .from(PUBLIC_RANKED_LEADERBOARD)
+      .select(PUBLIC_V3_PLATFORM_COUNT_COLUMNS)
+      .eq('season_id', V3_PLATFORM_COUNT_PERIOD)
+      .not('rank', 'is', null)
 
-  const platforms = activeSources
-    .map((source) => {
-      const config = EXCHANGE_CONFIG[source]
+    if (error || !Array.isArray(data)) {
       return {
-        key: source,
-        name: config?.name ?? source,
-        type: config?.sourceType ?? 'unknown',
-        traderCount: countMap[source] ?? 0,
+        data: [],
+        totalCountIsExact: false,
+        rankingVisibility: 'unknown' as const,
+        rankingVisibilityReason: 'public_platform_counts_unavailable',
       }
-    })
-    .filter((p) => p.traderCount > 0)
+    }
 
-  return { data: platforms, total: platforms.length }
+    // The view is the sole row authority, and the same response-boundary
+    // sanitizer used by v3 search makes a malformed direct response partial
+    // rather than emitting a shortened count map.
+    const cohort = sanitizePublicSearchRows(data)
+    if (cohort.integrityCompromised) {
+      return {
+        data: [],
+        totalCountIsExact: false,
+        rankingVisibility: 'partial' as const,
+        rankingVisibilityReason: 'public_cohort_unverified',
+      }
+    }
+
+    const activeSourceSet = new Set<string>(activeSources)
+    const countMap: Record<string, number> = {}
+    for (const row of cohort.rows) {
+      if (
+        typeof row.source !== 'string' ||
+        !activeSourceSet.has(row.source) ||
+        !isPublicRankingSourceAllowed(row.source)
+      ) {
+        return {
+          data: [],
+          totalCountIsExact: false,
+          rankingVisibility: 'partial' as const,
+          rankingVisibilityReason: 'public_cohort_unverified',
+        }
+      }
+      countMap[row.source] = (countMap[row.source] || 0) + 1
+    }
+
+    const platforms = activeSources.flatMap((source) => {
+      const traderCount = countMap[source]
+      // Absent from the sealed response is deliberately not rendered as a
+      // platform with a fake zero count.
+      if (traderCount === undefined) return []
+      const config = EXCHANGE_CONFIG[source]
+      return [
+        {
+          key: source,
+          name: config?.name ?? source,
+          type: config?.sourceType ?? 'unknown',
+          traderCount,
+        },
+      ]
+    })
+
+    if (platforms.length === 0) {
+      return {
+        data: [],
+        totalCountIsExact: false,
+        rankingVisibility: 'unknown' as const,
+        rankingVisibilityReason: 'public_platform_counts_unavailable',
+      }
+    }
+
+    return { data: platforms, total: platforms.length, totalCountIsExact: true }
+  } catch (err) {
+    log.warn('public platform cohort unavailable', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return {
+      data: [],
+      totalCountIsExact: false,
+      rankingVisibility: 'unknown' as const,
+      rankingVisibilityReason: 'public_platform_counts_unavailable',
+    }
+  }
 }
 
 async function handleHistory(params: URLSearchParams) {
@@ -404,10 +666,24 @@ async function handleBulk(params: URLSearchParams) {
     limit,
     offset: 0,
   })
+  if (result.error) {
+    return {
+      data: [],
+      totalCountIsExact: false,
+      hasMore: false,
+      rankingVisibility: 'unknown' as const,
+      rankingVisibilityReason: 'public_cohort_unavailable',
+    }
+  }
   const cleaned = result.traders
     .filter((trader) => trader.rank != null)
     .map((trader) => cleanTraderForApi(trader as unknown as Record<string, unknown>))
-  return { data: cleaned, total: result.total }
+  return {
+    data: cleaned,
+    ...(result.totalCountIsExact && result.total != null ? { total: result.total } : {}),
+    totalCountIsExact: result.totalCountIsExact,
+    hasMore: result.hasMore,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -502,7 +778,7 @@ export async function GET(request: NextRequest) {
 
   // --- Route to handler ---
   try {
-    let result: { data?: unknown; total?: number; error?: string; status?: number }
+    let result: V3HandlerResult
 
     switch (endpoint) {
       case 'rankings':
@@ -534,9 +810,12 @@ export async function GET(request: NextRequest) {
       return errorResponse(result.error, result.status || 400)
     }
 
-    // CSV export for tabular consumers (?format=csv). Only array payloads —
-    // single-object endpoints (trader) fall through to JSON.
-    if (params.get('format') === 'csv' && Array.isArray(result.data)) {
+    // CSV has no reliable place for an unavailable-cohort state. Preserve the
+    // JSON envelope when rank/count authority is partial or unknown instead of
+    // turning it into a blank file that consumers may interpret as zero.
+    // Otherwise only array payloads are exportable; single-object endpoints
+    // (trader) fall through to JSON.
+    if (params.get('format') === 'csv' && !result.rankingVisibility && Array.isArray(result.data)) {
       const csv = toCsv(result.data as Record<string, unknown>[])
       return new NextResponse(csv, {
         status: 200,
@@ -552,6 +831,14 @@ export async function GET(request: NextRequest) {
     return jsonResponse(result.data, {
       ...rateLimitMeta,
       ...(result.total != null ? { total: result.total } : {}),
+      ...(result.totalCountIsExact !== undefined
+        ? { total_count_is_exact: result.totalCountIsExact }
+        : {}),
+      ...(result.hasMore !== undefined ? { has_more: result.hasMore } : {}),
+      ...(result.rankingVisibility ? { ranking_visibility: result.rankingVisibility } : {}),
+      ...(result.rankingVisibilityReason
+        ? { ranking_visibility_reason: result.rankingVisibilityReason }
+        : {}),
       endpoint,
       version: 'v3',
     })
