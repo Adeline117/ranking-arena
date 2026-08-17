@@ -48,10 +48,10 @@ const PUBLIC_API_ROUTES = new Set([
   // —— 首次全量判定 2026-07-02（逐个人工核查 handler：全部仅 GET 或自验证/已限流）——
   // 公开市场数据（只读，产品核心是公开榜单）
   'market',
-  'market/alpha',
   'market/arbitrage',
-  // V1 public-egress compatibility tombstone; fixed 410/no-store and no
-  // request-driven exchange, ccxt, cache, or rate-limit work.
+  // V1 public-egress compatibility tombstones; fixed 410/no-store with no
+  // request handling, cache, logging, exchange, or market-provider work.
+  'market/alpha',
   'market/candles',
   'market/coin/[id]',
   'market/defi',
