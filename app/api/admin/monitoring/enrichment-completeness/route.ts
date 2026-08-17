@@ -6,7 +6,7 @@
  * - Traders with equity curves
  * - Traders with stats detail (win_rate, max_drawdown)
  * - Dead letter queue depth
- * - Latest heartbeat status
+ * - Heartbeat-history publication status
  * - Enrichment success rate (last 24h from pipeline_logs)
  *
  * Used by /admin/monitoring enrichment completeness panel.
@@ -14,6 +14,7 @@
 
 import { NextResponse } from 'next/server'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
+import { V1_HEARTBEAT_HISTORY_NOT_PUBLISHED_CODE } from '@/lib/monitoring/v1-heartbeat-history-publication'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 
@@ -127,24 +128,6 @@ export async function GET(request: Request) {
     const totalLogs = enrichLogs.length
     const successRate = totalLogs > 0 ? Math.round((successCount / totalLogs) * 100) : 0
 
-    // 6. Heartbeat status (if table exists)
-    let heartbeats: Array<Record<string, unknown>> = []
-    try {
-      const { query } = await import('@/lib/db')
-      const result = await query(
-        `SELECT DISTINCT ON (platform) platform, source_host, status, trader_count, created_at,
-              ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600, 1) AS hours_since
-       FROM platform_heartbeats ORDER BY platform, created_at DESC`,
-        []
-      )
-      heartbeats = (result.rows || []).map((r: Record<string, unknown>) => ({
-        ...r,
-        is_stale: Number(r.hours_since) > 6,
-      }))
-    } catch {
-      // Table may not exist yet
-    }
-
     return NextResponse.json(
       {
         // Preserve the response shape previously added by the cron wrapper so
@@ -161,7 +144,13 @@ export async function GET(request: Request) {
           success: successCount,
           success_rate_pct: successRate,
         },
-        heartbeats,
+        // Retain the legacy array for dashboard compatibility, but never turn
+        // a missing history dependency into a misleading healthy 0/0 result.
+        heartbeats: [],
+        heartbeat_history: {
+          availability: false,
+          code: V1_HEARTBEAT_HISTORY_NOT_PUBLISHED_CODE,
+        },
       },
       { headers: PRIVATE_NO_STORE_HEADERS }
     )
