@@ -8,6 +8,7 @@
 import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
 import ResultPageClient from './ResultPageClient'
@@ -59,35 +60,128 @@ const TRADER_QUERIES: Record<
   narrator: { orderBy: 'roi', ascending: false },
 }
 
+const QUIZ_RECOMMENDATION_PERIOD = '90D'
+// Quiz recommendations describe real traders with Arena score/ROI claims, so
+// they must use the same sealed ranking cohort as every other public surface.
+// Keep the proof fields selected for local defense-in-depth validation.
+const PUBLIC_QUIZ_TRADER_COLUMNS =
+  'source,source_trader_id,handle,avatar_url,roi,arena_score,win_rate,pnl,rank,season_id,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+
+type PublicQuizTraderQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicQuizTraderQuery = PromiseLike<PublicQuizTraderQueryResult> & {
+  select(columns: string): PublicQuizTraderQuery
+  eq(column: string, value: string): PublicQuizTraderQuery
+  not(column: string, operator: string, value: null): PublicQuizTraderQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst?: boolean }
+  ): PublicQuizTraderQuery
+  limit(count: number): PublicQuizTraderQuery
+}
+
+type PublicQuizTraderClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicQuizTraderQuery
+}
+
+type VerifiedQuizTrader = Record<string, unknown> & {
+  source: string
+  source_trader_id: string
+  rank: number
+  roi: number
+  arena_score: number
+  win_rate: number
+  pnl: number
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Narrow bridge while generated Supabase types catch up with the public view. */
+function publicQuizTraderClient(value: unknown): PublicQuizTraderClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicQuizTraderClient
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isVerifiedQuizTrader(row: unknown): row is VerifiedQuizTrader {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    typeof row.source_trader_id === 'string' &&
+    row.source_trader_id.length > 0 &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0 &&
+    finiteNumber(row.roi) &&
+    finiteNumber(row.arena_score) &&
+    finiteNumber(row.win_rate) &&
+    finiteNumber(row.pnl)
+  )
+}
+
+/**
+ * Preserve the query's finite top-three cohort. If a cache/proxy injects a
+ * malformed row, filtering it and showing a lower row would create a new,
+ * unproved recommendation ordering. Fail closed instead.
+ */
+function verifyQuizRecommendationCohort(value: unknown): VerifiedQuizTrader[] | null {
+  if (!Array.isArray(value)) return null
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value, period: QUIZ_RECOMMENDATION_PERIOD },
+    { expectedPeriod: QUIZ_RECOMMENDATION_PERIOD }
+  ) as { traders?: unknown[] }
+  const rows = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter(isVerifiedQuizTrader)
+    : []
+
+  return rows.length === value.length ? rows : null
+}
+
 async function getRecommendedTraders(typeId: PersonalityTypeId): Promise<RecommendedTrader[]> {
   try {
     const supabase = getSupabaseAdmin()
     const query = TRADER_QUERIES[typeId] || { orderBy: 'arena_score', ascending: false }
 
-    const { data } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, handle, avatar_url, roi, arena_score, win_rate, pnl, rank')
-      .eq('season_id', '90D')
+    const { data, error } = await publicQuizTraderClient(supabase)
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_QUIZ_TRADER_COLUMNS)
+      .eq('season_id', QUIZ_RECOMMENDATION_PERIOD)
       .not('rank', 'is', null)
       .not(query.orderBy, 'is', null)
       .order(query.orderBy, { ascending: query.ascending })
       .order('rank', { ascending: true, nullsFirst: false })
       .limit(3)
 
-    if (!data?.length) return []
+    if (error || !data?.length) return []
+    const verifiedRows = verifyQuizRecommendationCohort(data)
+    if (!verifiedRows) return []
 
-    return data
-      .filter((row) => row.rank != null)
-      .map((row) => ({
-        handle: row.handle || row.source_trader_id || '',
-        name: row.handle || row.source_trader_id || 'Unknown',
-        avatar_url: row.avatar_url || null,
-        platform: row.source || '',
-        roi_90d: row.roi ?? null,
-        arena_score: row.arena_score ?? null,
-        win_rate: row.win_rate ?? null,
-        pnl_90d: row.pnl ?? null,
-      }))
+    return verifiedRows.map((row) => {
+      const handle =
+        typeof row.handle === 'string' && row.handle.trim().length > 0
+          ? row.handle.trim()
+          : row.source_trader_id
+      return {
+        handle,
+        name: handle,
+        avatar_url: typeof row.avatar_url === 'string' ? row.avatar_url : null,
+        platform: row.source,
+        roi_90d: row.roi,
+        arena_score: row.arena_score,
+        win_rate: row.win_rate,
+        pnl_90d: row.pnl,
+      }
+    })
   } catch {
     return []
   }
