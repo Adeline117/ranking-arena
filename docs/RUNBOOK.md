@@ -247,6 +247,20 @@ This source-only boundary is limited to that file: it is not a recoverable work 
 not change, check, or prove any API route, on-chain pipeline, worker, deploy flow, or product
 behavior. It cannot establish any external or deployed state.
 
+### V1 enrichment monitor and stale runbook source boundary
+
+Do not use `scripts/monitor-enrichment.sh` as an incident workaround. This historical
+compatibility path is a retired V1 NO-GO source path rather than a status monitor; it writes its
+fixed `[RETIRED]` notice to stderr, leaves stdout empty, and exits `2`.
+`scripts/enrich-onchain-all.mjs` is not present in this repository. The former operational material
+in `scripts/DEPLOY_TO_VPS.md` and `scripts/ONCHAIN_ENRICHMENT_README.md` has been replaced by
+historical boundary notes and is not a recoverable runbook.
+
+This source-only boundary does not alter, stop, inspect, or prove any application on-chain API,
+worker, adapter, deployed host, scheduler, credential, database, provider, historical data, or
+product behavior. It does not change the existing `app/api/trader/onchain-enrich` hold and cannot
+establish external or deployed state.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
