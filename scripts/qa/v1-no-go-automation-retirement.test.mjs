@@ -20,6 +20,7 @@ const retiredEntrypoints = [
   'scripts/vps-deploy/setup-crontab.sh',
   'scripts/vps-deploy/setup.sh',
   'scripts/vps-deploy/setup-env.sh',
+  'scripts/vps-deploy/check-vps.sh',
   'scripts/vps-deploy/cron-runner.js',
   'scripts/vps-deploy/scraper-cron.mjs',
   'scripts/vps-scrapers/bybit-detail-pnl.mjs',
@@ -78,6 +79,21 @@ test('V1 autonomous actuator entrypoints are inert compatibility tombstones', ()
       assertRetiredResult(run(entrypoint, args), `${entrypoint} ${args.join(' ')}`)
     }
   }
+})
+
+test('legacy VPS inspection tombstone retains no remote inspection capability', () => {
+  const entrypoint = 'scripts/vps-deploy/check-vps.sh'
+  const source = readFileSync(join(root, entrypoint), 'utf8')
+
+  assert.equal(
+    source,
+    "#!/bin/bash\n\nprintf '%s\\n' '[RETIRED] check-vps.sh is disabled during V1 NO-GO.' >&2\nexit 2\n"
+  )
+  assert.doesNotMatch(
+    source,
+    /\b(?:host|ssh|pm2|curl|env|log)\b|\b(?:\d{1,3}\.){3}\d{1,3}\b/i,
+    `${entrypoint} must retain no host, IP, SSH, PM2, curl, env, or log capability name`
+  )
 })
 
 test('legacy VPS cron configuration contains no executable schedule', () => {

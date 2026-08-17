@@ -186,7 +186,7 @@ compatibility path，现固定输出 `RETIRED` 并以 exit `2` 结束；它们�
 
 这只是 source-only containment：不停止、检查或证明已部署 host/process、crontab、UptimeRobot 或其他
 external monitor 的状态。`/api/health`、OpenClaw、harness、infra topology，以及
-`scripts/vps-deploy/deploy.sh` 和 `scripts/vps-deploy/check-vps.sh` 均不在此次范围内。
+`scripts/vps-deploy/deploy.sh` 均不在此次范围内；`setup.sh`、`setup-env.sh` 与 `check-vps.sh` 已各自封存。
 
 ## V1 legacy VPS bootstrap source containment（2026-08-17）
 
@@ -194,8 +194,8 @@ external monitor 的状态。`/api/health`、OpenClaw、harness、infra topology
 `RETIRED` 并以 exit `2` 结束，不再安装软件、建立 host 文件、载入环境或进行网络工作。
 
 这只是 source-only containment：不停止、检查或证明任何 deployed host、PM2、credentials、scheduler
-或 infra topology 的状态。`scripts/vps-deploy/deploy.sh` 与 `scripts/vps-deploy/check-vps.sh`
-均不在此次范围内，须由各自独立审查。
+或 infra topology 的状态。`setup-env.sh` 与 `check-vps.sh` 已各自封存；
+`scripts/vps-deploy/deploy.sh` 仍不在此次范围内，须独立审查。
 
 ## V1 legacy VPS environment provisioning source containment（2026-08-17）
 
@@ -203,8 +203,17 @@ external monitor 的状态。`/api/health`、OpenClaw、harness、infra topology
 compatibility path。它现固定输出 `RETIRED` 并以 exit `2` 结束，不再执行 legacy setup 工作。
 
 这只是 source-only containment：不停止、检查或证明 infra topology、任何 deployed host、PM2、credentials
-或 scheduler 的状态。`scripts/vps-deploy/deploy.sh` 与 `scripts/vps-deploy/check-vps.sh` 仍不在此次
-范围内，须由各自独立审查。
+或 scheduler 的状态。`setup.sh` 与 `check-vps.sh` 已各自封存；`scripts/vps-deploy/deploy.sh` 仍不在此次
+范围内，须独立审查。
+
+## V1 legacy VPS inspection CLI source containment（2026-08-17）
+
+`scripts/vps-deploy/check-vps.sh` 是旧 VPS inspection compatibility path，现固定输出 `RETIRED`
+并以 exit `2` 结束；它不再连接远程主机、读取环境或日志、检查 process state，或发起网络请求。
+
+这只是 source-only containment：`scripts/vps-deploy/setup.sh`、`scripts/vps-deploy/setup-env.sh` 与
+`scripts/vps-deploy/check-vps.sh` 均已各自封存；它不停止、检查或证明 `scripts/vps-deploy/deploy.sh`、
+infra topology、任何 deployed host、PM2、credentials 或 scheduler 的状态。
 
 ## V1 archive on-chain probe source containment（2026-08-17）
 
