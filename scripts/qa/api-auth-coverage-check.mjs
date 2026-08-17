@@ -55,12 +55,13 @@ const PUBLIC_API_ROUTES = new Set([
   'market/arbitrage',
   'market/candles',
   'market/futures',
+  // The Fear & Greed card renders a local unavailable state and makes no endpoint call.
+  'market/fear-greed',
   // SpotMarket renders a local unavailable 7D marker and makes no endpoint call.
   'market/sparklines',
   'market/coin/[id]',
   'market/defi',
   'market/exchanges',
-  'market/fear-greed',
   'market/ohlc/[id]',
   'market/overview',
   'market/realtime',
