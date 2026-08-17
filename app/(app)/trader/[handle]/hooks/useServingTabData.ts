@@ -69,6 +69,12 @@ export interface ServingTabData {
   isCoreUnavailable: boolean
   /** A user-initiated retry is refreshing one or more failed core modules. */
   isCoreRefreshing: boolean
+  /**
+   * No truthful core module exists yet while either the initial request or
+   * server-side collection is in progress. Consumers may render a skeleton
+   * only for this state; retained modules and terminal failures stay visible.
+   */
+  isColdCoreLoading: boolean
   /** Retry only timeframe modules whose bounded refresh failed. */
   refetchDegradedCore: () => Promise<unknown>
   loading: boolean
@@ -154,6 +160,16 @@ export function useServingTabData(
   const isCoreUnavailable = isCoreDegraded && !hasCoreModules
   const degradedCoreHooks = enabledCoreHooks.filter((core) => core.isDegraded)
   const isCoreRefreshing = degradedCoreHooks.some((core) => core.isRefreshing)
+  // The adapter deliberately returns empty, truthy legacy shapes while no
+  // modules have arrived. Expose the cold boundary explicitly so the default
+  // three-tab view does not mistake a live request for a trader with no data.
+  // A retained module stays rendered during refresh, while degraded / disabled
+  // states keep their distinct unavailable and capability disclosures.
+  const isColdCoreLoading =
+    enabledCoreHooks.length > 0 &&
+    !hasCoreModules &&
+    !isCoreUnavailable &&
+    (isCoreLoading || isCorePendingUpstream)
 
   const { nickname, avatarSrc, entries, scores } = input
 
@@ -280,6 +296,7 @@ export function useServingTabData(
       isCoreStale,
       isCoreUnavailable,
       isCoreRefreshing,
+      isColdCoreLoading,
       refetchDegradedCore: () => Promise.all(degradedCoreHooks.map((core) => core.refetch())),
       loading: isCoreLoading,
     }
@@ -301,6 +318,7 @@ export function useServingTabData(
     isCoreStale,
     isCoreUnavailable,
     isCoreRefreshing,
+    isColdCoreLoading,
     isCoreLoading,
     degradedCoreHooks,
   ])

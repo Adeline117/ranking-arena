@@ -38,6 +38,7 @@ import { Box, Text } from '@/app/components/base'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import ServingCoreStatusNotice from '@/app/components/trader/serving/ServingCoreStatusNotice'
+import ServingOverviewCoreSkeleton from '@/app/components/trader/serving/ServingOverviewCoreSkeleton'
 import LinkedAccountStatus from '@/app/components/trader/LinkedAccountStatus'
 import {
   isExactSourceNotServingError,
@@ -1640,42 +1641,46 @@ export default function TraderProfileClient({
                       />
                     </Box>
                   )}
-                  <OverviewTab
-                    data={visibleData}
-                    traderProfile={effProfile}
-                    traderPerformance={effPerformance}
-                    traderEquityCurve={
-                      effEquityCurve as
-                        | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
-                        | undefined
-                    }
-                    traderSimilar={effSimilar}
-                    positionSummary={
-                      scopedTraderData?.positionSummary as
-                        | {
-                            avgLeverage: number | null
-                            longPositions: number | null
-                            shortPositions: number | null
-                          }
-                        | null
-                        | undefined
-                    }
-                    selectedPeriod={selectedPeriod}
-                    periodAvailability={useThreeTab ? servingPeriodAvailability : undefined}
-                    hasMultipleAccounts={
-                      hasMultipleAccounts || linkedAccountScope.mode === 'aggregate'
-                    }
-                    activeAccount={activeAccount}
-                    aggregatedData={aggregatedData}
-                    linkedAccounts={linkedAccounts}
-                    suppressAccountContent={suppressAccountContent}
-                    accountContentStatus={accountContentStatus}
-                    currentUserId={currentUserId}
-                    isVerifiedClaimOwner={isVerifiedClaimOwner}
-                    isVerifiedTrader={isVerifiedTrader}
-                    verifiedTraderProfile={authorizationClaimSource?.profile ?? null}
-                    claimedUser={visibleClaimedUser}
-                  />
+                  {useThreeTab && servingTab.isColdCoreLoading ? (
+                    <ServingOverviewCoreSkeleton />
+                  ) : (
+                    <OverviewTab
+                      data={visibleData}
+                      traderProfile={effProfile}
+                      traderPerformance={effPerformance}
+                      traderEquityCurve={
+                        effEquityCurve as
+                          | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
+                          | undefined
+                      }
+                      traderSimilar={effSimilar}
+                      positionSummary={
+                        scopedTraderData?.positionSummary as
+                          | {
+                              avgLeverage: number | null
+                              longPositions: number | null
+                              shortPositions: number | null
+                            }
+                          | null
+                          | undefined
+                      }
+                      selectedPeriod={selectedPeriod}
+                      periodAvailability={useThreeTab ? servingPeriodAvailability : undefined}
+                      hasMultipleAccounts={
+                        hasMultipleAccounts || linkedAccountScope.mode === 'aggregate'
+                      }
+                      activeAccount={activeAccount}
+                      aggregatedData={aggregatedData}
+                      linkedAccounts={linkedAccounts}
+                      suppressAccountContent={suppressAccountContent}
+                      accountContentStatus={accountContentStatus}
+                      currentUserId={currentUserId}
+                      isVerifiedClaimOwner={isVerifiedClaimOwner}
+                      isVerifiedTrader={isVerifiedTrader}
+                      verifiedTraderProfile={authorizationClaimSource?.profile ?? null}
+                      claimedUser={visibleClaimedUser}
+                    />
+                  )}
                 </Box>
 
                 {/* Stats Tab — not mounted until first visit (prevents skeleton flash in SwipeableView) */}

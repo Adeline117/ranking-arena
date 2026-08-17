@@ -68,6 +68,7 @@ describe('useServingTabData history completeness', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     ;(useTraderCore as jest.Mock).mockReturnValue(coreResult())
+    ;(useTraderRecords as jest.Mock).mockReturnValue(recordsResult(null))
   })
 
   it.each([
@@ -149,6 +150,51 @@ describe('useServingTabData history completeness', () => {
     expect(view.result.current.isCorePendingUpstream).toBe(true)
     expect(view.result.current.isCoreStale).toBe(false)
     expect(view.result.current.isCoreUnavailable).toBe(false)
+    expect(view.result.current.isColdCoreLoading).toBe(true)
+  })
+
+  it('marks a no-module network fetch as cold loading rather than no trader data', () => {
+    ;(useTraderCore as jest.Mock).mockReturnValue(coreResult({ isLoading: true }))
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    expect(view.result.current.isColdCoreLoading).toBe(true)
+    expect(view.result.current.isCoreUnavailable).toBe(false)
+  })
+
+  it('keeps a retained module visible while another window is collecting', () => {
+    ;(useTraderCore as jest.Mock).mockImplementation(({ tf }: { tf: 7 | 30 | 90 }) =>
+      tf === 90
+        ? coreResult({ modules: coreModule(90), isPendingUpstream: true })
+        : coreResult({ isLoading: true })
+    )
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    expect(view.result.current.isCorePendingUpstream).toBe(true)
+    expect(view.result.current.isColdCoreLoading).toBe(false)
   })
 
   it('shows simultaneous collection and stale disclosure, then retries only failed timeframes', async () => {
@@ -214,10 +260,38 @@ describe('useServingTabData history completeness', () => {
 
     expect(view.result.current.isCoreStale).toBe(false)
     expect(view.result.current.isCoreUnavailable).toBe(true)
+    expect(view.result.current.isColdCoreLoading).toBe(false)
     await view.result.current.refetchDegradedCore()
     expect(retry7).toHaveBeenCalledTimes(1)
     expect(retry30).not.toHaveBeenCalled()
     expect(retry90).not.toHaveBeenCalled()
+  })
+
+  it('does not treat an all-absent capability as a cold loading state', () => {
+    ;(useTraderCore as jest.Mock).mockReturnValue(
+      coreResult({ isLoading: true, isPendingUpstream: true })
+    )
+    const allAbsent: SourceCapability = {
+      ...capability,
+      timeframes: { '7': 'absent', '30': 'absent', '90': 'absent' },
+    }
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        allAbsent,
+        true
+      )
+    )
+
+    expect(view.result.current.isCorePendingUpstream).toBe(false)
+    expect(view.result.current.isCoreUnavailable).toBe(false)
+    expect(view.result.current.isColdCoreLoading).toBe(false)
   })
 
   it('never requests or retains source-declared absent timeframes', async () => {
