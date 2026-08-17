@@ -154,9 +154,12 @@ INGEST_EXECUTION_NOT_PUBLISHED` 及三层 `no-store`，先于 body、rate limit�
 serving-data 操作。`/api/traders/[handle]/core` 与 `/records` 保留 warm serving read；需要
 Tier-C 的分支以 pending 降级，不初始化 provider/ioredis/BullMQ bridge 或读取 result queue。
 两条 public route 的普通 rate limit 仍可能读 Redis，这一源码门禁并不声称它们没有 Redis
-读取。该门禁不能停止或证明 host/queue/external schedule；独立的 legacy `refresh_jobs`
-(`batch-5min`、`batch-discover`、public trader refresh) 与 legacy proxy/import path 不在本
-containment 内，须另行审查。
+读取。该门禁不能停止或证明 host/queue/external schedule。
+已登记的 legacy-refresh source boundary（含 client-safe 固定 false 的
+`V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker）已单独封存 legacy `refresh_jobs`：
+`batch-discover` 为 auth-first `401/410` tombstone，`batch-5min` 已移除 queue consumer，
+public trader refresh 不再接纳 job，legacy detail 固定 `refresh_job: null`。它不涵盖
+legacy proxy/import path，后者须另行审查。
 
 未来的发布流程必须由 owner 重新定义并单独批准：精确 candidate SHA、隔离目标、受保护
 source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界和保留的审计材料。具体操作

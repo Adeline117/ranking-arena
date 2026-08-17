@@ -2652,12 +2652,12 @@ const en = {
   viewGroupInfoAria: 'View group info & rules',
   viewGroupMembersAria: 'View member list',
 
-  // Trader page i18n - TraderPageV2, TraderRefreshButton, TraderFeed, etc.
+  // Trader page i18n - TraderPageV2, TraderFeed, etc.
   aumLabel: 'AUM',
   verifiedAccounts: 'verified accounts',
   mddLabel: 'MDD',
   tradesLabel: 'Trades',
-  dataOutdatedBanner: 'Data may be outdated. Refresh to get the latest.',
+  dataOutdatedBanner: 'Data may be outdated. Manual refresh is unavailable during V1 verification.',
   platformDataUnavailable:
     'Data for this platform is temporarily unavailable. Historical data shown below may be outdated.',
   rankTrend: 'Rank trend (7d)',

@@ -20,7 +20,6 @@ import type {
   EquityCurvePoint,
   DailyPnlPoint,
   AssetBreakdownPoint,
-  RefreshJobSummary,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
@@ -59,11 +58,15 @@ export async function GET(
       // the Redis cache. Align both paths: 60s fresh + 300s SWR.
       const CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300'
 
-      // Check cache first (warm tier - 5min TTL)
+      // Check cache first (warm tier - 15min Redis TTL).
       const cacheKey = publicRankingCacheKey(`trader:${platform}:${trader_key}`)
       const cached = await tieredGet<TraderDetailResponse>(cacheKey)
       if (cached.data) {
-        return NextResponse.json(cached.data, {
+        // Older cache entries may have been written before the V1 hold and
+        // therefore still contain a refresh-job status or error. Normalize at
+        // the public response boundary without mutating or purging Redis.
+        const response = { ...cached.data, refresh_job: null }
+        return NextResponse.json(response, {
           headers: { 'X-Cache': 'HIT', 'Cache-Control': CACHE_CONTROL },
         })
       }
@@ -77,7 +80,7 @@ export async function GET(
       }
       const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
 
-      // Phase 1: fire the 6 always-needed queries in parallel.
+      // Phase 1: fire the five serving reads in parallel.
       //
       // v2 snapshots table has 1.4M+ rows — most traders DO have v2 data, so the
       // 4 leaderboard_ranks fallback queries from the old code (profile, 7D, 30D,
@@ -85,10 +88,10 @@ export async function GET(
       // only on the rare miss. trader_timeseries is still empty so legacy
       // equity_curve + asset_breakdown stay in Phase 1 unconditionally.
       //
-      // Common case: 6 queries. Cold case (no v2 data): 6 + 1 = 7 queries (the
+      // Common case: 5 queries. Cold case (no v2 data): 5 + 1 = 6 queries (the
       // fallback is a single merged .in('season_id', ...) query instead of 4).
       const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-      const [profileResult, snapshotsResult, timeseriesResult, jobResult, ecResult, abResult] =
+      const [profileResult, snapshotsResult, timeseriesResult, ecResult, abResult] =
         await Promise.all([
           // V2 primary queries
           supabase
@@ -111,15 +114,6 @@ export async function GET(
             .eq('trader_key', trader_key)
             .order('as_of_ts', { ascending: false })
             .limit(5),
-          supabase
-            .from('refresh_jobs')
-            .select('id, status, attempts, last_error, created_at, updated_at')
-            .eq('platform', platform)
-            .eq('trader_key', trader_key)
-            .in('status', ['pending', 'running'])
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
 
           // Legacy timeseries (trader_timeseries is empty, always needed).
           // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
@@ -326,18 +320,6 @@ export async function GET(
       const stalenessSeconds = getStalenessSeconds(latestUpdate)
       const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
 
-      // Build refresh job summary
-      const refreshJob: RefreshJobSummary | null = jobResult.data
-        ? {
-            id: jobResult.data.id,
-            status: jobResult.data.status,
-            attempts: jobResult.data.attempts,
-            last_error: jobResult.data.last_error,
-            created_at: jobResult.data.created_at,
-            updated_at: jobResult.data.updated_at,
-          }
-        : null
-
       const response: TraderDetailResponse = {
         profile,
         snapshots,
@@ -345,10 +327,11 @@ export async function GET(
         updated_at: latestUpdate,
         is_stale: isStale,
         staleness_seconds: stalenessSeconds,
-        refresh_job: refreshJob,
+        // Compatibility field: V1 never exposes legacy refresh queue state.
+        refresh_job: null,
       }
 
-      // Cache to Redis (warm tier - 5min TTL). Use next/server `after()` so the
+      // Cache to Redis (warm tier - 15min Redis TTL). Use next/server `after()` so the
       // serverless function waits for the write to complete BEFORE Vercel
       // tears down the execution context. Previous `void tieredSet(...).catch()`
       // pattern leaked writes when the function returned faster than Redis,

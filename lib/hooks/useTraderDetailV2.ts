@@ -1,14 +1,21 @@
 /**
- * Hook for fetching trader details from the new /api/trader/:platform/:trader_key endpoint.
- * Provides loading/error/stale states and refresh capability.
+ * Legacy hook for the platform/key trader-detail API.
+ *
+ * It remains a read-only compatibility client. V1 does not admit legacy
+ * refresh jobs, so this hook neither posts a refresh request nor polls queue
+ * state after a user action.
  */
 
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo, useState } from 'react'
 import { STALE_SLOW } from './cache-presets'
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import type { TraderDetailResponse, RefreshResponse, Platform } from '@/lib/types/trading-platform'
+import {
+  isV1LegacyRefreshJobsPublished,
+  V1_LEGACY_REFRESH_JOBS_NOT_PUBLISHED_CODE,
+} from '@/lib/ingest/v1-legacy-refresh-jobs-publication'
+import type { Platform, RefreshResponse, TraderDetailResponse } from '@/lib/types/trading-platform'
 
 const FETCH_TIMEOUT_MS = 15_000
 
@@ -29,7 +36,7 @@ const fetcher = async (url: string): Promise<TraderDetailResponse> => {
 export interface UseTraderDetailV2Options {
   platform: Platform
   traderKey: string
-  /** Refresh interval in ms (default: 0 = no auto-refresh) */
+  /** Retained for compatibility; V1 does not automatically refetch this legacy detail view. */
   refreshInterval?: number
 }
 
@@ -41,27 +48,22 @@ export interface UseTraderDetailV2Result {
   isValidating: boolean
   /** Whether data is stale (older than threshold) */
   isStale: boolean
-  /** Trigger a background refresh job */
+  /** Fixed V1 unavailable result; this never creates a background job. */
   triggerRefresh: () => Promise<RefreshResponse | null>
-  /** Whether refresh is in progress */
+  /** Always false because V1 does not start refresh work. */
   isRefreshing: boolean
-  /** Refresh error message */
+  /** Refresh unavailability message after an attempted legacy action. */
   refreshError: string | null
-  /** Invalidate query cache */
+  /** Invalidate the local query cache. */
   mutate: () => void
 }
 
 export function useTraderDetailV2({
   platform,
   traderKey,
-  refreshInterval = 0,
 }: UseTraderDetailV2Options): UseTraderDetailV2Result {
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
-
   const queryKey = useMemo(() => ['trader-detail-v2', platform, traderKey], [platform, traderKey])
 
   const {
@@ -74,75 +76,26 @@ export function useTraderDetailV2({
     placeholderData: (prev) => prev,
     queryFn: () => fetcher(`/api/trader/${platform}/${traderKey}`),
     enabled: !!traderKey,
-    refetchInterval: refreshInterval || false,
+    refetchInterval: false,
     refetchOnWindowFocus: false,
     staleTime: STALE_SLOW,
-    retry: 2,
+    retry: false,
   })
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current)
-        pollTimeoutRef.current = null
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-        abortControllerRef.current = null
-      }
-    }
-  }, [])
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey })
   }, [queryClient, queryKey])
 
   const triggerRefresh = useCallback(async (): Promise<RefreshResponse | null> => {
-    if (!traderKey || isRefreshing) return null
-
-    setIsRefreshing(true)
-    setRefreshError(null)
-
-    try {
-      const res = await fetch(`/api/trader/${platform}/${traderKey}/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_type: 'full_refresh', priority: 1 }),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Request failed' }))
-        throw new Error(err.error || `HTTP ${res.status}`)
-      }
-
-      const result: RefreshResponse = await res.json()
-
-      // Poll for completion (check every 5s, max 60s)
-      if (result.created) {
-        // Abort any existing polling
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort()
-        }
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current)
-        }
-
-        const controller = new AbortController()
-        abortControllerRef.current = controller
-        pollForCompletion(platform, traderKey, invalidate, controller.signal, pollTimeoutRef)
-      }
-
-      return result
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Refresh failed'
-      setRefreshError(msg)
+    if (!isV1LegacyRefreshJobsPublished()) {
+      setRefreshError(V1_LEGACY_REFRESH_JOBS_NOT_PUBLISHED_CODE)
       return null
-    } finally {
-      setIsRefreshing(false)
     }
-  }, [platform, traderKey, isRefreshing, invalidate])
+
+    // Reopening requires a separately reviewed request and completion contract.
+    setRefreshError(V1_LEGACY_REFRESH_JOBS_NOT_PUBLISHED_CODE)
+    return null
+  }, [])
 
   return {
     data,
@@ -151,49 +104,8 @@ export function useTraderDetailV2({
     isValidating,
     isStale: data?.is_stale ?? false,
     triggerRefresh,
-    isRefreshing,
+    isRefreshing: false,
     refreshError,
     mutate: invalidate,
   }
-}
-
-/**
- * Poll the trader detail endpoint until data is refreshed or timeout.
- * Uses AbortSignal for proper cleanup on component unmount.
- */
-function pollForCompletion(
-  platform: string,
-  traderKey: string,
-  invalidate: () => void,
-  signal: AbortSignal,
-  timeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
-  maxAttempts = 12,
-  intervalMs = 5000
-): void {
-  let attempts = 0
-
-  const poll = () => {
-    if (signal.aborted) return
-    attempts++
-    if (attempts >= maxAttempts) return
-
-    timeoutRef.current = setTimeout(async () => {
-      if (signal.aborted) return
-      try {
-        const res = await fetch(`/api/trader/${platform}/${traderKey}`, { signal })
-        if (res.ok) {
-          const data: TraderDetailResponse = await res.json()
-          if (!data.refresh_job || data.refresh_job.status === 'success') {
-            invalidate()
-            return
-          }
-        }
-      } catch (_err) {
-        if (signal.aborted) return
-      }
-      poll()
-    }, intervalMs)
-  }
-
-  poll()
 }

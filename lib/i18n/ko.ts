@@ -2552,7 +2552,8 @@ const ko = {
   verifiedAccounts: '인증된 계정',
   mddLabel: 'MDD',
   tradesLabel: '거래',
-  dataOutdatedBanner: '데이터가 오래되었을 수 있습니다. 새로고침하여 최신 정보를 확인하세요.',
+  dataOutdatedBanner:
+    '데이터가 오래되었을 수 있습니다. V1 검증 중에는 수동 새로고침을 사용할 수 없습니다.',
   platformDataUnavailable:
     '이 플랫폼의 데이터를 일시적으로 사용할 수 없습니다. 아래 표시된 기록 데이터가 오래되었을 수 있습니다.',
   rankTrend: '순위 추이 (7일)',

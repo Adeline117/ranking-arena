@@ -2569,12 +2569,12 @@ const zh = {
   viewGroupInfoAria: '查看群组信息与规则',
   viewGroupMembersAria: '查看成员列表',
 
-  // 交易员页面 i18n - TraderPageV2, TraderRefreshButton, TraderFeed 等
+  // 交易员页面 i18n - TraderPageV2, TraderFeed 等
   aumLabel: '管理资金',
   verifiedAccounts: '已认证账户',
   mddLabel: '回撤',
   tradesLabel: '交易次数',
-  dataOutdatedBanner: '数据可能已过时，请刷新获取最新信息。',
+  dataOutdatedBanner: '数据可能已过时。V1 验证期间无法手动刷新。',
   platformDataUnavailable: '该平台数据暂时不可用，以下显示的历史数据可能已过时。',
   rankTrend: '排名趋势（7天）',
   drawdownChart: '回撤',

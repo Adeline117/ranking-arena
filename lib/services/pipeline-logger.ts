@@ -110,7 +110,6 @@ export class PipelineLogger {
     'backfill-data',
 
     // Discovery & enrichment
-    'batch-discover',
     'enrich-gmx',
     'generate-profiles',
     'backfill-avatars',
