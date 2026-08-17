@@ -189,6 +189,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-rank-authority-pg17
 
+      - name: Prove public ranked leaderboard source freshness
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:public-ranked-leaderboard-pg17
+
       - name: Prove canonical score-input platform aliases
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
