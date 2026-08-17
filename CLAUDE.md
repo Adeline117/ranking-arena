@@ -56,7 +56,7 @@ scripts/                # CLI tools and maintenance
   backfill-*.ts         # Legacy compatibility tombstones (no V1 direct invocation)
 
 supabase/migrations/    # SQL migration files
-worker/                 # Background job runner
+worker/                 # Worker source; this listing is architecture, not runtime state
 cloudflare-worker/      # CF Worker for geo-blocked APIs
 ```
 
@@ -83,8 +83,8 @@ it is intentionally not part of routine diagnostics.
 
 ## Database Schema (Core Tables)
 
-> **Primary data layer = `arena.*` schema** (partitioned, populated by the ingest
-> worker): `arena.traders`, `arena.trader_stats` (per trader×timeframe),
+> **Primary data layer = `arena.*` schema** (partitioned, intended for the ingest
+> worker data model): `arena.traders`, `arena.trader_stats` (per trader×timeframe),
 > `arena.leaderboard_snapshots/entries`, `arena.positions_current`,
 > `arena.{position_history,order_records,transfer_history,copier_records}` (monthly
 > partitions). `compute-leaderboard` derives serving tables `public.leaderboard_ranks`
@@ -119,6 +119,22 @@ checked-in source. Do not infer a live schedule or deployment state from a route
 name, historic configuration, or old runbook; these source-only changes do not prove
 the deployed control-plane state.
 
+For the documented ranking-command chain, the fixed source gate
+`V1_CRON_EXECUTION_PUBLISHED=false` guards `GET /api/cron/compute-leaderboard`,
+`GET /api/cron/precompute-composite`, `GET /api/cron/sync-meilisearch`,
+`GET /api/cron/pipeline-evaluate`, and `GET`/`POST /api/hooks/post-deploy`. It is not
+an environment flag. Invalid or missing service authentication receives `401`; valid
+authentication receives `410` `CRON_EXECUTION_NOT_PUBLISHED`; both paths have three
+`no-store` headers and return before parsing parameters, acquiring locks, or touching
+pipeline logs, cache, data, or providers. This ranking-command list does not classify
+other cron routes.
+
+`V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` separately holds the checked-in legacy
+downstream ranking-command worker/scheduler/caller chain. Its worker entry exits
+before dotenv, DB, Redis, BullMQ, or HTTP initialization; its scheduler and trigger
+chain return before BullMQ, Redis, or network work. This source behavior neither
+stops nor proves the state of an already-running worker or an external schedule.
+
 Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
 
 ## Exchange Adapters (`lib/ingest/adapters/`)
@@ -126,10 +142,11 @@ Daily snapshot production, historical violation cleanup, and the unversioned qua
 CEX: binance-futures, binance-spot, bybit, okx, bitget, mexc, kucoin, htx, coinex
 DEX: hyperliquid, gmx, dydx, vertex, drift, aevo, gains, kwenta
 
-Adapters register through `lib/ingest/adapters/register.ts` and are loaded by
-`worker/src/ingest-worker.ts`. Verify the current `SourceAdapter` contract and
-source-specific fixtures before changing an adapter; do not infer a path or API
-shape from old connector notes.
+The source bootstrap registers adapters through `lib/ingest/adapters/register.ts`
+and is referenced by `worker/src/ingest-worker.ts`. This is source architecture, not
+evidence that a worker is active. Verify the current `SourceAdapter` contract and
+source-specific fixtures before changing an adapter; do not infer a path or API shape
+from old connector notes.
 
 ## Arena Score Formula
 
@@ -332,8 +349,8 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
 
 ### 多会话编排纪律 — MANDATORY（漂移与卡死的元层根源）
 
-Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓库目录**。
-2026-06 血泪教训(全部活生生发生过):
+历史协作记录曾涉及最多 7 个 Claude 会话、cron 与 worker **共用同一个仓库目录**；这不是
+当前运行进程的断言。2026-06 血泪教训（全部活生生发生过）：
 
 1. **schema 变更走单一评审通道,串行化。** 多个会话各自手工 SQL-editor/MCP 应用
    迁移、用任意名字 → 仓库↔ledger 失配、幻影表、~200 迁移漂移。当前 V1 下，迁移
@@ -579,9 +596,12 @@ observation only: it must not trigger an auto-fix, worker restart, cron invocati
 backfill, deployment, or database write. Record the observation and route it through
 the owner-approved incident/release process instead.
 
-### Pipeline Logging
+### Pipeline Logging (historical/source interface)
 
-Cron jobs use `PipelineLogger` to record execution:
+`PipelineLogger` is a historical/source execution-logging interface retained for
+local code review and tests. Its presence does not show that a cron, worker, logger,
+or monitoring pipeline is active, and the example below is not an instruction to
+start one during V1:
 
 ```typescript
 import { PipelineLogger } from '@/lib/services/pipeline-logger'

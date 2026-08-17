@@ -6,8 +6,14 @@
 > **V1 NO-GO:** these diagrams are source/design context, not live runtime or
 > provider-control-plane evidence. They do not authorize a deployment, host access,
 > scheduler, queue, credential, proxy, or data operation.
+> `V1_CRON_EXECUTION_PUBLISHED=false` and
+> `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` are narrow, checked-in source guards;
+> they do not stop or prove the state of an external worker or schedule.
 
-## 一、系统全景
+## 一、系统全景（历史 / 设计语义）
+
+下图描述 intended source architecture，不表示其中的 worker、queue、provider 或 data
+flow 正在运行，也不表示任何 cadence 已发布。
 
 ```mermaid
 graph TD
@@ -30,7 +36,7 @@ graph TD
     POS[positions_* · 月分区]
   end
 
-  Serving[compute-leaderboard → public.leaderboard_ranks + lr_7d/30d/90d]
+  Serving[retired design: compute-leaderboard → public.leaderboard_ranks + lr_7d/30d/90d]
   Redis[(Upstash Redis)]
   FE[Next.js 前端 · Vercel hnd1]
 
@@ -46,15 +52,18 @@ graph TD
   FE -->|读| Serving
 ```
 
-## 二、数据管道（写路径）
+## 二、数据管道（历史 / 设计写路径）
+
+该 sequence 仅保留历史/设计的数据依赖关系；它不是 worker、scheduler、queue 或 ranking
+publication 的当前执行证明。
 
 ```mermaid
 sequenceDiagram
   participant EX as 交易所
-  participant W as Ingest Worker (Mac Mini + SG VPS)
+  participant W as Historical/design Ingest Worker (Mac Mini + SG VPS)
   participant ST as lib/ingest/staging/validate.ts
   participant DB as arena.* (Supabase)
-  participant CL as compute-leaderboard (cron)
+  participant CL as Retired compute-leaderboard command
   participant SV as public.leaderboard_ranks
 
   EX->>W: fetchLeaderboard/Details (tier A/B/C/D)
@@ -94,14 +103,14 @@ graph LR
     AUTH[Auth]
     RLS[RLS on all tables]
   end
-  subgraph Nodes[Ingest Worker 双节点]
+  subgraph Nodes[历史 / 设计的 Ingest Worker 双节点]
     MM[Local owner-managed node]
     SG[Regional owner-managed node]
   end
   MEILI[Meilisearch]
   REDIS[(Upstash Redis)]
-  R2[(Cloudflare R2 · 日备)]
-  GH[GitHub Actions · CI + 哨兵冗余]
+  R2[(Historical/design Cloudflare R2 · 日备)]
+  GH[Historical/design GitHub Actions · CI + 哨兵冗余]
 
   APP --> PG
   APP --> REDIS
@@ -125,6 +134,15 @@ schedules；这只是源码候选，不证明或改变任何已部署 provider�
 或数据库调度状态。不得用 Git push、CI、Vercel CLI、Preview、dashboard、cron、smoke
 或 rollback 作为替代路径。
 
+在已记录的 ranking-command chain 中，`V1_CRON_EXECUTION_PUBLISHED=false` 让
+`/api/cron/compute-leaderboard`、`/api/cron/precompute-composite`、
+`/api/cron/sync-meilisearch`、`/api/cron/pipeline-evaluate` 和
+`/api/hooks/post-deploy` 在 auth-first 之后固定返回 401/410 与三层 `no-store`，且不进入
+参数、锁、pipeline log、cache、data 或 provider 工作。本段不概括其他 cron。独立的
+`V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` 让源码中的 legacy downstream
+worker/scheduler/caller chain 在 dotenv、DB、Redis、BullMQ 或 HTTP 工作前退出/返回。
+两者都不能停止已运行的 process 或 checkout 外已有的 schedule。
+
 未来的发布流程必须由 owner 重新定义并单独批准：精确 candidate SHA、隔离目标、受保护
 source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界和保留的审计材料。具体操作
 步骤不在本文档中；参见 `docs/RUNBOOK.md` 的 owner escalation boundary。
@@ -134,7 +152,7 @@ source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界�
 | 层                 | 位置                                                                                    |
 | ------------------ | --------------------------------------------------------------------------------------- |
 | Ingest adapters    | `lib/ingest/adapters/<source>/`（NOT lib/connectors）                                   |
-| Ingest worker 入口 | `worker/src/ingest-worker.ts`（tier A/B/C/D）                                           |
+| Ingest worker 入口 | `worker/src/ingest-worker.ts`（历史/设计 tier A/B/C/D source entry；非运行证明）        |
 | 指标净化           | `lib/ingest/staging/validate.ts` + `lib/pipeline/validate-before-write.ts`              |
 | 主 perf 表         | `arena.trader_stats`（trader_latest/v2 已 DROP 2026-06-16）                             |
 | 服务层             | `public.leaderboard_ranks` + `lr_7d/30d/90d`                                            |
