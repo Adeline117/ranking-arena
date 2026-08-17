@@ -1,128 +1,53 @@
 /**
  * GET /api/rankings
  *
- * Returns ranked traders for a given window, with optional platform/category filters.
- * Reads from leaderboard_ranks (pre-computed by compute-leaderboard cron).
+ * Legacy-compatible public leaderboard endpoint. The only ranked cohort this
+ * route may read is `public_ranked_leaderboard`: its security-barrier view
+ * applies publication eligibility before caller filters, sorting, and range
+ * pagination. A page must never be assembled from a wider relation and then
+ * filtered in application code.
  *
- * Query params:
- *   window: '7d' | '30d' | '90d' (required)
- *   category: 'futures' | 'spot' | 'onchain' (optional)
- *   platform: Platform string (optional, overrides category)
- *   limit: number (default 100, max 500)
- *   offset: number (default 0) — the supported pagination mechanism
- *   cursor: RESERVED / not implemented. Keyset pagination was documented but never
- *     wired (the fallback ignores it → passing cursor alone silently re-returns
- *     page 0). Use offset. Do not advertise cursor to API consumers until keyset
- *     is actually implemented over (arena_score, source_trader_id).
- *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count'
- *   sort_dir: 'asc' | 'desc'
- *   min_pnl: number (optional)
- *   min_trades: number (optional)
+ * Query parameters:
+ * - window: 7d | 30d | 90d | composite (required)
+ * - category: futures | spot | onchain (optional; platform takes precedence)
+ * - platform: canonical active source (optional)
+ * - limit: 1..500 (default 100)
+ * - offset: 0..20,000,000 (default 0)
+ * - sort_by: one of the published view metrics below (default arena_score)
+ * - sort_dir: asc | desc (default desc)
+ * - min_pnl, min_trades, trader_type: optional SQL filters
  *
- * Response:
- *   { data:[], meta: { window, category, platform, totalcount, ... } }
- *
- * Caching: publication-fenced 500-row canonical Redis snapshot; CDN no-store.
+ * `cursor` was never implemented by this legacy endpoint. Reject it rather
+ * than silently returning page one under a false continuation contract.
  */
 
-import type {
-  RankingWindow,
-  TradingCategory,
-  Platform,
-  RankingsQuery,
-} from '@/lib/types/leaderboard'
-import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
+import type { Platform } from '@/lib/types/leaderboard'
 import type { TradingPeriod } from '@/lib/types/unified-trader'
-import { tieredGetOrSet, tieredGet } from '@/lib/cache/redis-layer'
-import type { SharedCacheWriteFence } from '@/lib/cache'
-import { ApiError, ErrorCode } from '@/lib/api/errors'
+import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
-import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
-import {
-  currentScoredSources,
-  type LeaderboardCountCacheRow,
-} from '@/lib/data/leaderboard-count-cache'
 import {
   sourceFreshnessStatusMap,
   summarizeSourceFreshness,
   type SourceFreshnessRow,
 } from '@/lib/rankings/source-freshness'
 import {
-  PUBLIC_RANKING_POSTGREST_EXCLUSION,
-  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_REDIS_TAG,
   filterPublicRankingSources,
   isPublicRankingSourceQuarantined,
-  publicRankingCacheKey,
-  publicRankingCountFromCache,
-  sanitizePublicRankingSourcePayload,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
-import {
-  PUBLIC_ACTIVE_RANKING_SOURCES,
-  parsePublicActiveRankingSource,
-} from '@/lib/constants/exchanges'
-import {
-  PUBLIC_RANKING_CANONICAL_LIMIT,
-  canonicalPublicRankingCacheKeys,
-  createPublicRankingRequestDeadline,
-  getCanonicalPublicRanking,
-  raceWithPublicRankingSignal,
-} from '@/lib/rankings/canonical-public-cache'
+import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 
 const logger = createLogger('rankings-api')
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
+const MAX_LIMIT = 500
+const DEFAULT_LIMIT = 100
+const MAX_OFFSET = 20_000_000
+const ROI_ANOMALY_THRESHOLD = 50_000
 
-// availableSources cache via Redis (tieredGetOrSet, warm tier).
-//
-// IMPORTANT: reads from leaderboard_count_cache (one row per source) instead
-// of doing `SELECT source FROM leaderboard_ranks LIMIT 200`. The old query
-// returned physically-ordered rows, which on a (season_id, source) composite
-// index meant all 200 matching rows came from the FIRST source lexicographically
-// (e.g. just ['aevo']) — the bug was hidden by per-instance in-memory caching
-// (different instances had different partial orderings) until we moved to
-// shared Redis in task 17 and everyone saw the same broken cache entry.
-//
-// leaderboard_count_cache is maintained by refresh_leaderboard_count_cache()
-// at the end of compute-leaderboard cron, so it's always fresh.
-async function getAvailableSources(
-  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
-  seasonId: string,
-  writeFence?: SharedCacheWriteFence | null,
-  signal?: AbortSignal
-): Promise<string[]> {
-  // Reuse the outer response generation when one exists. Direct/filtered
-  // callers still capture their own fence; `undefined` must never silently
-  // downgrade this v6 public cache to an ordinary unguarded pipeline write.
-  const cacheOptions =
-    writeFence === undefined
-      ? { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
-      : { skipMemory: true, writeFence }
-  const sources = await tieredGetOrSet<string[]>(
-    publicRankingCacheKey(`rankings:available-sources:v2:${seasonId}`),
-    async (): Promise<string[]> => {
-      let sourceQuery = supabase
-        .from('leaderboard_count_cache')
-        .select('source,total_count,updated_at')
-        .eq('season_id', seasonId)
-        .like('source', '%_gt0')
-      if (signal) sourceQuery = sourceQuery.abortSignal(signal)
-      const { data: sourceRows, error } = await sourceQuery
-      if (error) throw new Error(`Available source query failed: ${error.message}`)
-      return filterPublicRankingSources(
-        currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])
-      )
-    },
-    'warm', // 2min memory / 15min Redis — shared across instances
-    [PUBLIC_RANKING_REDIS_TAG, 'available-sources'],
-    cacheOptions
-  )
-  return filterPublicRankingSources(Array.isArray(sources) ? sources : [])
-}
-
-const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite']
-const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain']
+const VALID_WINDOWS = ['7d', '30d', '90d', 'composite'] as const
+const VALID_CATEGORIES = ['futures', 'spot', 'onchain'] as const
 const VALID_SORT_BY = [
   'arena_score',
   'roi',
@@ -133,109 +58,307 @@ const VALID_SORT_BY = [
   'sharpe_ratio',
   'trades_count',
 ] as const
+const VALID_TRADER_TYPES = ['human', 'bot'] as const
+const ALLOWED_QUERY_PARAMS = new Set([
+  'window',
+  'category',
+  'platform',
+  'limit',
+  'offset',
+  'sort_by',
+  'sort_dir',
+  'min_pnl',
+  'min_trades',
+  'trader_type',
+])
 
-// Data quality: ROI values above this threshold are considered anomalous
-const ROI_ANOMALY_THRESHOLD = 50000 // 50000% = 500x — only filter extreme data errors, not legitimate high performers
+type PublicRankingWindow = (typeof VALID_WINDOWS)[number]
+type PublicRankingCategory = (typeof VALID_CATEGORIES)[number]
+type PublicRankingSortBy = (typeof VALID_SORT_BY)[number]
+type PublicRankingTraderType = (typeof VALID_TRADER_TYPES)[number]
 
-type CanonicalRankingsPayload = Record<string, unknown> & {
-  traders?: unknown[]
-  totalCount?: number
-  totalcount?: number
-  total_count?: number
+const SORT_COLUMN: Record<PublicRankingSortBy, string> = {
+  arena_score: 'arena_score',
+  roi: 'roi',
+  pnl: 'pnl',
+  drawdown: 'max_drawdown',
+  copiers: 'copiers',
+  win_rate: 'win_rate',
+  sharpe_ratio: 'sharpe_ratio',
+  trades_count: 'trades_count',
 }
 
-function canonicalTotal(payload: CanonicalRankingsPayload, visibleRows: number): number {
-  for (const candidate of [payload.totalCount, payload.totalcount, payload.total_count]) {
-    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= visibleRows) {
-      return candidate
-    }
+const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
+  'source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, avatar_url, rank, rank_change, is_new, computed_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated, season_id'
+
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+/**
+ * Local read-only bridge until generated Supabase types contain the additive
+ * public view. It deliberately exposes only the query methods used below.
+ */
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  neq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: unknown): PublicRankedLeaderboardQuery
+  gt(column: string, value: number): PublicRankedLeaderboardQuery
+  gte(column: string, value: number): PublicRankedLeaderboardQuery
+  lte(column: string, value: number): PublicRankedLeaderboardQuery
+  or(filters: string): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  range(from: number, to: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(
+  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>
+): PublicRankedLeaderboardClient {
+  const candidate: unknown = supabase
+  if (!isRecord(candidate) || typeof candidate.from !== 'function') {
+    throw new TypeError('Supabase client does not expose a public ranked cohort reader')
   }
-  return visibleRows
+  return candidate as PublicRankedLeaderboardClient
 }
 
-export function sliceCanonicalRankingsPayload(
-  payload: CanonicalRankingsPayload,
-  offset: number,
-  limit: number,
-  staleFallback: boolean
-): CanonicalRankingsPayload {
-  // Sanitize the complete canonical page before slicing. Otherwise a newly
-  // quarantined row could consume a requested slot and hide the next safe row.
-  const safe = sanitizePublicRankingSourcePayload(payload)
-  const canonicalRows = Array.isArray(safe.traders) ? safe.traders : []
-  const traders = canonicalRows.slice(offset, offset + limit)
-  const totalCount = canonicalTotal(safe, canonicalRows.length)
+function singleQueryParam(searchParams: URLSearchParams, name: string): string | null {
+  const values = searchParams.getAll(name)
+  if (values.length > 1) {
+    throw ApiError.validation(`Query parameter ${name} may only be specified once`)
+  }
+  return values[0] ?? null
+}
+
+function parseStrictInteger(
+  raw: string | null,
+  fallback: number,
+  name: string,
+  min: number,
+  max: number
+): number {
+  if (raw === null) return fallback
+  if (!/^\d+$/.test(raw)) {
+    throw ApiError.validation(`Invalid ${name}`)
+  }
+  const parsed = Number(raw)
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw ApiError.validation(`Invalid ${name}`)
+  }
+  return parsed
+}
+
+function parseOptionalFiniteNumber(raw: string | null, name: string): number | undefined {
+  if (raw === null) return undefined
+  if (raw.trim() === '') throw ApiError.validation(`Invalid ${name}`)
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) throw ApiError.validation(`Invalid ${name}`)
+  return parsed
+}
+
+function publicSeason(window: PublicRankingWindow): TradingPeriod {
+  return (window === 'composite' ? '90D' : window.toUpperCase()) as TradingPeriod
+}
+
+function responseWindow(window: PublicRankingWindow): '7D' | '30D' | '90D' | 'COMPOSITE' {
+  return window === 'composite' ? 'COMPOSITE' : (window.toUpperCase() as '7D' | '30D' | '90D')
+}
+
+function sourceTypeForCategory(category: PublicRankingCategory): string {
+  return category === 'onchain' ? 'web3' : category
+}
+
+function nullableFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function hasPositivePublishedRank(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    typeof value.rank === 'number' &&
+    Number.isSafeInteger(value.rank) &&
+    value.rank > 0
+  )
+}
+
+function truncateAddress(value: string): string | null {
+  if (value.startsWith('0x') && value.length >= 10)
+    return `${value.slice(0, 6)}...${value.slice(-4)}`
+  if (/^[1-9A-HJ-NP-Za-km-z]{30,50}$/.test(value)) {
+    return `${value.slice(0, 4)}...${value.slice(-4)}`
+  }
+  return null
+}
+
+function displayName(handle: unknown, traderId: string): string {
+  const placeholderNames = new Set(['Enter Name', 'enter name', 'Unknown', 'null', 'undefined', ''])
+  if (typeof handle === 'string' && !placeholderNames.has(handle)) {
+    return truncateAddress(handle) ?? handle
+  }
+  if (traderId.includes(':')) {
+    const address = traderId.split(':')[1]
+    if (address) return truncateAddress(address) ?? address
+  }
+  return (truncateAddress(traderId) ?? traderId) || 'Anonymous'
+}
+
+function mapPublicRankedRow(
+  row: Record<string, unknown>,
+  sourceFreshness: ReturnType<typeof sourceFreshnessStatusMap>
+) {
+  const source = String(row.source)
+  const traderId = String(row.source_trader_id)
+  let platform = source
+  let traderKey = traderId
+  if (platform === 'copin' && traderId.includes(':')) {
+    const [underlyingPlatform, ...rest] = traderId.split(':')
+    platform = underlyingPlatform
+    traderKey = rest.join(':')
+  }
+
+  const freshness = sourceFreshness.get(source)
   return {
-    ...safe,
-    traders,
-    totalCount,
-    totalcount: totalCount,
-    total_count: totalCount,
-    hasMore: offset + traders.length < totalCount,
-    next_cursor: null,
-    ...(staleFallback ? { is_stale: true, stale_reason: 'dependency_unavailable' } : undefined),
+    platform: platform as Platform,
+    trader_key: traderKey,
+    display_name: displayName(row.handle, traderKey),
+    avatar_url: typeof row.avatar_url === 'string' ? row.avatar_url : null,
+    roi: nullableFiniteNumber(row.roi),
+    pnl: nullableFiniteNumber(row.pnl),
+    arena_score: nullableFiniteNumber(row.arena_score),
+    win_rate: nullableFiniteNumber(row.win_rate),
+    max_drawdown: nullableFiniteNumber(row.max_drawdown),
+    sharpe_ratio: nullableFiniteNumber(row.sharpe_ratio),
+    trades_count: nullableFiniteNumber(row.trades_count),
+    followers: nullableFiniteNumber(row.followers),
+    copiers: nullableFiniteNumber(row.copiers),
+    rank: Number(row.rank),
+    rank_change: nullableFiniteNumber(row.rank_change),
+    is_new: row.is_new === true,
+    quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1 },
+    // Backward-compatible per-row freshness fields. They are upstream source
+    // watermarks, never a score computation timestamp.
+    updated_at: freshness?.updated_at ?? null,
+    is_stale: freshness?.is_stale ?? true,
+    computed_at: typeof row.computed_at === 'string' ? row.computed_at : null,
+    profitability_score: nullableFiniteNumber(row.profitability_score),
+    risk_control_score: nullableFiniteNumber(row.risk_control_score),
+    execution_score: nullableFiniteNumber(row.execution_score),
+    score_completeness: typeof row.score_completeness === 'string' ? row.score_completeness : null,
+    trading_style: typeof row.trading_style === 'string' ? row.trading_style : null,
+    avg_holding_hours: nullableFiniteNumber(row.avg_holding_hours),
+    style_confidence: null,
+    is_bot:
+      source === 'web3_bot' || row.trader_type === 'bot' || row.trader_type === 'suspected_bot',
+    trader_type:
+      typeof row.trader_type === 'string' ? row.trader_type : source === 'web3_bot' ? 'bot' : null,
   }
 }
 
 export const GET = withPublic(
-  async ({ request }) => {
+  async ({ supabase, request }) => {
     const { searchParams } = new URL(request.url)
+    for (const [name] of searchParams) {
+      if (!ALLOWED_QUERY_PARAMS.has(name)) {
+        throw ApiError.validation(`Unsupported query parameter: ${name}`)
+      }
+    }
 
-    // Parse & validate window (required)
-    const window = searchParams.get('window') as RankingWindow | 'composite' | null
-    const normalizedWindow = window?.toLowerCase() as RankingWindow | 'composite'
+    const rawWindow = singleQueryParam(searchParams, 'window')
+    const normalizedWindow = rawWindow?.toLowerCase() as PublicRankingWindow | undefined
     if (!normalizedWindow || !VALID_WINDOWS.includes(normalizedWindow)) {
       throw ApiError.validation(
         'Invalid or missing window parameter. Must be one of: 7d, 30d, 90d, composite'
       )
     }
 
-    // Parse optional params
-    const category = searchParams.get('category') as TradingCategory | null
+    const rawCategory = singleQueryParam(searchParams, 'category')
+    const category = rawCategory as PublicRankingCategory | null
     if (category && !VALID_CATEGORIES.includes(category)) {
       throw ApiError.validation('Invalid category. Must be one of: futures, spot, onchain')
     }
 
-    const requestedPlatform = searchParams.get('platform')
+    const requestedPlatform = singleQueryParam(searchParams, 'platform')
     const platform = requestedPlatform ? parsePublicActiveRankingSource(requestedPlatform) : null
     if (requestedPlatform && !platform) {
       throw ApiError.validation(`Invalid platform: ${requestedPlatform}`)
     }
 
-    const sortBy = (searchParams.get('sort_by') || 'arena_score') as (typeof VALID_SORT_BY)[number]
+    const rawSortBy = singleQueryParam(searchParams, 'sort_by')
+    const sortBy = (rawSortBy ?? 'arena_score') as PublicRankingSortBy
     if (!VALID_SORT_BY.includes(sortBy)) {
       throw ApiError.validation(`Invalid sort_by. Must be one of: ${VALID_SORT_BY.join(', ')}`)
     }
 
-    const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc'
-
-    const limit = parseLimit(searchParams.get('limit'), 100, 500)
-    const offset = parseOffset(searchParams.get('offset'))
-    const cursor = searchParams.get('cursor') || undefined
-    if (cursor) {
-      // Keyset pagination is not implemented by the backing query. Silently
-      // ignoring this value re-serves offset 0 and can duplicate rows, so fail
-      // explicitly until the API has a real (sort value, identity) cursor.
-      throw ApiError.validation('Cursor pagination is not supported; use offset pagination')
+    const rawSortDir = singleQueryParam(searchParams, 'sort_dir')
+    const sortDir = rawSortDir ?? 'desc'
+    if (sortDir !== 'asc' && sortDir !== 'desc') {
+      throw ApiError.validation('Invalid sort_dir. Must be one of: asc, desc')
     }
-    const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined
-    const minTrades = searchParams.get('min_trades')
-      ? Number(searchParams.get('min_trades'))
-      : undefined
-    const traderType = searchParams.get('trader_type') as 'human' | 'bot' | null
 
+    const limit = parseStrictInteger(
+      singleQueryParam(searchParams, 'limit'),
+      DEFAULT_LIMIT,
+      'limit',
+      1,
+      MAX_LIMIT
+    )
+    const offset = parseStrictInteger(
+      singleQueryParam(searchParams, 'offset'),
+      0,
+      'offset',
+      0,
+      MAX_OFFSET
+    )
+    const minPnl = parseOptionalFiniteNumber(singleQueryParam(searchParams, 'min_pnl'), 'min_pnl')
+    const minTradesRaw = singleQueryParam(searchParams, 'min_trades')
+    const minTrades = parseStrictInteger(minTradesRaw, 0, 'min_trades', 0, Number.MAX_SAFE_INTEGER)
+    const hasMinTrades = minTradesRaw !== null
+    const rawTraderType = singleQueryParam(searchParams, 'trader_type')
+    const traderType = rawTraderType as PublicRankingTraderType | null
+    if (traderType && !VALID_TRADER_TYPES.includes(traderType)) {
+      throw ApiError.validation('Invalid trader_type. Must be one of: human, bot')
+    }
+
+    const window = responseWindow(normalizedWindow)
+    const seasonId = publicSeason(normalizedWindow)
+
+    // The policy itself proves that this requested source has no public rank
+    // population. Zero is exact for this intentionally empty scope.
     if (isPublicRankingSourceQuarantined(platform)) {
       const response = apiSuccess({
         traders: [],
-        window: normalizedWindow === 'composite' ? 'COMPOSITE' : normalizedWindow.toUpperCase(),
+        window,
         totalCount: 0,
+        totalCountIsExact: true,
         totalcount: 0,
         total_count: 0,
         as_of: null,
         is_stale: true,
         source_freshness: [],
         availableSources: [],
+        availableSourcesIsExact: true,
         next_cursor: null,
+        hasMore: false,
+        rankingMode: sortBy,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        limit,
+        offset,
         ranking_visibility: 'partial',
         ranking_visibility_reason: 'publication_policy_filtered',
         ranking_visibility_reasons: ['quarantined_source_requested'],
@@ -244,574 +367,165 @@ export const GET = withPublic(
       return response
     }
 
-    // A bounded canonical page replaces exact-limit cache keys. Any page fully
-    // covered by the canonical 500 rows can be served by slicing the same
-    // publication-fenced snapshot, including offset pagination.
-    const canonicalEligible =
-      sortBy === 'arena_score' &&
-      sortDir === 'desc' &&
-      !platform &&
-      minPnl == null &&
-      minTrades == null &&
-      !traderType &&
-      !cursor &&
-      offset + limit <= PUBLIC_RANKING_CANONICAL_LIMIT
+    // The security-barrier view enforces public rank membership before every
+    // predicate below. Keep all additional filters and the finite range in the
+    // database; mapping code must never repair a page assembled from raw rows.
+    let query = publicRankedLeaderboardClient(supabase)
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
+      .eq('season_id', seasonId)
+      // Redundant to the view, but records the persisted-rank contract at this
+      // endpoint boundary and protects a rolling migration with an older view.
+      .not('rank', 'is', null)
+      .gt('arena_score', 0)
+      .gte('roi', -ROI_ANOMALY_THRESHOLD)
+      .lte('roi', ROI_ANOMALY_THRESHOLD)
 
-    let result: unknown
-    const deadline = createPublicRankingRequestDeadline(request.signal)
-
-    try {
-      if (canonicalEligible) {
-        const keys = canonicalPublicRankingCacheKeys(
-          `api:rankings:${normalizedWindow}:${category || 'all'}`
-        )
-        const canonical = await getCanonicalPublicRanking<CanonicalRankingsPayload>({
-          keys,
-          signal: deadline.signal,
-          sanitize: sanitizePublicRankingSourcePayload,
-          tags: [`season:${normalizedWindow.toUpperCase()}`],
-          load: async ({ signal, writeFence }) => {
-            if (normalizedWindow === 'composite') {
-              // Reuse the publication writer's composite when available, but
-              // persist it into the same durable canonical/LKG contract. A
-              // category cannot reuse a subset of the global top-N: that is
-              // not necessarily the category's own top 500.
-              const { data: precomputed } = category
-                ? { data: null }
-                : await raceWithPublicRankingSignal(
-                    tieredGet<CanonicalRankingsPayload>(
-                      publicRankingCacheKey('precomputed:composite:all:v2'),
-                      'hot',
-                      { skipMemory: true, writeFence }
-                    ),
-                    signal
-                  )
-              if (precomputed) {
-                const safe = sanitizePublicRankingSourcePayload(precomputed)
-                const safeRows = Array.isArray(safe.traders) ? safe.traders : []
-                const totalCount = canonicalTotal(safe, safeRows.length)
-                return {
-                  ...safe,
-                  traders: safeRows.slice(0, PUBLIC_RANKING_CANONICAL_LIMIT),
-                  window: 'COMPOSITE',
-                  totalCount,
-                  totalcount: totalCount,
-                  total_count: totalCount,
-                }
-              }
-              return getCompositeRankings(
-                {
-                  category: category || undefined,
-                  limit: PUBLIC_RANKING_CANONICAL_LIMIT,
-                  offset: 0,
-                  sort_by: 'arena_score',
-                  sort_dir: 'desc',
-                },
-                writeFence,
-                signal,
-                true
-              )
-            }
-
-            return getRankingsFallback(
-              {
-                window: normalizedWindow,
-                category: category || undefined,
-                limit: PUBLIC_RANKING_CANONICAL_LIMIT,
-                offset: 0,
-                sort_by: 'arena_score',
-                sort_dir: 'desc',
-              },
-              undefined,
-              writeFence,
-              signal,
-              true
-            )
-          },
-        })
-        result = sliceCanonicalRankingsPayload(
-          canonical.payload,
-          offset,
-          limit,
-          canonical.source === 'lkg'
-        )
-      } else if (normalizedWindow === 'composite') {
-        result = await raceWithPublicRankingSignal(
-          getCompositeRankings(
-            {
-              category: category || undefined,
-              platform: (platform || undefined) as Platform | undefined,
-              limit,
-              offset,
-              sort_by: sortBy,
-              sort_dir: sortDir,
-              min_pnl: minPnl,
-              min_trades: minTrades,
-            },
-            undefined,
-            deadline.signal
-          ),
-          deadline.signal
-        )
-      } else {
-        const query: RankingsQuery = {
-          window: normalizedWindow,
-          category: category || undefined,
-          platform: (platform || undefined) as Platform | undefined,
-          limit,
-          offset,
-          sort_by: sortBy,
-          sort_dir: sortDir,
-          min_pnl: minPnl,
-          min_trades: minTrades,
-          trader_type: traderType || undefined,
-        }
-        result = await raceWithPublicRankingSignal(
-          getRankingsFallback(query, cursor, undefined, deadline.signal),
-          deadline.signal
-        )
-      }
-    } catch (fetchError) {
-      logger.warn(
-        'Ranking dependencies unavailable:',
-        fetchError instanceof Error ? fetchError.message : String(fetchError)
-      )
-      throw new ApiError('Ranking data is temporarily unavailable', {
-        code: ErrorCode.SERVICE_UNAVAILABLE,
-        cause: fetchError instanceof Error ? fetchError : undefined,
-      })
-    } finally {
-      deadline.dispose()
+    if (platform) {
+      query = query.eq('source', platform)
+    } else if (category) {
+      query = query.eq('source_type', sourceTypeForCategory(category))
+    }
+    if (minPnl !== undefined) query = query.gte('pnl', minPnl)
+    if (hasMinTrades) query = query.gte('trades_count', minTrades)
+    if (traderType === 'bot') {
+      query = query.or('trader_type.eq.bot,trader_type.eq.suspected_bot,source.eq.web3_bot')
+    } else if (traderType === 'human') {
+      query = query.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.eq.human')
     }
 
-    result = sanitizePublicRankingSourcePayload(result)
-    const response = apiSuccess(result)
+    const sortColumn = SORT_COLUMN[sortBy]
+    query = query.order(sortColumn, { ascending: sortDir === 'asc', nullsFirst: false })
+    if (sortColumn !== 'rank') {
+      query = query.order('rank', { ascending: true, nullsFirst: false })
+    }
+
+    // PostgREST ranges are inclusive: one extra view row is the only
+    // pagination witness. There is intentionally no count fallback.
+    const { data, error } = await query.range(offset, offset + limit)
+    if (error) {
+      logger.error('public ranked cohort query failed', error)
+      throw new Error('Public ranked cohort query failed')
+    }
+
+    const rawRows = Array.isArray(data) ? data : []
+    const sanitized = sanitizePublicRankingPayload(
+      { traders: rawRows, window: seasonId },
+      { expectedPeriod: seasonId }
+    )
+    const safeRows = Array.isArray(sanitized.traders)
+      ? sanitized.traders.filter(hasPositivePublishedRank)
+      : ([] as Record<string, unknown>[])
+    const integrityCompromised = safeRows.length !== rawRows.length
+    // The view is expected to make this impossible. If a rolling schema,
+    // proxy, or cache layer nevertheless returns an invalid row, do not shift
+    // a later row into this finite page: that would create a false offset
+    // continuation. Fail the complete page closed instead.
+    if (integrityCompromised) {
+      const response = apiSuccess({
+        traders: [],
+        window,
+        totalCount: null,
+        totalCountIsExact: false,
+        totalcount: null,
+        total_count: null,
+        as_of: null,
+        is_stale: true,
+        source_freshness: [],
+        availableSources: [],
+        availableSourcesIsExact: false,
+        next_cursor: null,
+        hasMore: false,
+        rankingMode: sortBy,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        limit,
+        offset,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'publication_policy_filtered',
+        ranking_visibility_reasons: ['ineligible_public_cohort_row_removed'],
+      })
+      response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
+      return response
+    }
+    const pageRows = safeRows.slice(0, limit)
+    const visibleSources = filterPublicRankingSources(pageRows.map((row) => row.source))
+
+    // `source_as_of` remains the compatibility freshness field. It is queried
+    // only for displayed sources and is fail-closed: a missing/error watermark
+    // means no row is returned as ranked even if the view query was successful.
+    const freshnessResult =
+      visibleSources.length > 0
+        ? await supabase
+            .from('leaderboard_source_freshness')
+            .select('source,source_as_of')
+            .eq('season_id', seasonId)
+            .in('source', visibleSources)
+        : { data: [] as SourceFreshnessRow[], error: null }
+    if (freshnessResult.error) {
+      logger.warn('source freshness metadata query failed', freshnessResult.error)
+    }
+    const freshnessSummary = summarizeSourceFreshness(
+      freshnessResult.error ? [] : ((freshnessResult.data || []) as SourceFreshnessRow[]),
+      visibleSources
+    )
+
+    if (pageRows.length > 0 && freshnessSummary.isStale) {
+      const response = apiSuccess({
+        traders: [],
+        window,
+        totalCount: null,
+        totalCountIsExact: false,
+        totalcount: null,
+        total_count: null,
+        as_of: freshnessSummary.asOf,
+        is_stale: true,
+        source_freshness: freshnessSummary.sources,
+        availableSources: [],
+        availableSourcesIsExact: false,
+        next_cursor: null,
+        hasMore: false,
+        rankingMode: sortBy,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        limit,
+        offset,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'source_freshness_unverified',
+        ranking_visibility_reasons: ['source_freshness_unverified'],
+      })
+      response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
+      return response
+    }
+
+    const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
+    const traders = pageRows.map((row) => mapPublicRankedRow(row, freshnessBySource))
+    const hasMore = rawRows.length > limit && !integrityCompromised
+    const response = apiSuccess({
+      traders,
+      window,
+      // No same-predicate, view-native count authority exists. A visible page
+      // or lookahead must never be represented as an exact total.
+      totalCount: null,
+      totalCountIsExact: false,
+      totalcount: null,
+      total_count: null,
+      as_of: freshnessSummary.asOf,
+      is_stale: freshnessSummary.isStale,
+      source_freshness: freshnessSummary.sources,
+      // This is the visible page's source set, not an exhaustive cohort census.
+      availableSources: visibleSources,
+      availableSourcesIsExact: false,
+      next_cursor: null,
+      hasMore,
+      rankingMode: sortBy,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+      limit,
+      offset,
+    })
     response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
     return response
   },
   { name: 'rankings', rateLimit: { requests: 30, window: 60, prefix: 'rankings' } }
 )
-
-/**
- * Fetch rankings via unified data layer (leaderboard_ranks).
- * Returns the same response shape as the legacy getRankingsFallback.
- */
-async function getRankingsFallback(
-  rankingsQuery: RankingsQuery,
-  _cursor?: string,
-  writeFence?: SharedCacheWriteFence | null,
-  signal?: AbortSignal,
-  requireCountAuthority = false
-) {
-  const {
-    window,
-    category,
-    platform,
-    limit = 100,
-    offset = 0,
-    sort_by = 'arena_score',
-    sort_dir = 'desc',
-    min_pnl,
-    min_trades,
-    trader_type,
-  } = rankingsQuery
-
-  // A publication-fenced cache miss must read the primary. A replica can lag
-  // behind the just-rotated Redis generation and legitimize old ranks as new.
-  const { getSupabaseAdmin } = await import('@/lib/supabase/server')
-  const supabase = getSupabaseAdmin()
-  // Cap at 1000: limit=5000 triggers 5 parallel chunk queries on a 314k-row
-  // table under the CHUNK_SIZE pagination logic, saturating the Supabase
-  // connection pool with little user benefit. Nobody actually needs 5000
-  // traders in one request — pagination is already cursor-friendly.
-  const safeLimit = Math.min(limit, 1000)
-  const seasonId = window.toUpperCase() as TradingPeriod
-
-  // Map sort_by to unified sortBy parameter
-  const sortByMap: Record<string, string> = {
-    arena_score: 'arena_score',
-    roi: 'roi',
-    pnl: 'pnl',
-    drawdown: 'max_drawdown',
-    copiers: 'copiers',
-    win_rate: 'win_rate',
-    sharpe_ratio: 'sharpe_ratio',
-    trades_count: 'trades_count',
-  }
-  const unifiedSortBy = sortByMap[sort_by] || 'arena_score'
-
-  // Determine platform filter based on category
-  const platformFilter: string | undefined = platform || undefined
-  let platformsInCategory: string[] | undefined
-  if (!platformFilter && category) {
-    platformsInCategory = filterPublicRankingSources(
-      Object.entries(PLATFORM_CATEGORY)
-        .filter(([, cat]) => cat === category)
-        .map(([p]) => p)
-    )
-  }
-
-  // Sorting
-  const sortColumn = unifiedSortBy === 'rank' ? 'rank' : unifiedSortBy
-  const ascending = sort_dir === 'asc'
-
-  // Helper: build base query with all filters applied (reusable for chunked fetches)
-  const SELECT_COLS = `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
-       trades_count, followers, copiers, arena_score, avatar_url, rank, rank_change, is_new, computed_at,
-       profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated`
-
-  function buildBaseQuery(opts?: { count?: 'exact' | 'planned' | 'estimated' }) {
-    let q = supabase
-      .from('leaderboard_ranks')
-      .select(SELECT_COLS, opts ? { count: opts.count } : undefined)
-      .eq('season_id', seasonId)
-      .not('rank', 'is', null)
-      // >0 (not just non-null): excluded/zeroed traders are set to arena_score=0
-      // by zeroOutExcluded; live board + Redis sync already use >0, so align the
-      // main board's tail & counts with them (was .not(null) → leaked 0-score rows).
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .lte('roi', ROI_ANOMALY_THRESHOLD)
-      .gte('roi', -ROI_ANOMALY_THRESHOLD)
-
-    if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-      q = q.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-    }
-
-    if (platformFilter) {
-      q = q.eq('source', platformFilter)
-    } else if (platformsInCategory && platformsInCategory.length > 0) {
-      q = q.in('source', platformsInCategory)
-    } else {
-      q = q.in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
-    }
-
-    if (min_pnl != null) {
-      q = q.gte('pnl', min_pnl)
-    }
-    if (min_trades != null) {
-      q = q.gte('trades_count', min_trades)
-    }
-
-    // Filter by trader type (human/bot/suspected_bot)
-    if (trader_type === 'bot') {
-      q = q.or('trader_type.eq.bot,trader_type.eq.suspected_bot,source.eq.web3_bot')
-    } else if (trader_type === 'human') {
-      q = q.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.eq.human')
-    }
-
-    q = q.order(sortColumn, { ascending, nullsFirst: false })
-    // The publication writer already resolves metric ties into persisted rank.
-    // Reuse that authority so offset/chunk boundaries cannot disagree with the
-    // rank shown to clients. Avoid ordering the rank column twice when it is the
-    // requested primary sort.
-    if (sortColumn !== 'rank') {
-      q = q.order('rank', { ascending: true, nullsFirst: false })
-    }
-    return q
-  }
-
-  // Supabase PostgREST has a max_rows limit (typically 1000) per request.
-  // Paginate in 1000-row chunks when safeLimit > 1000 to get complete data.
-  const CHUNK_SIZE = 1000
-  let rows: Record<string, unknown>[] = []
-  let countRowsForSources: LeaderboardCountCacheRow[] = []
-  let totalCount: number | null = null
-  let error: { message: string } | null = null
-
-  if (safeLimit <= CHUNK_SIZE) {
-    // Single request — NO count (exact count takes 25s+ on 314k rows with OR filters)
-    // Total count is read from leaderboard_count_cache (maintained by cron)
-    // in parallel with the main query to avoid sequential round-trips.
-    // MUST match the serving query's `.gt('arena_score', 0)` filter → read the
-    // `_gt0` count variant, not the plain key. The plain `_all` counts ALL rows
-    // incl. arena_score<=0, so it UNDER-counts the served set (90D: 8811 vs the
-    // real 9587) → the "N traders" figure was low AND `hasMore` truncated the
-    // board ~776 rows early, hiding the lowest-ranked traders from themselves.
-    let rankingQuery = buildBaseQuery().range(offset, offset + safeLimit - 1)
-    let countQuery = supabase
-      .from('leaderboard_count_cache')
-      .select('source,total_count,updated_at')
-      .eq('season_id', seasonId)
-      .like('source', '%_gt0')
-    if (signal) {
-      rankingQuery = rankingQuery.abortSignal(signal)
-      countQuery = countQuery.abortSignal(signal)
-    }
-    const [result, countResult] = await Promise.all([rankingQuery, countQuery])
-    if (requireCountAuthority && countResult.error) {
-      throw new Error(`Leaderboard count authority failed: ${countResult.error.message}`)
-    }
-    rows = (result.data || []) as Record<string, unknown>[]
-    error = result.error
-    countRowsForSources = (countResult.data || []) as LeaderboardCountCacheRow[]
-    // A retired source's old key must never claim rows. If the current cache
-    // generation is unavailable, fall back to the rows we actually observed.
-    const cachedTotal = publicRankingCountFromCache(
-      countRowsForSources,
-      platformFilter
-        ? { source: platformFilter }
-        : platformsInCategory
-          ? { sources: platformsInCategory }
-          : {}
-    )
-    if (requireCountAuthority && cachedTotal === null) {
-      throw new Error('Leaderboard count authority generation is missing')
-    }
-    totalCount = cachedTotal ?? offset + rows.length
-  } else {
-    // Chunked fetch: first chunk, no count
-    let firstQuery = buildBaseQuery().range(offset, offset + CHUNK_SIZE - 1)
-    if (signal) firstQuery = firstQuery.abortSignal(signal)
-    const firstResult = await firstQuery
-    if (firstResult.error) {
-      error = firstResult.error
-    } else {
-      rows = (firstResult.data || []) as Record<string, unknown>[]
-      totalCount = null // Will be set after all chunks
-
-      // Calculate remaining chunks needed
-      const remaining = safeLimit - CHUNK_SIZE
-      if (remaining > 0 && rows.length === CHUNK_SIZE) {
-        const chunkCount = Math.ceil(remaining / CHUNK_SIZE)
-        const chunkPromises = Array.from({ length: chunkCount }, (_, i) => {
-          const chunkOffset = offset + CHUNK_SIZE * (i + 1)
-          const chunkEnd = Math.min(chunkOffset + CHUNK_SIZE - 1, offset + safeLimit - 1)
-          let chunkQuery = buildBaseQuery().range(chunkOffset, chunkEnd)
-          if (signal) chunkQuery = chunkQuery.abortSignal(signal)
-          return chunkQuery
-        })
-        const chunkResults = await Promise.all(chunkPromises)
-        for (const cr of chunkResults) {
-          if (cr.error) {
-            error = cr.error
-            break
-          }
-          if (cr.data) rows = rows.concat(cr.data as Record<string, unknown>[])
-        }
-      }
-    }
-  }
-
-  if (error) {
-    throw new Error(`Leaderboard query failed: ${error.message}`)
-  }
-
-  // Deduplicate by source:source_trader_id (case-insensitive for 0x addresses)
-  const seenRowKeys = new Set<string>()
-  const paginatedRows = (rows || []).filter((r: Record<string, unknown>) => {
-    if (r.rank == null) return false
-    const tid = String(r.source_trader_id || '')
-    const normalizedTid = tid.startsWith('0x') ? tid.toLowerCase() : tid
-    const key = `${r.source}:${normalizedTid}`
-    if (seenRowKeys.has(key)) return false
-    seenRowKeys.add(key)
-    return true
-  })
-
-  // Fetch available sources + true source-data watermarks in parallel. Never
-  // substitute pipeline_logs or leaderboard_ranks.computed_at: both describe
-  // Arena compute activity, not the age of exchange/protocol data.
-  const seasonIdUpper = seasonId
-  let freshnessQuery = supabase
-    .from('leaderboard_source_freshness')
-    .select('source,source_as_of')
-    .eq('season_id', seasonIdUpper)
-    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
-  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-    freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-  }
-  if (signal) freshnessQuery = freshnessQuery.abortSignal(signal)
-  const availableSourcesPromise =
-    countRowsForSources.length > 0
-      ? Promise.resolve(filterPublicRankingSources(currentScoredSources(countRowsForSources)))
-      : getAvailableSources(supabase, seasonIdUpper, writeFence, signal)
-  const [availableSources, freshnessResult] = await Promise.all([
-    availableSourcesPromise,
-    freshnessQuery,
-  ])
-
-  const observedSources = [
-    ...new Set(paginatedRows.map((row) => String(row.source || '')).filter(Boolean)),
-  ]
-  const liveSources = availableSources.length > 0 ? availableSources : observedSources
-  const relevantSources = platformFilter
-    ? [platformFilter]
-    : platformsInCategory
-      ? liveSources.filter((source) => platformsInCategory.includes(source))
-      : liveSources
-  // A failed/missing table read yields no watermarks and therefore a
-  // fail-closed stale summary for every relevant source.
-  const freshnessSummary = summarizeSourceFreshness(
-    (freshnessResult.data || []) as SourceFreshnessRow[],
-    relevantSources
-  )
-  const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
-
-  // Transform to response format
-  const PLACEHOLDER_NAMES = new Set([
-    'Enter Name',
-    'enter name',
-    'Unknown',
-    'null',
-    'undefined',
-    '',
-  ])
-  // Truncate raw wallet addresses (0x hex or bare base58 Solana/Tron) so they
-  // don't overflow the name cell on mobile. Returns null if not address-like.
-  const truncAddr = (s: string): string | null => {
-    if (s.startsWith('0x') && s.length >= 10) return `${s.slice(0, 6)}...${s.slice(-4)}`
-    if (/^[1-9A-HJ-NP-Za-km-z]{30,50}$/.test(s)) return `${s.slice(0, 4)}...${s.slice(-4)}`
-    return null
-  }
-  const formatDisplayName = (handle: string | null, traderId: string): string => {
-    // A real handle may itself be a raw address (e.g. okx_web3_solana stores the
-    // full base58 address as handle) — truncate those before returning.
-    if (handle && !PLACEHOLDER_NAMES.has(handle)) return truncAddr(handle) ?? handle
-    // Format 0x addresses as "0x1234...5678"
-    if (traderId?.startsWith('0x') && traderId.length >= 10) {
-      return `${traderId.slice(0, 6)}...${traderId.slice(-4)}`
-    }
-    // Copin format: "protocol:0xAddr" → show the address part
-    if (traderId?.includes(':')) {
-      const addr = traderId.split(':')[1]
-      if (addr?.startsWith('0x') && addr.length >= 10)
-        return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-    }
-    return truncAddr(traderId) ?? traderId ?? 'Anonymous'
-  }
-
-  const traders = paginatedRows.map((row: Record<string, unknown>) => {
-    const traderId = row.source_trader_id as string
-    // For copin aggregator: extract real platform from trader_key (e.g., "hyperliquid:0x..." → "hyperliquid")
-    let displayPlatform = row.source as string
-    let displayTraderKey = traderId
-    if (displayPlatform === 'copin' && traderId?.includes(':')) {
-      const [realPlatform, ...rest] = traderId.split(':')
-      displayPlatform = realPlatform
-      displayTraderKey = rest.join(':')
-    }
-
-    const roi = row.roi != null ? Number(row.roi) : null
-    const pnl = row.pnl != null ? Number(row.pnl) : null
-    const arenaScore = row.arena_score != null ? Number(row.arena_score) : null
-    const sourceFreshness = freshnessBySource.get(String(row.source))
-
-    return {
-      platform: displayPlatform as Platform,
-      trader_key: displayTraderKey,
-      display_name: formatDisplayName(row.handle as string | null, displayTraderKey),
-      avatar_url: (row.avatar_url as string) || null,
-      // Top-level metrics for frontend compatibility
-      roi,
-      pnl,
-      arena_score: arenaScore,
-      win_rate: row.win_rate != null ? Number(row.win_rate) : null,
-      max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
-      sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
-      trades_count: (row.trades_count as number) ?? null,
-      followers: (row.followers as number) ?? null,
-      copiers: row.copiers != null ? Number(row.copiers) : null,
-      rank: Number(row.rank),
-      rank_change: (row.rank_change as number) ?? null,
-      is_new: (row.is_new as boolean) ?? false,
-      // Nested `metrics: { ... }` duplicate removed — all fields are already
-      // exposed at the top level and no consumer read from the nested shape
-      // (verified by repo-wide grep for `\.metrics\.roi` etc. in app/ and
-      // lib/hooks/ — only lib/connectors/* uses that shape internally).
-      // Saved ~30-40% response payload size.
-      quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-      // Compatibility name retained, but the value is now the source-data
-      // watermark rather than Arena's score computation timestamp.
-      updated_at: sourceFreshness?.updated_at ?? null,
-      is_stale: sourceFreshness?.is_stale ?? true,
-      computed_at: (row.computed_at as string) || null,
-      profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
-      risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
-      execution_score: row.execution_score != null ? Number(row.execution_score) : null,
-      score_completeness: (row.score_completeness as string) || null,
-      trading_style: (row.trading_style as string) || null,
-      avg_holding_hours: row.avg_holding_hours != null ? Number(row.avg_holding_hours) : null,
-      style_confidence: null,
-      is_bot:
-        row.source === 'web3_bot' ||
-        row.trader_type === 'bot' ||
-        row.trader_type === 'suspected_bot',
-      trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
-    }
-  })
-
-  return {
-    traders,
-    window: seasonId as '7D' | '30D' | '90D' | 'COMPOSITE',
-    // totalCount (camelCase) is what the frontend actually reads
-    // (useTraderData.ts:275: `data.totalCount ?? totalCountRef.current`).
-    // totalcount + total_count kept for backward compat with tests/older clients.
-    totalCount: totalCount || 0,
-    totalcount: totalCount || 0,
-    total_count: totalCount || 0,
-    as_of: freshnessSummary.asOf,
-    is_stale: freshnessSummary.isStale,
-    source_freshness: freshnessSummary.sources,
-    availableSources,
-    next_cursor: null,
-  }
-}
-
-/**
- * Composite rankings: uses 90D arena_score directly.
- *
- * compute-leaderboard already computes a weighted composite score
- * (90D x 0.70 + 30D x 0.25 + 7D x 0.05) and stores it as arena_score in 90D.
- * So instead of fetching 3 seasons and merging in JS, we just query 90D.
- * This reduces DB load from 3 queries to 1 and eliminates in-memory merge.
- */
-async function getCompositeRankings(
-  params: {
-    category?: TradingCategory
-    platform?: Platform
-    limit: number
-    offset: number
-    sort_by: string
-    sort_dir: 'asc' | 'desc'
-    min_pnl?: number
-    min_trades?: number
-  },
-  writeFence?: SharedCacheWriteFence | null,
-  signal?: AbortSignal,
-  requireCountAuthority = false
-) {
-  // Composite = 90D (which already contains the weighted composite arena_score)
-  // Delegate to getRankingsFallback with window='90d' and relabel as COMPOSITE
-  const result = await getRankingsFallback(
-    {
-      window: '90d' as RankingWindow,
-      category: params.category,
-      platform: params.platform,
-      limit: params.limit,
-      offset: params.offset,
-      sort_by: params.sort_by as
-        | 'arena_score'
-        | 'roi'
-        | 'pnl'
-        | 'drawdown'
-        | 'copiers'
-        | 'win_rate'
-        | 'sharpe_ratio'
-        | 'trades_count',
-      sort_dir: params.sort_dir,
-      min_pnl: params.min_pnl,
-      min_trades: params.min_trades,
-    },
-    undefined,
-    writeFence,
-    signal,
-    requireCountAuthority
-  )
-
-  return {
-    ...result,
-    window: 'COMPOSITE' as const,
-  }
-}

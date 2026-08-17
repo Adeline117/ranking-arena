@@ -1,29 +1,20 @@
 /**
- * Near-real-time rankings API
+ * Near-real-time public rankings.
  *
- * Reads the persisted leaderboard_ranks publication authority. A short response
- * cache absorbs repeat traffic without rebuilding rank from sorted-set position.
- *
- * GET /api/rankings/live?period=90D&limit=50&offset=0
- *
- * Response format matches /api/traders for frontend compatibility.
+ * The security-barrier `public_ranked_leaderboard` view is the only authority
+ * for a public ranked row. It validates the sealed serving head before this
+ * route applies its finite page; raw rank rows and estimated totals are never
+ * a fallback for this surface.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/api'
-import { readSharedCacheWriteFence } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
-import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { PUBLIC_ACTIVE_RANKING_SOURCES } from '@/lib/constants/exchanges'
 import {
-  PUBLIC_RANKING_POSTGREST_EXCLUSION,
-  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_REDIS_TAG,
-  filterPublicRankingRows,
-  publicRankingCacheKey,
-  sanitizePublicRankingSourcePayload,
+  filterPublicRankingSources,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 
 export const dynamic = 'force-dynamic'
@@ -31,25 +22,168 @@ export const runtime = 'nodejs'
 
 const logger = createLogger('rankings-live')
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
+const LIVE_QUERY_KEYS = new Set(['period', 'limit', 'offset'])
 
-// ── Input validation schema ──────────────────────────────────────────────────
 const liveRankingsSchema = z.object({
   period: z
-    .string()
-    .toUpperCase()
-    .pipe(z.enum(['7D', '30D', '90D']))
-    .catch('90D'),
-  limit: z.coerce.number().int().min(1).max(200).catch(50),
-  offset: z.coerce.number().int().min(0).catch(0),
+    .preprocess(
+      (value) => (typeof value === 'string' ? value.toUpperCase() : value),
+      z.enum(['7D', '30D', '90D'])
+    )
+    .optional()
+    .default('90D'),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+  // Keeps the inclusive PostgREST range bounded even for a malformed share URL.
+  offset: z.coerce.number().int().min(0).max(20_000_000).optional().default(0),
 })
 
+const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
+  'source_trader_id,handle,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,source,source_type,avatar_url,arena_score,rank,rank_change,is_new,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,trading_style,avg_holding_hours,style_confidence,computed_at,season_id,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,is_outlier'
+
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  range(from: number, to: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardRow = Record<string, unknown>
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isPublicRankedLeaderboardClient(value: unknown): value is PublicRankedLeaderboardClient {
+  return isRecord(value) && typeof value.from === 'function'
+}
+
+function publicRankedLeaderboardClient(
+  supabase: ReturnType<typeof getSupabaseAdmin>
+): PublicRankedLeaderboardClient {
+  // The view is introduced by a migration and is not yet in generated types.
+  // Keep this tiny checked bridge local rather than widening the entire client.
+  if (!isPublicRankedLeaderboardClient(supabase)) {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return supabase
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function hasPositiveRank(row: unknown): row is PublicRankedLeaderboardRow {
+  return (
+    isRecord(row) && typeof row.rank === 'number' && Number.isSafeInteger(row.rank) && row.rank > 0
+  )
+}
+
+function mapPublicRankedRow(row: PublicRankedLeaderboardRow) {
+  const source = stringOrNull(row.source)
+  const traderType = stringOrNull(row.trader_type)
+  return {
+    id: stringOrNull(row.source_trader_id),
+    source_trader_id: stringOrNull(row.source_trader_id),
+    handle: stringOrNull(row.handle),
+    source,
+    source_type: stringOrNull(row.source_type),
+    arena_score: finiteOrNull(row.arena_score),
+    rank: row.rank,
+    roi: finiteOrNull(row.roi),
+    pnl: finiteOrNull(row.pnl),
+    win_rate: finiteOrNull(row.win_rate),
+    max_drawdown: finiteOrNull(row.max_drawdown),
+    trades_count: finiteOrNull(row.trades_count),
+    followers: finiteOrNull(row.followers),
+    copiers: finiteOrNull(row.copiers),
+    avatar_url: stringOrNull(row.avatar_url),
+    profitability_score: finiteOrNull(row.profitability_score),
+    risk_control_score: finiteOrNull(row.risk_control_score),
+    execution_score: finiteOrNull(row.execution_score),
+    trading_style: stringOrNull(row.trading_style),
+    sharpe_ratio: finiteOrNull(row.sharpe_ratio),
+    sortino_ratio: finiteOrNull(row.sortino_ratio),
+    profit_factor: finiteOrNull(row.profit_factor),
+    calmar_ratio: finiteOrNull(row.calmar_ratio),
+    rank_change: finiteOrNull(row.rank_change),
+    is_new: row.is_new === true,
+    computed_at: stringOrNull(row.computed_at),
+    trader_type: traderType,
+    is_bot: source === 'web3_bot' || traderType === 'bot' || traderType === 'suspected_bot',
+  }
+}
+
+function invalidParameters(searchParams: URLSearchParams): boolean {
+  for (const key of searchParams.keys()) {
+    if (!LIVE_QUERY_KEYS.has(key) || searchParams.getAll(key).length !== 1) return true
+  }
+  return false
+}
+
+function response(body: Record<string, unknown>, cache: 'BYPASS' | 'MISS') {
+  const next = NextResponse.json(body)
+  next.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
+  next.headers.set('X-Cache', cache)
+  return next
+}
+
+function partialResponse(
+  period: '7D' | '30D' | '90D',
+  limit: number,
+  offset: number,
+  reason: string
+) {
+  return response(
+    {
+      traders: [],
+      period,
+      source: 'public_cohort',
+      total: null,
+      totalCount: null,
+      total_count: null,
+      totalCountIsExact: false,
+      hasMore: false,
+      as_of: null,
+      is_stale: true,
+      source_freshness: [],
+      availableSources: [],
+      availableSourcesIsExact: false,
+      limit,
+      offset,
+      ranking_visibility: 'partial',
+      ranking_visibility_reason: reason,
+      ranking_visibility_reasons: [reason],
+    },
+    'BYPASS'
+  )
+}
+
 export async function GET(request: NextRequest) {
-  const rl = await checkRateLimit(request, RateLimitPresets.read)
-  if (rl) return rl
+  const rateLimited = await checkRateLimit(request, RateLimitPresets.read)
+  if (rateLimited) return rateLimited
 
   const searchParams = request.nextUrl.searchParams
-  const rawParams = Object.fromEntries(searchParams)
-  const parsed = liveRankingsSchema.safeParse(rawParams)
+  if (invalidParameters(searchParams)) {
+    return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
+  }
+  const parsed = liveRankingsSchema.safeParse(Object.fromEntries(searchParams))
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Invalid parameters', details: parsed.error.flatten() },
@@ -58,127 +192,65 @@ export async function GET(request: NextRequest) {
   }
 
   const { period, limit, offset } = parsed.data
-
   try {
-    const writeFence = await readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
-    // Read-through response cache for repeated requests to the same DB-authority page.
-    const cacheKey = publicRankingCacheKey(`rankings:live:${period}:${limit}:${offset}`)
-    const cached = await tieredGet<Record<string, unknown>>(cacheKey, 'hot', {
-      skipMemory: true,
-      writeFence,
-    })
-    if (cached.data) {
-      // A policy-epoch rotation prevents older entries from being read, while
-      // source sanitation also fails closed if the current epoch is polluted.
-      const response = NextResponse.json(sanitizePublicRankingSourcePayload(cached.data))
-      // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-      // the Vercel CDN instead of every client invoking the function. The data is
-      // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
-      // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
-      // Keyed by full URL (period/limit/offset), no auth personalization.
-      response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
-      response.headers.set('X-Cache', 'HIT')
-      response.headers.set('X-Cache-Layer', cached.layer || 'unknown')
-      return response
-    }
-
-    // Persisted ranks are the publication authority. In particular, rank=NULL
-    // rows must not be re-ranked from a Redis/array position on this read path.
-    const supabase = getSupabaseAdmin()
-
-    let fallbackQuery = supabase
-      .from('leaderboard_ranks')
-      .select(
-        'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type',
-        { count: 'estimated' }
-      )
+    const query = publicRankedLeaderboardClient(getSupabaseAdmin())
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
       .eq('season_id', period)
       .not('rank', 'is', null)
-      .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
+      .order('rank', { ascending: true, nullsFirst: false })
+      // PostgREST ranges are inclusive; the extra row is the sole continuation
+      // witness. Never substitute an estimated/raw table count.
+      .range(offset, offset + limit)
 
-    if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-      fallbackQuery = fallbackQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-    }
-
-    const { data, count, error } = await fallbackQuery
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .order('rank', { ascending: true })
-      .range(offset, offset + limit - 1)
-
+    const { data, error } = await query
     if (error) {
-      logger.error('[rankings-live] DB fallback failed:', error)
+      logger.error('[rankings-live] public cohort query failed', error)
       return NextResponse.json({ error: 'Query failed' }, { status: 500 })
     }
 
-    // Filter the database-native source before mapping. This prevents a legacy
-    // aggregator identity from being relabelled as an active canonical source.
-    const rawRows = (data || []) as Array<Record<string, unknown>>
-    const publicRows = filterPublicRankingRows(rawRows, (row) => row.source).filter(
-      (row) => row.rank != null
+    const rawRows = Array.isArray(data) ? data : []
+    const sanitized = sanitizePublicRankingPayload(
+      { traders: rawRows, period },
+      { expectedPeriod: period }
+    ) as { traders?: unknown[] }
+    const safeRows = Array.isArray(sanitized.traders)
+      ? sanitized.traders.filter(hasPositiveRank)
+      : ([] as PublicRankedLeaderboardRow[])
+
+    // A valid security-barrier view cannot return an ineligible row. Treat a
+    // proxy/schema mismatch as a whole-page proof failure rather than shifting
+    // later entries into this offset and making `hasMore` untrue.
+    if (safeRows.length !== rawRows.length) {
+      return partialResponse(period, limit, offset, 'publication_policy_filtered')
+    }
+
+    const pageRows = safeRows.slice(0, limit)
+    const visibleSources = filterPublicRankingSources(pageRows.map((row) => row.source))
+    return response(
+      {
+        traders: pageRows.map(mapPublicRankedRow),
+        period,
+        source: 'public_cohort',
+        total: null,
+        totalCount: null,
+        total_count: null,
+        totalCountIsExact: false,
+        hasMore: rawRows.length > limit,
+        // The view's serving head validates source freshness internally. It
+        // intentionally does not expose receipt/watermark proof tokens here.
+        as_of: null,
+        is_stale: false,
+        source_freshness: [],
+        availableSources: visibleSources,
+        availableSourcesIsExact: false,
+        limit,
+        offset,
+      },
+      'MISS'
     )
-    const removedNonPublicRows = publicRows.length !== rawRows.length
-    const traders = publicRows.map((row) => ({
-      id: row.source_trader_id as string,
-      handle: (row.handle as string) || null,
-      source: row.source as string,
-      source_type: row.source_type as string,
-      arena_score: row.arena_score != null ? Number(row.arena_score) : 0,
-      rank: Number(row.rank),
-      roi: row.roi != null ? Number(row.roi) : 0,
-      pnl: row.pnl != null ? Number(row.pnl) : null,
-      win_rate: row.win_rate != null ? Number(row.win_rate) : null,
-      max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
-      trades_count: row.trades_count != null ? Number(row.trades_count) : null,
-      followers: row.followers != null ? Number(row.followers) : null,
-      avatar_url: row.avatar_url as string | null,
-      profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
-      risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
-      execution_score: row.execution_score != null ? Number(row.execution_score) : null,
-      trading_style: (row.trading_style as string) || null,
-      sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
-      trader_type: (row.trader_type as string) || null,
-      is_bot:
-        row.source === 'web3_bot' ||
-        row.trader_type === 'bot' ||
-        row.trader_type === 'suspected_bot',
-    }))
-
-    // Under a correctly behaving PostgREST response, count already reflects
-    // the pre-range allowlist. If a proxy violates that filter, fail closed to
-    // the finite safe page rather than publishing an untrusted aggregate.
-    const totalCount = removedNonPublicRows ? traders.length : (count ?? 0)
-    const responseBody = sanitizePublicRankingSourcePayload({
-      traders,
-      total: totalCount,
-      totalCount,
-      period,
-      source: 'database',
-      hasMore: !removedNonPublicRows && offset + limit < totalCount,
-    })
-
-    // Cache the authoritative DB response for subsequent requests.
-    tieredSet(cacheKey, responseBody, 'hot', [PUBLIC_RANKING_REDIS_TAG, `live:${period}`], {
-      skipMemory: true,
-      writeFence,
-    }).catch((err) => {
-      logger.warn(
-        '[rankings-live] Cache write failed:',
-        err instanceof Error ? err.message : String(err)
-      )
-    })
-
-    const response = NextResponse.json(responseBody)
-    // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
-    // the Vercel CDN instead of every client invoking the function. The data is
-    // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
-    // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
-    // Keyed by full URL (period/limit/offset), no auth personalization.
-    response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
-    response.headers.set('X-Cache', 'MISS')
-    return response
   } catch (error) {
-    logger.error('[rankings-live] Unexpected error:', error)
+    logger.error('[rankings-live] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

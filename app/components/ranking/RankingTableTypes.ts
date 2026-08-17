@@ -7,7 +7,6 @@ export type ColumnKey =
   | 'mdd'
   | 'sharpe'
   | 'sortino'
-  | 'alpha'
   | 'style'
   | 'followers'
   | 'trades'
@@ -47,17 +46,45 @@ export function getInitialRankingViewMode(
   return matchMedia?.(MOBILE_CARD_MEDIA_QUERY).matches ? 'card' : 'table'
 }
 
-export type SortColumn = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
+/** Public leaderboard sort fields with a verifiable source contract. */
+export type SortColumn = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino'
 export type SortDir = 'asc' | 'desc'
+export type ScoreGrade = 'S' | 'A' | 'B' | 'C' | 'D'
+
+/**
+ * Preserve an absent score as absent, but turn a corrupt numeric payload into
+ * an explicit unknown before it reaches a score presentation component.
+ */
+export function normalizeFiniteScore(score: number | null | undefined): number | null | undefined {
+  return score == null || Number.isFinite(score) ? score : null
+}
+
+/**
+ * Ranking-table score tiers. Missing, corrupt, or non-finite source scores do
+ * not have a grade and must never be represented as the zero-score D tier.
+ */
+export function scoreGradeOf(score: number | null | undefined): ScoreGrade | null {
+  if (score == null || !Number.isFinite(score)) return null
+  if (score >= 90) return 'S'
+  if (score >= 70) return 'A'
+  if (score >= 50) return 'B'
+  if (score >= 30) return 'C'
+  return 'D'
+}
 
 export function getStoredColumns(): ColumnKey[] {
   if (typeof window === 'undefined') return DEFAULT_VISIBLE_COLUMNS
   try {
     const stored = localStorage.getItem(LS_KEY_COLUMNS)
     if (stored) {
-      const parsed = JSON.parse(stored) as ColumnKey[]
-      if (Array.isArray(parsed) && parsed.every((c) => ALL_TOGGLEABLE_COLUMNS.includes(c))) {
-        return parsed
+      const parsed = JSON.parse(stored) as unknown
+      if (Array.isArray(parsed) && parsed.every((c) => typeof c === 'string')) {
+        // Migrate old local preferences that included the retired alpha
+        // column instead of discarding every other valid preference.
+        const supported = parsed.filter((c): c is ColumnKey =>
+          ALL_TOGGLEABLE_COLUMNS.includes(c as ColumnKey)
+        )
+        if (supported.length > 0) return supported
       }
     }
   } catch {
@@ -77,7 +104,8 @@ export interface Trader {
   id: string
   handle: string | null
   display_name?: string | null
-  roi: number
+  /** Null is an unknown source metric, never a synthetic zero. */
+  roi: number | null
   pnl?: number | null
   win_rate?: number | null
   max_drawdown?: number | null
@@ -90,7 +118,7 @@ export interface Trader {
   avatar_url?: string | null
   /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
   avatar_url_mirror?: string | null
-  arena_score?: number
+  arena_score?: number | null
   /** Pre-computed rank from leaderboard_ranks DB table */
   rank?: number | null
   return_score?: number
@@ -104,7 +132,6 @@ export interface Trader {
   // V3 Advanced Metrics
   sortino_ratio?: number | null
   calmar_ratio?: number | null
-  alpha?: number | null
   arena_score_v3?: number | null
   trading_style?: string | null
   style_confidence?: number | null
@@ -130,6 +157,16 @@ export interface Trader {
   /** A1 data-authenticity: trades confirmed via a connected read-only API key
    *  (vs scraped "Tracked"). Drives the ✓ Verified badge. */
   is_verified_data?: boolean
+}
+
+/**
+ * UI-only score boundary. This intentionally leaves every other field and the
+ * persisted rank untouched: corrupt score values become unknown only for
+ * presentation components.
+ */
+export function normalizeTraderArenaScoreForPresentation(trader: Trader): Trader {
+  const arenaScore = normalizeFiniteScore(trader.arena_score)
+  return Object.is(arenaScore, trader.arena_score) ? trader : { ...trader, arena_score: arenaScore }
 }
 
 export type PublishedRankTrader = Trader & { rank: number }

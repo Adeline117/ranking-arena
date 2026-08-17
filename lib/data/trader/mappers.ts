@@ -164,6 +164,9 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     riskControlScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
     executionScore: row.execution_score != null ? Number(row.execution_score) : null,
     scoreConfidence: normalizeScoreConfidence(row.score_completeness),
+    scoreCompleteness: typeof row.score_completeness === 'string' ? row.score_completeness : null,
+    metricsEstimated:
+      row.metrics_estimated === false ? false : row.metrics_estimated === true ? true : null,
 
     // Rankings
     rank: row.rank != null ? Number(row.rank) : null,

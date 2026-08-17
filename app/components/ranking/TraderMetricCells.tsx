@@ -23,6 +23,10 @@ import {
   ROI_TEXT_BASE_STYLE,
 } from './TraderRowStyles'
 
+function safeNonNegativeCount(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
 // ── N/A Indicator ──────────────────────────────────────────────────────────
 
 function NaIndicator({
@@ -50,31 +54,36 @@ function AnimatedROI({
   roiColor,
   animate,
 }: {
-  roi: number
+  roi: number | null
   roiColor: string
   animate?: boolean
 }) {
-  const animatedValue = useCountUp(animate ? roi : roi, animate ? 500 : 0)
+  // Keep the hook call unconditional, but never turn an absent source metric
+  // into the numeric value zero for display, accessibility, or animation.
+  const animatedValue = useCountUp(
+    animate && roi != null ? roi : 0,
+    animate && roi != null ? 500 : 0
+  )
   const displayValue = animate ? animatedValue : roi
   // Colorblind-safe direction cue (audit 1.2): the +/− sign already lives in the
   // text, so the arrow is redundant reinforcement and is aria-hidden. Mirrors
   // <Metric showArrow>. Kept here (rather than swapping in Metric) to preserve
   // the count-up animation on the top-3 rows.
-  const arrowGlyph = roi > 0 ? '▲' : roi < 0 ? '▼' : ''
+  const arrowGlyph = roi != null && roi > 0 ? '▲' : roi != null && roi < 0 ? '▼' : ''
   return (
     <Text
       size="md"
       weight="black"
       className="roi-value"
       style={{ ...ROI_TEXT_BASE_STYLE, color: roiColor }}
-      title={`${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%`}
+      title={roi != null ? `${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%` : 'ROI unknown'}
     >
       {arrowGlyph && (
         <span aria-hidden="true" style={{ marginRight: '0.25em', fontSize: '0.8em' }}>
           {arrowGlyph}
         </span>
       )}
-      {formatROI(displayValue)}
+      {roi != null ? formatROI(displayValue) : '—'}
     </Text>
   )
 }
@@ -105,11 +114,11 @@ export const TraderMetricCells = memo(function TraderMetricCells({
   roiSpark,
 }: TraderMetricCellsProps) {
   // ROI
-  const roi = trader.roi ?? 0
+  const roi = trader.roi != null && Number.isFinite(trader.roi) ? trader.roi : null
   const roiColor =
-    roi > 0
+    roi != null && roi > 0
       ? tokens.colors.accent.success
-      : roi < 0
+      : roi != null && roi < 0
         ? tokens.colors.accent.error
         : tokens.colors.text.tertiary
 
@@ -120,6 +129,8 @@ export const TraderMetricCells = memo(function TraderMetricCells({
   const drawdownDisplay = formatDrawdown(parsedDrawdown)
   const hasDrawdown = drawdownDisplay !== NULL_DISPLAY
   const drawdownValue = hasDrawdown ? -Math.abs(parsedDrawdown ?? 0) : null
+  const copierCount = safeNonNegativeCount(trader.copiers ?? trader.followers)
+  const tradesCount = safeNonNegativeCount(trader.trades_count)
 
   return (
     <>
@@ -127,7 +138,9 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       <Box className="roi-cell" style={ROI_CELL_STYLE}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
           <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
-          {roiSpark && roiSpark.length >= 2 && <Sparkline pts={roiSpark} up={roi >= 0} />}
+          {roiSpark && roiSpark.length >= 2 && (
+            <Sparkline pts={roiSpark} up={roi != null ? roi >= 0 : undefined} />
+          )}
         </div>
       </Box>
 
@@ -223,28 +236,21 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       {/* Followers — exchange copier count. Prefer `copiers` (populated: 90D max
           4756); `followers` is 0 for 100% of rows so it read as a dead dash
           (audit 2026-07-03). Fall back to followers for any source that fills it. */}
-      {(() => {
-        const copierN = Number(trader.copiers ?? trader.followers ?? 0)
-        return (
-          <Box className="col-followers" style={RIGHT_CELL_STYLE}>
-            {copierN > 0 ? (
-              <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
-                {copierN >= 1000 ? `${(copierN / 1000).toFixed(1)}K` : copierN}
-              </Text>
-            ) : (
-              <span style={NA_DASH_STYLE}>&mdash;</span>
-            )}
-          </Box>
-        )
-      })()}
+      <Box className="col-followers" style={RIGHT_CELL_STYLE}>
+        {copierCount != null && copierCount > 0 ? (
+          <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
+            {copierCount >= 1000 ? `${(copierCount / 1000).toFixed(1)}K` : copierCount}
+          </Text>
+        ) : (
+          <span style={NA_DASH_STYLE}>&mdash;</span>
+        )}
+      </Box>
 
       {/* Trades Count */}
       <Box className="col-trades" style={RIGHT_CELL_STYLE}>
-        {trader.trades_count != null ? (
+        {tradesCount != null ? (
           <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
-            {Number(trader.trades_count) >= 1000
-              ? `${(Number(trader.trades_count) / 1000).toFixed(1)}K`
-              : trader.trades_count}
+            {tradesCount >= 1000 ? `${(tradesCount / 1000).toFixed(1)}K` : tradesCount}
           </Text>
         ) : (
           <span style={NA_DASH_STYLE}>&mdash;</span>
