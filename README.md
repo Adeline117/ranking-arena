@@ -26,7 +26,7 @@ Git-triggered Vercel deployment. These are source-only containment changes: they
 not prove or modify a deployed control plane. Historical route implementations are
 code-review context only and do not authorize an operation.
 
-This source revision also has three narrow, immutable publication holds; none is an
+This source revision also has narrow, immutable publication holds; none is an
 environment toggle or a claim about a deployed process:
 
 - For the documented ranking-command chain, `V1_CRON_EXECUTION_PUBLISHED=false`
@@ -83,9 +83,19 @@ Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with the
 three `no-store` headers and no upstream fetch. The listed script entrypoints report
 `RETIRED` and exit `2` before proxy, browser, import, or host work. This is source-only:
 it neither stops nor proves an already deployed Cloudflare Worker, VPS proxy/scraper,
-host process, queue, or schedule. It does not classify or close other source/write
-paths, including `app/api/cron/backfill-avatars`, avatar helpers, adapters, or any
-uncatalogued import utility; each needs its own bounded review.
+host process, queue, or schedule. That proxy/import unit does not classify or close
+avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers, or
+`GET /api/avatar`; each remains outside its bounded review.
+
+A separate source-only tombstone covers the canonical `GET /api/cron/backfill-avatars`
+route and its `/api/v1/cron/backfill-avatars` rewrite alias, which resolves to the same
+handler. It is auth-first: missing or invalid service authentication returns `401`; valid
+authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both responses carry the
+three `no-store` headers and return before parameter parsing, database access, logging,
+or upstream fetch. This endpoint contract cannot stop, inspect, or prove an already
+deployed host, external scheduler, or healthcheck. It does not cover avatar helpers,
+the worker `avatar-mirror`, adapters, unlisted writers, or `GET /api/avatar`; those
+remain outside the endpoint's bounded review.
 
 ## Data API
 
@@ -272,11 +282,17 @@ complete-board publication. The fixed V1 ingest source hold prevents the covered
 native worker, scheduler, connection, bridges, on-chain route, and direct scripts
 from initiating new ingest. The separately fixed legacy refresh-job hold removes its
 consumer and admissions while preserving only the unrelated post hot-score maintenance
-command. A third, explicitly enumerated legacy proxy/import hold retires only its
-named historical proxy, browser, and import entrypoints; it is not a declaration that
-every source writer or helper is closed. None of these source holds can stop or prove
-an already-running process, queue, worker, or schedule. Code may be reviewed locally
-but does not prove that a source is scheduled or healthy.
+command. A separately enumerated legacy proxy/import hold retires only its named
+historical proxy, browser, and import entrypoints; it is not a declaration that every
+source writer or helper is closed. A distinct canonical `GET /api/cron/backfill-avatars`
+route—and its same-handler `/api/v1/cron/backfill-avatars` rewrite alias—is an auth-first
+tombstone that returns `401` or `410 CRON_EXECUTION_NOT_PUBLISHED` with three `no-store`
+headers before parameters, database, logging, or upstream fetch. It covers only that
+handler—not avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers, or
+`GET /api/avatar`—and cannot prove a host, external scheduler, or healthcheck. None of
+these source holds can stop or prove an already-running process, queue, worker, or
+schedule. Code may be reviewed locally but does not prove that a source is scheduled or
+healthy.
 
 **Incremental Static Regeneration.** Trader profile pages declare `revalidate=300` in code. Any historical cache-warming or ingest-triggered schedule is outside the V1 plan and must not be invoked.
 

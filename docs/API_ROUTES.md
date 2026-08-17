@@ -87,8 +87,19 @@ LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与同样三层 `no-store`，不做 upstream 
   browser、import 或 host 工作。
 
 这是 source-only containment，不停止、不检查也不证明已部署 Cloudflare Worker、VPS
-proxy/scraper、host process、queue 或 schedule。`app/api/cron/backfill-avatars`、avatar helper、
-adapter 和任何未列出的 source/write path 都不在本 PR 的封存结论内，必须单独审查。
+proxy/scraper、host process、queue 或 schedule。它不封存 avatar helper、worker
+`avatar-mirror`、adapter、未列 writer 或 `GET /api/avatar`；这些仍须独立审查。
+
+### V1 avatar-backfill source boundary
+
+canonical `GET /api/cron/backfill-avatars` 路由及其
+`/api/v1/cron/backfill-avatars` rewrite alias 解析到同一 source-only tombstone handler：
+先校验 service authentication，缺失或无效认证固定返回 `401`；有效认证固定返回 `410
+CRON_EXECUTION_NOT_PUBLISHED`。两条路径均带 `Cache-Control`、`CDN-Cache-Control`、
+`Vercel-CDN-Cache-Control` 三层 `no-store`，并在参数解析、数据库、logging 或 upstream fetch 前
+结束。该源码契约不停止、不检查也不证明已部署 host、external scheduler 或 healthcheck。
+avatar helper、worker `avatar-mirror`、adapter、未列 writer 与 `GET /api/avatar` 都不在此 handler
+的封存结论内。
 
 ---
 
@@ -265,23 +276,24 @@ V1 的公开 API-key 绑定选择器只展示 Binance、Bybit、Bitget，即当�
 
 ## 9. 定时任务 (Cron)
 
-| 路由                                      | 方法     | 描述                                                                                                                                                        | 认证       |
-| ----------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `/api/cron/check-trader-alerts`           | GET/POST | V1 auth-first tombstone；401/410/no-store；不评估、不发推送或邮件                                                                                           | Cron Token |
-| `/api/cron/broadcast-trader-events`       | GET      | V1 auth-first tombstone；401/410/no-store；不读取交易员事件、不写通知或发推送                                                                               | Cron Token |
-| `/api/cron/weekly-digest`                 | GET      | V1 auth-first tombstone；401/410/no-store；不读取订阅者数据、不发送个性化邮件                                                                               | Cron Token |
-| `/api/cron/compute-leaderboard`           | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或发布排名                | Cron Token |
-| `/api/cron/precompute-composite`          | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或写缓存                  | Cron Token |
-| `/api/cron/sync-meilisearch`              | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或调用搜索提供方          | Cron Token |
-| `/api/cron/pipeline-evaluate`             | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/pipeline log/数据/状态或发送告警 | Cron Token |
-| `/api/cron/batch-discover`                | GET      | V1 legacy refresh-job auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不创建 jobs 或调用 RPC                 | Cron Token |
-| `/api/cron/batch-5min`                    | GET      | 仅保留 post hot-score maintenance；不导入或消费 legacy `refresh_jobs` queue                                                                                 | Cron Token |
-| `/api/cron/check-data-freshness`          | GET      | 检查数据新鲜度                                                                                                                                              | Cron Token |
-| `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher                                                                         | Cron Token |
-| `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement                                                                                       | Cron Token |
-| `/api/cron/scan-data-quality`             | GET/POST | 未调度 auth-first tombstone；401/410/no-store；需 exact versioned scanner                                                                                   | Cron Token |
-| `/api/cron/sync-authorized-traders`       | GET      | V1 兼容认证 no-op；不扫描授权、不创建公共 first-party 作业                                                                                                  | Cron Token |
-| `/api/cron/aggregate-portfolio-snapshots` | GET      | V1 兼容认证 no-op；不读取旧凭据、不写 snapshots，且未被 Vercel 调度                                                                                         | Cron Token |
+| 路由                                      | 方法     | 描述                                                                                                                                                                       | 认证       |
+| ----------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/cron/check-trader-alerts`           | GET/POST | V1 auth-first tombstone；401/410/no-store；不评估、不发推送或邮件                                                                                                          | Cron Token |
+| `/api/cron/broadcast-trader-events`       | GET      | V1 auth-first tombstone；401/410/no-store；不读取交易员事件、不写通知或发推送                                                                                              | Cron Token |
+| `/api/cron/weekly-digest`                 | GET      | V1 auth-first tombstone；401/410/no-store；不读取订阅者数据、不发送个性化邮件                                                                                              | Cron Token |
+| `/api/cron/compute-leaderboard`           | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或发布排名                               | Cron Token |
+| `/api/cron/precompute-composite`          | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或写缓存                                 | Cron Token |
+| `/api/cron/sync-meilisearch`              | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或调用搜索提供方                         | Cron Token |
+| `/api/cron/pipeline-evaluate`             | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/pipeline log/数据/状态或发送告警                | Cron Token |
+| `/api/cron/batch-discover`                | GET      | V1 legacy refresh-job auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不创建 jobs 或调用 RPC                                | Cron Token |
+| `/api/cron/backfill-avatars`              | GET      | V1 avatar-backfill auth-first tombstone；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不解析参数、不访问数据库、logging 或 upstream fetch | Cron Token |
+| `/api/cron/batch-5min`                    | GET      | 仅保留 post hot-score maintenance；不导入或消费 legacy `refresh_jobs` queue                                                                                                | Cron Token |
+| `/api/cron/check-data-freshness`          | GET      | 检查数据新鲜度                                                                                                                                                             | Cron Token |
+| `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher                                                                                        | Cron Token |
+| `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement                                                                                                      | Cron Token |
+| `/api/cron/scan-data-quality`             | GET/POST | 未调度 auth-first tombstone；401/410/no-store；需 exact versioned scanner                                                                                                  | Cron Token |
+| `/api/cron/sync-authorized-traders`       | GET      | V1 兼容认证 no-op；不扫描授权、不创建公共 first-party 作业                                                                                                                 | Cron Token |
+| `/api/cron/aggregate-portfolio-snapshots` | GET      | V1 兼容认证 no-op；不读取旧凭据、不写 snapshots，且未被 Vercel 调度                                                                                                        | Cron Token |
 
 ### V1 ranking-command source boundary
 

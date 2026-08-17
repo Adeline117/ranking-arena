@@ -59,13 +59,21 @@
 - i18n via `t('key')`, no hardcoded strings
 - No investment advice, no storing API secrets
 
-## V1 proxy/import guardrail
+## V1 proxy/import and avatar-backfill guardrail
 
 No skill grants authority to deploy or invoke a Cloudflare Worker, configure/use a
 VPS proxy, start a browser scraper, run an import, add a schedule, or access an
 external control plane. The named legacy proxy/import source containment covers only
 `GET /api/proxy/phemex`, `cloudflare-worker/src/index.ts`, and the historical script
 entrypoints listed in `arena-cf-worker-patterns/SKILL.md`. It is source-only and does
-not stop or prove a deployed host, worker, proxy, queue, or schedule. Do not extend it
-into a claim that unrelated source writers such as `app/api/cron/backfill-avatars`,
-avatar helpers, adapters, or unlisted import utilities are closed.
+not stop or prove a deployed host, worker, proxy, queue, or schedule.
+
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only tombstone
+handler, not permission to invoke a cron. It authenticates first: missing or invalid
+service authentication returns `401`; valid authentication returns `410
+CRON_EXECUTION_NOT_PUBLISHED`. Both paths have three `no-store` headers and return
+before parameters, database access, logging, or upstream fetch. This cannot stop,
+inspect, or prove a deployed host, external scheduler, or healthcheck. Do not extend
+either containment into a claim that avatar helpers, the worker `avatar-mirror`,
+adapters, unlisted writers, or `GET /api/avatar` are closed.

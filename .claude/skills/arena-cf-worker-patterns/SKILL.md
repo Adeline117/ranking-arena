@@ -1,4 +1,4 @@
-# Arena CF Worker Legacy Proxy Containment — V1 NO-GO
+# Arena CF Worker Legacy Proxy and Avatar-Backfill Containment — V1 NO-GO
 
 This skill is a report-only source-review aid during V1. It does not authorize a
 Cloudflare deployment, dashboard/API access, credential use, route invocation, proxy
@@ -17,8 +17,16 @@ authentication returns `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`. Both paths 
 the same three no-store headers and finish before URL/query parsing, logging, or an
 upstream request.
 
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only tombstone
+handler. It authenticates first: missing or invalid service authentication returns
+`401`; valid authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths
+carry the same three `no-store` headers and return before parameter parsing, database
+access, logging, or upstream fetch. It is not a cron-invocation or backfill procedure.
+
 These are checked-in source contracts, not evidence that an external Worker, route,
-proxy, host, queue, or schedule is deployed, stopped, or healthy.
+proxy, host, queue, external scheduler, or healthcheck is deployed, stopped, or
+healthy.
 
 ## Scope boundary
 
@@ -35,9 +43,10 @@ entries plus these historical script entrypoints:
 - `scripts/archive/verify-data-accuracy.mjs`
 
 The scripts report `RETIRED` and exit `2` before proxy, browser, import, or host work.
-Do not generalize this list into a claim that all source writers have been closed.
-`app/api/cron/backfill-avatars`, avatar helpers, adapters, and unlisted import/write
-paths are outside this skill's conclusion and need separate review.
+Do not generalize this list into a claim that all source writers have been closed. The
+separate avatar-backfill tombstone covers only its canonical/rewrite-alias handler;
+avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers, and `GET
+/api/avatar` remain outside this skill's conclusion and need separate review.
 
 ## Safe review output
 

@@ -112,7 +112,6 @@ export class PipelineLogger {
     // Discovery & enrichment
     'enrich-gmx',
     'generate-profiles',
-    'backfill-avatars',
     'link-entities',
     'batch-5min',
 

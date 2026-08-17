@@ -42,8 +42,18 @@ Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with the
 headers and no upstream fetch. The named scripts report `RETIRED` and exit `2` before
 proxy, browser, import, or host work. This does not stop, inspect, or prove a deployed
 VPS proxy/scraper, Cloudflare Worker, host process, queue, or external schedule. It
-does not include `app/api/cron/backfill-avatars`, avatar helpers, adapters, or any
-unlisted source/write path, so none of those is declared closed by this document.
+does not include avatar helpers, the worker `avatar-mirror`, adapters, unlisted
+writers, or `GET /api/avatar`, so none of those is declared closed by this document.
+
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only
+tombstone handler. It authenticates first: missing or invalid service authentication
+returns `401`; valid authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both
+responses carry three `no-store` headers and return before parameter parsing, database,
+logging, or upstream fetch. This is not evidence that a host, external scheduler, or
+healthcheck is deployed, stopped, or healthy. Avatar helpers, the worker
+`avatar-mirror`, adapters, unlisted writers, and `GET /api/avatar` remain outside this
+handler's bounded review.
 
 Arena's ingest fleet is designed to serve customer-facing ranking freshness from two
 nodes sharing one Supabase database and Upstash Redis. A source's
