@@ -19,6 +19,16 @@
 详细阶段只在对应权威文档维护；`EXCHANGE_FIELD_COVERAGE.md` 是机器生成快照，禁止手改。旧日期段落保留
 为历史记录，不覆盖本表。
 
+## V1 ranking authority cache-purge source containment（2026-08-17）
+
+本轮只封存 `scripts/maintenance/purge-ranking-authority-caches.sh` 这一 legacy compatibility path。
+它无论传入何种参数均只向 stderr 输出 `[RETIRED]` 并以 exit `2` 结束；不再读取环境、运行 Vercel/Git、
+访问网络、清除 cache 或进行 host 工作。
+
+这是 source-only boundary：它不清除、检查或证明任何已部署 Data/CDN cache、release、project 或外部状态，
+也不改变 public ranking route、cache policy、cache key 或部署流程。下方的历史部署陈述不能作为当前 cache
+或 release 状态的证据；未来任何 cache 操作都必须由 owner 在独立 ADR-023 计划中定义并保全单独证据。
+
 ## V1 migration-ledger repair artifact source containment（2026-08-17）
 
 本轮只封存 `scripts/migration-reconcile/ledger-repair-20260702.sql` 这一历史账本路径。该文件现为
