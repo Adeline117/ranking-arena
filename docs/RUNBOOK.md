@@ -78,9 +78,9 @@ checked-in Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHE
 the same headers and no upstream fetch. The named scripts report `RETIRED` and exit
 `2` before proxy, browser, import, or host work. This is source-only containment, not
 an instruction to stop, inspect, restart, or prove an already deployed host, worker,
-proxy, queue, or schedule. It does not classify avatar helpers, the worker
-`avatar-mirror`, adapters, unlisted writers, or `GET /api/avatar`; those remain outside
-this runbook's conclusion.
+proxy, queue, or schedule. It does not classify the separately retired `avatar-mirror`
+worker; `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and unlisted writers
+remain outside this runbook's conclusion.
 
 ### V1 avatar-backfill source boundary
 
@@ -91,8 +91,21 @@ authentication returns `401`; valid authentication returns `410
 CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry the three `no-store` headers and return
 before parameter parsing, database access, logging, or upstream fetch. This checked-in
 contract does not stop, inspect, restart, or prove a deployed host, external scheduler,
-or healthcheck. Avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers,
-and `GET /api/avatar` remain outside this handler's bounded conclusion.
+or healthcheck. `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and unlisted
+writers remain outside this handler's bounded conclusion; the separate `avatar-mirror`
+worker hold does not expand it.
+
+### V1 avatar-mirror worker source boundary
+
+The checked-in `avatar-mirror` worker execution is separately source-only retired: its
+processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
+queued avatar-mirror job returns as a no-op within `route()` before that handler calls
+`getConnection()`, acquires its per-job source lease, or loads a processor. This makes
+no claim that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock. This is not an instruction to stop, inspect,
+restart, or prove an already-running worker, Redis, host process, or schedule.
+`/api/avatar`, avatar helpers, UI/read RPCs, adapters, and unlisted writers remain
+outside this worker boundary.
 
 ### Symptom: Cron job stuck in "running" status
 

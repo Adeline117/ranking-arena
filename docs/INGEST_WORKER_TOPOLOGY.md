@@ -42,8 +42,9 @@ Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with the
 headers and no upstream fetch. The named scripts report `RETIRED` and exit `2` before
 proxy, browser, import, or host work. This does not stop, inspect, or prove a deployed
 VPS proxy/scraper, Cloudflare Worker, host process, queue, or external schedule. It
-does not include avatar helpers, the worker `avatar-mirror`, adapters, unlisted
-writers, or `GET /api/avatar`, so none of those is declared closed by this document.
+does not include the separately retired `avatar-mirror` worker. `/api/avatar`, avatar
+helpers, UI/read RPCs, adapters, and unlisted writers remain outside this proxy/import
+review.
 
 The canonical `GET /api/cron/backfill-avatars` route and its
 `/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only
@@ -51,9 +52,18 @@ tombstone handler. It authenticates first: missing or invalid service authentica
 returns `401`; valid authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both
 responses carry three `no-store` headers and return before parameter parsing, database,
 logging, or upstream fetch. This is not evidence that a host, external scheduler, or
-healthcheck is deployed, stopped, or healthy. Avatar helpers, the worker
-`avatar-mirror`, adapters, unlisted writers, and `GET /api/avatar` remain outside this
-handler's bounded review.
+healthcheck is deployed, stopped, or healthy. `/api/avatar`, avatar helpers, UI/read
+RPCs, adapters, and unlisted writers remain outside this handler's bounded review; its
+separate `avatar-mirror` worker hold does not change that route scope.
+
+The checked-in `avatar-mirror` worker execution is separately source-only retired: the
+processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
+queued avatar-mirror job returns as a no-op within `route()` before that handler calls
+`getConnection()`, acquires its per-job source lease, or loads a processor. This makes
+no claim that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock. It cannot stop, inspect, or prove an
+already-running worker, Redis, host process, or schedule. It does not classify
+`/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted writers.
 
 Arena's ingest fleet is designed to serve customer-facing ranking freshness from two
 nodes sharing one Supabase database and Upstash Redis. A source's

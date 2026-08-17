@@ -19,11 +19,19 @@ authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry thre
 `no-store` headers and return before parameter parsing, database access, logging, or
 upstream fetch.
 
+The checked-in `avatar-mirror` worker execution is separately source-only retired: its
+processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
+queued avatar-mirror job returns as a no-op within `route()` before that handler calls
+`getConnection()`, acquires its per-job source lease, or loads a processor. This makes
+no claim that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock.
+
 This does not stop, inspect, restart, or prove an already deployed VPS scraper/proxy,
 Cloudflare Worker, host process, queue, external scheduler, or healthcheck. Do not
-infer that every browser, adapter, helper, or source write is held: avatar helpers, the
-worker `avatar-mirror`, adapters, unlisted writers, and `GET /api/avatar` are outside
-this containment review.
+infer that every browser, adapter, helper, or source write is held. The avatar-mirror
+hold itself cannot stop, inspect, restart, or prove an already-running worker, Redis,
+host process, or schedule. `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and
+unlisted writers are outside this containment review.
 
 ## Historical design surfaces
 

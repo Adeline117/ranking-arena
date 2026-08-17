@@ -84,8 +84,8 @@ three `no-store` headers and no upstream fetch. The listed script entrypoints re
 `RETIRED` and exit `2` before proxy, browser, import, or host work. This is source-only:
 it neither stops nor proves an already deployed Cloudflare Worker, VPS proxy/scraper,
 host process, queue, or schedule. That proxy/import unit does not classify or close
-avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers, or
-`GET /api/avatar`; each remains outside its bounded review.
+the separately held `avatar-mirror` worker. `/api/avatar`, avatar helpers, UI/read
+RPCs, adapters, and unlisted writers remain outside its bounded review.
 
 A separate source-only tombstone covers the canonical `GET /api/cron/backfill-avatars`
 route and its `/api/v1/cron/backfill-avatars` rewrite alias, which resolves to the same
@@ -93,9 +93,19 @@ handler. It is auth-first: missing or invalid service authentication returns `40
 authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both responses carry the
 three `no-store` headers and return before parameter parsing, database access, logging,
 or upstream fetch. This endpoint contract cannot stop, inspect, or prove an already
-deployed host, external scheduler, or healthcheck. It does not cover avatar helpers,
-the worker `avatar-mirror`, adapters, unlisted writers, or `GET /api/avatar`; those
-remain outside the endpoint's bounded review.
+deployed host, external scheduler, or healthcheck. The handler itself does not cover
+`/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted writers; the
+separate `avatar-mirror` worker hold below does not expand that handler's scope.
+
+The checked-in V1 `avatar-mirror` worker execution is separately source-only retired:
+its processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a
+legacy queued avatar-mirror job returns as a no-op within `route()` before that handler
+calls `getConnection()`, acquires its per-job source lease, or loads a processor. This
+makes no claim that the surrounding worker or BullMQ has not already established or
+used shared Redis, or acquired a job lock. It cannot stop, inspect, or prove an
+already-running worker, Redis, host process, or schedule.
+It does not classify `/api/avatar`, avatar helpers, UI/read RPCs, adapters, or
+unlisted writers.
 
 ## Data API
 
@@ -288,11 +298,18 @@ source writer or helper is closed. A distinct canonical `GET /api/cron/backfill-
 route—and its same-handler `/api/v1/cron/backfill-avatars` rewrite alias—is an auth-first
 tombstone that returns `401` or `410 CRON_EXECUTION_NOT_PUBLISHED` with three `no-store`
 headers before parameters, database, logging, or upstream fetch. It covers only that
-handler—not avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers, or
-`GET /api/avatar`—and cannot prove a host, external scheduler, or healthcheck. None of
-these source holds can stop or prove an already-running process, queue, worker, or
-schedule. Code may be reviewed locally but does not prove that a source is scheduled or
-healthy.
+handler—not `/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted
+writers—and cannot prove a host, external scheduler, or healthcheck. The separately
+retired `avatar-mirror` worker processor is a no-op; its scheduler no longer produces
+jobs, and legacy queued avatar-mirror jobs return as no-ops within `route()` before
+that handler calls `getConnection()`, acquires its per-job source lease, or loads a
+processor. This says nothing about whether the surrounding worker or BullMQ has already
+established or used shared Redis, or acquired a job lock. That separate source hold
+cannot stop, inspect, or prove an already-running worker, Redis, host process, or
+schedule, and it does not classify the same `/api/avatar`, helper, UI/read RPC,
+adapter, or unlisted-writer surfaces. None of these source holds can stop or prove an
+already-running process, queue, worker, or schedule. Code may be reviewed locally but
+does not prove that a source is scheduled or healthy.
 
 **Incremental Static Regeneration.** Trader profile pages declare `revalidate=300` in code. Any historical cache-warming or ingest-triggered schedule is outside the V1 plan and must not be invoked.
 

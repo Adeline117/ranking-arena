@@ -11,7 +11,7 @@ export const INGEST_JOB = {
   TIER_D: 'tierd:positions',
   /** Derived boards synthesis (MEXC/BTCC, spec §1.1-C). */
   DERIVE_BOARDS: 'derive:boards',
-  /** Avatar mirroring (first-sight + weekly refresh). */
+  /** Retired V1 legacy queue identity, retained only to discard queued payloads safely. */
   AVATAR_MIRROR: 'maint:avatar-mirror',
   /** Partitions + RAW cleanup + downsample + retention. */
   MAINTENANCE: 'maint:housekeeping',

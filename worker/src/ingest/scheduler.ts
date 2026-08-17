@@ -63,9 +63,6 @@ function loadSchedulerRuntime(): Promise<void> {
     STATIC_SCHEDULERS = [
       { id: 'maint:housekeeping', name: INGEST_JOB.MAINTENANCE, everyMs: 6 * 3600_000 },
       { id: 'maint:freshness', name: INGEST_JOB.FRESHNESS, everyMs: 30 * 60_000 },
-      // 2h cadence until the 72k-trader backfill drains (≈12 days at 500/batch);
-      // steady-state weekly refresh is naturally rate-limited by the 7d staleness check.
-      { id: 'maint:avatar-mirror', name: INGEST_JOB.AVATAR_MIRROR, everyMs: 2 * 3600_000 },
       { id: 'maint:daily-digest', name: INGEST_JOB.DAILY_DIGEST, everyMs: 24 * 3600_000 },
       // Top-N web3 wallets recomputed on-chain (durable; replaces WAF-blocked
       // profile detail). 12h cadence — bounded by ONCHAIN_ENRICH_TOPN + retry.

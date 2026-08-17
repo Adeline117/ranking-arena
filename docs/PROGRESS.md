@@ -32,9 +32,10 @@ LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` 和三层 `no-store`；checked-in Cloudf
 `RETIRED`/exit `2`，不启动 proxy、browser、import 或 host work。
 
 这不是已部署状态：它不停止、检查或证明 VPS scraper/proxy、Cloudflare Worker、host process、
-queue 或 schedule，也不封存所有 source write。avatar helper、worker `avatar-mirror`、adapter、
-未列 writer 与 `GET /api/avatar` 都在范围外，需独立审查。下方的主机、worker、生产验证或历史
-部署陈述仍是带日期的历史记录，不能用来推断当前运行状态或生成操作步骤。
+queue 或 schedule，也不封存所有 source write。worker `avatar-mirror` 已由下方单独 source-only
+封存；`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与未列 writer 都在范围外，需独立审查。
+下方的主机、worker、生产验证或历史部署陈述仍是带日期的历史记录，不能用来推断当前运行状态或
+生成操作步骤。
 
 ## V1 avatar-backfill source containment（2026-08-16）
 
@@ -44,9 +45,20 @@ queue 或 schedule，也不封存所有 source write。avatar helper、worker `a
 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
 upstream fetch 前结束。
 
-这同样不是已部署状态：它不停止、检查或证明 host、external scheduler 或 healthcheck。avatar
-helper、worker `avatar-mirror`、adapter、未列 writer 与 `GET /api/avatar` 保持范围外；下方主机、
-worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
+这同样不是已部署状态：它不停止、检查或证明 host、external scheduler 或 healthcheck。worker
+`avatar-mirror` 已由下方单独 source-only 封存；`GET /api/avatar`、avatar helper、UI/read RPC、
+adapter 与未列 writer 保持范围外。下方主机、worker、生产验证或历史部署陈述不可用于推断当前
+运行状态或生成操作步骤。
+
+## V1 avatar-mirror worker source containment（2026-08-17）
+
+checked-in `avatar-mirror` worker execution 已单独 source-only retired：processor 为 no-op，
+scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `route()` 内以 no-op 返回，
+早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
+worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。它不停止、检查或证明任何已运行
+worker、Redis、host process 或 schedule 已停止。
+`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与未列 writer 仍在该 worker 边界范围外；
+下方主机、worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
 
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
