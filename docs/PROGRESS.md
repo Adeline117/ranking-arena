@@ -19,6 +19,18 @@
 详细阶段只在对应权威文档维护；`EXCHANGE_FIELD_COVERAGE.md` 是机器生成快照，禁止手改。旧日期段落保留
 为历史记录，不覆盖本表。
 
+## V1 LCP measurement CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/performance/measure-lcp.mjs` 这一没有当前操作 caller 的 legacy compatibility path。
+它无论传入何种参数，均只向 stderr 输出 `[RETIRED] scripts/performance/measure-lcp.mjs`、stdout 保持为空，
+并以 exit `2` 结束；不解析目标、不加载 Lighthouse、不访问网络、不安装依赖、不启动或控制浏览器，
+也不生成、读取、覆盖或上传报告。
+
+这是单一脚本的 source-only boundary：它不改变真正的 Lighthouse CI/workflow、其他性能工具、Vercel
+Analytics、Chrome DevTools、部署或浏览器状态，也不删除、检查或证明已生成报告或任何外部状态。下方历史
+性能、CI、部署或报告陈述不能作为当前执行或外部状态的证据；未来任何测量、CI 或报告工作均须由 owner
+在独立 ADR-023 计划中重新定义并保全单独证据。
+
 ## V1 ranking authority cache-purge source containment（2026-08-17）
 
 本轮只封存 `scripts/maintenance/purge-ranking-authority-caches.sh` 这一 legacy compatibility path。
