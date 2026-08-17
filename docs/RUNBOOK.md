@@ -150,6 +150,16 @@ worker, host, Redis, process manager, or scheduler. `worker/deploy-ingest-local.
 `worker/deploy-ingest-sg.sh`, their separate safety contracts, and other runtime-ownership
 paths remain outside this bounded conclusion.
 
+### V1 social seed CLI source boundary
+
+Do not use `scripts/seed-quality-content.ts` or `scripts/social-seed/generate-posts.ts` as an
+incident workaround. These social seed compatibility paths report fixed `RETIRED` and exit `2`
+with any arguments; they do not read an environment, fetch, or read/write posts and comments.
+
+This source-only boundary does not change the normal social API, UI, RLS, cache, or existing
+posts/comments. It does not stop, inspect, or prove any external cron, deployed script, database,
+or historical seed data.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
