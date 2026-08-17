@@ -14,11 +14,16 @@ function codeOnly(value) {
   return value.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 const publication = source('lib/security/v1-public-egress-publication.ts')
 const cdnProxyRoute = codeOnly(source('app/api/cdn-proxy/route.ts'))
 const marketAlphaRoute = codeOnly(source('app/api/market/alpha/route.ts'))
 const marketArbitrageRoute = codeOnly(source('app/api/market/arbitrage/route.ts'))
 const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
+const marketCoinRoute = codeOnly(source('app/api/market/coin/[id]/route.ts'))
 const marketDefiRoute = codeOnly(source('app/api/market/defi/route.ts'))
 const marketExchangesRoute = codeOnly(source('app/api/market/exchanges/route.ts'))
 const marketOverviewRoute = codeOnly(source('app/api/market/overview/route.ts'))
@@ -35,6 +40,7 @@ const defiOverview = codeOnly(source('app/components/market/DefiOverview.tsx'))
 const exchangeVolume = codeOnly(source('app/components/market/ExchangeVolume.tsx'))
 const coreCards = codeOnly(source('app/components/market/CoreCards.tsx'))
 const globalMarketBar = codeOnly(source('app/components/market/GlobalMarketBar.tsx'))
+const tokenSidePanel = codeOnly(source('app/components/market/TokenSidePanel.tsx'))
 const proxy = source('proxy.ts')
 const apiAuthCoverage = source('scripts/qa/api-auth-coverage-check.mjs')
 const docs = source('docs/API_ROUTES.md')
@@ -51,12 +57,13 @@ test('V1 public egress publication is checked-in false and browser-safe', () => 
   }
 })
 
-test('anonymous public egress routes are no-argument fixed no-store tombstones', () => {
+test('anonymous public egress routes, including dynamic coin detail, are no-argument fixed no-store tombstones', () => {
   for (const route of [
     cdnProxyRoute,
     marketAlphaRoute,
     marketArbitrageRoute,
     marketCandlesRoute,
+    marketCoinRoute,
     marketDefiRoute,
     marketExchangesRoute,
     marketOverviewRoute,
@@ -68,10 +75,11 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
   ]) {
     assert.match(route, /export function GET\(\): NextResponse/)
     assert.match(route, /V1_PUBLIC_EGRESS_UNAVAILABLE_BODY/)
+    assert.match(route, /V1_PUBLIC_EGRESS_NO_STORE_HEADERS/)
     assert.match(route, /status:\s*410/)
 
     for (const forbidden of [
-      /\b(?:NextRequest|request|searchParams|new\s+URL)\b/,
+      /\b(?:NextRequest|request|params|searchParams|new\s+URL)\b/,
       /\bfetch\s*\(/,
       /\bccxt\b/,
       /\bCoinGecko\b|coingecko\.com/,
@@ -83,6 +91,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
       /\b(?:fetchSectorPerformance|CryptoCategory)\b/,
       /\b(?:fetchDefiOverview|fetchTVL|fetchProtocols|fetchChainTVL|DefiOverview|DefiLlama)\b/,
       /\b(?:fetchExchangeVolumes|ExchangeInfo)\b/,
+      /\b(?:UpstreamError|encodeURIComponent)\b/,
       /\b(?:fetchGasPrice|fetchFromCoinGecko|fetchFromCoinbase|fetchFromBinance|fetchMarketData)\b/,
       /\b(?:buildOverviewFromMarketCache|MarketOverviewData|Etherscan|Coinbase|Binance)\b/,
       /\b(?:checkRateLimit|RateLimitPresets|Ratelimit)\b/,
@@ -93,6 +102,22 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
       assert.doesNotMatch(route, forbidden)
     }
   }
+})
+
+test('dynamic coin-detail hold accepts only one canonical or V1 id segment', () => {
+  assert.match(proxy, /PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS\s*=\s*\[/)
+
+  for (const pattern of [
+    String.raw`/^\/api\/market\/coin\/[^/]+$/`,
+    String.raw`/^\/api\/v1\/market\/coin\/[^/]+$/`,
+  ]) {
+    assert.match(proxy, new RegExp(escapeRegExp(pattern)))
+  }
+
+  assert.match(
+    proxy,
+    /export function isPublicEgressProxyBypassPath\(pathname: string\): boolean\s*\{[\s\S]*?PUBLIC_EGRESS_BYPASS_PATHS\.has\(pathname\)[\s\S]*?PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS/
+  )
 })
 
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
@@ -106,7 +131,7 @@ test('only canonical and versioned public egress paths bypass proxy guards', () 
   )
   assert.doesNotMatch(
     proxy,
-    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|arbitrage|candles|defi|exchanges|overview|futures|fear-greed|sparklines|sectors)|link-preview)/
+    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|arbitrage|candles|coin|defi|exchanges|overview|futures|fear-greed|sparklines|sectors)|link-preview)/
   )
 
   const shouldSkipStart = proxy.indexOf('export function shouldSkip(pathname: string): boolean')
@@ -221,10 +246,20 @@ test('GlobalMarketBar keeps its shell but shows local unavailable without aggreg
   )
 })
 
+test('TokenSidePanel shows coin detail unavailable while retaining its separate OHLC chart', () => {
+  assert.match(tokenSidePanel, /role=['"]status['"][\s\S]*?t\(['"]dataUnavailable['"]\)/)
+  assert.doesNotMatch(tokenSidePanel, /\/api\/market\/coin\//)
+  assert.doesNotMatch(tokenSidePanel, /\b(?:CoinDetail|coinDetail|setCoinDetail)\b/)
+  assert.match(tokenSidePanel, /\/api\/market\/ohlc\/\$\{id\}\?days=\$\{days\}/)
+  assert.match(tokenSidePanel, /\bfetchOhlc\b/)
+  assert.match(tokenSidePanel, /<TradingViewChart\b/)
+})
+
 test('API allowlist and documentation describe the source-only public-egress hold', () => {
   assert.match(apiAuthCoverage, /'market\/alpha'/)
   assert.match(apiAuthCoverage, /'market\/arbitrage'/)
   assert.match(apiAuthCoverage, /'market\/candles'/)
+  assert.match(apiAuthCoverage, /'market\/coin\/\[id\]'/)
   assert.match(apiAuthCoverage, /'market\/defi'/)
   assert.match(apiAuthCoverage, /'market\/exchanges'/)
   assert.match(apiAuthCoverage, /'market\/overview'/)
@@ -238,6 +273,11 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(docs, /`\/api\/market\/alpha`/)
   assert.match(docs, /`\/api\/market\/arbitrage`/)
   assert.match(docs, /`\/api\/market\/candles`/)
+  assert.match(docs, /`\/api\/market\/coin\/\[id\]`/)
+  assert.match(docs, /`\/api\/v1\/market\/coin\/\[id\]`/)
+  assert.match(docs, /单个非空路径段/)
+  assert.match(docs, /TokenSidePanel/)
+  assert.match(docs, /`\/api\/market\/ohlc\/\[id\]`/)
   assert.match(docs, /`\/api\/market\/defi`/)
   assert.match(docs, /`\/api\/market\/exchanges`/)
   assert.match(docs, /`\/api\/market\/overview`/)

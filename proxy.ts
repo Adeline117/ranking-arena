@@ -118,6 +118,13 @@ const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
   '/api/posts/link-preview',
   '/api/v1/posts/link-preview',
 ])
+// Parameterized holds cannot be enumerated in the exact-path Set. Keep this
+// deliberately to one non-empty route segment so neighboring namespaces and
+// descendants still receive normal proxy handling.
+const PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS = [
+  /^\/api\/market\/coin\/[^/]+$/,
+  /^\/api\/v1\/market\/coin\/[^/]+$/,
+] as const
 const REFERRAL_PROGRAM_BYPASS_PATHS = new Set([
   '/api/referral',
   '/api/referral/apply',
@@ -332,7 +339,10 @@ export function isAdminSubscriptionSyncProxyBypassPath(pathname: string): boolea
 }
 
 export function isPublicEgressProxyBypassPath(pathname: string): boolean {
-  return PUBLIC_EGRESS_BYPASS_PATHS.has(pathname)
+  return (
+    PUBLIC_EGRESS_BYPASS_PATHS.has(pathname) ||
+    PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS.some((pattern) => pattern.test(pathname))
+  )
 }
 
 export function isReferralProgramProxyBypassPath(pathname: string): boolean {
