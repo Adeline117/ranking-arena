@@ -10,6 +10,8 @@ describe('full trader public-cohort boundary', () => {
 
     expect(source).toContain('const data = quarantineLegacyFullPositions(')
     expect(source).toContain('await fetchTraderFull(handle)')
+    expect(source).toContain('publicProfileHistoryQuarantine: true')
+    expect(source).toContain('toTraderPageData(detail, { publicProfileHistoryQuarantine: true })')
     expect(source).not.toContain('getOrSetWithLock')
     expect(source).toContain("'Cache-Control': 'private, no-store, max-age=0'")
   })

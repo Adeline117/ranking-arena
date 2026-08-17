@@ -20,6 +20,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getLeaderboard, getTraderDetail } from '@/lib/data/unified'
 import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
+import { LEGACY_METRIC_PUBLICATION_UNAVAILABLE } from '@/lib/data/trader/history-quarantine'
 import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
 import {
   EXCHANGE_CONFIG,
@@ -83,6 +84,7 @@ interface V3HandlerResult {
   hasMore?: boolean
   rankingVisibility?: V3RankingVisibility
   rankingVisibilityReason?: string
+  historicalMetricPublication?: typeof LEGACY_METRIC_PUBLICATION_UNAVAILABLE
   error?: string
   status?: number
 }
@@ -424,6 +426,7 @@ async function handleTrader(params: URLSearchParams) {
   const detail = await getTraderDetail(supabase, {
     platform: parsed.data.platform,
     traderKey: parsed.data.trader_key,
+    publicProfileHistoryQuarantine: true,
   })
   if (!detail) {
     return { error: 'Trader not found', status: 404 }
@@ -628,29 +631,16 @@ async function handleHistory(params: URLSearchParams) {
     return { error: 'Missing required params: platform, trader_key', status: 400 }
   }
 
-  const { platform, trader_key, days } = parsed.data
-  const since = new Date()
-  since.setDate(since.getDate() - days)
-
-  const supabase = getSupabaseAdmin() as SupabaseClient
-  const { data, error } = await supabase
-    .from('trader_daily_snapshots')
-    .select('date, roi, pnl, daily_return_pct, win_rate, max_drawdown, followers, trades_count')
-    .eq('platform', platform)
-    .eq('trader_key', trader_key)
-    .gte('date', since.toISOString().slice(0, 10))
-    .order('date', { ascending: true })
-    .limit(days)
-
-  if (error) {
-    return { error: 'Failed to fetch history', status: 500 }
+  // Validate the caller contract but do not resolve or read the requested
+  // trader. Historical daily ROI/PnL/drawdown rows are retained internally
+  // without a public publication proof, so even an empty legacy result must
+  // remain explicitly unavailable rather than masquerading as no history.
+  void parsed.data
+  return {
+    data: [],
+    total: 0,
+    historicalMetricPublication: LEGACY_METRIC_PUBLICATION_UNAVAILABLE,
   }
-
-  if (!data || data.length === 0) {
-    return { error: 'No history found for this trader', status: 404 }
-  }
-
-  return { data, total: data.length }
 }
 
 async function handleBulk(params: URLSearchParams) {
@@ -815,7 +805,12 @@ export async function GET(request: NextRequest) {
     // turning it into a blank file that consumers may interpret as zero.
     // Otherwise only array payloads are exportable; single-object endpoints
     // (trader) fall through to JSON.
-    if (params.get('format') === 'csv' && !result.rankingVisibility && Array.isArray(result.data)) {
+    if (
+      params.get('format') === 'csv' &&
+      !result.rankingVisibility &&
+      !result.historicalMetricPublication &&
+      Array.isArray(result.data)
+    ) {
       const csv = toCsv(result.data as Record<string, unknown>[])
       return new NextResponse(csv, {
         status: 200,
@@ -838,6 +833,9 @@ export async function GET(request: NextRequest) {
       ...(result.rankingVisibility ? { ranking_visibility: result.rankingVisibility } : {}),
       ...(result.rankingVisibilityReason
         ? { ranking_visibility_reason: result.rankingVisibilityReason }
+        : {}),
+      ...(result.historicalMetricPublication
+        ? { historical_metric_publication: result.historicalMetricPublication }
         : {}),
       endpoint,
       version: 'v3',

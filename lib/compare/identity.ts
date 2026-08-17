@@ -34,13 +34,10 @@ export function buildCompareUrl(accounts: CompareAccountRef[]): string {
   return `/compare?ids=${encodeURIComponent(ids)}&platforms=${encodeURIComponent(platforms)}`
 }
 
-export function buildCompareApiUrl(
-  accounts: CompareAccountRef[],
-  options: { includeEquity?: boolean } = {}
-): string {
+export function buildCompareApiUrl(accounts: CompareAccountRef[]): string {
   const pageUrl = buildCompareUrl(accounts)
   const query = pageUrl.includes('?') ? pageUrl.slice(pageUrl.indexOf('?')) : ''
-  return `/api/compare${query}${options.includeEquity ? `${query ? '&' : '?'}include_equity=1` : ''}`
+  return `/api/compare${query}`
 }
 
 /**

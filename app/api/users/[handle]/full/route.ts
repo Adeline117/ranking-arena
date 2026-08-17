@@ -15,7 +15,6 @@ import {
 import {
   projectPublicFullProfileRanking,
   fetchPublicFullTraderIdentity,
-  sanitizePublicFullPortfolio,
   sanitizePublicFullSimilarTraders,
 } from '@/lib/data/trader/public-full-profile'
 import { fetchSimilarTraders } from '@/lib/data/trader/similar'
@@ -29,6 +28,11 @@ const PUBLIC_PROFILE_NO_STORE_HEADERS = {
   'Vercel-CDN-Cache-Control': 'no-store',
   Pragma: 'no-cache',
 } as const
+
+// `trader_portfolio` is an internal raw source. A service-role route must not
+// turn its allocation/cost-basis-adjacent observations into a public API just
+// because the direct browser ACL is sealed.
+const LEGACY_PORTFOLIO_PUBLICATION_UNAVAILABLE = 'legacy_metric_publication_unavailable'
 
 function exactSocialCountOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
@@ -96,34 +100,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
     // Rank-bearing fields must observe the serving-head view for this request.
     // Do not cache this aggregate: a cache hit cannot prove that a row remains
     // published after a source freshness or completeness change.
-    const [rankingCohort, portfolioResult, subscriptionData] = await Promise.all([
+    const [rankingCohort, subscriptionData] = await Promise.all([
       fetchPublicProfileRankingRows(supabase, {
         source: profile.source,
         sourceTraderId: profile.id,
         periods: PUBLIC_PROFILE_RANKING_PERIODS,
       }),
-      (async () => {
-        try {
-          // Position identity/allocation are not ranking claims. Intentionally
-          // do not select entry price, PnL, or mark-to-market value: this old
-          // source cannot prove their price/cost basis for public display.
-          const { data, error } = await supabase
-            .from('trader_portfolio')
-            .select('symbol, direction, invested_pct')
-            .eq('source', profile.source)
-            .eq('source_trader_id', profile.id)
-            .order('captured_at', { ascending: false })
-            .limit(100)
-          if (error) throw error
-          return { positions: sanitizePublicFullPortfolio(data ?? []), error: null }
-        } catch (error) {
-          logger.error('[users/full] trader_portfolio query failed', {
-            handle,
-            error: String(error),
-          })
-          return { positions: [], error: 'portfolio_source_unavailable' }
-        }
-      })(),
       (async () => {
         if (audience.status !== 'active') return null
         try {
@@ -160,7 +142,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
             profile.source
           )
         : []
-    const portfolio = portfolioResult.positions
+    const portfolio: never[] = []
 
     const result = {
       profile: {
@@ -206,7 +188,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
           ranking.rankingVisibility === 'verified' ? undefined : ranking.rankingVisibilityReason,
         stats:
           ranking.rankingVisibility === 'verified' ? undefined : ranking.rankingVisibilityReason,
-        portfolio: portfolioResult.error ?? undefined,
+        portfolio: LEGACY_PORTFOLIO_PUBLICATION_UNAVAILABLE,
       },
       meta: {
         timestamp: new Date().toISOString(),

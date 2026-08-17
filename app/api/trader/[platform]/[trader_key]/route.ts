@@ -17,9 +17,6 @@ import type {
   TraderDetailResponse,
   TraderProfileRow,
   SnapshotMetrics,
-  EquityCurvePoint,
-  DailyPnlPoint,
-  AssetBreakdownPoint,
   RefreshJobSummary,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
@@ -29,6 +26,7 @@ import {
   PUBLIC_PROFILE_RANKING_PERIODS,
   type PublicProfileRankingVisibility,
 } from '@/lib/data/trader/public-profile-ranking'
+import { quarantineLegacyTraderTimeseries } from '@/lib/data/trader/history-quarantine'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,32 +71,16 @@ export async function GET(
       // Do not reuse a cached response here. The current request must observe
       // the sealed public cohort before it can expose rank/ROI/score/count.
 
-      // Legacy source aliases for fallback queries to old tables
-      const LEGACY_SOURCE_ALIASES: Record<string, string[]> = {
-        binance_futures: ['binance', 'binance_futures'],
-        bitget_futures: ['bitget', 'bitget_futures'],
-        htx_futures: ['htx_futures', 'htx'],
-        okx_web3: ['okx', 'okx_web3'],
-      }
-      const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
-
-      // Fire independent profile/identity/history reads together. The ranking
-      // row is deliberately a sealed-view read: a missing or rejected public
-      // cohort leaves rank-derived fields unknown instead of using raw rows.
+      // Fire only identity, operational refresh, and sealed-cohort reads. The
+      // deprecated route formerly replayed raw `trader_timeseries`, equity,
+      // daily-PnL, and asset data here; none carries a public completeness
+      // proof, so it is structurally quarantined below instead of being read.
       const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-      const [
-        profileResult,
-        sourceIdentityResult,
-        timeseriesResult,
-        jobResult,
-        ecResult,
-        abResult,
-        rankingCohort,
-      ] = await Promise.all([
+      const [profileResult, sourceIdentityResult, jobResult, rankingCohort] = await Promise.all([
         supabase
           .from('trader_profiles_v2')
           .select(
-            'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, followers, copiers, aum, updated_at, last_enriched_at, created_at'
+            'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, updated_at, last_enriched_at, created_at'
           )
           .eq('platform', platform)
           .eq('trader_key', trader_key)
@@ -112,13 +94,6 @@ export async function GET(
           .eq('source_trader_id', trader_key)
           .maybeSingle(),
         supabase
-          .from('trader_timeseries')
-          .select('series_type, data, as_of_ts, updated_at')
-          .eq('platform', platform)
-          .eq('trader_key', trader_key)
-          .order('as_of_ts', { ascending: false })
-          .limit(5),
-        supabase
           .from('refresh_jobs')
           .select('id, status, attempts, last_error, created_at, updated_at')
           .eq('platform', platform)
@@ -127,41 +102,6 @@ export async function GET(
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
-
-        // Legacy timeseries (trader_timeseries is empty, always needed).
-        // Use .eq('source', ...) when only 1 alias — .in() adds BitmapOr plan overhead.
-        sourceAliases.length === 1
-          ? supabase
-              .from('trader_equity_curve')
-              .select('data_date, roi_pct, pnl_usd')
-              .eq('source', sourceAliases[0])
-              .eq('source_trader_id', trader_key)
-              .in('period', ['90D', '30D', '7D'])
-              .order('data_date', { ascending: true })
-              .limit(365)
-          : supabase
-              .from('trader_equity_curve')
-              .select('data_date, roi_pct, pnl_usd')
-              .in('source', sourceAliases)
-              .eq('source_trader_id', trader_key)
-              .in('period', ['90D', '30D', '7D'])
-              .order('data_date', { ascending: true })
-              .limit(365),
-        sourceAliases.length === 1
-          ? supabase
-              .from('trader_asset_breakdown')
-              .select('symbol, weight_pct')
-              .eq('source', sourceAliases[0])
-              .eq('source_trader_id', trader_key)
-              .order('weight_pct', { ascending: false })
-              .limit(20)
-          : supabase
-              .from('trader_asset_breakdown')
-              .select('symbol, weight_pct')
-              .in('source', sourceAliases)
-              .eq('source_trader_id', trader_key)
-              .order('weight_pct', { ascending: false })
-              .limit(20),
         fetchPublicProfileRankingRows(supabase, {
           source: platform,
           sourceTraderId: trader_key,
@@ -202,23 +142,33 @@ export async function GET(
         lrByWindow.set(row.season_id, row)
       }
       // Build profile (graceful degradation if missing)
-      const profile: TraderProfileRow = (profileResult.data as TraderProfileRow) || {
-        id: '',
-        platform: platform as Platform,
-        trader_key,
-        display_name: null,
-        avatar_url: null,
-        profile_url: null,
-        bio: null,
-        bio_source: null,
-        tags: [],
-        followers: null,
-        copiers: null,
-        aum: null,
-        updated_at: new Date(0).toISOString(),
-        last_enriched_at: null,
-        created_at: new Date(0).toISOString(),
-      }
+      const profileRow = profileResult.data as TraderProfileRow | null
+      const profile: TraderProfileRow = profileRow
+        ? {
+            ...profileRow,
+            // These profile-row metrics are legacy observations, not the
+            // sealed public ranking cohort. Keep their unknown state explicit.
+            followers: null,
+            copiers: null,
+            aum: null,
+          }
+        : {
+            id: '',
+            platform: platform as Platform,
+            trader_key,
+            display_name: null,
+            avatar_url: null,
+            profile_url: null,
+            bio: null,
+            bio_source: null,
+            tags: [],
+            followers: null,
+            copiers: null,
+            aum: null,
+            updated_at: new Date(0).toISOString(),
+            last_enriched_at: null,
+            created_at: new Date(0).toISOString(),
+          }
 
       // Preserve non-ranking identity when enriched profile data is absent.
       if (!profileResult.data && sourceIdentityResult.data) {
@@ -262,66 +212,13 @@ export async function GET(
         }
       }
 
-      // Build timeseries
+      // Kept structurally empty by the shared quarantine helper at the
+      // response boundary. Do not infer a flat zero curve from the absence of
+      // a verified publication.
       const timeseries: TraderDetailResponse['timeseries'] = {
         equity_curve: null,
         daily_pnl: null,
         asset_breakdown: null,
-      }
-
-      if (timeseriesResult.data) {
-        const seenTypes = new Set<string>()
-        for (const ts of timeseriesResult.data) {
-          if (!seenTypes.has(ts.series_type)) {
-            seenTypes.add(ts.series_type)
-            switch (ts.series_type) {
-              case 'equity_curve':
-                timeseries.equity_curve = ts.data as EquityCurvePoint[]
-                break
-              case 'daily_pnl':
-                timeseries.daily_pnl = ts.data as DailyPnlPoint[]
-                break
-              case 'asset_breakdown':
-                timeseries.asset_breakdown = ts.data as AssetBreakdownPoint[]
-                break
-            }
-          }
-        }
-      }
-
-      // Use legacy equity curve + asset breakdown (already fetched in parallel)
-      if (!timeseries.equity_curve && ecResult?.data && ecResult.data.length > 0) {
-        const byDate = new Map<string, { roi: number; pnl: number }>()
-        for (const p of ecResult.data as Array<{
-          data_date: string
-          roi_pct: number | null
-          pnl_usd: number | null
-        }>) {
-          // A curve point is only displayable when both values are measured.
-          // Do not substitute an absent PnL with zero: that creates a false
-          // flat line and makes an incomplete historical series look complete.
-          if (p.roi_pct == null || p.pnl_usd == null) continue
-          const roi = Number(p.roi_pct)
-          const pnl = Number(p.pnl_usd)
-          if (!Number.isFinite(roi) || !Number.isFinite(pnl)) continue
-          byDate.set(p.data_date, {
-            roi,
-            pnl,
-          })
-        }
-        timeseries.equity_curve = [...byDate.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([date, v]) => ({ date, roi: v.roi, pnl: v.pnl })) as EquityCurvePoint[]
-      }
-
-      if (!timeseries.asset_breakdown && abResult?.data && abResult.data.length > 0) {
-        timeseries.asset_breakdown = (
-          abResult.data as Array<{ symbol: string; weight_pct: number }>
-        ).map((a) => ({
-          symbol: a.symbol,
-          weight_pct: Number(a.weight_pct),
-          count: 0,
-        })) as AssetBreakdownPoint[]
       }
 
       // Determine staleness from the most recent published ranking row.
@@ -356,7 +253,9 @@ export async function GET(
         ranking_visibility_reason: rankingCohort.rankingVisibilityReason,
       }
 
-      return NextResponse.json(response, { headers: PUBLIC_PROFILE_NO_STORE_HEADERS })
+      return NextResponse.json(quarantineLegacyTraderTimeseries(response), {
+        headers: PUBLIC_PROFILE_NO_STORE_HEADERS,
+      })
     },
     { name: 'trader-detail' }
   )

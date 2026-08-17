@@ -55,7 +55,11 @@ import { avatarSrc } from '@/lib/utils/avatar-proxy'
 // JSON-LD structured data is emitted by the server component (page.tsx).
 // Do NOT emit it here — that causes duplicate ProfilePage + BreadcrumbList.
 import { RankSparkline } from '@/app/components/ranking/RankSparkline'
-import { LEGACY_HISTORY_COMPLETENESS_UNKNOWN } from '@/lib/data/trader/history-quarantine'
+import {
+  LEGACY_HISTORY_COMPLETENESS_UNKNOWN,
+  PUBLIC_PROFILE_HISTORY_QUERY_EPOCH,
+  quarantineLegacyPositionHistory,
+} from '@/lib/data/trader/history-quarantine'
 
 // Memoized tab components — each wraps its own subtree so SWR revalidations
 // on one tab don't cause reconciliation of the others.
@@ -411,7 +415,12 @@ export default function TraderProfileClient({
     isFetching: legacyPlatformOverrideFetching,
     fetchStatus: legacyPlatformOverrideFetchStatus,
   } = useQuery<TraderPageData>({
-    queryKey: ['trader-platform-legacy-override', urlHandle, urlPlatform],
+    queryKey: [
+      'trader-platform-legacy-override',
+      PUBLIC_PROFILE_HISTORY_QUERY_EPOCH,
+      urlHandle,
+      urlPlatform,
+    ],
     queryFn: () => traderFetcher<TraderPageData>(legacyPlatformOverrideUrl!),
     enabled: Boolean(legacyPlatformOverrideUrl),
     staleTime: 0,
@@ -758,6 +767,17 @@ export default function TraderProfileClient({
       _error?: string
     }
   }
+  // Server-rendered props can originate from an HTML payload produced before
+  // this browser loaded the current client bundle. Treat them exactly like a
+  // network response: legacy history is never trusted merely because an old
+  // payload claimed it was complete.
+  const quarantinedServerTraderData = useMemo(
+    () =>
+      serverTraderData
+        ? (quarantineLegacyPositionHistory(serverTraderData) as TraderDataWithExtras)
+        : undefined,
+    [serverTraderData]
+  )
   const {
     data: traderData,
     error: traderError,
@@ -767,7 +787,7 @@ export default function TraderProfileClient({
     fetchStatus: traderFetchStatus,
     isFetching: traderDataFetching,
   } = useQuery<TraderDataWithExtras>({
-    queryKey: ['trader-profile', traderApiUrl],
+    queryKey: ['trader-profile', PUBLIC_PROFILE_HISTORY_QUERY_EPOCH, traderApiUrl],
     queryFn: () => traderFetcher<TraderDataWithExtras>(traderApiUrl!),
     // The route's serving account never touches the legacy endpoint. A linked
     // subject may do so only after its exact first-screen probe proves a 404.
@@ -786,9 +806,7 @@ export default function TraderProfileClient({
       if ((error as Error & { status?: number }).status === 404) return false
       return failureCount < 2
     },
-    initialData: primaryUsesServerDetail
-      ? ((serverTraderData as TraderDataWithExtras) ?? undefined)
-      : undefined,
+    initialData: primaryUsesServerDetail ? quarantinedServerTraderData : undefined,
     // #30: Skip refetch on mount when serverTraderData is provided (ISR freshness)
     refetchOnMount: primaryUsesServerDetail && serverTraderData ? false : 'always',
   })
@@ -1008,18 +1026,29 @@ export default function TraderProfileClient({
     () => scopedTraderData?.performance ?? null,
     [scopedTraderData?.performance]
   )
-  const traderStats = useMemo(() => scopedTraderData?.stats ?? null, [scopedTraderData?.stats])
+  // A pre-quarantine client cache can outlive a route deployment. Gate every
+  // legacy-history consumer on the explicit evidence state as a second line of
+  // defense; absence is never rendered as a flat zero-valued chart or position.
+  const legacyHistoryComplete = scopedTraderData?.historyCompleteness?.state === 'complete'
+  const traderStats = useMemo(
+    () => (legacyHistoryComplete ? (scopedTraderData?.stats ?? null) : null),
+    [legacyHistoryComplete, scopedTraderData?.stats]
+  )
   const traderPortfolio = useMemo(
-    () => scopedTraderData?.portfolio ?? [],
-    [scopedTraderData?.portfolio]
+    () => (legacyHistoryComplete ? (scopedTraderData?.portfolio ?? []) : []),
+    [legacyHistoryComplete, scopedTraderData?.portfolio]
   )
   const traderEquityCurve = useMemo(
-    () => scopedTraderData?.equityCurve,
-    [scopedTraderData?.equityCurve]
+    () => (legacyHistoryComplete ? scopedTraderData?.equityCurve : undefined),
+    [legacyHistoryComplete, scopedTraderData?.equityCurve]
   )
   const traderAssetBreakdown = useMemo(
-    () => scopedTraderData?.assetBreakdown,
-    [scopedTraderData?.assetBreakdown]
+    () => (legacyHistoryComplete ? scopedTraderData?.assetBreakdown : undefined),
+    [legacyHistoryComplete, scopedTraderData?.assetBreakdown]
+  )
+  const traderPositionSummary = useMemo(
+    () => (legacyHistoryComplete ? (scopedTraderData?.positionSummary ?? null) : null),
+    [legacyHistoryComplete, scopedTraderData?.positionSummary]
   )
   const traderSimilar = useMemo(
     () => scopedTraderData?.similarTraders ?? [],
@@ -1619,7 +1648,7 @@ export default function TraderProfileClient({
                     }
                     traderSimilar={effSimilar}
                     positionSummary={
-                      scopedTraderData?.positionSummary as
+                      traderPositionSummary as
                         | {
                             avgLeverage: number | null
                             longPositions: number | null

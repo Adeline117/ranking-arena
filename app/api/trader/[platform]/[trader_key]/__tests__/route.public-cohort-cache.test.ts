@@ -119,4 +119,29 @@ describe('GET /api/trader/[platform]/[trader_key] current public-cohort proof', 
     expect(second.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
     expect(second.headers.get('CDN-Cache-Control')).toBe('no-store')
   })
+
+  it('does not query or expose deprecated timeseries, daily PnL, or asset history', async () => {
+    mockFetchPublicProfileRankingRows.mockResolvedValueOnce({
+      rows: [publishedRow()],
+      rankingVisibility: 'verified',
+      rankingVisibilityReason: null,
+    })
+
+    const response = await GET({} as never, {
+      params: Promise.resolve({ platform: 'binance_futures', trader_key: 'trader-1' }),
+    })
+    const body = (await response.json()) as {
+      timeseries: Record<string, unknown>
+      history_completeness: { state: string; reason: string }
+    }
+
+    for (const relation of ['trader_timeseries', 'trader_equity_curve', 'trader_asset_breakdown']) {
+      expect(mockSupabase.from).not.toHaveBeenCalledWith(relation)
+    }
+    expect(body.timeseries).toEqual({ equity_curve: null, daily_pnl: null, asset_breakdown: null })
+    expect(body.history_completeness).toEqual({
+      state: 'unknown',
+      reason: 'history_evidence_not_bound',
+    })
+  })
 })

@@ -244,6 +244,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:trader-series-publication-isolation-pg17
 
+      - name: Prove legacy raw-metric publication isolation
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:legacy-raw-metric-publication-isolation-pg17
+
       - name: Prove copier snapshot trust v2 publisher
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

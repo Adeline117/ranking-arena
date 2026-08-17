@@ -290,17 +290,25 @@ export async function getLeaderboard(
  * security-barrier view suppresses any incomplete/estimated/raw observation;
  * profile identity can still render with unknown ranking fields.
  *
- * Enrichment data (equity curve, asset breakdown, positions, stats) comes from
- * dedicated tables that use v1 naming (source + source_trader_id).
+ * Legacy enrichment data (equity curve, asset breakdown, positions, stats)
+ * remains available to non-public callers such as compare. Public profile
+ * callers must explicitly opt into the quarantine below: absence of an arena
+ * publication proof is not a zero-valued historical observation.
  */
 export async function getTraderDetail(
   supabase: SupabaseClient,
   params: {
     platform: string
     traderKey: string
+    /**
+     * Public profile routes cannot publish unsealed legacy history. This is
+     * opt-in rather than the default because `/api/compare` remains outside
+     * the public-profile containment scope.
+     */
+    publicProfileHistoryQuarantine?: boolean
   }
 ): Promise<TraderDetail | null> {
-  const { platform, traderKey } = params
+  const { platform, traderKey, publicProfileHistoryQuarantine = false } = params
   const sourceAliases = getSourceAliases(platform)
 
   // --- Phase 1: Fetch ranked cohort + identity/profile in parallel ---
@@ -440,6 +448,11 @@ export async function getTraderDetail(
   // Merge 3 equity_curve + 3 asset_breakdown queries into 2 (6→2, saves 4 round trips)
   // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
   const phase2Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
+  // Preserve the default detail behavior for compare, but make public-profile
+  // containment an actual read fence rather than a post-read cosmetic filter.
+  // `null` is an unavailable value; no historical metric is replaced with 0.
+  const unavailableLegacyEnrichment = <T>(): Promise<DataResult<T | null>> =>
+    Promise.resolve(success<T | null>(null))
   const [
     allEquityCurveResult,
     allAssetBreakdownResult,
@@ -451,53 +464,61 @@ export async function getTraderDetail(
   ] = await withTimeout(
     Promise.all([
       // Equity curves — all periods in single query, split client-side
-      safeQuery(() =>
-        supabase
-          .from('trader_equity_curve')
-          .select('period, data_date, roi_pct, pnl_usd')
-          .in(ENRICH.source, sourceAliases)
-          .eq(ENRICH.source_trader_id, traderKey)
-          .in('period', ['90D', '30D', '7D'])
-          .order('data_date', { ascending: true })
-          .limit(130)
-          .abortSignal(phase2Signal)
-      ),
+      publicProfileHistoryQuarantine
+        ? unavailableLegacyEnrichment()
+        : safeQuery(() =>
+            supabase
+              .from('trader_equity_curve')
+              .select('period, data_date, roi_pct, pnl_usd')
+              .in(ENRICH.source, sourceAliases)
+              .eq(ENRICH.source_trader_id, traderKey)
+              .in('period', ['90D', '30D', '7D'])
+              .order('data_date', { ascending: true })
+              .limit(130)
+              .abortSignal(phase2Signal)
+          ),
       // Asset breakdowns — all periods in single query, split client-side
-      safeQuery(() =>
-        supabase
-          .from('trader_asset_breakdown')
-          .select('period, symbol, weight_pct')
-          .in(ENRICH.source, sourceAliases)
-          .eq(ENRICH.source_trader_id, traderKey)
-          .in('period', ['90D', '30D', '7D'])
-          .order('weight_pct', { ascending: false })
-          .limit(60)
-          .abortSignal(phase2Signal)
-      ),
+      publicProfileHistoryQuarantine
+        ? unavailableLegacyEnrichment()
+        : safeQuery(() =>
+            supabase
+              .from('trader_asset_breakdown')
+              .select('period, symbol, weight_pct')
+              .in(ENRICH.source, sourceAliases)
+              .eq(ENRICH.source_trader_id, traderKey)
+              .in('period', ['90D', '30D', '7D'])
+              .order('weight_pct', { ascending: false })
+              .limit(60)
+              .abortSignal(phase2Signal)
+          ),
       // Stats detail (all periods) — enrichment tables use v1 naming
-      safeQuery(() =>
-        supabase
-          .from('trader_stats_detail')
-          .select(
-            'sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, total_trades, profitable_trades_pct, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period'
-          )
-          .in(ENRICH.source, sourceAliases)
-          .eq(ENRICH.source_trader_id, traderKey)
-          .order('captured_at', { ascending: false })
-          .limit(3)
-          .abortSignal(phase2Signal)
-      ),
+      publicProfileHistoryQuarantine
+        ? unavailableLegacyEnrichment()
+        : safeQuery(() =>
+            supabase
+              .from('trader_stats_detail')
+              .select(
+                'sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, total_trades, profitable_trades_pct, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period'
+              )
+              .in(ENRICH.source, sourceAliases)
+              .eq(ENRICH.source_trader_id, traderKey)
+              .order('captured_at', { ascending: false })
+              .limit(3)
+              .abortSignal(phase2Signal)
+          ),
       // Portfolio — enrichment tables use v1 naming
-      safeQuery(() =>
-        supabase
-          .from('trader_portfolio')
-          .select('symbol, direction, invested_pct, entry_price, pnl')
-          .in(ENRICH.source, sourceAliases)
-          .eq(ENRICH.source_trader_id, traderKey)
-          .order('captured_at', { ascending: false })
-          .limit(50)
-          .abortSignal(phase2Signal)
-      ),
+      publicProfileHistoryQuarantine
+        ? unavailableLegacyEnrichment()
+        : safeQuery(() =>
+            supabase
+              .from('trader_portfolio')
+              .select('symbol, direction, invested_pct, entry_price, pnl')
+              .in(ENRICH.source, sourceAliases)
+              .eq(ENRICH.source_trader_id, traderKey)
+              .order('captured_at', { ascending: false })
+              .limit(50)
+              .abortSignal(phase2Signal)
+          ),
       // Tracked since — migrated off retiring trader_snapshots_v2 to
       // trader_sources.created_at (when this trader identity was first recorded).
       safeQuery(() =>
@@ -513,17 +534,19 @@ export async function getTraderDetail(
       // Similar traders (by arena score range)
       fetchSimilarTraders(supabase, platform, traderKey, trader.arenaScore, trader.roi),
       // Position summary (avg leverage, long/short counts)
-      safeQuery(() =>
-        supabase
-          .from('trader_position_summary')
-          .select(
-            'avg_leverage, long_positions, short_positions, total_positions, total_margin_usd, total_unrealized_pnl'
-          )
-          .eq('platform', platform)
-          .eq('trader_key', traderKey)
-          .abortSignal(phase2Signal)
-          .maybeSingle()
-      ),
+      publicProfileHistoryQuarantine
+        ? unavailableLegacyEnrichment()
+        : safeQuery(() =>
+            supabase
+              .from('trader_position_summary')
+              .select(
+                'avg_leverage, long_positions, short_positions, total_positions, total_margin_usd, total_unrealized_pnl'
+              )
+              .eq('platform', platform)
+              .eq('trader_key', traderKey)
+              .abortSignal(phase2Signal)
+              .maybeSingle()
+          ),
     ]),
     SSR_HEAVY_QUERY_TIMEOUT_MS + 1000 // outer fallback: AbortSignal should fire first
   )

@@ -206,6 +206,7 @@ export async function GET(
             const detail = await getTraderDetail(supabase, {
               platform: resolved.platform,
               traderKey: resolved.traderKey,
+              publicProfileHistoryQuarantine: true,
             })
 
             if (!detail) {
@@ -213,7 +214,7 @@ export async function GET(
             }
 
             return {
-              pageData: toTraderPageData(detail),
+              pageData: toTraderPageData(detail, { publicProfileHistoryQuarantine: true }),
               resolved: { platform: resolved.platform, traderKey: resolved.traderKey },
             }
           })(),

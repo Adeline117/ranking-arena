@@ -120,7 +120,11 @@ const SSR_DETAIL_TIMEOUT_MS = SSR_QUERY_TIMEOUT_MS + 1000 // 4s: 1s headroom ove
 const getCurrentPublicTraderDetail = async (platform: string, traderKey: string) => {
   try {
     return await Promise.race([
-      getTraderDetail(getReadReplica(), { platform, traderKey }),
+      getTraderDetail(getReadReplica(), {
+        platform,
+        traderKey,
+        publicProfileHistoryQuarantine: true,
+      }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
     ])
   } catch (err) {
@@ -740,7 +744,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     cachedFindUserHandleByTrader(resolved.platform, resolved.traderKey),
   ])
 
-  const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
+  const serverTraderData = detailResult
+    ? toTraderPageData(detailResult, { publicProfileHistoryQuarantine: true })
+    : null
 
   // Build UnregisteredTraderData for initial render
   const platformDead = isDeadPlatform(resolved.platform)

@@ -12,6 +12,8 @@ describe('legacy claimed-profile history quarantine', () => {
 
       expect(source).not.toContain('traderData?.positionHistory')
       expect(source).toContain('const traderPositionHistory = EMPTY_LEGACY_POSITION_HISTORY')
+      expect(source).toContain('const legacyHistoryComplete =')
+      expect(source).toContain('traderEquityCurve = legacyHistoryComplete')
       expect(
         source.match(/historyCompleteness=\{LEGACY_HISTORY_COMPLETENESS_UNKNOWN\}/g)
       ).toHaveLength(2)
