@@ -33,7 +33,14 @@ jest.mock('../similar', () => ({
   fetchSimilarTraders: jest.fn().mockResolvedValue([]),
 }))
 
-import { getLeaderboard, getTraderDetail, safeQuery, withTimeout } from '../queries'
+import {
+  getLeaderboard,
+  getTraderDetail,
+  materializePublicSearchTraders,
+  safeQuery,
+  searchTraders,
+  withTimeout,
+} from '../queries'
 
 function chainableQuery(response: { data?: Record<string, unknown>[]; error?: unknown } = {}) {
   const query: Record<string, jest.Mock> = {}
@@ -79,6 +86,25 @@ function publicRankRow(overrides: Record<string, unknown> = {}) {
     computed_at: new Date().toISOString(),
     ...overrides,
   }
+}
+
+function publicSearchQuery(response: { data: unknown[]; error?: { message: string } | null }) {
+  const query: Record<string, jest.Mock | ((...args: unknown[]) => Promise<unknown>)> = {}
+  for (const method of ['select', 'eq', 'in', 'not']) {
+    query[method] = jest.fn(() => query)
+  }
+  query.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+    Promise.resolve({ data: response.data, error: response.error ?? null }).then(resolve, reject)
+  return query
+}
+
+function searchIdentityQuery(response: { data: unknown[]; error?: { message: string } | null }) {
+  const query: Record<string, jest.Mock> = {}
+  for (const method of ['select', 'or', 'eq']) {
+    query[method] = jest.fn(() => query)
+  }
+  query.limit = jest.fn().mockResolvedValue({ data: response.data, error: response.error ?? null })
+  return query
 }
 
 describe('safeQuery', () => {
@@ -200,6 +226,219 @@ describe('withTimeout', () => {
       setTimeout(() => resolve('too late'), 5000)
     )
     await expect(withTimeout(slowPromise, 10)).rejects.toThrow('Query timeout after 10ms')
+  })
+})
+
+describe('public search cohort materialization', () => {
+  it('projects rank metrics only from the current sealed view', async () => {
+    const query = publicSearchQuery({
+      data: [
+        publicRankRow({
+          source_trader_id: 'verified-trader',
+          handle: 'Published handle',
+          arena_score: 84,
+          roi: 17.5,
+          pnl: 4200,
+          rank: 7,
+        }),
+      ],
+    })
+    const supabase = { from: jest.fn(() => query) }
+
+    const result = await materializePublicSearchTraders(supabase as never, [
+      {
+        platform: 'binance_futures',
+        traderKey: 'verified-trader',
+        handle: 'Search identity',
+        avatarUrl: null,
+      },
+    ])
+
+    expect(supabase.from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(query.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(query.not).toHaveBeenCalledWith('rank', 'is', null)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      platform: 'binance_futures',
+      traderKey: 'verified-trader',
+      handle: 'Search identity',
+      rank: 7,
+      roi: 17.5,
+      pnl: 4200,
+      arenaScore: 84,
+    })
+  })
+
+  it('keeps identity-only candidates when current proof is missing, partial, or quarantined', async () => {
+    const query = publicSearchQuery({
+      data: [
+        publicRankRow({
+          source_trader_id: 'partial-trader',
+          score_completeness: 'partial',
+          arena_score: 99,
+          roi: 999,
+          pnl: 999999,
+          rank: 1,
+        }),
+      ],
+    })
+    const supabase = { from: jest.fn(() => query) }
+
+    const result = await materializePublicSearchTraders(supabase as never, [
+      {
+        platform: 'binance_futures',
+        traderKey: 'partial-trader',
+        handle: 'Partial candidate',
+        avatarUrl: null,
+      },
+      {
+        platform: 'binance_futures',
+        traderKey: 'missing-trader',
+        handle: 'Missing candidate',
+        avatarUrl: null,
+      },
+      {
+        platform: 'okx_web3_solana',
+        traderKey: 'quarantined-trader',
+        handle: 'Quarantined candidate',
+        avatarUrl: null,
+      },
+    ])
+
+    expect(query.in).toHaveBeenCalledWith('source', ['binance_futures'])
+    expect(result.map((trader) => trader.handle)).toEqual([
+      'Partial candidate',
+      'Missing candidate',
+      'Quarantined candidate',
+    ])
+    for (const trader of result) {
+      expect(trader).toMatchObject({
+        rank: null,
+        roi: null,
+        pnl: null,
+        arenaScore: null,
+        scoreConfidence: null,
+      })
+    }
+  })
+
+  it('does not trust fuzzy RPC metric or relevance fields, or query leaderboard_ranks', async () => {
+    const publicQuery = publicSearchQuery({
+      data: [
+        publicRankRow({
+          source_trader_id: 'fuzzy-trader',
+          rank: 12,
+          arena_score: 73,
+          roi: 8.25,
+          pnl: 100,
+        }),
+      ],
+    })
+    const supabase = {
+      rpc: jest.fn().mockResolvedValue({
+        data: [
+          {
+            source: 'binance_futures',
+            source_trader_id: 'fuzzy-trader',
+            handle: 'Fuzzy Trader',
+            avatar_url: null,
+            relevance_score: 500,
+            // These are deliberately hostile index/RPC values. The helper
+            // must never project, admit, or order by them.
+            arena_score: 100,
+            roi: 9999,
+            pnl: 999999,
+            rank: 1,
+          },
+        ],
+        error: null,
+      }),
+      from: jest.fn(() => publicQuery),
+    }
+
+    const result = await searchTraders(supabase as never, { query: 'fuzzy', limit: 5 })
+
+    expect(supabase.from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(result[0]).toMatchObject({
+      rank: 12,
+      arenaScore: 73,
+      roi: 8.25,
+      pnl: 100,
+    })
+  })
+
+  it('does not admit a fuzzy RPC candidate solely from its raw relevance score', async () => {
+    const identityQuery = searchIdentityQuery({ data: [] })
+    const supabase = {
+      rpc: jest.fn().mockResolvedValue({
+        data: [
+          {
+            source: 'binance_futures',
+            source_trader_id: 'unrelated-trader',
+            handle: 'Unrelated identity',
+            avatar_url: null,
+            relevance_score: 999999,
+          },
+        ],
+        error: null,
+      }),
+      from: jest.fn(() => identityQuery),
+    }
+
+    const result = await searchTraders(supabase as never, { query: 'needle', limit: 5 })
+
+    expect(result).toEqual([])
+    expect(supabase.from).toHaveBeenCalledWith('trader_sources')
+    expect(supabase.from).not.toHaveBeenCalledWith('public_ranked_leaderboard')
+  })
+
+  it('uses stable identity ordering when text matches tie despite conflicting raw relevance', async () => {
+    const publicQuery = publicSearchQuery({
+      data: [
+        publicRankRow({
+          source_trader_id: 'alpha-a',
+          rank: 10,
+          arena_score: 70,
+          roi: 3,
+          pnl: 50,
+        }),
+        publicRankRow({
+          source_trader_id: 'alpha-b',
+          rank: 2,
+          arena_score: 90,
+          roi: 30,
+          pnl: 500,
+        }),
+      ],
+    })
+    const supabase = {
+      rpc: jest.fn().mockResolvedValue({
+        data: [
+          {
+            source: 'binance_futures',
+            source_trader_id: 'alpha-a',
+            handle: 'Alpha One',
+            avatar_url: null,
+            relevance_score: 1,
+          },
+          {
+            source: 'binance_futures',
+            source_trader_id: 'alpha-b',
+            handle: 'Alpha Two',
+            avatar_url: null,
+            relevance_score: 999999,
+          },
+        ],
+        error: null,
+      }),
+      from: jest.fn(() => publicQuery),
+    }
+
+    const result = await searchTraders(supabase as never, { query: 'alpha', limit: 5 })
+
+    expect(result.map((trader) => trader.traderKey)).toEqual(['alpha-a', 'alpha-b'])
   })
 })
 

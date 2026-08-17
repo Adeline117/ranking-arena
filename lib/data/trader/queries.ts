@@ -23,6 +23,7 @@ import { type DataResult, success, failure } from '@/lib/types/result'
 import {
   PUBLIC_RANKING_QUARANTINED_SOURCES,
   isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 import {
   fetchPublicProfileRankingRows,
@@ -35,6 +36,31 @@ import {
 const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
 /** Default freshness window shared by the homepage cache revalidator. */
 export const PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Ranking columns required to prove a search result belongs to the current
+ * public cohort. Keep this complete: sanitizePublicRankingPayload deliberately
+ * rejects rows whose basis, freshness, or score proof is missing.
+ */
+const PUBLIC_SEARCH_RANKING_COLUMNS =
+  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,is_outlier,computed_at,trading_style,avg_holding_hours,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,source_type,rank_change,is_new'
+
+const PUBLIC_SEARCH_PERIOD: TradingPeriod = '90D'
+const MAX_PUBLIC_SEARCH_CANDIDATES = 200
+
+/**
+ * Identity/relevance candidate from fuzzy, Meilisearch, or trader_sources.
+ * These fields are deliberately non-metric: a caller must materialize the
+ * candidate against public_ranked_leaderboard before exposing rank/ROI/PnL or
+ * Arena Score.
+ */
+export interface PublicSearchTraderCandidate {
+  platform: string
+  traderKey: string
+  handle: string | null
+  avatarUrl: string | null
+  traderType?: string | null
+}
 
 // ============================================================
 // INTERNAL: Safe query helper
@@ -642,13 +668,203 @@ export async function getTraderDetail(
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function searchCandidateKey(platform: string, traderKey: string): string {
+  return JSON.stringify([platform, traderKey])
+}
+
+function normalizePublicSearchCandidate(value: unknown): PublicSearchTraderCandidate | null {
+  if (!isRecord(value)) return null
+  const platform = value.platform
+  const traderKey = value.traderKey
+  if (
+    typeof platform !== 'string' ||
+    platform.length === 0 ||
+    platform !== platform.trim() ||
+    typeof traderKey !== 'string' ||
+    traderKey.length === 0 ||
+    traderKey !== traderKey.trim()
+  ) {
+    return null
+  }
+
+  return {
+    platform: platform.toLowerCase(),
+    traderKey,
+    handle: typeof value.handle === 'string' && value.handle.length > 0 ? value.handle : null,
+    avatarUrl:
+      typeof value.avatarUrl === 'string' && value.avatarUrl.length > 0 ? value.avatarUrl : null,
+    traderType:
+      typeof value.traderType === 'string' && value.traderType.length > 0 ? value.traderType : null,
+  }
+}
+
+function identityOnlySearchTrader(candidate: PublicSearchTraderCandidate): UnifiedTrader {
+  const platform = candidate.platform
+  return {
+    platform,
+    traderKey: candidate.traderKey,
+    handle: candidate.handle,
+    avatarUrl: candidate.avatarUrl,
+    profileUrl: null,
+    marketType: SOURCE_TYPE_MAP[platform] || null,
+    sourceType: SOURCE_TYPE_MAP[platform] || null,
+    roi: null,
+    pnl: null,
+    winRate: null,
+    maxDrawdown: null,
+    tradesCount: null,
+    followers: null,
+    copiers: null,
+    arenaScore: null,
+    returnScore: null,
+    pnlScore: null,
+    drawdownScore: null,
+    stabilityScore: null,
+    profitabilityScore: null,
+    riskControlScore: null,
+    executionScore: null,
+    scoreConfidence: null,
+    scoreCompleteness: null,
+    metricsEstimated: null,
+    rank: null,
+    rankChange: null,
+    isNew: false,
+    period: PUBLIC_SEARCH_PERIOD,
+    sharpeRatio: null,
+    sortinoRatio: null,
+    profitFactor: null,
+    calmarRatio: null,
+    tradingStyle: null,
+    avgHoldingHours: null,
+    traderType: candidate.traderType || (platform === 'web3_bot' ? 'bot' : null),
+    isOutlier: false,
+    lastUpdated: null,
+  }
+}
+
+type PublicSearchRankingRow = Record<string, unknown> & {
+  source: string
+  source_trader_id: string
+  season_id: TradingPeriod
+  rank: number
+}
+
+function isExactPublicSearchRow(
+  row: unknown,
+  candidateKeys: ReadonlySet<string>
+): row is PublicSearchRankingRow {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    typeof row.source_trader_id === 'string' &&
+    row.season_id === PUBLIC_SEARCH_PERIOD &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0 &&
+    candidateKeys.has(searchCandidateKey(row.source, row.source_trader_id))
+  )
+}
+
+/**
+ * Re-materialize identity candidates against the current sealed public cohort.
+ * Fuzzy/Meilisearch/trader_sources may nominate candidates only. Missing,
+ * stale, partial, or malformed proof intentionally leaves every rank-derived
+ * field null rather than falling back to the nomination source.
+ */
+export async function materializePublicSearchTraders(
+  supabase: SupabaseClient,
+  candidates: readonly PublicSearchTraderCandidate[]
+): Promise<UnifiedTrader[]> {
+  const normalizedCandidates: PublicSearchTraderCandidate[] = []
+  const seenCandidates = new Set<string>()
+  for (const candidate of candidates) {
+    const normalized = normalizePublicSearchCandidate(candidate)
+    if (!normalized) continue
+    const key = searchCandidateKey(normalized.platform, normalized.traderKey)
+    if (seenCandidates.has(key)) continue
+    seenCandidates.add(key)
+    normalizedCandidates.push(normalized)
+    if (normalizedCandidates.length >= MAX_PUBLIC_SEARCH_CANDIDATES) break
+  }
+  if (normalizedCandidates.length === 0) return []
+
+  const publicCandidates = normalizedCandidates.filter((candidate) =>
+    isPublicRankingSourceAllowed(candidate.platform)
+  )
+  const candidateKeys = new Set(
+    publicCandidates.map((candidate) => searchCandidateKey(candidate.platform, candidate.traderKey))
+  )
+  const publicRowsByCandidate = new Map<string, Record<string, unknown>>()
+  const ambiguousCandidateKeys = new Set<string>()
+
+  if (publicCandidates.length > 0) {
+    try {
+      const sources = [...new Set(publicCandidates.map((candidate) => candidate.platform))]
+      const traderKeys = [...new Set(publicCandidates.map((candidate) => candidate.traderKey))]
+      const { data, error } = await supabase
+        .from(PUBLIC_RANKED_LEADERBOARD as never)
+        .select(PUBLIC_SEARCH_RANKING_COLUMNS)
+        .eq(LR.season_id, PUBLIC_SEARCH_PERIOD)
+        .in(LR.source, sources)
+        .in(LR.source_trader_id, traderKeys)
+        .not(LR.rank, 'is', null)
+
+      if (error) {
+        logger.warn('[search] public cohort lookup failed', { error: error.message })
+      } else {
+        const sanitized = sanitizePublicRankingPayload(
+          { traders: data ?? [], period: PUBLIC_SEARCH_PERIOD },
+          { expectedPeriod: PUBLIC_SEARCH_PERIOD }
+        ) as { traders?: unknown[] }
+        for (const row of sanitized.traders ?? []) {
+          if (!isExactPublicSearchRow(row, candidateKeys)) continue
+          const key = searchCandidateKey(row.source, row.source_trader_id)
+          if (publicRowsByCandidate.has(key)) {
+            ambiguousCandidateKeys.add(key)
+            publicRowsByCandidate.delete(key)
+            continue
+          }
+          if (!ambiguousCandidateKeys.has(key)) publicRowsByCandidate.set(key, row)
+        }
+      }
+    } catch (err) {
+      logger.warn('[search] public cohort lookup threw', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  return normalizedCandidates.map((candidate) => {
+    const row = publicRowsByCandidate.get(
+      searchCandidateKey(candidate.platform, candidate.traderKey)
+    )
+    if (!row) return identityOnlySearchTrader(candidate)
+
+    const publicTrader = mapLeaderboardRow(row)
+    return {
+      ...publicTrader,
+      // Identity can be discovered through fuzzy/indexed sources. All
+      // performance, score, and rank fields above came from the sealed row.
+      platform: candidate.platform,
+      traderKey: candidate.traderKey,
+      handle: candidate.handle ?? publicTrader.handle,
+      avatarUrl: candidate.avatarUrl ?? publicTrader.avatarUrl,
+      traderType: candidate.traderType ?? publicTrader.traderType,
+    }
+  })
+}
+
 /**
  * Search traders by name/handle with fuzzy matching.
  * Used by: search bar, /search
- * Source: trader_sources + leaderboard_ranks for score-based ranking
  *
- * Strategy: Try RPC fuzzy search first (pg_trgm similarity), fall back to ILIKE.
- * Fuzzy search catches typos like "binane" -> "binance", "hyperliqu" -> "hyperliquid"
+ * Strategy: fuzzy RPC and trader_sources nominate identity/relevance only;
+ * materializePublicSearchTraders then proves every rank-derived field from the
+ * current public_ranked_leaderboard view.
  */
 export async function searchTraders(
   supabase: SupabaseClient,
@@ -663,7 +879,7 @@ export async function searchTraders(
   if (!query || query.length < 1) return []
 
   // 8s timeout — search should be fast; prevents UI hang on degraded Supabase
-  return withTimeout(searchTradersInner(supabase, { query: query, limit, platform }), 8_000).catch(
+  return withTimeout(searchTradersInner(supabase, { query, limit, platform }), 8_000).catch(
     (err) => {
       logger.warn(
         '[unified.searchTraders] Timeout or error:',
@@ -691,47 +907,45 @@ async function searchTradersInner(
 
   if (!sanitizedQuery) return []
 
-  // --- Try fuzzy RPC search first (handles typos via pg_trgm) ---
-  // The RPC now returns arena_score/roi/pnl/rank/trader_type from leaderboard_ranks
-  // in a single query, eliminating a serial second query that added ~200ms.
-  type FuzzyResult = {
+  type FuzzyIdentityResult = {
     source_trader_id: string
     handle: string | null
     source: string
     avatar_url: string | null
-    relevance_score?: number
-    arena_score?: number | null
-    roi?: number | null
-    pnl?: number | null
-    rank?: number | null
     trader_type?: string | null
   }
-  let sourcesData: FuzzyResult[] | null = null
-  let usedFuzzy = false
+  let sourcesData: FuzzyIdentityResult[] | null = null
 
   try {
     const { data: fuzzyData, error: fuzzyErr } = await supabase.rpc('search_traders_fuzzy', {
       search_query: sanitizedQuery,
-      result_limit: limit * 4,
+      result_limit: Math.min(limit * 4, MAX_PUBLIC_SEARCH_CANDIDATES),
       platform_filter: platform || null,
     })
-    if (!fuzzyErr && fuzzyData && fuzzyData.length > 0) {
+    if (!fuzzyErr && Array.isArray(fuzzyData) && fuzzyData.length > 0) {
       const qLower = sanitizedQuery.toLowerCase()
-      const filtered = (fuzzyData as FuzzyResult[]).filter((t) => {
-        const handle = (t.handle || '').toLowerCase()
-        const id = t.source_trader_id.toLowerCase()
-        const hasSubstringMatch = handle.includes(qLower) || id.includes(qLower)
-        if (hasSubstringMatch) return true
-        const score = t.relevance_score ?? 0
-        return score >= 250 && qLower.length >= 3
+      const filtered = (fuzzyData as FuzzyIdentityResult[]).filter((candidate) => {
+        if (
+          typeof candidate.source_trader_id !== 'string' ||
+          typeof candidate.source !== 'string' ||
+          candidate.source_trader_id.length === 0 ||
+          candidate.source.length === 0
+        ) {
+          return false
+        }
+        const handle = (candidate.handle || '').toLowerCase()
+        const id = candidate.source_trader_id.toLowerCase()
+        // The RPC relevance_score is derived from raw leaderboard score and
+        // follower inputs. It may nominate only an identity that textually
+        // matches the query; it can never admit or reorder a public result.
+        return handle.includes(qLower) || id.includes(qLower)
       })
       if (filtered.length > 0) {
         sourcesData = filtered
-        usedFuzzy = true
       }
     }
   } catch (err) {
-    // RPC not available (migration not applied), fall through to ILIKE
+    // RPC not available (migration not applied), fall through to ILIKE.
     logger.debug(
       '[search] fuzzy RPC unavailable, falling back to ILIKE:',
       err instanceof Error ? err.message : String(err)
@@ -751,7 +965,9 @@ async function searchTradersInner(
       sourcesQuery = sourcesQuery.eq('source', platform)
     }
 
-    const { data, error } = await sourcesQuery.limit(limit * 4)
+    const { data, error } = await sourcesQuery.limit(
+      Math.min(limit * 4, MAX_PUBLIC_SEARCH_CANDIDATES)
+    )
     if (error || !data || data.length === 0) return []
     sourcesData = data.map(
       (d: {
@@ -764,144 +980,63 @@ async function searchTradersInner(
         handle: d.handle,
         source: d.source,
         avatar_url: d.avatar_url,
+        trader_type: null,
       })
     )
   }
 
-  // Filter out DEAD/blocked platforms
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-  const filteredSources = sourcesData.filter((t) => !deadSet.has(t.source))
+  const filteredSources = sourcesData.filter(
+    (candidate) =>
+      typeof candidate.source === 'string' &&
+      typeof candidate.source_trader_id === 'string' &&
+      !deadSet.has(candidate.source)
+  )
   if (filteredSources.length === 0) return []
 
-  // When fuzzy RPC was used, scores are already included — skip second query.
-  // Only fetch from leaderboard_ranks when using ILIKE fallback.
-  const scoreMap = new Map<string, Record<string, unknown>>()
-  if (!usedFuzzy) {
-    const traderIds = filteredSources.map((t) => t.source_trader_id)
-    const { data: scoreRows, error: scoreError } = await supabase
-      .from('leaderboard_ranks')
-      .select(
-        `${LR.source}, ${LR.source_trader_id}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, ${LR.rank}, ${LR.season_id}, trader_type`
-      )
-      .in(LR.source_trader_id, traderIds.slice(0, 200))
-      .eq(LR.season_id, '90D')
-      .not(LR.arena_score, 'is', null)
-      .order(LR.arena_score, { ascending: false })
-    if (scoreError) {
-      // A swallowed error here leaves scoreMap empty → the downstream hasScore
-      // gate filters out ALL results, surfacing as a misleading "no results".
-      logger.warn('[searchTradersInner] score lookup failed', {
-        query: sanitizedQuery,
-        error: scoreError.message,
-      })
-    }
-
-    for (const row of scoreRows || []) {
-      const key = `${row.source}:${row.source_trader_id}`
-      if (!scoreMap.has(key)) scoreMap.set(key, row)
-    }
-  } else {
-    // Build scoreMap from fuzzy results (already has LR data)
-    for (const t of filteredSources) {
-      const key = `${t.source}:${t.source_trader_id}`
-      scoreMap.set(key, {
-        source: t.source,
-        source_trader_id: t.source_trader_id,
-        arena_score: t.arena_score ?? null,
-        roi: t.roi ?? null,
-        pnl: t.pnl ?? null,
-        rank: t.rank ?? null,
-        trader_type: t.trader_type ?? null,
-      })
-    }
-  }
-
-  // Rank by relevance: exact match > prefix match > contains > fuzzy + arena_score
+  // Text matching is the only ordering input here. Never let an RPC/index
+  // relevance score reorder or admit identity candidates before public proof.
   const queryLower = sanitizedQuery.toLowerCase()
   const sorted = filteredSources
-    .map((t) => {
-      const key = `${t.source}:${t.source_trader_id}`
-      const scoreRow = scoreMap.get(key)
-      const handleLower = (t.handle || '').toLowerCase()
-      const idLower = t.source_trader_id.toLowerCase()
-
+    .map((candidate) => {
+      const handleLower = (candidate.handle || '').toLowerCase()
+      const idLower = candidate.source_trader_id.toLowerCase()
       let textRelevance = 0
       if (handleLower === queryLower || idLower === queryLower) textRelevance += 10000
-      if (handleLower.startsWith(queryLower) || idLower.startsWith(queryLower))
+      if (handleLower.startsWith(queryLower) || idLower.startsWith(queryLower)) {
         textRelevance += 1000
+      }
       if (handleLower.includes(queryLower) || idLower.includes(queryLower)) textRelevance += 100
-      if (usedFuzzy && t.relevance_score != null) textRelevance += t.relevance_score
-      const arenaScore = scoreRow ? Number(scoreRow.arena_score) : 0
-      const relevance = textRelevance + arenaScore * 0.1
-
-      return { source: t, scoreRow, relevance, textRelevance }
+      return { candidate, textRelevance }
     })
-    .filter((r) => {
-      if (r.textRelevance <= 0) return false
-      // Filter out ghost traders (no leaderboard data) — they show all-null
-      // fields to the user which looks broken. Only keep traders with scores.
-      const hasScore = r.scoreRow?.arena_score != null && Number(r.scoreRow.arena_score) > 0
-      return hasScore
-    })
-    .sort((a, b) => b.relevance - a.relevance)
+    .filter(({ textRelevance }) => textRelevance > 0)
+    .sort(
+      (left, right) =>
+        right.textRelevance - left.textRelevance ||
+        left.candidate.source.localeCompare(right.candidate.source) ||
+        left.candidate.source_trader_id.localeCompare(right.candidate.source_trader_id)
+    )
 
-  // Deduplicate by (handle, platform) — keep the highest-relevance entry.
-  // Multiple trader_sources rows can share the same handle on the same platform
-  // with different internal IDs, causing duplicate results (especially for CJK queries).
   const seenHandlePlatform = new Set<string>()
-  const ranked: typeof sorted = []
-  for (const r of sorted) {
-    const handle = (r.source.handle || '').toLowerCase()
-    // Only deduplicate when handle is non-empty; traders without handles
-    // are disambiguated by source_trader_id alone
+  const rankedCandidates: PublicSearchTraderCandidate[] = []
+  for (const { candidate } of sorted) {
+    const handle = (candidate.handle || '').toLowerCase()
     const dedupKey = handle
-      ? `${handle}|${r.source.source}`
-      : `__id__${r.source.source_trader_id}|${r.source.source}`
+      ? `${handle}|${candidate.source}`
+      : `__id__${candidate.source_trader_id}|${candidate.source}`
     if (seenHandlePlatform.has(dedupKey)) continue
     seenHandlePlatform.add(dedupKey)
-    ranked.push(r)
-    if (ranked.length >= limit) break
+    rankedCandidates.push({
+      platform: candidate.source,
+      traderKey: candidate.source_trader_id,
+      handle: candidate.handle || null,
+      avatarUrl: candidate.avatar_url || null,
+      traderType: candidate.trader_type ?? null,
+    })
+    if (rankedCandidates.length >= limit) break
   }
 
-  return ranked.map(({ source: t, scoreRow }): UnifiedTrader => {
-    const plat = t.source
-    return {
-      platform: plat,
-      traderKey: t.source_trader_id,
-      handle: t.handle || null,
-      avatarUrl: t.avatar_url || null,
-      profileUrl: null,
-      marketType: SOURCE_TYPE_MAP[plat] || null,
-      sourceType: SOURCE_TYPE_MAP[plat] || null,
-      roi: scoreRow?.roi != null ? Number(scoreRow.roi) : null,
-      pnl: scoreRow?.pnl != null ? Number(scoreRow.pnl) : null,
-      winRate: null,
-      maxDrawdown: null,
-      tradesCount: null,
-      followers: null,
-      copiers: null,
-      arenaScore: scoreRow?.arena_score != null ? Number(scoreRow.arena_score) : null,
-      returnScore: null,
-      pnlScore: null,
-      drawdownScore: null,
-      stabilityScore: null,
-      profitabilityScore: null,
-      riskControlScore: null,
-      executionScore: null,
-      scoreConfidence: null,
-      rank: scoreRow?.rank != null ? Number(scoreRow.rank) : null,
-      period: '90D',
-      sharpeRatio: null,
-      sortinoRatio: null,
-      profitFactor: null,
-      calmarRatio: null,
-      tradingStyle: null,
-      avgHoldingHours: null,
-      traderType: (scoreRow?.trader_type as string) || (plat === 'web3_bot' ? 'bot' : null),
-      isOutlier: false,
-      lastUpdated: null,
-    }
-  })
+  return materializePublicSearchTraders(supabase, rankedCandidates)
 }
 
 /**

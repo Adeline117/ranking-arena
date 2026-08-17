@@ -176,6 +176,77 @@ describe('GET /api/search', () => {
     expect(mockRpc).toHaveBeenCalledTimes(1)
   })
 
+  it('drops metric-bearing cached trader data and uses the current sealed cohort', async () => {
+    mockCacheGet.mockResolvedValue({
+      groupQuery: 'verified',
+      result: {
+        query: 'verified',
+        results: {
+          traders: [
+            {
+              id: 'binance_futures:verified-trader',
+              type: 'trader',
+              title: '@stale',
+              subtitle: '#1 · +9999.0% · Score 100',
+              href: '/trader/verified-trader?platform=binance_futures',
+              meta: { rank: 1, roi: 9999, arena_score: 100 },
+            },
+          ],
+          posts: [],
+          users: [],
+          groups: [],
+        },
+        total: 1,
+      },
+      traderCandidates: [
+        {
+          platform: 'binance_futures',
+          traderKey: 'verified-trader',
+          handle: 'Current identity',
+          avatarUrl: null,
+        },
+      ],
+      traderSort: 'identity',
+    })
+    mockFrom.mockImplementation(() =>
+      makeChainMock({
+        data: [
+          {
+            source: 'binance_futures',
+            source_trader_id: 'verified-trader',
+            season_id: '90D',
+            rank: 9,
+            arena_score: 61,
+            roi: 4.5,
+            pnl: 320,
+            win_rate: 57,
+            max_drawdown: 8,
+            score_completeness: 'full',
+            metrics_estimated: false,
+            is_outlier: false,
+            computed_at: new Date().toISOString(),
+          },
+        ],
+        error: null,
+      })
+    )
+
+    const req = new NextRequest('http://localhost/api/search?q=verified')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(body.results.traders).toEqual([
+      expect.objectContaining({
+        id: 'binance_futures:verified-trader',
+        title: '@Current identity',
+        meta: expect.objectContaining({ rank: 9, roi: 4.5, arena_score: 61 }),
+      }),
+    ])
+    expect(JSON.stringify(body)).not.toContain('9999')
+    expect(JSON.stringify(body)).not.toContain('Score 100')
+  })
+
   it('fails closed for cached groups and users that are no longer public', async () => {
     mockCacheGet.mockResolvedValue({
       groupQuery: 'stale',
