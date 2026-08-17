@@ -7,8 +7,14 @@ jest.mock('next/navigation', () => ({
 }))
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }))
 jest.mock('@/lib/features', () => ({ features: { social: true } }))
@@ -371,6 +377,55 @@ describe('group application viewer ownership', () => {
     expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('idle')
     expect(showToast).toHaveBeenCalledTimes(1)
     expect(showToast).toHaveBeenCalledWith('imageUploadSuccess', 'success')
+  })
+
+  it('rejects a second same-viewer upload before token or network work starts', async () => {
+    const token = deferred<string | null>()
+    mockGetValidToken.mockReturnValue(token.promise)
+    global.fetch = jest.fn()
+
+    render(<ApplyGroupPage />)
+    const fileInput = screen.getByTestId('avatar-file')
+    fireEvent.change(fileInput, { target: { files: [imageFile('first.png')] } })
+    await waitFor(() => expect(mockGetValidToken).toHaveBeenCalledTimes(1))
+
+    fireEvent.change(fileInput, { target: { files: [imageFile('second.png')] } })
+    expect(mockGetValidToken).toHaveBeenCalledTimes(1)
+    expect(global.fetch).not.toHaveBeenCalled()
+
+    await act(async () => token.resolve(null))
+    await waitFor(() => expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('idle'))
+  })
+
+  it('keeps submit and cancel closed until the avatar upload settles', async () => {
+    const token = deferred<string | null>()
+    mockGetValidToken.mockReturnValue(token.promise)
+    global.fetch = jest.fn()
+
+    render(<ApplyGroupPage />)
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+    fireEvent.change(screen.getByPlaceholderText('groupNameZhPlaceholder'), {
+      target: { value: 'Upload-gated group' },
+    })
+    fireEvent.change(screen.getByTestId('avatar-file'), {
+      target: { files: [imageFile('avatar.png')] },
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('uploading')
+    )
+
+    const submit = screen.getByRole('button', { name: 'submitApplication' })
+    const cancel = screen.getByRole('link', { name: 'cancel' })
+    expect(submit).toBeDisabled()
+    expect(cancel).toHaveAttribute('aria-disabled', 'true')
+    expect(cancel).toHaveAttribute('tabindex', '-1')
+    expect(fireEvent.click(cancel)).toBe(false)
+
+    fireEvent.submit(submit.closest('form') as HTMLFormElement)
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+
+    await act(async () => token.resolve(null))
+    await waitFor(() => expect(screen.getByTestId('avatar-uploading')).toHaveTextContent('idle'))
   })
 
   it.each([

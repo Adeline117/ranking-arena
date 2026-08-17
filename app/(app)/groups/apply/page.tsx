@@ -46,6 +46,7 @@ export default function ApplyGroupPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const submitOperationIdRef = useRef<Record<string, string>>({})
   const avatarUploadOperationIdRef = useRef<Record<string, number>>({})
+  const avatarUploadInFlightRef = useRef<Record<string, boolean>>({})
   const nextAvatarUploadOperationIdRef = useRef(0)
   const { accessToken, userId, viewerKey, sessionGeneration } = useAuthSession()
   const stateOwnerKey = `${viewerKey}:${sessionGeneration}`
@@ -74,7 +75,8 @@ export default function ApplyGroupPage() {
   // Draft-loss guard: prompt on tab close/refresh while the application has
   // content and isn't mid-submit (audit 实体/详情).
   useUnsavedChangesGuard(
-    Boolean(nameZh.trim() || descriptionZh.trim() || nameEn.trim() || descriptionEn.trim()) &&
+    (Boolean(nameZh.trim() || descriptionZh.trim() || nameEn.trim() || descriptionEn.trim()) ||
+      uploading) &&
       !loading &&
       !success
   )
@@ -219,6 +221,12 @@ export default function ApplyGroupPage() {
       return
     }
 
+    if (avatarUploadInFlightRef.current[requestOwnerKey]) {
+      input.value = ''
+      return
+    }
+
+    avatarUploadInFlightRef.current[requestOwnerKey] = true
     const uploadOperationId = ++nextAvatarUploadOperationIdRef.current
     avatarUploadOperationIdRef.current[requestOwnerKey] = uploadOperationId
     const operationOwnsSlot = () =>
@@ -288,7 +296,10 @@ export default function ApplyGroupPage() {
       showToast(errorMsg, 'error')
     } finally {
       const ownsOperation = operationOwnsSlot()
-      if (ownsOperation) delete avatarUploadOperationIdRef.current[requestOwnerKey]
+      if (ownsOperation) {
+        delete avatarUploadOperationIdRef.current[requestOwnerKey]
+        delete avatarUploadInFlightRef.current[requestOwnerKey]
+      }
       if (ownsOperation && isViewerScopeCurrent(requestScope)) {
         setUploading(false)
         if (fileInputRef.current === input) input.value = ''
@@ -300,6 +311,8 @@ export default function ApplyGroupPage() {
     e.preventDefault()
 
     const requestScope: ViewerScope = { viewerKey, sessionGeneration, userId }
+    if (loading || uploading || avatarUploadInFlightRef.current[stateOwnerKey]) return
+
     if (
       !accessToken ||
       !userId ||
@@ -1094,12 +1107,19 @@ export default function ApplyGroupPage() {
               )}
 
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
-                <Link href="/groups">
-                  <Button variant="secondary" type="button">
+                <Link
+                  href="/groups"
+                  aria-disabled={loading || uploading}
+                  tabIndex={loading || uploading ? -1 : undefined}
+                  onClick={(event) => {
+                    if (loading || uploading) event.preventDefault()
+                  }}
+                >
+                  <Button variant="secondary" type="button" disabled={loading || uploading}>
                     {t('cancel')}
                   </Button>
                 </Link>
-                <Button variant="primary" type="submit" disabled={loading}>
+                <Button variant="primary" type="submit" disabled={loading || uploading}>
                   {loading ? t('submittingText') : t('submitApplication')}
                 </Button>
               </Box>

@@ -25,9 +25,7 @@ export function AvatarUploadSection({
 
   return (
     <Box>
-      <label style={labelStyle}>
-        {t('groupAvatar')}
-      </label>
+      <label style={labelStyle}>{t('groupAvatar')}</label>
       <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
         {t('avatarUploadDesc')}
       </Text>
@@ -45,26 +43,29 @@ export function AvatarUploadSection({
                 height: 120,
                 borderRadius: tokens.radius.lg,
                 objectFit: 'cover',
-                border: ('1px solid ' + tokens.colors.border.primary),
+                border: '1px solid ' + tokens.colors.border.primary,
               }}
               onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none'
+                ;(e.target as HTMLImageElement).style.display = 'none'
               }}
               unoptimized
             />
-            <Button aria-label="Close"
+            <Button
               type="button"
               variant="text"
               size="sm"
+              aria-label={t('deleteImage')}
+              title={t('deleteImage')}
               onClick={() => setAvatarUrl('')}
+              disabled={uploading}
               style={{
                 position: 'absolute',
                 top: -8,
                 right: -8,
                 padding: tokens.spacing[1],
                 minWidth: 'auto',
-                width: 24,
-                height: 24,
+                width: tokens.touchTarget.min,
+                height: tokens.touchTarget.min,
                 borderRadius: '50%',
                 background: tokens.colors.accent.error,
                 color: tokens.colors.white,
@@ -87,6 +88,7 @@ export function AvatarUploadSection({
             type="file"
             accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
             onChange={onImageUpload}
+            disabled={uploading}
             style={{ display: 'none' }}
           />
           <Button
@@ -110,6 +112,7 @@ export function AvatarUploadSection({
           type="url"
           value={avatarUrl}
           onChange={(e) => setAvatarUrl(e.target.value)}
+          disabled={uploading}
           placeholder="https://example.com/avatar.png"
           style={inputStyle}
         />
