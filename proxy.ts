@@ -95,6 +95,8 @@ const ADMIN_SUBSCRIPTION_SYNC_BYPASS_PATHS = new Set([
 const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
   '/api/cdn-proxy',
   '/api/v1/cdn-proxy',
+  '/api/market/candles',
+  '/api/v1/market/candles',
   '/api/posts/link-preview',
   '/api/v1/posts/link-preview',
 ])

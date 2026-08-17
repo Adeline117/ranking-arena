@@ -69,6 +69,8 @@ describe('public egress hold bypass paths', () => {
   it.each([
     '/api/cdn-proxy',
     '/api/v1/cdn-proxy',
+    '/api/market/candles',
+    '/api/v1/market/candles',
     '/api/posts/link-preview',
     '/api/v1/posts/link-preview',
   ])('hands %s directly to its fixed no-store hold', (pathname) => {
@@ -81,6 +83,12 @@ describe('public egress hold bypass paths', () => {
     '/api/cdn-proxies',
     '/api/v1/cdn-proxy/child',
     '/api/v1/cdn-proxies',
+    '/api/market/candles/child',
+    '/api/market/candle',
+    '/api/market/candles-history',
+    '/api/v1/market/candles/child',
+    '/api/v1/market/candle',
+    '/api/v1/market/candles-history',
     '/api/posts/link-previews',
     '/api/posts/link-preview/child',
     '/api/v1/posts/link-previews',

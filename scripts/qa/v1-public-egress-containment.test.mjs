@@ -16,6 +16,7 @@ function codeOnly(value) {
 
 const publication = source('lib/security/v1-public-egress-publication.ts')
 const cdnProxyRoute = codeOnly(source('app/api/cdn-proxy/route.ts'))
+const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
 const linkPreviewRoute = codeOnly(source('app/api/posts/link-preview/route.ts'))
 const proxy = source('proxy.ts')
 const apiAuthCoverage = source('scripts/qa/api-auth-coverage-check.mjs')
@@ -34,7 +35,7 @@ test('V1 public egress publication is checked-in false and browser-safe', () => 
 })
 
 test('anonymous public egress routes are no-argument fixed no-store tombstones', () => {
-  for (const route of [cdnProxyRoute, linkPreviewRoute]) {
+  for (const route of [cdnProxyRoute, marketCandlesRoute, linkPreviewRoute]) {
     assert.match(route, /export function GET\(\): NextResponse/)
     assert.match(route, /V1_PUBLIC_EGRESS_UNAVAILABLE_BODY/)
     assert.match(route, /status:\s*410/)
@@ -42,6 +43,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
     for (const forbidden of [
       /\b(?:NextRequest|request|searchParams|new\s+URL)\b/,
       /\bfetch\s*\(/,
+      /\bccxt\b/,
       /node\/dns|\b(?:dnsLookup|lookup)\b/,
       /\b(?:logger|cache|Redis|ioredis)\b/,
       /\b(?:checkRateLimit|RateLimitPresets|Ratelimit)\b/,
@@ -56,13 +58,13 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
   assert.match(
     proxy,
-    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
+    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/market\/candles['"],\s*['"]\/api\/v1\/market\/candles['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
   )
   assert.match(
     proxy,
     /isPublicEgressProxyBypassPath\(pathname: string\).*PUBLIC_EGRESS_BYPASS_PATHS\.has\(pathname\)/s
   )
-  assert.doesNotMatch(proxy, /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|link-preview)/)
+  assert.doesNotMatch(proxy, /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/candles|link-preview)/)
 
   const shouldSkipStart = proxy.indexOf('export function shouldSkip(pathname: string): boolean')
   const publicEgressHandoff = proxy.indexOf(
@@ -92,9 +94,11 @@ test('only canonical and versioned public egress paths bypass proxy guards', () 
 })
 
 test('API allowlist and documentation describe the source-only public-egress hold', () => {
-  assert.match(apiAuthCoverage, /'cdn-proxy',\s*'posts\/link-preview'/s)
+  assert.match(apiAuthCoverage, /'market\/candles'/)
   assert.match(apiAuthCoverage, /V1 public compatibility tombstones/)
+  assert.match(apiAuthCoverage, /V1 public-egress compatibility tombstone/)
   assert.match(docs, /`\/api\/cdn-proxy`/)
+  assert.match(docs, /`\/api\/market\/candles`/)
   assert.match(docs, /`\/api\/posts\/link-preview`/)
   assert.match(docs, /V1_PUBLIC_EGRESS_PUBLISHED=false/)
   assert.match(docs, /cannot stop, inspect, or prove|不能停止、检查或证明/)
