@@ -27,6 +27,7 @@ import {
 } from '@/lib/rankings/publication-policy'
 import {
   fetchPublicProfileRankingRows,
+  PUBLIC_PROFILE_RANKING_COLUMNS,
   PUBLIC_PROFILE_RANKING_PERIODS,
 } from './public-profile-ranking'
 
@@ -1072,10 +1073,15 @@ export async function getSearchSuggestions(
  * Used by: trader detail page to find the right trader
  *
  * Resolution chain:
- * 1. trader_sources by handle
- * 2. trader_sources by source_trader_id
- * 3. leaderboard_ranks by source_trader_id
- * 4. trader_profiles_v2 by trader_key
+ * 1. trader_sources by handle/source_trader_id (pure identity)
+ * 2. public_ranked_leaderboard by handle/source_trader_id (sealed publication)
+ * 3. trader_profiles_v2 by trader_key/display_name (pure identity)
+ *
+ * A handle or source key shared by multiple identities is intentionally not
+ * resolved. The resolver feeds public profile, badge, equity, positions, and
+ * compare routes, so choosing a candidate from a raw score would both expose
+ * an unverified ranking authority and associate the request with the wrong
+ * account. Callers can provide `platform` when they have an explicit source.
  */
 export async function resolveTrader(
   supabase: SupabaseClient,
@@ -1089,6 +1095,11 @@ export async function resolveTrader(
   handle: string | null
   avatarUrl: string | null
 } | null> {
+  // Candidate queries are intentionally bounded so a malformed/common handle
+  // cannot create an unbounded public request. Fetch one sentinel row beyond
+  // the maximum and fail closed if it appears: a truncated result can never
+  // establish that an identity is unique.
+  const MAX_RESOLVE_IDENTITY_CANDIDATES = 100
   // Sanitize handle for PostgREST .or() filter safety — reject chars that break filter syntax.
   // Do NOT decode here — callers are responsible for decoding (page.tsx already decodes).
   // Only strip characters that actually break PostgREST .or() syntax: commas and parentheses.
@@ -1105,23 +1116,128 @@ export async function resolveTrader(
   }
 
   const platformFilter = params.platform
+  const sanitizedForFilter = decodedHandle.replace(/[,()\[\]\\%_]/g, '')
+
+  type ResolvedIdentity = {
+    platform: string
+    traderKey: string
+    handle: string | null
+    avatarUrl: string | null
+  }
+
+  const identityKey = (identity: Pick<ResolvedIdentity, 'platform' | 'traderKey'>) =>
+    JSON.stringify([identity.platform, identity.traderKey])
+
+  const sourceIdentity = (value: unknown): ResolvedIdentity | null => {
+    if (!isRecord(value)) return null
+    const platform = value.source
+    const traderKey = value.source_trader_id
+    if (
+      typeof platform !== 'string' ||
+      platform.length === 0 ||
+      platform !== platform.trim() ||
+      typeof traderKey !== 'string' ||
+      traderKey.length === 0 ||
+      traderKey !== traderKey.trim() ||
+      (platformFilter !== undefined && platform !== platformFilter)
+    ) {
+      return null
+    }
+    return {
+      platform,
+      traderKey,
+      handle: typeof value.handle === 'string' && value.handle.length > 0 ? value.handle : null,
+      avatarUrl:
+        typeof value.avatar_url === 'string' && value.avatar_url.length > 0
+          ? value.avatar_url
+          : null,
+    }
+  }
+
+  const profileIdentity = (value: unknown): ResolvedIdentity | null => {
+    if (!isRecord(value)) return null
+    const platform = value.platform
+    const traderKey = value.trader_key
+    if (
+      typeof platform !== 'string' ||
+      platform.length === 0 ||
+      platform !== platform.trim() ||
+      typeof traderKey !== 'string' ||
+      traderKey.length === 0 ||
+      traderKey !== traderKey.trim() ||
+      (platformFilter !== undefined && platform !== platformFilter)
+    ) {
+      return null
+    }
+    return {
+      platform,
+      traderKey,
+      handle:
+        typeof value.display_name === 'string' && value.display_name.length > 0
+          ? value.display_name
+          : null,
+      avatarUrl:
+        typeof value.avatar_url === 'string' && value.avatar_url.length > 0
+          ? value.avatar_url
+          : null,
+    }
+  }
+
+  const exactlyMatchesRequestedIdentity = (identity: ResolvedIdentity) =>
+    identity.traderKey === sanitizedForFilter || identity.handle === sanitizedForFilter
+
+  const uniqueIdentity = (
+    rows: readonly unknown[],
+    toIdentity: (value: unknown) => ResolvedIdentity | null
+  ): ResolvedIdentity | 'ambiguous' | null => {
+    const identities = new Map<string, ResolvedIdentity>()
+    for (const row of rows) {
+      const identity = toIdentity(row)
+      if (!identity || !exactlyMatchesRequestedIdentity(identity)) continue
+      identities.set(identityKey(identity), identity)
+    }
+    if (identities.size === 0) return null
+    if (identities.size > 1) return 'ambiguous'
+    return [...identities.values()][0] ?? null
+  }
+
+  const publicIdentity = (value: unknown): ResolvedIdentity | null => {
+    const identity = sourceIdentity(value)
+    return identity && isPublicRankingSourceAllowed(identity.platform) ? identity : null
+  }
+
+  const sanitizedPublicIdentity = (value: unknown): ResolvedIdentity | 'ambiguous' | null => {
+    if (!Array.isArray(value)) return null
+
+    // Keep the period order fixed so a returned handle/avatar is deterministic
+    // when the same safely-published identity appears in multiple windows.
+    const safeRows: unknown[] = []
+    for (const period of ['90D', '30D', '7D'] as const) {
+      const rawRows = value.filter((row) => isRecord(row) && row.season_id === period)
+      const sanitized = sanitizePublicRankingPayload(
+        { traders: rawRows, period },
+        { expectedPeriod: period }
+      ) as { traders?: unknown[] }
+      safeRows.push(...(sanitized.traders ?? []))
+    }
+
+    return uniqueIdentity(safeRows, publicIdentity)
+  }
 
   // Steps 1+2 combined: Try trader_sources by handle OR source_trader_id (single query)
   {
     let query = supabase
       .from('trader_sources')
       .select('source, source_trader_id, handle, avatar_url')
-      .or(
-        `handle.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')},source_trader_id.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')}`
-      )
+      .or(`handle.eq.${sanitizedForFilter},source_trader_id.eq.${sanitizedForFilter}`)
 
     if (platformFilter) {
       query = query.eq('source', platformFilter)
     }
 
-    // Multiple traders may share the same handle (e.g., 鎏渊).
-    // Pick the one with the highest arena_score in leaderboard to avoid resolving to a no-data entry.
-    const { data: rawCandidates, error: candidatesError } = await query.limit(10)
+    const { data: rawCandidates, error: candidatesError } = await query.limit(
+      MAX_RESOLVE_IDENTITY_CANDIDATES + 1
+    )
     if (candidatesError) {
       // Never collapse a query error into "not found" — that 404s a valid
       // trader with no signal (the exact latent bug resolve.ts already fixed).
@@ -1136,50 +1252,42 @@ export async function resolveTrader(
     // deterministically return the retired row → generateMetadata's
     // isRetiredSource() check 404'd a valid serving trader (~1406 ids affected).
     const candidates = (rawCandidates ?? []).filter(
-      (c: { source: string }) => !isRetiredSource(c.source)
+      (candidate: unknown) =>
+        isRecord(candidate) &&
+        typeof candidate.source === 'string' &&
+        !isRetiredSource(candidate.source)
     )
-    let data = candidates[0] ?? null
-    if (candidates.length > 1) {
-      // Check which candidate has leaderboard data
-      const ids = candidates.map((c: { source_trader_id: string }) => c.source_trader_id)
-      const { data: lbCheck } = await supabase
-        .from('leaderboard_ranks')
-        .select(`${LR.source_trader_id}, ${LR.arena_score}`)
-        .in(LR.source_trader_id, ids)
-        .eq(LR.season_id, '90D')
-        .not(LR.arena_score, 'is', null)
-        .order(LR.arena_score, { ascending: false })
-        .limit(1)
-      if (lbCheck?.[0]) {
-        data =
-          candidates.find(
-            (c: { source_trader_id: string }) =>
-              c.source_trader_id === lbCheck[0][LR.source_trader_id]
-          ) || data
-      }
+    if ((rawCandidates?.length ?? 0) > MAX_RESOLVE_IDENTITY_CANDIDATES) {
+      logger.warn('[resolveTrader] trader_sources candidate query exceeded safe ambiguity bound', {
+        handle: decodedHandle,
+        platform: platformFilter ?? null,
+      })
+      return null
     }
-    if (data) {
-      return {
-        platform: data.source,
-        traderKey: data.source_trader_id,
-        handle: data.handle || null,
-        avatarUrl: data.avatar_url || null,
-      }
+    const resolvedSourceIdentity = uniqueIdentity(candidates, sourceIdentity)
+    if (resolvedSourceIdentity === 'ambiguous') {
+      logger.warn('[resolveTrader] ambiguous trader_sources identity', {
+        handle: decodedHandle,
+        platform: platformFilter ?? null,
+      })
+      return null
+    }
+    if (resolvedSourceIdentity) {
+      return resolvedSourceIdentity
     }
   }
 
-  // Steps 3+4+5 in parallel: leaderboard_ranks, trader_profiles_v2, trader_latest
-  // Previously sequential (3+4 → 5), now parallel to save 200-400ms for traders
-  // not found in the trader_sources table (~10-15% of detail page loads).
+  // The sealed view may recover a legacy identity absent from trader_sources.
+  // It is intentionally read in parallel with the pure identity profile table;
+  // neither branch may use a raw leaderboard row or raw arena score as a
+  // tie-breaker.
   {
-    const sanitizedForFilter = decodedHandle.replace(/[,.()\[\]\\%_]/g, '')
-
-    let lbQuery = supabase
-      .from('leaderboard_ranks')
-      .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}`)
+    let publicRankQuery = supabase
+      .from(PUBLIC_RANKED_LEADERBOARD as never)
+      .select(PUBLIC_PROFILE_RANKING_COLUMNS)
       .or(`${LR.source_trader_id}.eq.${sanitizedForFilter},${LR.handle}.eq.${sanitizedForFilter}`)
-      .in(LR.season_id, ['90D', '30D', '7D'])
-      .order(LR.season_id, { ascending: false })
+      .in(LR.season_id, PUBLIC_PROFILE_RANKING_PERIODS)
+      .not(LR.rank, 'is', null)
 
     let profileQuery = supabase
       .from('trader_profiles_v2')
@@ -1187,41 +1295,59 @@ export async function resolveTrader(
       .or(`trader_key.eq.${sanitizedForFilter},display_name.eq.${sanitizedForFilter}`)
 
     if (platformFilter) {
-      lbQuery = lbQuery.eq(LR.source, platformFilter)
+      publicRankQuery = publicRankQuery.eq(LR.source, platformFilter)
       profileQuery = profileQuery.eq('platform', platformFilter)
     }
 
-    // Priority: leaderboard_ranks > trader_profiles_v2 (trader_latest tier removed
-    // — table retiring; trader_sources is the primary resolver above this block).
-    const [lbResult, profileResult] = await Promise.all([
-      lbQuery.limit(1).maybeSingle(),
-      profileQuery.limit(1).maybeSingle(),
+    // Fetch a small bounded candidate set rather than `maybeSingle()`: a
+    // database limit of one would hide an ambiguous identity and make the
+    // chosen row depend on an unstated physical order.
+    const [publicRankResult, profileResult] = await Promise.all([
+      publicRankQuery.limit(MAX_RESOLVE_IDENTITY_CANDIDATES + 1),
+      profileQuery.limit(MAX_RESOLVE_IDENTITY_CANDIDATES + 1),
     ])
 
-    if (lbResult.error || profileResult.error) {
+    if (publicRankResult.error || profileResult.error) {
       logger.error('[resolveTrader] fallback lookup failed', {
         handle: decodedHandle,
-        lbError: lbResult.error?.message,
+        publicRankError: publicRankResult.error?.message,
         profileError: profileResult.error?.message,
       })
     }
 
-    if (lbResult.data) {
-      return {
-        platform: lbResult.data[LR.source],
-        traderKey: lbResult.data[LR.source_trader_id],
-        handle: lbResult.data[LR.handle] || null,
-        avatarUrl: lbResult.data[LR.avatar_url] || null,
-      }
+    if (
+      (publicRankResult.data?.length ?? 0) > MAX_RESOLVE_IDENTITY_CANDIDATES ||
+      (profileResult.data?.length ?? 0) > MAX_RESOLVE_IDENTITY_CANDIDATES
+    ) {
+      logger.warn('[resolveTrader] fallback candidate query exceeded safe ambiguity bound', {
+        handle: decodedHandle,
+        platform: platformFilter ?? null,
+      })
+      return null
     }
 
-    if (profileResult.data) {
-      return {
-        platform: profileResult.data.platform,
-        traderKey: profileResult.data.trader_key,
-        handle: profileResult.data.display_name || null,
-        avatarUrl: profileResult.data.avatar_url || null,
-      }
+    const resolvedPublicIdentity = sanitizedPublicIdentity(publicRankResult.data ?? [])
+    if (resolvedPublicIdentity === 'ambiguous') {
+      logger.warn('[resolveTrader] ambiguous published identity', {
+        handle: decodedHandle,
+        platform: platformFilter ?? null,
+      })
+      return null
+    }
+    if (resolvedPublicIdentity) {
+      return resolvedPublicIdentity
+    }
+
+    const resolvedProfileIdentity = uniqueIdentity(profileResult.data ?? [], profileIdentity)
+    if (resolvedProfileIdentity === 'ambiguous') {
+      logger.warn('[resolveTrader] ambiguous trader_profiles_v2 identity', {
+        handle: decodedHandle,
+        platform: platformFilter ?? null,
+      })
+      return null
+    }
+    if (resolvedProfileIdentity) {
+      return resolvedProfileIdentity
     }
   }
 
