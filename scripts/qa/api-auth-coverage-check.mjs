@@ -65,9 +65,10 @@ const PUBLIC_API_ROUTES = new Set([
   'market/defi',
   // Fund Flow and ExchangeVolume render local unavailable states and make no endpoint call.
   'market/exchanges',
+  // GlobalMarketBar renders a local unavailable state and makes no endpoint call.
+  'market/overview',
   'market/coin/[id]',
   'market/ohlc/[id]',
-  'market/overview',
   'market/realtime',
   'market/spot',
   // 公开聚合统计(交易员数/交易所数,首页 hero + 跨所百分位徽章用;无用户数据,CDN 缓存 1h)
