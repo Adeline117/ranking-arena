@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 import {
   getAvatarGradient,
   getAvatarInitial,
@@ -43,6 +44,7 @@ export function TraderHeaderAvatar({
   claimedAvatarUrl,
   proBadgeTier,
 }: TraderHeaderAvatarProps) {
+  const { t } = useLanguage()
   const [hovered, setHovered] = useState(false)
   const [errored, setErrored] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -50,8 +52,21 @@ export function TraderHeaderAvatar({
   const effectiveAvatarUrl = claimedAvatarUrl || avatarUrl
 
   return (
-    <Box
-      style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}
+    <button
+      type="button"
+      aria-label={t('scrollToTop')}
+      title={t('scrollToTop')}
+      style={{
+        position: 'relative',
+        flexShrink: 0,
+        cursor: 'pointer',
+        padding: 0,
+        border: 0,
+        background: 'transparent',
+        color: 'inherit',
+        lineHeight: 0,
+        borderRadius: tokens.radius.full,
+      }}
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -141,6 +156,6 @@ export function TraderHeaderAvatar({
         )}
       </Box>
       {proBadgeTier === 'pro' && <ProBadgeOverlay position="bottom-right" />}
-    </Box>
+    </button>
   )
 }
