@@ -1,52 +1,47 @@
 /**
  * GET /api/recommendations/hot
  *
- * Public endpoint returning globally hot traders ranked by composite hot score.
- * Results are cached in Upstash Redis with 5-minute TTL.
+ * A public "hot" list needs a sealed historical change cohort. Current rank
+ * publication alone cannot prove the ROI/follower/activity deltas behind the
+ * old composite score, so this endpoint is intentionally fail-closed until
+ * that evidence exists.
  */
 
 import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import { computeHotTraders } from '@/lib/recommendations/hot-score'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
-import { createLogger } from '@/lib/utils/logger'
-import type { HotTrader } from '@/lib/recommendations/hot-score'
 import { socialFeatureGuard } from '@/lib/features'
-import { parseLimit } from '@/lib/utils/safe-parse'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
-
-const _logger = createLogger('api-rec-hot')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
 
-const CACHE_KEY = publicRankingCacheKey('recommendations:hot')
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+}
 
 export const GET = withPublic(
-  async ({ request }) => {
+  async () => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    const { searchParams } = new URL(request.url)
-    const limit = parseLimit(searchParams.get('limit'), 20, 100)
-
-    const traders = await tieredGetOrSet<HotTrader[]>(
-      CACHE_KEY,
-      () => computeHotTraders(100),
-      'hot',
-      ['recommendations']
+    // Do not replay the former 5-minute hot-score cache. Even an empty
+    // response must describe the current publication state rather than a
+    // previously valid cohort.
+    const result = await computeHotTraders()
+    return NextResponse.json(
+      {
+        success: true,
+        data: result.traders,
+        ranking_visibility: result.ranking_visibility,
+        ranking_visibility_reason: result.ranking_visibility_reason,
+        ranking_visibility_reasons: result.ranking_visibility_reasons,
+        meta: { count: 0, cached: false },
+      },
+      { headers: NO_STORE_HEADERS }
     )
-
-    const sliced = traders.slice(0, limit)
-
-    const response = NextResponse.json({
-      success: true,
-      data: sliced,
-      meta: { count: sliced.length, cached: true },
-    })
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
-    return response
   },
   { name: 'get-recommendations-hot', rateLimit: 'public' }
 )
