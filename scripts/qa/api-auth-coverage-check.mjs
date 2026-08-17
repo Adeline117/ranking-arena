@@ -117,7 +117,8 @@ const PUBLIC_API_ROUTES = new Set([
   // Public V1 compatibility response: fixed no-store 410 with no request
   // parsing, source lookup, or user data.
   'avatar',
-  // Other public proxy-style handlers retain their own reviewed safeguards.
+  // V1 public compatibility tombstones: fixed no-store 410 with no request
+  // parsing, outbound fetch/DNS, logging, cache, rate-limit, CORS, or social work.
   'cdn-proxy',
   'posts/link-preview',
   // 自验证型（token/签名即凭证，无会话可言）

@@ -5362,7 +5362,6 @@ const en = {
   noGroupsFollowedYet: 'No groups followed yet',
   groupActionsTitle: 'Group Actions',
   newPostButton: '+ New Post',
-  fetchingLinkPreview: 'Fetching link preview...',
   stickerButton: 'Sticker',
   stickersButton: 'Stickers',
   deleteButton: 'Delete',

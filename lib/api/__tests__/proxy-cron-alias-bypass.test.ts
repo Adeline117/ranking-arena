@@ -1,6 +1,7 @@
 import {
   isAvatarProxyBypassPath,
   isHealthEvaluateReportProxyBypassPath,
+  isPublicEgressProxyBypassPath,
   isReferralProgramProxyBypassPath,
   shouldSkip,
 } from '@/proxy'
@@ -35,6 +36,32 @@ describe('avatar proxy compatibility bypass paths', () => {
       expect(shouldSkip(pathname)).toBe(false)
     }
   )
+})
+
+describe('public egress hold bypass paths', () => {
+  it.each([
+    '/api/cdn-proxy',
+    '/api/v1/cdn-proxy',
+    '/api/posts/link-preview',
+    '/api/v1/posts/link-preview',
+  ])('hands %s directly to its fixed no-store hold', (pathname) => {
+    expect(isPublicEgressProxyBypassPath(pathname)).toBe(true)
+    expect(shouldSkip(pathname)).toBe(true)
+  })
+
+  it.each([
+    '/api/cdn-proxy/child',
+    '/api/cdn-proxies',
+    '/api/v1/cdn-proxy/child',
+    '/api/v1/cdn-proxies',
+    '/api/posts/link-previews',
+    '/api/posts/link-preview/child',
+    '/api/v1/posts/link-previews',
+    '/api/v1/posts/link-preview/child',
+  ])('does not bypass proxy work for adjacent public egress path %s', (pathname) => {
+    expect(isPublicEgressProxyBypassPath(pathname)).toBe(false)
+    expect(shouldSkip(pathname)).toBe(false)
+  })
 })
 
 describe('referral-program hold bypass paths', () => {
