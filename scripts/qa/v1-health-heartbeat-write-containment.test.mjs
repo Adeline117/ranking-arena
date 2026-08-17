@@ -11,19 +11,22 @@ function source(relativePath) {
 }
 
 const route = source('app/api/health/heartbeat/route.ts')
+const heartbeatHistoryPublication = source('lib/monitoring/v1-heartbeat-history-publication.ts')
+const adminMonitoring = source('app/api/admin/monitoring/enrichment-completeness/route.ts')
+const enrichmentCompleteness = source(
+  'app/(app)/admin/monitoring/components/EnrichmentCompleteness.tsx'
+)
 const proxy = source('proxy.ts')
 const worker = source('worker/src/index.ts')
 const docs = source('docs/API_ROUTES.md')
 
 function handlerSource(name) {
-  const start = route.indexOf(
-    name === 'GET' ? 'export async function GET' : `export function ${name}`
-  )
-  const next = name === 'POST' ? route.indexOf('export async function GET', start) : -1
+  const start = route.indexOf(`export function ${name}`)
+  const next = name === 'POST' ? route.indexOf('export function GET', start) : -1
   return route.slice(start, next === -1 ? undefined : next)
 }
 
-test('only heartbeat POST is an auth-first V1 cron no-store tombstone', () => {
+test('heartbeat GET and POST are independent auth-first V1 no-store tombstones', () => {
   const post = handlerSource('POST')
   const get = handlerSource('GET')
 
@@ -36,9 +39,28 @@ test('only heartbeat POST is an auth-first V1 cron no-store tombstone', () => {
     assert.doesNotMatch(post, forbidden)
   }
 
-  assert.match(get, /verifyCronSecret\(request\)/)
-  assert.match(get, /FROM platform_heartbeats/)
+  assert.match(
+    get,
+    /v1HeartbeatHistoryGate\(request\) \?\? v1HeartbeatHistoryUnavailableResponse\(\)/
+  )
+  assert.doesNotMatch(
+    get,
+    /request\.(?:nextUrl|url|json|text|formData|arrayBuffer)\b|\b(?:getDb|query)\b|platform_heartbeats|@\/lib\/db|\bError\b/
+  )
   assert.doesNotMatch(get, /v1CronExecutionGate/)
+
+  assert.match(heartbeatHistoryPublication, /V1_HEARTBEAT_HISTORY_PUBLISHED\s*=\s*false\s+as const/)
+  assert.doesNotMatch(
+    heartbeatHistoryPublication,
+    /process\.env|NEXT_PUBLIC_|HEARTBEAT_HISTORY.*(?:ENV|FLAG)/
+  )
+  assert.match(heartbeatHistoryPublication, /verifyCronSecret\(request\)/)
+  assert.match(heartbeatHistoryPublication, /status:\s*401/)
+  assert.match(heartbeatHistoryPublication, /status:\s*410/)
+  assert.match(heartbeatHistoryPublication, /HEARTBEAT_HISTORY_NOT_PUBLISHED/)
+  for (const header of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) {
+    assert.match(heartbeatHistoryPublication, new RegExp(`['"]${header}['"]`))
+  }
 })
 
 test('only canonical and versioned heartbeat paths receive the exact proxy handoff', () => {
@@ -91,10 +113,31 @@ test('the legacy worker no longer continually POSTs failed jobs into the write h
   assert.doesNotMatch(failedHandler, /\b(?:CRON_SECRET|SITE_URL)\b/)
 })
 
-test('documentation distinguishes the POST hold from the retained GET history surface', () => {
+test('admin monitoring preserves a compatibility array while truthfully marking heartbeat history unavailable', () => {
+  assert.doesNotMatch(
+    adminMonitoring,
+    /platform_heartbeats|@\/lib\/db|await\s+import\(\s*['"]@\/lib\/db|const\s+\{\s*query\s*\}/
+  )
+  assert.match(adminMonitoring, /heartbeats:\s*\[\]/)
+  assert.match(
+    adminMonitoring,
+    /heartbeat_history:\s*\{\s*availability:\s*false,\s*code:\s*V1_HEARTBEAT_HISTORY_NOT_PUBLISHED_CODE/s
+  )
+  assert.match(
+    enrichmentCompleteness,
+    /heartbeatHistoryAvailable\s*=\s*data\.heartbeat_history\?\.availability\s*===\s*true/
+  )
+  assert.match(enrichmentCompleteness, /Unavailable/)
+  assert.match(enrichmentCompleteness, /Heartbeat history is not published in V1\./)
+})
+
+test('documentation distinguishes the GET history hold from the POST write hold', () => {
+  assert.match(docs, /`GET \/api\/health\/heartbeat`/)
   assert.match(docs, /`POST \/api\/health\/heartbeat`/)
+  assert.match(docs, /`V1_HEARTBEAT_HISTORY_PUBLISHED=false`/)
+  assert.match(docs, /HEARTBEAT_HISTORY_NOT_PUBLISHED/)
   assert.match(docs, /`V1_CRON_EXECUTION_PUBLISHED=false`/)
-  assert.match(docs, /body\s*解析或数据库写入前结束/)
-  assert.match(docs, /GET 保留原有的 Cron Token 验证和\s*历史读取语义/)
-  assert.match(docs, /其他 health\/admin 路由与监控读取面不在这次改动范围内/)
+  assert.match(docs, /GET.*数据库.*前结束/s)
+  assert.match(docs, /POST.*body\s*解析或数据库写入前结束/s)
+  assert.match(docs, /heartbeat_history.*availability.*false/s)
 })

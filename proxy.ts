@@ -114,7 +114,8 @@ const HEALTH_EVALUATE_REPORT_BYPASS_PATHS = new Set([
 ])
 // The canonical health namespace already skips the proxy, but the versioned
 // alias reaches it before Next.js rewrites. Hand both methods directly to the
-// route: GET keeps its own CRON_SECRET auth, and POST owns its V1 cron gate.
+// route-owned authentication-first V1 availability holds: historical GET and
+// write POST each retain a narrow, independent source boundary.
 const HEALTH_HEARTBEAT_BYPASS_PATHS = new Set(['/api/health/heartbeat', '/api/v1/health/heartbeat'])
 
 // ============================================

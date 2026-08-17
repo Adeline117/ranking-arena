@@ -5,7 +5,6 @@
 const mockVerifyAdminAuth = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
 const mockGetByPrefix = jest.fn()
-const mockQuery = jest.fn()
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 
@@ -23,9 +22,7 @@ jest.mock('@/lib/services/pipeline-state', () => ({
   },
 }))
 
-jest.mock('@/lib/db', () => ({
-  query: (...args: unknown[]) => mockQuery(...args),
-}))
+import { GET } from '../route'
 
 function queryResult(result: unknown) {
   const query = new Proxy<Record<string, unknown>>(
@@ -62,7 +59,6 @@ describe('GET /api/admin/monitoring/enrichment-completeness', () => {
     jest.clearAllMocks()
     mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom, rpc: mockRpc })
     mockGetByPrefix.mockResolvedValue([])
-    mockQuery.mockResolvedValue({ rows: [] })
     mockRpc.mockResolvedValue({ data: [] })
     mockFrom.mockImplementation((table: string) => {
       if (table === 'leaderboard_count_cache') {
@@ -98,7 +94,7 @@ describe('GET /api/admin/monitoring/enrichment-completeness', () => {
     expect(mockGetByPrefix).not.toHaveBeenCalled()
   })
 
-  it('keeps the prior success payload while using an authenticated admin read', async () => {
+  it('retains enrichment reads while marking retired heartbeat history unavailable', async () => {
     mockVerifyAdminAuth.mockResolvedValue(true)
     mockGetByPrefix.mockResolvedValue([
       {
@@ -108,19 +104,6 @@ describe('GET /api/admin/monitoring/enrichment-completeness', () => {
       },
     ])
     mockRpc.mockResolvedValue({ data: [{ platform: 'binance_futures', stale: 2 }] })
-    mockQuery.mockResolvedValue({
-      rows: [
-        {
-          platform: 'binance_futures',
-          source_host: 'api.binance.example',
-          status: 'healthy',
-          trader_count: 10,
-          created_at: '2026-08-16T00:00:00.000Z',
-          hours_since: '1.5',
-        },
-      ],
-    })
-
     const response = await GET(request())
 
     expect(response.status).toBe(200)
@@ -143,7 +126,11 @@ describe('GET /api/admin/monitoring/enrichment-completeness', () => {
       dead_letter_total: 2,
       gap_summary: [{ platform: 'binance_futures', stale: 2 }],
       pipeline_24h: { total: 2, success: 1, success_rate_pct: 50 },
-      heartbeats: [{ platform: 'binance_futures', is_stale: false }],
+      heartbeats: [],
+      heartbeat_history: {
+        availability: false,
+        code: 'HEARTBEAT_HISTORY_NOT_PUBLISHED',
+      },
     })
     expect(mockGetSupabaseAdmin).toHaveBeenCalledTimes(1)
     expect(mockGetByPrefix).toHaveBeenCalledWith('enrich:dead:')

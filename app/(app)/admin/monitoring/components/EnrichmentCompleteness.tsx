@@ -37,6 +37,10 @@ interface EnrichmentData {
     hours_since: number
     is_stale: boolean
   }>
+  heartbeat_history?: {
+    availability: boolean
+    code: string
+  }
 }
 
 function coverageColor(pct: number): string {
@@ -82,6 +86,7 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
   if (!data) return null
 
   const { enrichment_stats, dead_letter_queue, dead_letter_total, pipeline_24h, heartbeats } = data
+  const heartbeatHistoryAvailable = data.heartbeat_history?.availability === true
 
   return (
     <Card>
@@ -170,20 +175,33 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
             <Text size="xs" color="tertiary">
               Heartbeats
             </Text>
-            <Text
-              size="xl"
-              weight="black"
-              style={{
-                color: heartbeats.some((h) => h.is_stale)
-                  ? tokens.colors.accent.warning
-                  : tokens.colors.sentiment.bull,
-              }}
-            >
-              {heartbeats.filter((h) => !h.is_stale).length}/{heartbeats.length}
-            </Text>
-            <Text size="xs" color="tertiary">
-              fresh / total
-            </Text>
+            {heartbeatHistoryAvailable ? (
+              <>
+                <Text
+                  size="xl"
+                  weight="black"
+                  style={{
+                    color: heartbeats.some((h) => h.is_stale)
+                      ? tokens.colors.accent.warning
+                      : tokens.colors.sentiment.bull,
+                  }}
+                >
+                  {heartbeats.filter((h) => !h.is_stale).length}/{heartbeats.length}
+                </Text>
+                <Text size="xs" color="tertiary">
+                  fresh / total
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text size="xl" weight="black" color="tertiary">
+                  Unavailable
+                </Text>
+                <Text size="xs" color="tertiary">
+                  Heartbeat history is not published in V1.
+                </Text>
+              </>
+            )}
           </Box>
         </Box>
 
