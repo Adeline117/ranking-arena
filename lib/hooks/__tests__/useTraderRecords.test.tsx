@@ -453,6 +453,49 @@ describe('useCopierAggregate subject identity', () => {
     }
   })
 
+  it('keeps a known pending copier bridge collecting while its retry is in flight', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    const nextRead = deferred<ApiSuccessResponse<CopierAggregate>>()
+    let reads = 0
+    ;(fetcher as jest.Mock).mockImplementation(() => {
+      reads += 1
+      return reads === 1
+        ? Promise.resolve({ success: true, data: { cacheState: 'pending' as const } })
+        : nextRead.promise
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useCopierAggregate({ source: 'gmx', exchangeTraderId: 'trader-a', enabled: true }),
+      { wrapper: Wrapper }
+    )
+
+    try {
+      await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+      await act(async () => {
+        void view.result.current.refetch()
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(reads).toBe(2))
+      expect(view.result.current.isPendingUpstream).toBe(true)
+
+      await act(async () => {
+        nextRead.resolve(response(aggregate('gmx', 4)))
+        await nextRead.promise
+      })
+      await waitFor(() => expect(view.result.current.aggregate?.copierCount).toBe(4))
+    } finally {
+      view.unmount()
+      queryClient.clear()
+    }
+  })
+
   it('caps a continuously pending foreground window, exposes recovery, and restarts only on retry', async () => {
     jest.useFakeTimers()
     const queryClient = new QueryClient({
@@ -1214,6 +1257,49 @@ describe('useTraderRecords cursor generation reset', () => {
       view.unmount()
       client.clear()
       jest.useRealTimers()
+    }
+  })
+
+  it('keeps a known pending record bridge collecting while its retry is in flight', async () => {
+    const client = queryClient()
+    const nextRead = deferred<ApiSuccessResponse<RecordsPage>>()
+    let reads = 0
+    ;(fetcher as jest.Mock).mockImplementation(() => {
+      reads += 1
+      return reads === 1
+        ? Promise.resolve(recordsResponse(recordsPage({ cacheState: 'pending' })))
+        : nextRead.promise
+    })
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    try {
+      await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+      await act(async () => {
+        void view.result.current.refetch()
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(reads).toBe(2))
+      expect(view.result.current.isPendingUpstream).toBe(true)
+      expect(view.result.current.isPendingRecoveryRequired).toBe(false)
+
+      await act(async () => {
+        nextRead.resolve(recordsResponse(recordsPage({ rows: [{ id: 'collected' }] })))
+        await nextRead.promise
+      })
+      await waitFor(() => expect(view.result.current.rows).toEqual([{ id: 'collected' }]))
+    } finally {
+      view.unmount()
+      client.clear()
     }
   })
 

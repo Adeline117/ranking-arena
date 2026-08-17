@@ -212,9 +212,8 @@ function CopiersPanel({
     exchangeTraderId,
     enabled: true,
   })
-  if (isLoading || isPendingUpstream) {
-    return <ModulePendingState state={isLoading ? 'loading' : 'pending'} isCopier />
-  }
+  if (isPendingUpstream) return <ModulePendingState state="pending" isCopier />
+  if (isLoading) return <ModulePendingState state="loading" isCopier />
   return (
     <CopierAggregatePanel
       aggregate={aggregate}

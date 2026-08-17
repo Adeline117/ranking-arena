@@ -170,6 +170,28 @@ describe('ServingRecordsSection selection scope', () => {
     expect(status).toHaveAttribute('data-copier-state', 'pending')
   })
 
+  it('keeps a known in-flight copier collection labelled as collecting', () => {
+    ;(useCopierAggregate as jest.Mock).mockReturnValue({
+      aggregate: null,
+      isPendingUpstream: true,
+      isLoading: true,
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['copiers'])}
+        tf={90}
+      />
+    )
+
+    const status = screen.getByRole('status', { name: 'moduleDataPending' })
+    expect(status).toHaveAttribute('data-module-state', 'pending')
+  })
+
   it('labels a generic pending record response as collecting instead of unavailable', () => {
     ;(useTraderRecords as jest.Mock).mockReturnValue({
       rows: [],

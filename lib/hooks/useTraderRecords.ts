@@ -241,9 +241,7 @@ export function useTraderRecords({
   const pendingWindowActive =
     shouldFetch &&
     hasOnlyPendingFirstPage &&
-    query.isFetchedAfterMount &&
-    query.fetchStatus === 'idle' &&
-    !query.isFetching &&
+    query.fetchStatus !== 'paused' &&
     !query.error &&
     pendingPoll.current.scope === pendingScope &&
     pendingPoll.current.count < MAX_PENDING_RECORDS_POLLS
@@ -370,13 +368,11 @@ export function useCopierAggregate(opts: {
   // B2C user under a permanent skeleton with no recovery action.
   const pendingWindowActive =
     shouldFetch &&
-    query.isFetchedAfterMount &&
-    query.fetchStatus === 'idle' &&
-    !query.isFetching &&
+    query.fetchStatus !== 'paused' &&
     !query.isError &&
     isPendingCopierResponse(data) &&
     pendingPoll.current.subjectKey === subjectKey &&
-    pendingPoll.current.count > 0 &&
+    (query.isFetching || pendingPoll.current.count > 0) &&
     pendingPoll.current.count < 15
 
   const refetch = useCallback(() => {
