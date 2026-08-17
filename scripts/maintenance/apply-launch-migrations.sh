@@ -229,6 +229,7 @@ PREDEPLOY_MIGRATIONS=(
   20260803108000_comment_reaction_causal_intents.sql
   20260803110000_post_media_upload_registry.sql
   20260803111000_post_media_claims.sql
+  20260803112000_post_media_coverage_inventory.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
