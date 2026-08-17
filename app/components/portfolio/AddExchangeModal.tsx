@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
@@ -33,13 +33,18 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
   const [label, setLabel] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const submitOperationRef = useRef(false)
 
   if (!open) return null
 
   const needsPassphrase = PASSPHRASE_EXCHANGES.has(exchange)
+  const handleClose = () => {
+    if (!submitOperationRef.current) onClose()
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submitting || submitOperationRef.current) return
     if (!apiKey.trim() || !apiSecret.trim()) {
       setError(t('apiKeySecretRequired'))
       return
@@ -49,6 +54,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
       return
     }
     setError('')
+    submitOperationRef.current = true
     setSubmitting(true)
     try {
       await onSubmit({
@@ -66,15 +72,22 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedToAddExchange'))
     } finally {
+      submitOperationRef.current = false
       setSubmitting(false)
     }
   }
 
   return (
-    <ModalOverlay open={open} onClose={onClose} label={t('connectExchange')} maxWidth={440}>
+    <ModalOverlay open={open} onClose={handleClose} label={t('connectExchange')} maxWidth={440}>
       <div style={styles.header}>
         <h3 style={styles.title}>{t('connectExchange')}</h3>
-        <button style={styles.closeBtn} onClick={onClose} aria-label={t('close')}>
+        <button
+          type="button"
+          style={{ ...styles.closeBtn, cursor: submitting ? 'not-allowed' : 'pointer' }}
+          onClick={handleClose}
+          disabled={submitting}
+          aria-label={t('close')}
+        >
           <svg
             width="18"
             height="18"
@@ -98,6 +111,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           <select
             id="exchange-select"
             value={exchange}
+            disabled={submitting}
             onChange={(e) => setExchange(e.target.value)}
             style={styles.select}
           >
@@ -117,6 +131,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
             id="exchange-label"
             type="text"
             value={label}
+            disabled={submitting}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="e.g. Main Account"
             style={styles.input}
@@ -130,6 +145,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           <PasswordInput
             id="exchange-api-key"
             value={apiKey}
+            disabled={submitting}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={t('enterApiKeyPlaceholder')}
             style={styles.input}
@@ -144,6 +160,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           <PasswordInput
             id="exchange-api-secret"
             value={apiSecret}
+            disabled={submitting}
             onChange={(e) => setApiSecret(e.target.value)}
             placeholder={t('enterApiSecretPlaceholder')}
             style={styles.input}
@@ -159,6 +176,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
             <PasswordInput
               id="exchange-api-passphrase"
               value={apiPassphrase}
+              disabled={submitting}
               onChange={(e) => setApiPassphrase(e.target.value)}
               placeholder={t('enterApiPassphrasePlaceholder')}
               style={styles.input}
