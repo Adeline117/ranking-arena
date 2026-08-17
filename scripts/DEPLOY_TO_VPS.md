@@ -26,7 +26,6 @@ npm install pg node-fetch
 ```bash
 # 从~/arena目录上传脚本
 scp ~/arena/scripts/enrich-onchain-all.mjs root@45.76.152.169:/opt/arena/scripts/
-scp ~/arena/scripts/test-onchain-apis.mjs root@45.76.152.169:/opt/arena/scripts/
 scp ~/arena/scripts/monitor-enrichment.sh root@45.76.152.169:/opt/arena/scripts/
 scp ~/arena/scripts/cron/enrich-onchain.sh root@45.76.152.169:/opt/arena/scripts/cron/
 
@@ -37,6 +36,8 @@ scp ~/arena/scripts/ENRICHMENT_STATUS_REPORT.md root@45.76.152.169:/opt/arena/sc
 # 设置执行权限
 ssh root@45.76.152.169 'chmod +x /opt/arena/scripts/*.mjs /opt/arena/scripts/*.sh /opt/arena/scripts/cron/*.sh'
 ```
+
+历史 archive probe `scripts/archive/test-onchain-apis.mjs` 已在 V1 NO-GO 下退役；不得上传或运行它。
 
 ### 3. 配置环境变量
 
@@ -56,9 +57,6 @@ chmod 600 /opt/arena/.env
 
 ```bash
 ssh root@45.76.152.169
-
-# 测试API连通性
-cd /opt/arena && node scripts/test-onchain-apis.mjs
 
 # 测试单个平台 (dry-run)
 cd /opt/arena && node scripts/enrich-onchain-all.mjs --platform=hyperliquid --batch=5 --dry-run

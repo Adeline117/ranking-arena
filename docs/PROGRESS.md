@@ -166,6 +166,14 @@ compatibility path，现固定输出 `RETIRED` 并以 exit `2` 结束；它们�
 这只是 source-only containment：不停止、检查或证明已部署 host/process、crontab、UptimeRobot 或其他
 external monitor 的状态。`/api/health`、OpenClaw、harness 和 `scripts/vps-deploy/*` 均不在此次范围内。
 
+## V1 archive on-chain probe source containment（2026-08-17）
+
+`scripts/archive/test-onchain-apis.mjs` 是历史 provider probe compatibility path，现固定输出
+`RETIRED` 并以 exit `2` 结束；它不再向 Hyperliquid、Aevo、dYdX、Drift、Jupiter 或 Graph API 发请求。
+
+此 source-only boundary 不改变 `app/api/trader/onchain-enrich` 的既有 hold、worker/on-chain source
+logic、页面或证据链；也不停止、检查或证明任何已部署 probe、host、scheduler 或 provider 的状态。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）

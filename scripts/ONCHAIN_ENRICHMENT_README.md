@@ -41,11 +41,7 @@ node scripts/enrich-onchain-all.mjs --batch=200
 
 ### 辅助脚本
 
-**`test-onchain-apis.mjs`**: 测试所有平台API是否可用
-
-```bash
-node scripts/test-onchain-apis.mjs
-```
+历史 archive probe `scripts/archive/test-onchain-apis.mjs` 已在 V1 NO-GO 下退役；不得运行或上传它。
 
 **`monitor-enrichment.sh`**: 监控enrichment进度
 
@@ -137,10 +133,7 @@ gains           |   602 |     124 |      597 | 20.6 | 99.2
 
 ### API访问失败
 
-```bash
-# 测试API连通性
-node scripts/test-onchain-apis.mjs
-```
+历史 archive probe 已退役；不要通过仓库中的脚本探测 provider 连通性。
 
 ### 数据库连接问题
 

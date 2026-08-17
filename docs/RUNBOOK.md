@@ -171,6 +171,16 @@ This source-only boundary does not stop, inspect, or prove an already deployed h
 process, crontab, UptimeRobot, or external monitor. `/api/health`, OpenClaw, harness, and
 `scripts/vps-deploy/*` remain outside this bounded conclusion.
 
+### V1 archive on-chain probe source boundary
+
+Do not use `scripts/archive/test-onchain-apis.mjs` as an incident workaround. This historical
+provider-probe compatibility path reports fixed `RETIRED` and exits `2`; it does not contact
+Hyperliquid, Aevo, dYdX, Drift, Jupiter, or Graph API endpoints.
+
+This source-only boundary does not change the existing `app/api/trader/onchain-enrich` hold,
+worker/on-chain source logic, pages, or evidence paths. It does not stop, inspect, or prove any
+deployed probe, host, scheduler, or provider state.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy

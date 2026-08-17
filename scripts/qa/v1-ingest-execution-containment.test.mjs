@@ -144,6 +144,7 @@ const DIRECT_EXECUTION_TOMBSTONES = [
   'scripts/ingest-enqueue-region-smoke.mts',
   'scripts/ingest-test-surfaces.ts',
   'scripts/onchain-enrich-web3.mts',
+  'scripts/archive/test-onchain-apis.mjs',
   'scripts/ingest-capture-xhr.mts',
   'worker/find-wedged-schedulers.mjs',
   'worker/kick-wedged-source.mjs',
@@ -180,5 +181,24 @@ test('directly executable V1 tombstones exit 2 without starting a runtime', () =
     })
     assert.equal(result.status, 2, path)
     assert.match(`${result.stdout}${result.stderr}`, /\[RETIRED\]/, path)
+  }
+})
+
+test('the retired archive on-chain probe is documented without legacy run or upload instructions', () => {
+  const progress = readSource('docs/PROGRESS.md')
+  const runbook = readSource('docs/RUNBOOK.md')
+  const onchainReadme = readSource('scripts/ONCHAIN_ENRICHMENT_README.md')
+  const deployReadme = readSource('scripts/DEPLOY_TO_VPS.md')
+
+  for (const document of [progress, runbook]) {
+    assert.match(document, /V1 archive on-chain probe source (?:containment|boundary)/)
+    assert.match(document, /`scripts\/archive\/test-onchain-apis\.mjs`/)
+    assert.match(document, /source-only/)
+  }
+
+  for (const document of [onchainReadme, deployReadme]) {
+    assert.match(document, /scripts\/archive\/test-onchain-apis\.mjs/)
+    assert.doesNotMatch(document, /node scripts\/test-onchain-apis\.mjs/)
+    assert.doesNotMatch(document, /scp ~\/arena\/scripts\/test-onchain-apis\.mjs/)
   }
 })
