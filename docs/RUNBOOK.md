@@ -169,8 +169,8 @@ an HTTP server.
 
 This source-only boundary does not stop, inspect, or prove an already deployed host,
 process, crontab, UptimeRobot, or external monitor. `/api/health`, OpenClaw, harness,
-infra topology, and `scripts/vps-deploy/deploy.sh` remain outside this bounded conclusion;
-`setup.sh`, `setup-env.sh`, and `check-vps.sh` are each retired separately.
+and infra topology remain outside this bounded conclusion. `scripts/vps-deploy/setup.sh`,
+`setup-env.sh`, `check-vps.sh`, and `deploy.sh` are each retired separately.
 
 ### V1 legacy VPS bootstrap source boundary
 
@@ -180,8 +180,7 @@ files, load an environment, or make network requests.
 
 This source-only boundary covers `setup.sh` only. It does not stop, inspect, or prove infra topology,
 a deployed host, PM2, credentials, or a scheduler. `setup-env.sh` and `check-vps.sh` are each retired
-separately; `scripts/vps-deploy/deploy.sh` remains outside this bounded conclusion and requires
-independent review.
+separately; `scripts/vps-deploy/deploy.sh` is also a retired source path under its own boundary.
 
 ### V1 legacy VPS environment provisioning source boundary
 
@@ -191,7 +190,7 @@ performs its legacy setup work.
 
 This source-only boundary does not stop, inspect, or prove infra topology, a deployed host, PM2,
 credentials, or a scheduler. `setup.sh` and `check-vps.sh` are each retired separately;
-`scripts/vps-deploy/deploy.sh` remains outside this bounded conclusion and requires independent review.
+`scripts/vps-deploy/deploy.sh` is also a retired source path under its own boundary.
 
 ### V1 legacy VPS inspection CLI source boundary
 
@@ -200,9 +199,21 @@ compatibility path reports fixed `RETIRED` and exits `2`; it no longer contacts 
 an environment or logs, checks process state, or makes network requests.
 
 `scripts/vps-deploy/setup.sh`, `scripts/vps-deploy/setup-env.sh`, and
-`scripts/vps-deploy/check-vps.sh` are each retired source paths. This source-only boundary does not
-stop, inspect, or prove `scripts/vps-deploy/deploy.sh`, infra topology, deployed hosts, PM2,
+`scripts/vps-deploy/check-vps.sh`, and `scripts/vps-deploy/deploy.sh` are each retired source paths.
+This source-only boundary does not stop, inspect, or prove infra topology, deployed hosts, PM2,
 credentials, or schedulers.
+
+### V1 legacy VPS deploy CLI source boundary
+
+Do not use `scripts/vps-deploy/deploy.sh` as an incident workaround. This legacy VPS deploy CLI
+compatibility path reports fixed `RETIRED` to stderr and exits `2`; it no longer connects to a remote
+host, transfers files, changes PM2, or makes health requests.
+
+`scripts/vps-deploy/setup.sh`, `scripts/vps-deploy/setup-env.sh`,
+`scripts/vps-deploy/check-vps.sh`, and `scripts/vps-deploy/deploy.sh` are all retired source paths.
+This source-only boundary does not stop, inspect, or prove `infra/vps-playwright` ecosystem configs,
+deployed hosts, PM2, credentials, schedulers, or worker deploy paths such as `worker/deploy.sh`,
+`worker/deploy-ingest-local.sh`, and `worker/deploy-ingest-sg.sh`.
 
 ### V1 archive on-chain probe source boundary
 
