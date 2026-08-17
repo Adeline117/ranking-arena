@@ -250,6 +250,18 @@ stderr 输出 `[RETIRED]` 并以 exit `2` 结束，stdout 保持为空。
 API route、on-chain pipeline、worker、deploy flow 或产品行为；这些均不在范围内，也不能从此推断仓库外或
 已部署状态。
 
+## V1 enrichment monitor and stale runbook source containment（2026-08-17）
+
+`scripts/monitor-enrichment.sh` 是历史 enrichment monitor compatibility path，现为 retired V1 NO-GO
+source path，而非 status monitor：它固定向 stderr 输出 `[RETIRED]`、stdout 保持为空并以 exit `2` 结束。
+旧的 `scripts/enrich-onchain-all.mjs` runtime 已不在本仓库；
+`scripts/DEPLOY_TO_VPS.md` 与 `scripts/ONCHAIN_ENRICHMENT_README.md` 也已移除历史运行配方，只保留
+不可恢复的边界说明。
+
+这是 source-only boundary：不改变、停止、检查或证明任何 application on-chain API、worker、adapter、
+deployed host、scheduler、credential、database、provider、历史数据或产品行为；也不改变既有
+`app/api/trader/onchain-enrich` hold，不能据此推断任何仓库外或已部署状态。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
