@@ -478,6 +478,17 @@ non-sensitive proof; this document intentionally has no bypass workflow.
 或 scheduler 状态。本 runbook 不提供该历史文件的数据库、MCP、CLI 或回退流程；未来任何 ledger
 事项只能由 owner 在独立 ADR-023 中重新定义并保全单独证据。
 
+### V1 ClickHouse schema source boundary
+
+`scripts/clickhouse/schema.sql` 是 `[RETIRED]` 的纯注释来源记录，在 V1 NO-GO 下不含可运行
+内容。外部 SQL-file launcher 可能因注释是 no-op 而报告 exit 0；这不是 ClickHouse catalog、数据、
+配置或任何 live-state 的证据，也不是验证或工作入口。
+
+这是 source-only boundary：它不调用、配置、变更、检查或证明 ClickHouse client、dual-write、
+`PipelineLogger`、deployed ClickHouse instance、host 或 credentials 的状态。本 runbook 不提供该
+文件的 CLI 或其他工作流程，也不触及 analytics runtime、已部署实例或控制面。未来任何该类事项
+只能由 owner 在独立 ADR-023 中重新定义并保全单独证据。
+
 #### 当前事实
 
 - `V1_EXECUTION_STATUS_2026-08-03.md` 是公开服务与 launch 的唯一权威。

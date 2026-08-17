@@ -29,6 +29,17 @@
 scheduler 的状态。它不触及 `supabase/migrations/*`、现有 ledger 或生产控制面；未来的 ledger 事项
 只能由 owner 以独立 ADR-023 计划和单独证据处理，不能从这个历史文件推断当前状态。
 
+## V1 ClickHouse schema source containment（2026-08-17）
+
+本轮只封存 `scripts/clickhouse/schema.sql`。该文件现为 `[RETIRED]` 的纯注释来源记录，
+在 V1 NO-GO 下没有可运行内容；外部 SQL-file launcher 可能因注释是 no-op 而报告 exit 0，
+但这不是 ClickHouse catalog、数据、配置或任何 live-state 的证据，也不是验证或工作入口。
+
+这是 source-only boundary：它不调用、配置、变更、检查或证明 ClickHouse client、dual-write、
+`PipelineLogger`、deployed ClickHouse instance、host 或 credentials 的状态。本次不运行 CLI，
+也不触及 analytics runtime、已部署实例或控制面；未来任何该类事项只能由 owner 在独立 ADR-023
+计划中重新定义并保全单独证据。
+
 ## V1 public health VPS probe scope（2026-08-17）
 
 公开 `GET /api/health` 的 `checks` 只报告 API transport、database、Redis 与排名 freshness；本源码
