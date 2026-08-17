@@ -28,6 +28,10 @@ export const maxDuration = 60
 
 const TRADERS_PER_SITEMAP = 5000
 const MAX_OTHER_URLS = 500
+// This relation is intentionally isolated until generated Supabase types have
+// been refreshed after the public-cohort migration. Do not replace it with the
+// wider `leaderboard_ranks` table: this view is the publication authority.
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
 
 // Sitemap index IDs:
 // 0 = static + exchange pages
@@ -35,6 +39,17 @@ const MAX_OTHER_URLS = 500
 // N+1 = posts/groups/users
 const STATIC_SITEMAP_ID = 0
 const EXTRA_SITEMAP_ID = 999 // posts, groups, user profiles
+
+type SitemapShardId = number | string | PromiseLike<number | string>
+
+function isSitemapShardIdThenable(value: SitemapShardId): value is PromiseLike<number | string> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'then' in value &&
+    typeof value.then === 'function'
+  )
+}
 
 /**
  * Create a fresh Supabase admin client for sitemap generation.
@@ -69,43 +84,118 @@ function getSitemapSupabase(): SupabaseClient {
   })
 }
 
+type SitemapRankedTraderRow = {
+  handle: string | null
+  source_trader_id: string | null
+  source: string | null
+  rank: number | null
+  computed_at: string | null
+}
+
+type SitemapTrader = {
+  handle: string
+  source: string
+  updated_at?: string
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+function asSitemapTrader(row: SitemapRankedTraderRow): SitemapTrader | null {
+  const handle = isNonEmptyString(row.handle)
+    ? row.handle
+    : isNonEmptyString(row.source_trader_id)
+      ? row.source_trader_id
+      : null
+
+  // The view is the authority for full/non-estimated/fresh ranked membership.
+  // These guards fail a malformed proxy/schema response closed instead of
+  // publishing an unresolvable trader URL from a finite shard.
+  if (
+    typeof row.rank !== 'number' ||
+    !Number.isSafeInteger(row.rank) ||
+    row.rank <= 0 ||
+    !isNonEmptyString(row.source) ||
+    !isNonEmptyString(handle)
+  ) {
+    return null
+  }
+
+  const computedAt =
+    isNonEmptyString(row.computed_at) && Number.isFinite(Date.parse(row.computed_at))
+      ? new Date(row.computed_at).toISOString()
+      : undefined
+
+  return {
+    handle,
+    source: row.source,
+    ...(computedAt ? { updated_at: computedAt } : {}),
+  }
+}
+
 /**
- * Fetch all trader handles from leaderboard_ranks
+ * Fetch one trader sitemap shard from the already sealed public cohort.
+ *
+ * The database security barrier establishes complete, source-fresh ranking
+ * membership before the caller's season predicate, ordering, and finite range.
+ * Querying an all-history raw page and filtering it in JavaScript would make a
+ * shard's URL list neither trustworthy nor stable.
  */
-async function getAllTraders(): Promise<Array<{ handle: string; updated_at: string }>> {
+async function getTraderShard(shardIndex: number): Promise<SitemapTrader[]> {
   try {
     const supabase = getSitemapSupabase()
+    const start = shardIndex * TRADERS_PER_SITEMAP
 
-    const { data, error } = await supabase
-      .from('leaderboard_ranks')
-      .select('handle, source_trader_id, computed_at')
+    // The view is introduced by a rolling migration and has not been added to
+    // generated types yet. Keep the compatibility cast local; do not edit the
+    // generated schema just to make this public read compile.
+    const { data, error } = (await supabase
+      .from(PUBLIC_RANKED_LEADERBOARD as never)
+      .select('handle, source_trader_id, source, rank, computed_at')
       .eq('season_id', '90D')
-      .not('handle', 'is', null)
-      .limit(49000)
+      // Redundant to the view but documents the published-rank contract at
+      // this crawler boundary and protects a rolling older-view deployment.
+      .not('rank', 'is', null)
+      .order('rank', { ascending: true, nullsFirst: false })
+      .order('source', { ascending: true, nullsFirst: false })
+      .order('source_trader_id', { ascending: true, nullsFirst: false })
+      .range(start, start + TRADERS_PER_SITEMAP - 1)) as {
+      data: SitemapRankedTraderRow[] | null
+      error: { message: string; code?: string } | null
+    }
 
     if (error) {
-      console.error('[sitemap] getAllTraders query error:', error.message, error.code)
+      console.error('[sitemap] getTraderShard query error:', error.message, error.code)
+      return []
+    }
+
+    const rows = data || []
+    const traders = rows.map(asSitemapTrader)
+    // Do not drop malformed view rows and advance later results into this
+    // finite shard. That would make the next shard a false continuation.
+    if (traders.some((trader) => trader === null)) {
+      console.error('[sitemap] getTraderShard received a malformed public cohort row')
       return []
     }
 
     const seen = new Set<string>()
-    const results: Array<{ handle: string; updated_at: string }> = []
-    for (const t of data || []) {
-      const h = t.handle || t.source_trader_id
-      if (!h || seen.has(h)) continue
-      seen.add(h)
-      results.push({
-        handle: h,
-        updated_at: t.computed_at || new Date().toISOString(),
-      })
-    }
+    const results = traders.filter((trader): trader is SitemapTrader => {
+      if (!trader) return false
+      // The canonical trader URL includes source, so same-handle accounts on
+      // distinct exchanges remain distinct public identities.
+      const identity = `${trader.source}:${trader.handle}`
+      if (seen.has(identity)) return false
+      seen.add(identity)
+      return true
+    })
 
     // eslint-disable-next-line no-console
-    console.log(`[sitemap] getAllTraders: ${results.length} traders fetched`)
+    console.log(`[sitemap] getTraderShard(${shardIndex}): ${results.length} traders fetched`)
     return results
   } catch (error) {
     console.error(
-      '[sitemap] getAllTraders exception:',
+      '[sitemap] getTraderShard exception:',
       error instanceof Error ? error.message : error
     )
     return []
@@ -223,15 +313,13 @@ export async function generateSitemaps() {
 export default async function sitemap({
   id: rawId,
 }: {
-  id: number
+  id: SitemapShardId
 }): Promise<MetadataRoute.Sitemap> {
   // Next.js 16 (Turbopack) passes `id` as a PROMISE despite the `number` type
   // (async-params behavior). Without awaiting, Number(Promise)=NaN → no `id ===`
   // branch matches → EVERY shard returns empty → all trader/post/group URLs
   // silently vanish from the sitemap (SEO loss). Await if thenable, then coerce.
-  const isThenable =
-    rawId != null && typeof (rawId as unknown as { then?: unknown }).then === 'function'
-  const resolvedId = isThenable ? await (rawId as unknown as Promise<number | string>) : rawId
+  const resolvedId = isSitemapShardIdThenable(rawId) ? await rawId : rawId
   const id = Number(resolvedId)
   const now = new Date().toISOString()
 
@@ -382,13 +470,12 @@ export default async function sitemap({
   const shardIndex = id - 1 // 0-based
   if (shardIndex < 0) return []
 
-  const traders = await getAllTraders()
-  const start = shardIndex * TRADERS_PER_SITEMAP
-  const slice = traders.slice(start, start + TRADERS_PER_SITEMAP)
+  const traders = await getTraderShard(shardIndex)
 
-  return slice.map((trader) => ({
-    url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
-    lastModified: trader.updated_at,
+  return traders.map((trader) => ({
+    // The platform binds the URL to its canonical cross-exchange identity.
+    url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.source)}`,
+    ...(trader.updated_at ? { lastModified: trader.updated_at } : {}),
     changeFrequency: 'daily' as const,
     priority: 0.8,
   }))
