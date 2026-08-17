@@ -273,6 +273,20 @@ place and outside this bounded conclusion. It does not download, refresh, delete
 prove any deployed asset, cache, external source, or provenance; it also cannot establish that
 another logo acquisition or refresh workflow has stopped.
 
+### V1 monthly dependency update source boundary
+
+Do not use `scripts/monthly-deps-update.mjs` as an incident workaround. This no-current-operational-caller
+legacy compatibility path is a source-only exit-`2` tombstone: with any arguments, it writes
+`[RETIRED]` only to stderr, leaves stdout empty, and does not run `npm audit`, `npm audit fix`,
+`npm outdated`, `npm update`, `git checkout`, or `npm install`, or write a dependency-update report.
+
+This boundary does not remove or change the package `security:fix` command, independent CI
+`npm audit`, Dependabot, human dependency review, deployed dependencies, or product runtime. It
+does not inspect, change, or prove a lockfile, installed package, vulnerability state, release
+version, or any external environment. Any future dependency repair, update, or report requires a
+separately approved ADR-023 owner plan and distinct evidence; this retired path is not an execution
+route.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy

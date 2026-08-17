@@ -272,6 +272,18 @@ NO-GO source path：无论传入何种参数，均只向 stderr 输出 `[RETIRED
 assets 的产品 UI 仍在本次范围外。本次不下载、刷新、删除、检查或证明任何已部署 asset、cache、外部
 来源或 provenance，也不能据此推断任何其他 logo acquisition/refresh workflow 已停止。
 
+## V1 monthly dependency update source containment（2026-08-17）
+
+本轮只封存无当前操作 caller 的 `scripts/monthly-deps-update.mjs` 这一 legacy compatibility path。它现为
+source-only exit `2` tombstone：无论传入何种参数，均只向 stderr 输出 `[RETIRED]`、stdout 保持为空；不会运行
+`npm audit` 或 `npm audit fix`、`npm outdated` 或 `npm update`、`git checkout`、`npm install`，也不会写入依赖
+更新报告。
+
+该边界不移除或改变 package `security:fix`、独立 CI `npm audit`、Dependabot 或人工依赖审查、任何已部署
+依赖或产品运行时；也不检查、变更或证明 lockfile、已安装 package、漏洞状态、发布版本或仓库外环境。未来
+任何依赖修复、更新或报告均须由 owner 在独立 ADR-023 计划中定义并保全单独证据，不能通过这个已退役入口
+执行或推断。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
