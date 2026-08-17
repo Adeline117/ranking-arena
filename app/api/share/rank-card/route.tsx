@@ -1,7 +1,10 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 import {
   publicRankingResponseCacheHeaders,
   publicRankingResponseRejectionHeaders,
@@ -52,21 +55,82 @@ const PLAT_L: Record<string, string> = {
   bitunix: 'Bitunix',
   etoro: 'eToro',
 }
+
+const PUBLIC_RANK_CARD_COLUMNS =
+  'rank,roi,win_rate,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+
+type PublicRankCardQueryResult = {
+  data: unknown | null
+  error: { message: string } | null
+}
+
+type PublicRankCardQuery = {
+  select(columns: string): PublicRankCardQuery
+  eq(column: string, value: string): PublicRankCardQuery
+  maybeSingle(): Promise<PublicRankCardQueryResult>
+}
+
+type PublicRankCardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankCardQuery
+}
+
+type VerifiedRankCardRow = {
+  rank: number
+  roi: number | null
+  winRate: number | null
+  arenaScore: number | null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankCardClient(value: unknown): PublicRankCardClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankCardClient
+}
+
+function verifiedRankCardRow(
+  value: unknown,
+  source: string,
+  sourceTraderId: string,
+  period: string
+): VerifiedRankCardRow | null {
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value === null ? [] : [value], period },
+    { expectedPeriod: period }
+  ) as { traders?: unknown[] }
+  const row = sanitized.traders?.[0]
+  if (
+    !isRecord(row) ||
+    row.source !== source ||
+    row.source_trader_id !== sourceTraderId ||
+    typeof row.rank !== 'number' ||
+    !Number.isSafeInteger(row.rank) ||
+    row.rank <= 0
+  ) {
+    return null
+  }
+  return {
+    rank: row.rank,
+    roi: typeof row.roi === 'number' && Number.isFinite(row.roi) ? row.roi : null,
+    winRate:
+      typeof row.win_rate === 'number' && Number.isFinite(row.win_rate) ? row.win_rate : null,
+    arenaScore:
+      typeof row.arena_score === 'number' && Number.isFinite(row.arena_score)
+        ? row.arena_score
+        : null,
+  }
+}
+
 function fmtRoi(r: number) {
   const a = Math.abs(r),
     s = r >= 0 ? '+' : '-'
   if (a >= 10000) return s + Math.round(a / 1000) + 'K%'
   if (a >= 1000) return s + (a / 1000).toFixed(1) + 'K%'
   return s + a.toFixed(1) + '%'
-}
-function topPct(r: number, t: number) {
-  if (!t || !r) return ''
-  const p = r / t
-  if (p <= 0.01) return 'Top 1%'
-  if (p <= 0.05) return 'Top 5%'
-  if (p <= 0.1) return 'Top 10%'
-  if (p <= 0.25) return 'Top 25%'
-  return 'Top ' + Math.ceil(p * 100) + '%'
 }
 
 export async function GET(request: NextRequest) {
@@ -109,39 +173,33 @@ export async function GET(request: NextRequest) {
       { status: 404, headers: publicRankingResponseRejectionHeaders() }
     )
   }
-  const { data: lr } = await sb
-    .from('leaderboard_ranks')
-    .select('rank, roi, win_rate, arena_score')
+  const { data: candidate } = await publicRankCardClient(sb)
+    .from('public_ranked_leaderboard')
+    .select(PUBLIC_RANK_CARD_COLUMNS)
     .eq('source', tr.source)
     .eq('source_trader_id', tr.source_trader_id)
     .eq('season_id', sId)
     .maybeSingle()
-  // PERF FIX: was count:exact (25s+). Read from pre-computed cache instead.
-  const { data: countCache } = await sb
-    .from('leaderboard_count_cache')
-    .select('total_count')
-    .eq('source', tr.source)
-    .eq('season_id', sId)
-    .maybeSingle()
-  const count = countCache?.total_count ?? null
+
+  // A valid global rank may be rendered, but no generation-bound denominator
+  // is available on this image path. Deliberately omit “Top X%” rather than
+  // infer it from a raw or stale count cache.
+  const lr = verifiedRankCardRow(candidate, tr.source, tr.source_trader_id, sId)
   const name = tr.handle || handle,
     rank = lr?.rank ?? 0,
-    total = count ?? 0,
-    roi = lr?.roi,
-    score = lr?.arena_score,
-    winRate = lr?.win_rate
-  const rv = roi != null && !isNaN(roi),
-    sv = score != null && !isNaN(score),
-    wv = winRate != null && !isNaN(winRate)
+    roi = lr?.roi ?? null,
+    score = lr?.arenaScore ?? null,
+    winRate = lr?.winRate ?? null
+  const rv = typeof roi === 'number' && Number.isFinite(roi),
+    sv = typeof score === 'number' && Number.isFinite(score),
+    wv = typeof winRate === 'number' && Number.isFinite(winRate)
   const rc = rv && roi >= 0 ? C.success : C.error,
-    rs = rv ? fmtRoi(roi) : '--',
-    tp = rank > 0 && total > 0 ? topPct(rank, total) : ''
+    rs = rv ? fmtRoi(roi) : '--'
   const pl =
     PLAT_L[tr.source] ||
     tr.source.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
   const pc = PLAT_C[tr.source] || C.purpleLight
-  const rd = rank > 0 ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--',
-    td: string | null = total > 0 ? total.toLocaleString('en-US') + '+' : null
+  const rd = rank > 0 ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--'
   const cta = ref ? `arenafi.org/?ref=${ref}` : 'arenafi.org'
 
   return new ImageResponse(
@@ -403,21 +461,7 @@ export async function GET(request: NextRequest) {
               >
                 {rd}
               </span>
-              {td && <span style={{ fontSize: 14, color: C.dim }}>/ {td} traders</span>}
             </div>
-            {tp && (
-              <div
-                style={{
-                  display: 'flex',
-                  padding: '4px 14px',
-                  borderRadius: 999,
-                  background: C.goldDim,
-                  border: '1px solid ' + C.borderGold,
-                }}
-              >
-                <span style={{ fontSize: 13, fontWeight: 800, color: C.goldLight }}>{tp}</span>
-              </div>
-            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: C.purple }}>via Arena</span>

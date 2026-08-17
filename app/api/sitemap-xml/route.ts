@@ -26,6 +26,10 @@ export const maxDuration = 60
 const BASE_URL = 'https://www.arenafi.org'
 const TRADERS_PER_SHARD = 5000
 const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
+// This security-barrier view is the sole authority for search-engine-visible
+// ranked traders. Keep the ungenerated relation isolated here until database
+// types are regenerated; never fall back to the wider raw rank table.
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
 
 const CACHEABLE_SITEMAP_HEADERS = {
   'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
@@ -45,6 +49,48 @@ type SitemapProfileState = {
   banned_at?: string | null
   is_banned?: boolean | null
   ban_expires_at?: string | null
+}
+
+type PublicSitemapTrader = {
+  handle: string
+  source: string
+  computedAt?: string
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
+  if (typeof row !== 'object' || row === null || Array.isArray(row)) return null
+  const record = row as Record<string, unknown>
+  const rank = record.rank
+  const source = record.source
+  const handle = isNonEmptyString(record.handle)
+    ? record.handle
+    : isNonEmptyString(record.source_trader_id)
+      ? record.source_trader_id
+      : null
+
+  // The view itself enforces full/non-estimated/source-fresh membership. This
+  // boundary check is only a fail-closed defense against a malformed response
+  // from a proxy or rolling schema deployment.
+  if (
+    typeof rank !== 'number' ||
+    !Number.isSafeInteger(rank) ||
+    rank <= 0 ||
+    !isNonEmptyString(source) ||
+    !isNonEmptyString(handle)
+  ) {
+    return null
+  }
+
+  const computedAt =
+    isNonEmptyString(record.computed_at) && Number.isFinite(Date.parse(record.computed_at))
+      ? new Date(record.computed_at).toISOString()
+      : undefined
+
+  return { handle, source, ...(computedAt ? { computedAt } : {}) }
 }
 
 export function isSitemapProfileActive(profile: SitemapProfileState, now = Date.now()): boolean {
@@ -81,7 +127,10 @@ export async function GET(request: NextRequest) {
   // No shard param → return sitemap index
   if (shard === null) {
     const traderCount = await getTraderCount()
-    const shardCount = Math.ceil(traderCount / TRADERS_PER_SHARD) || 1
+    // An unavailable/invalid public count is unknown, not evidence for a
+    // synthetic trader shard. Keep the static and stateful sitemap entries
+    // discoverable while failing the ranked-trader branch closed.
+    const shardCount = traderCount > 0 ? Math.ceil(traderCount / TRADERS_PER_SHARD) : 0
     const shards = [0, ...Array.from({ length: shardCount }, (_, i) => i + 1), 999]
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -230,35 +279,55 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   // Shard 1..N: trader pages
   const supabase = getSupabase()
   const offset = (shardId - 1) * TRADERS_PER_SHARD
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source_trader_id, source, computed_at')
+  // The public cohort view applies its membership proof before this season
+  // predicate and range. Keep all caller clauses in this one SQL builder; do
+  // not fetch an arbitrary raw page and attempt to filter it after pagination.
+  const { data, error } = (await supabase
+    .from(PUBLIC_RANKED_LEADERBOARD as never)
+    .select('handle, source_trader_id, source, rank, computed_at')
     .eq('season_id', '90D')
-    .not('handle', 'is', null)
-    .range(offset, offset + TRADERS_PER_SHARD - 1)
+    .not('rank', 'is', null)
+    .order('rank', { ascending: true, nullsFirst: false })
+    .order('source', { ascending: true, nullsFirst: false })
+    .order('source_trader_id', { ascending: true, nullsFirst: false })
+    .range(offset, offset + TRADERS_PER_SHARD - 1)) as {
+    data: unknown[] | null
+    error: { message: string } | null
+  }
+
+  if (error) {
+    console.error('[sitemap] public ranked cohort query failed:', error.message)
+    return xmlResponse(urlsetXml([]))
+  }
+
+  const traders = (data || []).map(asPublicSitemapTrader)
+  // Do not remove an invalid row and pull a later account into this fixed
+  // shard: that would make the next shard a false continuation. Search
+  // engines receive no trader URLs until the serving cohort is trustworthy.
+  if (traders.some((trader) => trader === null)) {
+    console.error('[sitemap] public ranked cohort returned a malformed row')
+    return xmlResponse(urlsetXml([]))
+  }
 
   const seen = new Set<string>()
-  const entries = (data || [])
-    .map((t) => ({
-      h: t.handle || t.source_trader_id,
-      source: t.source as string | null,
-      computed_at: t.computed_at,
-    }))
-    .filter((r): r is { h: string; source: string | null; computed_at: string | null } => {
-      if (!r.h || seen.has(r.h)) return false
-      seen.add(r.h)
+  const entries = traders
+    .filter((trader): trader is PublicSitemapTrader => {
+      if (!trader) return false
+      // The platform parameter is part of the canonical trader identity, so
+      // same-handle accounts across exchanges must not collapse into one URL.
+      const identity = `${trader.source}:${trader.handle}`
+      if (seen.has(identity)) return false
+      seen.add(identity)
       return true
     })
-    .map((r) => ({
+    .map((trader) => ({
       // 与 trader 页 canonical 对齐(2026-07-11 SEO 审计):带 ?platform= 消除
       // handle-vs-id 双 URL + 跨源同名歧义。ASCII handle 用 handle 段,否则不确定
       // 就用它本身(sitemap 只是发现入口,canonical 才是权威,Google 会向其收敛)。
-      loc: r.source
-        ? `${BASE_URL}/trader/${encodeURIComponent(r.h)}?platform=${encodeURIComponent(r.source)}`
-        : `${BASE_URL}/trader/${encodeURIComponent(r.h)}`,
+      loc: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.source)}`,
       // 用真实 computed_at 作 lastmod;此前全用请求时刻 now → Google 判 lastmod
-      // 不可信直接整体忽略该字段(2026-07-11 SEO 审计)。缺失时才回退 now。
-      lastmod: r.computed_at ? new Date(r.computed_at).toISOString() : now,
+      // 不可信直接整体忽略该字段(2026-07-11 SEO 审计),而不是伪造请求时刻。
+      lastmod: trader.computedAt,
       changefreq: 'daily',
       priority: 0.8,
     }))
@@ -269,14 +338,27 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
 async function getTraderCount(): Promise<number> {
   try {
     const supabase = getSupabase()
-    const { count } = await supabase
-      .from('leaderboard_ranks')
+    const { count, error } = (await supabase
+      .from(PUBLIC_RANKED_LEADERBOARD as never)
       .select('id', { count: 'exact', head: true })
       .eq('season_id', '90D')
-      .not('handle', 'is', null)
-    return count || 0
-  } catch {
-    return 5000
+      .not('rank', 'is', null)) as {
+      count: number | null
+      error: { message: string } | null
+    }
+    if (error) {
+      console.error('[sitemap] public ranked cohort count failed:', error.message)
+      return 0
+    }
+    return typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : 0
+  } catch (error) {
+    console.error(
+      '[sitemap] public ranked cohort count exception:',
+      error instanceof Error ? error.message : error
+    )
+    // A guessed shard count is not a public-ranking authority. Returning zero
+    // fails closed and leaves static/stateful sitemap shards available.
+    return 0
   }
 }
 
