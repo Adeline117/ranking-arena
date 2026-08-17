@@ -1,3 +1,5 @@
+import type { ServingCurrency } from '@/lib/data/serving/types'
+
 /**
  * Type definitions for trader data adapter.
  *
@@ -142,6 +144,9 @@ export interface PositionHistoryItem {
   entryPrice: number
   exitPrice: number
   pnlPct: number
+  /** Exact source unit for an optional absolute realized-PnL amount. `null`
+   * means the source amount must not be formatted as dollars. */
+  pnlCurrency?: ServingCurrency | null
   openTime: string
   closeTime: string
 }

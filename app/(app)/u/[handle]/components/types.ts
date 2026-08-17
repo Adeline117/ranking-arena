@@ -5,7 +5,7 @@ import type {
   PortfolioItem,
   TraderFeedItem,
 } from '@/lib/data/trader'
-import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import type { HistoryCompleteness, ServingCurrency } from '@/lib/data/serving/types'
 
 export interface ServerProfile {
   id: string
@@ -50,7 +50,10 @@ export interface PositionHistoryEntry {
   exitPrice: number
   maxPositionSize: number
   closedSize: number
+  /** Legacy field name retained for compatibility; its exact source unit is
+   * bound separately and must never be inferred from a dollar glyph. */
   pnlUsd: number
+  pnlCurrency?: ServingCurrency | null
   pnlPct: number
   status: string
 }

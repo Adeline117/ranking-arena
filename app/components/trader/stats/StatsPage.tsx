@@ -19,7 +19,7 @@ import { BreakdownSection } from './components/BreakdownSection'
 import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
 import { PnlCalendarHeatmap } from '../charts/PnlCalendarHeatmap'
 import HistoryCompletenessNotice from '../serving/HistoryCompletenessNotice'
-import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import type { HistoryCompleteness, ServingCurrency } from '@/lib/data/serving/types'
 
 // 扩展类型以支持新数据
 interface AssetBreakdownData {
@@ -46,6 +46,7 @@ interface PositionHistoryItem {
   maxPositionSize: number
   closedSize: number
   pnlUsd: number
+  pnlCurrency?: ServingCurrency | null
   pnlPct: number
   status: string
 }

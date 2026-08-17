@@ -6,6 +6,7 @@ import { t as i18nT } from '@/lib/i18n'
 import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
 import { Box, Text } from '@/app/components/base'
 import type { TraderStats } from '@/lib/data/trader'
+import type { ServingCurrency } from '@/lib/data/serving/types'
 import { PositionHistorySection } from './PositionHistorySection'
 
 interface PositionHistoryItem {
@@ -20,6 +21,7 @@ interface PositionHistoryItem {
   maxPositionSize: number
   closedSize: number
   pnlUsd: number
+  pnlCurrency?: ServingCurrency | null
   pnlPct: number
   status: string
 }

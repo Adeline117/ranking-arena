@@ -4,7 +4,7 @@ import { useState, memo } from 'react'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
-import { NULL_DISPLAY } from '@/lib/utils/format'
+import { formatPnL, formatServingPnL, NULL_DISPLAY } from '@/lib/utils/format'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import PortfolioDataCell from './PortfolioDataCell'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
@@ -21,6 +21,16 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
   const [isHovered, setIsHovered] = useState(false)
   const isLong = position.direction === 'long'
   const isProfit = (position.pnlUsd ?? position.pnlPct ?? 0) >= 0
+  const hasPnlAmount =
+    typeof position.pnlUsd === 'number' && Number.isFinite(position.pnlUsd) && position.pnlUsd !== 0
+  const hasBoundPnl = hasPnlAmount && position.pnlCurrency !== null
+  const pnlDisplay = hasPnlAmount
+    ? position.pnlCurrency === null
+      ? NULL_DISPLAY
+      : position.pnlCurrency
+        ? formatServingPnL(position.pnlUsd!, position.pnlCurrency)
+        : formatPnL(position.pnlUsd)
+    : `${isProfit ? '+' : ''}${(position.pnlPct ?? 0).toFixed(2)}%`
   const coinName = position.symbol.replace('USDT', '').replace('BUSD', '')
 
   return (
@@ -115,12 +125,8 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
         />
         <PortfolioDataCell
           label={t('closePnl')}
-          value={
-            position.pnlUsd !== undefined && position.pnlUsd !== 0
-              ? `${isProfit ? '+' : '-'}$${formatPriceWithComma(Math.abs(position.pnlUsd))}`
-              : `${isProfit ? '+' : ''}${(position.pnlPct ?? 0).toFixed(2)}%`
-          }
-          highlight
+          value={pnlDisplay}
+          highlight={hasBoundPnl || !hasPnlAmount}
           isProfit={isProfit}
         />
       </Box>

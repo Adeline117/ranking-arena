@@ -28,6 +28,7 @@ import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trade
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 import { normalizeScoreConfidence } from '@/lib/data/trader/mappers'
+import type { ServingCurrency } from './types'
 
 type Row = Record<string, unknown>
 type SeriesPoint = { ts: string; value: number }
@@ -86,6 +87,10 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' 
 function toDirection(v: unknown): 'long' | 'short' {
   const s = str(v).toLowerCase()
   return s === 'short' || s === 'sell' ? 'short' : 'long'
+}
+
+function servingCurrencyOrNull(value: unknown): ServingCurrency | null {
+  return value === 'USDT' || value === 'USDC' || value === 'USDx' || value === 'USD' ? value : null
 }
 
 /** Serving `positions` records → legacy PortfolioItem (current holdings).
@@ -168,6 +173,7 @@ export function historyToPositionHistory(rows: Row[]): PositionHistoryEntry[] {
       maxPositionSize: num(r.max_open_interest ?? r.max_position_size ?? r.size ?? r.closed_size),
       closedSize: size,
       pnlUsd: realizedPnl,
+      pnlCurrency: servingCurrencyOrNull(r.currency),
       pnlPct,
       status: str(r.status) || 'closed',
     }

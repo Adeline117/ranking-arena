@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
+import { formatPnL, formatServingPnL, NULL_DISPLAY } from '@/lib/utils/format'
+import type { ServingCurrency } from '@/lib/data/serving/types'
 
 interface PositionHistoryItem {
   symbol: string
@@ -17,6 +19,7 @@ interface PositionHistoryItem {
   maxPositionSize: number
   closedSize: number
   pnlUsd: number
+  pnlCurrency?: ServingCurrency | null
   pnlPct: number
   status: string
 }
@@ -122,7 +125,14 @@ function PositionHistoryCard({
   t: (key: string) => string
 }) {
   const isLong = position.direction === 'long'
+  const hasBoundPnl = position.pnlCurrency !== null && Number.isFinite(position.pnlUsd)
   const isProfit = position.pnlUsd >= 0
+  const pnlDisplay =
+    position.pnlCurrency === null
+      ? NULL_DISPLAY
+      : position.pnlCurrency
+        ? formatServingPnL(position.pnlUsd, position.pnlCurrency)
+        : formatPnL(position.pnlUsd)
 
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '--'
@@ -278,15 +288,15 @@ function PositionHistoryCard({
             size="sm"
             weight="black"
             style={{
-              color: isProfit ? tokens.colors.accent.success : tokens.colors.accent.error,
+              color: hasBoundPnl
+                ? isProfit
+                  ? tokens.colors.accent.success
+                  : tokens.colors.accent.error
+                : tokens.colors.text.tertiary,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
           >
-            {isProfit ? '+' : '-'}$
-            {Math.abs(position.pnlUsd ?? 0).toLocaleString('en-US', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {pnlDisplay}
           </Text>
         </Box>
         {/* 逐图核对: 最大持仓 (Max Open Interest) — raw->>'maxOpenInterest'. */}

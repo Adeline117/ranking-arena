@@ -69,6 +69,7 @@ describe('serving → legacy adapter', () => {
         exit_price: 110,
         size: 10,
         realized_pnl: 100, // notional 100×10=1000 → 10%
+        currency: 'USDC',
         opened_at: '2026-06-01T00:00:00Z',
         closed_at: '2026-06-02T00:00:00Z',
       },
@@ -78,6 +79,7 @@ describe('serving → legacy adapter', () => {
     expect(h.entryPrice).toBe(100)
     expect(h.exitPrice).toBe(110)
     expect(h.pnlPct).toBeCloseTo(10, 5)
+    expect(h.pnlCurrency).toBe('USDC')
     expect(h.openTime).toBe('2026-06-01T00:00:00Z')
   })
 
@@ -87,6 +89,14 @@ describe('serving → legacy adapter', () => {
     ])
     expect(h.pnlPct).toBe(42)
     expect(h.direction).toBe('short')
+  })
+
+  it('marks a history PnL with an invalid or absent unit as unbound', () => {
+    const [h] = historyToPositionHistory([
+      { symbol: 'X', side: 'long', realized_pnl: 3, currency: 'EUR' },
+    ])
+
+    expect(h.pnlCurrency).toBeNull()
   })
 
   it('maps first-screen identity to TraderProfile', () => {
