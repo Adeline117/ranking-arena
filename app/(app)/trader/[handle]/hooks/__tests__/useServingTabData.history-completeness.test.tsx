@@ -279,6 +279,47 @@ describe('useServingTabData history completeness', () => {
     expect(retry90).not.toHaveBeenCalled()
   })
 
+  it('keeps a failed 90D first load unavailable when another window is warm', async () => {
+    const retry7 = jest.fn().mockResolvedValue(undefined)
+    const retry30 = jest.fn().mockResolvedValue(undefined)
+    const retry90 = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderCore as jest.Mock).mockImplementation(({ tf }: { tf: 7 | 30 | 90 }) => {
+      if (tf === 7) return coreResult({ modules: coreModule(7), refetch: retry7 })
+      if (tf === 30) return coreResult({ refetch: retry30 })
+      return coreResult({ isDegraded: true, refetch: retry90 })
+    })
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    expect(view.result.current.isCoreStale).toBe(false)
+    expect(view.result.current.isCoreUnavailable).toBe(true)
+    expect(view.result.current.coreByPeriod['7D']).toMatchObject({
+      hasModule: true,
+      isDegraded: false,
+    })
+    expect(view.result.current.coreByPeriod['90D']).toMatchObject({
+      hasModule: false,
+      isDegraded: true,
+      isPendingUpstream: false,
+    })
+
+    await view.result.current.coreByPeriod['90D'].refetch()
+    expect(retry7).not.toHaveBeenCalled()
+    expect(retry30).not.toHaveBeenCalled()
+    expect(retry90).toHaveBeenCalledTimes(1)
+  })
+
   it('does not treat an all-absent capability as a cold loading state', () => {
     ;(useTraderCore as jest.Mock).mockReturnValue(
       coreResult({ isLoading: true, isPendingUpstream: true })

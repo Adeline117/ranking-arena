@@ -1167,7 +1167,16 @@ export default function TraderProfileClient({
   const selectedServingPeriod = resolveAvailablePeriod(selectedPeriod, servingPeriodAvailability)
   const selectedServingTimeframe =
     selectedServingPeriod === '7D' ? 7 : selectedServingPeriod === '30D' ? 30 : 90
-  const hasSelectedServingCore = servingTab.coreModuleAvailability[selectedServingPeriod]
+  const selectedServingCore = servingTab.coreByPeriod[selectedServingPeriod]
+  const hasSelectedServingCore = selectedServingCore.hasModule
+  const isSelectedCoreStale = selectedServingCore.isDegraded && hasSelectedServingCore
+  const isSelectedCoreUnavailable = selectedServingCore.isDegraded && !hasSelectedServingCore
+  const isSelectedCoreColdLoading =
+    !hasSelectedServingCore &&
+    !isSelectedCoreUnavailable &&
+    (selectedServingCore.isLoading ||
+      selectedServingCore.isPendingUpstream ||
+      (typeof window === 'undefined' && servingTab.isColdCoreLoading))
   const hasAuthorityEligibleFirstScreenSnapshot = Boolean(
     servingViewFirstScreen?.entries.some((entry) =>
       isPeriodAvailable(`${entry.timeframe}D` as Period, servingPeriodAvailability)
@@ -1180,10 +1189,7 @@ export default function TraderProfileClient({
     Boolean(servingViewCapability) &&
     hasAuthorityEligibleFirstScreenSnapshot
   const shouldRenderColdCoreSkeleton =
-    useThreeTab &&
-    !suppressAccountContent &&
-    !hasSelectedServingCore &&
-    (servingTab.isColdCoreLoading || servingTab.loading || servingTab.isCorePendingUpstream)
+    useThreeTab && !suppressAccountContent && !hasSelectedServingCore && isSelectedCoreColdLoading
   // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
   // (bounded) instead of waiting for the 12h rotation, then refetch.
   const onchainEnrichmentState = useOnchainEnrichTrigger({
@@ -1582,11 +1588,11 @@ export default function TraderProfileClient({
             <div id="trader-tab-content">
               {useThreeTab && !suppressAccountContent && (
                 <ServingCoreStatusNotice
-                  isPendingUpstream={servingTab.isCorePendingUpstream}
-                  isStale={servingTab.isCoreStale}
-                  isUnavailable={servingTab.isCoreUnavailable}
-                  isRetrying={servingTab.isCoreRefreshing}
-                  onRetry={servingTab.refetchDegradedCore}
+                  isPendingUpstream={selectedServingCore.isPendingUpstream}
+                  isStale={isSelectedCoreStale}
+                  isUnavailable={isSelectedCoreUnavailable}
+                  isRetrying={selectedServingCore.isRefreshing}
+                  onRetry={selectedServingCore.refetch}
                 />
               )}
               <SwipeableView

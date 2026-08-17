@@ -42,6 +42,19 @@ import {
   readGmxRealizedNetModuleDisclosure,
 } from '@/lib/data/serving/pnl-contract'
 
+export type ServingCorePeriod = '7D' | '30D' | '90D'
+
+/** Status remains scoped to its exact timeframe. A warm 7D module cannot make
+ * a first-load 90D failure look like merely stale retained data. */
+export interface ServingCorePeriodState {
+  hasModule: boolean
+  isLoading: boolean
+  isPendingUpstream: boolean
+  isDegraded: boolean
+  isRefreshing: boolean
+  refetch: () => Promise<unknown>
+}
+
 export interface ServingTabData {
   traderProfile: TraderProfile
   traderPerformance: ExtendedPerformance
@@ -65,12 +78,14 @@ export interface ServingTabData {
   hasCoreModules: boolean
   /** Exact arrival state for each Overview period. Keeps a faster 7D response
    *  from briefly replacing a truthful 90D first-screen snapshot with dashes. */
-  coreModuleAvailability: Record<'7D' | '30D' | '90D', boolean>
+  coreModuleAvailability: Record<ServingCorePeriod, boolean>
+  /** Per-window collection state for the period currently on screen. */
+  coreByPeriod: Record<ServingCorePeriod, ServingCorePeriodState>
   /** At least one timeframe is still collecting a server-side refresh. */
   isCorePendingUpstream: boolean
-  /** A failed refresh affects retained, still-visible core values. */
+  /** At least one failed window still has retained, truthful values. */
   isCoreStale: boolean
-  /** Core collection failed before any truthful module was available. */
+  /** At least one window failed before it produced truthful values. */
   isCoreUnavailable: boolean
   /** A user-initiated retry is refreshing one or more failed core modules. */
   isCoreRefreshing: boolean
@@ -157,20 +172,72 @@ export function useServingTabData(
     core30Enabled ? c30 : null,
     core90Enabled ? c90 : null,
   ].filter((core): core is typeof c7 => core !== null)
+  const coreByPeriod = useMemo<Record<ServingCorePeriod, ServingCorePeriodState>>(
+    () => ({
+      '7D': {
+        hasModule: Boolean(m7),
+        isLoading: core7Enabled && c7.isLoading,
+        isPendingUpstream: core7Enabled && c7.isPendingUpstream,
+        isDegraded: core7Enabled && c7.isDegraded,
+        isRefreshing: core7Enabled && c7.isRefreshing,
+        refetch: core7Enabled ? c7.refetch : () => Promise.resolve(),
+      },
+      '30D': {
+        hasModule: Boolean(m30),
+        isLoading: core30Enabled && c30.isLoading,
+        isPendingUpstream: core30Enabled && c30.isPendingUpstream,
+        isDegraded: core30Enabled && c30.isDegraded,
+        isRefreshing: core30Enabled && c30.isRefreshing,
+        refetch: core30Enabled ? c30.refetch : () => Promise.resolve(),
+      },
+      '90D': {
+        hasModule: Boolean(m90),
+        isLoading: core90Enabled && c90.isLoading,
+        isPendingUpstream: core90Enabled && c90.isPendingUpstream,
+        isDegraded: core90Enabled && c90.isDegraded,
+        isRefreshing: core90Enabled && c90.isRefreshing,
+        refetch: core90Enabled ? c90.refetch : () => Promise.resolve(),
+      },
+    }),
+    [
+      m7,
+      m30,
+      m90,
+      core7Enabled,
+      core30Enabled,
+      core90Enabled,
+      c7.isLoading,
+      c7.isPendingUpstream,
+      c7.isDegraded,
+      c7.isRefreshing,
+      c7.refetch,
+      c30.isLoading,
+      c30.isPendingUpstream,
+      c30.isDegraded,
+      c30.isRefreshing,
+      c30.refetch,
+      c90.isLoading,
+      c90.isPendingUpstream,
+      c90.isDegraded,
+      c90.isRefreshing,
+      c90.refetch,
+    ]
+  )
   const coreModuleAvailability = useMemo(
     () => ({
-      '7D': Boolean(m7),
-      '30D': Boolean(m30),
-      '90D': Boolean(m90),
+      '7D': coreByPeriod['7D'].hasModule,
+      '30D': coreByPeriod['30D'].hasModule,
+      '90D': coreByPeriod['90D'].hasModule,
     }),
-    [m7, m30, m90]
+    [coreByPeriod]
   )
   const hasCoreModules = Object.values(coreModuleAvailability).some(Boolean)
   const isCoreLoading = enabledCoreHooks.some((core) => core.isLoading)
-  const isCoreDegraded = enabledCoreHooks.some((core) => core.isDegraded)
   const isCorePendingUpstream = enabledCoreHooks.some((core) => core.isPendingUpstream)
-  const isCoreStale = isCoreDegraded && hasCoreModules
-  const isCoreUnavailable = isCoreDegraded && !hasCoreModules
+  const isCoreStale = Object.values(coreByPeriod).some((core) => core.isDegraded && core.hasModule)
+  const isCoreUnavailable = Object.values(coreByPeriod).some(
+    (core) => core.isDegraded && !core.hasModule
+  )
   const degradedCoreHooks = enabledCoreHooks.filter((core) => core.isDegraded)
   const isCoreRefreshing = degradedCoreHooks.some((core) => core.isRefreshing)
   // The adapter deliberately returns empty, truthy legacy shapes while no
@@ -310,6 +377,7 @@ export function useServingTabData(
       ],
       hasCoreModules,
       coreModuleAvailability,
+      coreByPeriod,
       isCorePendingUpstream,
       isCoreStale,
       isCoreUnavailable,
@@ -334,6 +402,7 @@ export function useServingTabData(
     capability,
     hasCoreModules,
     coreModuleAvailability,
+    coreByPeriod,
     isCorePendingUpstream,
     isCoreStale,
     isCoreUnavailable,

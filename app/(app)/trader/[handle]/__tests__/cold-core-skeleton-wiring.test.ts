@@ -17,7 +17,12 @@ describe('default trader cold-core skeleton wiring', () => {
     expect(client).toContain(
       'const selectedServingPeriod = resolveAvailablePeriod(selectedPeriod, servingPeriodAvailability)'
     )
-    expect(client).toContain('servingTab.coreModuleAvailability[selectedServingPeriod]')
+    expect(client).toContain(
+      'const selectedServingCore = servingTab.coreByPeriod[selectedServingPeriod]'
+    )
+    expect(client).toContain('const isSelectedCoreUnavailable =')
+    expect(client).toContain('const isSelectedCoreColdLoading =')
+    expect(client).toContain("typeof window === 'undefined' && servingTab.isColdCoreLoading")
     expect(client).toContain('const shouldRenderFirstScreenSnapshot =')
     expect(client).toContain('!hasSelectedServingCore')
     expect(client).toContain('!suppressAccountContent')
@@ -29,6 +34,9 @@ describe('default trader cold-core skeleton wiring', () => {
     expect(client).toContain('periodAvailability={servingPeriodAvailability}')
     expect(client).toContain('const shouldRenderColdCoreSkeleton =')
     expect(client).toContain('<ServingOverviewCoreSkeleton />')
+    expect(client).toContain('isPendingUpstream={selectedServingCore.isPendingUpstream}')
+    expect(client).toContain('isUnavailable={isSelectedCoreUnavailable}')
+    expect(client).toContain('onRetry={selectedServingCore.refetch}')
   })
 
   it('keeps the swipe shell and default overview server-renderable', () => {
