@@ -53,7 +53,8 @@ lib/                    # Core business logic
 
 scripts/                # CLI tools and maintenance
   import/               # Historical import source; named V1 entrypoints are retired
-  backfill-*.ts         # Legacy compatibility tombstones (no V1 direct invocation)
+  backfill-*.ts; archive/backfill-metrics-v2.mjs
+                         # Legacy compatibility tombstones (no V1 direct invocation)
 
 supabase/migrations/    # SQL migration files
 worker/                 # Worker source; this listing is architecture, not runtime state
@@ -76,7 +77,8 @@ public services or use controlled read credentials. During V1, run one only when
 the current task or owner grants an exact read-only evidence request; never treat
 the command names as permission to contact a production service.
 
-The retained legacy `backfill-*.ts` paths are compatibility tombstones: during V1
+The retained legacy `backfill-*.ts` paths and
+`scripts/archive/backfill-metrics-v2.mjs` are compatibility tombstones: during V1
 they report `RETIRED` and exit 2 rather than performing a write. A future backfill
 would need its own reviewed, provenance-bound release plan and explicit owner GO;
 it is intentionally not part of routine diagnostics.

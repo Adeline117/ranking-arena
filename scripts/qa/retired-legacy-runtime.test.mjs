@@ -7,6 +7,7 @@ import test from 'node:test'
 const root = process.cwd()
 const retiredScripts = [
   'arena-status-check.mjs',
+  'archive/backfill-metrics-v2.mjs',
   'backfill-risk-metrics-7d30d.ts',
   'backfill-sharpe-ratio.mjs',
   'backfill-window-24h.ts',
