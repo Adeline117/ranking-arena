@@ -26,26 +26,230 @@ type ValidatedUrl = {
   tlsServername: string | null
 }
 
-// 简单的 HTML 解析函数
+const MAX_TITLE_LENGTH = 512
+const MAX_DESCRIPTION_LENGTH = 2_048
+const MAX_IMAGE_LENGTH = 4_096
+
+const HTML_NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  amp: '&',
+  apos: "'",
+  copy: '©',
+  gt: '>',
+  hellip: '…',
+  ldquo: '“',
+  lsquo: '‘',
+  lt: '<',
+  mdash: '—',
+  nbsp: '\u00a0',
+  ndash: '–',
+  quot: '"',
+  rdquo: '”',
+  reg: '®',
+  rsquo: '’',
+  trade: '™',
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value.replace(
+    /&(?:#(x[0-9a-f]+|[0-9]+)|([a-z][a-z0-9]+));/gi,
+    (entity, numeric, named) => {
+      if (named) return HTML_NAMED_ENTITIES[named.toLowerCase()] ?? entity
+
+      const hexadecimal = numeric[0].toLowerCase() === 'x'
+      const codePoint = Number.parseInt(
+        hexadecimal ? numeric.slice(1) : numeric,
+        hexadecimal ? 16 : 10
+      )
+      // Keep invalid, surrogate, and control entities literal. In particular, never
+      // introduce hidden URL delimiters such as NUL/CR/LF into an image candidate.
+      if (
+        !Number.isSafeInteger(codePoint) ||
+        codePoint <= 0 ||
+        codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+        codePoint < 0x20 ||
+        (codePoint >= 0x7f && codePoint <= 0x9f)
+      ) {
+        return entity
+      }
+      return String.fromCodePoint(codePoint)
+    }
+  )
+}
+
+function boundedMetadataValue(value: string, maxLength: number): string {
+  const decoded = decodeHtmlEntities(value).trim()
+  if (decoded.length <= maxLength) return decoded
+  const truncated = decoded.slice(0, maxLength)
+  // Do not return half of a UTF-16 surrogate pair at the field boundary.
+  return /[\uD800-\uDBFF]$/.test(truncated) ? truncated.slice(0, -1) : truncated
+}
+
+function findTagEnd(html: string, start: number): number {
+  let quote = ''
+  for (let index = start + 1; index < html.length; index++) {
+    const character = html[index]
+    if (quote) {
+      if (character === quote) quote = ''
+    } else if (character === '"' || character === "'") {
+      quote = character
+    } else if (character === '>') {
+      return index
+    }
+  }
+  return -1
+}
+
+function findClosingTag(
+  html: string,
+  lowerHtml: string,
+  tagName: string,
+  start: number
+): { start: number; end: number } | null {
+  const prefix = `</${tagName}`
+  let closeStart = lowerHtml.indexOf(prefix, start)
+  while (closeStart >= 0) {
+    const boundary = html[closeStart + prefix.length]
+    if (boundary && /[\t\n\f\r >]/.test(boundary)) {
+      const closeEnd = findTagEnd(html, closeStart)
+      return closeEnd >= 0 ? { start: closeStart, end: closeEnd } : null
+    }
+    closeStart = lowerHtml.indexOf(prefix, closeStart + prefix.length)
+  }
+  return null
+}
+
+/** Parse attributes from one already-bounded start tag. First duplicate wins. */
+function parseTagAttributes(source: string): Map<string, string> | null {
+  const attributes = new Map<string, string>()
+  let index = 0
+  const isWhitespace = (character: string) => /[\t\n\f\r ]/.test(character)
+
+  while (index < source.length) {
+    while (index < source.length && isWhitespace(source[index])) index++
+    if (index >= source.length || (source[index] === '/' && index === source.length - 1)) break
+
+    const nameStart = index
+    while (index < source.length && !/[\t\n\f\r /=>]/.test(source[index])) index++
+    if (index === nameStart) return null
+    const name = source.slice(nameStart, index).toLowerCase()
+
+    while (index < source.length && isWhitespace(source[index])) index++
+    let value = ''
+    if (source[index] === '=') {
+      index++
+      while (index < source.length && isWhitespace(source[index])) index++
+      if (index >= source.length) return null
+
+      const quote = source[index]
+      if (quote === '"' || quote === "'") {
+        const valueStart = ++index
+        while (index < source.length && source[index] !== quote) index++
+        if (index >= source.length) return null
+        value = source.slice(valueStart, index)
+        index++
+      } else {
+        const valueStart = index
+        while (index < source.length && !/[\t\n\f\r "'`=<>]/.test(source[index])) index++
+        if (index === valueStart) return null
+        value = source.slice(valueStart, index)
+      }
+    }
+
+    if (!attributes.has(name)) attributes.set(name, value)
+  }
+
+  return attributes
+}
+
+/**
+ * Extract a deliberately small metadata subset without executing HTML. Every
+ * attribute parse is bounded to a single quote-aware tag; malformed tags never
+ * borrow attributes from a later tag.
+ */
 function extractMetaTags(html: string) {
-  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-  const ogTitleMatch = html.match(
-    /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i
-  )
-  const ogDescriptionMatch = html.match(
-    /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i
-  )
-  const ogImageMatch = html.match(
-    /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i
-  )
-  const descriptionMatch = html.match(
-    /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i
-  )
+  let documentTitle = ''
+  let fallbackDescription = ''
+  let ogTitle = ''
+  let ogDescription = ''
+  let ogImage = ''
+  const lowerHtml = html.toLowerCase()
+
+  for (let cursor = 0; cursor < html.length; ) {
+    const tagStart = html.indexOf('<', cursor)
+    if (tagStart < 0) break
+    if (html.startsWith('<!--', tagStart)) {
+      const commentEnd = html.indexOf('-->', tagStart + 4)
+      if (commentEnd < 0) break
+      cursor = commentEnd + 3
+      continue
+    }
+    const nameMatch = /^([a-z][a-z0-9:-]*)/i.exec(html.slice(tagStart + 1, tagStart + 32))
+    if (!nameMatch) {
+      cursor = tagStart + 1
+      continue
+    }
+
+    const tagName = nameMatch[1].toLowerCase()
+    const afterName = tagStart + 1 + nameMatch[1].length
+    if (afterName < html.length && !/[\t\n\f\r />]/.test(html[afterName])) {
+      cursor = afterName
+      continue
+    }
+    if (tagName === 'script' || tagName === 'style') {
+      const tagEnd = findTagEnd(html, tagStart)
+      if (tagEnd < 0) break
+      const closingTag = findClosingTag(html, lowerHtml, tagName, tagEnd + 1)
+      if (!closingTag) break
+      cursor = closingTag.end + 1
+      continue
+    }
+    if (tagName !== 'meta' && tagName !== 'title') {
+      const tagEnd = findTagEnd(html, tagStart)
+      if (tagEnd < 0) break
+      cursor = tagEnd + 1
+      continue
+    }
+    const tagEnd = findTagEnd(html, tagStart)
+    if (tagEnd < 0) break
+
+    if (tagName === 'title') {
+      const closingTag = findClosingTag(html, lowerHtml, tagName, tagEnd + 1)
+      if (!closingTag) break
+      if (!documentTitle) {
+        documentTitle = boundedMetadataValue(
+          html.slice(tagEnd + 1, closingTag.start),
+          MAX_TITLE_LENGTH
+        )
+      }
+      cursor = closingTag.end + 1
+      continue
+    }
+
+    const attributes = parseTagAttributes(html.slice(afterName, tagEnd))
+    cursor = tagEnd + 1
+    if (!attributes) continue
+    const content = attributes.get('content')
+    if (content === undefined) continue
+    const key = decodeHtmlEntities(attributes.get('property') ?? attributes.get('name') ?? '')
+      .trim()
+      .toLowerCase()
+
+    if (key === 'og:title' && !ogTitle) {
+      ogTitle = boundedMetadataValue(content, MAX_TITLE_LENGTH)
+    } else if (key === 'og:description' && !ogDescription) {
+      ogDescription = boundedMetadataValue(content, MAX_DESCRIPTION_LENGTH)
+    } else if (key === 'og:image' && !ogImage) {
+      ogImage = boundedMetadataValue(content, MAX_IMAGE_LENGTH)
+    } else if (key === 'description' && !fallbackDescription) {
+      fallbackDescription = boundedMetadataValue(content, MAX_DESCRIPTION_LENGTH)
+    }
+  }
 
   return {
-    title: ogTitleMatch?.[1] || titleMatch?.[1] || '',
-    description: ogDescriptionMatch?.[1] || descriptionMatch?.[1] || '',
-    image: ogImageMatch?.[1] || '',
+    title: ogTitle || documentTitle,
+    description: ogDescription || fallbackDescription,
+    image: ogImage,
   }
 }
 
@@ -310,7 +514,11 @@ export async function GET(request: NextRequest) {
     if (meta.image) {
       try {
         const imageUrl = new URL(meta.image, finalLogicalUrl)
-        meta.image = ['http:', 'https:'].includes(imageUrl.protocol) ? imageUrl.href : ''
+        meta.image =
+          ['http:', 'https:'].includes(imageUrl.protocol) &&
+          imageUrl.href.length <= MAX_IMAGE_LENGTH
+            ? imageUrl.href
+            : ''
       } catch {
         meta.image = ''
       }

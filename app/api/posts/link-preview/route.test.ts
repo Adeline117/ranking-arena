@@ -360,4 +360,169 @@ describe('link preview URL authority', () => {
     expect(mockUndiciFetch).not.toHaveBeenCalled()
     expect(mockAgentOptions).not.toHaveBeenCalled()
   })
+
+  describe('metadata extraction', () => {
+    async function preview(body: string) {
+      mockUndiciFetch.mockResolvedValue(upstreamResponse({ body }))
+      const response = await GET(request('https://preview.example/articles/page') as never)
+      expect(response.status).toBe(200)
+      return response.json()
+    }
+
+    it('accepts content before property or name', async () => {
+      await expect(
+        preview(
+          [
+            '<meta content="Content-first title" property="og:title">',
+            '<meta content="Content-first description" name="description">',
+            '<meta content="/content-first.jpg" property="og:image">',
+          ].join('')
+        )
+      ).resolves.toEqual({
+        title: 'Content-first title',
+        description: 'Content-first description',
+        image: 'https://preview.example/content-first.jpg',
+      })
+    })
+
+    it('handles mixed-case names, whitespace, quotes, and a quoted greater-than sign', async () => {
+      await expect(
+        preview(
+          [
+            '<MeTa\n CoNtEnT = \'A > B\'\tPrOpErTy = "OG:TITLE" >',
+            '<META PROPERTY=og:description CONTENT="First > second">',
+          ].join('')
+        )
+      ).resolves.toEqual({
+        title: 'A > B',
+        description: 'First > second',
+        image: '',
+      })
+    })
+
+    it('supports valid unquoted attribute values', async () => {
+      await expect(
+        preview(
+          [
+            '<meta property=og:title content=Unquoted>',
+            '<meta name=description content=Fallback>',
+            '<meta property=og:image content=/unquoted.png?large>',
+          ].join('')
+        )
+      ).resolves.toEqual({
+        title: 'Unquoted',
+        description: 'Fallback',
+        image: 'https://preview.example/unquoted.png?large',
+      })
+    })
+
+    it('gives Open Graph fields priority even when fallbacks occur first', async () => {
+      await expect(
+        preview(
+          [
+            '<title>Document title</title>',
+            '<meta name="description" content="Document description">',
+            '<meta property="og:title" content="Open Graph title">',
+            '<meta property="og:description" content="Open Graph description">',
+          ].join('')
+        )
+      ).resolves.toEqual({
+        title: 'Open Graph title',
+        description: 'Open Graph description',
+        image: '',
+      })
+    })
+
+    it('decodes common named and safe numeric entities, including image queries', async () => {
+      await expect(
+        preview(
+          [
+            '<meta property="og:title" content="Tom &amp; Jerry &#x2014; &#169;">',
+            '<meta property="og:description" content="One&nbsp;two &hellip; &#128512;">',
+            '<meta property="og:image" content="/cover?one=1&amp;two=&#50;">',
+          ].join('')
+        )
+      ).resolves.toEqual({
+        title: 'Tom & Jerry — ©',
+        description: 'One\u00a0two … 😀',
+        image: 'https://preview.example/cover?one=1&two=2',
+      })
+    })
+
+    it('preserves unknown or unsafe numeric entities literally', async () => {
+      await expect(
+        preview('<meta property="og:title" content="&unknown; &#0; &#xD800; &#x110000;">')
+      ).resolves.toEqual({
+        title: '&unknown; &#0; &#xD800; &#x110000;',
+        description: '',
+        image: '',
+      })
+    })
+
+    it('uses the first duplicate attribute and first non-empty field deterministically', async () => {
+      await expect(
+        preview(
+          [
+            '<meta property="og:title" property="og:description" content="First">',
+            '<meta property="og:title" content="Second">',
+            '<meta property="og:description" content="Description one">',
+            '<meta property="og:description" content="Description two">',
+          ].join('')
+        )
+      ).resolves.toEqual({ title: 'First', description: 'Description one', image: '' })
+    })
+
+    it('does not combine attributes across separate or malformed tags', async () => {
+      await expect(
+        preview(
+          [
+            '<meta property="og:title">',
+            '<meta content="Must not cross">',
+            '<meta property="og:description" content=>',
+            '<title data-label="1 > 0">Safe title</title>',
+          ].join('')
+        )
+      ).resolves.toEqual({ title: 'Safe title', description: '', image: '' })
+    })
+
+    it('ignores meta-looking text inside a title element', async () => {
+      await expect(
+        preview('<title>Text <meta property="og:title" content="Injected"></title>')
+      ).resolves.toEqual({
+        title: 'Text <meta property="og:title" content="Injected">',
+        description: '',
+        image: '',
+      })
+    })
+
+    it('ignores metadata lookalikes in comments, scripts, and other tag attributes', async () => {
+      await expect(
+        preview(
+          [
+            '<!-- <meta property="og:title" content="Comment"> -->',
+            '<script>const fake = \'<meta property="og:title" content="Script">\'</script>',
+            '<div data-fake=\'<meta property="og:title" content="Attribute">\'>',
+            '<title>Real title</title>',
+          ].join('')
+        )
+      ).resolves.toEqual({ title: 'Real title', description: '', image: '' })
+    })
+
+    it('caps decoded output fields and keeps surrogate pairs intact', async () => {
+      const longTitle = `${'t'.repeat(511)}😀tail`
+      const longDescription = `description-${'d'.repeat(3_000)}`
+      const longImage = `/image?value=${'i'.repeat(5_000)}`
+      const result = await preview(
+        [
+          `<meta property="og:title" content="${longTitle}">`,
+          `<meta property="og:description" content="${longDescription}">`,
+          `<meta property="og:image" content="${longImage}">`,
+        ].join('')
+      )
+
+      expect(result.title).toBe('t'.repeat(511))
+      expect(result.description).toHaveLength(2_048)
+      expect(result.image).toBe('')
+    })
+  })
 })
