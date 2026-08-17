@@ -89,13 +89,10 @@ describe('atomic administrator user sanctions', () => {
     expect(banRoute).not.toContain(".from('admin_logs')")
     expect(unbanRoute).not.toContain(".from('admin_logs')")
 
-    const moderateBan = moderateRoute.slice(
-      moderateRoute.indexOf("case 'ban_user':"),
-      moderateRoute.indexOf('default:')
-    )
-    expect(moderateBan).toContain('setAdminUserSanctionAtomic')
-    expect(moderateBan).not.toContain(".from('user_profiles')")
-    expect(moderateBan).not.toContain(".from('admin_logs')")
+    expect(moderateRoute).toContain('ADMIN_MODERATE_ENDPOINT_RETIRED')
+    expect(moderateRoute).not.toContain('setAdminUserSanctionAtomic')
+    expect(moderateRoute).not.toContain(".from('user_profiles')")
+    expect(moderateRoute).not.toContain(".from('admin_logs')")
   })
 
   it('ships executable PostgreSQL 17 rollback and concurrency proofs', () => {
