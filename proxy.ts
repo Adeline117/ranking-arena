@@ -97,6 +97,8 @@ const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
   '/api/v1/cdn-proxy',
   '/api/market/alpha',
   '/api/v1/market/alpha',
+  '/api/market/arbitrage',
+  '/api/v1/market/arbitrage',
   '/api/market/candles',
   '/api/v1/market/candles',
   '/api/market/futures',
