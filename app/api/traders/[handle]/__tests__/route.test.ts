@@ -277,7 +277,12 @@ describe('GET /api/traders/[handle]', () => {
     const pageData = {
       performance: { roi: 42.5 },
       profile: { handle: 'CachedTrader' },
+      equityCurve: { '90D': [{ date: '2026-08-17', roi: 9, pnl: 42 }] },
+      assetBreakdown: { '90D': [{ symbol: 'BTC', weightPct: 100 }] },
+      stats: { trading: { avgProfit: 42 } },
+      portfolio: [{ market: 'BTCUSDT', price: 100, pnl: 42 }],
       positionHistory: [{ symbol: 'BTCUSDT', pnlUsd: 42 }],
+      positionSummary: { totalUnrealizedPnl: 42 },
       historyCompleteness: { state: 'complete' },
     }
     mockResolveTrader.mockResolvedValueOnce({
@@ -294,13 +299,25 @@ describe('GET /api/traders/[handle]', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
+    expect(body.data.equityCurve).toBeUndefined()
+    expect(body.data.assetBreakdown).toBeUndefined()
+    expect(body.data.stats).toBeNull()
+    expect(body.data.portfolio).toEqual([])
     expect(body.data.positionHistory).toEqual([])
+    expect(body.data.positionSummary).toBeNull()
     expect(body.data.historyCompleteness).toEqual({
       state: 'unknown',
       reason: 'history_evidence_not_bound',
     })
     expect(pageData.positionHistory).toHaveLength(1)
     expect(mockGetTraderDetail).toHaveBeenCalledTimes(1)
+    expect(mockGetTraderDetail).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ publicProfileHistoryQuarantine: true })
+    )
+    expect(mockToTraderPageData).toHaveBeenCalledWith(expect.anything(), {
+      publicProfileHistoryQuarantine: true,
+    })
     expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
     expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()

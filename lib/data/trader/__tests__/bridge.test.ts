@@ -246,6 +246,37 @@ describe('集合映射', () => {
     expect(out.positionHistory).toEqual([])
   })
 
+  it('public profile mode removes legacy curves, stats, and price/PnL portfolio values', () => {
+    const d = detail({
+      equityCurve: {
+        '90D': [{ date: '2026-08-17', roi: 9, pnl: 42 }],
+        '30D': [],
+        '7D': [],
+      },
+      stats: stats({ avgProfit: 42 }),
+      portfolio: [{ symbol: 'BTCUSDT', direction: 'long', entryPrice: 100, pnlUsd: 42 }],
+      positionSummary: { totalUnrealizedPnl: 42 },
+    })
+
+    const out = toTraderPageData(d, { publicProfileHistoryQuarantine: true })
+
+    expect(out).toMatchObject({
+      equityCurve: undefined,
+      assetBreakdown: undefined,
+      stats: null,
+      portfolio: [],
+      positionHistory: [],
+      positionSummary: null,
+      historyCompleteness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    })
+    expect(out.performance).toMatchObject({
+      avg_profit: null,
+      avg_loss: null,
+      largest_win: null,
+      largest_loss: null,
+    })
+  })
+
   it('stats 为 null → 输出 stats null(不伪造)', () => {
     expect(toTraderPageData(detail()).stats).toBeNull()
   })

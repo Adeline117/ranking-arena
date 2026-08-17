@@ -78,11 +78,14 @@ export default function TraderProfileView({
 
   const traderProfile = traderData?.profile ?? null
   const traderPerformance = traderData?.performance ?? null
-  const traderStats = traderData?.stats ?? null
-  const traderPortfolio = traderData?.portfolio ?? []
+  // The claimed-profile fallback shares the public legacy payload. Do not let
+  // stale hydration revive unproved curve, price, or PnL fields.
+  const legacyHistoryComplete = traderData?.historyCompleteness?.state === 'complete'
+  const traderStats = legacyHistoryComplete ? (traderData?.stats ?? null) : null
+  const traderPortfolio = legacyHistoryComplete ? (traderData?.portfolio ?? []) : []
   const traderPositionHistory = EMPTY_LEGACY_POSITION_HISTORY
-  const traderEquityCurve = traderData?.equityCurve
-  const traderAssetBreakdown = traderData?.assetBreakdown
+  const traderEquityCurve = legacyHistoryComplete ? traderData?.equityCurve : undefined
+  const traderAssetBreakdown = legacyHistoryComplete ? traderData?.assetBreakdown : undefined
   const _traderFeed = traderData?.feed ?? []
   const _traderSimilar = traderData?.similarTraders ?? []
 

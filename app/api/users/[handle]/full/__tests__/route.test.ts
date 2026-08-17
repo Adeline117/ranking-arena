@@ -105,19 +105,6 @@ function context() {
   return { params: Promise.resolve({ handle: 'alice' }) }
 }
 
-function portfolioQuery(data: unknown[] = []) {
-  const query = {
-    select: jest.fn(),
-    eq: jest.fn(),
-    order: jest.fn(),
-    limit: jest.fn().mockResolvedValue({ data, error: null }),
-  }
-  query.select.mockReturnValue(query)
-  query.eq.mockReturnValue(query)
-  query.order.mockReturnValue(query)
-  return query
-}
-
 function traderSourceQuery(data: unknown[] = []) {
   const query = {
     select: jest.fn(),
@@ -144,16 +131,7 @@ describe('GET /api/users/[handle]/full public ranking authority', () => {
                 avatar_url: 'https://example.test/avatar.png',
               },
             ])
-          : portfolioQuery([
-              {
-                symbol: 'BTCUSDT',
-                direction: 'long',
-                invested_pct: 25,
-                pnl: 999,
-                value: 1000,
-                entry_price: 100000,
-              },
-            ])
+          : traderSourceQuery()
       ),
     })
     mockReadAudience.mockResolvedValue({ status: 'unregistered' })
@@ -184,7 +162,8 @@ describe('GET /api/users/[handle]/full public ranking authority', () => {
       profile: { followers: 12, copiers: 7 },
       performance: { rank: 1, roi_90d: 12.5, pnl: 5000, arena_score: 88 },
       similarTraders: [{ id: 'similar-1', rank: 2, roi_90d: 9 }],
-      portfolio: [{ market: 'BTCUSDT', pnl: null, value: null, price: null }],
+      portfolio: [],
+      _errors: { portfolio: 'legacy_metric_publication_unavailable' },
     })
     expect(secondBody).toMatchObject({
       ranking_visibility: 'unknown',
@@ -227,7 +206,7 @@ describe('GET /api/users/[handle]/full public ranking authority', () => {
                   avatar_url: null,
                 },
               ])
-            : portfolioQuery()
+            : traderSourceQuery()
       ),
     })
     mockReadAudience.mockResolvedValue({
@@ -271,7 +250,7 @@ describe('GET /api/users/[handle]/full public ranking authority', () => {
                 avatar_url: null,
               },
             ])
-          : portfolioQuery()
+          : traderSourceQuery()
       ),
     })
 
@@ -294,5 +273,7 @@ describe('GET /api/users/[handle]/full public ranking authority', () => {
     expect(source).not.toContain('getTraderStats(')
     expect(source).not.toContain('getTraderPortfolio(')
     expect(source).not.toContain('getTraderByHandle(')
+    expect(source).not.toContain("from('trader_portfolio')")
+    expect(source).toContain('legacy_metric_publication_unavailable')
   })
 })

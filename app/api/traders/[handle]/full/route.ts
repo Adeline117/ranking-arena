@@ -78,6 +78,7 @@ async function fetchTraderFull(handle: string) {
   const detail = await getTraderDetail(supabase, {
     platform: resolved.platform,
     traderKey: resolved.traderKey,
+    publicProfileHistoryQuarantine: true,
   })
 
   if (!detail) {
@@ -85,7 +86,7 @@ async function fetchTraderFull(handle: string) {
   }
 
   // 3. Convert to legacy response format via toTraderPageData bridge
-  const pageData = toTraderPageData(detail)
+  const pageData = toTraderPageData(detail, { publicProfileHistoryQuarantine: true })
 
   // 4. Return in the original response shape
   return {

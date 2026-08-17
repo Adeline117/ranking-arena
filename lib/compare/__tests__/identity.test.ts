@@ -26,8 +26,8 @@ describe('compare composite identity', () => {
     expect(buildCompareUrl(accounts)).toBe(
       '/compare?ids=wallet%20one%2Cwallet%3Atwo&platforms=bybit%2Cbinance_futures'
     )
-    expect(buildCompareApiUrl(accounts, { includeEquity: true })).toBe(
-      '/api/compare?ids=wallet%20one%2Cwallet%3Atwo&platforms=bybit%2Cbinance_futures&include_equity=1'
+    expect(buildCompareApiUrl(accounts)).toBe(
+      '/api/compare?ids=wallet%20one%2Cwallet%3Atwo&platforms=bybit%2Cbinance_futures'
     )
   })
 

@@ -16,6 +16,10 @@ import {
   isProfileViewerCurrent,
   type ProfileViewerSnapshot,
 } from './profile-viewer-scope'
+import {
+  PUBLIC_PROFILE_HISTORY_QUERY_EPOCH,
+  quarantineLegacyPositionHistory,
+} from '@/lib/data/trader/history-quarantine'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from '../components/types'
 
@@ -115,14 +119,16 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     error: traderError,
     isLoading: traderLoading,
   } = useQuery<TraderPageData>({
-    queryKey: ['user-trader-data', serverProfile?.traderHandle],
+    queryKey: ['user-trader-data', PUBLIC_PROFILE_HISTORY_QUERY_EPOCH, serverProfile?.traderHandle],
     queryFn: () => traderFetcher(traderUrl),
     enabled: isTrader,
     refetchOnWindowFocus: false,
     refetchInterval: 0,
     staleTime: STALE_STANDARD,
     retry: 2,
-    initialData: serverTraderData ?? undefined,
+    initialData: serverTraderData
+      ? (quarantineLegacyPositionHistory(serverTraderData) as TraderPageData)
+      : undefined,
   })
 
   // Tabs

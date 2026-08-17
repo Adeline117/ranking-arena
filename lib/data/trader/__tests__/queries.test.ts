@@ -609,6 +609,31 @@ describe('getTraderDetail public profile cohort', () => {
     expect(result?.periods['90D']).toMatchObject({ rank: 1, roi: 12.5, arenaScore: 90 })
   })
 
+  it('does not read retained history, price, PnL, or raw-stat tables for a public profile', async () => {
+    const supabase = traderDetailSupabase([publicRankRow()])
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+      publicProfileHistoryQuarantine: true,
+    })
+
+    for (const relation of [
+      'trader_equity_curve',
+      'trader_asset_breakdown',
+      'trader_stats_detail',
+      'trader_portfolio',
+      'trader_position_summary',
+    ]) {
+      expect(supabase.from).not.toHaveBeenCalledWith(relation)
+    }
+    expect(result?.equityCurve).toEqual({ '7D': [], '30D': [], '90D': [] })
+    expect(result?.assetBreakdown).toEqual({ '7D': [], '30D': [], '90D': [] })
+    expect(result?.stats).toBeNull()
+    expect(result?.portfolio).toEqual([])
+    expect(result?.positionSummary).toBeNull()
+  })
+
   it('keeps a known profile but nulls ranking fields when its public row is unavailable', async () => {
     const supabase = traderDetailSupabase([])
 

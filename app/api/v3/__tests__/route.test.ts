@@ -366,10 +366,15 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(body.meta.total).toBeUndefined()
   })
 
-  it('quarantines legacy position history in trader responses', async () => {
+  it('quarantines every legacy historical profile surface in trader responses', async () => {
     const cachedDetail = {
       trader: { platform: 'bybit', traderKey: 'cached-trader' },
+      equityCurve: { '90D': [{ date: '2026-08-17', roi: 9, pnl: 42 }] },
+      assetBreakdown: { '90D': [{ symbol: 'BTC', weightPct: 100 }] },
+      stats: { avgProfit: 42 },
+      portfolio: [{ entryPrice: 100, pnlUsd: 42 }],
       positionHistory: [{ symbol: 'BTCUSDT', pnlUsd: 42 }],
+      positionSummary: { totalUnrealizedPnl: 42 },
       historyCompleteness: { state: 'complete' },
     }
     mockGetTraderDetail.mockResolvedValueOnce(cachedDetail)
@@ -380,11 +385,56 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(body.data.equityCurve).toBeUndefined()
+    expect(body.data.assetBreakdown).toBeUndefined()
+    expect(body.data.stats).toBeNull()
+    expect(body.data.portfolio).toEqual([])
     expect(body.data.positionHistory).toEqual([])
+    expect(body.data.positionSummary).toBeNull()
     expect(body.data.historyCompleteness).toEqual({
       state: 'unknown',
       reason: 'history_evidence_not_bound',
     })
     expect(cachedDetail.positionHistory).toHaveLength(1)
+    expect(mockGetTraderDetail).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ publicProfileHistoryQuarantine: true })
+    )
+  })
+
+  it('keeps legacy daily history unavailable instead of querying raw snapshots or exporting a blank CSV', async () => {
+    const response = await GET(
+      request('/api/v3?endpoint=history&platform=binance_futures&trader_key=alice&days=30')
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe(PRIVATE_NO_STORE)
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(body.data).toEqual([])
+    expect(body.meta).toEqual(
+      expect.objectContaining({
+        endpoint: 'history',
+        total: 0,
+        historical_metric_publication: {
+          state: 'unknown',
+          reason: 'historical_metric_publication_unavailable',
+        },
+      })
+    )
+
+    const csvResponse = await GET(
+      request(
+        '/api/v3?endpoint=history&platform=binance_futures&trader_key=alice&days=30&format=csv'
+      )
+    )
+    const csvBody = await csvResponse.json()
+
+    expect(csvResponse.headers.get('content-type')).not.toBe('text/csv; charset=utf-8')
+    expect(csvBody.meta.historical_metric_publication).toEqual({
+      state: 'unknown',
+      reason: 'historical_metric_publication_unavailable',
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 })
