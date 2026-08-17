@@ -194,7 +194,7 @@ describe('useCopierAggregate subject identity', () => {
     queryClient.clear()
   })
 
-  it('hides a successful aggregate while offline revalidation is paused', async () => {
+  it('hides a successful aggregate and exposes retryable unavailability while offline revalidation is paused', async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
     })
@@ -217,13 +217,46 @@ describe('useCopierAggregate subject identity', () => {
     })
 
     await waitFor(() => expect(view.result.current.aggregate).toBeNull())
-    expect(view.result.current.isLoading).toBe(true)
+    expect(view.result.current.isLoading).toBe(false)
 
     await act(async () => {
       onlineManager.setOnline(true)
       await Promise.resolve()
     })
     await waitFor(() => expect(view.result.current.aggregate?.copierCount).toBe(12))
+
+    view.unmount()
+    queryClient.clear()
+  })
+
+  it('does not leave a pending receipt permanently collecting while its revalidation is paused', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    ;(fetcher as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { cacheState: 'pending' as const },
+    })
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useCopierAggregate({ source: 'gmx', exchangeTraderId: 'trader-a', enabled: true }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+    await act(async () => {
+      onlineManager.setOnline(false)
+      void view.result.current.refetch()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(false))
+    expect(view.result.current.aggregate).toBeNull()
+    expect(view.result.current.isLoading).toBe(false)
 
     view.unmount()
     queryClient.clear()

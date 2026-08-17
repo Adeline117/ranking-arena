@@ -360,6 +360,10 @@ export function useCopierAggregate(opts: {
   // window expires, a retained `{ cacheState: 'pending' }` must not leave a
   // B2C user under a permanent skeleton with no recovery action.
   const pendingWindowActive =
+    shouldFetch &&
+    query.isFetchedAfterMount &&
+    query.fetchStatus === 'idle' &&
+    !query.isFetching &&
     !query.isError &&
     isPendingCopierResponse(data) &&
     pendingPoll.current.subjectKey === subjectKey &&
@@ -387,8 +391,12 @@ export function useCopierAggregate(opts: {
   return {
     aggregate: authorityIsCurrent ? aggregate : null,
     isPendingUpstream: pendingWindowActive,
+    // A paused React Query request has no way to make forward progress until
+    // connectivity returns. Treat it as retryable unavailability instead of
+    // retaining a permanent loading or "collecting" skeleton for B2C users.
     isLoading:
       shouldFetch &&
+      query.fetchStatus !== 'paused' &&
       (!query.isFetchedAfterMount || query.fetchStatus !== 'idle' || query.isFetching),
     error: query.error,
     refetch,

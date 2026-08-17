@@ -119,11 +119,13 @@ function ModulePendingState({
   isCopier?: boolean
 }) {
   const { t } = useLanguage()
+  const messageKey = state === 'loading' ? 'loading' : 'moduleDataPending'
   return (
     <div
       role="status"
       aria-live="polite"
       aria-atomic="true"
+      aria-label={t(messageKey)}
       data-module-state={state}
       data-copier-state={isCopier ? state : undefined}
     >
@@ -133,7 +135,7 @@ function ModulePendingState({
         color="tertiary"
         style={{ display: 'block', marginTop: tokens.spacing[2], textAlign: 'center' }}
       >
-        {t('moduleDataPending')}
+        {t(messageKey)}
       </Text>
     </div>
   )

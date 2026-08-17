@@ -254,7 +254,7 @@ describe('ServingRecordsSection selection scope', () => {
       />
     )
 
-    const status = screen.getByRole('status', { name: 'loading' })
+    const status = screen.getByRole('status', { name: 'moduleDataPending' })
     const skeleton = status.querySelector('.serving-module-skeleton')
     expect(skeleton).toBeInTheDocument()
     expect(skeleton).not.toHaveAttribute('style', expect.stringContaining('animation'))
