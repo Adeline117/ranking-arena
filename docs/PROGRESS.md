@@ -241,6 +241,15 @@ infra topology、任何 deployed host、PM2、credentials 或 scheduler 的状�
 此 source-only boundary 不改变 `app/api/trader/onchain-enrich` 的既有 hold、worker/on-chain source
 logic、页面或证据链；也不停止、检查或证明任何已部署 probe、host、scheduler 或 provider 的状态。
 
+## V1 archive enrich probe source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/test-enrich-fix.sh` 这一历史 compatibility path。它无论传入何种参数均只向
+stderr 输出 `[RETIRED]` 并以 exit `2` 结束，stdout 保持为空。
+
+这是 source-only boundary：只描述该 checked-in script，不是可恢复的工作入口，也不改变、检查或证明任何
+API route、on-chain pipeline、worker、deploy flow 或产品行为；这些均不在范围内，也不能从此推断仓库外或
+已部署状态。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
