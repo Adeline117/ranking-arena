@@ -79,6 +79,7 @@ export function ImageUploader({
         accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
         multiple
         onChange={onImageUpload}
+        disabled={uploading}
         style={{ display: 'none' }}
         id="image-upload"
       />
@@ -236,6 +237,18 @@ export function ImageUploader({
         {images.length < 9 && (
           <label
             htmlFor="image-upload"
+            role="button"
+            tabIndex={uploading ? -1 : 0}
+            aria-disabled={uploading}
+            aria-label={uploading ? t('uploadingImage') : t('addImage')}
+            onClick={(event) => {
+              if (uploading) event.preventDefault()
+            }}
+            onKeyDown={(event) => {
+              if (uploading || (event.key !== 'Enter' && event.key !== ' ')) return
+              event.preventDefault()
+              fileInputRef.current?.click()
+            }}
             style={{
               width: 100,
               height: 100,
@@ -306,6 +319,7 @@ export function VideoUploader({
         type="file"
         accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska"
         onChange={onVideoUpload}
+        disabled={videoUploading}
         style={{ display: 'none' }}
         id="video-upload"
       />
@@ -371,15 +385,16 @@ export function VideoUploader({
             </Box>
             {/* Delete button */}
             <button
-              aria-label="Close"
+              type="button"
+              aria-label={t('deleteVideo')}
               onClick={onRemoveVideo}
               title={t('deleteVideo')}
               style={{
                 position: 'absolute',
                 top: 4,
                 right: 4,
-                width: 24,
-                height: 24,
+                width: tokens.touchTarget.min,
+                height: tokens.touchTarget.min,
                 border: 'none',
                 background: 'var(--color-accent-error)',
                 color: tokens.colors.white,
@@ -400,6 +415,22 @@ export function VideoUploader({
         {videos.length < 1 && (
           <label
             htmlFor="video-upload"
+            role="button"
+            tabIndex={videoUploading ? -1 : 0}
+            aria-disabled={videoUploading}
+            aria-label={
+              videoUploading
+                ? t('uploadingProgress').replace('{percent}', String(videoUploadProgress))
+                : t('addVideo')
+            }
+            onClick={(event) => {
+              if (videoUploading) event.preventDefault()
+            }}
+            onKeyDown={(event) => {
+              if (videoUploading || (event.key !== 'Enter' && event.key !== ' ')) return
+              event.preventDefault()
+              videoInputRef.current?.click()
+            }}
             style={{
               width: 200,
               height: 120,
@@ -418,7 +449,7 @@ export function VideoUploader({
             {videoUploading ? (
               <Box style={{ textAlign: 'center' }}>
                 <Text size="xs" color="secondary">
-                  {t('uploadingImage')} {videoUploadProgress}%
+                  {t('uploadingProgress').replace('{percent}', String(videoUploadProgress))}
                 </Text>
                 {/* Progress bar */}
                 <Box

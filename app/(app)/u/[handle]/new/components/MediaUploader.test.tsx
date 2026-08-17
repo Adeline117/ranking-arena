@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { ImageUploader } from './MediaUploader'
+import { ImageUploader, VideoUploader } from './MediaUploader'
 
 const image = { url: 'https://cdn.example/image.png', fileName: 'image.png' }
 
@@ -94,5 +94,153 @@ describe('profile post image preview actions', () => {
       'title',
       '光标位置再次插入图片'
     )
+  })
+})
+
+describe('profile post media upload controls', () => {
+  const labels: Record<string, string> = {
+    addImage: 'Add image',
+    addVideo: 'Add video',
+    deleteVideo: 'Delete video',
+    imageInsertGuideTitle: 'Guide',
+    imageInsertStep1: 'Step one',
+    imageInsertStep2: 'Step two',
+    imageInsertStep2Suffix: 'suffix',
+    imageInsertStep3: 'Step three',
+    imageSupport: 'Image support',
+    imagesOptional: 'Images',
+    uploadingImage: 'Uploading image',
+    uploadingProgress: 'Uploading {percent}%',
+    videoFormatSupport: 'Video support',
+    videoOptional: 'Video',
+  }
+  const t = (key: string): string => labels[key] ?? key
+
+  it('makes a busy image picker inert at the real input and keyboard entry point', () => {
+    const inputRef = createRef<HTMLInputElement>()
+    render(
+      <ImageUploader
+        images={[]}
+        uploading
+        fileInputRef={inputRef}
+        onImageUpload={jest.fn()}
+        onRemoveImage={jest.fn()}
+        onInsertImage={jest.fn()}
+        isImageInContent={jest.fn(() => false)}
+        onDragStart={jest.fn()}
+        onDragOver={jest.fn()}
+        onDragEnd={jest.fn()}
+        draggedImageIndex={null}
+        t={t}
+      />
+    )
+
+    expect(inputRef.current).toBeDisabled()
+    const picker = screen.getByRole('button', { name: 'Uploading image' })
+    expect(picker).toHaveAttribute('aria-disabled', 'true')
+    expect(picker).toHaveAttribute('tabindex', '-1')
+    const inputClick = jest.spyOn(inputRef.current as HTMLInputElement, 'click')
+    fireEvent.keyDown(picker, { key: 'Enter' })
+    expect(inputClick).not.toHaveBeenCalled()
+  })
+
+  it('opens an idle image picker from the keyboard', () => {
+    const inputRef = createRef<HTMLInputElement>()
+    render(
+      <ImageUploader
+        images={[]}
+        uploading={false}
+        fileInputRef={inputRef}
+        onImageUpload={jest.fn()}
+        onRemoveImage={jest.fn()}
+        onInsertImage={jest.fn()}
+        isImageInContent={jest.fn(() => false)}
+        onDragStart={jest.fn()}
+        onDragOver={jest.fn()}
+        onDragEnd={jest.fn()}
+        draggedImageIndex={null}
+        t={t}
+      />
+    )
+
+    expect(inputRef.current).not.toBeDisabled()
+    const picker = screen.getByRole('button', { name: 'Add image' })
+    const inputClick = jest.spyOn(inputRef.current as HTMLInputElement, 'click')
+    fireEvent.keyDown(picker, { key: ' ' })
+    expect(inputClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('makes a busy video picker inert at the real input and keyboard entry point', () => {
+    const inputRef = createRef<HTMLInputElement>()
+    render(
+      <VideoUploader
+        videos={[]}
+        videoUploading
+        videoUploadProgress={25}
+        videoInputRef={inputRef}
+        onVideoUpload={jest.fn()}
+        onRemoveVideo={jest.fn()}
+        t={t}
+      />
+    )
+
+    expect(inputRef.current).toBeDisabled()
+    const picker = screen.getByRole('button', { name: 'Uploading 25%' })
+    expect(picker).toHaveAttribute('aria-disabled', 'true')
+    expect(picker).toHaveAttribute('tabindex', '-1')
+    const inputClick = jest.spyOn(inputRef.current as HTMLInputElement, 'click')
+    fireEvent.keyDown(picker, { key: 'Enter' })
+    expect(inputClick).not.toHaveBeenCalled()
+  })
+
+  it('opens an idle video picker from the keyboard', () => {
+    const inputRef = createRef<HTMLInputElement>()
+    render(
+      <VideoUploader
+        videos={[]}
+        videoUploading={false}
+        videoUploadProgress={0}
+        videoInputRef={inputRef}
+        onVideoUpload={jest.fn()}
+        onRemoveVideo={jest.fn()}
+        t={t}
+      />
+    )
+
+    expect(inputRef.current).not.toBeDisabled()
+    const picker = screen.getByRole('button', { name: 'Add video' })
+    const inputClick = jest.spyOn(inputRef.current as HTMLInputElement, 'click')
+    fireEvent.keyDown(picker, { key: 'Enter' })
+    expect(inputClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps video deletion localized and touch-sized', () => {
+    const onRemoveVideo = jest.fn()
+    render(
+      <VideoUploader
+        videos={[
+          {
+            url: 'https://cdn.example/video.mp4',
+            fileName: 'video.mp4',
+            fileSize: 1_024,
+          },
+        ]}
+        videoUploading={false}
+        videoUploadProgress={0}
+        videoInputRef={createRef<HTMLInputElement>()}
+        onVideoUpload={jest.fn()}
+        onRemoveVideo={onRemoveVideo}
+        t={t}
+      />
+    )
+
+    const remove = screen.getByRole('button', { name: 'Delete video' })
+    expect(remove).toHaveAttribute('type', 'button')
+    expect(remove).toHaveStyle({
+      width: `${tokens.touchTarget.min}px`,
+      height: `${tokens.touchTarget.min}px`,
+    })
+    fireEvent.click(remove)
+    expect(onRemoveVideo).toHaveBeenCalledTimes(1)
   })
 })

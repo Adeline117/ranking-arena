@@ -3,6 +3,10 @@ import { resolve } from 'node:path'
 
 const root = process.cwd()
 const profileCreatePage = readFileSync(resolve(root, 'app/(app)/u/[handle]/new/page.tsx'), 'utf8')
+const profileMediaUploader = readFileSync(
+  resolve(root, 'app/(app)/u/[handle]/new/components/MediaUploader.tsx'),
+  'utf8'
+)
 const groupCreatePage = readFileSync(resolve(root, 'app/(app)/groups/[id]/new/page.tsx'), 'utf8')
 const groupImageUploader = readFileSync(
   resolve(root, 'app/(app)/groups/[id]/new/components/ImageUploader.tsx'),
@@ -115,6 +119,52 @@ describe('post creation media upload authentication', () => {
         'setContent((prev) => removeMarkdownImageReferences(prev, target.url).content)'
       )
     }
+  })
+
+  it('serializes profile media upload lanes before asynchronous work', () => {
+    const imageUpload = functionBody(
+      profileCreatePage,
+      'const handleImageUpload = async',
+      '// Video upload handler'
+    )
+    const videoUpload = functionBody(
+      profileCreatePage,
+      'const handleVideoUpload = async',
+      '// Remove video'
+    )
+
+    for (const [body, lane] of [
+      [imageUpload, 'imageUploadInFlightRef'],
+      [videoUpload, 'videoUploadInFlightRef'],
+    ] as const) {
+      const guard = body.indexOf(`if (${lane}.current)`)
+      const acquire = body.indexOf(`${lane}.current = true`)
+      const asyncWork = body.indexOf('tokenRefreshCoordinator.getValidToken()')
+      const release = body.indexOf(`${lane}.current = false`)
+
+      expect(guard).toBeGreaterThanOrEqual(0)
+      expect(acquire).toBeGreaterThan(guard)
+      expect(asyncWork).toBeGreaterThan(acquire)
+      expect(release).toBeGreaterThan(asyncWork)
+      expect(body.slice(release - 80, release)).toContain('finally')
+    }
+  })
+
+  it('keeps profile publish/navigation and actual inputs closed during uploads', () => {
+    const submit = functionBody(profileCreatePage, 'const handleSubmit = async', '  return (')
+    const authority = submit.indexOf('bindPostCreateOperation(')
+
+    expect(submit).toContain('imageUploadInFlightRef.current')
+    expect(submit).toContain('videoUploadInFlightRef.current')
+    expect(authority).toBeGreaterThan(submit.indexOf('imageUploadInFlightRef.current'))
+    expect(profileCreatePage).toContain('disabled={loading || uploading || videoUploading}')
+    expect(profileCreatePage).toContain(
+      'disabled={loading || uploading || videoUploading || !title.trim()}'
+    )
+    expect(profileMediaUploader).toContain('disabled={uploading}')
+    expect(profileMediaUploader).toContain('aria-disabled={uploading}')
+    expect(profileMediaUploader).toContain('disabled={videoUploading}')
+    expect(profileMediaUploader).toContain('aria-disabled={videoUploading}')
   })
 
   it('serializes group media upload lanes before asynchronous token or network work', () => {

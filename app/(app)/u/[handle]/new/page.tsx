@@ -66,6 +66,7 @@ export default function NewPostPage() {
   const { showToast } = useToast()
   const { t } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageUploadInFlightRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const submitRef = useRef(false)
   const publishOperationRef = useRef<BoundPostCreateOperation | null>(null)
@@ -95,6 +96,7 @@ export default function NewPostPage() {
   const [isSensitive, setIsSensitive] = useState(false)
   const [contentWarning, setContentWarning] = useState('')
   const videoInputRef = useRef<HTMLInputElement>(null)
+  const videoUploadInFlightRef = useRef(false)
   const [videos, setVideos] = useState<UploadedVideo[]>([])
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
@@ -251,75 +253,84 @@ export default function NewPostPage() {
       return
     }
 
+    if (imageUploadInFlightRef.current) {
+      e.currentTarget.value = ''
+      return
+    }
+
+    imageUploadInFlightRef.current = true
     setUploading(true)
-    const newImages: UploadedImage[] = []
+    try {
+      const newImages: UploadedImage[] = []
 
-    for (const file of Array.from(files)) {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-      if (!allowedTypes.includes(file.type)) {
-        showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
-        continue
-      }
-
-      if (file.size > 5 * 1024 * 1024) {
-        showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
-        continue
-      }
-
-      try {
-        // Compress image before upload (resize to 1920px, 85% quality)
-        const compressed = await compressImage(file)
-        const formData = new FormData()
-        formData.append('file', compressed)
-        formData.append('purpose', 'post_image')
-        formData.append('userId', userId)
-
-        // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
-        const uploadToken = await tokenRefreshCoordinator.getValidToken()
-        const response = await fetch('/api/posts/upload-image', {
-          method: 'POST',
-          headers: {
-            ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
-            ...getCsrfHeaders(),
-          },
-          body: formData,
-        })
-
-        const responseBody: unknown = await response.json()
-
-        if (!response.ok) {
-          showToast(readPostMediaUploadError(responseBody) ?? t('uploadFailed'), 'error')
+      for (const file of Array.from(files)) {
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        if (!allowedTypes.includes(file.type)) {
+          showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
           continue
         }
 
-        const acknowledgement = readPostImageUploadAcknowledgement(
-          responseBody,
-          userId,
-          process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-        )
-        if (!acknowledgement) {
+        if (file.size > 5 * 1024 * 1024) {
+          showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
+          continue
+        }
+
+        try {
+          // Compress image before upload (resize to 1920px, 85% quality)
+          const compressed = await compressImage(file)
+          const formData = new FormData()
+          formData.append('file', compressed)
+          formData.append('purpose', 'post_image')
+          formData.append('userId', userId)
+
+          // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+          const uploadToken = await tokenRefreshCoordinator.getValidToken()
+          const response = await fetch('/api/posts/upload-image', {
+            method: 'POST',
+            headers: {
+              ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
+              ...getCsrfHeaders(),
+            },
+            body: formData,
+          })
+
+          const responseBody: unknown = await response.json()
+
+          if (!response.ok) {
+            showToast(readPostMediaUploadError(responseBody) ?? t('uploadFailed'), 'error')
+            continue
+          }
+
+          const acknowledgement = readPostImageUploadAcknowledgement(
+            responseBody,
+            userId,
+            process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+          )
+          if (!acknowledgement) {
+            showToast(t('uploadFailed'), 'error')
+            continue
+          }
+
+          newImages.push({
+            url: acknowledgement.url,
+            fileName: acknowledgement.fileName,
+          })
+        } catch (error) {
+          logger.error('Upload error:', error)
           showToast(t('uploadFailed'), 'error')
-          continue
         }
-
-        newImages.push({
-          url: acknowledgement.url,
-          fileName: acknowledgement.fileName,
-        })
-      } catch (error) {
-        logger.error('Upload error:', error)
-        showToast(t('uploadFailed'), 'error')
       }
-    }
 
-    if (newImages.length > 0) {
-      setImages((prev) => [...prev, ...newImages])
-      showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
-    }
-
-    setUploading(false)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      if (newImages.length > 0) {
+        setImages((prev) => [...prev, ...newImages])
+        showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
+      }
+    } finally {
+      imageUploadInFlightRef.current = false
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
@@ -358,6 +369,12 @@ export default function NewPostPage() {
       return
     }
 
+    if (videoUploadInFlightRef.current) {
+      e.currentTarget.value = ''
+      return
+    }
+
+    videoUploadInFlightRef.current = true
     setVideoUploading(true)
     setVideoUploadProgress(0)
 
@@ -455,6 +472,7 @@ export default function NewPostPage() {
       logger.error('Video upload error:', error)
       showToast(t('videoUploadFailed'), 'error')
     } finally {
+      videoUploadInFlightRef.current = false
       setVideoUploading(false)
       setVideoUploadProgress(0)
       if (videoInputRef.current) {
@@ -554,7 +572,16 @@ export default function NewPostPage() {
   }
 
   const handleSubmit = async () => {
-    if (submitRef.current || loading) return
+    if (
+      submitRef.current ||
+      loading ||
+      imageUploadInFlightRef.current ||
+      videoUploadInFlightRef.current ||
+      uploading ||
+      videoUploading
+    ) {
+      return
+    }
 
     if (!title.trim()) {
       showToast(t('pleaseEnterTitle'), 'warning')
@@ -1058,14 +1085,19 @@ export default function NewPostPage() {
                 {t('draftSaved')} {draftSavedAt}
               </Text>
             )}
-            <Button variant="ghost" size="md" onClick={() => router.back()} disabled={loading}>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => router.back()}
+              disabled={loading || uploading || videoUploading}
+            >
               {t('cancel')}
             </Button>
             <Button
               variant="primary"
               size="md"
               onClick={handleSubmit}
-              disabled={loading || !title.trim()}
+              disabled={loading || uploading || videoUploading || !title.trim()}
               loading={loading}
             >
               {loading ? t('publishing') : t('publish')}
