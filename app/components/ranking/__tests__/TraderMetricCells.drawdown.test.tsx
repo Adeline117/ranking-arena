@@ -35,6 +35,27 @@ function renderCells(maxDrawdown: number | null, estimated = false) {
 }
 
 describe('TraderMetricCells drawdown display', () => {
+  it('renders an unknown ROI as a dash with no zero-value direction signal', () => {
+    const unknown = { ...trader(10), roi: null }
+    const { container } = render(
+      <div>
+        <TraderMetricCells
+          trader={unknown}
+          rank={1}
+          language="en"
+          getPnLTooltipFn={() => ''}
+          t={(key) => key}
+        />
+      </div>
+    )
+    const cell = container.querySelector('.roi-cell')
+
+    expect(cell).toHaveTextContent('—')
+    expect(cell).not.toHaveTextContent('▲')
+    expect(cell).not.toHaveTextContent('▼')
+    expect(cell?.querySelector('[title="ROI unknown"]')).not.toBeNull()
+  })
+
   it.each([
     [0, '0.0%'],
     [0.01, '< 0.1%'],
@@ -63,4 +84,32 @@ describe('TraderMetricCells drawdown display', () => {
     expect(cell!.querySelector('[title="estimatedFromRoi"]')).not.toBeNull()
     expect(cell).not.toHaveTextContent('▼')
   })
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'renders corrupt copier and trade counts as unknown for %p',
+    (count) => {
+      const corrupted = {
+        ...trader(10),
+        followers: count,
+        copiers: count,
+        trades_count: count,
+      }
+      const { container } = render(
+        <div>
+          <TraderMetricCells
+            trader={corrupted}
+            rank={4}
+            language="en"
+            getPnLTooltipFn={() => ''}
+            t={(key) => key}
+          />
+        </div>
+      )
+
+      expect(container.querySelector('.col-followers')).toHaveTextContent('—')
+      expect(container.querySelector('.col-trades')).toHaveTextContent('—')
+      expect(container).not.toHaveTextContent('NaN')
+      expect(container).not.toHaveTextContent('Infinity')
+    }
+  )
 })

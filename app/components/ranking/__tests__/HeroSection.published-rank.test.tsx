@@ -4,8 +4,10 @@ import type { Trader } from '../RankingTableTypes'
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }))
 
@@ -50,5 +52,21 @@ describe('HeroSection persisted rank authority', () => {
     ])
     expect(screen.queryByText('unpublished')).not.toBeInTheDocument()
     expect(screen.queryByText('rank-four')).not.toBeInTheDocument()
+  })
+
+  it('renders unknown ROI as a neutral dash with an explicit unknown accessible name', () => {
+    render(
+      <HeroSection
+        traders={[
+          { ...trader('unknown-roi', 1), roi: null },
+          trader('rank-two', 2),
+          trader('rank-three', 3),
+        ]}
+      />
+    )
+
+    const link = screen.getByRole('link', { name: /unknown-roi, ROI unknown/i })
+    expect(link).toHaveTextContent('—')
+    expect(link).not.toHaveAccessibleName(expect.stringContaining('ROI +0.00%'))
   })
 })
