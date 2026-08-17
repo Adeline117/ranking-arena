@@ -59,6 +59,17 @@ type LogoutOperation = {
   viewer: SettingsViewerSnapshot
 }
 
+type CropImageReadOperation = {
+  kind: 'avatar' | 'cover'
+  reader: FileReader
+}
+
+function cancelCropImageRead(operationRef: { current: CropImageReadOperation | null }) {
+  const operation = operationRef.current
+  operationRef.current = null
+  if (operation?.reader.readyState === FileReader.LOADING) operation.reader.abort()
+}
+
 const ACCOUNT_DELETION_ACK_FIELDS = [
   'auth_invalidation_pending',
   'billing_settlement_pending',
@@ -199,6 +210,9 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   const [showAvatarCropper, setShowAvatarCropper] = useState(false)
   const [showCoverCropper, setShowCoverCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+  const cropImageReadOperationRef = useRef<CropImageReadOperation | null>(null)
+
+  useEffect(() => () => cancelCropImageRead(cropImageReadOperationRef), [])
 
   // Initial values for tracking changes
   const initialValuesRef = useRef<{
@@ -537,6 +551,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
   // ===== Data loading functions =====
   const resetViewerState = useCallback((authPending: boolean) => {
+    cancelCropImageRead(cropImageReadOperationRef)
     if (handleCheckTimeoutRef.current) clearTimeout(handleCheckTimeoutRef.current)
     handleCheckGenerationRef.current += 1
     profileLoadGenerationRef.current += 1
@@ -615,7 +630,12 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
     setHandleAvailable(null)
     setCheckingHandle(false)
-    setTouchedFields({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
+    setTouchedFields({
+      handle: false,
+      newPassword: false,
+      confirmPassword: false,
+      newEmail: false,
+    })
     setProfileReady(false)
     setSaving(false)
     setLoading(authPending)
@@ -756,25 +776,64 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   ])
 
   // ===== Image handlers =====
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const beginCropImageRead = (
+    kind: CropImageReadOperation['kind'],
+    file: File,
+    maxSize: number
+  ) => {
     const scope = captureViewer()
     if (!scope || !stateBelongsToViewer(scope)) return
     const profileGeneration = profileLoadGenerationRef.current
-    const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToast(t('imageSizeExceed').replace('{size}', '5'), 'error')
+
+    cancelCropImageRead(cropImageReadOperationRef)
+    setShowAvatarCropper(false)
+    setShowCoverCropper(false)
+    setCropImageSrc(null)
+
+    if (file.size > maxSize) {
+      showToast(
+        t('imageSizeExceed').replace('{size}', String(Math.round(maxSize / 1024 / 1024))),
+        'error'
+      )
+      return
+    }
+
+    const reader = new FileReader()
+    const operation: CropImageReadOperation = { kind, reader }
+    cropImageReadOperationRef.current = operation
+    reader.onload = () => {
+      if (
+        cropImageReadOperationRef.current !== operation ||
+        !stateBelongsToViewer(scope, profileGeneration)
+      ) {
         return
       }
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        if (!stateBelongsToViewer(scope, profileGeneration)) return
-        setCropImageSrc(reader.result as string)
-        setShowAvatarCropper(true)
+      cropImageReadOperationRef.current = null
+      if (typeof reader.result !== 'string') {
+        showToast(t('cropFailed'), 'error')
+        return
       }
-      reader.readAsDataURL(file)
+      setCropImageSrc(reader.result)
+      setShowAvatarCropper(kind === 'avatar')
+      setShowCoverCropper(kind === 'cover')
     }
+    reader.onerror = () => {
+      if (
+        cropImageReadOperationRef.current !== operation ||
+        !stateBelongsToViewer(scope, profileGeneration)
+      ) {
+        return
+      }
+      cropImageReadOperationRef.current = null
+      showToast(t('cropFailed'), 'error')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
     e.target.value = ''
+    if (file) beginCropImageRead('avatar', file, 5 * 1024 * 1024)
   }
 
   const handleAvatarCropComplete = (croppedBlob: Blob) => {
@@ -793,24 +852,9 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
   }
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const scope = captureViewer()
-    if (!scope || !stateBelongsToViewer(scope)) return
-    const profileGeneration = profileLoadGenerationRef.current
     const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        showToast(t('imageSizeExceed').replace('{size}', '10'), 'error')
-        return
-      }
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        if (!stateBelongsToViewer(scope, profileGeneration)) return
-        setCropImageSrc(reader.result as string)
-        setShowCoverCropper(true)
-      }
-      reader.readAsDataURL(file)
-    }
     e.target.value = ''
+    if (file) beginCropImageRead('cover', file, 10 * 1024 * 1024)
   }
 
   const handleCoverCropComplete = (croppedBlob: Blob) => {

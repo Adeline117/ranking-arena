@@ -300,6 +300,113 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.initialValuesRef.current?.handle).toBe('bravo')
   })
 
+  it('lets only the latest avatar or cover file read open a cropper', async () => {
+    const originalFileReader = global.FileReader
+    const readers: MockFileReader[] = []
+
+    class MockFileReader {
+      static readonly EMPTY = 0
+      static readonly LOADING = 1
+      static readonly DONE = 2
+      readyState = MockFileReader.EMPTY
+      result: string | ArrayBuffer | null = null
+      error: DOMException | null = null
+      onabort: FileReader['onabort'] = null
+      onerror: FileReader['onerror'] = null
+      onload: FileReader['onload'] = null
+      onloadend: FileReader['onloadend'] = null
+      onloadstart: FileReader['onloadstart'] = null
+      onprogress: FileReader['onprogress'] = null
+      abort = jest.fn(() => {
+        this.readyState = MockFileReader.DONE
+      })
+      readAsDataURL = jest.fn(() => {
+        this.readyState = MockFileReader.LOADING
+        readers.push(this)
+      })
+    }
+
+    Object.defineProperty(global, 'FileReader', {
+      configurable: true,
+      value: MockFileReader,
+    })
+
+    try {
+      mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+      mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+      const scope = synchronizeViewerScope(true, 'user-a')
+      const hook = renderHook(() =>
+        useSettingsHandlers({
+          auth: authFor('user-a', scope.sessionGeneration),
+          showToast,
+          showConfirm,
+          t,
+        })
+      )
+      await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+      const avatarInput = {
+        target: {
+          files: [new File(['avatar'], 'avatar.png', { type: 'image/png' })],
+          value: 'avatar.png',
+        },
+      } as unknown as React.ChangeEvent<HTMLInputElement>
+      act(() => hook.result.current.handleAvatarChange(avatarInput))
+      expect(readers).toHaveLength(1)
+      const avatarReader = readers[0]
+      const staleAvatarLoad = avatarReader.onload
+
+      const coverInput = {
+        target: {
+          files: [new File(['cover'], 'cover.png', { type: 'image/png' })],
+          value: 'cover.png',
+        },
+      } as unknown as React.ChangeEvent<HTMLInputElement>
+      act(() => hook.result.current.handleCoverChange(coverInput))
+      expect(readers).toHaveLength(2)
+      expect(avatarReader.abort).toHaveBeenCalledTimes(1)
+
+      const coverReader = readers[1]
+      act(() => {
+        coverReader.result = 'data:image/png;base64,Y292ZXI='
+        coverReader.onload?.call(
+          coverReader as unknown as FileReader,
+          {} as ProgressEvent<FileReader>
+        )
+      })
+      expect(hook.result.current.cropImageSrc).toBe('data:image/png;base64,Y292ZXI=')
+      expect(hook.result.current.showAvatarCropper).toBe(false)
+      expect(hook.result.current.showCoverCropper).toBe(true)
+
+      act(() => {
+        avatarReader.result = 'data:image/png;base64,YXZhdGFy'
+        staleAvatarLoad?.call(
+          avatarReader as unknown as FileReader,
+          {} as ProgressEvent<FileReader>
+        )
+      })
+      expect(hook.result.current.cropImageSrc).toBe('data:image/png;base64,Y292ZXI=')
+      expect(hook.result.current.showAvatarCropper).toBe(false)
+      expect(hook.result.current.showCoverCropper).toBe(true)
+
+      const pendingInput = {
+        target: {
+          files: [new File(['pending'], 'pending.png', { type: 'image/png' })],
+          value: 'pending.png',
+        },
+      } as unknown as React.ChangeEvent<HTMLInputElement>
+      act(() => hook.result.current.handleAvatarChange(pendingInput))
+      const pendingReader = readers[2]
+      hook.unmount()
+      expect(pendingReader.abort).toHaveBeenCalledTimes(1)
+    } finally {
+      Object.defineProperty(global, 'FileReader', {
+        configurable: true,
+        value: originalFileReader,
+      })
+    }
+  })
+
   it('exposes a retryable failure instead of writable defaults when the sensitive row is missing', async () => {
     mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
     mockSensitiveMaybeSingle
