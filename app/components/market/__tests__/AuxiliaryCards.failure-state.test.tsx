@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { apiFetch } from '@/lib/utils/api-fetch'
 import ArbitrageOpportunities from '../ArbitrageOpportunities'
+import DefiOverview from '../DefiOverview'
 import FearGreedGauge from '../FearGreedGauge'
 import SectorPerformance from '../SectorPerformance'
 
@@ -10,6 +11,7 @@ jest.mock('@/lib/utils/api-fetch', () => ({
 
 const mockTranslations: Record<string, string> = {
   arbitrageOpportunities: 'Arbitrage',
+  defiOverview: 'DeFi Overview',
   fearGreedTitle: 'Fear & Greed',
   sectorPerformance: 'Sector Performance',
   dataUnavailable: 'Unavailable',
@@ -45,6 +47,17 @@ describe('auxiliary market card state contracts', () => {
     const view = render(<FearGreedGauge />)
 
     expect(screen.getByText('Fear & Greed')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
+    expect(mockedApiFetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
+  })
+
+  it('renders a local unavailable DeFi card without requesting data', () => {
+    const view = render(<DefiOverview />)
+
+    expect(screen.getByText('DeFi Overview')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
     expect(mockedApiFetch).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()

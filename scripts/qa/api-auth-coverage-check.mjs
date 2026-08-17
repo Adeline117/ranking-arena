@@ -61,8 +61,9 @@ const PUBLIC_API_ROUTES = new Set([
   'market/sparklines',
   // SectorPerformance renders a local unavailable state and makes no endpoint call.
   'market/sectors',
-  'market/coin/[id]',
+  // DefiOverview renders a local unavailable state and makes no endpoint call.
   'market/defi',
+  'market/coin/[id]',
   'market/exchanges',
   'market/ohlc/[id]',
   'market/overview',
