@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import dynamic from 'next/dynamic'
 import { logger } from '@/lib/logger'
@@ -59,23 +59,41 @@ export default function SocialLogin({
   onWalletSuccess,
   t,
 }: SocialLoginProps) {
-  const [passkeyLoading, setPasskeyLoading] = useState(false)
+  const [pendingOperation, setPendingOperation] = useState<'oauth' | 'passkey' | null>(null)
   const [showOtherOptions, setShowOtherOptions] = useState(false)
+  const operationRef = useRef<{ id: number; kind: 'oauth' | 'passkey' } | null>(null)
+  const nextOperationIdRef = useRef(0)
+
+  const beginOperation = (kind: 'oauth' | 'passkey') => {
+    if (operationRef.current) return null
+    const operation = { id: ++nextOperationIdRef.current, kind }
+    operationRef.current = operation
+    setPendingOperation(kind)
+    return operation
+  }
+
+  const finishOperation = (operation: { id: number; kind: 'oauth' | 'passkey' }) => {
+    if (operationRef.current !== operation) return
+    operationRef.current = null
+    setPendingOperation(null)
+  }
 
   // Passwordless passkey (WebAuthn) sign-in. On success we call setSession,
   // which fires onAuthStateChange in LoginPageClient and triggers the redirect.
   const handlePasskeySignIn = async () => {
-    if (passkeyLoading) return
+    const operation = beginOperation('passkey')
+    if (!operation) return
     const authBoundary = getCurrentAuthOperation()
+    const operationIsCurrent = () =>
+      operationRef.current === operation && isSocialAttemptCurrent(authBoundary)
     const reportCurrentError = (message: string) => {
-      if (isSocialAttemptCurrent(authBoundary)) onError(message)
+      if (operationIsCurrent()) onError(message)
     }
     onError('')
-    setPasskeyLoading(true)
     try {
       const { startAuthentication, browserSupportsWebAuthn } =
         await import('@simplewebauthn/browser')
-      if (!isSocialAttemptCurrent(authBoundary)) return
+      if (!operationIsCurrent()) return
       if (!browserSupportsWebAuthn()) {
         reportCurrentError(t('passkeyNotSupported'))
         return
@@ -86,18 +104,18 @@ export default function SocialLogin({
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       })
-      if (!isSocialAttemptCurrent(authBoundary)) return
+      if (!operationIsCurrent()) return
       if (!optRes.ok) {
         reportCurrentError(t('passkeyError'))
         return
       }
       const { optionsJSON, challengeKey } = await optRes.json()
-      if (!isSocialAttemptCurrent(authBoundary)) return
+      if (!operationIsCurrent()) return
 
       let assertion
       try {
         assertion = await startAuthentication({ optionsJSON })
-        if (!isSocialAttemptCurrent(authBoundary)) return
+        if (!operationIsCurrent()) return
       } catch (err) {
         // User cancelled the native prompt or no credential available.
         const name = (err as Error)?.name
@@ -114,16 +132,16 @@ export default function SocialLogin({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assertion, challengeKey }),
       })
-      if (!isSocialAttemptCurrent(authBoundary)) return
+      if (!operationIsCurrent()) return
       const verifyData = await verifyRes.json().catch(() => ({}))
-      if (!isSocialAttemptCurrent(authBoundary)) return
+      if (!operationIsCurrent()) return
       if (!verifyRes.ok || !verifyData?.session) {
         reportCurrentError(verifyData?.error || t('passkeyNoCredential'))
         return
       }
 
       const expectedUserId = jwtSubject(verifyData.session.access_token)
-      if (!isSocialAttemptCurrent(authBoundary)) return
+      if (!operationIsCurrent()) return
       const established = expectedUserId
         ? await tokenRefreshCoordinator.establishSession(verifyData.session, expectedUserId)
         : null
@@ -137,47 +155,67 @@ export default function SocialLogin({
       logger.warn('[Passkey] sign-in error:', err)
       reportCurrentError(t('passkeyError'))
     } finally {
-      setPasskeyLoading(false)
+      finishOperation(operation)
     }
   }
 
   const getOAuthHandler =
     (provider: 'google' | 'twitter' | 'discord', providerLabel: string) => async () => {
+      const operation = beginOperation('oauth')
+      if (!operation) return
       const authBoundary = getCurrentAuthOperation()
+      const operationIsCurrent = () =>
+        operationRef.current === operation && isSocialAttemptCurrent(authBoundary)
+      let redirectStarted = false
       onError('')
-      const returnUrl =
-        safeInternalReturnPath(searchParams.get('returnUrl') || searchParams.get('redirect')) || ''
-      const addAccountParam = isAddAccount ? 'addAccount=true' : ''
-      const params = [
-        returnUrl ? `returnUrl=${encodeURIComponent(returnUrl)}` : '',
-        addAccountParam,
-      ]
-        .filter(Boolean)
-        .join('&')
-      const callbackUrl = params
-        ? `${window.location.origin}/auth/callback?${params}`
-        : `${window.location.origin}/auth/callback`
-      const ua = navigator.userAgent || ''
-      const isInAppBrowser =
-        /Telegram|TelegramBot|FBAN|FBAV|Instagram|Line\/|WeChat|MicroMessenger/i.test(ua)
-      if (isInAppBrowser) {
-        const oauthUrl = `${window.location.origin}/login${returnUrl ? '?returnUrl=' + encodeURIComponent(returnUrl) : ''}`
-        try {
-          await navigator.clipboard.writeText(oauthUrl)
-        } catch {
-          /* clipboard may not be available */
+      try {
+        const returnUrl =
+          safeInternalReturnPath(searchParams.get('returnUrl') || searchParams.get('redirect')) ||
+          ''
+        const addAccountParam = isAddAccount ? 'addAccount=true' : ''
+        const params = [
+          returnUrl ? `returnUrl=${encodeURIComponent(returnUrl)}` : '',
+          addAccountParam,
+        ]
+          .filter(Boolean)
+          .join('&')
+        const callbackUrl = params
+          ? `${window.location.origin}/auth/callback?${params}`
+          : `${window.location.origin}/auth/callback`
+        const ua = navigator.userAgent || ''
+        const isInAppBrowser =
+          /Telegram|TelegramBot|FBAN|FBAV|Instagram|Line\/|WeChat|MicroMessenger/i.test(ua)
+        if (isInAppBrowser) {
+          const oauthUrl = `${window.location.origin}/login${returnUrl ? '?returnUrl=' + encodeURIComponent(returnUrl) : ''}`
+          try {
+            await navigator.clipboard.writeText(oauthUrl)
+          } catch {
+            /* clipboard may not be available */
+          }
+          if (!operationIsCurrent()) return
+          onError(t('socialLoginOpenInBrowser').replace('{provider}', providerLabel))
+          window.open(oauthUrl, '_system')
+          return
         }
-        if (!isSocialAttemptCurrent(authBoundary)) return
-        onError(t('socialLoginOpenInBrowser').replace('{provider}', providerLabel))
-        window.open(oauthUrl, '_system')
-        return
+        const { error: oauthError } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: { redirectTo: callbackUrl },
+        })
+        if (!operationIsCurrent()) return
+        if (oauthError) {
+          onError(oauthError.message)
+        } else {
+          redirectStarted = true
+        }
+      } catch {
+        if (operationIsCurrent()) onError(t('loginAuthFailed'))
+      } finally {
+        if (!redirectStarted) finishOperation(operation)
       }
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo: callbackUrl },
-      })
-      if (oauthError && isSocialAttemptCurrent(authBoundary)) onError(oauthError.message)
     }
+
+  const socialBusy = pendingOperation !== null
+  const passkeyLoading = pendingOperation === 'passkey'
 
   // Rendered ABOVE the email form as the primary auth path — Google + wallet
   // convert best for a crypto audience. Email/password sits below an "or" divider.
@@ -186,6 +224,7 @@ export default function SocialLogin({
       {/* Google - primary social option, slightly larger */}
       <button
         onClick={getOAuthHandler('google', 'Google')}
+        disabled={socialBusy}
         className="login-button"
         style={{
           width: '100%',
@@ -196,7 +235,8 @@ export default function SocialLogin({
           color: 'var(--color-text-secondary)',
           fontWeight: 600,
           fontSize: 13,
-          cursor: 'pointer',
+          cursor: socialBusy ? 'not-allowed' : 'pointer',
+          opacity: socialBusy ? 0.6 : 1,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -226,7 +266,10 @@ export default function SocialLogin({
 
       <button
         type="button"
-        onClick={() => setShowOtherOptions((show) => !show)}
+        onClick={() => {
+          if (!operationRef.current) setShowOtherOptions((show) => !show)
+        }}
+        disabled={socialBusy}
         aria-expanded={showOtherOptions}
         className="login-button"
         style={{
@@ -238,7 +281,7 @@ export default function SocialLogin({
           color: 'var(--color-text-tertiary)',
           fontWeight: 600,
           fontSize: 13,
-          cursor: 'pointer',
+          cursor: socialBusy ? 'not-allowed' : 'pointer',
         }}
       >
         {showOtherOptions ? t('loginHideOtherOptions') : t('loginOtherOptions')}
@@ -257,6 +300,7 @@ export default function SocialLogin({
           {process.env.NEXT_PUBLIC_ENABLE_X_LOGIN === 'true' && (
             <button
               onClick={getOAuthHandler('twitter', 'X')}
+              disabled={socialBusy}
               className="login-button"
               style={{
                 flex: 1,
@@ -267,7 +311,7 @@ export default function SocialLogin({
                 color: 'var(--color-text-secondary)',
                 fontWeight: 600,
                 fontSize: 13,
-                cursor: 'pointer',
+                cursor: socialBusy ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -283,6 +327,7 @@ export default function SocialLogin({
 
           <button
             onClick={getOAuthHandler('discord', 'Discord')}
+            disabled={socialBusy}
             className="login-button"
             style={{
               flex: 1,
@@ -293,7 +338,7 @@ export default function SocialLogin({
               color: 'var(--color-text-secondary)',
               fontWeight: 600,
               fontSize: 13,
-              cursor: 'pointer',
+              cursor: socialBusy ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -323,7 +368,7 @@ export default function SocialLogin({
       {showOtherOptions && (
         <button
           onClick={handlePasskeySignIn}
-          disabled={passkeyLoading}
+          disabled={socialBusy}
           className="login-button"
           style={{
             width: '100%',
@@ -334,8 +379,8 @@ export default function SocialLogin({
             color: 'var(--color-text-secondary)',
             fontWeight: 600,
             fontSize: 13,
-            cursor: passkeyLoading ? 'default' : 'pointer',
-            opacity: passkeyLoading ? 0.6 : 1,
+            cursor: socialBusy ? 'default' : 'pointer',
+            opacity: socialBusy ? 0.6 : 1,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -360,7 +405,7 @@ export default function SocialLogin({
         </button>
       )}
 
-      {showOtherOptions && <WalletLogin onSuccess={onWalletSuccess} t={t} />}
+      {showOtherOptions && <WalletLogin onSuccess={onWalletSuccess} t={t} disabled={socialBusy} />}
     </div>
   )
 }
@@ -368,9 +413,11 @@ export default function SocialLogin({
 export function WalletLogin({
   onSuccess,
   t: _t,
+  disabled = false,
 }: {
   onSuccess: (result: { handle?: string | null }) => void
   t: (key: string) => string
+  disabled?: boolean
 }) {
   return (
     <div style={{ marginBottom: 16 }}>
@@ -378,6 +425,7 @@ export function WalletLogin({
         <OneClickWalletButton
           fullWidth
           size="md"
+          disabled={disabled}
           onSuccess={(result) => {
             onSuccess(result)
           }}
