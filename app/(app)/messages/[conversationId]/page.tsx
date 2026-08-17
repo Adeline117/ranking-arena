@@ -183,7 +183,7 @@ function ViewerScopedConversationPage({ params }: { params: Promise<{ conversati
   // Send handler
   const handleSend = async () => {
     const hasContent = newMessage.trim() || fileHook.pendingAttachment
-    if (!hasContent || sending) return
+    if (!hasContent || sending || fileHook.uploading) return
     setSending(true)
     const content = newMessage.trim()
     setNewMessage('')

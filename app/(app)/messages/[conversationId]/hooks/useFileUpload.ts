@@ -74,6 +74,7 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    if (operationRef.current) return
     setIsDragging(true)
   }, [])
 
@@ -98,12 +99,13 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
       ) {
         return null
       }
+      if (operationRef.current) return null
+
       const operation: UploadOperation = {
         controller: new AbortController(),
         conversationId,
         viewer,
       }
-      operationRef.current?.controller.abort()
       operationRef.current = operation
       setUploading(true)
       try {
@@ -173,6 +175,7 @@ export function useFileUpload({ userId, accessToken, conversationId }: UseFileUp
     async (e: React.DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
+      if (operationRef.current) return
       const file = e.dataTransfer.files?.[0]
       if (file) await uploadFile(file)
     },

@@ -74,12 +74,13 @@ export default function MessageInput({
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (!file || uploading) return
     await onFileUpload(file)
   }
 
   const handlePaste = async (e: React.ClipboardEvent) => {
+    if (uploading) return
     const items = e.clipboardData?.items
     if (!items) return
     for (const item of Array.from(items)) {
@@ -96,6 +97,7 @@ export default function MessageInput({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      if (uploading) return
       onSend()
     }
   }
@@ -163,11 +165,13 @@ export default function MessageInput({
             </Text>
           </Box>
           <button
+            type="button"
             onClick={onCancelReply}
-            aria-label="Cancel reply"
+            aria-label={`${t('cancel')}: ${t('reply')}`}
+            title={`${t('cancel')}: ${t('reply')}`}
             style={{
-              width: 28,
-              height: 28,
+              width: tokens.touchTarget.min,
+              height: tokens.touchTarget.min,
               borderRadius: '50%',
               border: 'none',
               background: 'var(--color-accent-error-15)',
@@ -292,11 +296,13 @@ export default function MessageInput({
             </Text>
           </Box>
           <button
+            type="button"
             onClick={() => setPendingAttachment(null)}
-            aria-label="Remove attachment"
+            aria-label={`${t('remove')}: ${pendingAttachment.originalName}`}
+            title={t('remove')}
             style={{
-              width: 28,
-              height: 28,
+              width: tokens.touchTarget.min,
+              height: tokens.touchTarget.min,
               borderRadius: '50%',
               border: 'none',
               background: 'var(--color-accent-error-15)',
@@ -375,16 +381,19 @@ export default function MessageInput({
           type="file"
           accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
           onChange={handleFileSelect}
+          disabled={uploading}
           style={{ display: 'none' }}
         />
 
         {/* File upload button */}
         <button
+          type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
+          aria-label={t('sendMediaFile')}
           style={{
-            width: 36,
-            height: 36,
+            width: tokens.touchTarget.min,
+            height: tokens.touchTarget.min,
             borderRadius: '50%',
             border: 'none',
             background: 'transparent',
@@ -478,10 +487,12 @@ export default function MessageInput({
         {/* Sticker button */}
         <div style={{ position: 'relative' }}>
           <button
+            type="button"
+            aria-label={t('stickersButton')}
             onClick={() => setShowStickerPicker(!showStickerPicker)}
             style={{
-              width: 36,
-              height: 36,
+              width: tokens.touchTarget.min,
+              height: tokens.touchTarget.min,
               borderRadius: '50%',
               border: 'none',
               background: 'transparent',
@@ -524,13 +535,18 @@ export default function MessageInput({
 
         {/* Send button */}
         <button
+          type="button"
+          aria-label={t('send')}
           onClick={onSend}
           disabled={
-            (!newMessage.trim() && !pendingAttachment) || sending || newMessage.length > 2000
+            (!newMessage.trim() && !pendingAttachment) ||
+            sending ||
+            uploading ||
+            newMessage.length > 2000
           }
           style={{
-            width: 42,
-            height: 42,
+            width: tokens.touchTarget.min,
+            height: tokens.touchTarget.min,
             borderRadius: '50%',
             border: 'none',
             background:
@@ -542,7 +558,10 @@ export default function MessageInput({
                 ? 'var(--color-on-accent)'
                 : tokens.colors.text.tertiary,
             cursor:
-              (newMessage.trim() || pendingAttachment) && !sending && newMessage.length <= 2000
+              (newMessage.trim() || pendingAttachment) &&
+              !sending &&
+              !uploading &&
+              newMessage.length <= 2000
                 ? 'pointer'
                 : 'default',
             display: 'flex',
@@ -550,14 +569,19 @@ export default function MessageInput({
             justifyContent: 'center',
             transition: `all ${tokens.transition.fast}`,
             flexShrink: 0,
-            opacity: sending ? 0.6 : 1,
+            opacity: sending || uploading ? 0.6 : 1,
             boxShadow:
               (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000
                 ? tokens.shadow.glow
                 : 'none',
           }}
           onMouseEnter={(e) => {
-            if ((newMessage.trim() || pendingAttachment) && newMessage.length <= 2000) {
+            if (
+              (newMessage.trim() || pendingAttachment) &&
+              !sending &&
+              !uploading &&
+              newMessage.length <= 2000
+            ) {
               e.currentTarget.style.transform = 'scale(1.08)'
               e.currentTarget.style.background = tokens.gradient.primaryHover
               e.currentTarget.style.boxShadow = tokens.shadow.glowLg
@@ -565,7 +589,12 @@ export default function MessageInput({
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'scale(1)'
-            if ((newMessage.trim() || pendingAttachment) && newMessage.length <= 2000) {
+            if (
+              (newMessage.trim() || pendingAttachment) &&
+              !sending &&
+              !uploading &&
+              newMessage.length <= 2000
+            ) {
               e.currentTarget.style.background = tokens.gradient.primary
               e.currentTarget.style.boxShadow = tokens.shadow.glow
             }

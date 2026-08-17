@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { DragEvent } from 'react'
+import type { MediaAttachment } from '../../components/types'
 
 const mockShowToast = jest.fn()
 const mockGetCsrfHeaders = jest.fn(() => ({ 'x-csrf-token': 'csrf-token' }))
@@ -290,5 +291,45 @@ describe('useFileUpload viewer scope', () => {
       fileSize: file.size,
     })
     expect(result.current.pendingAttachment).toBeNull()
+  })
+
+  it('keeps a same-conversation upload single-flight without aborting the first request', async () => {
+    const firstFile = new File(['first'], 'first.png', { type: 'image/png' })
+    const secondFile = new File(['second'], 'second.png', { type: 'image/png' })
+    const upload = deferred<Response>()
+    const fetchMock = jest.fn().mockReturnValue(upload.promise)
+    globalThis.fetch = fetchMock as typeof fetch
+
+    const { result } = renderHook(() =>
+      useFileUpload({
+        accessToken: 'access-token-a',
+        conversationId: CONVERSATION_A,
+        userId: VIEWER_A,
+      })
+    )
+
+    let firstRequest!: Promise<MediaAttachment | null>
+    act(() => {
+      firstRequest = result.current.uploadFile(firstFile)
+    })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const firstSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit).signal as AbortSignal
+
+    let secondResult: MediaAttachment | null = null
+    await act(async () => {
+      secondResult = await result.current.uploadFile(secondFile)
+    })
+
+    expect(secondResult).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(firstSignal.aborted).toBe(false)
+    expect(result.current.uploading).toBe(true)
+
+    await act(async () => {
+      upload.resolve(jsonResponse(uploadAcknowledgement(CONVERSATION_A, firstFile, 'image')))
+      await firstRequest
+    })
+    expect(result.current.pendingAttachment?.originalName).toBe(firstFile.name)
+    expect(result.current.uploading).toBe(false)
   })
 })
