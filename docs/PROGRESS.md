@@ -62,6 +62,18 @@ monitoring readers（包括 enrichment-completeness）、`lib/cron/auto-cleanup-
 检查、改变或证明 deployed database、cron 或任何外部状态；下方历史诊断、排名或 pipeline 记录不能作为
 当前运行或数据状态的证据。未来诊断或修复工作须由 owner 在独立 ADR-023 计划中重新定义并保全单独证据。
 
+## V1 homepage regression archive CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/check-homepage-regression.mjs` 这一 legacy homepage diagnostic
+compatibility path。它无论传入何种参数，均只向 stderr 输出
+`[RETIRED] scripts/archive/check-homepage-regression.mjs`、stdout 保持为空，并以 exit `2` 结束。
+
+这是单一文件的 source-only boundary：它不退休、评估、改变、检查或证明 `app/page.tsx`、`HomePage`、
+`HomePageLoader`、SSR ranking surface、homepage Jest/E2E、真正的 Lighthouse CI、`/api/health`、
+`/api/health/pipeline` 或当前 workflows。它同样不停止、检查、改变或证明 deployment、browser 或任何
+external state；下方历史 homepage、测试或性能记录不能作为当前运行或外部状态的证据。未来任何检查、CI
+或修复工作须由 owner 在独立 ADR-023 计划中重新定义并保全单独证据。
+
 ## V1 ranking authority cache-purge source containment（2026-08-17）
 
 本轮只封存 `scripts/maintenance/purge-ranking-authority-caches.sh` 这一 legacy compatibility path。

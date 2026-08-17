@@ -22,3 +22,7 @@ exits `2`; it is not a `pipeline_logs` diagnostic or recovery route.
 separately retired service-role archive diagnostics. Each writes its matching fixed
 `[RETIRED]` notice only to stderr, leaves stdout empty, and exits `2`; this limited status
 covers only those four files.
+
+`scripts/archive/check-homepage-regression.mjs` is separately retired during V1 NO-GO. It
+writes `[RETIRED] scripts/archive/check-homepage-regression.mjs` only to stderr, leaves
+stdout empty, and exits `2`; this limited status covers that file only.
