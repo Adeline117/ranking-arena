@@ -51,6 +51,7 @@ import {
   type GroupPostDraftData,
   type GroupPostDraftScope,
 } from '@/lib/posts/post-draft-storage'
+import { removeMarkdownVideoMarkers } from '@/lib/posts/markdown-images'
 
 export default function NewGroupPostPage(): React.ReactElement {
   if (!features.social) redirect('/')
@@ -586,7 +587,7 @@ export default function NewGroupPostPage(): React.ReactElement {
 
   const removeVideo = useCallback(() => {
     setVideos([])
-    setContent((prev) => prev.replace(/\n?\[(?:视频|video)\]\([^)]+\)\n?/g, ''))
+    setContent((prev) => removeMarkdownVideoMarkers(prev).content)
     showToast(t('videoRemoved'), 'info')
   }, [showToast, t])
 

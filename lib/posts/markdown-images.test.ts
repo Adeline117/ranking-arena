@@ -5,6 +5,7 @@ import {
   findRawContentUrlTokens,
   moveMarkdownImage,
   removeMarkdownImage,
+  removeMarkdownVideoMarkers,
 } from './markdown-images'
 
 describe('post Markdown image controls', () => {
@@ -112,5 +113,81 @@ describe('post Markdown image controls', () => {
     expect(findMarkdownVideoTokens(`[video](https://evil.example${lineBreak}/video.mp4)`)).toEqual(
       []
     )
+  })
+
+  it.each(['video', 'Video', 'VIDEO', '视频', '動画', '동영상'])(
+    'removes the persisted video marker label %p from its own line',
+    (label) => {
+      expect(
+        removeMarkdownVideoMarkers(`before\n[${label}](https://cdn.example/video.mp4)\nafter`)
+      ).toEqual({ content: 'before\n\nafter', removed: 1 })
+    }
+  )
+
+  it('removes a standalone marker from CRLF content without leaving a carriage return', () => {
+    expect(
+      removeMarkdownVideoMarkers('before\r\n[video](https://cdn.example/video.mp4)\r\nafter')
+    ).toEqual({ content: 'before\r\n\r\nafter', removed: 1 })
+  })
+
+  it('removes multiple markers once and is idempotent', () => {
+    const content =
+      '[VIDEO](https://cdn.example/one.mp4)\nbody\n[视频](https://cdn.example/two.mp4)\n' +
+      '[動画](https://cdn.example/three.mp4)[동영상](https://cdn.example/four.mp4)'
+
+    const result = removeMarkdownVideoMarkers(content)
+
+    expect(result).toEqual({ content: '\nbody\n\n', removed: 4 })
+    expect(removeMarkdownVideoMarkers(result.content)).toEqual({
+      content: result.content,
+      removed: 0,
+    })
+  })
+
+  it('returns empty content when only whitespace remains after marker removal', () => {
+    expect(removeMarkdownVideoMarkers('\n[video](https://cdn.example/video.mp4)\n')).toEqual({
+      content: '',
+      removed: 1,
+    })
+  })
+
+  it('preserves every byte outside the removed marker ranges', () => {
+    expect(removeMarkdownVideoMarkers('left[video](https://cdn.example/video.mp4)right')).toEqual({
+      content: 'leftright',
+      removed: 1,
+    })
+    expect(
+      removeMarkdownVideoMarkers(
+        'before\n\n[video](https://cdn.example/video.mp4)\n\nafter\n\nunchanged'
+      )
+    ).toEqual({ content: 'before\n\n\n\nafter\n\nunchanged', removed: 1 })
+    expect(
+      removeMarkdownVideoMarkers('left[video](https://cdn.example/video.mp4)\n\n\nright')
+    ).toEqual({ content: 'left\n\n\nright', removed: 1 })
+  })
+
+  it.each([
+    '[videos](https://cdn.example/video.mp4)',
+    '[ video](https://cdn.example/video.mp4)',
+    '[video ](https://cdn.example/video.mp4)',
+    '[link](https://cdn.example/video.mp4)',
+    '![video](https://cdn.example/video.mp4)',
+    '[video]()',
+    '[video](https://cdn.example\n/video.mp4)',
+    '[video](https://cdn.example\r/video.mp4)',
+  ])('preserves a non-marker token exactly: %p', (content) => {
+    expect(removeMarkdownVideoMarkers(content)).toEqual({ content, removed: 0 })
+  })
+
+  it('does not remove beyond a parsed marker range when tokens overlap', () => {
+    expect(
+      removeMarkdownVideoMarkers('[video](![image](https://cdn.example/image.webp))tail')
+    ).toEqual({ content: ')tail', removed: 1 })
+
+    const imageContainingMarker = '![image]([video](https://cdn.example/video.mp4))'
+    expect(removeMarkdownVideoMarkers(imageContainingMarker)).toEqual({
+      content: imageContainingMarker,
+      removed: 0,
+    })
   })
 })

@@ -52,4 +52,36 @@ describe('post creation media upload authentication', () => {
     )
     expectAuthenticatedXhr(body, '/api/posts/upload-video')
   })
+
+  it('persists a canonical video marker and structurally removes historical markers', () => {
+    const profileUpload = functionBody(
+      profileCreatePage,
+      'const handleVideoUpload = async',
+      '// Remove video'
+    )
+    const profileRemoval = functionBody(
+      profileCreatePage,
+      'const removeVideo = () =>',
+      '// Remove image'
+    )
+    const groupUpload = functionBody(
+      groupCreatePage,
+      'const handleVideoUpload = useCallback',
+      'const removeVideo = useCallback'
+    )
+    const groupRemoval = functionBody(
+      groupCreatePage,
+      'const removeVideo = useCallback',
+      'const handleSubmit = async'
+    )
+
+    expect(profileUpload).toContain('const videoMarkdown = `\\n[video](${data.url})\\n`')
+    expect(profileUpload).not.toContain("t('video')")
+    expect(groupUpload).toContain('setContent((prev) => prev + `\\n[video](${data.url})\\n`)')
+
+    for (const removal of [profileRemoval, groupRemoval]) {
+      expect(removal).toContain('removeMarkdownVideoMarkers(prev).content')
+      expect(removal).not.toContain('.replace(')
+    }
+  })
 })

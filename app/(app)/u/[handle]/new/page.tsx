@@ -39,7 +39,11 @@ import {
   readPostVideoUploadAcknowledgement,
   type PostVideoUploadAcknowledgement,
 } from '@/lib/posts/post-media-upload-contract'
-import { moveMarkdownImage, removeMarkdownImage } from '@/lib/posts/markdown-images'
+import {
+  moveMarkdownImage,
+  removeMarkdownImage,
+  removeMarkdownVideoMarkers,
+} from '@/lib/posts/markdown-images'
 import {
   isPostDraftMeaningful,
   postDraftStorageKey,
@@ -442,7 +446,7 @@ export default function NewPostPage() {
         },
       ])
 
-      const videoMarkdown = `\n[${t('video')}](${data.url})\n`
+      const videoMarkdown = `\n[video](${data.url})\n`
       setContent((prev) => prev + videoMarkdown)
 
       showToast(t('videoUploadSuccess'), 'success')
@@ -461,9 +465,7 @@ export default function NewPostPage() {
   // Remove video
   const removeVideo = () => {
     setVideos([])
-    setContent((prev) => {
-      return prev.replace(/\n?\[(?:视频|Video)\]\([^)]+\)\n?/g, '')
-    })
+    setContent((prev) => removeMarkdownVideoMarkers(prev).content)
     showToast(t('videoRemoved'), 'info')
   }
 

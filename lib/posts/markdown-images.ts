@@ -27,6 +27,11 @@ export type MarkdownImageMoveResult = {
   status: 'moved' | 'boundary' | 'missing'
 }
 
+export type MarkdownVideoRemovalResult = {
+  content: string
+  removed: number
+}
+
 /**
  * Parse the exact raw HTTP(S) URL grammar used by post content renderers.
  * Keep this separate from Markdown destinations: their explicit delimiters
@@ -99,6 +104,25 @@ export function findMarkdownImageTokens(content: string): MarkdownImageToken[] {
   }
 
   return tokens
+}
+
+/** Remove every exact persisted video marker without rescanning or consuming adjacent text. */
+export function removeMarkdownVideoMarkers(content: string): MarkdownVideoRemovalResult {
+  const tokens = findMarkdownVideoTokens(content)
+  if (tokens.length === 0) return { content, removed: 0 }
+
+  let result = ''
+  let cursor = 0
+  for (const token of tokens) {
+    result += content.slice(cursor, token.start)
+    cursor = token.end
+  }
+  result += content.slice(cursor)
+
+  return {
+    content: result.trim() === '' ? '' : result,
+    removed: tokens.length,
+  }
 }
 
 /** Swap an image with its adjacent image without temporary placeholder text. */
