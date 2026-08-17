@@ -47,6 +47,43 @@ function makeQuery(result: QueryResult): QueryChain {
   return chain
 }
 
+function rankedTrader(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'current-trader',
+    handle: 'Current trader',
+    roi: 20,
+    pnl: 200,
+    win_rate: 55,
+    max_drawdown: 12,
+    trades_count: 40,
+    followers: 10,
+    copiers: 2,
+    source_type: 'futures',
+    avatar_url: null,
+    arena_score: 88,
+    rank: 1,
+    rank_change: null,
+    is_new: false,
+    profitability_score: 90,
+    risk_control_score: 80,
+    execution_score: 85,
+    score_completeness: 'full',
+    trading_style: null,
+    avg_holding_hours: null,
+    computed_at: new Date().toISOString(),
+    season_id: '90D',
+    sharpe_ratio: null,
+    sortino_ratio: null,
+    profit_factor: null,
+    calmar_ratio: null,
+    trader_type: null,
+    is_outlier: false,
+    metrics_estimated: false,
+    ...overrides,
+  }
+}
+
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 const mockGetAuthUser = jest.fn()
@@ -211,14 +248,8 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
     mockRpc.mockResolvedValue({ data: [], error: null })
   })
 
-  it('serves anonymous traders from current rank rows, never from the post cache', async () => {
-    const trader = {
-      source: 'binance_futures',
-      source_trader_id: 'current-trader',
-      handle: 'Current trader',
-      arena_score: 88,
-      rank: 1,
-    }
+  it('serves anonymous traders from the sealed public cohort, never from the post cache', async () => {
+    const trader = rankedTrader()
     const topQuery = makeQuery({ data: [trader], error: null })
     mockFrom.mockReturnValueOnce(topQuery)
 
@@ -229,7 +260,8 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
 
     expect(mockTieredGetOrSet).not.toHaveBeenCalled()
     expect(mockRpc).not.toHaveBeenCalled()
-    expect(mockFrom).toHaveBeenCalledWith('leaderboard_ranks')
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(topQuery.eq).toHaveBeenCalledWith('season_id', '90D')
     expect(topQuery.not).toHaveBeenCalledWith('rank', 'is', null)
     expect(topQuery.gt).toHaveBeenCalledWith('arena_score', 0)
@@ -255,23 +287,21 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
       ],
       error: null,
     })
+    const matchingTrader = rankedTrader({
+      source: 'bybit',
+      source_trader_id: 'key:with-colon',
+      handle: 'Current DB handle',
+      arena_score: 70,
+    })
+    const wrongIdentityTrader = rankedTrader({
+      source: 'bybit',
+      source_trader_id: 'missing',
+      handle: 'Wrong composite identity',
+      arena_score: 60,
+      rank: 2,
+    })
     const currentQuery = makeQuery({
-      data: [
-        {
-          source: 'bybit',
-          source_trader_id: 'key:with-colon',
-          handle: 'Current DB handle',
-          arena_score: 70,
-          rank: 1,
-        },
-        {
-          source: 'wrong_source',
-          source_trader_id: 'missing',
-          handle: 'Wrong composite identity',
-          arena_score: 60,
-          rank: 2,
-        },
-      ],
+      data: [matchingTrader, wrongIdentityTrader],
       error: null,
     })
     const topQuery = makeQuery({ data: [], error: null })
@@ -287,27 +317,22 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
       p_target_type: 'trader',
       p_limit: 2,
     })
+    expect(mockFrom).toHaveBeenNthCalledWith(1, 'public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(currentQuery.in).toHaveBeenNthCalledWith(1, 'source', ['bybit', 'binance_futures'])
     expect(currentQuery.in).toHaveBeenCalledWith('source_trader_id', ['key:with-colon', 'missing'])
     expect(body.data).toEqual({
-      recommendations: [
-        {
-          source: 'bybit',
-          source_trader_id: 'key:with-colon',
-          handle: 'Current DB handle',
-          arena_score: 70,
-          rank: 1,
-          recommendation_score: 9,
-        },
-      ],
+      recommendations: [matchingTrader],
       type: 'trader',
       personalized: true,
     })
     expect(JSON.stringify(body)).not.toContain('Wrong composite identity')
     expect(JSON.stringify(body)).not.toContain('binance_futures:missing')
     expect(JSON.stringify(body)).not.toContain('target_id')
+    expect(JSON.stringify(body)).not.toContain('recommendation_score')
   })
 
-  it('fails closed when current trader materialization fails', async () => {
+  it('fails closed as unknown when public cohort materialization fails', async () => {
     mockGetAuthUser.mockResolvedValue({ id: '20000000-0000-4000-8000-000000000001' })
     mockRpc.mockResolvedValue({
       data: [{ target_id: 'bybit:trader-1', score: 1 }],
@@ -322,8 +347,66 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
     )
     const body = await response.json()
 
-    expect(response.status).toBe(500)
-    expect(body).toEqual({ success: false, error: 'current traders unavailable' })
+    expect(response.status).toBe(200)
+    expect(body).toEqual({
+      success: true,
+      data: {
+        recommendations: [],
+        type: 'trader',
+        personalized: false,
+        ranking_visibility: 'unknown',
+        ranking_visibility_reason: 'public_cohort_unavailable',
+        ranking_visibility_reasons: ['public_cohort_unavailable'],
+      },
+    })
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('fails closed as partial instead of promoting an unverified view row to top performer', async () => {
+    mockFrom.mockReturnValueOnce(
+      makeQuery({ data: [rankedTrader({ metrics_estimated: true })], error: null })
+    )
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=1')
+    )
+
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        recommendations: [],
+        type: 'trader',
+        personalized: false,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'public_cohort_unverified',
+        ranking_visibility_reasons: ['public_cohort_unverified'],
+      },
+    })
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
+  it('reports an empty sealed cohort as unknown instead of inventing a top list', async () => {
+    mockFrom.mockReturnValueOnce(makeQuery({ data: [], error: null }))
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=1')
+    )
+
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        recommendations: [],
+        type: 'trader',
+        personalized: false,
+        ranking_visibility: 'unknown',
+        ranking_visibility_reason: 'public_rank_unavailable',
+        ranking_visibility_reasons: ['public_rank_unavailable'],
+      },
+    })
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 })
