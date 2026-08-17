@@ -489,9 +489,11 @@
     padding-right: 12px !important;
   }
 
-  /* When mini header is visible, offset tabs below it */
-  .trader-sticky-mini-header.visible ~ .page-container .profile-tabs {
-    top: 44px;
+  /* The mini header lives inside .page-container, so its visible state is
+     mirrored onto that ancestor by TraderProfileClient. Keep the sticky tabs
+     below the fixed summary instead of relying on an impossible sibling path. */
+  .page-container.trader-mini-header-visible .profile-tabs {
+    top: 45px;
   }
 }
 

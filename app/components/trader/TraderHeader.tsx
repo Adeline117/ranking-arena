@@ -239,8 +239,10 @@ export default function TraderHeader({
         boxShadow: '0 4px 16px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
         position: 'relative',
         overflow: 'visible',
-        opacity: mounted ? 1 : 0,
-        transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        // `mounted` only guards the wall-clock-dependent active-days label.
+        // The identity and primary actions must remain visible in the SSR/first
+        // client paint, rather than fading in after the hydration effect.
+        opacity: 1,
       }}
     >
       {/* Profile Info — compact single-row layout */}

@@ -1331,7 +1331,7 @@ export default function TraderProfileClient({
       {/* TopNav is rendered by the parent layout.tsx (server component) */}
 
       <Box
-        className="page-container"
+        className={`page-container${showMiniHeader ? ' trader-mini-header-visible' : ''}`}
         style={{
           maxWidth: 1200,
           width: '100%',
@@ -1357,7 +1357,14 @@ export default function TraderProfileClient({
         />
 
         {/* Sticky mini header for mobile */}
-        <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
+        <div
+          className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}
+          // The fixed summary remains mounted for a smooth reveal. Keep its
+          // off-screen copy out of both the screen-reader and focus trees so
+          // it cannot be announced before the real profile heading.
+          aria-hidden={!showMiniHeader}
+          inert={!showMiniHeader}
+        >
           <div
             className="mini-avatar"
             style={{
