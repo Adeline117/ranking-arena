@@ -12,7 +12,10 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
-import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 import {
   publicRankingResponseCacheHeaders,
   publicRankingResponseRejectionHeaders,
@@ -103,7 +106,8 @@ const PLATFORM_NAMES: Record<string, string> = {
 }
 
 const OG_TRADER_CARD_LIMIT = 3
-const OG_TRADER_CANDIDATE_LIMIT = 12
+const PUBLIC_RANKED_OG_COLUMNS =
+  'source,source_trader_id,handle,avatar_url,roi,pnl,win_rate,max_drawdown,arena_score,rank,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
 function formatRoi(roi: number): string {
   const abs = Math.abs(roi)
@@ -122,71 +126,134 @@ interface TopTrader {
   rank: number
 }
 
+type PublicRankedLeaderboardQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+  count?: number | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(
+    columns: string,
+    options?: { count?: 'exact'; head?: boolean }
+  ): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  // The public view is additive and may land before generated Supabase types.
+  // Keep the narrow bridge at this public rendering boundary.
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
+}
+
+function hasPositivePublishedRank(row: unknown, exchange: string): row is Record<string, unknown> {
+  return (
+    isRecord(row) &&
+    row.source === exchange &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0
+  )
+}
+
+function exactCountOrUnknown(
+  result: PublicRankedLeaderboardQueryResult,
+  minimumVisibleRows: number
+): number | null {
+  const count = result.count
+  if (
+    result.error ||
+    typeof count !== 'number' ||
+    !Number.isSafeInteger(count) ||
+    count < 0 ||
+    count < minimumVisibleRows
+  ) {
+    return null
+  }
+  return count
+}
+
 async function fetchExchangeData(
   exchange: string
-): Promise<{ traders: TopTrader[]; total: number }> {
-  const supabase = getSupabaseAdmin()
+): Promise<{ traders: TopTrader[]; total: number | null }> {
+  const publicCohort = publicRankedLeaderboardClient(getSupabaseAdmin())
 
-  const { data: top3, error: topErr } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, handle, avatar_url, roi, arena_score, rank')
-    .eq('source', exchange)
-    .eq('season_id', '90D')
-    .not('rank', 'is', null)
-    .not('arena_score', 'is', null)
-    .gt('arena_score', 0)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('rank', { ascending: true, nullsFirst: false })
-    .order('arena_score', { ascending: false, nullsFirst: false })
-    // Read a few extra candidates so a malformed row can be rejected without
-    // turning a healthy three-card preview into a shorter one.
-    .limit(OG_TRADER_CANDIDATE_LIMIT)
+  const [topResult, countResult] = await Promise.all([
+    publicCohort
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_OG_COLUMNS)
+      .eq('source', exchange)
+      .eq('season_id', '90D')
+      .not('rank', 'is', null)
+      .order('rank', { ascending: true, nullsFirst: false })
+      .order('arena_score', { ascending: false, nullsFirst: false })
+      .limit(OG_TRADER_CARD_LIMIT),
+    publicCohort
+      .from('public_ranked_leaderboard')
+      .select('*', { count: 'exact', head: true })
+      .eq('source', exchange)
+      .eq('season_id', '90D')
+      .not('rank', 'is', null),
+  ])
 
-  if (topErr) {
-    logger.error('[OG Exchange] Error fetching top traders:', topErr)
+  if (topResult.error) {
+    logger.error('[OG Exchange] Error fetching public top traders:', topResult.error)
+  }
+  if (countResult.error) {
+    logger.error('[OG Exchange] Error fetching exact public count:', countResult.error)
   }
 
-  // Estimated — OG exchange image shows "N traders tracked" as a
-  // marketing tile; rounded marketing headline.
-  const { count, error: countErr } = await supabase
-    .from('leaderboard_ranks')
-    .select('*', { count: 'estimated', head: true })
-    .eq('source', exchange)
-    .eq('season_id', '90D')
-    .not('rank', 'is', null)
-    .not('arena_score', 'is', null)
-    .gt('arena_score', 0)
-    .or('is_outlier.is.null,is_outlier.eq.false')
+  const rawTopTraders = Array.isArray(topResult.data) ? topResult.data : []
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rawTopTraders, period: '90D' },
+    { expectedPeriod: '90D' }
+  ) as { traders?: unknown[] }
+  const safeTopTraders = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter((row) => hasPositivePublishedRank(row, exchange))
+    : ([] as Record<string, unknown>[])
 
-  if (countErr) {
-    logger.error('[OG Exchange] Error fetching count:', countErr)
+  // A row failing this check means the view/proxy contract is no longer
+  // trustworthy. Render a neutral card instead of filling the three slots
+  // from a potentially shifted or partial ranking page.
+  if (topResult.error || safeTopTraders.length !== rawTopTraders.length) {
+    return { traders: [], total: null }
   }
 
-  const traders: TopTrader[] = (top3 || [])
-    .filter(
-      (t) =>
-        typeof t.source_trader_id === 'string' &&
-        t.source_trader_id.trim().length > 0 &&
-        Number.isSafeInteger(t.rank) &&
-        Number(t.rank) > 0 &&
-        typeof t.roi === 'number' &&
-        Number.isFinite(t.roi) &&
-        typeof t.arena_score === 'number' &&
-        Number.isFinite(t.arena_score) &&
-        t.arena_score > 0 &&
-        t.arena_score <= 100
-    )
-    .slice(0, OG_TRADER_CARD_LIMIT)
-    .map((t) => ({
-      source_trader_id: t.source_trader_id,
-      handle: t.handle as string | null,
-      avatar_url: t.avatar_url as string | null,
-      roi: t.roi as number | null,
-      arena_score: t.arena_score as number | null,
-      rank: Number(t.rank),
-    }))
+  const traders: TopTrader[] = safeTopTraders.slice(0, OG_TRADER_CARD_LIMIT).map((t) => ({
+    source_trader_id: stringOrNull(t.source_trader_id) ?? '',
+    handle: stringOrNull(t.handle),
+    avatar_url: stringOrNull(t.avatar_url),
+    roi: finiteOrNull(t.roi),
+    arena_score: finiteOrNull(t.arena_score),
+    rank: Number(t.rank),
+  }))
 
-  return { traders, total: count ?? 0 }
+  return { traders, total: exactCountOrUnknown(countResult, traders.length) }
 }
 
 const MEDAL_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32']
@@ -361,7 +428,9 @@ export async function GET(request: NextRequest) {
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <span style={{ fontSize: 16, color: C.dim }}>
-                  {total > 0 ? total.toLocaleString('en-US') : '0'} ranked traders
+                  {total === null
+                    ? 'Ranked trader count unavailable'
+                    : `${total.toLocaleString('en-US')} ranked traders`}
                 </span>
                 <div
                   style={{

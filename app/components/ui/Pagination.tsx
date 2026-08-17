@@ -7,8 +7,17 @@ import { useLanguage } from '../Providers/LanguageProvider'
 
 export interface PaginationProps {
   currentPage: number
-  totalPages: number
+  /** Null when the server can only prove this page, not the cohort total. */
+  totalPages: number | null
+  /** False prevents numeric page controls even if a legacy totalPages leaks through. */
+  totalCountIsExact?: boolean
+  /** Limit+1 look-ahead for an otherwise unknown total. */
+  hasMore?: boolean
   onPageChange: (page: number) => void
+}
+
+function finitePageCount(value: number | null): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
 /**
@@ -18,40 +27,115 @@ export interface PaginationProps {
 export default memo(function Pagination({
   currentPage,
   totalPages,
+  totalCountIsExact,
+  hasMore,
   onPageChange,
 }: PaginationProps) {
   const { t, language: _language } = useLanguage()
 
-  // Guard: non-positive or non-finite totalPages means no pagination needed
-  if (!Number.isFinite(totalPages) || totalPages <= 1) return null
+  const exactTotalPages =
+    totalCountIsExact === true && finitePageCount(totalPages) ? totalPages : null
+  const safeInputPage = Number.isSafeInteger(currentPage) && currentPage > 0 ? currentPage : 1
+
+  // With no exact total, the only honest controls are a backwards link and a
+  // next link that has a concrete limit+1 witness. Never infer numbered pages,
+  // a final page, or an upper bound from the current finite page.
+  if (exactTotalPages === null) {
+    const safePageChange = (page: number) =>
+      onPageChange(Number.isFinite(page) ? Math.max(1, Math.trunc(page)) : 1)
+    if (safeInputPage === 1 && hasMore !== true) return null
+
+    return (
+      <nav
+        aria-label={t('paginationNav')}
+        className="pagination-container"
+        style={{
+          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          borderTop: `1px solid var(--glass-border-light)`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: tokens.spacing[2],
+          background: tokens.glass.bg.light,
+          borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
+        }}
+      >
+        <button
+          aria-label={t('prevPage')}
+          className={`pagination-btn pagination-nav ${safeInputPage === 1 ? 'pagination-disabled' : ''}`}
+          onClick={() => safePageChange(safeInputPage - 1)}
+          disabled={safeInputPage === 1}
+          style={{
+            padding: `6px ${tokens.spacing[3]}`,
+            minHeight: 44,
+            background:
+              safeInputPage === 1 ? 'transparent' : alpha(tokens.colors.accent.primary, 6),
+            border: `1px solid ${safeInputPage === 1 ? tokens.colors.border.primary : alpha(tokens.colors.accent.primary, 19)}`,
+            borderRadius: tokens.radius.md,
+            color: safeInputPage === 1 ? tokens.colors.text.disabled : tokens.colors.accent.primary,
+            cursor: safeInputPage === 1 ? 'not-allowed' : 'pointer',
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: tokens.typography.fontWeight.semibold,
+            transition: `all ${tokens.transition.fast}`,
+          }}
+        >
+          {t('prevPage')}
+        </button>
+        <button
+          aria-label={t('nextPage')}
+          className={`pagination-btn pagination-nav ${hasMore === true ? '' : 'pagination-disabled'}`}
+          onClick={() => safePageChange(safeInputPage + 1)}
+          disabled={hasMore !== true}
+          style={{
+            padding: `6px ${tokens.spacing[3]}`,
+            minHeight: 44,
+            background: hasMore === true ? alpha(tokens.colors.accent.primary, 6) : 'transparent',
+            border: `1px solid ${hasMore === true ? alpha(tokens.colors.accent.primary, 19) : tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.md,
+            color: hasMore === true ? tokens.colors.accent.primary : tokens.colors.text.disabled,
+            cursor: hasMore === true ? 'pointer' : 'not-allowed',
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: tokens.typography.fontWeight.semibold,
+            transition: `all ${tokens.transition.fast}`,
+          }}
+        >
+          {t('nextPage')}
+        </button>
+      </nav>
+    )
+  }
+
+  // Guard: one exact page means no pagination needed.
+  if (exactTotalPages <= 1) return null
 
   // Clamp currentPage to valid range to prevent out-of-bounds rendering
-  const safePage = Math.max(1, Math.min(currentPage, totalPages))
+  const safePage = Math.max(1, Math.min(safeInputPage, exactTotalPages))
 
   // Build page numbers array with ellipsis
   const pages: (number | string)[] = []
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i)
+  if (exactTotalPages <= 7) {
+    for (let i = 1; i <= exactTotalPages; i++) pages.push(i)
   } else {
     if (safePage <= 3) {
       for (let i = 1; i <= 5; i++) pages.push(i)
       pages.push('...')
-      pages.push(totalPages)
-    } else if (safePage >= totalPages - 2) {
+      pages.push(exactTotalPages)
+    } else if (safePage >= exactTotalPages - 2) {
       pages.push(1)
       pages.push('...')
-      for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i)
+      for (let i = exactTotalPages - 4; i <= exactTotalPages; i++) pages.push(i)
     } else {
       pages.push(1)
       pages.push('...')
       for (let i = safePage - 1; i <= safePage + 1; i++) pages.push(i)
       pages.push('...')
-      pages.push(totalPages)
+      pages.push(exactTotalPages)
     }
   }
 
   // Clamp page changes to valid range
-  const safePageChange = (page: number) => onPageChange(Math.max(1, Math.min(page, totalPages)))
+  const safePageChange = (page: number) =>
+    onPageChange(Math.max(1, Math.min(page, exactTotalPages)))
 
   return (
     <nav
@@ -148,19 +232,21 @@ export default memo(function Pagination({
 
       <button
         aria-label={t('nextPage')}
-        className={`pagination-btn pagination-nav ${safePage === totalPages ? 'pagination-disabled' : ''}`}
+        className={`pagination-btn pagination-nav ${safePage === exactTotalPages ? 'pagination-disabled' : ''}`}
         onClick={() => safePageChange(safePage + 1)}
-        disabled={safePage === totalPages}
+        disabled={safePage === exactTotalPages}
         style={{
           padding: `6px ${tokens.spacing[3]}`,
           minHeight: 44,
           background:
-            safePage === totalPages ? 'transparent' : alpha(tokens.colors.accent.primary, 6),
-          border: `1px solid ${safePage === totalPages ? tokens.colors.border.primary : alpha(tokens.colors.accent.primary, 19)}`,
+            safePage === exactTotalPages ? 'transparent' : alpha(tokens.colors.accent.primary, 6),
+          border: `1px solid ${safePage === exactTotalPages ? tokens.colors.border.primary : alpha(tokens.colors.accent.primary, 19)}`,
           borderRadius: tokens.radius.md,
           color:
-            safePage === totalPages ? tokens.colors.text.disabled : tokens.colors.accent.primary,
-          cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
+            safePage === exactTotalPages
+              ? tokens.colors.text.disabled
+              : tokens.colors.accent.primary,
+          cursor: safePage === exactTotalPages ? 'not-allowed' : 'pointer',
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,
           transition: `all ${tokens.transition.fast}`,

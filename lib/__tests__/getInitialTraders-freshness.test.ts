@@ -1,20 +1,10 @@
-import {
-  homeInitialTradersCacheKeys,
-  publicInitialCategoryCounts,
-  summarizeInitialTraderFreshness,
-} from '../getInitialTraders'
+import { homeInitialTradersCacheKeys, summarizeInitialTraderFreshness } from '../getInitialTraders'
 
 const NOW = Date.parse('2026-07-18T12:00:00.000Z')
-const GENERATION = '2026-07-18T11:59:00.000Z'
 
 describe('SSR leaderboard source freshness', () => {
-  it('uses every live count-cache source, not only sources visible on the first page', () => {
+  it('describes only the verified cohort sources rendered on this finite page', () => {
     const summary = summarizeInitialTraderFreshness({
-      countRows: [
-        { source: '_all_gt0', total_count: 2, updated_at: GENERATION },
-        { source: 'binance_futures_gt0', total_count: 1, updated_at: GENERATION },
-        { source: 'hyperliquid_gt0', total_count: 1, updated_at: GENERATION },
-      ],
       watermarkRows: [
         { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
         { source: 'hyperliquid', source_as_of: '2026-07-16T09:00:00.000Z' },
@@ -23,42 +13,40 @@ describe('SSR leaderboard source freshness', () => {
       nowMs: NOW,
     })
 
-    expect(summary.asOf).toBe('2026-07-16T09:00:00.000Z')
-    expect(summary.isStale).toBe(true)
-    expect(summary.sources.map((source) => source.source)).toEqual([
-      'binance_futures',
-      'hyperliquid',
-    ])
-  })
-
-  it('fails closed when only rendered sources are known after count-cache loss', () => {
-    const summary = summarizeInitialTraderFreshness({
-      countRows: [],
-      watermarkRows: [
-        { source: 'binance_futures', source_as_of: '2026-07-18T10:00:00.000Z' },
-        { source: 'toobit', source_as_of: '2026-07-10T10:00:00.000Z' },
-      ],
-      observedSources: ['binance_futures', 'toobit'],
-      nowMs: NOW,
-    })
-
-    expect(summary.asOf).toBe('2026-07-18T10:00:00.000Z')
-    expect(summary.isStale).toBe(true)
+    expect(summary.asOf).toBe('2026-07-18T11:00:00.000Z')
+    expect(summary.isStale).toBe(false)
     expect(summary.sources.map((source) => source.source)).toEqual(['binance_futures'])
   })
 
-  it('does not expose quarantined sources through SSR freshness', () => {
+  it('fails closed when the rendered cohort source lacks a usable watermark', () => {
     const summary = summarizeInitialTraderFreshness({
-      countRows: [
-        { source: '_all_gt0', total_count: 2, updated_at: GENERATION },
-        { source: 'binance_futures_gt0', total_count: 1, updated_at: GENERATION },
-        { source: 'okx_web3_solana_gt0', total_count: 1, updated_at: GENERATION },
+      watermarkRows: [{ source: 'binance_futures', source_as_of: null }],
+      observedSources: ['binance_futures'],
+      nowMs: NOW,
+    })
+
+    expect(summary).toEqual({
+      asOf: null,
+      isStale: true,
+      ageSeconds: null,
+      sources: [
+        {
+          source: 'binance_futures',
+          updated_at: null,
+          is_stale: true,
+          age_seconds: null,
+        },
       ],
+    })
+  })
+
+  it('does not surface a quarantined source through the SSR freshness summary', () => {
+    const summary = summarizeInitialTraderFreshness({
       watermarkRows: [
         { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
         { source: 'okx_web3_solana', source_as_of: '2026-07-01T00:00:00.000Z' },
       ],
-      observedSources: ['binance_futures'],
+      observedSources: ['binance_futures', 'okx_web3_solana'],
       nowMs: NOW,
     })
 
@@ -66,26 +54,10 @@ describe('SSR leaderboard source freshness', () => {
     expect(summary.sources.map((source) => source.source)).toEqual(['binance_futures'])
   })
 
-  it('subtracts only quarantined-source counts from the atomic SSR count generation', () => {
-    const counts = publicInitialCategoryCounts(
-      [
-        { source: '_all_gt0', total_count: 16, updated_at: GENERATION },
-        { source: 'binance_futures_gt0', total_count: 10, updated_at: GENERATION },
-        { source: 'binance_spot_gt0', total_count: 2, updated_at: GENERATION },
-        { source: 'hyperliquid_gt0', total_count: 1, updated_at: GENERATION },
-        { source: 'okx_web3_solana_gt0', total_count: 3, updated_at: GENERATION },
-      ],
-      [],
-      { all: 999, futures: 999, spot: 999, onchain: 999 }
-    )
-
-    expect(counts).toEqual({ all: 13, futures: 10, spot: 2, onchain: 1 })
-  })
-
-  it('epochs both SSR cache keys together', () => {
+  it('epochs both SSR cache keys with the verified view proof shape', () => {
     expect(homeInitialTradersCacheKeys('90D', 2)).toEqual({
-      cacheKey: 'public-rank-policy-v7:home-initial-traders-v4:90D:p2',
-      fallbackKey: 'public-rank-policy-v7:home-initial-traders-fallback-v4:90D:p2',
+      cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n50:p2',
+      fallbackKey: 'public-rank-policy-v7:home-initial-traders-fallback-v7:90D:n50:p2',
     })
   })
 })

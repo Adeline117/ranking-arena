@@ -185,15 +185,6 @@ export default function ExchangePartners() {
                 onClick={(e) => {
                   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
                   e.preventDefault()
-                  const params = new URLSearchParams(searchParams.toString())
-                  params.set('range', timeRange)
-                  params.set('exchange', ex.filterSource)
-                  params.delete('ex')
-                  params.delete('page')
-                  // The homepage is a static server shell. Next's client router
-                  // can dedupe same-route, search-param-only replace calls to a
-                  // no-op, leaving the filtered data and share URL out of sync.
-                  window.history.replaceState(null, '', `/?${params.toString()}`)
                   trackEvent('ranking_filter', {
                     kind: 'source_marquee',
                     value: ex.filterSource,
@@ -202,7 +193,11 @@ export default function ExchangePartners() {
                   })
                   // Scroll to ranking table and trigger exchange filter
                   const event = new CustomEvent('arena:filter-exchange', {
-                    detail: { exchange: ex.filterSource },
+                    // The receiver owns the request and only commits this URL
+                    // cohort after it has matching rows. Writing here first
+                    // would leave an exchange URL pointing at old all-board
+                    // rows when the request fails.
+                    detail: { exchange: ex.filterSource, timeRange },
                   })
                   window.dispatchEvent(event)
                   document

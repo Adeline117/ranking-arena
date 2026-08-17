@@ -16,6 +16,7 @@ import {
 import { getScoreColorInfo, getScoreColor } from '@/lib/utils/score-colors'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { Trader } from '../RankingTable'
+import { normalizeFiniteScore } from '../RankingTableTypes'
 
 // Shared color constants for trader display components
 // These ensure WCAG AA 4.5:1 contrast on card/row backgrounds
@@ -64,13 +65,20 @@ function RankChangeIndicator({
     return <span style={{ ...indicatorStyle, color: tokens.colors.accent.primary }}>NEW</span>
   }
 
-  if (rankChange != null && rankChange !== 0) {
+  // A corrupt movement value must not leak into the visible label or its
+  // screen-reader summary as "NaN"/"Infinity". The persisted rank remains
+  // useful; only the unproven movement signal is omitted.
+  const finiteRankChange = rankChange != null && Number.isFinite(rankChange) ? rankChange : null
+
+  if (finiteRankChange != null && finiteRankChange !== 0) {
     // Positive rankChange = moved up in ranking (green arrow up)
     // Negative rankChange = moved down (red arrow down)
-    const isUp = rankChange > 0
+    const isUp = finiteRankChange > 0
     const color = isUp ? tokens.colors.accent.success : TRADER_ACCENT_ERROR
     const arrow = isUp ? '\u25B2' : '\u25BC'
-    const srText = isUp ? `Rank up ${Math.abs(rankChange)}` : `Rank down ${Math.abs(rankChange)}`
+    const srText = isUp
+      ? `Rank up ${Math.abs(finiteRankChange)}`
+      : `Rank down ${Math.abs(finiteRankChange)}`
     return (
       <span
         style={{ ...indicatorStyle, color, display: 'inline-flex', alignItems: 'center', gap: 1 }}
@@ -78,7 +86,7 @@ function RankChangeIndicator({
         <span className="sr-only">{srText}</span>
         <span aria-hidden="true">
           {arrow}
-          {Math.abs(rankChange)}
+          {Math.abs(finiteRankChange)}
         </span>
       </span>
     )
@@ -257,12 +265,10 @@ export function TraderAvatar({
 }
 
 // Determine score confidence level based on available data
-function getScoreConfidence(trader: Trader): 'full' | 'partial' | 'minimal' {
-  if (trader.score_confidence) return trader.score_confidence
-  // Use != null instead of falsy check — win_rate=0 and max_drawdown=0 are valid data
-  if (trader.win_rate == null && trader.max_drawdown == null) return 'minimal'
-  if (trader.win_rate == null || trader.max_drawdown == null) return 'partial'
-  return 'full'
+function getScoreConfidence(trader: Trader): 'full' | 'partial' | 'minimal' | 'unknown' {
+  // Confidence is publication evidence, not a presentation heuristic. A missing
+  // source value must stay unknown even when neighboring metrics happen to exist.
+  return trader.score_confidence ?? 'unknown'
 }
 
 // Score confidence indicator
@@ -271,10 +277,17 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
   if (confidence === 'full') return null
 
   const isMinimal = confidence === 'minimal'
-  const title = isMinimal
-    ? 'Limited data: win rate & drawdown unavailable (score -20%)'
-    : 'Partial data: some metrics unavailable (score -8%)'
-  const background = isMinimal ? tokens.colors.accent.error : tokens.colors.accent.warning
+  const isUnknown = confidence === 'unknown'
+  const title = isUnknown
+    ? 'Score confidence unknown'
+    : isMinimal
+      ? 'Limited data: win rate & drawdown unavailable (score -20%)'
+      : 'Partial data: some metrics unavailable (score -8%)'
+  const background = isUnknown
+    ? tokens.colors.text.tertiary
+    : isMinimal
+      ? tokens.colors.accent.error
+      : tokens.colors.accent.warning
 
   return (
     <span
@@ -317,22 +330,23 @@ export function ArenaScoreBadge({
   showConfidence,
   trader,
 }: {
-  score: number | undefined
+  score: number | null | undefined
   showConfidence?: boolean
   trader?: Trader
 }) {
-  if (score == null) return null
+  const finiteScore = normalizeFiniteScore(score)
+  if (finiteScore == null) return null
 
-  const { bgGradient, borderColor, textColor, fillColor } = getScoreStyle(score)
+  const { bgGradient, borderColor, textColor, fillColor } = getScoreStyle(finiteScore)
 
-  const isLegendary = score >= 90
-  const isElite = score >= 95
+  const isLegendary = finiteScore >= 90
+  const isElite = finiteScore >= 95
 
   const glowStyle = isElite
     ? { animation: 'score-legendary-glow-intense 2.5s ease-in-out infinite' }
     : isLegendary
       ? { animation: 'score-legendary-glow 3s ease-in-out infinite' }
-      : score >= 80
+      : finiteScore >= 80
         ? { boxShadow: `0 0 6px ${alpha(tokens.colors.accent.primary, 15)}` }
         : {}
 
@@ -383,7 +397,7 @@ export function ArenaScoreBadge({
           left: 0,
           top: 0,
           bottom: 0,
-          width: `${Math.min(100, score)}%`,
+          width: `${Math.min(100, finiteScore)}%`,
           background: fillColor,
           transition: 'width 0.4s ease',
           borderRadius: 'inherit',
@@ -400,7 +414,7 @@ export function ArenaScoreBadge({
           ...(isLegendary ? { textShadow: '0 0 8px var(--color-accent-primary-40)' } : {}),
         }}
       >
-        {Number(score).toFixed(1)}
+        {Number(finiteScore).toFixed(1)}
       </Text>
       {showConfidence && trader && <ScoreConfidenceIndicator trader={trader} />}
     </Box>
@@ -473,7 +487,7 @@ export const ArenaScoreCircle = memo(
     showConfidence,
     trader,
   }: {
-    score: number | undefined
+    score: number | null | undefined
     roi?: number | null
     pnl?: number | null
     showConfidence?: boolean
@@ -485,6 +499,9 @@ export const ArenaScoreCircle = memo(
     const ref = useRef<HTMLDivElement>(null)
     const tooltipRef = useRef<HTMLDivElement>(null)
     const { t } = useLanguage()
+    const finiteScore = normalizeFiniteScore(score)
+    const finiteRoi = normalizeFiniteScore(roi)
+    const finitePnl = normalizeFiniteScore(pnl)
 
     // Position tooltip after it renders
     useEffect(() => {
@@ -514,7 +531,7 @@ export const ArenaScoreCircle = memo(
     // 5-tier color system (matches score-colors.ts standard):
     // 90+: legendary (purple), 70-89: great (green), 50-69: average (amber),
     // 30-49: below (orange), 0-29: low (gray-red)
-    const ringColor = getScoreColor(score ?? 0)
+    const ringColor = getScoreColor(finiteScore ?? 0)
 
     // Pre-compute color-mix() expressions — must be before any early return (rules of hooks).
     // Without this, 50 rows × 2 color-mix string templates per row = 100 allocations per render.
@@ -528,15 +545,15 @@ export const ArenaScoreCircle = memo(
       [ringColor]
     )
 
-    if (score == null) return null
+    if (finiteScore == null) return null
 
     // v4 (2026-07): show HONEST raw inputs (ROI% / PnL $) in the tooltip. The old
     // roi/500×60 and pnl/100k×40 pseudo-scores were arbitrary V3-era client-side
     // approximations that never matched the real formula — retired with v4.
-    const roiText = roi != null ? `${roi > 0 ? '+' : ''}${roi.toFixed(1)}%` : null
+    const roiText = finiteRoi != null ? `${finiteRoi > 0 ? '+' : ''}${finiteRoi.toFixed(1)}%` : null
     const pnlText =
-      pnl != null
-        ? `${pnl < 0 ? '-' : ''}$${Math.abs(Math.round(pnl)).toLocaleString('en-US')}`
+      finitePnl != null
+        ? `${finitePnl < 0 ? '-' : ''}$${Math.abs(Math.round(finitePnl)).toLocaleString('en-US')}`
         : null
     const hasBreakdown = roiText !== null || pnlText !== null
 
@@ -608,7 +625,7 @@ export const ArenaScoreCircle = memo(
         >
           {t('scoreTotal')}:{' '}
           <span style={{ color: ringColor, fontVariantNumeric: 'tabular-nums' }}>
-            {Number(score).toFixed(0)}
+            {Number(finiteScore).toFixed(0)}
           </span>
           <span style={{ color: tokens.colors.text.tertiary }}> / 100</span>
         </div>
@@ -660,7 +677,7 @@ export const ArenaScoreCircle = memo(
               letterSpacing: '-0.5px',
             }}
           >
-            {Number(score).toFixed(0)}
+            {Number(finiteScore).toFixed(0)}
           </span>
         </div>
 

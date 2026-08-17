@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { Trader } from './RankingTable'
+import { normalizeFiniteScore } from './RankingTableTypes'
 
 /**
  * 置信度标签配置
@@ -94,13 +95,23 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
     setPositioned(true)
   }, [show])
 
+  const arenaScore = normalizeFiniteScore(trader.arena_score)
+  const profitabilityScore = normalizeFiniteScore(trader.profitability_score)
+  const riskControlScore = normalizeFiniteScore(trader.risk_control_score)
+  const executionScore = normalizeFiniteScore(trader.execution_score)
+  const roi = normalizeFiniteScore(trader.roi)
+  const pnl = normalizeFiniteScore(trader.pnl)
+  const maxDrawdown = normalizeFiniteScore(trader.max_drawdown)
+  const sharpeRatio = normalizeFiniteScore(trader.sharpe_ratio)
+  const winRate = normalizeFiniteScore(trader.win_rate)
+
   // v4: gate on the flagship sub-scores (profitability/risk/execution). Fall back
   // to arena_score so the breakdown still shows when only the composite is present.
   if (
-    trader.profitability_score == null &&
-    trader.risk_control_score == null &&
-    trader.execution_score == null &&
-    trader.arena_score == null
+    profitabilityScore == null &&
+    riskControlScore == null &&
+    executionScore == null &&
+    arenaScore == null
   ) {
     return null
   }
@@ -116,9 +127,9 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
   // Use == null instead of falsy check: win_rate=0 and max_drawdown=0 are valid values
   const confidence =
     trader.score_confidence ??
-    (trader.win_rate == null && trader.max_drawdown == null
+    (winRate == null && maxDrawdown == null
       ? 'minimal'
-      : trader.win_rate == null || trader.max_drawdown == null
+      : winRate == null || maxDrawdown == null
         ? 'partial'
         : 'full')
   const confidenceInfo = confidence !== 'full' ? CONFIDENCE_LABELS[confidence] : null
@@ -154,21 +165,21 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
       <div>
         {t('scoreProfit')}:{' '}
         <span style={{ color: 'var(--color-score-profitability)', fontWeight: 700 }}>
-          {trader.profitability_score?.toFixed(0) ?? '—'}
+          {profitabilityScore?.toFixed(0) ?? '—'}
         </span>
         /100
       </div>
       <div>
         {t('scoreRisk')}:{' '}
         <span style={{ color: 'var(--color-score-risk)', fontWeight: 700 }}>
-          {trader.risk_control_score?.toFixed(0) ?? '—'}
+          {riskControlScore?.toFixed(0) ?? '—'}
         </span>
         /100
       </div>
       <div>
         {t('scoreExecution')}:{' '}
         <span style={{ color: 'var(--color-score-execution)', fontWeight: 700 }}>
-          {trader.execution_score?.toFixed(0) ?? '—'}
+          {executionScore?.toFixed(0) ?? '—'}
         </span>
         /100
       </div>
@@ -185,9 +196,9 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
           lineHeight: 1.7,
         }}
       >
-        {t('roi')} {fmtPct(trader.roi)} · {t('pnl')} {fmtUsd(trader.pnl)} · {t('scoreDrawdown')}{' '}
-        {fmtPct(trader.max_drawdown != null ? -Math.abs(trader.max_drawdown) : null)} · Sharpe{' '}
-        {fmtNum(trader.sharpe_ratio)} · {t('winRate')} {fmtPct(trader.win_rate)}
+        {t('roi')} {fmtPct(roi)} · {t('pnl')} {fmtUsd(pnl)} · {t('scoreDrawdown')}{' '}
+        {fmtPct(maxDrawdown != null ? -Math.abs(maxDrawdown) : null)} · Sharpe {fmtNum(sharpeRatio)}{' '}
+        · {t('winRate')} {fmtPct(winRate)}
       </div>
       {confidenceInfo && (
         <div
@@ -213,8 +224,8 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
           >
             {t('scoreConfidenceMissing')}
             {[
-              trader.win_rate == null && t('scoreConfidenceWinRate'),
-              trader.max_drawdown == null && t('scoreConfidenceDrawdown'),
+              winRate == null && t('scoreConfidenceWinRate'),
+              maxDrawdown == null && t('scoreConfidenceDrawdown'),
             ]
               .filter(Boolean)
               .join(', ')}

@@ -69,6 +69,18 @@ export const TraderCard = memo(
     const drawdownDisplay = formatDrawdown(parsedDrawdown)
     const hasDrawdown = drawdownDisplay !== NULL_DISPLAY
     const drawdownValue = hasDrawdown ? -Math.abs(parsedDrawdown ?? 0) : null
+    const sharpeRatio =
+      trader.sharpe_ratio != null && Number.isFinite(trader.sharpe_ratio)
+        ? trader.sharpe_ratio
+        : null
+    const winRate =
+      trader.win_rate != null && Number.isFinite(trader.win_rate) ? trader.win_rate : null
+    const roiText =
+      trader.roi != null && Number.isFinite(trader.roi) ? formatROI(trader.roi) : 'unknown'
+    const scoreText =
+      trader.arena_score != null && Number.isFinite(trader.arena_score)
+        ? Number(trader.arena_score).toFixed(0)
+        : 'unknown'
 
     const isSelected = useComparisonStore(
       useCallback(
@@ -86,7 +98,7 @@ export const TraderCard = memo(
       e.preventDefault()
       e.stopPropagation()
       const shareUrl = `${window.location.origin}/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
-      const shareText = `${displayName} — ROI ${formatROI(trader.roi)}, Arena Score ${trader.arena_score != null ? Number(trader.arena_score).toFixed(0) : 'N/A'}`
+      const shareText = `${displayName} — ROI ${roiText}, Arena Score ${scoreText}`
       if (navigator.share) {
         try {
           await navigator.share({ title: shareText, url: shareUrl })
@@ -147,7 +159,7 @@ export const TraderCard = memo(
             minWidth: 0,
             gap: tokens.spacing[2],
           }}
-          aria-label={`#${rank} ${displayName}, ROI ${formatROI(trader.roi)}`}
+          aria-label={`#${rank} ${displayName}, ROI ${roiText}`}
         >
           {/* Top row: Rank + Avatar + Name */}
           <Box
@@ -239,7 +251,7 @@ export const TraderCard = memo(
                 <VerifiedDataBadge verified={trader.is_verified_data} />
                 <AntiGamingBadge
                   flags={trader.anti_gaming_flags}
-                  winRate={trader.win_rate}
+                  winRate={winRate}
                   tradesCount={trader.trades_count}
                 />
                 {trader.also_on && trader.also_on.length > 0 && (
@@ -255,6 +267,7 @@ export const TraderCard = memo(
 
             {/* Arena Score — badge (number) + graded mini-bar (audit §4) */}
             {trader.arena_score != null &&
+              Number.isFinite(trader.arena_score) &&
               (() => {
                 const { bgGradient, borderColor, textColor } = getScoreStyle(trader.arena_score)
                 return (
@@ -302,9 +315,9 @@ export const TraderCard = memo(
             <Box style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
               {series && series.length >= 2 ? (
                 <RankSparkline data={series.map((rank) => ({ rank }))} width={120} height={24} />
-              ) : (
+              ) : trader.roi != null && Number.isFinite(trader.roi) ? (
                 <Sparkline roi={trader.roi} width={120} height={24} />
-              )}
+              ) : null}
             </Box>
             <Metric
               value={trader.roi}
@@ -325,12 +338,12 @@ export const TraderCard = memo(
           >
             <MetricStat
               label="Sharpe"
-              value={trader.sharpe_ratio != null ? trader.sharpe_ratio.toFixed(2) : undefined}
+              value={sharpeRatio != null ? sharpeRatio.toFixed(2) : undefined}
               color={
-                trader.sharpe_ratio != null
-                  ? trader.sharpe_ratio >= 2
+                sharpeRatio != null
+                  ? sharpeRatio >= 2
                     ? tokens.colors.accent.success
-                    : trader.sharpe_ratio <= 0
+                    : sharpeRatio <= 0
                       ? TRADER_ACCENT_ERROR
                       : undefined
                   : undefined
@@ -347,8 +360,8 @@ export const TraderCard = memo(
             <MetricStat
               label={t('winRatePercent')}
               value={
-                trader.win_rate != null ? (
-                  `${Number(trader.win_rate).toFixed(1)}%`
+                winRate != null ? (
+                  `${winRate.toFixed(1)}%`
                 ) : // Confirmed zero-trade wallet: win% undefined by design —
                 // labeled "Holder", not an empty stat.
                 trader.trades_count === 0 ? (
@@ -357,13 +370,9 @@ export const TraderCard = memo(
                   </span>
                 ) : undefined
               }
-              color={
-                trader.win_rate != null && trader.win_rate > 50
-                  ? tokens.colors.accent.success
-                  : undefined
-              }
+              color={winRate != null && winRate > 50 ? tokens.colors.accent.success : undefined}
               nullTooltip={
-                trader.win_rate == null
+                winRate == null
                   ? trader.trades_count === 0
                     ? t('holderTooltip')
                     : getPlatformNote(trader.source || source || '') ||
