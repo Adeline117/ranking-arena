@@ -4180,6 +4180,7 @@ const zh = {
   feedbackSuccess: '感谢你的反馈！',
   feedbackError: '提交失败，请重试。',
   feedbackScreenshot: '添加截图（可选）',
+  feedbackScreenshotInvalid: '请选择可安全附加的有效截图。',
 
   // Data disclaimer
   dataDisclaimer: '数据仅供参考，不构成任何投资建议。',

@@ -10,11 +10,13 @@ import {
   announceBottomOverlayOpen,
   subscribeToBottomOverlayOpen,
 } from '@/lib/ui/bottomOverlayCoordinator'
+import { encodeFeedbackScreenshot } from '@/lib/feedback/screenshot'
 
 export default function FeedbackWidget() {
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const submitOperationRef = useRef(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const launcherRef = useRef<HTMLButtonElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -85,7 +87,8 @@ export default function FeedbackWidget() {
   if (suppressed) return null
 
   const handleSubmit = async () => {
-    if (!message.trim() || submitting) return
+    if (!message.trim() || submitting || submitOperationRef.current) return
+    submitOperationRef.current = true
     setSubmitting(true)
 
     try {
@@ -96,13 +99,13 @@ export default function FeedbackWidget() {
       }
 
       const file = fileRef.current?.files?.[0]
-      if (file && file.size < 5 * 1024 * 1024) {
-        const reader = new FileReader()
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onloadend = () => resolve(reader.result as string)
-          reader.readAsDataURL(file)
-        })
-        body.screenshot = base64
+      if (file) {
+        const screenshot = await encodeFeedbackScreenshot(file)
+        if (!screenshot) {
+          showToast(t('feedbackScreenshotInvalid'), 'error')
+          return
+        }
+        body.screenshot = screenshot
       }
 
       const res = await fetch('/api/feedback', {
@@ -123,6 +126,7 @@ export default function FeedbackWidget() {
     } catch {
       showToast(t('feedbackError'), 'error')
     } finally {
+      submitOperationRef.current = false
       setSubmitting(false)
     }
   }
@@ -322,7 +326,13 @@ export default function FeedbackWidget() {
                 <polyline points="21 15 16 10 5 21" />
               </svg>
               {t('feedbackScreenshot')}
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} />
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={submitting}
+                style={{ display: 'none' }}
+              />
             </label>
           </div>
 

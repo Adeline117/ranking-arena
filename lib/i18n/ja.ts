@@ -3954,6 +3954,7 @@ const ja = {
   feedbackSuccess: 'フィードバックありがとうございます！',
   feedbackError: 'フィードバックの送信に失敗しました。もう一度お試しください。',
   feedbackScreenshot: 'スクリーンショットを追加（任意）',
+  feedbackScreenshotInvalid: '安全に添付できる有効なスクリーンショットを選択してください。',
 
   dataDisclaimer: 'データは情報提供のみを目的としています。投資助言ではありません。',
 

@@ -4148,6 +4148,7 @@ const ko = {
   feedbackSuccess: '피드백 감사합니다!',
   feedbackError: '피드백 제출에 실패했습니다. 다시 시도해 주세요.',
   feedbackScreenshot: '스크린샷 추가 (선택)',
+  feedbackScreenshotInvalid: '안전하게 첨부할 수 있는 올바른 스크린샷을 선택해 주세요.',
 
   // Data disclaimer
   dataDisclaimer: '데이터는 정보 제공 목적으로만 제공됩니다. 투자 조언이 아닙니다.',

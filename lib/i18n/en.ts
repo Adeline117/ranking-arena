@@ -4285,6 +4285,7 @@ const en = {
   feedbackSuccess: 'Thanks for your feedback!',
   feedbackError: 'Failed to submit feedback. Please try again.',
   feedbackScreenshot: 'Add screenshot (optional)',
+  feedbackScreenshotInvalid: 'Choose a valid screenshot that can be safely attached.',
 
   // Data disclaimer
   dataDisclaimer: 'Data is for informational purposes only. Not financial advice.',

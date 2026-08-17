@@ -124,6 +124,9 @@ jest.mock('@/lib/api/versioning', () => ({
 import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
+const PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl9lZsAAAAASUVORK5CYII='
+
 // Helper to create a feedback request
 function createRequest(body: Record<string, unknown>, headers: Record<string, string> = {}) {
   return new NextRequest('http://localhost/api/feedback', {
@@ -216,6 +219,31 @@ describe('POST /api/feedback', () => {
 
     expect(res.status).toBe(200)
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ message: 'Hello world' }))
+  })
+
+  it('stores a complete validated screenshot without truncating it', async () => {
+    const res = await POST(
+      createRequest({ message: 'Screenshot attached', screenshot: PNG_DATA_URL })
+    )
+
+    expect(res.status).toBe(200)
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ screenshot_url: PNG_DATA_URL })
+    )
+  })
+
+  it.each([
+    ['a truncated image', PNG_DATA_URL.slice(0, -4)],
+    ['a spoofed MIME type', PNG_DATA_URL.replace('image/png', 'image/jpeg')],
+    ['an oversized image', `data:image/png;base64,iVBORw0KGgo${'A'.repeat(50_000)}`],
+    ['a non-string value', { data: PNG_DATA_URL }],
+  ])('rejects %s instead of persisting corrupt screenshot evidence', async (_label, screenshot) => {
+    const res = await POST(createRequest({ message: 'Screenshot attached', screenshot }))
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.error?.message ?? body.error).toBe('Invalid screenshot')
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 
   // --- Auth (optional) ---

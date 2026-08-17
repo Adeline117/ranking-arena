@@ -1,6 +1,7 @@
 import { withPublic } from '@/lib/api/middleware'
 import { success, badRequest, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
+import { isValidFeedbackScreenshotDataUrl } from '@/lib/feedback/screenshot'
 
 const logger = createLogger('feedback')
 
@@ -27,6 +28,14 @@ export const POST = withPublic(
       return badRequest('Message too long')
     }
 
+    if (
+      screenshot !== undefined &&
+      screenshot !== null &&
+      !isValidFeedbackScreenshotDataUrl(screenshot)
+    ) {
+      return badRequest('Invalid screenshot')
+    }
+
     // No bearer stays anonymous; a supplied bearer is strictly verified by middleware.
     const userId = user?.id ?? null
 
@@ -35,8 +44,7 @@ export const POST = withPublic(
       message: message.trim(),
       page_url: page_url || null,
       user_agent: user_agent || null,
-      // Limit screenshot to 50KB (was 500KB) to prevent DB abuse
-      screenshot_url: screenshot ? screenshot.slice(0, 50000) : null,
+      screenshot_url: screenshot || null,
     })
 
     if (error) {
