@@ -263,7 +263,7 @@ function PositionHistoryCard({
             weight="bold"
             style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}
           >
-            ${formatPrice(position.entryPrice)}
+            {formatPrice(position.entryPrice)}
           </Text>
         </Box>
         <Box>
@@ -277,7 +277,7 @@ function PositionHistoryCard({
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
           >
-            ${formatPrice(position.exitPrice)}
+            {formatPrice(position.exitPrice)}
           </Text>
         </Box>
         <Box>

@@ -40,6 +40,9 @@ describe('PositionHistorySection currency-bound PnL', () => {
     )
 
     expect(screen.getByText('+$100.00 USDC')).toBeInTheDocument()
+    expect(screen.getByText('100.00')).toBeInTheDocument()
+    expect(screen.getByText('110.00')).toBeInTheDocument()
+    expect(screen.queryByText('$110.00')).not.toBeInTheDocument()
   })
 
   it('does not invent a dollar unit for an unbound serving PnL', () => {
