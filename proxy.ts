@@ -107,6 +107,8 @@ const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
   '/api/v1/market/fear-greed',
   '/api/market/sparklines',
   '/api/v1/market/sparklines',
+  '/api/market/sectors',
+  '/api/v1/market/sectors',
   '/api/posts/link-preview',
   '/api/v1/posts/link-preview',
 ])

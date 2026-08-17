@@ -59,13 +59,14 @@ const PUBLIC_API_ROUTES = new Set([
   'market/fear-greed',
   // SpotMarket renders a local unavailable 7D marker and makes no endpoint call.
   'market/sparklines',
+  // SectorPerformance renders a local unavailable state and makes no endpoint call.
+  'market/sectors',
   'market/coin/[id]',
   'market/defi',
   'market/exchanges',
   'market/ohlc/[id]',
   'market/overview',
   'market/realtime',
-  'market/sectors',
   'market/spot',
   // 公开聚合统计(交易员数/交易所数,首页 hero + 跨所百分位徽章用;无用户数据,CDN 缓存 1h)
   'hero-stats',
