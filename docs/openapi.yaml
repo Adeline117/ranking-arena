@@ -44,8 +44,10 @@ paths:
       tags: [Health]
       summary: Health Check
       description: >
-        Returns application health status including database, Redis, ranking
-        freshness, and supplementary worker connectivity.
+        Returns public application health status for API transport, database,
+        Redis, and ranking freshness. This endpoint does not probe VPS
+        scraper/proxy connectivity; separate external monitoring is outside
+        this contract.
       responses:
         '200':
           description: Healthy
@@ -77,6 +79,8 @@ paths:
                       database:
                         $ref: '#/components/schemas/HealthCheck'
                       redis:
+                        $ref: '#/components/schemas/HealthCheck'
+                      freshness:
                         $ref: '#/components/schemas/HealthCheck'
         '202':
           description: Degraded (Redis or ranking freshness unavailable)

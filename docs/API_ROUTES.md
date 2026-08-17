@@ -445,7 +445,7 @@ query、rate limit、endpoint-specific Supabase/Stripe/logger/DB 工作。该源
 
 | 路由                          | 方法                | 描述                                                                                                                                                                                | 认证       |
 | ----------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `/api/health`                 | GET                 | 健康检查                                                                                                                                                                            | 否         |
+| `/api/health`                 | GET                 | 公开健康检查；只报告 API、数据库、Redis 与排名 freshness，源码不探测 VPS scraper/proxy                                                                                              | 否         |
 | `/api/health/detailed`        | GET                 | 详细健康状态                                                                                                                                                                        | 否         |
 | `/api/health/heartbeat`       | GET                 | V1 source-only heartbeat-history availability hold；无效 service secret `401`，有效 secret 固定 `410 HEARTBEAT_HISTORY_NOT_PUBLISHED`；三层 `no-store`，不打开历史依赖              | Cron Token |
 | `/api/health/heartbeat`       | POST                | V1 source-only 写入 hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不解析 body 或写入数据库                                 | Cron Token |
@@ -474,6 +474,16 @@ Redis rate limit、Supabase ranked-cohort read、CSV/JSON 生成或 logging 前�
 该固定、非环境的 `V1_RANKINGS_EXPORT_PUBLISHED=false` boundary 只覆盖这个直接
 service-auth HTTP ingress；它不改变 V3 CSV endpoint 或 authenticated `/api/settings/export`，也不停止、
 检查或证明已部署 route、仓库外 automation、缓存或数据读取的状态。
+
+### Public `/api/health` scope
+
+公开 `GET /api/health` 的 `checks` 只覆盖 API transport、database、Redis 与排名
+freshness；本源码不读取 VPS scraper/proxy 配置，也不向 VPS 发起 health probe。它仍是公开
+API 的运行状态合同，不是 VPS 或外部监控的状态权威。
+
+这是 source-only scope 收窄：不停止、不检查也不证明任何已部署的 VPS、host process、external
+monitor 或 scheduler 的状态。OpenClaw 和 harness 的独立 VPS probe 不属于该 route 的 contract，
+也不在本变更范围内。
 
 ### V1 health evaluator source boundary
 
