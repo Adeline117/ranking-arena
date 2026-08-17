@@ -62,12 +62,22 @@ describe('public ranking cache epoch boundary', () => {
     expect(store).not.toMatch(/return `\$\{DETAIL_HASH_PREFIX\}:\$\{period\.toUpperCase\(\)\}`/)
   })
 
-  it.each([
-    'app/api/cron/precompute-composite/route.ts',
-    'app/api/rankings/movers/route.ts',
-    'app/api/rankings/platform-stats/route.ts',
-  ])('%s keeps its derivative cache key inside the publication epoch', (path) => {
-    expect(source(path)).toContain('publicRankingCacheKey')
+  it.each(['app/api/cron/precompute-composite/route.ts', 'app/api/rankings/movers/route.ts'])(
+    '%s keeps its derivative cache key inside the publication epoch',
+    (path) => {
+      expect(source(path)).toContain('publicRankingCacheKey')
+    }
+  )
+
+  it('quarantines legacy platform aggregates rather than replaying an epoch cache', () => {
+    const contents = source('app/api/rankings/platform-stats/route.ts')
+
+    expect(contents).toContain('platform_stats_publication_unavailable')
+    expect(contents).toContain('no-store')
+    expect(contents).not.toContain('publicRankingCacheKey')
+    expect(contents).not.toMatch(/tieredGet\(|tieredSet\(|tieredGetOrSet\(|getOrSetWithLock\(/)
+    expect(contents).not.toContain('get_platform_stats')
+    expectNoRawPublicRankingRelation(contents)
   })
 
   it.each([

@@ -39,11 +39,13 @@ export const GET = withCron('warm-cache', async (request: NextRequest) => {
     logger.warn(`[warm-cache] DB fetch failed: ${err instanceof Error ? err.message : err}`)
   }
 
-  // Pre-warm high-traffic API caches to prevent 3s cold starts
+  // Pre-warm only endpoints that still have a trusted cache to populate.
+  // Platform statistics are intentionally quarantined until a sealed
+  // aggregate publication exists, so fetching them here must not be counted
+  // as a successful cache warm.
   const baseUrl = request.nextUrl.origin
   const warmResults = await Promise.allSettled([
     fetch(`${baseUrl}/api/traders?timeRange=90D&limit=50`, { cache: 'no-store' }),
-    fetch(`${baseUrl}/api/rankings/platform-stats`, { cache: 'no-store' }),
   ])
   const warmedApis = warmResults.filter((r) => r.status === 'fulfilled' && r.value.ok).length
   const failedApis = warmResults.filter(

@@ -913,7 +913,7 @@ Arena tracks **live CEX, DEX, and on-chain source boards**. Rankings only compar
 - **gTrade**: Arena currently serves its Arbitrum public board and verified profile windows; bounded Top-25 boards are not treated as the complete trader population.
 
 ## How to Compare
-Use Arena's **Platform Stats** (/api/rankings/platform-stats) to see aggregate ROI, score, and ranked-row counts by source. Treat these as a snapshot of Arena's eligible data, not the platform's complete user population or an investment recommendation.
+Arena's **Platform Stats** endpoint (/api/rankings/platform-stats) is temporarily unavailable while a sealed aggregate publication is established. Compare only currently published leaderboard entries, and do not infer platform-wide ROI, score, or population from an incomplete aggregate.
 
 ## Key Insight
 Do not infer performance from a CEX/DEX label. ROI capital bases, realized-versus-unrealized PnL, window boundaries, and missing risk data differ by source, so Arena only compares compatible, quality-gated metrics.
@@ -934,7 +934,7 @@ Arena 追踪**当前有数据的 CEX、DEX 与链上来源板**。只有通过�
 - **gTrade**：Arena 当前服务 Arbitrum 公开榜单和通过覆盖门的主页窗口；Top-25 榜单不能冒充完整交易员人口。
 
 ## 如何对比
-使用 Arena 的 **平台统计**（/api/rankings/platform-stats）查看各来源聚合后的 ROI、分数与入榜行数。它们是 Arena 合格数据的一个快照，不代表平台全部用户人口，也不是投资建议。
+Arena 的 **平台统计**（/api/rankings/platform-stats）正在建立可封存的聚合发布证明，当前暂不可用。请只比较当前已发布的排行榜条目，不要从不完整的聚合数据推断平台整体 ROI、分数或用户规模。
 
 ## 关键洞见
 不能从 CEX/DEX 标签推断表现。ROI 资本基数、PnL 是否含未实现部分、窗口边界和风险字段完整度都可能不同；Arena 只比较方法兼容且通过质量门的指标。
@@ -955,7 +955,7 @@ Arena は**稼働中の CEX・DEX・オンチェーンのソースボード**を
 - **gTrade**：Arena は現在 Arbitrum の公開ボードと検証済みプロフィール期間を提供します。Top-25 ボードを完全なトレーダー人口とは見なしません。
 
 ## 比較の仕方
-Arena の **プラットフォーム統計**（/api/rankings/platform-stats）では、ソース別に集計された ROI、スコア、ランク対象行数を確認できます。これは Arena の適格データのスナップショットであり、プラットフォームの全ユーザー数でも投資推奨でもありません。
+Arena の **プラットフォーム統計**（/api/rankings/platform-stats）は、封印済み集計公開を整備中のため現在利用できません。現在公開されているリーダーボード項目だけを比較し、不完全な集計からプラットフォーム全体の ROI、スコア、利用者数を推測しないでください。
 
 ## 重要な洞察
 CEX/DEX というラベルだけで成績を推測してはいけません。ROI の資本基準、実現・未実現 PnL、期間境界、リスクデータの完全性がソースごとに異なるため、Arena は方法論的に互換で品質ゲートを通過した指標だけを比較します。
@@ -976,7 +976,7 @@ Arena는 **운영 중인 CEX, DEX 및 온체인 소스 보드**를 추적합니�
 - **gTrade**: Arena는 현재 Arbitrum 공개 보드와 검증된 프로필 기간을 제공합니다. Top-25 보드를 전체 트레이더 인구로 간주하지 않습니다.
 
 ## 비교 방법
-Arena의 **플랫폼 통계**(/api/rankings/platform-stats)에서 소스별 집계 ROI, 점수, 랭킹 대상 행 수를 확인할 수 있습니다. 이는 Arena의 적격 데이터 스냅샷이며 플랫폼 전체 사용자 수나 투자 권유가 아닙니다.
+Arena의 **플랫폼 통계**(/api/rankings/platform-stats)는 봉인된 집계 공개를 준비하는 동안 일시적으로 사용할 수 없습니다. 현재 공개된 리더보드 항목만 비교하고, 불완전한 집계로 플랫폼 전체 ROI, 점수 또는 사용자 수를 추정하지 마세요.
 
 ## 핵심 인사이트
 CEX/DEX 라벨만으로 성과를 추정하면 안 됩니다. ROI 자본 기준, 실현·미실현 PnL, 기간 경계, 리스크 데이터 완전성이 소스마다 다르므로 Arena는 방법론이 호환되고 품질 게이트를 통과한 지표만 비교합니다.
