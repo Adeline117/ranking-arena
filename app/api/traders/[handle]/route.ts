@@ -1,10 +1,10 @@
 /**
  * 获取交易员详情 API
  *
- * 性能优化：
+ * 公开排名安全：
  * - 并行查询所有数据
- * - 内存缓存（5分钟TTL）
- * - 减少数据库往返
+ * - 每个响应重读当前 sealed public cohort
+ * - 不复用可能跨越 serving-head 变更的排名 payload 缓存
  *
  * 数据包括：
  * - 基本信息、绩效数据
@@ -21,16 +21,10 @@ import { withPublic } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
-import {
-  success as apiSuccess,
-  unauthorized as apiUnauthorized,
-  withCache,
-} from '@/lib/api/response'
+import { success as apiSuccess, unauthorized as apiUnauthorized } from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 import { serializePublicLinkedAggregate } from '@/lib/data/linked-trader-public'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
 import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
@@ -38,25 +32,26 @@ const handleSchema = z.string().min(1).max(255)
 
 const logger = createLogger('trader-api')
 
-// Next.js 缓存配置
-export const revalidate = 300 // 5分钟，与 Cache-Control s-maxage 一致
+// A rank-bearing public response needs a current sealed-cohort read. Neither
+// the route cache nor a shared response cache can establish that proof.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-// 缓存键前缀
-const CACHE_PREFIX = publicRankingCacheKey('trader:')
-
-const LINKED_MEMBERSHIP_NO_STORE_HEADERS = {
+const PUBLIC_PROFILE_NO_STORE_HEADERS = {
   'Cache-Control': 'private, no-store, max-age=0',
   'CDN-Cache-Control': 'no-store',
   'Vercel-CDN-Cache-Control': 'no-store',
   Pragma: 'no-cache',
 } as const
 
-function noStoreLinkedMembership<T extends Response>(response: T): T {
-  for (const [name, value] of Object.entries(LINKED_MEMBERSHIP_NO_STORE_HEADERS)) {
+function noStorePublicProfile<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PUBLIC_PROFILE_NO_STORE_HEADERS)) {
     response.headers.set(name, value)
   }
   return response
 }
+
+const noStoreLinkedMembership = noStorePublicProfile
 
 function requestCarriesLinkedMembership(request: NextRequest): boolean {
   const includes = (request.nextUrl.searchParams.get('include') || '')
@@ -175,12 +170,11 @@ export async function GET(
       // don't depend on prod data shape.
       const fixtureName = req.nextUrl.searchParams.get('e2e_fixture')
       if (process.env.NODE_ENV !== 'production' && fixtureName && E2E_FIXTURES[fixtureName]) {
-        return apiSuccess(E2E_FIXTURES[fixtureName]())
+        return noStorePublicProfile(apiSuccess(E2E_FIXTURES[fixtureName]()))
       }
 
       // Accept optional ?source= param to disambiguate traders with same handle across exchanges
       const sourceParam = req.nextUrl.searchParams.get('source') || ''
-      const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
       const consistencyProbeRequested = req.nextUrl.searchParams.get('consistency_probe') === '1'
       const consistencyProbe = consistencyProbeRequested && verifyCronSecret(req)
       if (consistencyProbeRequested && !consistencyProbe) {
@@ -226,17 +220,10 @@ export async function GET(
         return result
       }
 
-      // The CI consistency probe compares the API with a just-read authoritative
-      // leaderboard row. Its CRON_SECRET-authenticated path must bypass the warm
-      // 2m memory / 15m Redis tier; otherwise expected cache age looks like drift.
-      const data = consistencyProbe
-        ? await fetchTraderData()
-        : await tieredGetOrSet(
-            cacheKey,
-            fetchTraderData,
-            'warm', // warm tier: 2 min memory, 15 min Redis
-            ['trader']
-          )
+      // Every public response recomputes the profile projection. A warm payload
+      // could outlive a withdrawn serving head and would then leak its old
+      // rank-derived fields without a current public-cohort proof.
+      const data = await fetchTraderData()
 
       const { resolved } = data
       const pageData = quarantineLegacyPositionHistory(data.pageData)
@@ -408,15 +395,9 @@ export async function GET(
       const duration = Date.now() - startTime
       const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
       if (consistencyProbe) {
-        response.headers.set('Cache-Control', 'private, no-store, max-age=0')
-        response.headers.set('Pragma', 'no-cache')
         response.headers.set('X-Arena-Consistency-Proof', 'live-loader-v1')
-        return response
       }
-      if (includes.includes('aggregate')) {
-        return noStoreLinkedMembership(response)
-      }
-      return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
+      return noStorePublicProfile(response)
     },
     { name: 'trader-detail', rateLimit: 'public' }
   )

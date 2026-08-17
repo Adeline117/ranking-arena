@@ -24,6 +24,10 @@ import {
   PUBLIC_RANKING_QUARANTINED_SOURCES,
   isPublicRankingSourceAllowed,
 } from '@/lib/rankings/publication-policy'
+import {
+  fetchPublicProfileRankingRows,
+  PUBLIC_PROFILE_RANKING_PERIODS,
+} from './public-profile-ranking'
 
 // Database types are generated after the migration is applied. Keep the one
 // ungenerated relation name isolated here rather than hand-editing generated
@@ -255,9 +259,9 @@ export async function getLeaderboard(
  * Get full trader detail for the trader profile page.
  * Used by: /trader/[handle], /api/traders/[handle]
  *
- * Per-period data comes from leaderboard_ranks (precomputed). The trader_latest
- * fallback was removed (table retiring) — serving sources render via the arena
- * read path; this legacy branch only serves shadow/legacy-mode sources.
+ * Per-period ranking data comes only from public_ranked_leaderboard. The
+ * security-barrier view suppresses any incomplete/estimated/raw observation;
+ * profile identity can still render with unknown ranking fields.
  *
  * Enrichment data (equity curve, asset breakdown, positions, stats) comes from
  * dedicated tables that use v1 naming (source + source_trader_id).
@@ -270,34 +274,23 @@ export async function getTraderDetail(
   }
 ): Promise<TraderDetail | null> {
   const { platform, traderKey } = params
-  if (!isPublicRankingSourceAllowed(platform)) return null
   const sourceAliases = getSourceAliases(platform)
 
-  // --- Phase 1: Fetch basic data + profile in parallel (4 queries) ---
-  // Profile queries (traders + trader_profiles_v2) don't depend on LR/v2 results,
-  // so run them all in one Promise.all to save a sequential round trip (~100-200ms).
+  // --- Phase 1: Fetch ranked cohort + identity/profile in parallel ---
+  // Profile queries do not establish rank authority. Run them alongside the
+  // sealed cohort query so an unranked profile can retain its identity.
   // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
   const phase1Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
-  const [lrResult, sourceProfileResult, profileV2Result] = await withTimeout(
+  const [rankingCohort, sourceProfileResult, profileV2Result] = await withTimeout(
     Promise.all([
-      // leaderboard_ranks: all periods (precomputed). SOLE per-period source now
-      // — the trader_latest fallback was removed (table retiring). Serving sources
-      // render via the arena read path (page.tsx); this legacy branch only ever
-      // serves shadow/legacy-mode sources, whose ranked traders are in LR.
-      safeQuery(() =>
-        supabase
-          .from('leaderboard_ranks')
-          .select(
-            `${LR.source_trader_id}, ${LR.handle}, ${LR.source}, source_type, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown,
-                   trades_count, followers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, computed_at,
-                   profitability_score, risk_control_score, execution_score, score_completeness,
-                   trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor,
-                   calmar_ratio, trader_type, is_outlier, ${LR.season_id}`
-          )
-          .eq(LR.source, platform)
-          .eq(LR.source_trader_id, traderKey)
-          .limit(5)
-          .abortSignal(phase1Signal)
+      fetchPublicProfileRankingRows(
+        supabase,
+        {
+          source: platform,
+          sourceTraderId: traderKey,
+          periods: PUBLIC_PROFILE_RANKING_PERIODS,
+        },
+        phase1Signal
       ),
       // Profile from trader_sources table
       safeQuery(() =>
@@ -325,12 +318,13 @@ export async function getTraderDetail(
     SSR_HEAVY_QUERY_TIMEOUT_MS + 1000 // outer fallback: AbortSignal should fire first
   )
 
-  // Extract data from DataResult wrappers (failures treated as empty/null for graceful degradation)
-  const lrRows = (unwrap(lrResult) || []) as Record<string, unknown>[]
+  // Extract profile observations independently from the rank cohort. The
+  // helper has already converted a missing/unverified cohort to no rows.
+  const lrRows = rankingCohort.rows as Record<string, unknown>[]
   const sourceProfile = unwrap(sourceProfileResult) as Record<string, unknown> | null | undefined
   const profileV2 = unwrap(profileV2Result) as Record<string, unknown> | null | undefined
 
-  // Build per-period data using fallback chain: LR -> v2
+  // Build each requested period from the sealed public cohort only.
   const periods: Record<TradingPeriod, Partial<UnifiedTrader> | null> = {
     '7D': null,
     '30D': null,
@@ -338,22 +332,32 @@ export async function getTraderDetail(
   }
 
   for (const p of ['90D', '30D', '7D'] as TradingPeriod[]) {
-    // leaderboard_ranks (season_id → period) — sole per-period source.
+    // The sealed public view projects season_id → period.
     const lrRow = lrRows.find((r) => normalizePeriod(r[LR.season_id] as string) === p)
     if (lrRow) {
       periods[p] = mapLeaderboardRow(lrRow)
     }
   }
 
-  // If no data from any source, return null
+  // A profile can exist without a published ranking row. Retain its identity,
+  // but leave all ranking-derived fields null so callers render unknown rather
+  // than coercing an unavailable cohort to zero or a fabricated position.
   const hasAnyData = periods['90D'] || periods['30D'] || periods['7D']
-  if (!hasAnyData) {
+  const hasIdentityData = sourceProfile || profileV2
+  if (!hasAnyData && !hasIdentityData) {
     return null
   }
 
-  // Build the primary trader record (prefer 90D, then 30D, then 7D)
-  const primaryPeriod: TradingPeriod = periods['90D'] ? '90D' : periods['30D'] ? '30D' : '7D'
-  const primaryData = periods[primaryPeriod]!
+  // Build the primary trader record (prefer 90D, then 30D, then 7D).
+  // With a profile-only trader, `primaryData` is intentionally blank.
+  const primaryPeriod: TradingPeriod = periods['90D']
+    ? '90D'
+    : periods['30D']
+      ? '30D'
+      : periods['7D']
+        ? '7D'
+        : '90D'
+  const primaryData = periods[primaryPeriod] ?? ({} as Partial<UnifiedTrader>)
 
   const trader: UnifiedTrader = {
     platform,

@@ -18,13 +18,19 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import logger from '@/lib/logger'
-import { getOrSetWithLock } from '@/lib/cache'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
-import { publicRankingCacheKey } from '@/lib/rankings/publication-policy'
+import { success as apiSuccess, handleError } from '@/lib/api/response'
 import { quarantineLegacyFullPositions } from '@/lib/data/trader/history-quarantine'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const PUBLIC_PROFILE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
 
 export async function GET(
   request: NextRequest,
@@ -40,23 +46,19 @@ export async function GET(
       throw ApiError.validation('Missing handle parameter')
     }
 
-    const cacheKey = publicRankingCacheKey(`trader:full:${handle}`)
-    const data = quarantineLegacyFullPositions(
-      await getOrSetWithLock(
-        cacheKey,
-        async () => {
-          return await fetchTraderFull(handle)
-        },
-        { ttl: 60, lockTtl: 10 }
-      )
-    )
+    // A cached full response cannot prove its ranking cohort is still
+    // published. Read the detail projection live for every public request.
+    const data = quarantineLegacyFullPositions(await fetchTraderFull(handle))
 
     if (!data) {
       throw ApiError.notFound('Trader not found')
     }
 
     const response = apiSuccess(data)
-    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
+    for (const [name, value] of Object.entries(PUBLIC_PROFILE_NO_STORE_HEADERS)) {
+      response.headers.set(name, value)
+    }
+    return response
   } catch (error: unknown) {
     logger.error('[API] 交易员聚合数据获取Failed:', error)
     return handleError(error, 'trader-full')

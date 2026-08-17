@@ -21,7 +21,9 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
   const profile = {
     handle: t.handle || t.traderKey,
     id: t.traderKey,
-    followers: t.followers ?? 0,
+    // Missing source profile counts must remain absent. Treating them as zero
+    // makes an unknown public profile field look like a verified count.
+    followers: t.followers ?? undefined,
     copiers: t.copiers,
     avatar_url: t.avatarUrl,
     isRegistered: false,
@@ -237,7 +239,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
   const similarTraders = detail.similarTraders.map((st) => ({
     handle: st.handle || st.traderKey,
     id: st.traderKey,
-    followers: st.followers ?? 0,
+    followers: st.followers ?? undefined,
     avatar_url: st.avatarUrl,
     source: st.platform,
     roi_90d: st.roi,

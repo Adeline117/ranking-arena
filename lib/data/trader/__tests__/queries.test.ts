@@ -29,7 +29,11 @@ jest.mock('@/lib/utils/logger', () => ({
   },
 }))
 
-import { getLeaderboard, safeQuery, withTimeout } from '../queries'
+jest.mock('../similar', () => ({
+  fetchSimilarTraders: jest.fn().mockResolvedValue([]),
+}))
+
+import { getLeaderboard, getTraderDetail, safeQuery, withTimeout } from '../queries'
 
 function chainableQuery(response: { data?: Record<string, unknown>[]; error?: unknown } = {}) {
   const query: Record<string, jest.Mock> = {}
@@ -42,6 +46,39 @@ function chainableQuery(response: { data?: Record<string, unknown>[]; error?: un
   })
   query.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
   return query
+}
+
+function detailQuery(response: { data: unknown; error: { message?: string } | null }) {
+  const query: Record<string, jest.Mock | ((...args: unknown[]) => Promise<unknown>)> = {}
+  for (const method of ['select', 'eq', 'in', 'not', 'order', 'limit']) {
+    query[method] = jest.fn(() => query)
+  }
+  query.abortSignal = jest.fn(() => query)
+  query.maybeSingle = jest.fn().mockResolvedValue(response)
+  query.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+    Promise.resolve(response).then(resolve, reject)
+  return query
+}
+
+function publicRankRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'trader-1',
+    season_id: '90D',
+    rank: 1,
+    arena_score: 90,
+    roi: 12.5,
+    pnl: 5000,
+    win_rate: 62,
+    max_drawdown: 9,
+    trades_count: 42,
+    followers: 12,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    ...overrides,
+  }
 }
 
 describe('safeQuery', () => {
@@ -273,4 +310,97 @@ describe('getLeaderboard public cohort view', () => {
       expect(from).not.toHaveBeenCalled()
     }
   )
+})
+
+function traderDetailSupabase(publicRows: unknown[]) {
+  const emptyRows = () => detailQuery({ data: [], error: null })
+  const queries = new Map<string, Array<ReturnType<typeof detailQuery>>>([
+    ['public_ranked_leaderboard', [detailQuery({ data: publicRows, error: null })]],
+    [
+      'trader_sources',
+      [
+        detailQuery({
+          data: {
+            source_trader_id: 'trader-1',
+            handle: 'Trader One',
+            profile_url: 'https://example.test/trader-1',
+            avatar_url: 'https://example.test/avatar.png',
+            market_type: 'futures',
+          },
+          error: null,
+        }),
+        detailQuery({ data: { created_at: '2026-08-15T00:00:00.000Z' }, error: null }),
+      ],
+    ],
+    ['trader_profiles_v2', [detailQuery({ data: null, error: null })]],
+    ['trader_equity_curve', [emptyRows()]],
+    ['trader_asset_breakdown', [emptyRows()]],
+    ['trader_stats_detail', [emptyRows()]],
+    ['trader_portfolio', [emptyRows()]],
+    ['trader_position_summary', [detailQuery({ data: null, error: null })]],
+  ])
+  const from = jest.fn((relation: string) => {
+    const queued = queries.get(relation)
+    if (!queued || queued.length === 0) {
+      throw new Error(`Unexpected relation ${relation}`)
+    }
+    return queued.shift()!
+  })
+  return { from }
+}
+
+describe('getTraderDetail public profile cohort', () => {
+  it('uses the sealed view for every public rank-derived profile metric', async () => {
+    const supabase = traderDetailSupabase([publicRankRow()])
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+    })
+
+    expect(supabase.from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(result?.trader).toMatchObject({
+      handle: 'Trader One',
+      rank: 1,
+      roi: 12.5,
+      arenaScore: 90,
+      tradesCount: 42,
+    })
+    expect(result?.periods['90D']).toMatchObject({ rank: 1, roi: 12.5, arenaScore: 90 })
+  })
+
+  it('keeps a known profile but nulls ranking fields when its public row is unavailable', async () => {
+    const supabase = traderDetailSupabase([])
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+    })
+
+    expect(result).not.toBeNull()
+    expect(result?.trader).toMatchObject({
+      handle: 'Trader One',
+      rank: null,
+      roi: null,
+      pnl: null,
+      arenaScore: null,
+      tradesCount: null,
+    })
+    expect(result?.periods).toEqual({ '7D': null, '30D': null, '90D': null })
+    expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
+  it('keeps a non-rankable source profile while skipping its public ranking query', async () => {
+    const supabase = traderDetailSupabase([])
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'okx_web3_solana',
+      traderKey: 'trader-1',
+    })
+
+    expect(result?.trader).toMatchObject({ handle: 'Trader One', rank: null, roi: null })
+    expect(supabase.from).not.toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
 })

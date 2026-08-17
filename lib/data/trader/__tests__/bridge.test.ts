@@ -155,12 +155,12 @@ describe('持仓数交叉校验', () => {
 })
 
 describe('profile 映射', () => {
-  it('handle 缺失回退 traderKey;followers null → 0', () => {
+  it('handle 缺失回退 traderKey;followers null 保持 unknown', () => {
     const d = detail({ trader: { handle: null, followers: null } })
     const profile = toTraderPageData(d).profile as Record<string, unknown>
     expect(profile.handle).toBe('tk-1')
     expect(profile.id).toBe('tk-1')
-    expect(profile.followers).toBe(0)
+    expect(profile.followers).toBeUndefined()
     expect(profile.isRegistered).toBe(false)
   })
 
@@ -250,7 +250,7 @@ describe('集合映射', () => {
     expect(toTraderPageData(detail()).stats).toBeNull()
   })
 
-  it('similarTraders 映射 handle 回退 + followers 0 兜底', () => {
+  it('similarTraders 映射 handle 回退 + followers unknown 不伪造为 0', () => {
     const d = detail({
       similarTraders: [
         {
@@ -265,6 +265,6 @@ describe('集合映射', () => {
       ],
     })
     const st = toTraderPageData(d).similarTraders as Array<Record<string, unknown>>
-    expect(st[0]).toMatchObject({ handle: 'sk1', id: 'sk1', followers: 0, source: 'okx' })
+    expect(st[0]).toMatchObject({ handle: 'sk1', id: 'sk1', followers: undefined, source: 'okx' })
   })
 })
