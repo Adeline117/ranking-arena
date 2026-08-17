@@ -27,6 +27,8 @@ interface HealthData {
 interface PlatformHealthData {
   platforms: Array<{ platform: string; status: string; last_check?: string }>
   freshness: Record<string, string>
+  freshness_visibility?: 'verified' | 'unknown'
+  freshness_reason?: string | null
 }
 
 /** Semantic health level, decoupled from the various raw status strings. */
@@ -214,7 +216,7 @@ export default function StatusPage() {
       }
     }
 
-    if (platforms?.freshness) {
+    if (platforms?.freshness_visibility === 'verified') {
       for (const [platform, ts] of Object.entries(platforms.freshness)) {
         monitored++
         const stale = Date.now() - new Date(ts).getTime() > STALE_MS
@@ -227,6 +229,17 @@ export default function StatusPage() {
             message: t('statusDataAgo').replace('{ago}', formatTimeAgo(ts, language)),
           })
       }
+    } else if (platforms) {
+      // Old cached payloads lack the explicit visibility bit. Treat both them
+      // and a new unknown response as unverified rather than replaying a
+      // timestamp that could have come from a raw score-computation fallback.
+      monitored++
+      inc.push({
+        key: 'plat:freshness',
+        name: t('statusDataFreshness'),
+        level: 'degraded',
+        message: t('unknown'),
+      })
     }
 
     const pct = monitored > 0 ? (operational / monitored) * 100 : null
@@ -481,36 +494,56 @@ export default function StatusPage() {
             )}
 
             {/* Platform data freshness */}
-            {platforms && Object.keys(platforms.freshness).length > 0 && (
-              <div className="card-hover" style={cardStyle}>
-                <h2 style={sectionHeadingStyle}>{t('statusDataFreshness')}</h2>
-                {Object.entries(platforms.freshness)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([platform, timestamp]) => {
-                    const stale = Date.now() - new Date(timestamp).getTime() > STALE_MS
-                    const level: Level = stale ? 'degraded' : 'operational'
-                    return (
-                      <div key={platform} style={rowStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <StatusIcon level={level} t={t} />
-                          <span>{formatComponentName(platform)}</span>
-                        </div>
-                        <span
-                          style={{
-                            fontSize: tokens.typography.fontSize.xs,
-                            color: stale
-                              ? tokens.colors.accent.warning
-                              : tokens.colors.text.tertiary,
-                            fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                          }}
-                        >
-                          {formatTimeAgo(timestamp, language)}
-                        </span>
+            {platforms &&
+              (platforms.freshness_visibility !== 'verified' ||
+                Object.keys(platforms.freshness).length > 0) && (
+                <div className="card-hover" style={cardStyle}>
+                  <h2 style={sectionHeadingStyle}>{t('statusDataFreshness')}</h2>
+                  {platforms.freshness_visibility !== 'verified' ? (
+                    <div style={rowStyle}>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <StatusIcon level="degraded" t={t} />
+                        <span>{t('unknown')}</span>
                       </div>
-                    )
-                  })}
-              </div>
-            )}
+                      <span
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.accent.warning,
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        }}
+                      >
+                        {t('unknown')}
+                      </span>
+                    </div>
+                  ) : (
+                    Object.entries(platforms.freshness)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([platform, timestamp]) => {
+                        const stale = Date.now() - new Date(timestamp).getTime() > STALE_MS
+                        const level: Level = stale ? 'degraded' : 'operational'
+                        return (
+                          <div key={platform} style={rowStyle}>
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <StatusIcon level={level} t={t} />
+                              <span>{formatComponentName(platform)}</span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: tokens.typography.fontSize.xs,
+                                color: stale
+                                  ? tokens.colors.accent.warning
+                                  : tokens.colors.text.tertiary,
+                                fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                              }}
+                            >
+                              {formatTimeAgo(timestamp, language)}
+                            </span>
+                          </div>
+                        )
+                      })
+                  )}
+                </div>
+              )}
           </>
         )}
 

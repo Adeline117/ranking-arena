@@ -42,6 +42,23 @@ describe('public ranking freshness route contracts', () => {
     expect(v2).toContain('updated_at: freshnessSummary.asOf')
   })
 
+  it('platform health never exposes raw score computation time as source freshness', () => {
+    const route = source('app/api/platforms/health/route.ts')
+    const statusPage = source('app/(app)/status/page.tsx')
+
+    expect(route).not.toMatch(rawLeaderboardRankRead)
+    expect(route).not.toMatch(/select\([^)]*computed_at/)
+    expect(route).not.toContain('updated_at:computed_at')
+    expect(route).not.toContain('getOrSetWithLock')
+    expect(route).toContain(
+      "freshness_visibility: latestByPlatform.size > 0 ? ('verified' as const) : ('unknown' as const)"
+    )
+    expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0, must-revalidate'")
+    expect(statusPage).toContain("platforms?.freshness_visibility === 'verified'")
+    expect(statusPage).toContain("platforms.freshness_visibility !== 'verified'")
+    expect(statusPage).toContain("message: t('unknown')")
+  })
+
   it('composite cache joins source watermarks and does not discard stale last-good ranks', () => {
     const route = source('app/api/cron/precompute-composite/route.ts')
 
