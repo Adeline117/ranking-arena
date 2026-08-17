@@ -25,6 +25,11 @@ import { fireAndForget, createLogger } from '@/lib/utils/logger'
 const logger = createLogger('search-api')
 import { features } from '@/lib/features'
 import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/lib/data/unified'
+import {
+  materializePublicSearchTraders,
+  type PublicSearchTraderCandidate,
+} from '@/lib/data/trader/queries'
+import type { UnifiedTrader } from '@/lib/data/trader/types'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilisearch'
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
@@ -69,8 +74,17 @@ interface SearchSuggestionCandidateSet {
   groups: Array<{ id: string; name: string }>
 }
 
+type CachedTraderSort = 'identity' | 'arena_score' | 'roi'
+
 interface UnifiedSearchCacheCandidate {
   result: Omit<UnifiedSearchResponse, 'suggestions'>
+  /**
+   * Identity-only nominations. These are re-materialized against the current
+   * public ranking cohort on every cache hit; never cache rank/ROI/PnL/score.
+   */
+  traderCandidates?: PublicSearchTraderCandidate[]
+  traderSort?: CachedTraderSort
+  minimumRoi?: number
   /** Escaped DB pattern used to prove group names still match on cache hits. */
   groupQuery: string
   suggestionCandidates?: SearchSuggestionCandidateSet
@@ -89,6 +103,84 @@ const SEARCH_NO_STORE_HEADERS = {
 const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
 
 type PublicSearchSupabase = Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']
+
+function toPublicSearchTraderCandidate(
+  trader: Pick<UnifiedTrader, 'platform' | 'traderKey' | 'handle' | 'avatarUrl' | 'traderType'>
+): PublicSearchTraderCandidate | null {
+  if (!trader.platform || !trader.traderKey) return null
+  return {
+    platform: trader.platform,
+    traderKey: trader.traderKey,
+    handle: trader.handle,
+    avatarUrl: trader.avatarUrl,
+    traderType: trader.traderType,
+  }
+}
+
+function publicSearchNominationKey(platform: string, traderKey: string): string {
+  return JSON.stringify([platform, traderKey])
+}
+
+function materializeSearchTraderResults(traders: readonly UnifiedTrader[]): UnifiedSearchResult[] {
+  return traders.map((trader) => {
+    const exchangeName =
+      EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform
+    const isBot = trader.traderType === 'bot' || trader.platform === 'web3_bot'
+    const roiStr =
+      trader.roi != null
+        ? `${trader.roi >= 0 ? '+' : ''}${trader.roi >= 1000 ? `${(trader.roi / 1000).toFixed(1)}K` : trader.roi.toFixed(1)}%`
+        : null
+    const rankStr = trader.rank != null ? `#${trader.rank}` : null
+    const subtitle = [
+      exchangeName,
+      rankStr,
+      roiStr,
+      trader.arenaScore != null ? `Score ${Math.round(trader.arenaScore)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' \u00B7 ')
+
+    return {
+      id: `${trader.platform}:${trader.traderKey}`,
+      type: 'trader' as const,
+      title: `@${trader.handle || trader.traderKey}`,
+      subtitle,
+      href: `/trader/${encodeURIComponent(trader.traderKey || trader.handle || '')}?platform=${trader.platform}`,
+      avatar: trader.avatarUrl || null,
+      meta: {
+        ...(isBot ? { is_bot: true } : {}),
+        ...(trader.roi != null ? { roi: trader.roi } : {}),
+        ...(trader.arenaScore != null ? { arena_score: trader.arenaScore } : {}),
+        ...(trader.rank != null ? { rank: trader.rank } : {}),
+        platform: trader.platform,
+        ranking_visibility: trader.rank != null ? 'verified' : 'unknown',
+      },
+    }
+  })
+}
+
+function sortCurrentPublicSearchTraders(
+  traders: readonly UnifiedTrader[],
+  sort: CachedTraderSort,
+  minimumRoi?: number
+): UnifiedTrader[] {
+  if (sort === 'identity') return [...traders]
+
+  const verified = traders.filter(
+    (trader) =>
+      trader.rank != null && (minimumRoi == null || (trader.roi != null && trader.roi > minimumRoi))
+  )
+  return verified.sort((left, right) => {
+    const leftValue = sort === 'arena_score' ? left.arenaScore : left.roi
+    const rightValue = sort === 'arena_score' ? right.arenaScore : right.roi
+    return (
+      (rightValue ?? Number.NEGATIVE_INFINITY) - (leftValue ?? Number.NEGATIVE_INFINITY) ||
+      (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER) ||
+      left.platform.localeCompare(right.platform) ||
+      left.traderKey.localeCompare(right.traderKey)
+    )
+  })
+}
 
 interface CurrentSearchGroup {
   id: string
@@ -152,6 +244,19 @@ async function materializeUnifiedSearchCandidate(
   supabase: PublicSearchSupabase,
   candidate: UnifiedSearchCacheCandidate
 ): Promise<UnifiedSearchResponse> {
+  // Redis may contain identity/relevance nominations only. Re-read the
+  // security-barrier view on every response so a withdrawn, partial, or stale
+  // ranking row cannot survive a cache TTL. Ignore any legacy cached trader
+  // result entirely rather than attempting to sanitize its metric fields.
+  const currentTraders = await materializePublicSearchTraders(
+    supabase,
+    candidate.traderCandidates ?? []
+  )
+  const traders = sortCurrentPublicSearchTraders(
+    currentTraders,
+    candidate.traderSort ?? 'identity',
+    candidate.minimumRoi
+  )
   const resultPostCandidates: SearchPostAudienceCandidate[] = candidate.result.results.posts.map(
     (result) => ({
       id: result.id,
@@ -227,7 +332,13 @@ async function materializeUnifiedSearchCandidate(
         ]),
       ].slice(0, 5)
     : []
-  const results = { ...candidate.result.results, posts, users, groups }
+  const results = {
+    ...candidate.result.results,
+    traders: materializeSearchTraderResults(traders),
+    posts,
+    users,
+    groups,
+  }
 
   return {
     ...candidate.result,
@@ -575,8 +686,9 @@ export const GET = withPublic(
       } satisfies UnifiedSearchResponse)
     }
 
-    // Cache check
-    const cacheKey = `search:unified:v4:candidates:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
+    // Cache identity/relevance nominations only. Every response below rebuilds
+    // trader metrics from the live sealed cohort before it is returned.
+    const cacheKey = `search:unified:v5:candidates:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
     try {
       const cached = await cacheGet<UnifiedSearchCacheCandidate>(cacheKey)
       if (cached) {
@@ -659,7 +771,11 @@ export const GET = withPublic(
       description: string | null
     }
 
-    // Try Meilisearch first (1-6ms), fall back to Supabase (100-300ms)
+    type SearchTraderNomination = PublicSearchTraderCandidate & { relevance: number }
+
+    // Meilisearch can nominate identities and text relevance only. Its index
+    // no longer returns rank-derived fields, and every nomination below is
+    // hydrated from public_ranked_leaderboard before it reaches the response.
     let meliFacetDistribution: Record<string, Record<string, number>> | undefined
     let meiliDegraded = false
     const meiliTraderSearch =
@@ -669,21 +785,17 @@ export const GET = withPublic(
             platform: effectivePlatform || undefined,
             season: '90D',
           })
-            .then((result) => {
+            .then((result): SearchTraderNomination[] | null => {
               if (!result) return null
-              // Capture facet distribution for response
               if (result.facetDistribution) meliFacetDistribution = result.facetDistribution
-              return result.hits.map((h) => ({
-                handle: h.handle,
+              return result.hits.map((hit, index) => ({
+                handle: hit.handle || null,
                 traderKey:
-                  h.id.split('--').slice(1, -1).join('--') || h.id.split('--')[1] || h.handle,
-                platform: h.platform,
-                roi: h.roi,
-                pnl: h.pnl,
-                arenaScore: h.arena_score,
-                rank: h.rank,
-                avatarUrl: h.avatar_url,
-                traderType: h.trader_type,
+                  hit.id.split('--').slice(1, -1).join('--') || hit.id.split('--')[1] || hit.handle,
+                platform: hit.platform,
+                avatarUrl: hit.avatar_url || null,
+                traderType: hit.trader_type ?? null,
+                relevance: result.hits.length - index,
               }))
             })
             .catch((err) => {
@@ -699,9 +811,6 @@ export const GET = withPublic(
     const [meiliResults, initialSupabaseTraders, postsData, usersData, groupsData] =
       await Promise.all([
         meiliTraderSearch,
-        // Supabase trader search: only run when Meilisearch is NOT configured.
-        // Previously ran both in parallel and discarded Supabase results ~90% of the time,
-        // wasting a DB connection pool slot per search request.
         isMeilisearchAvailable()
           ? Promise.resolve([])
           : unifiedSearchTraders(supabase, {
@@ -716,7 +825,6 @@ export const GET = withPublic(
               return []
             }),
 
-        // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
         features.social
           ? safeQuery(
               supabase
@@ -733,8 +841,6 @@ export const GET = withPublic(
           ? safeQuery(
               supabase
                 .from('public_user_profiles')
-                // The public projection excludes account-private columns and
-                // deleted profiles before the service client can see them.
                 .select('id, handle, avatar_url, bio')
                 .ilike('handle', `%${sanitizedQuery}%`)
                 .limit(limitPerCategory)
@@ -755,34 +861,38 @@ export const GET = withPublic(
       ])
     let supabaseTraders = initialSupabaseTraders
 
-    // The public search route uses a service client. Visibility='public' is
-    // not sufficient for group-paid posts, repost roots, account state, or
-    // block edges, so release only rows approved for the anonymous actor.
     const readablePostsData = await filterServiceReadablePostRows(
       supabase,
       postsData as PostRow[],
       null
     )
 
-    // If Meilisearch was configured but failed at runtime, run Supabase fallback now
     if (meiliDegraded && supabaseTraders.length === 0) {
       try {
-        const fallback = await unifiedSearchTraders(supabase, {
+        supabaseTraders = await unifiedSearchTraders(supabase, {
           query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
           limit: effectiveLimit,
           platform: effectivePlatform,
         })
-        supabaseTraders = fallback
       } catch {
         /* already logged above */
       }
     }
 
-    // For exchange name search, fetch top traders from leaderboard if direct search returned nothing
-    // Use Meilisearch results if available (1-6ms), otherwise Supabase (100-300ms)
-    let exchangeTopTraders =
-      meiliResults && meiliResults.length > 0 ? meiliResults : supabaseTraders
-    if (matchedExchange && !platformFilter && exchangeTopTraders.length === 0) {
+    const toNomination = (trader: UnifiedTrader, index: number): SearchTraderNomination | null => {
+      const candidate = toPublicSearchTraderCandidate(trader)
+      return candidate ? { ...candidate, relevance: Math.max(effectiveLimit - index, 1) } : null
+    }
+    let traderNominations: SearchTraderNomination[] =
+      meiliResults && meiliResults.length > 0
+        ? meiliResults
+        : supabaseTraders
+            .map(toNomination)
+            .filter((candidate): candidate is SearchTraderNomination => candidate !== null)
+
+    // An exchange query is a ranking intent. If text/index nomination found no
+    // identities, begin from the sealed leaderboard, not an index metric.
+    if (matchedExchange && !platformFilter && traderNominations.length === 0) {
       try {
         const { getLeaderboard } = await import('@/lib/data/unified')
         const { traders: topTraders } = await getLeaderboard(supabase, {
@@ -790,74 +900,57 @@ export const GET = withPublic(
           limit: effectiveLimit,
           period: '90D',
         })
-        exchangeTopTraders = topTraders
+        traderNominations = topTraders
+          .map(toNomination)
+          .filter((candidate): candidate is SearchTraderNomination => candidate !== null)
       } catch {
-        // Leaderboard fetch failed
+        // Leaderboard fetch failed; a live public-cohort materialization below
+        // will still keep only identity candidates with unknown metrics.
       }
     }
 
-    // Sort traders by relevance score (Meilisearch-inspired weighted ranking)
-    // When searching for an exchange name, prioritize arena_score (best traders first).
-    // For text searches, prioritize text match quality.
-    const isExchangeSearch = !!matchedExchange && !platformFilter
-    const scoredTraders = exchangeTopTraders
-      .map((t) => {
-        let relevance = 0
-        if (isExchangeSearch) {
-          // Exchange search: sort by arena_score (most relevant = best performer)
-          relevance = t.arenaScore ?? 0
-        } else {
-          const handle = (t.handle || t.traderKey || '').toLowerCase()
-          const q = sanitizedQuery.toLowerCase()
-          if (handle === q)
-            relevance += 100 // Exact match
-          else if (handle.startsWith(q))
-            relevance += 50 // Prefix match
-          else if (handle.includes(q)) relevance += 20 // Contains
-          relevance += Math.min((t.arenaScore ?? 0) / 2, 30) // Score bonus (max 30)
-          relevance += Math.min(Math.log10(Math.max(t.roi ?? 1, 1)) * 5, 15) // ROI bonus (max 15)
-        }
-        return { ...t, _relevance: relevance }
-      })
-      .sort((a, b) => b._relevance - a._relevance)
+    const nominationRelevance = new Map<string, number>()
+    for (const nomination of traderNominations) {
+      const key = publicSearchNominationKey(nomination.platform, nomination.traderKey)
+      if (!nominationRelevance.has(key)) nominationRelevance.set(key, nomination.relevance)
+    }
 
-    // Map traders to UnifiedSearchResult
-    const traders: UnifiedSearchResult[] = scoredTraders.map((t) => {
-      const exchangeName =
-        EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
-      const isBot = t.traderType === 'bot' || t.platform === 'web3_bot'
-      const roiStr =
-        t.roi != null
-          ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%`
-          : null
-      const rankStr = t.rank != null ? `#${t.rank}` : null
-      const subtitle = [
-        exchangeName,
-        rankStr,
-        roiStr,
-        t.arenaScore != null ? `Score ${Math.round(t.arenaScore)}` : null,
-      ]
-        .filter(Boolean)
-        .join(' \u00B7 ')
-      return {
-        id: `${t.platform}:${t.traderKey}`,
-        type: 'trader' as const,
-        title: `@${t.handle || t.traderKey}`,
-        subtitle,
-        // Route by real traderKey (source_trader_id), NOT handle. 92% of handles
-        // fail /api/traders/<handle> resolution → 404; resolveTrader accepts either
-        // handle OR source_trader_id, and the id is always resolvable. (U3-1b)
-        href: `/trader/${encodeURIComponent(t.traderKey || t.handle || '')}?platform=${t.platform}`,
-        avatar: t.avatarUrl || null,
-        meta: {
-          ...(isBot ? { is_bot: true } : {}),
-          ...(t.roi != null ? { roi: t.roi } : {}),
-          ...(t.arenaScore != null ? { arena_score: t.arenaScore } : {}),
-          ...(t.rank != null ? { rank: t.rank } : {}),
-          platform: t.platform,
-        },
-      }
-    })
+    const currentTraders = await materializePublicSearchTraders(supabase, traderNominations)
+    const isExchangeSearch = !!matchedExchange && !platformFilter
+    const traderSort: CachedTraderSort =
+      isExchangeSearch || statsFilter?.sortBy === 'arena_score'
+        ? 'arena_score'
+        : statsFilter?.minRoi != null || statsFilter?.sortBy === 'roi'
+          ? 'roi'
+          : 'identity'
+    const minimumRoi = statsFilter?.minRoi
+    const scoredTraders =
+      traderSort === 'identity'
+        ? currentTraders
+            .map((trader) => {
+              const handle = (trader.handle || trader.traderKey).toLowerCase()
+              const q = sanitizedQuery.toLowerCase()
+              let relevance =
+                nominationRelevance.get(
+                  publicSearchNominationKey(trader.platform, trader.traderKey)
+                ) ?? 0
+              if (handle === q) relevance += 100
+              else if (handle.startsWith(q)) relevance += 50
+              else if (handle.includes(q)) relevance += 20
+              return { trader, relevance }
+            })
+            .sort(
+              (left, right) =>
+                right.relevance - left.relevance ||
+                left.trader.platform.localeCompare(right.trader.platform) ||
+                left.trader.traderKey.localeCompare(right.trader.traderKey)
+            )
+            .map(({ trader }) => trader)
+        : sortCurrentPublicSearchTraders(currentTraders, traderSort, minimumRoi)
+    const traders = materializeSearchTraderResults(scoredTraders)
+    const traderCandidates = scoredTraders
+      .map(toPublicSearchTraderCandidate)
+      .filter((candidate): candidate is PublicSearchTraderCandidate => candidate !== null)
 
     const posts: UnifiedSearchResult[] = readablePostsData.map((p) => ({
       id: p.id,
@@ -946,12 +1039,17 @@ export const GET = withPublic(
       groupQuery: sanitizedQuery,
       result: {
         query: escapedQuery,
-        results: { traders, posts, users, groups },
+        // Trader metrics never enter Redis. The identity candidates below are
+        // re-read from public_ranked_leaderboard in materializeUnifiedSearchCandidate.
+        results: { traders: [], posts, users, groups },
         total: totalResults,
         ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),
         ...(meliFacetDistribution ? { facetDistribution: meliFacetDistribution } : {}),
         ...(meiliDegraded ? { degraded: true } : {}),
       },
+      traderCandidates,
+      traderSort,
+      ...(minimumRoi != null ? { minimumRoi } : {}),
       ...(suggestionCandidates ? { suggestionCandidates } : {}),
     }
 

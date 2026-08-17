@@ -35,18 +35,15 @@ if (MEILI_URL.startsWith('https://') && typeof window === 'undefined') {
   }
 }
 
+/**
+ * Search-index candidates are identity/relevance hints only. Public ranking
+ * fields are deliberately not retrieved here; callers must re-materialize a
+ * hit against the sealed public ranking cohort before exposing them.
+ */
 interface MeiliSearchResult {
   id: string
   handle: string
   platform: string
-  platform_name: string
-  roi: number
-  pnl: number
-  arena_score: number
-  win_rate: number | null
-  max_drawdown: number | null
-  followers: number | null
-  rank: number
   trader_type: string | null
   avatar_url: string | null
 }
@@ -102,20 +99,7 @@ export async function searchTradersMeili(
         limit,
         filter: filters.join(' AND '),
         facets: ['platform', 'trader_type', 'season_id'],
-        attributesToRetrieve: [
-          'id',
-          'handle',
-          'platform',
-          'platform_name',
-          'roi',
-          'pnl',
-          'arena_score',
-          'win_rate',
-          'rank',
-          'trader_type',
-          'avatar_url',
-          'season_id',
-        ],
+        attributesToRetrieve: ['id', 'handle', 'platform', 'trader_type', 'avatar_url'],
         attributesToHighlight: ['handle'],
         highlightPreTag: '<mark>',
         highlightPostTag: '</mark>',
