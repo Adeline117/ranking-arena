@@ -262,6 +262,16 @@ source path，而非 status monitor：它固定向 stderr 输出 `[RETIRED]`、s
 deployed host、scheduler、credential、database、provider、历史数据或产品行为；也不改变既有
 `app/api/trader/onchain-enrich` hold，不能据此推断任何仓库外或已部署状态。
 
+## V1 exchange-logo sync source containment（2026-08-17）
+
+`scripts/sync-exchange-logos.sh` 是单条历史 exchange-logo sync compatibility path，现为 retired V1
+NO-GO source path：无论传入何种参数，均只向 stderr 输出 `[RETIRED]`、stdout 保持为空并以 exit `2`
+结束。
+
+这是 source-only boundary：既有 checked-in `public/icons/exchanges/*` icon assets 与使用这些本地
+assets 的产品 UI 仍在本次范围外。本次不下载、刷新、删除、检查或证明任何已部署 asset、cache、外部
+来源或 provenance，也不能据此推断任何其他 logo acquisition/refresh workflow 已停止。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
