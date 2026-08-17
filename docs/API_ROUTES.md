@@ -322,20 +322,22 @@ V1 的公开 API-key 绑定选择器只展示 Binance、Bybit、Bitget，即当�
 
 ### 旧版 Portfolio 凭据退役
 
-| 路由                                      | 方法   | 描述                                                                                         | 认证       |
-| ----------------------------------------- | ------ | -------------------------------------------------------------------------------------------- | ---------- |
-| `/api/portfolio`                          | GET    | 仅列出 owner 的 `id/exchange/label/created_at` 清理元数据；不返回密文                        | 是         |
-| `/api/portfolio?id=[uuid]`                | DELETE | 调用 service-only owner-filtered RPC；删除 parent 并由 FK 级联 positions/snapshots           | 是         |
-| `/api/portfolio`                          | POST   | V1 已退役；解析 body 或写入凭据前固定返回 410                                                | 否         |
-| `/api/portfolio/sync`                     | POST   | V1 已退役；读取/解密凭据或访问交易所前固定返回 410                                           | 否         |
-| `/api/portfolio/positions`                | GET    | V1 已退役；固定返回 410                                                                      | 否         |
-| `/api/portfolio/snapshots`                | GET    | V1 已退役；固定返回 410                                                                      | 否         |
-| `/api/settings/export`                    | POST   | owner data export；`account.legacy_portfolios` 含白名单 metadata/positions/snapshots，无密文 | 是 + CSRF  |
-| `/api/portfolio/[address]`                | GET    | 仍在使用的公开 EVM address portfolio 查询；与 `user_portfolios` 旧 CEX 凭据面无关            | 否         |
-| `/api/portfolio/suggestions`              | GET    | 已下线；所有 tier 固定返回 403，不提供组合建议                                               | 不适用     |
-| `/api/cron/aggregate-portfolio-snapshots` | GET    | 认证 compatibility no-op；返回 `status=retired`、`snapshots=0`，且不在 Vercel schedule 中    | Cron Token |
+| 路由                                      | 方法   | 描述                                                                                                                                      | 认证       |
+| ----------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/portfolio`                          | GET    | 仅列出 owner 的 `id/exchange/label/created_at` 清理元数据；不返回密文                                                                     | 是         |
+| `/api/portfolio?id=[uuid]`                | DELETE | 调用 service-only owner-filtered RPC；删除 parent 并由 FK 级联 positions/snapshots                                                        | 是         |
+| `/api/portfolio`                          | POST   | V1 已退役；解析 body 或写入凭据前固定返回 410                                                                                             | 否         |
+| `/api/portfolio/sync`                     | POST   | V1 已退役；读取/解密凭据或访问交易所前固定返回 410                                                                                        | 否         |
+| `/api/portfolio/positions`                | GET    | V1 已退役；固定返回 410                                                                                                                   | 否         |
+| `/api/portfolio/snapshots`                | GET    | V1 已退役；固定返回 410                                                                                                                   | 否         |
+| `/api/settings/export`                    | POST   | owner data export；`account.legacy_portfolios` 含白名单 metadata/positions/snapshots，无密文                                              | 是 + CSRF  |
+| `/api/portfolio/[address]`                | GET    | V1 public-egress source-only hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取动态地址、缓存或 EVM portfolio adapter | 否         |
+| `/api/portfolio/suggestions`              | GET    | 已下线；所有 tier 固定返回 403，不提供组合建议                                                                                            | 不适用     |
+| `/api/cron/aggregate-portfolio-snapshots` | GET    | 认证 compatibility no-op；返回 `status=retired`、`snapshots=0`，且不在 Vercel schedule 中                                                 | Cron Token |
 
 所有响应均不得暴露旧 API key 密文。`POST /api/settings/export` 不接受 caller-supplied user id；server 只把已认证 user id 传给 service-only `export_legacy_portfolio_data_v1(uuid)`。输出键为 `account.legacy_portfolios = { portfolios, positions, snapshots }`，manifest 对应三个同名前缀数据集；每组最多 250,000 行。portfolio 只含 `id/exchange/label/created_at`，positions 与 snapshots 只含用户可移植的严格白名单业务字段，numeric 以 text 保真；不含 `user_id` 或任何 API key/passphrase ciphertext，child `portfolio_id` 必须属于同一 owner 的导出 parent set。exact bridge SHA 会早于 Portfolio migration 部署，因此 migration 前已认证 export 必须返回 500 fail closed，不能降级为省略 `legacy_portfolios` 的“成功”导出；migration 后才以 HTTP 200、完整三项 manifest/owner rows、零密文/跨 owner 数据及每组超限返回 413 作为可用证明。Arena owner-delete 只清除 Arena 副本及其 child rows，不会调用交易所撤销 key；用户必须另在对应交易所 revoke/rotate。migration 部署后 production 必须核对 exact ledger、三表 table/column ACL、唯一 service metadata policy、两个 service-only RPC、数据保留、export owner scope/字段白名单/上限、跨 owner delete false、delete cascade 与 rollback。
+
+`GET /api/portfolio/[address]` 是独立的匿名 EVM portfolio acquisition ingress hold：固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 和三层 `no-store`，不读取动态地址、不调用 public wrapper、cache、EVM adapter、logger 或 RPC。仓内 source audit 的结果为 **zero checked-in callers**；这只描述本仓库当前受版本控制的源文件，不能推断仓外 callers/consumers 是否存在。该 hold 同样是 source-only：它不停止、检查或证明已部署的 route、cache、RPC 或链上数据已经停用。
 
 ---
 
@@ -491,7 +493,7 @@ handoff，因此两种方法都交给各自 route-owned 的认证和 hold；相�
 
 ### V1 public-egress source boundary
 
-`GET /api/cdn-proxy`、`GET /api/attestation/[uid]`、`GET /api/market/alpha`、`GET /api/market/arbitrage`、
+`GET /api/cdn-proxy`、`GET /api/attestation/[uid]`、`GET /api/portfolio/[address]`、`GET /api/market/alpha`、`GET /api/market/arbitrage`、
 `GET /api/market/candles`、`GET /api/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`GET /api/market/ohlc/[id]`（`[id]` 只允许单个非空路径段）、`GET /api/market/defi`、`GET /api/market/exchanges`、`GET /api/market/overview`、`GET /api/market/futures`、`GET /api/market/fear-greed`、
 `GET /api/market/sparklines`、`GET /api/market/sectors` 与 `GET /api/posts/link-preview` 共用固定、非环境的
 `V1_PUBLIC_EGRESS_PUBLISHED=false` source hold，均固定返回
@@ -500,6 +502,8 @@ handoff，因此两种方法都交给各自 route-owned 的认证和 hold；相�
 social feature guard、缓存、DNS lookup、logging 或 outbound fetch；alpha handler 也不导入
 CoinGecko、cache 或旧响应转换逻辑，candles handler 不导入 ccxt、选择 exchange 或转换 K 线。
 attestation verification handler 不读取动态 UID，也不导入 EAS、viem、logger 或 Base RPC；它不查询或改变既有 attestation。
+portfolio address handler 不读取动态地址，也不导入 public wrapper、cache、EVM adapter、logger 或 RPC；仓内 source audit 的
+结果为 **zero checked-in callers**，但这不对仓外 callers/consumers 作任何判断，也不停止、检查或证明已部署的 route、cache、RPC 或链上数据已经停用。
 coin detail 和 OHLC handler 都不读取动态 id、缓存、rate limit 或 CoinGecko；TokenSidePanel 的币种详情和
 OHLC 图表区域只显示本地 `dataUnavailable`，不请求、不重试，也不把不可用解释为币种详情或图表数据。
 defi handler 保留 Edge/dynamic 元数据，但不使用缓存、rate limit 或 DefiLlama；DefiOverview
@@ -517,12 +521,14 @@ sparklines handler 保留 Edge/dynamic 元数据，但不使用内存缓存、ra
 7D 单元格显示本地 `dataUnavailable` 标记，不发起该 endpoint 请求。
 sectors handler 保留 Edge/dynamic 元数据，但不使用缓存、rate limit 或 CoinGecko；SectorPerformance
 只显示本地 `dataUnavailable`，不发起该 endpoint 请求，也不把不可用解释为任一板块表现。
-`/api/v1/cdn-proxy`、`/api/v1/attestation/[uid]`、`/api/v1/market/alpha`、`/api/v1/market/arbitrage`、
+`/api/v1/cdn-proxy`、`/api/v1/attestation/[uid]`、`/api/v1/portfolio/[address]`、`/api/v1/market/alpha`、`/api/v1/market/arbitrage`、
 `/api/v1/market/candles`、`/api/v1/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`/api/v1/market/ohlc/[id]`（`[id]` 只允许单个非空路径段）、`/api/v1/market/defi`、`/api/v1/market/exchanges`、`/api/v1/market/overview`、`/api/v1/market/futures`、`/api/v1/market/fear-greed`、
 `/api/v1/market/sparklines`、`/api/v1/market/sectors` 和 `/api/v1/posts/link-preview` 在 rewrite 前 handoff：
 静态路径使用 exact matcher，coin detail 和 OHLC 只使用 canonical/V1 的严格单段 `[id]` matcher；两者都不扩展到相邻路径。
 attestation verification 则只 handoff canonical/V1 的单段 bytes32 UID：`0x` 后恰好 64 个十六进制字符；
 `/api/attestation/mint`、短/非 hex UID 与任何 child path 都不在该 bypass 内，继续经过正常 proxy/IP-floor 处理。
+portfolio address 只 handoff canonical/V1 的单段 EVM 地址：小写 `0x` 后恰好 40 个十六进制字符；
+`/api/portfolio/positions`、`/api/portfolio/snapshots`、`/api/portfolio/sync`、`/api/portfolio/suggestions`、无效值与任何 child path 都不在该 bypass 内，继续经过正常 proxy/IP-floor 处理。
 独立的 Funding Rates 与 Open Interest 页面直接读取各自 RPC/回退数据，
 不经此 retired handler，仍在本边界范围外。
 

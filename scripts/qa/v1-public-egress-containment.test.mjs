@@ -26,6 +26,7 @@ const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
 const marketCoinRoute = codeOnly(source('app/api/market/coin/[id]/route.ts'))
 const marketOhlcRoute = codeOnly(source('app/api/market/ohlc/[id]/route.ts'))
 const attestationVerificationRoute = codeOnly(source('app/api/attestation/[uid]/route.ts'))
+const portfolioAddressRoute = codeOnly(source('app/api/portfolio/[address]/route.ts'))
 const marketDefiRoute = codeOnly(source('app/api/market/defi/route.ts'))
 const marketExchangesRoute = codeOnly(source('app/api/market/exchanges/route.ts'))
 const marketOverviewRoute = codeOnly(source('app/api/market/overview/route.ts'))
@@ -59,7 +60,7 @@ test('V1 public egress publication is checked-in false and browser-safe', () => 
   }
 })
 
-test('anonymous public egress routes, including dynamic market and attestation holds, are no-argument fixed no-store tombstones', () => {
+test('anonymous public egress routes, including dynamic market, attestation, and portfolio holds, are no-argument fixed no-store tombstones', () => {
   for (const route of [
     cdnProxyRoute,
     marketAlphaRoute,
@@ -68,6 +69,7 @@ test('anonymous public egress routes, including dynamic market and attestation h
     marketCoinRoute,
     marketOhlcRoute,
     attestationVerificationRoute,
+    portfolioAddressRoute,
     marketDefiRoute,
     marketExchangesRoute,
     marketOverviewRoute,
@@ -108,7 +110,7 @@ test('anonymous public egress routes, including dynamic market and attestation h
   }
 })
 
-test('dynamic market and attestation holds use strict canonical or V1 route-shape matchers', () => {
+test('dynamic market, attestation, and portfolio holds use strict canonical or V1 route-shape matchers', () => {
   assert.match(proxy, /PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS\s*=\s*\[/)
 
   for (const pattern of [
@@ -118,6 +120,8 @@ test('dynamic market and attestation holds use strict canonical or V1 route-shap
     String.raw`/^\/api\/v1\/market\/ohlc\/[^/]+$/`,
     String.raw`/^\/api\/attestation\/0x[a-fA-F0-9]{64}$/`,
     String.raw`/^\/api\/v1\/attestation\/0x[a-fA-F0-9]{64}$/`,
+    String.raw`/^\/api\/portfolio\/0x[a-fA-F0-9]{40}$/`,
+    String.raw`/^\/api\/v1\/portfolio\/0x[a-fA-F0-9]{40}$/`,
   ]) {
     assert.match(proxy, new RegExp(escapeRegExp(pattern)))
   }
@@ -142,6 +146,22 @@ test('attestation verification is fixed and has no UID, EAS, viem, logger, or RP
   }
 })
 
+test('EVM portfolio acquisition is fixed and has no address, public wrapper, cache, adapter, logger, or RPC capability', () => {
+  assert.match(portfolioAddressRoute, /export function GET\(\): NextResponse/)
+  assert.match(portfolioAddressRoute, /status:\s*410/)
+
+  for (const forbidden of [
+    /\b(?:NextRequest|request|params|searchParams|new\s+URL|address)\b/,
+    /\b(?:withPublic|isValidEvmAddress|extractAddress)\b/,
+    /\bfetch\s*\(/,
+    /\b(?:logger|createLogger|cache|Redis|ioredis)\b/,
+    /\b(?:getPortfolio|evm-adapter|EVM|ethers|viem|rpc)\b/i,
+    /\b(?:checkRateLimit|RateLimitPresets|Ratelimit)\b/,
+  ]) {
+    assert.doesNotMatch(portfolioAddressRoute, forbidden)
+  }
+})
+
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
   assert.match(
     proxy,
@@ -153,7 +173,7 @@ test('only canonical and versioned public egress paths bypass proxy guards', () 
   )
   assert.doesNotMatch(
     proxy,
-    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|arbitrage|candles|coin|defi|exchanges|overview|futures|fear-greed|sparklines|sectors)|link-preview)/
+    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|portfolio|market\/(?:alpha|arbitrage|candles|coin|defi|exchanges|overview|futures|fear-greed|sparklines|sectors)|link-preview)/
   )
 
   const shouldSkipStart = proxy.indexOf('export function shouldSkip(pathname: string): boolean')
@@ -286,6 +306,7 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(apiAuthCoverage, /'market\/candles'/)
   assert.match(apiAuthCoverage, /'market\/coin\/\[id\]'/)
   assert.match(apiAuthCoverage, /'market\/ohlc\/\[id\]'/)
+  assert.match(apiAuthCoverage, /'portfolio\/\[address\]'/)
   assert.match(apiAuthCoverage, /'market\/defi'/)
   assert.match(apiAuthCoverage, /'market\/exchanges'/)
   assert.match(apiAuthCoverage, /'market\/overview'/)
@@ -303,6 +324,9 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(docs, /`\/api\/market\/coin\/\[id\]`/)
   assert.match(docs, /`\/api\/v1\/market\/coin\/\[id\]`/)
   assert.match(docs, /`\/api\/market\/ohlc\/\[id\]`/)
+  assert.match(docs, /`\/api\/portfolio\/\[address\]`/)
+  assert.match(docs, /`\/api\/v1\/portfolio\/\[address\]`/)
+  assert.match(docs, /zero checked-in callers/)
   assert.match(docs, /`\/api\/v1\/market\/ohlc\/\[id\]`/)
   assert.match(docs, /单个非空路径段/)
   assert.match(docs, /TokenSidePanel/)
