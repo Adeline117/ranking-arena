@@ -51,6 +51,7 @@
 | `/api/market/fear-greed`                      | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、缓存或请求情绪供应商           | 否   |
 | `/api/market/sparklines`                      | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、内存缓存或请求市场供应商       | 否   |
 | `/api/market/sectors`                         | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、缓存或请求 CoinGecko 分类      | 否   |
+| `/api/attestation/[uid]`                      | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取动态 UID 或请求 EAS/viem/Base RPC 验证 | 否   |
 | `/api/trader/[platform]/[trader_key]`         | GET              | legacy read-compatibility；固定 `refresh_job:null`，不公开旧 queue 状态                                                       | 否   |
 | `/api/trader/[platform]/[trader_key]/refresh` | POST             | V1 auth-first `401/410 LEGACY_REFRESH_JOBS_NOT_PUBLISHED` 与三层 `no-store`；不读 body、限流或 queue                          | 是   |
 | `/api/trader/[platform]/[trader_key]/history` | GET              | 固定 `forensic_only`/unavailable 空历史；不公开 legacy rows                                                                   | 否   |
@@ -490,7 +491,7 @@ handoff，因此两种方法都交给各自 route-owned 的认证和 hold；相�
 
 ### V1 public-egress source boundary
 
-`GET /api/cdn-proxy`、`GET /api/market/alpha`、`GET /api/market/arbitrage`、
+`GET /api/cdn-proxy`、`GET /api/attestation/[uid]`、`GET /api/market/alpha`、`GET /api/market/arbitrage`、
 `GET /api/market/candles`、`GET /api/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`GET /api/market/ohlc/[id]`（`[id]` 只允许单个非空路径段）、`GET /api/market/defi`、`GET /api/market/exchanges`、`GET /api/market/overview`、`GET /api/market/futures`、`GET /api/market/fear-greed`、
 `GET /api/market/sparklines`、`GET /api/market/sectors` 与 `GET /api/posts/link-preview` 共用固定、非环境的
 `V1_PUBLIC_EGRESS_PUBLISHED=false` source hold，均固定返回
@@ -498,6 +499,7 @@ handoff，因此两种方法都交给各自 route-owned 的认证和 hold；相�
 `Vercel-CDN-Cache-Control` 三层 `no-store`。它们不读取 query、执行 rate limit、CORS、
 social feature guard、缓存、DNS lookup、logging 或 outbound fetch；alpha handler 也不导入
 CoinGecko、cache 或旧响应转换逻辑，candles handler 不导入 ccxt、选择 exchange 或转换 K 线。
+attestation verification handler 不读取动态 UID，也不导入 EAS、viem、logger 或 Base RPC；它不查询或改变既有 attestation。
 coin detail 和 OHLC handler 都不读取动态 id、缓存、rate limit 或 CoinGecko；TokenSidePanel 的币种详情和
 OHLC 图表区域只显示本地 `dataUnavailable`，不请求、不重试，也不把不可用解释为币种详情或图表数据。
 defi handler 保留 Edge/dynamic 元数据，但不使用缓存、rate limit 或 DefiLlama；DefiOverview
@@ -515,10 +517,12 @@ sparklines handler 保留 Edge/dynamic 元数据，但不使用内存缓存、ra
 7D 单元格显示本地 `dataUnavailable` 标记，不发起该 endpoint 请求。
 sectors handler 保留 Edge/dynamic 元数据，但不使用缓存、rate limit 或 CoinGecko；SectorPerformance
 只显示本地 `dataUnavailable`，不发起该 endpoint 请求，也不把不可用解释为任一板块表现。
-`/api/v1/cdn-proxy`、`/api/v1/market/alpha`、`/api/v1/market/arbitrage`、
+`/api/v1/cdn-proxy`、`/api/v1/attestation/[uid]`、`/api/v1/market/alpha`、`/api/v1/market/arbitrage`、
 `/api/v1/market/candles`、`/api/v1/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`/api/v1/market/ohlc/[id]`（`[id]` 只允许单个非空路径段）、`/api/v1/market/defi`、`/api/v1/market/exchanges`、`/api/v1/market/overview`、`/api/v1/market/futures`、`/api/v1/market/fear-greed`、
 `/api/v1/market/sparklines`、`/api/v1/market/sectors` 和 `/api/v1/posts/link-preview` 在 rewrite 前 handoff：
 静态路径使用 exact matcher，coin detail 和 OHLC 只使用 canonical/V1 的严格单段 `[id]` matcher；两者都不扩展到相邻路径。
+attestation verification 则只 handoff canonical/V1 的单段 bytes32 UID：`0x` 后恰好 64 个十六进制字符；
+`/api/attestation/mint`、短/非 hex UID 与任何 child path 都不在该 bypass 内，继续经过正常 proxy/IP-floor 处理。
 独立的 Funding Rates 与 Open Interest 页面直接读取各自 RPC/回退数据，
 不经此 retired handler，仍在本边界范围外。
 

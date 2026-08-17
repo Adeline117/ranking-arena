@@ -131,11 +131,13 @@ const PUBLIC_API_ROUTES = new Set([
   // parsing, outbound fetch/DNS, logging, cache, rate-limit, CORS, or social work.
   'cdn-proxy',
   'posts/link-preview',
+  // Attestation verification is a fixed public-egress 410: it does not read a
+  // UID or invoke EAS, viem, logging, or Base RPC verification.
+  'attestation/[uid]',
   // 自验证型（token/签名即凭证，无会话可言）
   'auth/siwe/nonce',
   'auth/siwe/verify',
   'email/unsubscribe',
-  'attestation/[uid]',
   // 有意公开的计算端点（sensitive 限流 15/min fail-close + 30min dedup，防成本放大）
   'trader/onchain-enrich',
   // 已退役（恒 410 Gone）

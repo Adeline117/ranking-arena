@@ -25,6 +25,7 @@ const marketArbitrageRoute = codeOnly(source('app/api/market/arbitrage/route.ts'
 const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
 const marketCoinRoute = codeOnly(source('app/api/market/coin/[id]/route.ts'))
 const marketOhlcRoute = codeOnly(source('app/api/market/ohlc/[id]/route.ts'))
+const attestationVerificationRoute = codeOnly(source('app/api/attestation/[uid]/route.ts'))
 const marketDefiRoute = codeOnly(source('app/api/market/defi/route.ts'))
 const marketExchangesRoute = codeOnly(source('app/api/market/exchanges/route.ts'))
 const marketOverviewRoute = codeOnly(source('app/api/market/overview/route.ts'))
@@ -58,7 +59,7 @@ test('V1 public egress publication is checked-in false and browser-safe', () => 
   }
 })
 
-test('anonymous public egress routes, including dynamic coin detail and OHLC, are no-argument fixed no-store tombstones', () => {
+test('anonymous public egress routes, including dynamic market and attestation holds, are no-argument fixed no-store tombstones', () => {
   for (const route of [
     cdnProxyRoute,
     marketAlphaRoute,
@@ -66,6 +67,7 @@ test('anonymous public egress routes, including dynamic coin detail and OHLC, ar
     marketCandlesRoute,
     marketCoinRoute,
     marketOhlcRoute,
+    attestationVerificationRoute,
     marketDefiRoute,
     marketExchangesRoute,
     marketOverviewRoute,
@@ -106,7 +108,7 @@ test('anonymous public egress routes, including dynamic coin detail and OHLC, ar
   }
 })
 
-test('dynamic coin-detail and OHLC holds accept only one canonical or V1 id segment', () => {
+test('dynamic market and attestation holds use strict canonical or V1 route-shape matchers', () => {
   assert.match(proxy, /PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS\s*=\s*\[/)
 
   for (const pattern of [
@@ -114,6 +116,8 @@ test('dynamic coin-detail and OHLC holds accept only one canonical or V1 id segm
     String.raw`/^\/api\/v1\/market\/coin\/[^/]+$/`,
     String.raw`/^\/api\/market\/ohlc\/[^/]+$/`,
     String.raw`/^\/api\/v1\/market\/ohlc\/[^/]+$/`,
+    String.raw`/^\/api\/attestation\/0x[a-fA-F0-9]{64}$/`,
+    String.raw`/^\/api\/v1\/attestation\/0x[a-fA-F0-9]{64}$/`,
   ]) {
     assert.match(proxy, new RegExp(escapeRegExp(pattern)))
   }
@@ -122,6 +126,20 @@ test('dynamic coin-detail and OHLC holds accept only one canonical or V1 id segm
     proxy,
     /export function isPublicEgressProxyBypassPath\(pathname: string\): boolean\s*\{[\s\S]*?PUBLIC_EGRESS_BYPASS_PATHS\.has\(pathname\)[\s\S]*?PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS/
   )
+})
+
+test('attestation verification is fixed and has no UID, EAS, viem, logger, or RPC capability', () => {
+  assert.match(attestationVerificationRoute, /export function GET\(\): NextResponse/)
+  assert.match(attestationVerificationRoute, /status:\s*410/)
+
+  for (const forbidden of [
+    /\b(?:NextRequest|request|params|searchParams|new\s+URL|uid)\b/,
+    /\b(?:verifyAttestation|ARENA_SCORE_SCHEMA_UID|EAS|viem|Hex)\b/,
+    /\b(?:basePublicClient|readContract|rpc)\b/i,
+    /\b(?:logger|fetch\s*\(|checkRateLimit|RateLimitPresets|Ratelimit)\b/,
+  ]) {
+    assert.doesNotMatch(attestationVerificationRoute, forbidden)
+  }
 })
 
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
@@ -275,6 +293,7 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(apiAuthCoverage, /'market\/fear-greed'/)
   assert.match(apiAuthCoverage, /'market\/sparklines'/)
   assert.match(apiAuthCoverage, /'market\/sectors'/)
+  assert.match(apiAuthCoverage, /'attestation\/\[uid\]'/)
   assert.match(apiAuthCoverage, /V1 public compatibility tombstones/)
   assert.match(apiAuthCoverage, /V1 public-egress compatibility tombstone/)
   assert.match(docs, /`\/api\/cdn-proxy`/)
@@ -295,6 +314,9 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(docs, /`\/api\/market\/fear-greed`/)
   assert.match(docs, /`\/api\/market\/sparklines`/)
   assert.match(docs, /`\/api\/market\/sectors`/)
+  assert.match(docs, /`\/api\/attestation\/\[uid\]`/)
+  assert.match(docs, /`\/api\/v1\/attestation\/\[uid\]`/)
+  assert.match(docs, /bytes32/)
   assert.match(docs, /`\/api\/posts\/link-preview`/)
   assert.match(docs, /V1_PUBLIC_EGRESS_PUBLISHED=false/)
   assert.match(docs, /cannot stop, inspect, or prove|不能停止、检查或证明/)
