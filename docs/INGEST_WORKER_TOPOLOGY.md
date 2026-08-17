@@ -27,7 +27,23 @@ The checked-in legacy-refresh boundary, including the client-safe fixed-false
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately retires legacy queue admission
 and consumption: `batch-discover` is auth-first `401/410`, `batch-5min` retains only
 post hot-score maintenance, and public refresh never admits or exposes a job. Legacy
-proxy/import paths remain outside this containment unit and require a separate review.
+proxy/import paths remain outside that refresh-job containment unit.
+
+The separate legacy proxy/import source hold is intentionally limited to `GET
+/api/proxy/phemex`, `cloudflare-worker/src/index.ts`,
+`scripts/import/import_all_platforms.mjs`, `scripts/import/refresh.sh`,
+`scripts/import/import-all-blocked.sh`, `scripts/import/run_hl_enrichment.sh`,
+`scripts/vps-deploy/scraper-v16-parallel.js`, `scripts/vps-deploy/arena-proxy.mjs`,
+`scripts/archive/test-vps-scrapers.ts`, and
+`scripts/archive/verify-data-accuracy.mjs`. Phemex authenticates first, then returns
+fixed `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` with three `no-store` headers;
+there is no URL/query parsing, upstream fetch, or logging after the hold. The checked-in
+Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with the same
+headers and no upstream fetch. The named scripts report `RETIRED` and exit `2` before
+proxy, browser, import, or host work. This does not stop, inspect, or prove a deployed
+VPS proxy/scraper, Cloudflare Worker, host process, queue, or external schedule. It
+does not include `app/api/cron/backfill-avatars`, avatar helpers, adapters, or any
+unlisted source/write path, so none of those is declared closed by this document.
 
 Arena's ingest fleet is designed to serve customer-facing ranking freshness from two
 nodes sharing one Supabase database and Upstash Redis. A source's

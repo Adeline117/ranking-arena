@@ -52,12 +52,12 @@ lib/                    # Core business logic
   supabase/             # Supabase client + helpers
 
 scripts/                # CLI tools and maintenance
-  import/               # Data import scripts
+  import/               # Historical import source; named V1 entrypoints are retired
   backfill-*.ts         # Legacy compatibility tombstones (no V1 direct invocation)
 
 supabase/migrations/    # SQL migration files
 worker/                 # Worker source; this listing is architecture, not runtime state
-cloudflare-worker/      # CF Worker for geo-blocked APIs
+cloudflare-worker/      # Historical proxy source; fixed V1 no-fetch response
 ```
 
 ## Key Commands
@@ -151,9 +151,24 @@ The checked-in legacy-refresh boundary includes the client-safe fixed-false
 `batch-5min` no longer consumes refresh jobs,
 and public refresh admission is auth-first `401/410` without body/rate-limit/queue
 work. Legacy detail returns `refresh_job: null` and its compatibility hook cannot post
-or poll. Legacy proxy/import paths remain outside this unit. Like the other source
-holds, it neither stops nor proves a running host, persisted queue, or external
-schedule.
+or poll.
+
+The legacy proxy/import acquisition source hold is separately and exhaustively named:
+`GET /api/proxy/phemex`, `cloudflare-worker/src/index.ts`,
+`scripts/import/import_all_platforms.mjs`, `scripts/import/refresh.sh`,
+`scripts/import/import-all-blocked.sh`, `scripts/import/run_hl_enrichment.sh`,
+`scripts/vps-deploy/scraper-v16-parallel.js`, `scripts/vps-deploy/arena-proxy.mjs`,
+`scripts/archive/test-vps-scrapers.ts`, and
+`scripts/archive/verify-data-accuracy.mjs`. Phemex remains auth-first (`401` for
+missing/invalid service authentication, then `410
+LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` with three `no-store` headers) and does not
+parse URL/query, fetch, or log. The checked-in Cloudflare Worker is a fixed
+`410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED`/three-`no-store` no-fetch response; the named
+script entrypoints report `RETIRED` and exit `2` before proxy, browser, import, or host
+work. This source-only hold does not stop or prove a deployed VPS/Cloudflare worker,
+host process, queue, or schedule. It also does not claim that every source write is
+closed: `app/api/cron/backfill-avatars`, avatar helpers, adapters, and any unlisted
+import/write utility remain outside this PR and need their own bounded review.
 
 Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
 

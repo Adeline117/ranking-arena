@@ -66,7 +66,29 @@ rate limit 仍可能使用 Redis，因此这里不声称路由完全不读 Redis
 已登记的 legacy-refresh source boundary（含 client-safe 固定 false 的
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker）另行封存 legacy `refresh_jobs`：
 `batch-discover` 为 auth-first `401/410`，`batch-5min` 不再消费 queue，public trader refresh
-不接纳 job，legacy detail 固定 `refresh_job: null`。legacy proxy/import path 仍须后续 containment。
+不接纳 job，legacy detail 固定 `refresh_job: null`。
+
+### V1 legacy proxy/import acquisition source boundary
+
+本 PR 只封存下列历史 acquisition entrypoint，不把它描述为“所有 source write 已关闭”：
+
+- `GET /api/proxy/phemex` 保留 Edge runtime/region 元数据，但先校验 service
+  authentication。缺失或错误认证固定返回 `401 {"error":"Unauthorized"}`；有效认证固定返回
+  `410`、`error: "LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED"` 与 unavailable message。两种路径
+  都有 `Cache-Control`、`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`，且在
+  URL/query 解析、upstream fetch 或 logging 前结束。
+- `cloudflare-worker/src/index.ts` 对任意请求固定返回 `410
+LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与同样三层 `no-store`，不做 upstream fetch。
+- `scripts/import/import_all_platforms.mjs`、`scripts/import/refresh.sh`、
+  `scripts/import/import-all-blocked.sh`、`scripts/import/run_hl_enrichment.sh`、
+  `scripts/vps-deploy/scraper-v16-parallel.js`、`scripts/vps-deploy/arena-proxy.mjs`、
+  `scripts/archive/test-vps-scrapers.ts` 与
+  `scripts/archive/verify-data-accuracy.mjs` 固定报告 `RETIRED` 并以 `2` 退出，不启动 proxy、
+  browser、import 或 host 工作。
+
+这是 source-only containment，不停止、不检查也不证明已部署 Cloudflare Worker、VPS
+proxy/scraper、host process、queue 或 schedule。`app/api/cron/backfill-avatars`、avatar helper、
+adapter 和任何未列出的 source/write path 都不在本 PR 的封存结论内，必须单独审查。
 
 ---
 
@@ -303,16 +325,17 @@ BullMQ 或 HTTP 初始化前退出，scheduler/caller 会在 BullMQ、Redis 或 
 
 ## 11. 工具与其他
 
-| 路由                         | 方法                | 描述                                                                                                                                | 认证       |
-| ---------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `/api/health`                | GET                 | 健康检查                                                                                                                            | 否         |
-| `/api/health/detailed`       | GET                 | 详细健康状态                                                                                                                        | 否         |
-| `/api/hooks/post-deploy`     | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估 | Cron Token |
-| `/api/translate`             | POST                | 翻译服务                                                                                                                            | 是         |
-| `/api/settings/export`       | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                               | 是 + CSRF  |
-| `/api/saved-filters`         | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                  | 是         |
-| `/api/search/suggestions`    | GET                 | 搜索建议                                                                                                                            | 否         |
-| `/api/portfolio/suggestions` | GET                 | 已下线；所有 tier 固定返回 403                                                                                                      | 不适用     |
+| 路由                         | 方法                | 描述                                                                                                                                                                   | 认证       |
+| ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/health`                | GET                 | 健康检查                                                                                                                                                               | 否         |
+| `/api/health/detailed`       | GET                 | 详细健康状态                                                                                                                                                           | 否         |
+| `/api/proxy/phemex`          | GET                 | V1 legacy proxy acquisition auth-first hold；无效认证 `401`，有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`；三层 `no-store`，不解析 URL/query、不 fetch 或 log | Cron Token |
+| `/api/hooks/post-deploy`     | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估                                    | Cron Token |
+| `/api/translate`             | POST                | 翻译服务                                                                                                                                                               | 是         |
+| `/api/settings/export`       | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                                                                  | 是 + CSRF  |
+| `/api/saved-filters`         | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                                                     | 是         |
+| `/api/search/suggestions`    | GET                 | 搜索建议                                                                                                                                                               | 否         |
+| `/api/portfolio/suggestions` | GET                 | 已下线；所有 tier 固定返回 403                                                                                                                                         | 不适用     |
 
 人类可读 API 文档页面是 `/api-docs`；机器契约保存在仓库
 `docs/openapi.yaml`，不存在 `/api/docs` App Router endpoint。
@@ -334,4 +357,4 @@ BullMQ 或 HTTP 初始化前退出，scheduler/caller 会在 BullMQ、Redis 或 
 
 ---
 
-最后更新: 2026-08-08
+最后更新: 2026-08-16

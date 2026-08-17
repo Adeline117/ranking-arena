@@ -66,8 +66,26 @@ only post hot-score maintenance. The public trader-refresh POST is auth-first
 `401/410` without parsing a body, rate limiting, or touching the queue; legacy detail
 returns `refresh_job: null`, and its compatibility hook neither posts nor polls.
 This source boundary cannot stop or prove a running host, persisted queue, or external
-schedule. Legacy proxy/import paths remain separately unclassified; their presence in
-this checkout is not runtime evidence.
+schedule.
+
+The checked-in legacy proxy/import acquisition boundary is deliberately narrower than
+"all source writes are closed." It retires only these historical source entrypoints:
+`GET /api/proxy/phemex`, `cloudflare-worker/src/index.ts`,
+`scripts/import/import_all_platforms.mjs`, `scripts/import/refresh.sh`,
+`scripts/import/import-all-blocked.sh`, `scripts/import/run_hl_enrichment.sh`,
+`scripts/vps-deploy/scraper-v16-parallel.js`, `scripts/vps-deploy/arena-proxy.mjs`,
+`scripts/archive/test-vps-scrapers.ts`, and
+`scripts/archive/verify-data-accuracy.mjs`. The Phemex route authenticates first:
+missing or invalid service authentication returns `401`; valid authentication returns
+`410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`; both responses carry three `no-store`
+headers before URL/query parsing, upstream fetch, or logging. The checked-in
+Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with the same
+three `no-store` headers and no upstream fetch. The listed script entrypoints report
+`RETIRED` and exit `2` before proxy, browser, import, or host work. This is source-only:
+it neither stops nor proves an already deployed Cloudflare Worker, VPS proxy/scraper,
+host process, queue, or schedule. It does not classify or close other source/write
+paths, including `app/api/cron/backfill-avatars`, avatar helpers, adapters, or any
+uncatalogued import utility; each needs its own bounded review.
 
 ## Data API
 
@@ -254,9 +272,11 @@ complete-board publication. The fixed V1 ingest source hold prevents the covered
 native worker, scheduler, connection, bridges, on-chain route, and direct scripts
 from initiating new ingest. The separately fixed legacy refresh-job hold removes its
 consumer and admissions while preserving only the unrelated post hot-score maintenance
-command. Neither boundary classifies legacy proxy/import paths or can stop or prove an
-already-running process, queue, or schedule. Code may be reviewed locally but does not
-prove that a source is scheduled or healthy.
+command. A third, explicitly enumerated legacy proxy/import hold retires only its
+named historical proxy, browser, and import entrypoints; it is not a declaration that
+every source writer or helper is closed. None of these source holds can stop or prove
+an already-running process, queue, worker, or schedule. Code may be reviewed locally
+but does not prove that a source is scheduled or healthy.
 
 **Incremental Static Regeneration.** Trader profile pages declare `revalidate=300` in code. Any historical cache-warming or ingest-triggered schedule is outside the V1 plan and must not be invoked.
 
@@ -349,7 +369,7 @@ scripts/                      # CLI tools and maintenance (110+ files)
 
 supabase/migrations/          # versioned PostgreSQL migration history
 
-cloudflare-worker/            # Managed routing implementation; no V1 operator action
+cloudflare-worker/            # Historical proxy source; fixed V1 no-fetch response
 
 e2e/                          # Playwright E2E tests
 k6/                           # K6 load tests

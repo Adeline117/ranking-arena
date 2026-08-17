@@ -105,3 +105,31 @@ describe('Tip checkout cutover at the Next.js proxy boundary', () => {
     expect(mockGenerateRequestId).not.toHaveBeenCalled()
   })
 })
+
+describe('V1 Phemex acquisition handoff at the Next.js proxy boundary', () => {
+  it('lets the exact route own its auth-first no-store response before global proxy work', async () => {
+    const response = await proxy({
+      nextUrl: { pathname: '/api/proxy/phemex' },
+      method: 'GET',
+    } as never)
+
+    expect(response.status).toBe(200)
+    expect(mockClassifyProxyStrictRateLimit).not.toHaveBeenCalled()
+    expect(mockGenerateRequestId).not.toHaveBeenCalled()
+  })
+
+  it('does not treat a sibling path as the exact Phemex handoff', async () => {
+    const response = await proxy({
+      nextUrl: { pathname: '/api/proxy/phemex-history' },
+      method: 'GET',
+      headers: new Headers({ 'user-agent': 'proxy-boundary-test' }),
+    } as never)
+
+    expect(response.status).toBe(200)
+    expect(mockClassifyProxyStrictRateLimit).toHaveBeenCalledWith(
+      '/api/proxy/phemex-history',
+      'GET'
+    )
+    expect(mockGenerateRequestId).toHaveBeenCalled()
+  })
+})
