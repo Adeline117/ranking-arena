@@ -139,6 +139,15 @@ limit、Supabase ranked-cohort read、CSV/JSON 生成或 logging 前结束。
 classifier/translator 的运行时行为；它们仍需独立审查。这只是 checked-in source 状态，不停止、检查或证明任何
 仓库外、已部署 script 或 scheduler 的状态。
 
+## V1 legacy worker deploy source containment（2026-08-17）
+
+`worker/deploy.sh` 是旧 Mac full-pipeline compatibility path，现固定输出 `RETIRED` 并以 exit `2`
+结束；它不再安装 host tooling、读取 worker environment、连接 Redis 或改变 process manager state。
+
+这只是 checked-in source containment：不停止、检查或证明任何已部署 worker、host、Redis、process
+manager 或 scheduler 的状态。`worker/deploy-ingest-local.sh`、`worker/deploy-ingest-sg.sh`、其各自安全
+契约以及其他 runtime ownership 路径均不在此次范围内。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）

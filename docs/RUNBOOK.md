@@ -139,6 +139,17 @@ This bounded source conclusion does not touch `app/api/cron/flash-news-fetch`, `
 UI, and does not change shared classifier/translator runtime behavior; each remains subject to separate review. It is not an instruction to
 stop, inspect, or prove any external or already deployed script or scheduler.
 
+### V1 legacy worker deploy source boundary
+
+Do not use `worker/deploy.sh` as an incident workaround. This legacy Mac full-pipeline
+compatibility path reports fixed `RETIRED` and exits `2`; it does not install host tooling,
+read a worker environment, connect Redis, or alter a process-manager state.
+
+This is source-only containment, not an instruction to stop, inspect, or prove any deployed
+worker, host, Redis, process manager, or scheduler. `worker/deploy-ingest-local.sh`,
+`worker/deploy-ingest-sg.sh`, their separate safety contracts, and other runtime-ownership
+paths remain outside this bounded conclusion.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
