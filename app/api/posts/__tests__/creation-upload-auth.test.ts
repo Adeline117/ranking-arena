@@ -84,4 +84,28 @@ describe('post creation media upload authentication', () => {
       expect(removal).not.toContain('.replace(')
     }
   })
+
+  it('removes a tray image from both attachment state and exact Markdown references', () => {
+    const profileRemoval = functionBody(
+      profileCreatePage,
+      'const removeImage = (index: number) =>',
+      '// Image drag reorder'
+    )
+    const groupRemoval = functionBody(
+      groupCreatePage,
+      'const removeImage = useCallback',
+      'const insertImageToContent = useCallback'
+    )
+
+    for (const removal of [profileRemoval, groupRemoval]) {
+      expect(removal).toContain('const target = images[index]')
+      expect(removal).toContain('if (!target) return')
+      expect(removal).toContain(
+        'setImages((prev) => prev.filter((image) => image.url !== target.url))'
+      )
+      expect(removal).toContain(
+        'setContent((prev) => removeMarkdownImageReferences(prev, target.url).content)'
+      )
+    }
+  })
 })

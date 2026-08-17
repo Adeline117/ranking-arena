@@ -35,6 +35,23 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain('!sameStringList(')
   })
 
+  it('removes a tray image from both the submitted list and Markdown content', () => {
+    const start = page.indexOf('const removeImage = (index: number) =>')
+    const end = page.indexOf('// 插入图片到内容', start)
+    const removal = page.slice(start, end)
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    expect(removal).toContain('const target = images[index]')
+    expect(removal).toContain('if (!target) return')
+    expect(removal).toContain(
+      'setImages((prev) => prev.filter((image) => image.url !== target.url))'
+    )
+    expect(removal).toContain(
+      'setContent((prev) => removeMarkdownImageReferences(prev, target.url).content)'
+    )
+  })
+
   it('accepts image uploads only through the owner-bound acknowledgement parser', () => {
     expect(page).toContain('readPostImageUploadAcknowledgement(')
     expect(page).toContain("process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''")

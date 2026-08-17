@@ -27,6 +27,11 @@ export type MarkdownImageMoveResult = {
   status: 'moved' | 'boundary' | 'missing'
 }
 
+export type MarkdownImageReferencesRemovalResult = {
+  content: string
+  removed: number
+}
+
 export type MarkdownVideoRemovalResult = {
   content: string
   removed: number
@@ -178,5 +183,27 @@ export function removeMarkdownImage(
       .replace(/\n{3,}/g, '\n\n')
       .trim(),
     removed: true,
+  }
+}
+
+/** Remove every parsed image marker whose URL exactly matches an attachment. */
+export function removeMarkdownImageReferences(
+  content: string,
+  url: string
+): MarkdownImageReferencesRemovalResult {
+  const tokens = findMarkdownImageTokens(content).filter((token) => token.url === url)
+  if (tokens.length === 0) return { content, removed: 0 }
+
+  let result = ''
+  let cursor = 0
+  for (const token of tokens) {
+    result += content.slice(cursor, token.start)
+    cursor = token.end
+  }
+  result += content.slice(cursor)
+
+  return {
+    content: result.trim() === '' ? '' : result,
+    removed: tokens.length,
   }
 }

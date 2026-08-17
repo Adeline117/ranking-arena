@@ -42,6 +42,7 @@ import {
 import {
   moveMarkdownImage,
   removeMarkdownImage,
+  removeMarkdownImageReferences,
   removeMarkdownVideoMarkers,
 } from '@/lib/posts/markdown-images'
 import {
@@ -471,7 +472,11 @@ export default function NewPostPage() {
 
   // Remove image
   const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index))
+    const target = images[index]
+    if (!target) return
+
+    setImages((prev) => prev.filter((image) => image.url !== target.url))
+    setContent((prev) => removeMarkdownImageReferences(prev, target.url).content)
   }
 
   // Image drag reorder

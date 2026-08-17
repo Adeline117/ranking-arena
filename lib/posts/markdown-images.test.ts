@@ -5,6 +5,7 @@ import {
   findRawContentUrlTokens,
   moveMarkdownImage,
   removeMarkdownImage,
+  removeMarkdownImageReferences,
   removeMarkdownVideoMarkers,
 } from './markdown-images'
 
@@ -42,6 +43,30 @@ describe('post Markdown image controls', () => {
     expect(removeMarkdownImage(content, firstUrl)).toEqual({
       content: 'before\n\nafter',
       removed: true,
+    })
+  })
+
+  it('removes every exact image reference while preserving all other bytes', () => {
+    const content =
+      `before\r\n![custom alt](${firstUrl})\r\nmiddle ` +
+      `![duplicate](${firstUrl}) after\n![near match](${secondUrl})\n`
+
+    const result = removeMarkdownImageReferences(content, firstUrl)
+
+    expect(result).toEqual({
+      content: `before\r\n\r\nmiddle  after\n![near match](${secondUrl})\n`,
+      removed: 2,
+    })
+    expect(removeMarkdownImageReferences(result.content, firstUrl)).toEqual({
+      content: result.content,
+      removed: 0,
+    })
+  })
+
+  it('returns empty content only when removing image references leaves whitespace', () => {
+    expect(removeMarkdownImageReferences(` \r\n![only](${firstUrl})\n\t`, firstUrl)).toEqual({
+      content: '',
+      removed: 1,
     })
   })
 

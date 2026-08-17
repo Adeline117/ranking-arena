@@ -51,7 +51,10 @@ import {
   type GroupPostDraftData,
   type GroupPostDraftScope,
 } from '@/lib/posts/post-draft-storage'
-import { removeMarkdownVideoMarkers } from '@/lib/posts/markdown-images'
+import {
+  removeMarkdownImageReferences,
+  removeMarkdownVideoMarkers,
+} from '@/lib/posts/markdown-images'
 
 export default function NewGroupPostPage(): React.ReactElement {
   if (!features.social) redirect('/')
@@ -452,9 +455,16 @@ export default function NewGroupPostPage(): React.ReactElement {
     [userId, images.length, showToast, t]
   )
 
-  const removeImage = useCallback((index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index))
-  }, [])
+  const removeImage = useCallback(
+    (index: number) => {
+      const target = images[index]
+      if (!target) return
+
+      setImages((prev) => prev.filter((image) => image.url !== target.url))
+      setContent((prev) => removeMarkdownImageReferences(prev, target.url).content)
+    },
+    [images]
+  )
 
   const insertImageToContent = useCallback(
     (url: string) => {

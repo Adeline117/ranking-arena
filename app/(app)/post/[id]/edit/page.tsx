@@ -33,6 +33,7 @@ import {
   findRawContentUrlTokens,
   moveMarkdownImage,
   removeMarkdownImage,
+  removeMarkdownImageReferences,
 } from '@/lib/posts/markdown-images'
 
 interface UploadedImage {
@@ -497,7 +498,11 @@ export default function EditPostPage() {
 
   // 移除图片
   const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index))
+    const target = images[index]
+    if (!target) return
+
+    setImages((prev) => prev.filter((image) => image.url !== target.url))
+    setContent((prev) => removeMarkdownImageReferences(prev, target.url).content)
   }
 
   // 插入图片到内容（在光标位置）
