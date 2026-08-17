@@ -20,6 +20,9 @@ export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) 
   const { t } = useLanguage()
   return (
     <Box
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -46,10 +49,11 @@ export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) 
         <line x1="12" y1="8" x2="12.01" y2="8" />
       </svg>
       <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
-        {t('moduleDataPending')}
+        {t('moduleDataUnavailable')}
       </Text>
       {onRetry && (
         <button
+          type="button"
           onClick={onRetry}
           style={{
             padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
@@ -57,8 +61,8 @@ export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) 
             border: '1px solid ' + tokens.colors.border.primary,
             background: tokens.colors.bg.primary,
             color: tokens.colors.text.primary,
-            fontSize: 13,
-            fontWeight: 500,
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: tokens.typography.fontWeight.medium,
             cursor: 'pointer',
           }}
         >

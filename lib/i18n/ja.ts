@@ -5834,6 +5834,7 @@ const ja = {
   tfNotProvided: 'この取引所では提供されていません',
   tfInception: '作成以来',
   moduleDataPending: '詳細データを読み込み中 — しばらくしてから更新してください。',
+  moduleDataUnavailable: '詳細データは一時的に利用できません。再試行してください。',
   traderDormantForPeriod: '選択した期間中、このトレーダーの取引活動はありません。',
   moduleRetry: '再試行',
   dataDelayedNote: 'この取引所のデータ公開には遅延があります。',
