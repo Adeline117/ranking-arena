@@ -38,6 +38,20 @@ environment toggle or a claim about a deployed process:
   responses carry the three `no-store` headers before request parsing, locks, pipeline
   logs, stores, cache, or provider access. This ranking-command list does not classify
   other cron routes.
+- The same fixed, non-environment `V1_CRON_EXECUTION_PUBLISHED=false` source gate
+  separately holds exactly ten direct service-auth cron ingress handlers: `GET
+/api/cron/batch-5min`, `GET /api/cron/check-data-freshness`, `GET
+/api/cron/cleanup-data`, `GET /api/cron/cleanup-stuck-logs`, `GET
+/api/cron/detect-contracts`, `GET`/`POST /api/cron/fetch-funding-rates`, `GET`/`POST
+/api/cron/fetch-market-data`, `GET`/`POST /api/cron/fetch-open-interest`, `GET
+/api/cron/qualify-referrals`, and `GET /api/cron/smoke-test`. Each authenticates
+  first: missing or invalid service authentication returns `401`; a valid service
+  secret returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry
+  `Cache-Control`, `CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store`
+  headers and return before query/body parsing, locks, `PipelineLogger`, database,
+  cache, provider, or network work. This bounded direct-ingress list does not classify
+  other cron routes and cannot stop, inspect, or prove an existing deployed scheduler,
+  host, queue, or worker.
 - `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` separately closes the checked-in legacy
   downstream ranking-command worker, scheduler, and caller chain. On this source
   revision its worker entry exits before dotenv, database, Redis, BullMQ, or HTTP
@@ -57,12 +71,22 @@ environment toggle or a claim about a deployed process:
   Redis reads. Covered direct ingest scripts likewise do not initiate ingest. This
   source boundary neither stops nor proves a running host, persisted queue, or
   external schedule.
+- `V1_REFERRAL_PROGRAM_PUBLISHED=false` separately holds `GET`/`POST
+/api/referral` and `POST /api/referral/apply`. They authenticate first: missing or
+  invalid authentication returns `401`; an authenticated account receives `410
+REFERRAL_PROGRAM_NOT_PUBLISHED`. Both responses carry `Cache-Control`,
+  `CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store`, before endpoint
+  query/body parsing, rate limiting, referral-code issuance, or endpoint-specific
+  referral reads/writes. The same source hold leaves `/referral`, Settings, pricing
+  success, and rank-share referral propagation status-only; historic referral data is
+  not an automatic-reward promise. This is source-only and does not stop, inspect, or
+  prove deployed code, historical records, or external reward state.
 
 The checked-in legacy-refresh boundary, including the client-safe fixed-false
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, holds the legacy `refresh_jobs` path.
 `batch-discover` is auth-first `401/410` with three
-`no-store` headers; `batch-5min` no longer imports or consumes that queue and retains
-only post hot-score maintenance. The public trader-refresh POST is auth-first
+`no-store` headers. `batch-5min` is separately covered by the bounded direct
+service-auth cron ingress hold above. The public trader-refresh POST is auth-first
 `401/410` without parsing a body, rate limiting, or touching the queue; legacy detail
 returns `refresh_job: null`, and its compatibility hook neither posts nor polls.
 This source boundary cannot stop or prove a running host, persisted queue, or external
@@ -186,7 +210,8 @@ Each trader profile includes:
 - **Trader Claim System**: Traders can claim and verify their exchange identities
 - **Reputation-Driven Access**: Groups can set minimum Arena Score thresholds; posts carry author Arena Score
 - **On-Chain Attestation**: Mint Arena Score to Base chain via EAS (Ethereum Attestation Service), server-side signing
-- **Copy Trade Links**: Referral URLs for 8 exchanges
+- **Referral Program Status**: V1 verification hold — new referral invitations and rewards are unavailable; existing referral history is not a promise of automatic rewards
+- **Copy Trade Links**: Exchange referral URLs for 8 exchanges (separate from the held Arena referral program)
 
 ### Market Overview
 
@@ -306,8 +331,9 @@ Each trader profile includes:
 complete-board publication. The fixed V1 ingest source hold prevents the covered
 native worker, scheduler, connection, bridges, on-chain route, and direct scripts
 from initiating new ingest. The separately fixed legacy refresh-job hold removes its
-consumer and admissions while preserving only the unrelated post hot-score maintenance
-command. A separately enumerated legacy proxy/import hold retires only its named
+consumer and admissions; `batch-5min` is instead one of the separately enumerated,
+auth-first direct service-auth cron ingress holds. That direct-ingress list does not
+classify other cron routes. A separately enumerated legacy proxy/import hold retires only its named
 historical proxy, browser, and import entrypoints; it is not a declaration that every
 source writer or helper is closed. Separately, anonymous `GET /api/avatar` and its
 `/api/v1/avatar` rewrite alias are a fixed `410`/three-`no-store` source hold before

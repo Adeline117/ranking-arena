@@ -65,8 +65,9 @@ rate limit 仍可能使用 Redis，因此这里不声称路由完全不读 Redis
 已运行的 host、持久化 queue 或外部 schedule。固定的
 已登记的 legacy-refresh source boundary（含 client-safe 固定 false 的
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker）另行封存 legacy `refresh_jobs`：
-`batch-discover` 为 auth-first `401/410`，`batch-5min` 不再消费 queue，public trader refresh
-不接纳 job，legacy detail 固定 `refresh_job: null`。
+`batch-discover` 为 auth-first `401/410`，`batch-5min` 由第 9 节精确列出的 direct
+service-auth cron ingress boundary 单独封存，public trader refresh 不接纳 job，legacy detail
+固定 `refresh_job: null`。
 
 ### V1 legacy proxy/import acquisition source boundary
 
@@ -130,18 +131,34 @@ adapter 或未列 writer。
 
 ## 2. 用户管理
 
-| 路由                                                   | 方法     | 描述                                                                                | 认证 |
-| ------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------- | ---- |
-| `/api/users/[handle]/full`                             | GET      | 获取用户完整资料                                                                    | 否   |
-| `/api/users/[handle]/follow?list=followers\|following` | GET      | 获取用户粉丝或关注列表                                                              | 否   |
-| `/api/users/[handle]/bookmark-folders`                 | GET      | 获取用户收藏夹                                                                      | 否   |
-| `/api/users/follow`                                    | GET/POST | 查询或修改关注状态                                                                  | 是   |
-| `/api/follow`                                          | GET/POST | 查询或修改关注状态                                                                  | 是   |
-| `/api/following`                                       | GET      | 获取当前用户关注列表                                                                | 是   |
-| `/api/avatar`                                          | GET      | V1 匿名 fixed `410` source hold；三层 `no-store`，不解析 query/DNS/fetch/logging    | 否   |
-| `/api/v1/avatar`                                       | GET      | rewrite alias → `/api/avatar`；同一 V1 匿名 fixed `410`/三层 `no-store` source hold | 否   |
-| `/api/upload-profile-image`                            | POST     | 上传已认证用户的资料图片                                                            | 是   |
-| `/api/avoid-list`                                      | GET/POST | 屏蔽列表管理                                                                        | 是   |
+| 路由                                                   | 方法     | 描述                                                                                                                                                                  | 认证 |
+| ------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `/api/users/[handle]/full`                             | GET      | 获取用户完整资料                                                                                                                                                      | 否   |
+| `/api/users/[handle]/follow?list=followers\|following` | GET      | 获取用户粉丝或关注列表                                                                                                                                                | 否   |
+| `/api/users/[handle]/bookmark-folders`                 | GET      | 获取用户收藏夹                                                                                                                                                        | 否   |
+| `/api/users/follow`                                    | GET/POST | 查询或修改关注状态                                                                                                                                                    | 是   |
+| `/api/follow`                                          | GET/POST | 查询或修改关注状态                                                                                                                                                    | 是   |
+| `/api/following`                                       | GET      | 获取当前用户关注列表                                                                                                                                                  | 是   |
+| `/api/avatar`                                          | GET      | V1 匿名 fixed `410` source hold；三层 `no-store`，不解析 query/DNS/fetch/logging                                                                                      | 否   |
+| `/api/v1/avatar`                                       | GET      | rewrite alias → `/api/avatar`；同一 V1 匿名 fixed `410`/三层 `no-store` source hold                                                                                   | 否   |
+| `/api/upload-profile-image`                            | POST     | 上传已认证用户的资料图片                                                                                                                                              | 是   |
+| `/api/avoid-list`                                      | GET/POST | 屏蔽列表管理                                                                                                                                                          | 是   |
+| `/api/referral`                                        | GET/POST | V1 auth-first hold；无认证 401，认证后固定 410 `REFERRAL_PROGRAM_NOT_PUBLISHED`，三层 `no-store`；不解析 endpoint query/body、不限流、不读取/生成推荐码或读写推荐记录 | 是   |
+| `/api/referral/apply`                                  | POST     | V1 auth-first hold；无认证 401，认证后固定 410 `REFERRAL_PROGRAM_NOT_PUBLISHED`，三层 `no-store`；不解析 body、不限流、不写 attribution/reward 或推荐记录             | 是   |
+
+### V1 推荐计划展示边界
+
+固定、非环境的 `V1_REFERRAL_PROGRAM_PUBLISHED=false` 同时封存本源码中的 referral
+API 和展示/新链接传播：`GET`/`POST /api/referral` 与 `POST /api/referral/apply` 都先完成
+认证；无认证返回 `401`，认证通过固定返回 `410 REFERRAL_PROGRAM_NOT_PUBLISHED`，两条路径均有
+`Cache-Control`、`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`。认证之后
+它们不解析 endpoint query/body、不做 rate limit，也不读取、生成或写入推荐码、attribution、reward
+或其他推荐记录（认证本身的身份校验除外）。
+
+`/referral`、Settings 的 Referral card、付款成功页的推荐交叉推广，以及 rank-share URL/card 的
+`ref` 参数均不再提供邀请、链接复制、进度或 Pro 奖励承诺。页面只显示 V1 验证暂停状态；已有推荐
+历史不构成自动发奖承诺。这是 source-only boundary，不改变或证明任何已部署代码、历史记录或外部
+状态。
 
 ---
 
@@ -302,24 +319,32 @@ V1 的公开 API-key 绑定选择器只展示 Binance、Bybit、Bitget，即当�
 
 ## 9. 定时任务 (Cron)
 
-| 路由                                      | 方法     | 描述                                                                                                                                                                       | 认证       |
-| ----------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `/api/cron/check-trader-alerts`           | GET/POST | V1 auth-first tombstone；401/410/no-store；不评估、不发推送或邮件                                                                                                          | Cron Token |
-| `/api/cron/broadcast-trader-events`       | GET      | V1 auth-first tombstone；401/410/no-store；不读取交易员事件、不写通知或发推送                                                                                              | Cron Token |
-| `/api/cron/weekly-digest`                 | GET      | V1 auth-first tombstone；401/410/no-store；不读取订阅者数据、不发送个性化邮件                                                                                              | Cron Token |
-| `/api/cron/compute-leaderboard`           | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或发布排名                               | Cron Token |
-| `/api/cron/precompute-composite`          | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或写缓存                                 | Cron Token |
-| `/api/cron/sync-meilisearch`              | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或调用搜索提供方                         | Cron Token |
-| `/api/cron/pipeline-evaluate`             | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/pipeline log/数据/状态或发送告警                | Cron Token |
-| `/api/cron/batch-discover`                | GET      | V1 legacy refresh-job auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不创建 jobs 或调用 RPC                                | Cron Token |
-| `/api/cron/backfill-avatars`              | GET      | V1 avatar-backfill auth-first tombstone；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不解析参数、不访问数据库、logging 或 upstream fetch | Cron Token |
-| `/api/cron/batch-5min`                    | GET      | 仅保留 post hot-score maintenance；不导入或消费 legacy `refresh_jobs` queue                                                                                                | Cron Token |
-| `/api/cron/check-data-freshness`          | GET      | 检查数据新鲜度                                                                                                                                                             | Cron Token |
-| `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher                                                                                        | Cron Token |
-| `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement                                                                                                      | Cron Token |
-| `/api/cron/scan-data-quality`             | GET/POST | 未调度 auth-first tombstone；401/410/no-store；需 exact versioned scanner                                                                                                  | Cron Token |
-| `/api/cron/sync-authorized-traders`       | GET      | V1 兼容认证 no-op；不扫描授权、不创建公共 first-party 作业                                                                                                                 | Cron Token |
-| `/api/cron/aggregate-portfolio-snapshots` | GET      | V1 兼容认证 no-op；不读取旧凭据、不写 snapshots，且未被 Vercel 调度                                                                                                        | Cron Token |
+| 路由                                      | 方法     | 描述                                                                                                                                                                                                | 认证       |
+| ----------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/cron/check-trader-alerts`           | GET/POST | V1 auth-first tombstone；401/410/no-store；不评估、不发推送或邮件                                                                                                                                   | Cron Token |
+| `/api/cron/broadcast-trader-events`       | GET      | V1 auth-first tombstone；401/410/no-store；不读取交易员事件、不写通知或发推送                                                                                                                       | Cron Token |
+| `/api/cron/weekly-digest`                 | GET      | V1 auth-first tombstone；401/410/no-store；不读取订阅者数据、不发送个性化邮件                                                                                                                       | Cron Token |
+| `/api/cron/compute-leaderboard`           | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或发布排名                                                        | Cron Token |
+| `/api/cron/precompute-composite`          | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或写缓存                                                          | Cron Token |
+| `/api/cron/sync-meilisearch`              | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或调用搜索提供方                                                  | Cron Token |
+| `/api/cron/pipeline-evaluate`             | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/pipeline log/数据/状态或发送告警                                         | Cron Token |
+| `/api/cron/batch-discover`                | GET      | V1 legacy refresh-job auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不创建 jobs 或调用 RPC                                                         | Cron Token |
+| `/api/cron/backfill-avatars`              | GET      | V1 avatar-backfill auth-first tombstone；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不解析参数、不访问数据库、logging 或 upstream fetch                          | Cron Token |
+| `/api/cron/batch-5min`                    | GET      | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/check-data-freshness`          | GET      | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/cleanup-data`                  | GET      | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/cleanup-stuck-logs`            | GET      | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/detect-contracts`              | GET      | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/fetch-funding-rates`           | GET/POST | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/fetch-market-data`             | GET/POST | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/fetch-open-interest`           | GET/POST | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/qualify-referrals`             | GET      | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/smoke-test`                    | GET      | V1 direct service-auth ingress auth-first hold；无效认证 401，有效 secret 固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query/body/lock/`PipelineLogger`/DB/cache/provider/network | Cron Token |
+| `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher                                                                                                                 | Cron Token |
+| `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement                                                                                                                               | Cron Token |
+| `/api/cron/scan-data-quality`             | GET/POST | 未调度 auth-first tombstone；401/410/no-store；需 exact versioned scanner                                                                                                                           | Cron Token |
+| `/api/cron/sync-authorized-traders`       | GET      | V1 兼容认证 no-op；不扫描授权、不创建公共 first-party 作业                                                                                                                                          | Cron Token |
+| `/api/cron/aggregate-portfolio-snapshots` | GET      | V1 兼容认证 no-op；不读取旧凭据、不写 snapshots，且未被 Vercel 调度                                                                                                                                 | Cron Token |
 
 ### V1 ranking-command source boundary
 
@@ -342,6 +367,28 @@ command worker/scheduler/caller 源码链的边界：本版本 worker entry 会�
 BullMQ 或 HTTP 初始化前退出，scheduler/caller 会在 BullMQ、Redis 或 network 工作前返回。
 两项源码守卫都不能停止已运行的 host process 或 checkout 外已持久化的 schedule，也不构成其
 当前运行状态的证据。
+
+### V1 direct service-auth cron ingress source boundary
+
+同一个固定、非环境的 `V1_CRON_EXECUTION_PUBLISHED=false` source gate 只将下列十个
+direct service-auth cron ingress handler 纳入本节边界；它不因此概括其他 `/api/cron/*` 路由：
+
+- `GET /api/cron/batch-5min`
+- `GET /api/cron/check-data-freshness`
+- `GET /api/cron/cleanup-data`
+- `GET /api/cron/cleanup-stuck-logs`
+- `GET /api/cron/detect-contracts`
+- `GET` / `POST /api/cron/fetch-funding-rates`
+- `GET` / `POST /api/cron/fetch-market-data`
+- `GET` / `POST /api/cron/fetch-open-interest`
+- `GET /api/cron/qualify-referrals`
+- `GET /api/cron/smoke-test`
+
+每个入口均 auth-first：缺失或无效 service authentication 返回 `401`；有效 service secret 固定返回
+`410 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均带 `Cache-Control`、`CDN-Cache-Control`、
+`Vercel-CDN-Cache-Control` 三层 `no-store`，并在 query/body 解析、lock、`PipelineLogger`、
+database、cache、provider 或 network 工作前结束。这只是 source-only handler contract，不能停止、
+检查或证明已部署 scheduler、host、queue 或 worker。
 
 ---
 

@@ -82,6 +82,25 @@ proxy, queue, or schedule. It does not classify the separately retired `avatar-m
 worker or the separate avatar-proxy route below; other avatar-related API paths/helpers,
 UI/read RPCs, adapters, and unlisted writers remain outside this runbook's conclusion.
 
+### V1 direct service-auth cron ingress source boundary
+
+Do not invoke the separately bounded direct service-auth cron ingress handlers as an
+incident workaround: `GET /api/cron/batch-5min`, `GET
+/api/cron/check-data-freshness`, `GET /api/cron/cleanup-data`, `GET
+/api/cron/cleanup-stuck-logs`, `GET /api/cron/detect-contracts`, `GET`/`POST
+/api/cron/fetch-funding-rates`, `GET`/`POST /api/cron/fetch-market-data`, `GET`/`POST
+/api/cron/fetch-open-interest`, `GET /api/cron/qualify-referrals`, and `GET
+/api/cron/smoke-test`.
+
+The same fixed, non-environment `V1_CRON_EXECUTION_PUBLISHED=false` source gate is
+auth-first for exactly those ten handlers: missing or invalid service authentication
+returns `401`; a valid service secret returns `410 CRON_EXECUTION_NOT_PUBLISHED`.
+Both responses carry `Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control` `no-store` headers before query/body parsing, locks,
+`PipelineLogger`, database, cache, provider, or network work. This source-only list
+does not classify other cron routes and cannot stop, inspect, restart, or prove a
+deployed scheduler, host, queue, or worker.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
@@ -226,7 +245,8 @@ fixed-false `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately removes legacy
 refresh-job admission and consumption: `batch-discover` is an auth-first `401/410`
 tombstone, public trader refresh is an auth-first `401/410` tombstone with no
 body/rate-limit/queue work, legacy detail exposes `refresh_job: null`, and
-`batch-5min` retains only post hot-score maintenance. The separately named legacy
+`batch-5min` is separately covered by the bounded direct service-auth cron ingress
+hold above. The separately named legacy
 proxy/import entrypoints above are source tombstones; do not treat that limited list as
 authority to operate, stop, or inspect a proxy/import runtime, or as a claim that every
 source write has been closed.

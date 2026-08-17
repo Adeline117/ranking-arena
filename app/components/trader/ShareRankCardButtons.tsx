@@ -4,7 +4,7 @@
  * ShareRankCardButtons -- share buttons for trader pages
  *
  * Provides:
- * 1. Copy link button (copies trader URL with optional referral code)
+ * 1. Copy link button (copies the canonical trader URL)
  * 2. Share on X button (opens X compose with rank card link + OG image)
  */
 
@@ -22,7 +22,6 @@ interface ShareRankCardButtonsProps {
   roi?: number | null
   arenaScore?: number | null
   window?: string
-  referralCode?: string | null
 }
 
 function CopyIcon() {
@@ -82,7 +81,6 @@ export default function ShareRankCardButtons({
   roi,
   arenaScore,
   window: windowProp = '90d',
-  referralCode,
 }: ShareRankCardButtonsProps) {
   const [copied, setCopied] = useState(false)
   const [embedCopied, setEmbedCopied] = useState(false)
@@ -95,10 +93,9 @@ export default function ShareRankCardButtons({
     const params = new URLSearchParams()
     if (platform) params.set('platform', platform)
     params.set('window', windowProp)
-    if (referralCode) params.set('ref', referralCode)
 
     return `${base}/share/rank/${encodeURIComponent(handle)}?${params}`
-  }, [handle, platform, windowProp, referralCode])
+  }, [handle, platform, windowProp])
 
   const copyLink = useCallback(async () => {
     try {

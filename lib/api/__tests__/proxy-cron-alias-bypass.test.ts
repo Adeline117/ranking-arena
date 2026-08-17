@@ -1,4 +1,4 @@
-import { isAvatarProxyBypassPath, shouldSkip } from '@/proxy'
+import { isAvatarProxyBypassPath, isReferralProgramProxyBypassPath, shouldSkip } from '@/proxy'
 
 describe('cron proxy bypass paths', () => {
   it.each(['/api/cron/backfill-avatars', '/api/v1/cron/backfill-avatars'])(
@@ -30,4 +30,28 @@ describe('avatar proxy compatibility bypass paths', () => {
       expect(shouldSkip(pathname)).toBe(false)
     }
   )
+})
+
+describe('referral-program hold bypass paths', () => {
+  it.each(['/api/referral', '/api/referral/apply', '/api/v1/referral', '/api/v1/referral/apply'])(
+    'hands %s directly to its authentication-first hold',
+    (pathname) => {
+      expect(isReferralProgramProxyBypassPath(pathname)).toBe(true)
+      expect(shouldSkip(pathname)).toBe(true)
+    }
+  )
+
+  it.each([
+    '/api/referrals',
+    '/api/referral-code',
+    '/api/referral/apply-history',
+    '/api/referral/apply/child',
+    '/api/v1/referrals',
+    '/api/v1/referral-code',
+    '/api/v1/referral/apply-history',
+    '/api/v1/referral/apply/child',
+  ])('does not bypass proxy work for adjacent referral path %s', (pathname) => {
+    expect(isReferralProgramProxyBypassPath(pathname)).toBe(false)
+    expect(shouldSkip(pathname)).toBe(false)
+  })
 })

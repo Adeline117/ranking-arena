@@ -73,8 +73,7 @@ export async function GET(request: NextRequest) {
   const { searchParams: sp } = new URL(request.url)
   const handle = sp.get('handle'),
     platform = sp.get('platform') || '',
-    windowParam = sp.get('window') || '7d',
-    ref = sp.get('ref') || ''
+    windowParam = sp.get('window') || '7d'
   if (!handle) return NextResponse.json({ error: 'handle required' }, { status: 400 })
   if (platform && !isPublicRankingSourceAllowed(platform)) {
     return NextResponse.json(
@@ -142,7 +141,9 @@ export async function GET(request: NextRequest) {
   const pc = PLAT_C[tr.source] || C.purpleLight
   const rd = rank > 0 ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--',
     td: string | null = total > 0 ? total.toLocaleString('en-US') + '+' : null
-  const cta = ref ? `arenafi.org/?ref=${ref}` : 'arenafi.org'
+  // Rank-card sharing remains available during the V1 referral hold, but the
+  // public asset must not publish a caller-provided referral destination.
+  const cta = 'arenafi.org'
 
   return new ImageResponse(
     <div

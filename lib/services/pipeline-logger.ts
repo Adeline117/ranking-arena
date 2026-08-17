@@ -103,7 +103,6 @@ export class PipelineLogger {
     'batch-fetch-traders',
     'batch-enrich',
     'compute-leaderboard',
-    'check-data-freshness',
     'pipeline-fetch',
     'fetch-details',
     'precompute-composite',
@@ -113,18 +112,12 @@ export class PipelineLogger {
     'enrich-gmx',
     'generate-profiles',
     'link-entities',
-    'batch-5min',
 
     // Market data
-    'fetch-market-data',
-    'fetch-funding-rates',
-    'fetch-open-interest',
     'flash-news-fetch',
 
     // Monitoring & health
     'verify-fetchers',
-    'cleanup-stuck-logs',
-    'cleanup-data',
     'cleanup-deleted-accounts',
     'meta-monitor',
 
