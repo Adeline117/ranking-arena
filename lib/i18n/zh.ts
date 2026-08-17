@@ -6027,6 +6027,7 @@ const zh = {
   tfInception: '创建以来',
   moduleDataPending: '详细数据加载中 — 请稍后刷新。',
   moduleDataUnavailable: '详细数据暂时无法获取，请重试。',
+  moduleRefreshFailed: '刷新失败，当前显示的数据可能不是最新。',
   traderDormantForPeriod: '该交易员在所选周期内无交易活动。',
   moduleRetry: '重试',
   dataDelayedNote: '该交易所发布此数据存在延迟。',

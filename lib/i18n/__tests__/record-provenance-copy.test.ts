@@ -35,4 +35,18 @@ describe('record provenance copy', () => {
   ])('does not present a verified capture as live data in %s', (_language, dictionary, copy) => {
     expect(dictionary.copierVerifiedCaptureNotice).toContain(copy)
   })
+
+  it.each([
+    ['en', en],
+    ['zh', zh],
+    ['ja', ja],
+    ['ko', ko],
+  ])(
+    'keeps a failed refresh distinct from loading and total unavailability in %s',
+    (_language, dictionary) => {
+      expect(dictionary.moduleRefreshFailed.trim()).not.toBe('')
+      expect(dictionary.moduleRefreshFailed).not.toBe(dictionary.moduleDataPending)
+      expect(dictionary.moduleRefreshFailed).not.toBe(dictionary.moduleDataUnavailable)
+    }
+  )
 })

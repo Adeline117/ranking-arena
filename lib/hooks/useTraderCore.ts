@@ -56,7 +56,7 @@ export function useTraderCore({
     refetchOnWindowFocus: false,
     refetchInterval: (q) => {
       const data = q.state.data
-      if (!data || data.cacheState !== 'pending') {
+      if (!data || data.cacheState !== 'pending' || q.state.error) {
         pollRef.current = null
         return false
       }
@@ -69,6 +69,7 @@ export function useTraderCore({
       poll.attempt += 1
       return interval
     },
+    refetchIntervalInBackground: false,
   })
 
   const data = query.data
@@ -78,13 +79,17 @@ export function useTraderCore({
     data?.cacheState === 'pending' &&
     pollRef.current !== null &&
     Date.now() - pollRef.current.startedAt > POLL_GIVE_UP_MS
+  const isDegraded = Boolean(pollGaveUp) || Boolean(query.error)
+  const isPendingUpstream = data?.cacheState === 'pending' && !isDegraded
 
   return {
     modules,
     /** Tier-C still fetching upstream (skeleton or stale-data badge). */
-    isPendingUpstream: data?.cacheState === 'pending',
+    isPendingUpstream,
     /** 90s polling window exhausted — show ModuleDegraded with retry. */
-    isDegraded: Boolean(pollGaveUp) || Boolean(query.error),
+    isDegraded,
+    /** A manual retry is in flight; keep its retry affordance non-duplicative. */
+    isRefreshing: query.isFetching,
     isLoading: query.isLoading,
     error: query.error,
     refetch: () => {

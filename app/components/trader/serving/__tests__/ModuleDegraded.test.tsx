@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import ModuleDegraded from '../ModuleDegraded'
+import ModuleDegraded, { ModuleRefreshFailureNotice } from '../ModuleDegraded'
 import { tokens } from '@/lib/design-tokens'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -27,5 +27,18 @@ describe('ModuleDegraded', () => {
     expect(retry).toHaveStyle({ minHeight: `${tokens.touchTarget.min}px` })
     fireEvent.click(retry)
     expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('discloses retained data may be stale and disables a duplicate retry', () => {
+    const onRetry = jest.fn()
+    render(<ModuleRefreshFailureNotice isRetrying onRetry={onRetry} />)
+
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('moduleRefreshFailed')
+    const retry = screen.getByRole('button', { name: 'loading' })
+    expect(retry).toBeDisabled()
+    expect(retry).toHaveStyle({ minHeight: `${tokens.touchTarget.min}px` })
+    fireEvent.click(retry)
+    expect(onRetry).not.toHaveBeenCalled()
   })
 })

@@ -43,7 +43,6 @@ jest.mock('../DrawdownModule', () => () => null)
 jest.mock('../AssetPreference', () => () => null)
 jest.mock('../HoldingDistribution', () => () => null)
 jest.mock('../AbilityRadar', () => () => null)
-jest.mock('../ModuleDegraded', () => () => null)
 jest.mock('../ServingRecordsSection', () => jest.fn(() => <div data-testid="records-section" />))
 jest.mock('../BotHeaderCard', () => () => null)
 jest.mock('@/app/components/common/ProvenanceFooter', () => () => null)
@@ -99,6 +98,7 @@ function mockCore(extras: Record<string, unknown>) {
     modules: coreModules(extras),
     isPendingUpstream: false,
     isDegraded: false,
+    isRefreshing: false,
     isLoading: false,
     error: null,
     refetch: jest.fn(),
@@ -183,6 +183,26 @@ describe('ServingProfilePanel GMX metric disclosure', () => {
     expect(screen.queryByText('metricPnl')).not.toBeInTheDocument()
     expect(screen.queryByText('gmxRealizedNetPnlLabel')).not.toBeInTheDocument()
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('keeps loaded core values honest when their refresh fails', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderCore as jest.Mock).mockReturnValue({
+      modules: coreModules({}),
+      isPendingUpstream: false,
+      isDegraded: true,
+      isRefreshing: false,
+      isLoading: false,
+      error: new Error('refresh failed'),
+      refetch,
+    })
+
+    render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
+
+    expect(screen.getByText('moduleRefreshFailed')).toBeInTheDocument()
+    expect(screen.getByText('metricPnl')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'moduleRetry' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 })
 

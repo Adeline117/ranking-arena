@@ -64,4 +64,45 @@ describe('useTraderCore timeframe identity', () => {
     unmount()
     queryClient.clear()
   })
+
+  it('marks retained pending core data as degraded after its refresh fails', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    let failRefresh = false
+    const pendingModules: TraderCoreModules = { ...modules(90, 900), cacheState: 'pending' }
+    ;(fetcher as jest.Mock).mockImplementation(() =>
+      failRefresh
+        ? Promise.reject(new Error('core refresh failed'))
+        : Promise.resolve(response(pendingModules))
+    )
+
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useTraderCore({ source: 'gmx', exchangeTraderId: '0x123', tf: 90 }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.modules?.stats.pnl).toBe(900))
+    expect(view.result.current.isPendingUpstream).toBe(true)
+
+    failRefresh = true
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: ['trader-core', 'gmx', '0x123', 90],
+        exact: true,
+      })
+    })
+
+    await waitFor(() => expect(view.result.current.isDegraded).toBe(true))
+    expect(view.result.current.modules?.stats.pnl).toBe(900)
+    expect(view.result.current.isPendingUpstream).toBe(false)
+    expect(view.result.current.isRefreshing).toBe(false)
+
+    view.unmount()
+    queryClient.clear()
+  })
 })

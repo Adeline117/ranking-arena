@@ -6066,6 +6066,7 @@ const ko = {
   tfInception: '생성 이후',
   moduleDataPending: '상세 데이터 로딩 중 — 잠시 후 새로고침하세요.',
   moduleDataUnavailable: '상세 데이터를 일시적으로 불러올 수 없습니다. 다시 시도하세요.',
+  moduleRefreshFailed: '새로고침에 실패했습니다. 표시된 데이터가 최신이 아닐 수 있습니다.',
   traderDormantForPeriod: '선택한 기간 동안 이 트레이더의 거래 활동이 없습니다.',
   moduleRetry: '재시도',
   dataDelayedNote: '이 거래소의 데이터 공개에는 지연이 있습니다.',

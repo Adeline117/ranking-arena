@@ -42,7 +42,7 @@ import DrawdownModule from './DrawdownModule'
 import AssetPreference from './AssetPreference'
 import HoldingDistribution from './HoldingDistribution'
 import AbilityRadar from './AbilityRadar'
-import ModuleDegraded from './ModuleDegraded'
+import ModuleDegraded, { ModuleRefreshFailureNotice } from './ModuleDegraded'
 import ServingRecordsSection from './ServingRecordsSection'
 import BotHeaderCard from './BotHeaderCard'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
@@ -299,9 +299,17 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
       ) : core.modules ? (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
           {core.isPendingUpstream && (
-            <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
-              {t('moduleDataPending')}
-            </Text>
+            <Box role="status" aria-live="polite" aria-atomic="true">
+              <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
+                {t('moduleDataPending')}
+              </Text>
+            </Box>
+          )}
+          {core.isDegraded && (
+            <ModuleRefreshFailureNotice
+              isRetrying={core.isRefreshing}
+              onRetry={() => void core.refetch()}
+            />
           )}
           {antiGamingFlags.length > 0 && (
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>

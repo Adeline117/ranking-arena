@@ -2,7 +2,6 @@ import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ServingRecordsSection, { RECORD_COLUMNS } from '../ServingRecordsSection'
 import CopierAggregatePanel from '../CopierAggregatePanel'
-import ModuleDegraded from '../ModuleDegraded'
 import RecordsTable from '../RecordsTable'
 import { useCopierAggregate, useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import type { RecordKind, SourceCapability } from '@/lib/data/serving/types'
@@ -16,7 +15,6 @@ jest.mock('@/lib/hooks/useTraderRecords', () => ({
 }))
 jest.mock('../RecordsTable', () => jest.fn(() => null))
 jest.mock('../CopierAggregatePanel', () => jest.fn(() => null))
-jest.mock('../ModuleDegraded', () => jest.fn(() => null))
 jest.mock('@/app/components/common/RecordProvenanceFooter', () => () => null)
 
 function capability(enabledKinds: RecordKind[]): SourceCapability {
@@ -233,9 +231,8 @@ describe('ServingRecordsSection selection scope', () => {
       />
     )
 
-    const props = (ModuleDegraded as jest.Mock).mock.calls.at(-1)?.[0]
-    expect(props).toEqual(expect.objectContaining({ onRetry: expect.any(Function) }))
-    props.onRetry()
+    expect(screen.getByText('moduleDataUnavailable')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'moduleRetry' }))
     expect(refetch).toHaveBeenCalledTimes(1)
   })
 

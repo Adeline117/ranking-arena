@@ -21,7 +21,7 @@ import { useTraderRecords, useCopierAggregate } from '@/lib/hooks/useTraderRecor
 import RecordsTable, { type RecordColumn } from './RecordsTable'
 import CopierAggregatePanel from './CopierAggregatePanel'
 import HistoryCompletenessNotice from './HistoryCompletenessNotice'
-import ModuleDegraded from './ModuleDegraded'
+import ModuleDegraded, { ModuleRefreshFailureNotice } from './ModuleDegraded'
 import RecordProvenanceFooter from '@/app/components/common/RecordProvenanceFooter'
 import type { RecordKind, ServingTimeframe, SourceCapability } from '@/lib/data/serving/types'
 
@@ -139,57 +139,6 @@ function ModulePendingState({
   )
 }
 
-function RecordsRefreshFailureNotice({
-  isRetrying,
-  onRetry,
-}: {
-  isRetrying: boolean
-  onRetry: () => void
-}) {
-  const { t } = useLanguage()
-  return (
-    <Box
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: tokens.spacing[2],
-        padding: tokens.spacing[3],
-        marginBottom: tokens.spacing[3],
-        borderRadius: tokens.radius.md,
-        border: `1px solid ${tokens.colors.border.primary}`,
-        background: tokens.colors.bg.tertiary,
-      }}
-    >
-      <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
-        {t('recordsRefreshFailed')}
-      </Text>
-      <button
-        type="button"
-        onClick={onRetry}
-        disabled={isRetrying}
-        style={{
-          minHeight: tokens.touchTarget.min,
-          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          borderRadius: tokens.radius.md,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          background: tokens.colors.bg.primary,
-          color: tokens.colors.text.primary,
-          fontSize: tokens.typography.fontSize.sm,
-          cursor: isRetrying ? 'wait' : 'pointer',
-          opacity: isRetrying ? 0.6 : 1,
-        }}
-      >
-        {isRetrying ? t('loading') : t('moduleRetry')}
-      </button>
-    </Box>
-  )
-}
-
 /** One heavy record tab — own component so its hook mounts lazily. */
 function RecordKindPanel({
   source,
@@ -219,10 +168,13 @@ function RecordKindPanel({
         completeness={kind === 'positions' ? null : (records.completeness ?? UNBOUND_HISTORY)}
       />
       {records.isRefetchError && (
-        <RecordsRefreshFailureNotice
-          isRetrying={records.isRefetching}
-          onRetry={() => void records.refetch()}
-        />
+        <Box style={{ marginBottom: tokens.spacing[3] }}>
+          <ModuleRefreshFailureNotice
+            messageKey="recordsRefreshFailed"
+            isRetrying={records.isRefetching}
+            onRetry={() => void records.refetch()}
+          />
+        </Box>
       )}
       <RecordsTable
         columns={RECORD_COLUMNS[kind]}

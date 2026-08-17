@@ -17,6 +17,13 @@ export interface ModuleDegradedProps {
   style?: React.CSSProperties
 }
 
+export interface ModuleRefreshFailureNoticeProps {
+  /** Exact copy for the data family whose last successful value remains visible. */
+  messageKey?: string
+  isRetrying?: boolean
+  onRetry: () => void
+}
+
 export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) {
   const { t } = useLanguage()
   return (
@@ -71,6 +78,59 @@ export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) 
           {t('moduleRetry')}
         </button>
       )}
+    </Box>
+  )
+}
+
+/**
+ * Keep previously loaded values visible only with an explicit stale-data
+ * disclosure. This is intentionally smaller than ModuleDegraded: it applies
+ * when a module still has truthful historical content but its refresh failed.
+ */
+export function ModuleRefreshFailureNotice({
+  messageKey = 'moduleRefreshFailed',
+  isRetrying = false,
+  onRetry,
+}: ModuleRefreshFailureNoticeProps) {
+  const { t } = useLanguage()
+  return (
+    <Box
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: tokens.spacing[2],
+        padding: tokens.spacing[3],
+        borderRadius: tokens.radius.md,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.tertiary,
+      }}
+    >
+      <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
+        {t(messageKey)}
+      </Text>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={isRetrying}
+        style={{
+          minHeight: tokens.touchTarget.min,
+          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+          borderRadius: tokens.radius.md,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+          fontSize: tokens.typography.fontSize.sm,
+          cursor: isRetrying ? 'wait' : 'pointer',
+          opacity: isRetrying ? 0.6 : 1,
+        }}
+      >
+        {isRetrying ? t('loading') : t('moduleRetry')}
+      </button>
     </Box>
   )
 }
