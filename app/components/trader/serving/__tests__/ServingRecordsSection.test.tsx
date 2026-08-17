@@ -2,6 +2,7 @@ import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ServingRecordsSection, { RECORD_COLUMNS } from '../ServingRecordsSection'
 import CopierAggregatePanel from '../CopierAggregatePanel'
+import ModuleDegraded from '../ModuleDegraded'
 import RecordsTable from '../RecordsTable'
 import { useCopierAggregate, useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import type { RecordKind, SourceCapability } from '@/lib/data/serving/types'
@@ -15,7 +16,7 @@ jest.mock('@/lib/hooks/useTraderRecords', () => ({
 }))
 jest.mock('../RecordsTable', () => jest.fn(() => null))
 jest.mock('../CopierAggregatePanel', () => jest.fn(() => null))
-jest.mock('../ModuleDegraded', () => () => null)
+jest.mock('../ModuleDegraded', () => jest.fn(() => null))
 jest.mock('@/app/components/common/RecordProvenanceFooter', () => () => null)
 
 function capability(enabledKinds: RecordKind[]): SourceCapability {
@@ -47,6 +48,7 @@ describe('ServingRecordsSection selection scope', () => {
       provenance: null,
       completeness: null,
       isPendingUpstream: false,
+      isPendingRecoveryRequired: false,
       isLoading: false,
       isInitialError: false,
       isFetchNextPageError: false,
@@ -200,6 +202,41 @@ describe('ServingRecordsSection selection scope', () => {
     const status = screen.getByRole('status', { name: 'moduleDataPending' })
     expect(status).toHaveAttribute('data-module-state', 'pending')
     expect(status).not.toHaveAttribute('data-copier-state')
+  })
+
+  it('offers a retry after a bounded generic collection window expires', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [],
+      provenance: null,
+      completeness: null,
+      isPendingUpstream: false,
+      isPendingRecoveryRequired: true,
+      isLoading: false,
+      isInitialError: false,
+      isFetchNextPageError: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      error: null,
+      refetch,
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['positions'])}
+        tf={90}
+      />
+    )
+
+    const props = (ModuleDegraded as jest.Mock).mock.calls.at(-1)?.[0]
+    expect(props).toEqual(expect.objectContaining({ onRetry: expect.any(Function) }))
+    props.onRetry()
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 
   it('respects reduced-motion for the collecting skeleton', () => {

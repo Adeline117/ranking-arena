@@ -210,6 +210,9 @@ function RecordKindPanel({
   if (records.isPendingUpstream && records.rows.length === 0) {
     return <ModulePendingState state="pending" />
   }
+  if (records.isPendingRecoveryRequired && records.rows.length === 0) {
+    return <ModuleDegraded onRetry={() => records.refetch()} />
+  }
   return (
     <Box>
       <HistoryCompletenessNotice

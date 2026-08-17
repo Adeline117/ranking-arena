@@ -26,6 +26,8 @@ import {
 import type { ApiSuccessResponse } from '@/lib/types/index'
 
 const POSITION_HISTORY_RECORDS_CONTRACT = 'vph3' as const
+const PENDING_RECORDS_POLL_INTERVAL_MS = 2_000
+const MAX_PENDING_RECORDS_POLLS = 15
 
 export interface UseTraderRecordsOptions {
   source: string
@@ -162,6 +164,7 @@ export function useTraderRecords({
   enabled = false,
 }: UseTraderRecordsOptions) {
   const queryClient = useQueryClient()
+  const shouldFetch = enabled && Boolean(source) && Boolean(exchangeTraderId)
   const queryKey = useMemo(
     () =>
       [
@@ -174,22 +177,53 @@ export function useTraderRecords({
       ] as const,
     [exchangeTraderId, kind, source, tf]
   )
+  const pendingScope = JSON.stringify([source, exchangeTraderId, kind, tf])
+  const pendingPoll = useRef({ scope: pendingScope, count: 0 })
+  if (pendingPoll.current.scope !== pendingScope) {
+    pendingPoll.current = { scope: pendingScope, count: 0 }
+  }
   const query = useInfiniteQuery<RecordsPage>({
     queryKey,
     queryFn: async ({ pageParam }) => {
       const res = await fetcher<ApiSuccessResponse<RecordsPage>>(
         recordsUrl(exchangeTraderId, source, kind, tf, pageParam as string | undefined)
       )
+      // Tier-C first-page pending is a collection bridge, not an empty result.
+      // Count only its initial page: later paginated pages must never consume
+      // this foreground recovery window.
+      if (pageParam === undefined && pendingPoll.current.scope === pendingScope) {
+        pendingPoll.current.count =
+          res.data.cacheState === 'pending' ? pendingPoll.current.count + 1 : 0
+      }
       return res.data
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       mayRequestNextPage(kind, lastPage) ? (lastPage.nextCursor ?? undefined) : undefined,
-    enabled: enabled && Boolean(source) && Boolean(exchangeTraderId),
+    enabled: shouldFetch,
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
+    // Tier-C returns an explicit pending shell while its durable read is being
+    // collected. Re-read that first page in a bounded foreground window;
+    // otherwise a user would see a permanent loading state with no recovery.
+    refetchInterval: (activeQuery) => {
+      const activePages = activeQuery.state.data?.pages
+      const hasOnlyPendingFirstPage =
+        activePages?.length === 1 && activePages[0]?.cacheState === 'pending'
+      if (
+        !hasOnlyPendingFirstPage ||
+        activeQuery.state.error ||
+        pendingPoll.current.scope !== pendingScope ||
+        pendingPoll.current.count >= MAX_PENDING_RECORDS_POLLS
+      ) {
+        return false
+      }
+      return PENDING_RECORDS_POLL_INTERVAL_MS
+    },
+    refetchIntervalInBackground: false,
     retry: (failureCount, error) => !isRecordsCursorInvalidated(error) && failureCount < 2,
   })
+  const queryRefetch = query.refetch
 
   const cursorInvalidated = isRecordsCursorInvalidated(query.error)
   useEffect(() => {
@@ -203,16 +237,36 @@ export function useTraderRecords({
   }, [cursorInvalidated, queryClient, queryKey])
 
   const pages = query.data?.pages ?? []
+  const hasOnlyPendingFirstPage = pages.length === 1 && pages[0].cacheState === 'pending'
+  const pendingWindowActive =
+    hasOnlyPendingFirstPage &&
+    (query.isFetching || !query.error) &&
+    pendingPoll.current.scope === pendingScope &&
+    pendingPoll.current.count < MAX_PENDING_RECORDS_POLLS
+  const pendingRecoveryRequired =
+    hasOnlyPendingFirstPage &&
+    !query.isFetching &&
+    (Boolean(query.error) ||
+      (pendingPoll.current.scope === pendingScope &&
+        pendingPoll.current.count >= MAX_PENDING_RECORDS_POLLS))
   const rows = pages.flatMap((page) => (mayDisplayPageRows(kind, page) ? page.rows : []))
   const completeness = combinedHistoryCompleteness(kind, pages)
   const provenance = combinedRecordProvenance(source, pages)
+  const refetch = useCallback(() => {
+    // A deliberate retry gets one new bounded collection window. Background
+    // revalidation must never silently extend the user's waiting period.
+    if (pendingPoll.current.scope === pendingScope) pendingPoll.current.count = 0
+    return queryRefetch()
+  }, [pendingScope, queryRefetch])
 
   return {
     rows,
     provenance,
     completeness,
     /** First page is still cold-fetching upstream (Tier-C pending). */
-    isPendingUpstream: pages.length === 1 && pages[0].cacheState === 'pending',
+    isPendingUpstream: pendingWindowActive,
+    /** Pending collection exhausted or failed after a shell was returned. */
+    isPendingRecoveryRequired: pendingRecoveryRequired,
     isLoading: query.isLoading || cursorInvalidated,
     /** No cached page exists, so the module has nothing truthful to preserve. */
     isInitialError: !cursorInvalidated && query.isLoadingError,
@@ -225,7 +279,7 @@ export function useTraderRecords({
     hasNextPage: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
     error: cursorInvalidated ? null : query.error,
-    refetch: query.refetch,
+    refetch,
   }
 }
 

@@ -1135,4 +1135,100 @@ describe('useTraderRecords cursor generation reset', () => {
     view.unmount()
     queryClient.clear()
   })
+
+  it('polls an explicit pending record bridge every two seconds and stops on data', async () => {
+    jest.useFakeTimers()
+    const client = queryClient()
+    let reads = 0
+    ;(fetcher as jest.Mock).mockImplementation(() => {
+      reads += 1
+      return Promise.resolve(
+        recordsResponse(
+          reads < 3
+            ? recordsPage({ cacheState: 'pending' })
+            : recordsPage({ rows: [{ id: 'collected' }] })
+        )
+      )
+    })
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    try {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0)
+      })
+      expect(view.result.current.isPendingUpstream).toBe(true)
+      expect(view.result.current.isPendingRecoveryRequired).toBe(false)
+      expect(reads).toBe(1)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(4_000)
+        await Promise.resolve()
+      })
+      expect(reads).toBe(3)
+      await waitFor(() => expect(view.result.current.rows).toEqual([{ id: 'collected' }]))
+      expect(view.result.current.isPendingUpstream).toBe(false)
+      expect(view.result.current.isPendingRecoveryRequired).toBe(false)
+    } finally {
+      view.unmount()
+      client.clear()
+      jest.useRealTimers()
+    }
+  })
+
+  it('caps a pending record bridge, exposes recovery, and restarts only on retry', async () => {
+    jest.useFakeTimers()
+    const client = queryClient()
+    ;(fetcher as jest.Mock).mockResolvedValue(
+      recordsResponse(recordsPage({ cacheState: 'pending' }))
+    )
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    try {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(40_000)
+      })
+      expect(fetcher).toHaveBeenCalledTimes(15)
+      expect(view.result.current.isPendingUpstream).toBe(false)
+      expect(view.result.current.isPendingRecoveryRequired).toBe(true)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10_000)
+      })
+      expect(fetcher).toHaveBeenCalledTimes(15)
+
+      await act(async () => {
+        await view.result.current.refetch()
+      })
+      expect(fetcher).toHaveBeenCalledTimes(16)
+      await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+      expect(view.result.current.isPendingRecoveryRequired).toBe(false)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(4_000)
+      })
+      expect(fetcher).toHaveBeenCalledTimes(18)
+    } finally {
+      view.unmount()
+      client.clear()
+      jest.useRealTimers()
+    }
+  })
 })
