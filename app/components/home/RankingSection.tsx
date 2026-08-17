@@ -43,12 +43,23 @@ interface RankingSectionProps {
   onRetry?: () => void
   onRefresh?: () => void
   availableSources?: string[]
-  totalCount?: number
+  totalCount?: number | null
+  totalCountIsExact?: boolean
+  hasMore?: boolean
   categoryCounts?: CategoryCounts
+  categoryCountsAreExact?: boolean
+  /** Zero-based page paired with the SSR trader snapshot. */
+  initialPageIndex?: number
+  /** A direct URL requested a cohort the SSR reader does not implement. */
+  requiresInitialCohortFetch?: boolean
+  /** Incremented by the parent to retry a failed direct-link cohort. */
+  initialCohortAttempt?: number
+  /** Prevents target UI labels/rows until that initial client request succeeds. */
+  onInitialCohortSettled?: (succeeded: boolean) => void
   fetchPage?: (
     page: number,
-    opts?: { category?: string; sortBy?: string; sortDir?: string }
-  ) => Promise<void>
+    opts?: { category?: string; sortBy?: string; sortDir?: string; exchange?: string }
+  ) => Promise<boolean>
   lastRefreshFailed?: boolean
   staleDataWarning?: boolean
   /** Source-watermark freshness from the shared 48-hour server contract. */
@@ -67,7 +78,14 @@ export default function RankingSection({
   onRetry,
   onRefresh,
   totalCount,
+  totalCountIsExact,
+  hasMore,
   categoryCounts,
+  categoryCountsAreExact,
+  initialPageIndex,
+  requiresInitialCohortFetch,
+  initialCohortAttempt,
+  onInitialCohortSettled,
   fetchPage,
   lastRefreshFailed,
   staleDataWarning,
@@ -106,7 +124,17 @@ export default function RankingSection({
     handleResetFilters,
     handleFilterToggle,
     formatLastUpdated,
-  } = useRankingFilters({ traders, activeTimeRange, totalCount, categoryCounts, fetchPage })
+  } = useRankingFilters({
+    traders,
+    activeTimeRange,
+    totalCount,
+    categoryCounts,
+    initialPageIndex,
+    requiresInitialCohortFetch,
+    initialCohortAttempt,
+    onInitialCohortSettled,
+    fetchPage,
+  })
 
   // Unified paywall: callback-style gates (locked tabs, export) open the
   // shared upsell modal instead of a dead-end toast.
@@ -214,6 +242,7 @@ export default function RankingSection({
           isPro={isPro}
           onProRequired={onProRequired}
           categoryCounts={categoryCounts}
+          categoryCountsAreExact={categoryCountsAreExact}
         />
       </div>
 
@@ -236,7 +265,7 @@ export default function RankingSection({
         language={language}
         selectedExchange={selectedExchange}
         advancedFilteredCount={advancedFiltered.length}
-        tradersCount={totalCount || traders.length}
+        tradersCount={totalCountIsExact === true ? totalCount : null}
         hasActiveFilters={hasActiveFilters}
         onResetFilters={handleResetFilters}
       />
@@ -369,7 +398,10 @@ export default function RankingSection({
         onPageChange={handlePageChange}
         onSearchChange={handleSearchChange}
         serverTotalCount={totalCount}
+        totalCountIsExact={totalCountIsExact}
+        hasMore={hasMore}
         categoryCounts={categoryCounts}
+        categoryCountsAreExact={categoryCountsAreExact}
       />
 
       <div className="contain-layout-style">
