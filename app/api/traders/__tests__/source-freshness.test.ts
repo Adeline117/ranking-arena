@@ -79,10 +79,65 @@ function queryResult(data: unknown[], error: unknown = null) {
   return proxy
 }
 
-function rankedPageQuery(rows: Array<Record<string, unknown>>) {
+function publicRankedRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'trader-1',
+    source_type: 'futures',
+    handle: 'Trader One',
+    roi: 10,
+    pnl: 100,
+    win_rate: 60,
+    max_drawdown: 20,
+    trades_count: 10,
+    followers: 2,
+    copiers: 1,
+    avatar_url: null,
+    arena_score: 90,
+    rank: 1,
+    rank_change: null,
+    is_new: false,
+    profitability_score: 80,
+    risk_control_score: 75,
+    execution_score: 70,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    trading_style: null,
+    avg_holding_hours: null,
+    style_confidence: null,
+    computed_at: '2026-07-18T11:55:00.000Z',
+    season_id: '90D',
+    sharpe_ratio: null,
+    sortino_ratio: null,
+    profit_factor: null,
+    calmar_ratio: null,
+    trader_type: null,
+    is_outlier: false,
+    ...overrides,
+  }
+}
+
+function publicRankedCohortScope(overrides: Record<string, unknown> = {}) {
+  return {
+    timeRange: '90D',
+    exchangeFilter: null,
+    categoryFilter: null,
+    sortBy: 'arena_score',
+    order: 'desc',
+    cursor: null,
+    limit: 50,
+    useLegacyPaging: false,
+    page: 0,
+    ...overrides,
+  }
+}
+
+function publicRankedPageQuery(rows: Array<Record<string, unknown>>) {
   let minimumRank: number | null = null
-  let requirePublishedRank = false
+  let minimumComputedAt: string | null = null
+  let sourceFilter: string | null = null
   let pageLimit: number | null = null
+  let range: { from: number; to: number } | null = null
   const orders: Array<{ column: string; ascending: boolean }> = []
   const methods: Record<string, jest.Mock> = {}
   const proxy = new Proxy<Record<string, unknown>>(
@@ -91,8 +146,11 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
       get(_target, property) {
         if (property === 'then') {
           const filtered = rows
-            .filter((row) => !requirePublishedRank || row.rank != null)
+            .filter(
+              (row) => minimumComputedAt == null || String(row.computed_at) >= minimumComputedAt
+            )
             .filter((row) => minimumRank == null || Number(row.rank) > minimumRank)
+            .filter((row) => sourceFilter == null || row.source === sourceFilter)
             .sort((left, right) => {
               for (const { column, ascending } of orders) {
                 const a = left[column]
@@ -103,7 +161,8 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
               }
               return 0
             })
-          const data = pageLimit == null ? filtered : filtered.slice(0, pageLimit)
+          const ranged = range ? filtered.slice(range.from, range.to + 1) : filtered
+          const data = pageLimit == null ? ranged : ranged.slice(0, pageLimit)
           const result = { data, error: null }
           return (
             resolve: (value: typeof result) => unknown,
@@ -112,14 +171,19 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
         }
 
         const key = String(property)
-        if (key === 'not') {
-          methods.not ??= jest.fn((column: string, operator: string, value: unknown) => {
-            if (column === 'rank' && operator === 'is' && value === null) {
-              requirePublishedRank = true
-            }
+        if (key === 'eq') {
+          methods.eq ??= jest.fn((column: string, value: string) => {
+            if (column === 'source') sourceFilter = value
             return proxy
           })
-          return methods.not
+          return methods.eq
+        }
+        if (key === 'gte') {
+          methods.gte ??= jest.fn((column: string, value: string) => {
+            if (column === 'computed_at') minimumComputedAt = value
+            return proxy
+          })
+          return methods.gte
         }
         if (key === 'gt') {
           methods.gt ??= jest.fn((column: string, value: number) => {
@@ -142,6 +206,13 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
           })
           return methods.limit
         }
+        if (key === 'range') {
+          methods.range ??= jest.fn((from: number, to: number) => {
+            range = { from, to }
+            return proxy
+          })
+          return methods.range
+        }
         methods[key] ??= jest.fn(() => proxy)
         return methods[key]
       },
@@ -152,7 +223,7 @@ function rankedPageQuery(rows: Array<Record<string, unknown>>) {
 
 import { GET, warmDefaultPublicTradersCache } from '../route'
 
-describe('GET /api/traders source freshness', () => {
+describe('GET /api/traders public ranked cohort', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockGetOrSetWithLock.mockImplementation(
@@ -170,63 +241,20 @@ describe('GET /api/traders source freshness', () => {
     jest.useRealTimers()
   })
 
-  it('keeps stale rows visible while exposing source timestamps per row and page', async () => {
-    const generation = '2026-07-18T11:55:00.000Z'
-    let rankingQuery: ReturnType<typeof queryResult> | undefined
-    let freshnessQuery: ReturnType<typeof queryResult> | undefined
+  it('reads only the source-fresh public view, returns nullable totals, and exposes page-scoped freshness', async () => {
+    // Source freshness is now a database eligibility predicate. This route
+    // must receive only rows whose sealed source cohort is current; a stale
+    // source is proved at the view's PG17 contract, not relabelled as a ranked
+    // row with a stale badge after pagination.
+    const rankingQuery = publicRankedPageQuery([
+      publicRankedRow({ source_trader_id: 'fresh', handle: 'Fresh', rank: 1 }),
+    ])
+    const freshnessQuery = queryResult([
+      { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+    ])
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'leaderboard_ranks') {
-        rankingQuery = queryResult([
-          {
-            source: 'binance_futures',
-            source_trader_id: 'fresh',
-            source_type: 'futures',
-            handle: 'Fresh',
-            roi: 10,
-            pnl: 100,
-            arena_score: 90,
-            rank: 1,
-            computed_at: '2026-07-18T11:59:00.000Z',
-          },
-          {
-            source: 'hyperliquid',
-            source_trader_id: 'stale',
-            source_type: 'web3',
-            handle: 'Stale',
-            roi: 9,
-            pnl: 90,
-            arena_score: 80,
-            rank: 2,
-            computed_at: '2026-07-18T11:59:00.000Z',
-          },
-        ])
-        return rankingQuery
-      }
-      if (table === 'leaderboard_count_cache') {
-        return queryResult([
-          { source: '_all_gt0', total_count: 3, updated_at: generation },
-          { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
-          { source: 'okx_web3_solana_gt0', total_count: 1, updated_at: generation },
-          { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
-        ])
-      }
-      if (table === 'leaderboard_source_freshness') {
-        freshnessQuery = queryResult([
-          {
-            source: 'binance_futures',
-            source_as_of: '2026-07-18T11:00:00.000Z',
-          },
-          {
-            source: 'okx_web3_solana',
-            source_as_of: '2026-07-01T00:00:00.000Z',
-          },
-          {
-            source: 'hyperliquid',
-            source_as_of: '2026-07-16T09:00:00.000Z',
-          },
-        ])
-        return freshnessQuery
-      }
+      if (table === 'public_ranked_leaderboard') return rankingQuery
+      if (table === 'leaderboard_source_freshness') return freshnessQuery
       if (table === 'verified_traders') return queryResult([])
       throw new Error(`unexpected table ${table}`)
     })
@@ -236,82 +264,122 @@ describe('GET /api/traders source freshness', () => {
     } as never)
     const body = await response.json()
 
-    expect(body.lastUpdated).toBe('2026-07-16T09:00:00.000Z')
-    expect(body.isStale).toBe(true)
-    expect(body.totalCount).toBe(2)
-    expect(body.availableSources).toEqual(['binance_futures', 'hyperliquid'])
-    expect(body.source_freshness).toHaveLength(2)
+    expect(body.lastUpdated).toBe('2026-07-18T11:00:00.000Z')
+    expect(body.isStale).toBe(false)
+    expect(body.totalCount).toBeNull()
+    expect(body.totalCountIsExact).toBe(false)
+    expect(body.availableSources).toEqual(['binance_futures'])
+    expect(body.source_freshness).toHaveLength(1)
     expect(body.traders).toEqual([
       expect.objectContaining({
+        id: 'fresh',
         source: 'binance_futures',
         updated_at: '2026-07-18T11:00:00.000Z',
         is_stale: false,
-        computed_at: '2026-07-18T11:59:00.000Z',
-      }),
-      expect.objectContaining({
-        source: 'hyperliquid',
-        updated_at: '2026-07-16T09:00:00.000Z',
-        is_stale: true,
-        computed_at: '2026-07-18T11:59:00.000Z',
       }),
     ])
-    expect(rankingQuery?.not).toHaveBeenCalledWith(
-      'source',
-      'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
-    )
-    expect(rankingQuery?.not).toHaveBeenCalledWith('rank', 'is', null)
-    expect(freshnessQuery?.not).toHaveBeenCalledWith(
-      'source',
-      'in',
-      '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
-    )
+    expect(mockFrom.mock.calls.map(([table]) => table)).toEqual([
+      'public_ranked_leaderboard',
+      'verified_traders',
+      'leaderboard_source_freshness',
+    ])
+    expect(rankingQuery.select).toHaveBeenCalledWith(expect.stringContaining('metrics_estimated'))
+    expect(rankingQuery.gte).toHaveBeenCalledWith('computed_at', '2026-07-18T06:00:00.000Z')
+    expect(rankingQuery.limit).toHaveBeenCalledWith(51)
   })
 
-  it('continues an arena-score tie by persisted rank without losing a row', async () => {
-    const generation = '2026-07-18T11:55:00.000Z'
-    const tiedRows = [
-      {
-        source: 'binance_futures',
-        source_trader_id: 'z-rank-one',
-        source_type: 'futures',
-        handle: 'Rank One',
-        arena_score: 90,
-        rank: 1,
-        computed_at: generation,
-      },
-      {
-        source: 'binance_futures',
-        source_trader_id: 'a-rank-two',
-        source_type: 'futures',
-        handle: 'Rank Two',
-        arena_score: 90,
-        rank: 2,
-        computed_at: generation,
-      },
-      {
-        source: 'binance_futures',
-        source_trader_id: 'm-rank-three',
-        source_type: 'futures',
-        handle: 'Rank Three',
-        arena_score: 90,
-        rank: 3,
-        computed_at: generation,
-      },
-    ]
-    const rankingQueries: Array<ReturnType<typeof rankedPageQuery>> = []
-
+  it.each([
+    ['arena_score', 'arena_score'],
+    ['roi', 'roi'],
+    ['pnl', 'pnl'],
+    ['win_rate', 'win_rate'],
+    ['max_drawdown', 'max_drawdown'],
+    ['sortino_ratio', 'sortino_ratio'],
+  ] as const)('orders the public cohort by supported sortBy=%s', async (sortBy, expectedColumn) => {
+    const rankingQuery = publicRankedPageQuery([publicRankedRow()])
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'leaderboard_ranks') {
-        const query = rankedPageQuery(tiedRows)
+      if (table === 'public_ranked_leaderboard') return rankingQuery
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unsupported source relation ${table}`)
+    })
+
+    const response = await GET({
+      nextUrl: new URL(`http://localhost/api/traders?timeRange=90D&sortBy=${sortBy}&order=asc`),
+    } as never)
+
+    expect(response.status).toBe(200)
+    expect(mockFrom.mock.calls.map(([table]) => table)).toEqual([
+      'public_ranked_leaderboard',
+      'verified_traders',
+      'leaderboard_source_freshness',
+    ])
+    expect(rankingQuery.order.mock.calls).toEqual([
+      [expectedColumn, { ascending: true, nullsFirst: false }],
+      ['rank', { ascending: true, nullsFirst: false }],
+    ])
+    expect((await response.json()).rankingMode).toBe(sortBy)
+  })
+
+  it.each(['alpha', 'unpublished_metric'])(
+    'rejects unsupported sortBy=%s before cache or DB reads',
+    async (sortBy) => {
+      const response = await GET({
+        nextUrl: new URL(`http://localhost/api/traders?timeRange=90D&sortBy=${sortBy}`),
+      } as never)
+
+      expect(response.status).toBe(400)
+      expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['timeRange=not-a-period', 'order=sideways', 'limit=0', 'limit=501', 'page=40001'])(
+    'rejects malformed explicit scope %s before cache or DB reads',
+    async (query) => {
+      const response = await GET({
+        nextUrl: new URL(`http://localhost/api/traders?${query}`),
+      } as never)
+
+      expect(response.status).toBe(400)
+      expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it('normalizes a lowercase valid period without changing its cohort', async () => {
+    const rankingQuery = publicRankedPageQuery([publicRankedRow()])
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'public_ranked_leaderboard') return rankingQuery
+      if (table === 'leaderboard_source_freshness') return queryResult([])
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unsupported relation ${table}`)
+    })
+
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90d'),
+    } as never)
+
+    expect(response.status).toBe(200)
+    expect(rankingQuery.eq).toHaveBeenCalledWith('season_id', '90D')
+  })
+
+  it('uses a limit+1 lookahead for rank-cursor pagination and emits no cursor on the final page', async () => {
+    const tiedRows = [
+      publicRankedRow({ source_trader_id: 'z-rank-one', rank: 1 }),
+      publicRankedRow({ source_trader_id: 'a-rank-two', rank: 2 }),
+      publicRankedRow({ source_trader_id: 'm-rank-three', rank: 3 }),
+    ]
+    const rankingQueries: Array<ReturnType<typeof publicRankedPageQuery>> = []
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'public_ranked_leaderboard') {
+        const query = publicRankedPageQuery(tiedRows)
         rankingQueries.push(query)
         return query
-      }
-      if (table === 'leaderboard_count_cache') {
-        return queryResult([
-          { source: '_all_gt0', total_count: 3, updated_at: generation },
-          { source: 'binance_futures_gt0', total_count: 3, updated_at: generation },
-        ])
       }
       if (table === 'leaderboard_source_freshness') {
         return queryResult([
@@ -334,54 +402,41 @@ describe('GET /api/traders source freshness', () => {
     const second = await secondResponse.json()
 
     expect(first.traders.map(({ rank }: { rank: number }) => rank)).toEqual([1, 2])
+    expect(first.hasMore).toBe(true)
     expect(first.nextCursor).toBe(2)
     expect(second.traders.map(({ rank }: { rank: number }) => rank)).toEqual([3])
+    expect(second.hasMore).toBe(false)
+    expect(second.nextCursor).toBeNull()
     expect([...first.traders, ...second.traders].map(({ id }: { id: string }) => id)).toEqual([
       'z-rank-one',
       'a-rank-two',
       'm-rank-three',
     ])
-    for (const query of rankingQueries) {
-      expect(query.order.mock.calls.slice(0, 2)).toEqual([
-        ['arena_score', { ascending: false, nullsFirst: false }],
-        ['rank', { ascending: true, nullsFirst: false }],
-      ])
-    }
+    expect(rankingQueries[0].limit).toHaveBeenCalledWith(3)
+    expect(rankingQueries[1].limit).toHaveBeenCalledWith(3)
     expect(rankingQueries[1].gt).toHaveBeenCalledWith('rank', 2)
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v3:/),
+      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v5:public-cohort:/),
       expect.any(Function),
-      {
-        ttl: 300,
-        lockTtl: 10,
+      expect.objectContaining({
         tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         skipMemory: true,
-        writeFenceKey: 'public-rankings:write-fence:v1',
-      }
+      })
     )
   })
 
-  it('warms the exact versioned full-response key only after Redis confirms it', async () => {
-    const generation = '2026-07-18T11:55:00.000Z'
+  it('uses an inclusive legacy range for the same limit+1 lookahead without count-cache totals', async () => {
+    const rows = [
+      publicRankedRow({ source_trader_id: 'rank-one', rank: 1 }),
+      publicRankedRow({ source_trader_id: 'rank-two', rank: 2 }),
+      publicRankedRow({ source_trader_id: 'rank-three', rank: 3 }),
+    ]
+    const rankingQueries: Array<ReturnType<typeof publicRankedPageQuery>> = []
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'leaderboard_ranks') {
-        return rankedPageQuery([
-          {
-            source: 'binance_futures',
-            source_trader_id: 'rank-one',
-            source_type: 'futures',
-            handle: 'Rank One',
-            arena_score: 90,
-            rank: 1,
-            computed_at: generation,
-          },
-        ])
-      }
-      if (table === 'leaderboard_count_cache') {
-        return queryResult([
-          { source: '_all_gt0', total_count: 1, updated_at: generation },
-          { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
-        ])
+      if (table === 'public_ranked_leaderboard') {
+        const query = publicRankedPageQuery(rows)
+        rankingQueries.push(query)
+        return query
       }
       if (table === 'leaderboard_source_freshness') {
         return queryResult([
@@ -389,17 +444,228 @@ describe('GET /api/traders source freshness', () => {
         ])
       }
       if (table === 'verified_traders') return queryResult([])
-      throw new Error(`unexpected table ${table}`)
+      throw new Error(`old table/count cache must not be queried: ${table}`)
+    })
+
+    const first = await (
+      await GET({
+        nextUrl: new URL('http://localhost/api/traders?timeRange=90D&page=0&limit=2'),
+      } as never)
+    ).json()
+    const last = await (
+      await GET({
+        nextUrl: new URL('http://localhost/api/traders?timeRange=90D&page=1&limit=2'),
+      } as never)
+    ).json()
+
+    expect(rankingQueries[0].range).toHaveBeenCalledWith(0, 2)
+    expect(rankingQueries[1].range).toHaveBeenCalledWith(2, 4)
+    expect(first.hasMore).toBe(true)
+    expect(last.hasMore).toBe(false)
+    expect(first.totalCount).toBeNull()
+    expect(last.totalCountIsExact).toBe(false)
+  })
+
+  it('revalidates a raw cached cohort with the complete proof and fails closed on a bad row', async () => {
+    mockGetOrSetWithLock.mockResolvedValue({
+      scope: publicRankedCohortScope({ limit: 2 }),
+      rows: [
+        publicRankedRow({ source_trader_id: 'first', rank: 1 }),
+        publicRankedRow({ source_trader_id: 'partial', rank: 2, metrics_estimated: true }),
+        publicRankedRow({ source_trader_id: 'last', rank: 3 }),
+      ],
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected cache-hit query ${table}`)
+    })
+
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?timeRange=90D&limit=2'),
+    } as never)
+    const body = await response.json()
+
+    expect(body.traders.map(({ id }: { id: string }) => id)).toEqual(['first', 'last'])
+    expect(body.hasMore).toBe(false)
+    expect(body.nextCursor).toBeNull()
+    expect(body.totalCount).toBeNull()
+    expect(body.totalCountIsExact).toBe(false)
+    expect(body.ranking_visibility_reasons).toEqual(['ineligible_cached_cohort_row_removed'])
+    expect(body.traders[0]).not.toHaveProperty('metrics_estimated')
+    expect(body.traders[0]).not.toHaveProperty('season_id')
+    expect(body.traders[0]).not.toHaveProperty('source_trader_id')
+    expect(mockFrom.mock.calls.map(([table]) => table)).toEqual([
+      'verified_traders',
+      'leaderboard_source_freshness',
+    ])
+  })
+
+  it('rejects a cross-period raw cache envelope instead of reusing it', async () => {
+    mockGetOrSetWithLock.mockResolvedValue({
+      scope: publicRankedCohortScope({ timeRange: '30D' }),
+      rows: [publicRankedRow({ source_trader_id: 'wrong-period' })],
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected malformed-cache query ${table}`)
+    })
+
+    const body = await (
+      await GET({
+        nextUrl: new URL('http://localhost/api/traders?timeRange=90D'),
+      } as never)
+    ).json()
+
+    expect(body.traders).toEqual([])
+    expect(body.hasMore).toBe(false)
+    expect(body.nextCursor).toBeNull()
+    expect(body.totalCount).toBeNull()
+    expect(body.totalCountIsExact).toBe(false)
+  })
+
+  it('rejects a 6-to-48-hour raw cache row even when its complete publication proof remains valid', async () => {
+    mockGetOrSetWithLock.mockResolvedValue({
+      scope: publicRankedCohortScope({ limit: 2 }),
+      rows: [
+        publicRankedRow({
+          source_trader_id: 'served-too-old',
+          computed_at: '2026-07-18T05:59:00.000Z',
+        }),
+      ],
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected stale-cache query ${table}`)
+    })
+
+    const body = await (
+      await GET({
+        nextUrl: new URL('http://localhost/api/traders?timeRange=90D&limit=2'),
+      } as never)
+    ).json()
+
+    expect(body.traders).toEqual([])
+    expect(body.hasMore).toBe(false)
+    expect(body.nextCursor).toBeNull()
+    expect(body.totalCount).toBeNull()
+    expect(body.totalCountIsExact).toBe(false)
+    expect(body.ranking_visibility_reasons).toEqual(['ineligible_cached_cohort_row_removed'])
+    expect(mockFrom.mock.calls.map(([table]) => table)).toEqual([
+      'verified_traders',
+      'leaderboard_source_freshness',
+    ])
+  })
+
+  it('does not let a cached row retain a public rank after its source watermark expires', async () => {
+    mockGetOrSetWithLock.mockResolvedValue({
+      scope: publicRankedCohortScope({ limit: 2 }),
+      rows: [publicRankedRow({ source_trader_id: 'source-expired' })],
+    })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-16T11:59:59.999Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected stale-source cache query ${table}`)
+    })
+
+    const body = await (
+      await GET({
+        nextUrl: new URL('http://localhost/api/traders?timeRange=90D&limit=2'),
+      } as never)
+    ).json()
+
+    expect(body.traders).toEqual([])
+    expect(body.hasMore).toBe(false)
+    expect(body.nextCursor).toBeNull()
+    expect(body.isStale).toBe(true)
+    expect(body.ranking_visibility_reasons).toEqual(['source_freshness_unverified'])
+  })
+
+  it('keeps an absent exchange and literal exchange=all in separate raw cache cohorts', async () => {
+    const cache = new Map<string, unknown>()
+    const rankingQueries: Array<ReturnType<typeof publicRankedPageQuery>> = []
+    mockGetOrSetWithLock.mockImplementation(
+      async (key: string, fetcher: () => Promise<unknown>) => {
+        const cached = cache.get(key)
+        if (cached !== undefined) return cached
+        const fetched = await fetcher()
+        cache.set(key, fetched)
+        return fetched
+      }
+    )
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'public_ranked_leaderboard') {
+        const query = publicRankedPageQuery([
+          publicRankedRow({ source_trader_id: 'default-source' }),
+        ])
+        rankingQueries.push(query)
+        return query
+      }
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected exchange-cache query ${table}`)
+    })
+
+    const literalAll = await (
+      await GET({
+        nextUrl: new URL('http://localhost/api/traders?timeRange=90D&exchange=all'),
+      } as never)
+    ).json()
+    const absentExchange = await (
+      await GET({
+        nextUrl: new URL('http://localhost/api/traders?timeRange=90D'),
+      } as never)
+    ).json()
+
+    expect(literalAll.traders).toEqual([])
+    expect(absentExchange.traders.map(({ id }: { id: string }) => id)).toEqual(['default-source'])
+    expect(rankingQueries).toHaveLength(2)
+    const [literalAllKey, absentExchangeKey] = mockGetOrSetWithLock.mock.calls.map(
+      ([key]) => key as string
+    )
+    expect(literalAllKey).not.toBe(absentExchangeKey)
+    expect(decodeURIComponent(literalAllKey)).toContain('"exchangeFilter":"all"')
+    expect(decodeURIComponent(absentExchangeKey)).toContain('"exchangeFilter":null')
+  })
+
+  it('warms the versioned raw cohort key only after Redis confirms it', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'public_ranked_leaderboard') {
+        return publicRankedPageQuery([publicRankedRow({ source_trader_id: 'rank-one' })])
+      }
+      throw new Error(`warmup must only query the public view, got ${table}`)
     })
 
     await expect(
       warmDefaultPublicTradersCache({ from: mockFrom } as never, '90D', 50)
     ).resolves.toBe(1)
     expect(mockCacheSet).toHaveBeenCalledWith(
-      'public-rank-policy-v7:leaderboard:v3:90D:all:all:arena_score:desc:start:50',
+      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v5:public-cohort:/),
       expect.objectContaining({
-        traders: [expect.objectContaining({ id: 'rank-one', rank: 1 })],
-        totalCount: 1,
+        scope: publicRankedCohortScope(),
+        rows: [expect.objectContaining({ source_trader_id: 'rank-one', metrics_estimated: false })],
       }),
       {
         ttl: 300,
@@ -415,54 +681,7 @@ describe('GET /api/traders source freshness', () => {
     ).rejects.toThrow('[90D] public traders Redis cache write was not confirmed')
   })
 
-  it('sanitizes a polluted cache hit without truncating safe rows after the quarantine', async () => {
-    const first = { source: 'binance_futures', id: 'first' }
-    const last = { source: 'hyperliquid', id: 'last' }
-    mockGetOrSetWithLock.mockResolvedValue({
-      traders: [first, { source: 'okx_web3_solana', id: 'blocked' }, last],
-      timeRange: '90D',
-      totalCount: 999,
-      hasMore: true,
-      nextCursor: 50,
-      lastUpdated: 'blocked-aggregate-watermark',
-      dataAgeMinutes: 1,
-      isStale: false,
-      availableSources: ['binance_futures', 'okx_web3_solana', 'hyperliquid'],
-      source_freshness: [
-        { source: 'binance_futures', updated_at: 'safe' },
-        { source: 'okx_web3_solana', updated_at: 'blocked' },
-        { source: 'hyperliquid', updated_at: 'safe' },
-      ],
-    })
-
-    const response = await GET({
-      nextUrl: new URL('http://localhost/api/traders?timeRange=90D'),
-    } as never)
-    const body = await response.json()
-
-    expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v3:/),
-      expect.any(Function),
-      expect.objectContaining({
-        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
-        skipMemory: true,
-      })
-    )
-    expect(body.traders).toEqual([first, last])
-    expect(body.totalCount).toBe(2)
-    expect(body.hasMore).toBe(false)
-    expect(body.nextCursor).toBeNull()
-    expect(body.lastUpdated).toBeNull()
-    expect(body.dataAgeMinutes).toBeNull()
-    expect(body.isStale).toBe(true)
-    expect(body.availableSources).toEqual(['binance_futures', 'hyperliquid'])
-    expect(body.source_freshness.map((row: { source: string }) => row.source)).toEqual([
-      'binance_futures',
-      'hyperliquid',
-    ])
-  })
-
-  it('returns an honest empty board for an explicitly quarantined source without DB access', async () => {
+  it('returns an exact empty result for an explicitly quarantined source without DB access', async () => {
     const response = await GET({
       nextUrl: new URL('http://localhost/api/traders?timeRange=90D&exchange=okx_web3_solana'),
     } as never)
@@ -470,8 +689,23 @@ describe('GET /api/traders source freshness', () => {
 
     expect(response.status).toBe(200)
     expect(body).toEqual(
-      expect.objectContaining({ traders: [], totalCount: 0, availableSources: [] })
+      expect.objectContaining({
+        traders: [],
+        totalCount: 0,
+        totalCountIsExact: true,
+        availableSources: [],
+      })
     )
+    expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejects rank cursors that do not match the persisted arena-score order', async () => {
+    const response = await GET({
+      nextUrl: new URL('http://localhost/api/traders?sortBy=roi&cursor=10'),
+    } as never)
+
+    expect(response.status).toBe(400)
     expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
