@@ -154,6 +154,14 @@ export default function SwipeableView({
             ref={(el) => {
               paneRefs.current[i] = el
             }}
+            // Translated panes remain mounted for animation and measurement,
+            // but only the active tab panel may be exposed to a keyboard or a
+            // screen reader. `inert` also blocks controls that would otherwise
+            // be focusable while visually off-screen; aria-hidden is the
+            // semantic fallback for assistive technology.
+            aria-hidden={i !== activeIndex}
+            inert={i !== activeIndex}
+            data-swipeable-pane={i}
             style={{
               flex: '0 0 100%',
               width: '100%',
