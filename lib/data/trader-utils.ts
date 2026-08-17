@@ -105,35 +105,18 @@ async function findTraderAcrossSourcesInner(
       .select('source_trader_id, handle, profile_url, source')
       .in('source', sources as unknown as string[])
       .or(handleConditions.join(','))
-      .limit(10)
+      // One public handle may legitimately map to multiple source accounts.
+      // A max+1 sentinel detects that ambiguity without selecting an arbitrary
+      // raw-rank winner or relying on physical response order.
+      .limit(2)
 
     if (error) {
       logger.error('[findTraderAcrossSources] DB query error:', error.message)
       return null
     }
 
-    if (!data || data.length === 0) {
+    if (!data || data.length !== 1) {
       return null
-    }
-
-    // 如果有多个结果，优先返回有排名数据的
-    if (data.length > 1) {
-      const traderIds = data.map((d) => d.source_trader_id)
-
-      const { data: rankedTraders } = await client
-        .from('leaderboard_ranks')
-        .select('source_trader_id')
-        .in('source_trader_id', traderIds)
-        .eq('season_id', '90D')
-        .limit(traderIds.length)
-
-      if (rankedTraders && rankedTraders.length > 0) {
-        const rankedIds = new Set(rankedTraders.map((s) => s.source_trader_id))
-        const withRank = data.find((d) => rankedIds.has(d.source_trader_id))
-        if (withRank) {
-          return withRank as TraderSourceRecord
-        }
-      }
     }
 
     return data[0] as TraderSourceRecord
