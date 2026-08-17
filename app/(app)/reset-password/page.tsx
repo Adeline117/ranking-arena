@@ -241,6 +241,8 @@ function ResetPasswordContent() {
   const [verifiedRecovery, setVerifiedRecovery] = useState<VerifiedSessionSnapshot | null>(null)
   const [mounted, setMounted] = useState(false)
   const errorRef = useRef<HTMLDivElement>(null)
+  const resetEmailSubmissionRef = useRef(0)
+  const activeResetEmailSubmissionRef = useRef<number | null>(null)
   const passwordSubmissionRef = useRef(0)
   const activePasswordSubmissionRef = useRef<number | null>(null)
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -248,6 +250,8 @@ function ResetPasswordContent() {
   const _searchParams = useSearchParams()
 
   const isResetMode = verifiedRecovery !== null
+  const isResetModeRef = useRef(isResetMode)
+  isResetModeRef.current = isResetMode
 
   const passwordStrength = getPasswordStrength(newPassword)
   const passwordMeetsFloor =
@@ -341,12 +345,22 @@ function ResetPasswordContent() {
 
   useEffect(
     () => () => {
+      resetEmailSubmissionRef.current += 1
+      activeResetEmailSubmissionRef.current = null
       passwordSubmissionRef.current += 1
       activePasswordSubmissionRef.current = null
       if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
     },
     []
   )
+
+  useEffect(() => {
+    if (!isResetMode) return
+    resetEmailSubmissionRef.current += 1
+    activeResetEmailSubmissionRef.current = null
+    setLoading(false)
+    setSuccess(null)
+  }, [isResetMode])
 
   useEffect(() => {
     if (countdown > 0) {
@@ -367,6 +381,7 @@ function ResetPasswordContent() {
   }, [error])
 
   const handleSendResetEmail = async () => {
+    if (activeResetEmailSubmissionRef.current !== null) return
     if (!email) {
       setError(t('resetPasswordEmailRequired'))
       return
@@ -386,6 +401,13 @@ function ResetPasswordContent() {
     setError(null)
     setSuccess(null)
     setLoading(true)
+    const submission = ++resetEmailSubmissionRef.current
+    activeResetEmailSubmissionRef.current = submission
+    const operationEmail = email
+    const submissionIsCurrent = () =>
+      activeResetEmailSubmissionRef.current === submission &&
+      submission === resetEmailSubmissionRef.current &&
+      !isResetModeRef.current
 
     try {
       // Account-enumeration safety: never reveal whether an email is registered.
@@ -393,9 +415,10 @@ function ResetPasswordContent() {
       // account exists, we've sent a link" state (no error surfaced). But a
       // genuine 400 (bad request / invalid email) is a real failure, not an
       // enumeration signal — surface it so the user knows the mail was NOT sent.
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(operationEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
+      if (!submissionIsCurrent()) return
 
       if (resetError) {
         const status = (resetError as { status?: number }).status
@@ -417,10 +440,15 @@ function ResetPasswordContent() {
     } catch (err) {
       // Network/transport failure — the mail definitely did not go out, so show
       // a real error instead of a fake success (which stranded users on U4-3).
-      console.error('[reset-password] resetPasswordForEmail threw:', err)
-      setError(t('loginResetFailed'))
+      if (submissionIsCurrent()) {
+        console.error('[reset-password] resetPasswordForEmail threw:', err)
+        setError(t('loginResetFailed'))
+      }
     } finally {
-      setLoading(false)
+      if (activeResetEmailSubmissionRef.current === submission) {
+        activeResetEmailSubmissionRef.current = null
+        if (!isResetModeRef.current) setLoading(false)
+      }
     }
   }
 
@@ -743,6 +771,7 @@ function ResetPasswordContent() {
                 placeholder="you@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !loading && email && countdown === 0) {
                     handleSendResetEmail()

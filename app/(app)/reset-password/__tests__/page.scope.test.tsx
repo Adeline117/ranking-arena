@@ -136,6 +136,63 @@ describe('password recovery identity scope', () => {
     mockAuthState = authState(null, synchronizeViewerScope(true, null).sessionGeneration)
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null })
     mockGetUser.mockResolvedValue({ data: { user: null }, error: new Error('invalid token') })
+    mockResetPasswordForEmail.mockResolvedValue({ error: null })
+  })
+
+  it('single-flights reset email delivery before the disabled state renders', async () => {
+    const delivery = deferred<{ error: null }>()
+    mockResetPasswordForEmail.mockReturnValue(delivery.promise)
+    render(<ResetPasswordPage />)
+    const emailInput = await screen.findByPlaceholderText('you@email.com')
+    fireEvent.change(emailInput, { target: { value: 'user@example.test' } })
+    const send = screen.getByText('resetPasswordSendLink')
+
+    act(() => {
+      send.click()
+      send.click()
+    })
+
+    expect(mockResetPasswordForEmail).toHaveBeenCalledTimes(1)
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith('user@example.test', {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    expect(emailInput).toBeDisabled()
+
+    await act(async () => {
+      delivery.resolve({ error: null })
+      await delivery.promise
+    })
+
+    expect(await screen.findByText('resetPasswordEmailSent')).toBeInTheDocument()
+  })
+
+  it('does not attach an old email-delivery acknowledgement to a recovery session', async () => {
+    const delivery = deferred<{ error: null }>()
+    mockResetPasswordForEmail.mockReturnValue(delivery.promise)
+    const view = render(<ResetPasswordPage />)
+    fireEvent.change(await screen.findByPlaceholderText('you@email.com'), {
+      target: { value: 'old@example.test' },
+    })
+    fireEvent.click(screen.getByText('resetPasswordSendLink'))
+    expect(mockResetPasswordForEmail).toHaveBeenCalledTimes(1)
+
+    const recovery = session('user-a', 'recovery-access-a')
+    const generation = makeRecoverySession(recovery)
+    mockAuthState = authState(recovery, generation)
+    mockGetUser.mockResolvedValue({ data: { user: recovery.user }, error: null })
+    view.rerender(<ResetPasswordPage />)
+    act(() => {
+      mockAuthStateCallback?.('PASSWORD_RECOVERY', recovery)
+    })
+    await enterStrongPassword()
+
+    await act(async () => {
+      delivery.resolve({ error: null })
+      await delivery.promise
+    })
+
+    expect(screen.queryByText('resetPasswordEmailSent')).not.toBeInTheDocument()
+    expect(screen.getByText('resetPasswordButton')).toBeInTheDocument()
   })
 
   it('does not let an invalid recovery hash update the already signed-in B', async () => {
