@@ -50,6 +50,8 @@ const PUBLIC_API_ROUTES = new Set([
   'market',
   'market/alpha',
   'market/arbitrage',
+  // V1 public-egress compatibility tombstone; fixed 410/no-store and no
+  // request-driven exchange, ccxt, cache, or rate-limit work.
   'market/candles',
   'market/coin/[id]',
   'market/defi',
