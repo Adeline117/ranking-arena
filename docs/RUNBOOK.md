@@ -261,6 +261,18 @@ worker, adapter, deployed host, scheduler, credential, database, provider, histo
 product behavior. It does not change the existing `app/api/trader/onchain-enrich` hold and cannot
 establish external or deployed state.
 
+### V1 exchange-logo sync source boundary
+
+Do not use `scripts/sync-exchange-logos.sh` as an incident workaround. This single historical
+compatibility path is a retired V1 NO-GO source path: with any arguments, it writes `[RETIRED]`
+only to stderr, leaves stdout empty, and exits `2`.
+
+This is source-only containment for that file. Existing checked-in
+`public/icons/exchanges/*` assets and the product UI that renders their local paths remain in
+place and outside this bounded conclusion. It does not download, refresh, delete, inspect, or
+prove any deployed asset, cache, external source, or provenance; it also cannot establish that
+another logo acquisition or refresh workflow has stopped.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
