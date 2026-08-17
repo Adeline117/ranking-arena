@@ -243,6 +243,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:legacy-daily-snapshot-quarantine-pg17
 
+      - name: Prove V1 trader-alert browser mutation containment
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:v1-trader-alert-browser-mutations-pg17
+
       - name: Prove live serving resolver and capability boundaries
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

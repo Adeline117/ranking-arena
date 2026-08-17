@@ -1,27 +1,25 @@
 /**
- * 提醒历史 API
+ * V1 legacy trader-alert history inventory.
  *
- * GET /api/alerts - 获取提醒触发历史
- * GET /api/alerts?alert_id=xxx - 获取指定提醒的历史
+ * Monitoring and delivery are not published. This owner-scoped endpoint exists
+ * only to inspect legacy records; it must never imply active alert service.
  */
 
-import { NextRequest } from 'next/server'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  error,
-  handleError,
-} from '@/lib/api'
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin, requireAuth, handleError } from '@/lib/api'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import logger from '@/lib/logger'
+import {
+  TRADER_ALERTS_NOT_PUBLISHED_CODE,
+  TRADER_ALERTS_NO_STORE_HEADERS,
+  TRADER_ALERTS_PUBLISHED,
+} from '@/lib/alerts/trader-alert-publication'
 
 export const runtime = 'nodejs'
-export const preferredRegion = ['sfo1', 'hnd1']
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-/**
- * GET - 获取提醒触发历史
- */
+/** GET — list an authenticated owner's legacy alert history. */
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
@@ -50,11 +48,29 @@ export async function GET(request: NextRequest) {
 
     if (queryError) {
       logger.error('[alerts] 查询历史Failed:', queryError)
-      return error('Failed to fetch alert history', 500)
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch alert history' },
+        { status: 500, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+      )
     }
 
-    return success({ history: history || [], total: count || 0 })
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          available: TRADER_ALERTS_PUBLISHED,
+          code: TRADER_ALERTS_NOT_PUBLISHED_CODE,
+          history: history || [],
+          total: count || 0,
+        },
+      },
+      { headers: TRADER_ALERTS_NO_STORE_HEADERS }
+    )
   } catch (err: unknown) {
-    return handleError(err)
+    const response = handleError(err)
+    for (const [key, value] of Object.entries(TRADER_ALERTS_NO_STORE_HEADERS)) {
+      response.headers.set(key, value)
+    }
+    return response
   }
 }

@@ -100,6 +100,7 @@
     "qa:records-page-quarantine-pg17": "bash supabase/migrations/__tests__/record-provenance-clocks.pg17.sh",
     "qa:legacy-position-history-freeze-pg17": "bash supabase/migrations/__tests__/legacy-position-history-partition-freeze.pg17.sh",
     "qa:legacy-daily-snapshot-quarantine-pg17": "bash supabase/migrations/__tests__/legacy-trader-daily-snapshot-quarantine.pg17.sh",
+    "qa:v1-trader-alert-browser-mutations-pg17": "bash supabase/migrations/__tests__/v1-trader-alert-browser-mutations.pg17.sh",
     "qa:serving-boundary-pg17": "bash supabase/migrations/__tests__/harden-serving-trader-resolver.pg17.sh && bash supabase/migrations/__tests__/harden-serving-source-capabilities.pg17.sh",
     "qa:copier-publication-pg17": "bash supabase/migrations/__tests__/record-provenance-clocks.pg17.sh && bash supabase/migrations/__tests__/copier-snapshot-publication-substrate.pg17.sh && bash supabase/migrations/__tests__/publish-copier-snapshot-atomically.pg17.sh",
     "qa:copier-projection-v2-pg17": "bash supabase/migrations/__tests__/copier-snapshot-projection-v2.pg17.sh",

@@ -76,7 +76,7 @@ function buildWelcomeEmail(): string {
 
         <div style="margin-bottom: 16px; padding-left: 16px; border-left: 3px solid #22c55e;">
           <p style="margin: 0 0 4px; font-weight: 600; color: #fff;">2. Follow Traders</p>
-          <p style="margin: 0; font-size: 13px; color: #94a3b8;">Track performance and get alerts on your favorite traders</p>
+          <p style="margin: 0; font-size: 13px; color: #94a3b8;">Keep favorite traders organized while you review their public performance</p>
         </div>
 
         <div style="padding-left: 16px; border-left: 3px solid #f59e0b;">

@@ -25,17 +25,17 @@ const messages: Record<BotLang, Record<string, string>> = {
     availableExchanges: 'Available exchanges',
     noTradersFound: 'No ranked traders found for this exchange.',
 
-    // /follow
-    followUsage: 'Usage: /follow <trader name>\nExample: /follow CryptoKing',
-    followSuccess: 'Now following {handle} on {platform}. You will receive alerts when their rank changes significantly.',
-    followError: 'Failed to set up alert. Please try again later.',
+    // /follow (V1 unpublished)
+    followUnavailable:
+      'Trader alert subscriptions are temporarily unavailable during V1 verification. You can use /unfollow to remove a legacy subscription.',
 
     // /unfollow
     unfollowUsage: 'Usage: /unfollow <trader name>\nExample: /unfollow CryptoKing',
-    unfollowSuccess: 'Unfollowed {handle}. You will no longer receive alerts for this trader.',
-    unfollowError: 'Failed to unfollow. Please try again later.',
-    noSubscriptions: 'You have no active subscriptions.',
-    subscriptionNotFound: 'No subscription found matching "{query}". Use /follow to see your list.',
+    unfollowSuccess:
+      'Removed the legacy subscription for {handle}. No automatic alert delivery is available during V1 verification.',
+    unfollowError: 'Failed to remove the legacy subscription. Please try again later.',
+    noSubscriptions: 'You have no legacy alert subscriptions.',
+    subscriptionNotFound: 'No legacy subscription found matching "{query}".',
 
     // /price
     priceUsage: 'Usage: /price <symbol>\nExample: /price BTC',
@@ -55,10 +55,9 @@ const messages: Record<BotLang, Record<string, string>> = {
 
     // /help
     commands: 'Commands',
-    helpRank: 'Look up a trader\'s ranking and score',
+    helpRank: "Look up a trader's ranking and score",
     helpTop: 'Show top 10 traders (optionally filter by exchange)',
-    helpFollow: 'Subscribe to rank change alerts for a trader',
-    helpUnfollow: 'Unsubscribe from a trader\'s alerts',
+    helpUnfollow: 'Remove a legacy trader-alert subscription',
     helpPrice: 'Quick crypto price check',
     helpStats: 'Platform statistics',
     helpHelp: 'Show this help message',
@@ -82,15 +81,13 @@ const messages: Record<BotLang, Record<string, string>> = {
     availableExchanges: '可用交易所',
     noTradersFound: '该交易所暂无排名交易员。',
 
-    followUsage: '用法: /follow <交易员名称>\n示例: /follow CryptoKing',
-    followSuccess: '已关注 {handle}（{platform}）。当排名发生显著变化时将收到提醒。',
-    followError: '关注设置失败，请稍后重试。',
+    followUnavailable: 'V1 验证期间交易员提醒订阅暂不可用。你可使用 /unfollow 清理旧订阅。',
 
     unfollowUsage: '用法: /unfollow <交易员名称>\n示例: /unfollow CryptoKing',
-    unfollowSuccess: '已取消关注 {handle}，不再接收该交易员的提醒。',
-    unfollowError: '取消关注失败，请稍后重试。',
-    noSubscriptions: '你没有任何活跃的订阅。',
-    subscriptionNotFound: '未找到匹配 "{query}" 的订阅。使用 /follow 查看列表。',
+    unfollowSuccess: '已移除 {handle} 的旧订阅。V1 验证期间不提供自动提醒投递。',
+    unfollowError: '移除旧订阅失败，请稍后重试。',
+    noSubscriptions: '你没有旧提醒订阅。',
+    subscriptionNotFound: '未找到匹配 "{query}" 的旧订阅。',
 
     priceUsage: '用法: /price <代币符号>\n示例: /price BTC',
     priceLabel: '价格',
@@ -109,8 +106,7 @@ const messages: Record<BotLang, Record<string, string>> = {
     commands: '命令列表',
     helpRank: '查询交易员排名和评分',
     helpTop: '查看 Top 10 交易员（可按交易所筛选）',
-    helpFollow: '订阅交易员排名变动提醒',
-    helpUnfollow: '取消订阅',
+    helpUnfollow: '移除旧交易员提醒订阅',
     helpPrice: '快速查询加密货币价格',
     helpStats: '平台统计数据',
     helpHelp: '显示此帮助消息',
@@ -122,7 +118,11 @@ const messages: Record<BotLang, Record<string, string>> = {
 /**
  * Get a bot message with optional template variable replacement.
  */
-export function botMessages(lang: BotLang, key: string, vars?: Record<string, string | number>): string {
+export function botMessages(
+  lang: BotLang,
+  key: string,
+  vars?: Record<string, string | number>
+): string {
   let msg = messages[lang]?.[key] || messages.en[key] || key
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {

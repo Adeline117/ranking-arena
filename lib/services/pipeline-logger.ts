@@ -125,7 +125,6 @@ export class PipelineLogger {
 
     // Monitoring & health
     'verify-fetchers',
-    'check-trader-alerts',
     'cleanup-stuck-logs',
     'cleanup-data',
     'cleanup-deleted-accounts',

@@ -44,8 +44,6 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   // Monitoring & health
   'verify-fetchers': 360,
   'check-data-freshness': 180,
-  // Scheduled every 30 minutes; allow one missed run before paging.
-  'check-trader-alerts': 60,
   'cleanup-stuck-logs': 120,
   'cleanup-data': 1440,
   'cleanup-deleted-accounts': 1440,

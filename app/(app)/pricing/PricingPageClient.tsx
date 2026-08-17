@@ -171,7 +171,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
   const features = [
     resolved(t('featureCategoryRanking'), 'featureCategoryRanking', 'Category Rankings'),
-    resolved(t('featureTraderAlerts'), 'featureTraderAlerts', 'Trader Alerts'),
     resolved(t('featureScoreBreakdown'), 'featureScoreBreakdown', 'Arena Score Details'),
     resolved(t('featureProBadge'), 'featureProBadge', 'Pro Badge'),
     resolved(t('featureAdvancedFilter'), 'featureAdvancedFilter', 'Advanced Filters'),
@@ -1259,13 +1258,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   t('pricingProDetailedAnalytics'),
                   'pricingProDetailedAnalytics',
                   'Detailed trader analytics & score breakdowns'
-                ),
-              },
-              {
-                text: resolved(
-                  t('pricingProAlerts'),
-                  'pricingProAlerts',
-                  'Trader alerts temporarily unavailable during V1 verification'
                 ),
               },
               {

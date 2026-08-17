@@ -11,154 +11,80 @@ jest.mock('@/lib/env', () => ({
   ),
 }))
 
-const mockRunTraderAlerts = jest.fn()
-const mockPipelineSuccess = jest.fn()
-const mockPipelineError = jest.fn()
-const mockSendToUser = jest.fn()
-const mockSendEmail = jest.fn()
-const mockProfilesIn = jest.fn()
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { GET, POST } from '../route'
 
-jest.mock('@/lib/alerts/run-trader-alerts', () => ({
-  runTraderAlerts: (...args: unknown[]) => mockRunTraderAlerts(...args),
-}))
+const route = readFileSync(join(process.cwd(), 'app/api/cron/check-trader-alerts/route.ts'), 'utf8')
+const monitor = readFileSync(join(process.cwd(), 'app/api/cron/meta-monitor/route.ts'), 'utf8')
+const pipelineLogger = readFileSync(join(process.cwd(), 'lib/services/pipeline-logger.ts'), 'utf8')
 
-jest.mock('@/lib/services/pipeline-logger', () => ({
-  PipelineLogger: {
-    start: jest.fn().mockResolvedValue({
-      success: (...args: unknown[]) => mockPipelineSuccess(...args),
-      error: (...args: unknown[]) => mockPipelineError(...args),
-    }),
-  },
-}))
-
-jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: jest.fn(() => ({
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({ in: (...args: unknown[]) => mockProfilesIn(...args) })),
-    })),
-  })),
-}))
-
-jest.mock('@/lib/services/push-notification', () => ({
-  getPushNotificationService: jest.fn(() => ({ sendToUser: mockSendToUser })),
-}))
-
-jest.mock('@/lib/services/email', () => ({
-  sendEmail: (...args: unknown[]) => mockSendEmail(...args),
-  buildTraderAlertEmail: jest.fn(() => '<html>alert</html>'),
-}))
-
-jest.mock('@/lib/logger', () => ({
-  __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-}))
-
-import { GET } from '../route'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
-
-const baseResult = {
-  alertsConfigured: 1,
-  alertsChecked: 1,
-  alertsSkippedNoSubscription: 0,
-  tradersChecked: 1,
-  statesWritten: 5,
-  alertsSent: 0,
-  deliveryFailures: 0,
-  deliveredAlerts: [],
-}
-
-function request(secret?: string): Request {
+function request(method: 'GET' | 'POST', secret?: string): Request {
   return new Request('https://www.arenafi.org/api/cron/check-trader-alerts', {
+    method,
     headers: secret ? { authorization: `Bearer ${secret}` } : undefined,
   })
 }
 
-describe('check-trader-alerts cron route', () => {
-  beforeAll(() => {
-    process.env.CRON_SECRET = 'test-secret'
-  })
+describe('retired trader-alert cron route', () => {
+  const originalCronSecret = process.env.CRON_SECRET
 
   beforeEach(() => {
-    jest.clearAllMocks()
-    mockRunTraderAlerts.mockResolvedValue(baseResult)
-    mockProfilesIn.mockResolvedValue({ data: [], error: null })
-    mockSendToUser.mockResolvedValue([])
-    mockSendEmail.mockResolvedValue(true)
+    process.env.CRON_SECRET = 'retired-trader-alert-cron-test-secret'
   })
 
-  it('rejects unauthorized requests before creating a pipeline run', async () => {
-    const response = await GET(request('wrong'))
-
-    expect(response.status).toBe(401)
-    expect(PipelineLogger.start).not.toHaveBeenCalled()
-    expect(mockRunTraderAlerts).not.toHaveBeenCalled()
+  afterAll(() => {
+    if (originalCronSecret === undefined) delete process.env.CRON_SECRET
+    else process.env.CRON_SECRET = originalCronSecret
   })
 
-  it('reports the durable run result', async () => {
-    const response = await GET(request('test-secret'))
-    const body = await response.json()
+  it.each([
+    ['GET', GET],
+    ['POST', POST],
+  ] as const)(
+    'authenticates before retiring an authenticated %s request',
+    async (method, handler) => {
+      const response = handler(request(method))
 
-    expect(response.status).toBe(200)
-    expect(body).toMatchObject({
-      ok: true,
-      alertsChecked: 1,
-      statesWritten: 5,
-      alertsSent: 0,
-      pushSent: 0,
-      emailsSent: 0,
-    })
-    expect(body).not.toHaveProperty('deliveredAlerts')
-    expect(mockPipelineSuccess).toHaveBeenCalledWith(
-      0,
-      expect.objectContaining({ alertsChecked: 1, deliveryFailures: 0 })
-    )
-  })
+      expect(response.status).toBe(401)
+      await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' })
+      expectNoStore(response)
+    }
+  )
 
-  it('fans out only newly finalized deliveries and gives email a stable idempotency key', async () => {
-    mockRunTraderAlerts.mockResolvedValue({
-      ...baseResult,
-      alertsSent: 1,
-      deliveredAlerts: [
-        {
-          deliveryId: 'delivery-1',
-          userId: 'user-1',
-          notificationType: 'trader_alert_roi',
-          title: 'ROI change',
-          message: 'ROI moved',
-          link: '/trader/alpha?platform=binance_futures',
-        },
-      ],
-    })
-    mockProfilesIn.mockResolvedValue({
-      data: [{ id: 'user-1', email: 'qa@example.com', email_digest: 'daily' }],
-      error: null,
-    })
+  it.each([
+    ['GET', GET],
+    ['POST', POST],
+  ] as const)(
+    'returns 410 without execution for an authenticated %s request',
+    async (method, handler) => {
+      const response = handler(request(method, 'retired-trader-alert-cron-test-secret'))
 
-    const response = await GET(request('test-secret'))
-    const body = await response.json()
-
-    expect(body).toMatchObject({ alertsSent: 1, pushSent: 1, emailsSent: 1 })
-    expect(mockSendToUser).toHaveBeenCalledWith(
-      'user-1',
-      expect.objectContaining({
-        data: expect.objectContaining({ deliveryId: 'delivery-1', type: 'trader_alert_roi' }),
+      expect(response.status).toBe(410)
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'Retired cron route',
+        code: 'TRADER_ALERTS_NOT_PUBLISHED',
       })
-    )
-    expect(mockSendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        idempotencyKey:
-          'trader-alert/0b220df1969115139ffebb337981298d243a44f84dad5d20d7e7da5fdb34de43',
-      })
-    )
-  })
+      expectNoStore(response)
+    }
+  )
 
-  it('returns 500 and marks the pipeline failed when the durable run fails', async () => {
-    mockRunTraderAlerts.mockRejectedValue(new Error('database unavailable'))
-
-    const response = await GET(request('test-secret'))
-
-    expect(response.status).toBe(500)
-    await expect(response.json()).resolves.toMatchObject({ error: 'database unavailable' })
-    expect(mockPipelineError).toHaveBeenCalled()
+  it('has no evaluator, delivery, pipeline, or dead-man path', () => {
+    expect(route).not.toContain('runTraderAlerts')
+    expect(route).not.toContain('getSupabaseAdmin')
+    expect(route).not.toContain('PipelineLogger')
+    expect(route).not.toContain('getPushNotificationService')
+    expect(route).not.toContain('sendEmail')
+    expect(route).not.toContain('createHash')
+    expect(monitor).not.toContain("'check-trader-alerts'")
+    expect(pipelineLogger).not.toContain("'check-trader-alerts'")
   })
 })
+
+function expectNoStore(response: Response) {
+  expect(response.headers.get('Cache-Control')).toBe(
+    'private, no-store, max-age=0, must-revalidate'
+  )
+  expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+  expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+}

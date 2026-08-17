@@ -450,7 +450,6 @@ function PaymentSuccessContent() {
                 {[
                   { href: '/rankings', label: t('proStep1') },
                   { href: '/rankings', label: t('proStep2') },
-                  { href: '/settings', label: t('proStep3') },
                 ].map((step, i) => (
                   <Link key={i} href={step.href} style={{ textDecoration: 'none' }}>
                     <Box

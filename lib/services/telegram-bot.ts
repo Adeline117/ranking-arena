@@ -7,8 +7,8 @@
  * Commands:
  *   /rank <trader>   - Look up a trader's ranking and score
  *   /top <exchange>  - Show top 10 traders on an exchange
- *   /follow <trader> - Subscribe to rank change alerts
- *   /unfollow <trader> - Unsubscribe
+ *   /follow <trader> - Retired during V1 verification
+ *   /unfollow <trader> - Remove a legacy subscription
  *   /price <symbol>  - Quick price check (CCXT)
  *   /stats           - Platform stats
  *   /help            - Command list
@@ -113,7 +113,8 @@ async function handleRank(chatId: number, args: string, lang: BotLang): Promise<
 
   const lines: string[] = []
   for (const t of traders) {
-    const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+    const exchangeName =
+      EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
     const score = t.arenaScore != null ? t.arenaScore.toFixed(1) : 'N/A'
     const rank = t.rank != null ? `#${t.rank}` : 'N/A'
     const roi = t.roi != null ? `${t.roi >= 0 ? '+' : ''}${t.roi.toFixed(2)}%` : 'N/A'
@@ -197,62 +198,26 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
     )
   }
 
-  lines.push(`\n${botMessages(lang, 'viewMore')}: ${BASE_URL}/rankings${platform ? `/${platform}` : ''}`)
+  lines.push(
+    `\n${botMessages(lang, 'viewMore')}: ${BASE_URL}/rankings${platform ? `/${platform}` : ''}`
+  )
 
   await sendMessage({ chat_id: chatId, text: lines.join('\n') })
 }
 
-async function handleFollow(chatId: number, args: string, userId: number, lang: BotLang): Promise<void> {
-  const query = args.trim()
-  if (!query) {
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followUsage') })
-    return
-  }
-
-  const supabase = getSupabaseAdmin()
-  const traders = await searchTraders(supabase, { query, limit: 1 })
-
-  if (!traders || traders.length === 0) {
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'traderNotFound', { query }) })
-    return
-  }
-
-  const trader = traders[0]
-  const traderId = `${trader.platform}:${trader.traderKey}`
-
-  // Store follow subscription in Supabase
-  const { error } = await supabase
-    .from('bot_subscriptions')
-    .upsert(
-      {
-        platform_type: 'telegram',
-        platform_user_id: String(userId),
-        chat_id: String(chatId),
-        trader_id: traderId,
-        trader_handle: trader.handle || trader.traderKey,
-        trader_platform: trader.platform,
-        enabled: true,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'platform_type,platform_user_id,trader_id' }
-    )
-
-  if (error) {
-    logger.error('[TelegramBot] Follow upsert error:', error)
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followError') })
-    return
-  }
-
-  await sendMessage({
-    chat_id: chatId,
-    text: botMessages(lang, 'followSuccess', {
-      handle: trader.handle || trader.traderKey,
-      platform: EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform,
-    }),
-  })
+async function handleFollow(chatId: number, lang: BotLang): Promise<void> {
+  // Do not create a new bot_subscriptions row while the ranking-alert
+  // evaluator and delivery paths are unpublished. Existing legacy rows can
+  // still be removed with /unfollow.
+  await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followUnavailable') })
 }
 
-async function handleUnfollow(chatId: number, args: string, userId: number, lang: BotLang): Promise<void> {
+async function handleUnfollow(
+  chatId: number,
+  args: string,
+  userId: number,
+  lang: BotLang
+): Promise<void> {
   const query = args.trim()
   if (!query) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'unfollowUsage') })
@@ -282,7 +247,10 @@ async function handleUnfollow(chatId: number, args: string, userId: number, lang
   )
 
   if (!match) {
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'subscriptionNotFound', { query }) })
+    await sendMessage({
+      chat_id: chatId,
+      text: botMessages(lang, 'subscriptionNotFound', { query }),
+    })
     return
   }
 
@@ -336,7 +304,8 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
     const volume = priceData.usd_24h_vol
     const marketCap = priceData.usd_market_cap
 
-    const changeStr = change24h != null ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%` : 'N/A'
+    const changeStr =
+      change24h != null ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%` : 'N/A'
     const changeIcon = change24h != null ? (change24h >= 0 ? '\u{1F7E2}' : '\u{1F534}') : ''
 
     const lines = [
@@ -346,7 +315,8 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
     ]
 
     if (volume != null) lines.push(`${botMessages(lang, 'volumeLabel')}: $${formatNumber(volume)}`)
-    if (marketCap != null) lines.push(`${botMessages(lang, 'marketCapLabel')}: $${formatNumber(marketCap)}`)
+    if (marketCap != null)
+      lines.push(`${botMessages(lang, 'marketCapLabel')}: $${formatNumber(marketCap)}`)
 
     await sendMessage({ chat_id: chatId, text: lines.join('\n') })
   } catch (err) {
@@ -366,10 +336,7 @@ async function handleStats(chatId: number, lang: BotLang): Promise<void> {
       .from('leaderboard_ranks')
       .select('source_trader_id', { count: 'estimated', head: true })
       .eq('season_id', '90D'),
-    supabase
-      .from('leaderboard_ranks')
-      .select('source')
-      .eq('season_id', '90D'),
+    supabase.from('leaderboard_ranks').select('source').eq('season_id', '90D'),
   ])
 
   const traderCount = traderResult.count ?? 0
@@ -401,7 +368,6 @@ async function handleHelp(chatId: number, lang: BotLang): Promise<void> {
     `<b>Arena Bot ${botMessages(lang, 'commands')}</b>\n`,
     `/rank &lt;name&gt; — ${botMessages(lang, 'helpRank')}`,
     `/top [exchange] — ${botMessages(lang, 'helpTop')}`,
-    `/follow &lt;name&gt; — ${botMessages(lang, 'helpFollow')}`,
     `/unfollow &lt;name&gt; — ${botMessages(lang, 'helpUnfollow')}`,
     `/price &lt;symbol&gt; — ${botMessages(lang, 'helpPrice')}`,
     `/stats — ${botMessages(lang, 'helpStats')}`,
@@ -442,7 +408,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
         await handleTop(chatId, args, lang)
         break
       case 'follow':
-        await handleFollow(chatId, args, userId, lang)
+        await handleFollow(chatId, lang)
         break
       case 'unfollow':
         await handleUnfollow(chatId, args, userId, lang)
@@ -483,7 +449,8 @@ function formatNumber(n: number): string {
 }
 
 function formatPrice(n: number): string {
-  if (n >= 1) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (n >= 1)
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (n >= 0.01) return n.toFixed(4)
   return n.toFixed(8)
 }

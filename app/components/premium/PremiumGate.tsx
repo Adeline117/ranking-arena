@@ -62,7 +62,6 @@ const StarIcon = ({
  * are introduced.
  */
 type FeatureBenefitKey =
-  | 'advancedAlerts'
   | 'comparison'
   | 'csvExport'
   | 'apiAccess'
@@ -72,14 +71,6 @@ type FeatureBenefitKey =
   | 'unlimitedWatchlist'
 
 const FEATURE_BENEFITS: Record<FeatureBenefitKey, { titleKey: string; benefitKeys: string[] }> = {
-  advancedAlerts: {
-    titleKey: 'gateAdvancedAlertsTitle',
-    benefitKeys: [
-      'gateBenefitAlertsRealtime',
-      'gateBenefitAlertsConditions',
-      'gateBenefitAlertsHistory',
-    ],
-  },
   comparison: {
     titleKey: 'gateComparisonTitle',
     benefitKeys: [
@@ -122,11 +113,7 @@ const FEATURE_BENEFITS: Record<FeatureBenefitKey, { titleKey: string; benefitKey
   },
   unlimitedWatchlist: {
     titleKey: 'gateUnlimitedWatchlistTitle',
-    benefitKeys: [
-      'gateBenefitWatchlistUnlimited',
-      'gateBenefitWatchlistAlerts',
-      'gateBenefitWatchlistFolders',
-    ],
+    benefitKeys: ['gateBenefitWatchlistUnlimited', 'gateBenefitWatchlistFolders'],
   },
 }
 
