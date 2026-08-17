@@ -57,6 +57,7 @@ export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) 
           type="button"
           onClick={onRetry}
           style={{
+            minHeight: tokens.touchTarget.min,
             padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
             borderRadius: tokens.radius.md,
             border: '1px solid ' + tokens.colors.border.primary,

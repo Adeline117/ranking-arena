@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import ModuleDegraded from '../ModuleDegraded'
+import { tokens } from '@/lib/design-tokens'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
@@ -23,6 +24,7 @@ describe('ModuleDegraded', () => {
 
     const retry = screen.getByRole('button', { name: 'moduleRetry' })
     expect(retry).toHaveAttribute('type', 'button')
+    expect(retry).toHaveStyle({ minHeight: `${tokens.touchTarget.min}px` })
     fireEvent.click(retry)
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
