@@ -2449,7 +2449,7 @@ const ja = {
   verifiedAccounts: '認証済みアカウント',
   mddLabel: 'MDD',
   tradesLabel: '取引数',
-  dataOutdatedBanner: 'データが古い可能性があります。更新して最新情報を取得してください。',
+  dataOutdatedBanner: 'データが古い可能性があります。V1 検証中は手動更新を利用できません。',
   platformDataUnavailable:
     'このプラットフォームのデータは一時的に利用できません。以下の履歴データは古い場合があります。',
   rankTrend: 'ランク推移（7日）',

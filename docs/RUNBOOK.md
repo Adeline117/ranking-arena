@@ -157,10 +157,13 @@ BullMQ/result-queue access. A public route's ordinary rate limiter may still use
 Redis, so this is not a "zero Redis reads" assertion.
 
 This source gate cannot stop, inspect, or prove a running host, persisted queue, or
-external schedule. It also does not classify the separate legacy `refresh_jobs`
-pipeline (`batch-5min`, `batch-discover`, public trader refresh) or legacy
-proxy/import paths; those require separate containment rather than a canary or
-workaround.
+external schedule. The checked-in legacy-refresh boundary, including the client-safe
+fixed-false `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately removes legacy
+refresh-job admission and consumption: `batch-discover` is an auth-first `401/410`
+tombstone, public trader refresh is an auth-first `401/410` tombstone with no
+body/rate-limit/queue work, legacy detail exposes `refresh_job: null`, and
+`batch-5min` retains only post hot-score maintenance. Legacy proxy/import paths still
+require separate containment rather than a canary or workaround.
 
 Do not enqueue a canary, read worker credentials, select a region, or inspect a
 worker directly from this runbook. A future owner-approved ingest plan must specify

@@ -39,6 +39,8 @@
 | `/api/traders/linked`                         | GET/PATCH/DELETE | 管理已绑定身份；DELETE 使用 service-only 原子解绑 RPC                                                            | 是   |
 | `/api/compare`                                | GET              | 对比交易员                                                                                                       | 可选 |
 | `/api/market`                                 | GET              | 获取市场数据                                                                                                     | 否   |
+| `/api/trader/[platform]/[trader_key]`         | GET              | legacy read-compatibility；固定 `refresh_job:null`，不公开旧 queue 状态                                          | 否   |
+| `/api/trader/[platform]/[trader_key]/refresh` | POST             | V1 auth-first `401/410 LEGACY_REFRESH_JOBS_NOT_PUBLISHED` 与三层 `no-store`；不读 body、限流或 queue             | 是   |
 | `/api/trader/[platform]/[trader_key]/history` | GET              | 固定 `forensic_only`/unavailable 空历史；不公开 legacy rows                                                      | 否   |
 | `/api/rankings/movers`                        | GET              | 固定 `available:false` 空榜与三层 `no-store`                                                                     | 否   |
 | `/api/recommendations/hot`                    | GET              | 固定 `available:false` 空推荐与三层 `no-store`                                                                   | 否   |
@@ -60,9 +62,11 @@ ingest，受覆盖的 direct ingest scripts 也不启动 ingest。`POST
 `/core` 与 `/records` 的 warm serving-read 分支仍可使用；当它们需要 Tier-C 时，bridge 在
 provider、ioredis、BullMQ 或 result-queue access 前返回 pending。两条 public route 的一般
 rate limit 仍可能使用 Redis，因此这里不声称路由完全不读 Redis。此源码守卫不停止、检查或证明
-已运行的 host、持久化 queue 或外部 schedule；它也不概括独立的 legacy `refresh_jobs`
-(`batch-5min`、`batch-discover`、public trader refresh) 或 legacy proxy/import path，它们须由
-后续 containment 单独处理。
+已运行的 host、持久化 queue 或外部 schedule。固定的
+已登记的 legacy-refresh source boundary（含 client-safe 固定 false 的
+`V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker）另行封存 legacy `refresh_jobs`：
+`batch-discover` 为 auth-first `401/410`，`batch-5min` 不再消费 queue，public trader refresh
+不接纳 job，legacy detail 固定 `refresh_job: null`。legacy proxy/import path 仍须后续 containment。
 
 ---
 
@@ -248,6 +252,8 @@ V1 的公开 API-key 绑定选择器只展示 Binance、Bybit、Bitget，即当�
 | `/api/cron/precompute-composite`          | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或写缓存                  | Cron Token |
 | `/api/cron/sync-meilisearch`              | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或调用搜索提供方          | Cron Token |
 | `/api/cron/pipeline-evaluate`             | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/pipeline log/数据/状态或发送告警 | Cron Token |
+| `/api/cron/batch-discover`                | GET      | V1 legacy refresh-job auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不创建 jobs 或调用 RPC                 | Cron Token |
+| `/api/cron/batch-5min`                    | GET      | 仅保留 post hot-score maintenance；不导入或消费 legacy `refresh_jobs` queue                                                                                 | Cron Token |
 | `/api/cron/check-data-freshness`          | GET      | 检查数据新鲜度                                                                                                                                              | Cron Token |
 | `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher                                                                         | Cron Token |
 | `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement                                                                                       | Cron Token |

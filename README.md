@@ -58,10 +58,16 @@ environment toggle or a claim about a deployed process:
   source boundary neither stops nor proves a running host, persisted queue, or
   external schedule.
 
-This ingest hold is deliberately not a blanket source-acquisition or queue claim. It
-does not classify the separate legacy `refresh_jobs` pipeline (`batch-5min`,
-`batch-discover`, public trader refresh) or legacy proxy/import paths; those need a
-separate containment review. Their presence in this checkout is not runtime evidence.
+The checked-in legacy-refresh boundary, including the client-safe fixed-false
+`V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, holds the legacy `refresh_jobs` path.
+`batch-discover` is auth-first `401/410` with three
+`no-store` headers; `batch-5min` no longer imports or consumes that queue and retains
+only post hot-score maintenance. The public trader-refresh POST is auth-first
+`401/410` without parsing a body, rate limiting, or touching the queue; legacy detail
+returns `refresh_job: null`, and its compatibility hook neither posts nor polls.
+This source boundary cannot stop or prove a running host, persisted queue, or external
+schedule. Legacy proxy/import paths remain separately unclassified; their presence in
+this checkout is not runtime evidence.
 
 ## Data API
 
@@ -246,10 +252,11 @@ Each trader profile includes:
 **Gated Ingest Lifecycle.** The intended design gates RAW evidence, parsed data, and
 complete-board publication. The fixed V1 ingest source hold prevents the covered
 native worker, scheduler, connection, bridges, on-chain route, and direct scripts
-from initiating new ingest. It is not a blanket classification of legacy
-`refresh_jobs`/proxy/import paths, and it cannot stop or prove an already-running
-process, queue, or schedule. Code may be reviewed locally but does not prove that a
-source is scheduled or healthy.
+from initiating new ingest. The separately fixed legacy refresh-job hold removes its
+consumer and admissions while preserving only the unrelated post hot-score maintenance
+command. Neither boundary classifies legacy proxy/import paths or can stop or prove an
+already-running process, queue, or schedule. Code may be reviewed locally but does not
+prove that a source is scheduled or healthy.
 
 **Incremental Static Regeneration.** Trader profile pages declare `revalidate=300` in code. Any historical cache-warming or ingest-triggered schedule is outside the V1 plan and must not be invoked.
 

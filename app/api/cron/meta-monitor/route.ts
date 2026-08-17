@@ -29,7 +29,6 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'backfill-data': 240,
 
   // Discovery & enrichment
-  'batch-discover': 720,
   'generate-profiles': 720,
   'backfill-avatars': 1440,
   'link-entities': 1440,

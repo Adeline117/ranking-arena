@@ -145,11 +145,15 @@ with three `no-store` headers before body parsing, rate limiting, provider, or
 serving-data work. The profile `core` and `records` routes retain their warm
 serving-read branches; an unavailable cold Tier-C path is pending without bridge
 provider/ioredis/BullMQ/result-queue access. Their public rate limiter may still use
-Redis, so do not describe those routes as making zero Redis reads. This boundary does
-not classify the legacy `refresh_jobs` pipeline (`batch-5min`, `batch-discover`,
-public trader refresh) or legacy proxy/import paths; those require separate
-containment. Like the other source holds, it neither stops nor proves a running host,
-persisted queue, or external schedule.
+Redis, so do not describe those routes as making zero Redis reads.
+The checked-in legacy-refresh boundary includes the client-safe fixed-false
+`V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker: its producer is an auth-first cron tombstone,
+`batch-5min` no longer consumes refresh jobs,
+and public refresh admission is auth-first `401/410` without body/rate-limit/queue
+work. Legacy detail returns `refresh_job: null` and its compatibility hook cannot post
+or poll. Legacy proxy/import paths remain outside this unit. Like the other source
+holds, it neither stops nor proves a running host, persisted queue, or external
+schedule.
 
 Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
 

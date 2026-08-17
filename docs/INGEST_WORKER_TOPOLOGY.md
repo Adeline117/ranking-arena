@@ -22,10 +22,12 @@ The public profile `core` and `records` routes retain their warm serving-read br
 When they need Tier-C, the held bridge returns pending before bridge-provider, ioredis,
 BullMQ, or result-queue access. Their general public rate limiter may still use Redis,
 so this does not mean those routes make no Redis reads. The gate is source-only: it
-does not stop, inspect, or prove a running host, queue, or external schedule. It is
-also not a blanket ingestion claim: the separate legacy `refresh_jobs` pipeline
-(`batch-5min`, `batch-discover`, public trader refresh) and legacy proxy/import paths
-are outside this containment unit and require a separate review.
+does not stop, inspect, or prove a running host, queue, or external schedule.
+The checked-in legacy-refresh boundary, including the client-safe fixed-false
+`V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately retires legacy queue admission
+and consumption: `batch-discover` is auth-first `401/410`, `batch-5min` retains only
+post hot-score maintenance, and public refresh never admits or exposes a job. Legacy
+proxy/import paths remain outside this containment unit and require a separate review.
 
 Arena's ingest fleet is designed to serve customer-facing ranking freshness from two
 nodes sharing one Supabase database and Upstash Redis. A source's
