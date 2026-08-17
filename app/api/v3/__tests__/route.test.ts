@@ -1,8 +1,6 @@
 const mockCheckRateLimitFull = jest.fn()
-const mockTieredGetOrSet = jest.fn()
 const mockGetLeaderboard = jest.fn()
 const mockGetTraderDetail = jest.fn()
-const mockSearchTraders = jest.fn()
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
 
@@ -50,14 +48,9 @@ jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimitFull: (...args: unknown[]) => mockCheckRateLimitFull(...args),
 }))
 
-jest.mock('@/lib/cache/redis-layer', () => ({
-  tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
-}))
-
 jest.mock('@/lib/data/unified', () => ({
   getLeaderboard: (...args: unknown[]) => mockGetLeaderboard(...args),
   getTraderDetail: (...args: unknown[]) => mockGetTraderDetail(...args),
-  searchTraders: (...args: unknown[]) => mockSearchTraders(...args),
 }))
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -78,21 +71,72 @@ jest.mock('@/lib/utils/logger', () => ({
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
-import {
-  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_REDIS_TAG,
-  publicRankingCacheKey,
-} from '@/lib/rankings/publication-policy'
-
 const PRIVATE_NO_STORE = 'private, no-store, max-age=0, must-revalidate'
 
 function request(path: string, headers?: HeadersInit) {
   return new NextRequest(`http://localhost${path}`, { headers })
 }
 
+type PublicRankedQueryResponse = {
+  data?: unknown[] | null
+  error?: { message: string } | null
+}
+
+type PublicRankedQueryMock = Record<string, jest.Mock> & {
+  then: PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>['then']
+}
+
+function publicRankedQuery(response: PublicRankedQueryResponse = {}): PublicRankedQueryMock {
+  const query = {} as PublicRankedQueryMock
+  for (const method of ['select', 'eq', 'not', 'or', 'order', 'limit']) {
+    query[method] = jest.fn(() => query)
+  }
+  const settled = {
+    data: response.data ?? [],
+    error: response.error ?? null,
+  }
+  query.then = ((onfulfilled, onrejected) =>
+    Promise.resolve(settled).then(onfulfilled, onrejected)) as PublicRankedQueryMock['then']
+  return query
+}
+
+function publicSearchRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'alice',
+    handle: 'Alice Whale',
+    avatar_url: null,
+    source_type: 'futures',
+    season_id: '90D',
+    rank: 1,
+    arena_score: 92,
+    roi: 12.5,
+    pnl: 5000,
+    win_rate: 62,
+    max_drawdown: 8,
+    trades_count: 42,
+    followers: 12,
+    copiers: 0,
+    profitability_score: 40,
+    risk_control_score: 30,
+    execution_score: 20,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    trader_type: 'human',
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
 describe('GET /api/v3 cache and publication boundaries', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockCheckRateLimitFull.mockReset()
+    mockGetLeaderboard.mockReset()
+    mockGetTraderDetail.mockReset()
+    mockFrom.mockReset()
+    mockRpc.mockReset()
     mockCheckRateLimitFull.mockResolvedValue({
       response: null,
       meta: { remaining: 73 },
@@ -110,8 +154,6 @@ describe('GET /api/v3 cache and publication boundaries', () => {
       total: 1,
     })
     mockGetTraderDetail.mockResolvedValue(null)
-    mockSearchTraders.mockResolvedValue([])
-    mockTieredGetOrSet.mockResolvedValue({ binance_futures: 12 })
   })
 
   it('keeps successful JSON private when its metadata contains a caller quota', async () => {
@@ -163,26 +205,165 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(mockGetLeaderboard).not.toHaveBeenCalled()
   })
 
-  it('uses the versioned public ranking key and publication fence/tag for platform counts', async () => {
+  it('builds each platform count from the sealed 90D cohort, never the retained raw table', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicSearchRow(),
+        publicSearchRow({ source_trader_id: 'alice-2', rank: 2 }),
+        publicSearchRow({ source: 'bybit', source_trader_id: 'bob', rank: 3 }),
+      ],
+    })
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation !== 'public_ranked_leaderboard') {
+        throw new Error(`Unexpected relation ${relation}`)
+      }
+      return query
+    })
+
     const response = await GET(request('/api/v3?endpoint=platforms'))
     const body = await response.json()
 
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe(PRIVATE_NO_STORE)
-    expect(body.data).toContainEqual(
-      expect.objectContaining({ key: 'binance_futures', traderCount: 12 })
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(query.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(query.not).toHaveBeenCalledWith('rank', 'is', null)
+    expect(body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'binance_futures', traderCount: 2 }),
+        expect.objectContaining({ key: 'bybit', traderCount: 1 }),
+      ])
     )
-    expect(mockTieredGetOrSet).toHaveBeenCalledTimes(1)
-    expect(mockTieredGetOrSet).toHaveBeenCalledWith(
-      publicRankingCacheKey('v3:platform-counts'),
-      expect.any(Function),
-      'warm',
-      [PUBLIC_RANKING_REDIS_TAG, 'platform-counts'],
-      {
-        skipMemory: true,
-        writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-      }
+    expect(body.meta).toEqual(expect.objectContaining({ total_count_is_exact: true, total: 2 }))
+  })
+
+  it('does not reuse a stale platform count between requests', async () => {
+    const firstQuery = publicRankedQuery({
+      data: [publicSearchRow(), publicSearchRow({ source_trader_id: 'alice-2', rank: 2 })],
+    })
+    const currentQuery = publicRankedQuery({ data: [publicSearchRow()] })
+    mockFrom.mockReturnValueOnce(firstQuery).mockReturnValueOnce(currentQuery)
+
+    const first = await GET(request('/api/v3?endpoint=platforms'))
+    const second = await GET(request('/api/v3?endpoint=platforms'))
+    const firstBody = await first.json()
+    const secondBody = await second.json()
+
+    expect(firstBody.data).toContainEqual(
+      expect.objectContaining({ key: 'binance_futures', traderCount: 2 })
     )
+    expect(secondBody.data).toContainEqual(
+      expect.objectContaining({ key: 'binance_futures', traderCount: 1 })
+    )
+    expect(mockFrom).toHaveBeenCalledTimes(2)
+  })
+
+  it('makes a malformed platform cohort partial instead of emitting a shortened count map', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicSearchRow(),
+        {
+          source: 'binance_futures',
+          source_trader_id: 'unverified',
+          season_id: '90D',
+          rank: 2,
+        },
+      ],
+    })
+    mockFrom.mockReturnValue(query)
+
+    const response = await GET(request('/api/v3?endpoint=platforms&format=csv'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).not.toBe('text/csv; charset=utf-8')
+    expect(body.data).toEqual([])
+    expect(body.meta).toEqual(
+      expect.objectContaining({
+        total_count_is_exact: false,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'public_cohort_unverified',
+      })
+    )
+  })
+
+  it('searches only the sealed public cohort and omits an unprovable search total', async () => {
+    const query = publicRankedQuery({ data: [publicSearchRow()] })
+    mockFrom.mockReturnValue(query)
+
+    const response = await GET(request('/api/v3?endpoint=search&q=alice&limit=5'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(query.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(query.not).toHaveBeenCalledWith('rank', 'is', null)
+    expect(query.or).toHaveBeenCalledWith('handle.ilike.%alice%,source_trader_id.ilike.%alice%')
+    expect(body.data).toEqual([
+      expect.objectContaining({
+        platform: 'binance_futures',
+        traderKey: 'alice',
+        rank: 1,
+        arenaScore: 92,
+      }),
+    ])
+    expect(body.meta).toEqual(expect.objectContaining({ total_count_is_exact: false }))
+    expect(body.meta.total).toBeUndefined()
+  })
+
+  it('marks a malformed public search cohort partial instead of returning a shortened ranking', async () => {
+    const query = publicRankedQuery({
+      data: [
+        {
+          source: 'binance_futures',
+          source_trader_id: 'alice',
+          season_id: '90D',
+          rank: 1,
+        },
+      ],
+    })
+    mockFrom.mockReturnValue(query)
+
+    const response = await GET(request('/api/v3?endpoint=search&q=alice'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data).toEqual([])
+    expect(body.meta).toEqual(
+      expect.objectContaining({
+        total_count_is_exact: false,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'public_cohort_unverified',
+      })
+    )
+  })
+
+  it('does not promote a page or an upstream fallback count to a rankings total', async () => {
+    mockGetLeaderboard.mockResolvedValueOnce({
+      traders: [
+        {
+          platform: 'binance_futures',
+          traderKey: 'alice',
+          handle: 'Alice',
+          rank: 1,
+          roi: 12,
+        },
+      ],
+      total: 9_999,
+      totalCountIsExact: false,
+      hasMore: true,
+    })
+
+    const response = await GET(request('/api/v3?endpoint=rankings'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.meta).toEqual(
+      expect.objectContaining({ total_count_is_exact: false, has_more: true })
+    )
+    expect(body.meta.total).toBeUndefined()
   })
 
   it('quarantines legacy position history in trader responses', async () => {
