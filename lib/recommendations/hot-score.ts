@@ -1,276 +1,150 @@
 /**
- * Hot Score Algorithm
+ * Hot-trader publication boundary.
  *
- * Computes a composite "hotness" score for each trader based on:
- * - ROI momentum (recent change rate)
- * - Follower growth rate
- * - Trading frequency
- * - Time decay (newer = hotter)
- *
- * No ML -- pure rule-based signal aggregation.
+ * A "hot" list is a ranking over historical changes. A currently published
+ * Arena rank proves only the current score; it does not prove that the prior
+ * snapshots used for ROI momentum, follower growth, or trading frequency had
+ * complete coverage, trusted prices, and known cost basis. Until that
+ * historical cohort has its own immutable publication receipt, do not turn
+ * raw snapshots into a public ranking.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
-import { filterPublicRankingRows } from '@/lib/rankings/publication-policy'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('hot-score')
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+const HOT_TRADER_PERIOD = '90D'
+const PUBLIC_RANKED_HOT_PROBE_COLUMNS =
+  'source,source_trader_id,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
-export interface HotTrader {
-  source: string
-  source_trader_id: string
-  handle: string | null
-  avatar_url: string | null
-  arena_score: number | null
-  roi: number | null
-  pnl: number | null
-  win_rate: number | null
-  followers: number | null
-  trades_count: number | null
-  hot_score: number
-  signals: HotSignals
+export type HotTraderRankingVisibility = 'partial' | 'unknown'
+
+export interface HotTraderCohortResult {
+  traders: []
+  ranking_visibility: HotTraderRankingVisibility
+  ranking_visibility_reason: string
+  ranking_visibility_reasons: [string]
 }
 
-export interface HotSignals {
-  roiMomentum: number
-  followerGrowth: number
-  tradingFrequency: number
-  recency: number
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: unknown | null
 }
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
-
-const WEIGHTS = {
-  roiMomentum: 0.35,
-  followerGrowth: 0.2,
-  tradingFrequency: 0.15,
-  recency: 0.3,
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  gt(column: string, value: number): PublicRankedLeaderboardQuery
+  or(expression: string): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
 }
 
-/** How many hours back to look for "recent" snapshots */
-const LOOKBACK_HOURS = 48
-
-// ---------------------------------------------------------------------------
-// Supabase helper
-// ---------------------------------------------------------------------------
-
-function getSupabase() {
-  return getSupabaseAdmin()
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
 }
 
-// ---------------------------------------------------------------------------
-// Core algorithm
-// ---------------------------------------------------------------------------
-
-interface SnapshotRow {
-  source: string
-  source_trader_id: string
-  roi: number | null
-  followers: number | null
-  trades_count: number | null
-  captured_at: string
-}
-
-interface RankRow {
-  source: string
-  source_trader_id: string
-  handle: string | null
-  avatar_url: string | null
-  arena_score: number | null
-  roi: number | null
-  pnl: number | null
-  win_rate: number | null
-  followers: number | null
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**
- * Compute hot traders list, sorted by hot_score descending.
+ * Local bridge until generated Supabase types include the security-barrier
+ * view. This intentionally prevents this public code path from selecting a
+ * raw ranking relation.
  */
-export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
-  const supabase = getSupabase()
-
-  // 1. Fetch current leaderboard ranks (latest standings)
-  const { data: ranks, error: ranksErr } = await supabase
-    .from('leaderboard_ranks')
-    .select(
-      'source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate, followers'
-    )
-    .eq('season_id', '90D')
-    .not('rank', 'is', null)
-    .not('arena_score', 'is', null)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .order('rank', { ascending: true, nullsFirst: false })
-    .limit(300)
-
-  if (ranksErr || !ranks || ranks.length === 0) {
-    logger.error('Failed to fetch leaderboard_ranks', { error: ranksErr })
-    return []
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
   }
-
-  const typedRanks = filterPublicRankingRows(ranks as unknown as RankRow[], (rank) => rank.source)
-  if (typedRanks.length === 0) return []
-
-  // 2. Fetch recent daily snapshots for momentum calculation.
-  // Migrated off retiring trader_snapshots_v2 → trader_daily_snapshots (daily
-  // roi trajectory; coarser than hourly but sufficient for momentum).
-  const cutoffDate = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString().slice(0, 10)
-  const traderIds = typedRanks.map((r) => r.source_trader_id)
-
-  // Fetch in parallel batches to avoid oversized IN clause
-  const batchSize = 100
-  const allSnapshots: SnapshotRow[] = []
-
-  const batchPromises: Promise<void>[] = []
-  for (let i = 0; i < traderIds.length; i += batchSize) {
-    const batch = traderIds.slice(i, i + batchSize)
-    batchPromises.push(
-      Promise.resolve(
-        supabase
-          .from('trader_daily_snapshots')
-          .select('platform, trader_key, roi, followers, trades_count, date')
-          .in('trader_key', batch)
-          .gte('date', cutoffDate)
-          .order('date', { ascending: true })
-      ).then(({ data: snaps }) => {
-        if (snaps) {
-          allSnapshots.push(
-            ...(snaps as unknown as Array<Record<string, unknown>>).map((s) => ({
-              source: String(s.platform || ''),
-              source_trader_id: String(s.trader_key || ''),
-              roi: s.roi != null ? Number(s.roi) : null,
-              followers: s.followers != null ? Number(s.followers) : null,
-              trades_count: s.trades_count != null ? Number(s.trades_count) : null,
-              captured_at: String(s.date || ''),
-            }))
-          )
-        }
-      })
-    )
-  }
-  await Promise.all(batchPromises)
-
-  // Group snapshots by trader key
-  const snapshotMap = new Map<string, SnapshotRow[]>()
-  for (const snap of allSnapshots) {
-    const key = `${snap.source}:${snap.source_trader_id}`
-    const arr = snapshotMap.get(key) || []
-    arr.push(snap)
-    snapshotMap.set(key, arr)
-  }
-
-  // 3. Score each trader
-  const now = Date.now()
-  const scored: HotTrader[] = []
-
-  for (const rank of typedRanks) {
-    const key = `${rank.source}:${rank.source_trader_id}`
-    const snapshots = snapshotMap.get(key) || []
-
-    const signals = computeSignals(snapshots, rank, now)
-    const hot_score =
-      WEIGHTS.roiMomentum * signals.roiMomentum +
-      WEIGHTS.followerGrowth * signals.followerGrowth +
-      WEIGHTS.tradingFrequency * signals.tradingFrequency +
-      WEIGHTS.recency * signals.recency
-
-    scored.push({
-      source: rank.source,
-      source_trader_id: rank.source_trader_id,
-      handle: rank.handle,
-      avatar_url: rank.avatar_url,
-      arena_score: rank.arena_score,
-      roi: rank.roi,
-      pnl: rank.pnl,
-      win_rate: rank.win_rate,
-      followers: rank.followers,
-      trades_count: snapshots.length > 0 ? snapshots[snapshots.length - 1].trades_count : null,
-      hot_score: Math.round(hot_score * 1000) / 1000,
-      signals,
-    })
-  }
-
-  scored.sort((a, b) => b.hot_score - a.hot_score)
-  return scored.slice(0, limit)
+  return value as PublicRankedLeaderboardClient
 }
 
-// ---------------------------------------------------------------------------
-// Signal computation helpers
-// ---------------------------------------------------------------------------
+function isCurrentPublicHotProbe(row: unknown): boolean {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    isPublicRankingSourceAllowed(row.source) &&
+    typeof row.source_trader_id === 'string' &&
+    row.source_trader_id.length > 0 &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0 &&
+    typeof row.arena_score === 'number' &&
+    Number.isFinite(row.arena_score) &&
+    row.arena_score > 0 &&
+    typeof row.roi === 'number' &&
+    Number.isFinite(row.roi)
+  )
+}
 
-function computeSignals(snapshots: SnapshotRow[], rank: RankRow, now: number): HotSignals {
-  // -- ROI Momentum --
-  let roiMomentum = 0
-  if (snapshots.length >= 2) {
-    const oldest = snapshots[0]
-    const newest = snapshots[snapshots.length - 1]
-    const oldRoi = oldest.roi ?? 0
-    const newRoi = newest.roi ?? 0
-    // Percentage-point change, clamped
-    const diff = newRoi - oldRoi
-    // Normalize: 10pp change = score 1.0
-    roiMomentum = clamp(diff / 10, -1, 1)
-  } else if (rank.roi !== null && rank.roi > 0) {
-    // No historical data -- small positive signal from current positive ROI
-    roiMomentum = clamp(rank.roi / 100, 0, 0.3)
-  }
+/**
+ * The database view establishes cohort membership; this repeat validation is
+ * defense in depth for schema/client drift. We never return the probe row,
+ * but it distinguishes "historical proof missing" from "current cohort
+ * unavailable" without trusting raw leaderboard data.
+ */
+function hasVerifiedCurrentPublicHotCohort(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false
 
-  // -- Follower Growth --
-  let followerGrowth = 0
-  if (snapshots.length >= 2) {
-    const oldFollowers = snapshots[0].followers ?? 0
-    const newFollowers = snapshots[snapshots.length - 1].followers ?? 0
-    if (oldFollowers > 0) {
-      const growthRate = (newFollowers - oldFollowers) / oldFollowers
-      // 10% growth = score 1.0
-      followerGrowth = clamp(growthRate / 0.1, -1, 1)
-    } else if (newFollowers > 0) {
-      followerGrowth = 0.5
-    }
-  }
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value, period: HOT_TRADER_PERIOD },
+    { expectedPeriod: HOT_TRADER_PERIOD }
+  ) as { traders?: unknown[] }
+  const rows = Array.isArray(sanitized.traders) ? sanitized.traders : []
 
-  // -- Trading Frequency --
-  // More snapshots with trades_count changes = more active
-  let tradingFrequency = 0
-  if (snapshots.length >= 2) {
-    let tradeChanges = 0
-    for (let i = 1; i < snapshots.length; i++) {
-      const prev = snapshots[i - 1].trades_count ?? 0
-      const curr = snapshots[i].trades_count ?? 0
-      if (curr > prev) tradeChanges++
-    }
-    // Normalize: active in half the intervals = score 1.0
-    tradingFrequency = clamp(tradeChanges / Math.max(1, (snapshots.length - 1) * 0.5), 0, 1)
-  }
+  return rows.length === value.length && rows.length > 0 && rows.every(isCurrentPublicHotProbe)
+}
 
-  // -- Recency (time decay) --
-  let recency = 0.5 // default if no snapshot data
-  if (snapshots.length > 0) {
-    const latestTime = new Date(snapshots[snapshots.length - 1].captured_at).getTime()
-    const hoursAgo = (now - latestTime) / (3600 * 1000)
-    // Exponential decay: half-life = 12 hours
-    recency = Math.exp((-0.693 * hoursAgo) / 12)
-  }
-
+function unavailableHotTraders(
+  visibility: HotTraderRankingVisibility,
+  reason: string
+): HotTraderCohortResult {
   return {
-    roiMomentum: round3(roiMomentum),
-    followerGrowth: round3(followerGrowth),
-    tradingFrequency: round3(tradingFrequency),
-    recency: round3(recency),
+    traders: [],
+    ranking_visibility: visibility,
+    ranking_visibility_reason: reason,
+    ranking_visibility_reasons: [reason],
   }
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
+/**
+ * Probe the current sealed cohort, then fail closed. A composite hot score
+ * cannot be published until its historical inputs have independent,
+ * immutable publication authority.
+ */
+export async function computeHotTraders(): Promise<HotTraderCohortResult> {
+  try {
+    const { data, error } = await publicRankedLeaderboardClient(getSupabaseAdmin())
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_HOT_PROBE_COLUMNS)
+      .eq('season_id', HOT_TRADER_PERIOD)
+      .not('rank', 'is', null)
+      .not('arena_score', 'is', null)
+      .gt('arena_score', 0)
+      .or('is_outlier.is.null,is_outlier.eq.false')
+      .order('rank', { ascending: true, nullsFirst: false })
+      .limit(1)
 
-function round3(n: number): number {
-  return Math.round(n * 1000) / 1000
+    if (error) {
+      logger.warn('Current public hot cohort probe failed', { error })
+      return unavailableHotTraders('unknown', 'public_cohort_unavailable')
+    }
+
+    return hasVerifiedCurrentPublicHotCohort(data)
+      ? unavailableHotTraders('partial', 'historical_hot_evidence_unavailable')
+      : unavailableHotTraders('unknown', 'public_cohort_unavailable')
+  } catch (error) {
+    logger.warn('Current public hot cohort is unavailable', { error })
+    return unavailableHotTraders('unknown', 'public_cohort_unavailable')
+  }
 }
