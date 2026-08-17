@@ -160,6 +160,17 @@ This source-only boundary does not change the normal social API, UI, RLS, cache,
 posts/comments. It does not stop, inspect, or prove any external cron, deployed script, database,
 or historical seed data.
 
+### V1 legacy VPS monitor source boundary
+
+Do not use `scripts/vps/health-ping.sh` or `scripts/vps/healthcheck.mjs` as an incident
+workaround. These legacy VPS monitor compatibility paths report fixed `RETIRED` and exit
+`2`; they no longer request the network, read or write host files, send alerts, or start
+an HTTP server.
+
+This source-only boundary does not stop, inspect, or prove an already deployed host,
+process, crontab, UptimeRobot, or external monitor. `/api/health`, OpenClaw, harness, and
+`scripts/vps-deploy/*` remain outside this bounded conclusion.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
