@@ -165,11 +165,43 @@ describe('ServingRecordsSection selection scope', () => {
       />
     )
 
-    expect(screen.getByText('moduleDataPending')).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: 'loading' })).toHaveAttribute(
-      'data-copier-state',
-      'pending'
+    const status = screen.getByRole('status', { name: 'moduleDataPending' })
+    expect(status).toHaveAttribute('aria-busy', 'true')
+    expect(status).toHaveAttribute('data-module-state', 'pending')
+    expect(status).toHaveAttribute('data-copier-state', 'pending')
+  })
+
+  it('labels a generic pending record response as collecting instead of unavailable', () => {
+    ;(useTraderRecords as jest.Mock).mockReturnValue({
+      rows: [],
+      provenance: null,
+      completeness: null,
+      isPendingUpstream: true,
+      isLoading: false,
+      isInitialError: false,
+      isFetchNextPageError: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['positions'])}
+        tf={90}
+      />
     )
+
+    const status = screen.getByRole('status', { name: 'moduleDataPending' })
+    expect(status).toHaveAttribute('aria-busy', 'true')
+    expect(status).toHaveAttribute('data-module-state', 'pending')
+    expect(status).not.toHaveAttribute('data-copier-state')
   })
 
   it('respects reduced-motion for the collecting skeleton', () => {

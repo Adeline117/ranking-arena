@@ -106,6 +106,40 @@ function ModuleSkeleton({ height }: { height: number }) {
   )
 }
 
+/**
+ * A pending server response means collection is in progress, not that the
+ * module has failed. Keep this distinct from ModuleDegraded so users do not
+ * receive a false failure message while the Tier-C bridge is still working.
+ */
+function ModulePendingState({
+  state,
+  isCopier,
+}: {
+  state: 'loading' | 'pending'
+  isCopier?: boolean
+}) {
+  const { t } = useLanguage()
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-busy="true"
+      data-module-state={state}
+      data-copier-state={isCopier ? state : undefined}
+    >
+      <ModuleSkeleton height={160} />
+      <Text
+        size="sm"
+        color="tertiary"
+        style={{ display: 'block', marginTop: tokens.spacing[2], textAlign: 'center' }}
+      >
+        {t('moduleDataPending')}
+      </Text>
+    </div>
+  )
+}
+
 function RecordsRefreshFailureNotice({
   isRetrying,
   onRetry,
@@ -172,10 +206,10 @@ function RecordKindPanel({
   exchangeName?: string
 }) {
   const records = useTraderRecords({ source, exchangeTraderId, kind, tf, enabled: true })
-  if (records.isLoading) return <ModuleSkeleton height={160} />
+  if (records.isLoading) return <ModulePendingState state="loading" />
   if (records.isInitialError) return <ModuleDegraded onRetry={() => records.refetch()} />
   if (records.isPendingUpstream && records.rows.length === 0) {
-    return <ModuleDegraded onRetry={() => records.refetch()} />
+    return <ModulePendingState state="pending" />
   }
   return (
     <Box>
@@ -217,30 +251,13 @@ function CopiersPanel({
   exchangeTraderId: string
   exchangeName?: string
 }) {
-  const { t } = useLanguage()
   const { aggregate, isLoading, isPendingUpstream, refetch } = useCopierAggregate({
     source,
     exchangeTraderId,
     enabled: true,
   })
   if (isLoading || isPendingUpstream) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        aria-label={t('loading')}
-        data-copier-state={isLoading ? 'loading' : 'pending'}
-      >
-        <ModuleSkeleton height={160} />
-        <Text
-          size="sm"
-          color="tertiary"
-          style={{ display: 'block', marginTop: tokens.spacing[2], textAlign: 'center' }}
-        >
-          {t('moduleDataPending')}
-        </Text>
-      </div>
-    )
+    return <ModulePendingState state={isLoading ? 'loading' : 'pending'} isCopier />
   }
   return (
     <CopierAggregatePanel
