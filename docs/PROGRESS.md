@@ -106,6 +106,17 @@ limit、Supabase ranked-cohort read、CSV/JSON 生成或 logging 前结束。
 `/api/settings/export` 保持范围外。它不停止、检查或证明已部署 route、仓库外 automation、cache 或
 数据读取状态。
 
+## V1 legacy Library collector source containment（2026-08-17）
+
+本轮只封存五个 legacy Library collector compatibility path：
+`scripts/library/collect_arxiv.mjs`、`scripts/library/collect_books.mjs`、
+`scripts/library/collect_research.mjs`、`scripts/library/collect_whitepapers.mjs` 与
+`scripts/library/seed_bulk.mjs`。它们不再 import、读取环境、连接数据库或 fetch；无论传入何种参数
+（含空环境）均只向 stderr 输出 `[RETIRED]` 并以 exit `2` 结束，stdout 保持为空。
+
+这是 source-only boundary：不停止、检查或证明任何已部署 collector、数据库、schedule 或历史数据状态；
+其他 Library helper、数据库结构和历史 archive 文档均不在此次范围内。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）

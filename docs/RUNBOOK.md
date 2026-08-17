@@ -114,6 +114,19 @@ This boundary is limited to that direct ingress. It does not classify the V3 CSV
 `/api/settings/export`, and it cannot stop, inspect, or prove an already deployed route, external automation,
 cache, or data-reading state.
 
+### V1 legacy Library collector source boundary
+
+Do not use the legacy Library collectors as an incident workaround. The checked-in source hold is limited to
+`scripts/library/collect_arxiv.mjs`, `scripts/library/collect_books.mjs`,
+`scripts/library/collect_research.mjs`, `scripts/library/collect_whitepapers.mjs`, and
+`scripts/library/seed_bulk.mjs`. Each retained path has no import, environment read, database connection, or
+fetch path. With any arguments, including under an empty environment, it writes `[RETIRED]` only to stderr,
+leaves stdout empty, and exits `2`.
+
+This is source-only containment, not an instruction to stop, inspect, or prove an already deployed collector,
+database, schedule, or historical Library data. Other Library helpers, database schema, and historical archive
+documentation remain outside this bounded conclusion.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
