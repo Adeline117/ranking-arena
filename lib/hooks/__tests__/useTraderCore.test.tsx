@@ -105,4 +105,36 @@ describe('useTraderCore timeframe identity', () => {
     view.unmount()
     queryClient.clear()
   })
+
+  it('makes a retained pending response retryable at the deadline after the tab returns', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000)
+    const pendingModules: TraderCoreModules = { ...modules(90, 900), cacheState: 'pending' }
+    ;(fetcher as jest.Mock).mockResolvedValue(response(pendingModules))
+
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useTraderCore({ source: 'gmx', exchangeTraderId: '0x123', tf: 90 }),
+      { wrapper: Wrapper }
+    )
+
+    await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+
+    now.mockReturnValue(91_000)
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    await waitFor(() => expect(view.result.current.isDegraded).toBe(true))
+    expect(view.result.current.isPendingUpstream).toBe(false)
+
+    now.mockRestore()
+    view.unmount()
+    queryClient.clear()
+  })
 })

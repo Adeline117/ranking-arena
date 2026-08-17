@@ -12,7 +12,7 @@
  *   2s/4s/8s exponential backoff capped at 15s, giving up after 90s.
  */
 
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { STALE_SLOW } from '@/lib/hooks/cache-presets'
@@ -41,6 +41,7 @@ export function useTraderCore({
   enabled = true,
 }: UseTraderCoreOptions) {
   const pollRef = useRef<{ key: string; startedAt: number; attempt: number } | null>(null)
+  const [deadlineTick, setDeadlineTick] = useState(0)
   const pollKey = `${source}:${exchangeTraderId}:${tf}`
 
   const url = `/api/traders/${encodeURIComponent(exchangeTraderId)}/core?source=${encodeURIComponent(source)}&tf=${tf}`
@@ -49,6 +50,13 @@ export function useTraderCore({
     queryKey: ['trader-core', source, exchangeTraderId, tf],
     queryFn: async () => {
       const res = await fetcher<ApiSuccessResponse<TraderCoreResponse>>(url)
+      if (res.data.cacheState === 'pending') {
+        if (!pollRef.current || pollRef.current.key !== pollKey) {
+          pollRef.current = { key: pollKey, startedAt: Date.now(), attempt: 0 }
+        }
+      } else if (pollRef.current?.key === pollKey) {
+        pollRef.current = null
+      }
       return res.data
     },
     enabled: enabled && Boolean(source) && Boolean(exchangeTraderId),
@@ -64,8 +72,13 @@ export function useTraderCore({
         pollRef.current = { key: pollKey, startedAt: Date.now(), attempt: 0 }
       }
       const poll = pollRef.current
-      if (Date.now() - poll.startedAt > POLL_GIVE_UP_MS) return false
-      const interval = Math.min(POLL_BASE_MS * 2 ** poll.attempt, POLL_CAP_MS)
+      const remainingMs = POLL_GIVE_UP_MS - (Date.now() - poll.startedAt)
+      if (remainingMs <= 0) return false
+      // Never let the final 15s backoff overshoot the user-visible recovery
+      // deadline. The final scheduled read makes the hook re-render at the
+      // exact boundary, so a retained pending response becomes retryable on
+      // time instead of drifting one more polling interval.
+      const interval = Math.min(POLL_BASE_MS * 2 ** poll.attempt, POLL_CAP_MS, remainingMs)
       poll.attempt += 1
       return interval
     },
@@ -73,12 +86,49 @@ export function useTraderCore({
   })
 
   const data = query.data
+
+  useEffect(() => {
+    if (data?.cacheState !== 'pending' || query.error) return
+    // A restored query can contain a pending shell before queryFn runs. Start
+    // a fresh, bounded foreground window for that exact subject rather than
+    // inheriting an untracked loading state from a prior observer.
+    if (!pollRef.current || pollRef.current.key !== pollKey) {
+      pollRef.current = { key: pollKey, startedAt: Date.now(), attempt: 0 }
+      setDeadlineTick((tick) => tick + 1)
+      return
+    }
+
+    const deadlineAt = pollRef.current.startedAt + POLL_GIVE_UP_MS
+    const refreshDeadlineState = () => setDeadlineTick((tick) => tick + 1)
+    const remainingMs = deadlineAt - Date.now()
+    if (remainingMs <= 0) return
+
+    const deadlineTimer = window.setTimeout(refreshDeadlineState, remainingMs)
+    // Browsers can pause timers while a tab is hidden. Re-check the deadline
+    // when it becomes visible so a returning user never sees a permanent
+    // loading label for a recovery window that already expired.
+    const refreshIfDeadlineExpired = () => {
+      if (Date.now() >= deadlineAt) refreshDeadlineState()
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshIfDeadlineExpired()
+    }
+    window.addEventListener('focus', refreshIfDeadlineExpired)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      window.clearTimeout(deadlineTimer)
+      window.removeEventListener('focus', refreshIfDeadlineExpired)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [data?.cacheState, deadlineTick, pollKey, query.error])
+
   // A stale hit carries full modules with cacheState 'pending' — render it.
   const modules: TraderCoreModules | null = data && 'stats' in data ? data : null
+  const activePoll = pollRef.current?.key === pollKey ? pollRef.current : null
   const pollGaveUp =
     data?.cacheState === 'pending' &&
-    pollRef.current !== null &&
-    Date.now() - pollRef.current.startedAt > POLL_GIVE_UP_MS
+    activePoll !== null &&
+    Date.now() - activePoll.startedAt >= POLL_GIVE_UP_MS
   const isDegraded = Boolean(pollGaveUp) || Boolean(query.error)
   const isPendingUpstream = data?.cacheState === 'pending' && !isDegraded
 
