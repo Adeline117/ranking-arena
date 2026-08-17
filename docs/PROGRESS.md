@@ -45,6 +45,23 @@ worker、meta-monitor、deployment、数据或任何外部状态。下方历史�
 monitoring readers（包括 enrichment-completeness）、`lib/cron/auto-cleanup-stuck.ts`，或已单独 held 的
 `/api/cron/cleanup-stuck-logs`。
 
+## V1 archive service-role diagnostic CLIs source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/check-failed-jobs.mjs`、
+`scripts/archive/check-failed-tasks.mjs`、`scripts/archive/check-latest-errors.mjs` 与
+`scripts/archive/check-rankings.mjs` 这四个 legacy service-role diagnostic compatibility path。
+每个脚本无论传入何种参数，均只向 stderr 输出对应固定的
+`[RETIRED] scripts/archive/check-failed-jobs.mjs`、
+`[RETIRED] scripts/archive/check-failed-tasks.mjs`、
+`[RETIRED] scripts/archive/check-latest-errors.mjs` 或
+`[RETIRED] scripts/archive/check-rankings.mjs` notice、stdout 保持为空，并以 exit `2` 结束。
+
+这是只覆盖这四个文件的 source-only boundary：它不退休、评估、改变、检查或证明当前
+`PipelineLogger`、`/api/health/pipeline`、`/api/cron/meta-monitor`、package 中当前 diagnostic scripts、
+`leaderboard_ranks` 或 public rankings，也不触及已单独 held 的 cleanup/compute cron。它同样不停止、
+检查、改变或证明 deployed database、cron 或任何外部状态；下方历史诊断、排名或 pipeline 记录不能作为
+当前运行或数据状态的证据。未来诊断或修复工作须由 owner 在独立 ADR-023 计划中重新定义并保全单独证据。
+
 ## V1 ranking authority cache-purge source containment（2026-08-17）
 
 本轮只封存 `scripts/maintenance/purge-ranking-authority-caches.sh` 这一 legacy compatibility path。

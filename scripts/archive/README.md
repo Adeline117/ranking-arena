@@ -16,3 +16,9 @@ status covers that file only.
 `scripts/archive/check-stuck-simple.mjs` is separately retired during V1 NO-GO. It writes
 `[RETIRED] scripts/archive/check-stuck-simple.mjs` only to stderr, leaves stdout empty, and
 exits `2`; it is not a `pipeline_logs` diagnostic or recovery route.
+
+`scripts/archive/check-failed-jobs.mjs`, `scripts/archive/check-failed-tasks.mjs`,
+`scripts/archive/check-latest-errors.mjs`, and `scripts/archive/check-rankings.mjs` are
+separately retired service-role archive diagnostics. Each writes its matching fixed
+`[RETIRED]` notice only to stderr, leaves stdout empty, and exits `2`; this limited status
+covers only those four files.

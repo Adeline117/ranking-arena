@@ -95,6 +95,26 @@ boundary does not retire or assess `lib/services/pipeline-logger.ts`,
 `lib/cron/auto-cleanup-stuck.ts`, or the separately held
 `/api/cron/cleanup-stuck-logs`.
 
+### V1 archive service-role diagnostic CLI source boundary
+
+Do not use `scripts/archive/check-failed-jobs.mjs`,
+`scripts/archive/check-failed-tasks.mjs`, `scripts/archive/check-latest-errors.mjs`, or
+`scripts/archive/check-rankings.mjs` as an incident, database, pipeline, or ranking
+workaround. These four checked-in legacy service-role diagnostic compatibility paths
+have no current operational caller. With every argument, their respective fixed stderr
+lines are `[RETIRED] scripts/archive/check-failed-jobs.mjs`, `[RETIRED]
+scripts/archive/check-failed-tasks.mjs`, `[RETIRED] scripts/archive/check-latest-errors.mjs`,
+and `[RETIRED] scripts/archive/check-rankings.mjs`; stdout is empty and each exits `2`.
+
+This source-only boundary covers only those four files. It does not retire, assess,
+change, inspect, or prove the current `PipelineLogger`, `/api/health/pipeline`,
+`/api/cron/meta-monitor`, package current diagnostic scripts, `leaderboard_ranks`, or
+public rankings, and it does not touch the separately held cleanup/compute cron paths.
+It also does not stop, inspect, change, or prove a deployed database, cron, or any
+external state. Historical diagnostic, ranking, or pipeline records are not current
+runtime or data-state evidence; a future diagnostic or remediation requires an
+independently approved ADR-023 owner plan and separate evidence.
+
 ### V1 ranking authority cache-purge source boundary
 
 Do not use `scripts/maintenance/purge-ranking-authority-caches.sh` as an incident workaround.
