@@ -4,12 +4,11 @@ import { useState, useEffect, useRef } from 'react'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import type { TraderPerformance } from '@/lib/data/trader'
-import { PeriodSelector } from './performance/PeriodSelector'
+import { PeriodSelector, type Period, type PeriodAvailability } from './performance/PeriodSelector'
 import { HeroMetrics } from './performance/HeroMetrics'
 import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
 import { isValidScore } from './performance/ScoreBar'
-import type { Period } from './performance/PeriodSelector'
 import { usePeriodStore } from '@/lib/stores/periodStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type {
@@ -85,6 +84,9 @@ export interface OverviewPerformanceCardProps {
   lastUpdated?: string
   // Data source for period mapping notes
   source?: string
+  /** Serving capability verdict for each core timeframe. Explicitly absent
+   *  periods are disabled and never render as an empty metric set. */
+  availability?: PeriodAvailability
   /** Live position summary (avg leverage, long/short counts) */
   positionSummary?: {
     avgLeverage: number | null
@@ -112,6 +114,7 @@ export default function OverviewPerformanceCard({
   allEquityCurves,
   lastUpdated,
   source,
+  availability,
   positionSummary,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
@@ -122,9 +125,23 @@ export default function OverviewPerformanceCard({
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
-  const selectedPeriodRef = useRef(period)
+  // Keep the default three-tab path aligned with ServingProfilePanel. An
+  // explicit `absent` capability is authoritative: resolve a deep link or a
+  // retained cross-account selection to the best supported period rather than
+  // showing a row of misleading em dashes. Unknown capability remains
+  // optimistic, matching the core-fetch policy.
+  const preferredAvailablePeriod = availability
+    ? ((['90D', '30D', '7D'] as const).find((candidate) => availability[candidate] !== 'absent') ??
+      null)
+    : null
+  const effectivePeriod =
+    availability?.[period] === 'absent' && preferredAvailablePeriod
+      ? preferredAvailablePeriod
+      : period
+  const noCoreTimeframeAvailable = availability !== undefined && preferredAvailablePeriod === null
+  const selectedPeriodRef = useRef(effectivePeriod)
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  selectedPeriodRef.current = period
+  selectedPeriodRef.current = effectivePeriod
 
   useEffect(() => {
     setMounted(true)
@@ -136,8 +153,12 @@ export default function OverviewPerformanceCard({
     }
   }, [])
 
+  useEffect(() => {
+    if (effectivePeriod !== period) setStorePeriod(effectivePeriod)
+  }, [effectivePeriod, period, setStorePeriod])
+
   const handlePeriodChange = (newPeriod: Period) => {
-    if (newPeriod === selectedPeriodRef.current) return
+    if (availability?.[newPeriod] === 'absent' || newPeriod === selectedPeriodRef.current) return
 
     // The user's latest selection is authoritative immediately. Delaying the
     // store update made a fast 90D→30D→90D sequence ignore the final click and
@@ -153,7 +174,7 @@ export default function OverviewPerformanceCard({
   }
 
   const getData = () => {
-    switch (period) {
+    switch (effectivePeriod) {
       case '7D':
         return {
           roi: performance.roi_7d,
@@ -271,7 +292,7 @@ export default function OverviewPerformanceCard({
     activityMetrics.length > 0 && activityMetrics.every((value) => Number(value) === 0)
 
   // 生成 sparkline 数据 — 使用当前 period 对应的 equity curve，过滤掉 null/NaN 值
-  const periodCurve = allEquityCurves?.[period] ?? equityCurve
+  const periodCurve = allEquityCurves?.[effectivePeriod] ?? equityCurve
   const sparklineRawData = (periodCurve?.map((d) => d.roi) || []).filter(
     (v) => v != null && !isNaN(v as number)
   ) as number[]
@@ -295,15 +316,17 @@ export default function OverviewPerformanceCard({
         <Box style={{ padding: tokens.spacing[5] }}>
           {/* Header */}
           <PeriodSelector
-            period={period}
+            period={effectivePeriod}
             onPeriodChange={handlePeriodChange}
             source={source}
             lastUpdated={lastUpdated}
+            availability={availability}
           />
 
-          {isDormantPeriod && (
+          {noCoreTimeframeAvailable ? (
             <Box
               role="status"
+              aria-live="polite"
               style={{
                 marginBottom: tokens.spacing[4],
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -313,58 +336,77 @@ export default function OverviewPerformanceCard({
               }}
             >
               <Text size="sm" color="tertiary">
-                {t('traderDormantForPeriod')}
+                {t('tfNotProvided')}
               </Text>
             </Box>
+          ) : (
+            <>
+              {isDormantPeriod && (
+                <Box
+                  role="status"
+                  style={{
+                    marginBottom: tokens.spacing[4],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderRadius: tokens.radius.lg,
+                    background: 'var(--color-bg-tertiary)',
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                  }}
+                >
+                  <Text size="sm" color="tertiary">
+                    {t('traderDormantForPeriod')}
+                  </Text>
+                </Box>
+              )}
+
+              {/* Content — shimmer on period switch */}
+              <Box
+                className={isAnimating ? 'period-switch-shimmer' : ''}
+                style={{
+                  opacity: isAnimating ? 0.4 : 1,
+                  transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
+                  transition: `opacity 0.2s ease, transform 0.2s ease`,
+                }}
+              >
+                {/* ROI & PnL - 主指标区 Hero Metrics */}
+                <HeroMetrics
+                  roi={roi}
+                  roiDisclosure={roiDisclosure}
+                  pnl={pnl}
+                  pnlDisclosure={pnlDisclosure}
+                  sparklineData={sparklineData}
+                  isVisible={isVisible}
+                />
+
+                {/* 二级指标 - 紧凑徽章布局 */}
+                <MetricBadgesGrid
+                  sharpeRatio={sharpeRatio}
+                  maxDrawdown={maxDrawdown}
+                  winRate={winRate}
+                  winningPositions={winningPositions}
+                  totalPositions={totalPositions}
+                  sortinoRatio={sortinoRatio}
+                  calmarRatio={calmarRatio}
+                  alpha={alpha}
+                  tradesCount={tradesCount}
+                  avgHoldingTimeHours={avgHoldingTimeHours}
+                  avgLeverage={positionSummary?.avgLeverage ?? undefined}
+                  longPositions={positionSummary?.longPositions ?? undefined}
+                  shortPositions={positionSummary?.shortPositions ?? undefined}
+                  isVisible={isVisible}
+                />
+
+                {/* 评分详情 - 免费展示 (period-specific) */}
+                <ScoreBreakdownSection
+                  periodArenaScore={periodArenaScore}
+                  periodProfitabilityScore={periodProfitabilityScore}
+                  periodRiskControlScore={periodRiskControlScore}
+                  arenaScoreV3={arenaScoreV3}
+                  scoreConfidence={periodScoreConfidence}
+                  isVisible={isVisible}
+                />
+              </Box>
+            </>
           )}
-
-          {/* Content — shimmer on period switch */}
-          <Box
-            className={isAnimating ? 'period-switch-shimmer' : ''}
-            style={{
-              opacity: isAnimating ? 0.4 : 1,
-              transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
-              transition: `opacity 0.2s ease, transform 0.2s ease`,
-            }}
-          >
-            {/* ROI & PnL - 主指标区 Hero Metrics */}
-            <HeroMetrics
-              roi={roi}
-              roiDisclosure={roiDisclosure}
-              pnl={pnl}
-              pnlDisclosure={pnlDisclosure}
-              sparklineData={sparklineData}
-              isVisible={isVisible}
-            />
-
-            {/* 二级指标 - 紧凑徽章布局 */}
-            <MetricBadgesGrid
-              sharpeRatio={sharpeRatio}
-              maxDrawdown={maxDrawdown}
-              winRate={winRate}
-              winningPositions={winningPositions}
-              totalPositions={totalPositions}
-              sortinoRatio={sortinoRatio}
-              calmarRatio={calmarRatio}
-              alpha={alpha}
-              tradesCount={tradesCount}
-              avgHoldingTimeHours={avgHoldingTimeHours}
-              avgLeverage={positionSummary?.avgLeverage ?? undefined}
-              longPositions={positionSummary?.longPositions ?? undefined}
-              shortPositions={positionSummary?.shortPositions ?? undefined}
-              isVisible={isVisible}
-            />
-
-            {/* 评分详情 - 免费展示 (period-specific) */}
-            <ScoreBreakdownSection
-              periodArenaScore={periodArenaScore}
-              periodProfitabilityScore={periodProfitabilityScore}
-              periodRiskControlScore={periodRiskControlScore}
-              arenaScoreV3={arenaScoreV3}
-              scoreConfidence={periodScoreConfidence}
-              isVisible={isVisible}
-            />
-          </Box>
         </Box>
       </Box>
     </div>

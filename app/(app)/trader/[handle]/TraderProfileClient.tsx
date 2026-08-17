@@ -51,6 +51,7 @@ import {
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import DataProvenanceBadge from '@/app/components/trader/DataProvenanceBadge'
 import { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+import type { PeriodAvailability } from '@/app/components/trader/performance/PeriodSelector'
 // MarketCorrelationCard removed -- beta_btc/beta_eth/alpha never computed by pipeline (P0-5)
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
@@ -1142,6 +1143,16 @@ export default function TraderProfileClient({
     clientCapabilities,
     exactFirstScreenCapability
   )
+  // The default serving path fetches /core only for these authoritative
+  // timeframes. Keep its shared period control on the same contract so an
+  // unsupported deep-link period cannot render a metric card full of dashes.
+  const servingPeriodAvailability: PeriodAvailability | undefined = servingViewCapability
+    ? {
+        '7D': servingViewCapability.timeframes['7'],
+        '30D': servingViewCapability.timeframes['30'],
+        '90D': servingViewCapability.timeframes['90'],
+      }
+    : undefined
   const servingTab = useServingTabData(
     {
       source: visibleData.source,
@@ -1650,6 +1661,7 @@ export default function TraderProfileClient({
                         | undefined
                     }
                     selectedPeriod={selectedPeriod}
+                    periodAvailability={useThreeTab ? servingPeriodAvailability : undefined}
                     hasMultipleAccounts={
                       hasMultipleAccounts || linkedAccountScope.mode === 'aggregate'
                     }

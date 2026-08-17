@@ -11,9 +11,11 @@ jest.mock('../performance/PeriodSelector', () => ({
   PeriodSelector: ({
     period,
     onPeriodChange,
+    availability,
   }: {
     period: '7D' | '30D' | '90D'
     onPeriodChange: (period: '7D' | '30D' | '90D') => void
+    availability?: Partial<Record<'7D' | '30D' | '90D', 'native' | 'derived' | 'absent'>>
   }) => (
     <div>
       {(['7D', '30D', '90D'] as const).map((candidate) => (
@@ -21,6 +23,7 @@ jest.mock('../performance/PeriodSelector', () => ({
           key={candidate}
           aria-label={`${candidate} period`}
           aria-pressed={period === candidate}
+          disabled={availability?.[candidate] === 'absent'}
           onClick={() => onPeriodChange(candidate)}
         >
           {candidate}
@@ -187,5 +190,40 @@ describe('OverviewPerformanceCard period switching', () => {
 
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', 'unknown')
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', 'unknown')
+  })
+
+  it('falls back an unsupported retained or deep-linked period to the best serving timeframe', () => {
+    usePeriodStore.setState({ period: '7D' })
+
+    render(
+      <OverviewPerformanceCard
+        performance={{ pnl: 900, pnl_30d: 300, pnl_7d: 70 }}
+        availability={{ '7D': 'absent', '30D': 'native', '90D': 'absent' }}
+      />
+    )
+
+    expect(usePeriodStore.getState().period).toBe('30D')
+    expect(screen.getByRole('button', { name: '30D period' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(screen.getByRole('button', { name: '7D period' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '90D period' })).toBeDisabled()
+    expect(screen.getByTestId('period-pnl')).toHaveTextContent('300')
+  })
+
+  it('replaces the metric grid with a clear unavailable state when no core period is provided', () => {
+    render(
+      <OverviewPerformanceCard
+        performance={{ pnl: 900 }}
+        availability={{ '7D': 'absent', '30D': 'absent', '90D': 'absent' }}
+      />
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent('tfNotProvided')
+    expect(screen.queryByTestId('period-pnl')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '7D period' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '30D period' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '90D period' })).toBeDisabled()
   })
 })

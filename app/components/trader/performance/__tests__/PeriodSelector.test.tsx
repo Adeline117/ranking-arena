@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { PeriodSelector } from '../PeriodSelector'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -31,5 +31,31 @@ describe('PeriodSelector source semantics', () => {
     render(<PeriodSelector period="30D" onPeriodChange={jest.fn()} source="bybit" />)
 
     expect(screen.getByText('cumulativeRoiLabel')).toBeInTheDocument()
+  })
+
+  it('disables source-declared absent periods and explains the authority verdict', () => {
+    const onPeriodChange = jest.fn()
+    render(
+      <PeriodSelector
+        period="30D"
+        onPeriodChange={onPeriodChange}
+        availability={{ '7D': 'absent', '30D': 'native', '90D': 'absent' }}
+      />
+    )
+
+    const unavailableSevenDay = screen.getByRole('button', { name: '7D period' })
+    const availableThirtyDay = screen.getByRole('button', { name: '30D period' })
+    const unavailableNinetyDay = screen.getByRole('button', { name: '90D period' })
+
+    expect(unavailableSevenDay).toBeDisabled()
+    expect(unavailableSevenDay).toHaveAttribute('title', 'tfNotProvided')
+    expect(availableThirtyDay).not.toBeDisabled()
+    expect(unavailableNinetyDay).toBeDisabled()
+
+    fireEvent.click(unavailableSevenDay)
+    fireEvent.click(availableThirtyDay)
+
+    expect(onPeriodChange).toHaveBeenCalledTimes(1)
+    expect(onPeriodChange).toHaveBeenCalledWith('30D')
   })
 })

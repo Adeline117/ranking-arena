@@ -16,6 +16,7 @@ import { Box, Text } from '@/app/components/base'
 import OverviewPerformanceCard, {
   type ExtendedPerformance,
 } from '@/app/components/trader/OverviewPerformanceCard'
+import type { PeriodAvailability } from '@/app/components/trader/performance/PeriodSelector'
 import { ChartSkeleton } from '@/app/components/ui/Skeleton'
 import { features } from '@/lib/features'
 import type { TraderProfile, TraderPerformance } from '@/lib/data/trader'
@@ -113,6 +114,9 @@ export interface OverviewTabProps {
 
   // Period
   selectedPeriod: string
+  /** Serving sources pass the authoritative per-timeframe capability through
+   *  to the shared performance selector. Legacy sources leave it unknown. */
+  periodAvailability?: PeriodAvailability
 
   // Multi-account
   hasMultipleAccounts: boolean
@@ -139,6 +143,7 @@ export const OverviewTab = React.memo(function OverviewTab({
   traderSimilar,
   positionSummary,
   selectedPeriod,
+  periodAvailability,
   hasMultipleAccounts,
   activeAccount,
   aggregatedData,
@@ -224,6 +229,7 @@ export const OverviewTab = React.memo(function OverviewTab({
                 equityCurve={traderEquityCurve?.['90D']}
                 allEquityCurves={traderEquityCurve}
                 source={(traderProfile?.source as string) || data.source}
+                availability={periodAvailability}
                 positionSummary={positionSummary}
               />
             ) : (

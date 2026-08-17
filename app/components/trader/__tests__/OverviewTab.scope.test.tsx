@@ -22,7 +22,11 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 }))
 jest.mock('@/app/components/trader/OverviewPerformanceCard', () => ({
   __esModule: true,
-  default: () => <div data-testid="primary-performance" />,
+  default: ({
+    availability,
+  }: {
+    availability?: Partial<Record<'7D' | '30D' | '90D', 'native' | 'derived' | 'absent'>>
+  }) => <div data-testid="primary-performance" data-period-seven={availability?.['7D']} />,
 }))
 jest.mock('@/app/components/base', () => ({
   Box: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
@@ -153,5 +157,20 @@ describe('OverviewTab account scope', () => {
     )
 
     expect(screen.getByTestId('primary-performance')).toBeInTheDocument()
+  })
+
+  it('passes serving timeframe availability into the shared performance control', () => {
+    render(
+      <OverviewTab
+        {...baseProps}
+        hasMultipleAccounts={false}
+        activeAccount="bybit:primary"
+        aggregatedData={null}
+        suppressAccountContent={false}
+        periodAvailability={{ '7D': 'absent', '30D': 'native', '90D': 'absent' }}
+      />
+    )
+
+    expect(screen.getByTestId('primary-performance')).toHaveAttribute('data-period-seven', 'absent')
   })
 })
