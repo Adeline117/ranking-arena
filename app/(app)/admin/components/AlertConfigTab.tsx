@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
+import { useToast } from '@/app/components/ui/Toast'
 import { useAlertConfig } from '../hooks/useAlertConfig'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -21,33 +22,92 @@ interface ConfigItemProps {
   saving: boolean
   savingLabel: string
   saveLabel: string
-  onSave: (key: string, value: string, enabled: boolean) => void
+  onSave: (key: string, value: string, enabled: boolean) => Promise<boolean>
 }
 
-function ConfigItem({ label, description, configKey, placeholder, value: initialValue, enabled: initialEnabled, saving, savingLabel, saveLabel, onSave }: ConfigItemProps) {
-  const [value, setValue] = useState(initialValue)
-  const [enabled, setEnabled] = useState(initialEnabled)
-  const [isDirty, setIsDirty] = useState(false)
+type DraftState = {
+  value: string
+  enabled: boolean
+}
+
+function isSameDraft(left: DraftState, right: DraftState) {
+  return left.value === right.value && left.enabled === right.enabled
+}
+
+function ConfigItem({
+  label,
+  description,
+  configKey,
+  placeholder,
+  value: initialValue,
+  enabled: initialEnabled,
+  saving,
+  savingLabel,
+  saveLabel,
+  onSave,
+}: ConfigItemProps) {
+  const incomingDraft = useMemo(
+    () => ({ value: initialValue, enabled: initialEnabled }),
+    [initialValue, initialEnabled]
+  )
+  const [draft, setDraft] = useState<DraftState>(incomingDraft)
+  const [committed, setCommitted] = useState<DraftState>(incomingDraft)
+  const pendingSaveRef = useRef<DraftState | null>(null)
+  const draftRef = useRef(draft)
+  const committedRef = useRef(committed)
 
   useEffect(() => {
-    setValue(initialValue)
-    setEnabled(initialEnabled)
-    setIsDirty(false)
-  }, [initialValue, initialEnabled])
+    draftRef.current = draft
+  }, [draft])
+
+  useEffect(() => {
+    committedRef.current = committed
+  }, [committed])
+
+  useEffect(() => {
+    const previousCommitted = committedRef.current
+    const currentDraft = draftRef.current
+    const pendingSave = pendingSaveRef.current
+
+    setCommitted(incomingDraft)
+    committedRef.current = incomingDraft
+
+    if (pendingSave && isSameDraft(incomingDraft, pendingSave)) {
+      pendingSaveRef.current = null
+      if (isSameDraft(currentDraft, pendingSave)) {
+        draftRef.current = incomingDraft
+        setDraft(incomingDraft)
+      }
+      return
+    }
+
+    if (
+      !pendingSave &&
+      isSameDraft(currentDraft, previousCommitted) &&
+      !isSameDraft(currentDraft, incomingDraft)
+    ) {
+      draftRef.current = incomingDraft
+      setDraft(incomingDraft)
+    }
+  }, [incomingDraft])
+
+  const isDirty = !isSameDraft(draft, committed)
 
   const handleChange = (newValue: string) => {
-    setValue(newValue)
-    setIsDirty(true)
+    setDraft((current) => ({ ...current, value: newValue }))
   }
 
   const handleToggle = () => {
-    setEnabled(!enabled)
-    setIsDirty(true)
+    setDraft((current) => ({ ...current, enabled: !current.enabled }))
   }
 
-  const handleSave = () => {
-    onSave(configKey, value, enabled)
-    setIsDirty(false)
+  const handleSave = async () => {
+    const submission = draftRef.current
+    pendingSaveRef.current = submission
+    const saved = await onSave(configKey, submission.value, submission.enabled)
+    if (!saved && pendingSaveRef.current && isSameDraft(pendingSaveRef.current, submission)) {
+      pendingSaveRef.current = null
+    }
   }
 
   return (
@@ -59,10 +119,21 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
         border: `1px solid ${tokens.colors.border.primary}`,
       }}
     >
-      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[3] }}>
+      <Box
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: tokens.spacing[3],
+        }}
+      >
         <Box>
-          <Text size="md" weight="bold">{label}</Text>
-          <Text size="sm" color="tertiary">{description}</Text>
+          <Text size="md" weight="bold">
+            {label}
+          </Text>
+          <Text size="sm" color="tertiary">
+            {description}
+          </Text>
         </Box>
         <Box
           onClick={handleToggle}
@@ -70,7 +141,7 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
             width: 48,
             height: 24,
             borderRadius: tokens.radius.lg,
-            background: enabled ? tokens.colors.accent.success : tokens.colors.bg.tertiary,
+            background: draft.enabled ? tokens.colors.accent.success : tokens.colors.bg.tertiary,
             cursor: 'pointer',
             position: 'relative',
             transition: 'background 0.2s',
@@ -84,7 +155,7 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
               background: tokens.colors.white,
               position: 'absolute',
               top: 2,
-              left: enabled ? 26 : 2,
+              left: draft.enabled ? 26 : 2,
               transition: 'left 0.2s',
               boxShadow: '0 1px 3px var(--color-overlay-medium)',
             }}
@@ -96,26 +167,21 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
         <input
           type="text"
           placeholder={placeholder}
-          value={value}
+          value={draft.value}
           onChange={(e) => handleChange(e.target.value)}
-          disabled={!enabled}
+          disabled={!draft.enabled}
           style={{
             flex: 1,
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
             borderRadius: tokens.radius.md,
             border: `1px solid ${tokens.colors.border.primary}`,
-            background: enabled ? tokens.colors.bg.primary : tokens.colors.bg.tertiary,
-            color: enabled ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+            background: draft.enabled ? tokens.colors.bg.primary : tokens.colors.bg.tertiary,
+            color: draft.enabled ? tokens.colors.text.primary : tokens.colors.text.tertiary,
             fontSize: tokens.typography.fontSize.sm,
-            opacity: enabled ? 1 : 0.6,
+            opacity: draft.enabled ? 1 : 0.6,
           }}
         />
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleSave}
-          disabled={!isDirty || saving}
-        >
+        <Button variant="primary" size="sm" onClick={handleSave} disabled={!isDirty || saving}>
           {saving ? savingLabel : saveLabel}
         </Button>
       </Box>
@@ -124,7 +190,11 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
 }
 
 export default function AlertConfigTab({ accessToken }: AlertConfigTabProps) {
-  const { config, loading, saving, loadConfig, updateConfig } = useAlertConfig(accessToken)
+  const { showToast } = useToast()
+  const { config, error, loading, saving, loadConfig, updateConfig } = useAlertConfig(
+    accessToken,
+    showToast
+  )
   const { t } = useLanguage()
 
   useEffect(() => {
@@ -134,7 +204,7 @@ export default function AlertConfigTab({ accessToken }: AlertConfigTabProps) {
   }, [accessToken, loadConfig])
 
   const handleSave = async (key: string, value: string, enabled: boolean) => {
-    await updateConfig(key, value || null, enabled)
+    return updateConfig(key, value || null, enabled)
   }
 
   return (
@@ -144,6 +214,14 @@ export default function AlertConfigTab({ accessToken }: AlertConfigTabProps) {
           {t('adminAlertConfigDesc')}
         </Text>
       </Box>
+
+      {error && (
+        <Box style={{ marginBottom: tokens.spacing[4] }}>
+          <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+            {error}
+          </Text>
+        </Box>
+      )}
 
       {loading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
