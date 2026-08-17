@@ -19,13 +19,23 @@ jest.mock('../useRankingTableStyles', () => ({
 
 jest.mock('../TraderRow', () => ({
   TraderRow: ({ trader, rank }: { trader: Trader; rank: number }) => (
-    <div data-testid="published-rank-row" data-trader-id={trader.id} data-rank={rank} />
+    <div
+      data-testid="published-rank-row"
+      data-trader-id={trader.id}
+      data-rank={rank}
+      data-arena-score={trader.arena_score ?? 'unknown'}
+    />
   ),
 }))
 
 jest.mock('../TraderCard', () => ({
   TraderCard: ({ trader, rank }: { trader: Trader; rank: number }) => (
-    <div data-testid="published-rank-card" data-trader-id={trader.id} data-rank={rank} />
+    <div
+      data-testid="published-rank-card"
+      data-trader-id={trader.id}
+      data-rank={rank}
+      data-arena-score={trader.arena_score ?? 'unknown'}
+    />
   ),
 }))
 
@@ -137,5 +147,66 @@ describe('RankingTable persisted rank authority', () => {
     ])
     expect(screen.queryByTestId('published-rank-row')).not.toBeInTheDocument()
     expect(screen.queryByText('Unpublished')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['desktop row', false, 'published-rank-row'],
+    ['mobile card', true, 'published-rank-card'],
+  ])(
+    'normalizes a non-finite score before the %s presentation receives it',
+    (_surface, mobile, testId) => {
+      setViewport(mobile)
+      render(
+        <RankingTable
+          traders={[
+            {
+              ...rankedTraders[0],
+              id: `non-finite-${testId}`,
+              arena_score: Number.NaN,
+              rank: 37,
+            },
+          ]}
+          loading={false}
+          loggedIn
+          controlledPage={1}
+          serverTotalCount={1}
+        />
+      )
+
+      expect(screen.getByTestId(testId)).toHaveAttribute('data-arena-score', 'unknown')
+    }
+  )
+
+  it('treats a corrupt local sort scalar as unknown instead of promoting it', () => {
+    setViewport(false)
+    render(
+      <RankingTable
+        traders={[
+          {
+            ...rankedTraders[0],
+            id: 'corrupt-score',
+            arena_score: Number.POSITIVE_INFINITY,
+            rank: 37,
+          },
+          {
+            ...rankedTraders[1],
+            id: 'finite-score',
+            arena_score: 88,
+            rank: 91,
+          },
+        ]}
+        loading={false}
+        loggedIn
+        controlledPage={1}
+        controlledSortColumn="score"
+        controlledSortDir="desc"
+        serverTotalCount={2}
+      />
+    )
+
+    expect(rankAttributes('published-rank-row')).toEqual([
+      ['finite-score', '91'],
+      ['corrupt-score', '37'],
+    ])
   })
 })

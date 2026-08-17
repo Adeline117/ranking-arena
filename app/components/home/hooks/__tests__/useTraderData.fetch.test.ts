@@ -2,7 +2,7 @@
  * useTraderData — fetchPage 数据面行为（与 useTraderData.test.tsx 的时间档切换互补）。
  *
  * 保护的契约：
- * - 无 SSR 数据时挂载即拉取，成功后填充 traders / totalCount / lastUpdated
+ * - 无 SSR 数据时挂载即拉取，成功后填充 traders / explicit count authority / lastUpdated
  * - API payload → Trader 的字段转换（字符串数字归一、缺失归 null、is_bot 默认 false）
  * - 失败降级：有旧数据时静默保留（error 不设置，避免错误框替换内容造成 CLS），
  *   无旧数据时才暴露 error
@@ -19,7 +19,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 
 // 稳定身份 — fetchPage 依赖 broadcast；每次渲染换新函数会让 fetch effect 无限循环
 const mockBroadcast = jest.fn()
-const mockOn = jest.fn(() => () => {})
+const mockOn = jest.fn((_event: unknown, _handler: (payload: unknown) => void) => () => {})
 jest.mock('@/lib/hooks/useBroadcastSync', () => ({
   useTraderDataSync: () => ({ broadcast: mockBroadcast, on: mockOn }),
 }))
@@ -54,6 +54,7 @@ const ssrTrader = {
 } as unknown as Trader
 
 const mockFetch = jest.fn()
+let broadcastHandler: ((payload: unknown) => void) | undefined
 
 function mockPayloadOnce(payload: Record<string, unknown>, ok = true, status = 200) {
   mockFetch.mockResolvedValueOnce({ ok, status, json: async () => payload })
@@ -70,6 +71,11 @@ function setup(options: Parameters<typeof useTraderData>[0] = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  broadcastHandler = undefined
+  mockOn.mockImplementation((_event: unknown, handler: (payload: unknown) => void) => {
+    broadcastHandler = handler
+    return () => {}
+  })
   global.fetch = mockFetch as never
   mockFetch.mockResolvedValue({ ok: true, json: async () => ({ traders: [] }) })
   window.localStorage.clear()
@@ -83,6 +89,8 @@ describe('挂载与加载态', () => {
       lastUpdated: '2026-07-03T00:00:00Z',
       availableSources: ['bybit'],
       totalCount: 42,
+      totalCountIsExact: true,
+      hasMore: true,
     })
     const { result } = setup()
 
@@ -95,12 +103,24 @@ describe('挂载与加载态', () => {
     expect(fetchUrls()[0]).toContain('page=0')
     expect(result.current.traders.map((t) => t.id)).toEqual(['t-1'])
     expect(result.current.totalCount).toBe(42)
+    expect(result.current.totalCountIsExact).toBe(true)
+    expect(result.current.hasMore).toBe(true)
     expect(result.current.lastUpdated).toBe('2026-07-03T00:00:00Z')
     expect(result.current.availableSources).toEqual(['bybit'])
     // 多标签页同步：成功加载必须广播给其他 tab
     expect(mockBroadcast).toHaveBeenCalledWith(
       'TRADER_DATA_UPDATED',
-      expect.objectContaining({ timeRange: '90D' })
+      expect.objectContaining({
+        timeRange: '90D',
+        cohort: {
+          timeRange: '90D',
+          pageIndex: 0,
+          category: null,
+          sortBy: 'arena_score',
+          sortDir: 'desc',
+          exchange: null,
+        },
+      })
     )
   })
 
@@ -115,11 +135,35 @@ describe('挂载与加载态', () => {
     expect(result.current.isStale).toBe(true)
     expect(mockFetch).not.toHaveBeenCalled()
   })
+
+  it('clears legacy numeric totals unless the payload explicitly proves they are exact', async () => {
+    const { result } = setup({
+      initialTraders: [ssrTrader],
+      initialTotalCount: 999,
+      initialIsStale: false,
+    })
+    expect(result.current.totalCount).toBeNull()
+    expect(result.current.totalCountIsExact).toBe(false)
+
+    mockPayloadOnce({
+      traders: [apiTrader('unknown-total')],
+      totalCount: 999,
+      totalCountIsExact: false,
+      hasMore: true,
+    })
+    await act(async () => {
+      await result.current.fetchPage(0)
+    })
+
+    expect(result.current.totalCount).toBeNull()
+    expect(result.current.totalCountIsExact).toBe(false)
+    expect(result.current.hasMore).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------
 describe('payload 字段转换', () => {
-  it('字符串数字归一为 number，缺失指标归 null，is_bot 默认 false', async () => {
+  it('字符串数字归一为 number，缺失或非有限指标归 null，is_bot 默认 false', async () => {
     mockPayloadOnce({
       traders: [
         apiTrader('t-str', {
@@ -127,6 +171,8 @@ describe('payload 字段转换', () => {
           pnl: '1000',
           win_rate: undefined, // 缺失指标必须是 null 而非 NaN/undefined
           sharpe_ratio: null,
+          max_drawdown: Number.NaN,
+          arena_score: Number.POSITIVE_INFINITY,
           is_bot: undefined,
         }),
       ],
@@ -138,6 +184,8 @@ describe('payload 字段转换', () => {
     expect(t.roi).toBe(12.5)
     expect(t.pnl).toBe(1000)
     expect(t.win_rate).toBeNull()
+    expect(t.max_drawdown).toBeNull()
+    expect(t.arena_score).toBeNull()
     expect(t.sharpe_ratio).toBeNull()
     expect(t.is_bot).toBe(false)
   })
@@ -274,5 +322,233 @@ describe('指纹去重', () => {
     expect(result.current.lastUpdated).toBe('2026-07-03T02:00:00Z')
     expect(result.current.isStale).toBe(false)
     expect(result.current.traders[0].roi).toBe(99)
+  })
+})
+
+// ---------------------------------------------------------------------------
+describe('pagination cohort integrity', () => {
+  it('manual refresh keeps the loaded page and complete sticky cohort', async () => {
+    const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
+
+    mockPayloadOnce({ traders: [apiTrader('page-3')], hasMore: true })
+    await act(async () => {
+      await result.current.fetchPage(2, {
+        category: 'futures',
+        sortBy: 'roi',
+        sortDir: 'asc',
+        exchange: 'binance-futures',
+      })
+    })
+
+    mockPayloadOnce({ traders: [apiTrader('page-3-refresh')], hasMore: true })
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    const url = new URL(fetchUrls().at(-1)!, 'https://arena.example')
+    expect(url.searchParams.get('page')).toBe('2')
+    expect(url.searchParams.get('category')).toBe('futures')
+    expect(url.searchParams.get('sortBy')).toBe('roi')
+    expect(url.searchParams.get('order')).toBe('asc')
+    expect(url.searchParams.get('exchange')).toBe('binance_futures')
+  })
+
+  it('ignores cross-tab rows for the same range but a different page/filter cohort', async () => {
+    const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
+
+    mockPayloadOnce({ traders: [apiTrader('local-page-3')], hasMore: true })
+    await act(async () => {
+      await result.current.fetchPage(2, {
+        category: 'all',
+        sortBy: 'roi',
+        sortDir: 'asc',
+        exchange: undefined,
+      })
+    })
+    expect(result.current.traders[0].id).toBe('local-page-3')
+    expect(broadcastHandler).toBeDefined()
+
+    await act(async () => {
+      broadcastHandler?.({
+        timeRange: '90D',
+        traders: [apiTrader('wrong-page')],
+        lastUpdated: '2026-07-03T00:00:00Z',
+        cohort: {
+          timeRange: '90D',
+          pageIndex: 0,
+          category: null,
+          sortBy: 'roi',
+          sortDir: 'asc',
+          exchange: null,
+        },
+        availableSources: ['bybit'],
+        totalCount: null,
+        totalCountIsExact: false,
+        hasMore: true,
+        categoryCounts: null,
+        categoryCountsAreExact: false,
+      })
+    })
+    expect(result.current.traders[0].id).toBe('local-page-3')
+
+    await act(async () => {
+      broadcastHandler?.({
+        timeRange: '90D',
+        traders: [apiTrader('wrong-null-vs-all')],
+        lastUpdated: '2026-07-03T00:00:00Z',
+        cohort: {
+          timeRange: '90D',
+          pageIndex: 2,
+          category: 'all',
+          sortBy: 'roi',
+          sortDir: 'asc',
+          exchange: null,
+        },
+        availableSources: ['bybit'],
+        totalCount: null,
+        totalCountIsExact: false,
+        hasMore: true,
+        categoryCounts: null,
+        categoryCountsAreExact: false,
+      })
+    })
+    expect(result.current.traders[0].id).toBe('local-page-3')
+  })
+
+  it('does not let a pending local interaction accept its target cohort from broadcast', async () => {
+    const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
+    let rejectTarget!: (reason?: unknown) => void
+    const pendingTarget = new Promise<Response>((_resolve, reject) => {
+      rejectTarget = reject
+    })
+    mockFetch.mockReset()
+    mockFetch.mockImplementationOnce(() => pendingTarget)
+
+    let localRequest!: Promise<boolean>
+    act(() => {
+      localRequest = result.current.fetchPage(1, { sortBy: 'roi', sortDir: 'asc' })
+    })
+
+    await act(async () => {
+      broadcastHandler?.({
+        timeRange: '90D',
+        traders: [apiTrader('broadcast-pending-target')],
+        lastUpdated: '2026-07-03T00:00:00Z',
+        cohort: {
+          timeRange: '90D',
+          pageIndex: 1,
+          category: null,
+          sortBy: 'roi',
+          sortDir: 'asc',
+          exchange: null,
+        },
+        availableSources: ['bybit'],
+        totalCount: null,
+        totalCountIsExact: false,
+        hasMore: true,
+        categoryCounts: null,
+        categoryCountsAreExact: false,
+      })
+    })
+    // The UI still labels the SSR score/page-1 cohort, so the new rows must
+    // wait for this tab's own successful commit.
+    expect(result.current.traders[0].id).toBe('ssr-1')
+
+    rejectTarget(new Error('target request failed'))
+    await act(async () => {
+      await expect(localRequest).resolves.toBe(false)
+    })
+    expect(result.current.traders[0].id).toBe('ssr-1')
+  })
+
+  it('builds B=category from the loaded cohort, never a pending A=ROI/exchange target', async () => {
+    const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
+    let resolveA!: (response: { ok: boolean; json: () => Promise<Record<string, unknown>> }) => void
+    const pendingA = new Promise<{
+      ok: boolean
+      json: () => Promise<Record<string, unknown>>
+    }>((resolve) => {
+      resolveA = resolve
+    })
+    mockFetch.mockReset()
+    mockFetch.mockImplementationOnce(() => pendingA)
+    mockPayloadOnce({ traders: [apiTrader('category-score')], hasMore: true })
+
+    let requestA!: Promise<boolean>
+    act(() => {
+      requestA = result.current.fetchPage(0, {
+        sortBy: 'roi',
+        sortDir: 'asc',
+        exchange: 'binance-futures',
+      })
+    })
+
+    await act(async () => {
+      await expect(result.current.fetchPage(0, { category: 'futures' })).resolves.toBe(true)
+    })
+
+    const categoryUrl = new URL(fetchUrls()[1], 'https://arena.example')
+    expect(categoryUrl.searchParams.get('category')).toBe('futures')
+    expect(categoryUrl.searchParams.get('sortBy')).toBeNull()
+    expect(categoryUrl.searchParams.get('exchange')).toBeNull()
+    expect(result.current.traders[0].id).toBe('category-score')
+
+    // An ignored late A must not alter B or become a future refresh baseline.
+    resolveA({ ok: true, json: async () => ({ traders: [apiTrader('late-roi-exchange')] }) })
+    await act(async () => {
+      await expect(requestA).resolves.toBe(false)
+    })
+
+    mockPayloadOnce({ traders: [apiTrader('category-refresh')], hasMore: true })
+    await act(async () => {
+      await result.current.refresh()
+    })
+    const refreshUrl = new URL(fetchUrls().at(-1)!, 'https://arena.example')
+    expect(refreshUrl.searchParams.get('category')).toBe('futures')
+    expect(refreshUrl.searchParams.get('sortBy')).toBeNull()
+    expect(refreshUrl.searchParams.get('exchange')).toBeNull()
+    expect(result.current.traders[0].id).toBe('category-refresh')
+  })
+
+  it('rolls failed concurrent requests back to the loaded cohort, not the prior in-flight filter', async () => {
+    const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
+    let resolveFirst!: (response: {
+      ok: boolean
+      json: () => Promise<Record<string, unknown>>
+    }) => void
+    const firstResponse = new Promise<{
+      ok: boolean
+      json: () => Promise<Record<string, unknown>>
+    }>((resolve) => {
+      resolveFirst = resolve
+    })
+    mockFetch.mockReset()
+    mockFetch.mockImplementationOnce(() => firstResponse)
+    mockFetch.mockRejectedValueOnce(new Error('second cohort failed'))
+
+    let firstRequest!: Promise<boolean>
+    act(() => {
+      firstRequest = result.current.fetchPage(0, { sortBy: 'roi', sortDir: 'asc' })
+    })
+    await act(async () => {
+      await result.current.fetchPage(1, { sortBy: 'pnl', sortDir: 'desc' })
+    })
+
+    // The aborted first request resolving late has no authority to change rows
+    // or sticky filters after B has failed.
+    resolveFirst({ ok: true, json: async () => ({ traders: [apiTrader('late-a')] }) })
+    await act(async () => {
+      await firstRequest
+    })
+
+    mockPayloadOnce({ traders: [apiTrader('loaded-cohort-refresh')] })
+    await act(async () => {
+      await result.current.refresh()
+    })
+    const refreshUrl = new URL(fetchUrls().at(-1)!, 'https://arena.example')
+    expect(refreshUrl.searchParams.get('page')).toBe('0')
+    expect(refreshUrl.searchParams.get('sortBy')).toBeNull()
+    expect(refreshUrl.searchParams.get('order')).toBeNull()
+    expect(result.current.traders[0].id).toBe('loaded-cohort-refresh')
   })
 })
