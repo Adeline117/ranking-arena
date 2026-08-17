@@ -50,14 +50,14 @@ const PUBLIC_API_ROUTES = new Set([
   'market',
   'market/arbitrage',
   // V1 public-egress compatibility tombstones; fixed 410/no-store with no
-  // request handling, cache, logging, exchange, or market-provider work.
+  // request handling, data-store/cache, logging, exchange, or market-provider work.
   'market/alpha',
   'market/candles',
+  'market/futures',
   'market/coin/[id]',
   'market/defi',
   'market/exchanges',
   'market/fear-greed',
-  'market/futures',
   'market/ohlc/[id]',
   'market/overview',
   'market/realtime',
