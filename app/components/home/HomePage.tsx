@@ -45,14 +45,22 @@ const WIDGET_DELAYS = {
 }
 
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
+import type { TimeRange } from './hooks/useTraderData'
 
 interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
   initialIsStale?: boolean
   heroStats?: { traderCount: number; sourceBoardCount: number }
-  initialTotalCount?: number
+  initialTotalCount?: number | null
+  initialTotalCountIsExact?: boolean
+  initialHasMore?: boolean
   initialCategoryCounts?: CategoryCounts
+  initialCategoryCountsAreExact?: boolean
+  initialTimeRange?: TimeRange
+  initialPageIndex?: number
+  initialClientCohortPending?: boolean
+  initialClientCohortKey?: string
 }
 
 export default function HomePage({
@@ -61,7 +69,14 @@ export default function HomePage({
   initialIsStale,
   heroStats: _heroStats,
   initialTotalCount,
+  initialTotalCountIsExact,
+  initialHasMore,
   initialCategoryCounts,
+  initialCategoryCountsAreExact,
+  initialTimeRange,
+  initialPageIndex,
+  initialClientCohortPending,
+  initialClientCohortKey,
 }: HomePageProps) {
   // SSR TopNav stays visible permanently (no portal, no removal).
   // globals.css no longer hides #ssr-topnav when Phase 2 loads.
@@ -219,12 +234,26 @@ export default function HomePage({
                   then CSS :has() hid #ssr-ranking-table, leaving users staring at a
                   spinner while 4.2MB JS loaded. Without Suspense, React hydrates
                   HomePageClient in-place and SSR content stays visible throughout. */}
+              {/* A router navigation receives a new server snapshot. Remount
+                  the stateful tree for the complete canonical URL cohort, not
+                  merely range/page, so an old sort/filter can never survive
+                  beneath a different direct-link cohort. */}
               <HomePageClient
+                key={
+                  initialClientCohortKey ??
+                  `range=${initialTimeRange ?? '90D'}&page=${(initialPageIndex ?? 0) + 1}`
+                }
                 initialTraders={initialTraders}
                 initialLastUpdated={initialLastUpdated}
                 initialIsStale={initialIsStale}
                 initialTotalCount={initialTotalCount}
+                initialTotalCountIsExact={initialTotalCountIsExact}
+                initialHasMore={initialHasMore}
                 initialCategoryCounts={initialCategoryCounts}
+                initialCategoryCountsAreExact={initialCategoryCountsAreExact}
+                initialTimeRange={initialTimeRange}
+                initialPageIndex={initialPageIndex}
+                initialClientCohortPending={initialClientCohortPending}
               />
             </SectionErrorBoundary>
           </ThreeColumnLayout>

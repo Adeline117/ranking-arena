@@ -16,6 +16,7 @@ import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPreset
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { trackEvent } from '@/lib/analytics/track'
+import type { SortColumn, SortDir } from '../ranking/RankingTableTypes'
 
 // localStorage keys for user preferences
 const LS_KEY_SORT_COLUMN = 'ranking-sort-column'
@@ -26,6 +27,92 @@ const LS_KEY_FILTER_CONFIG = 'ranking-filter-config'
 
 // Free users: show up to 1000 traders (beta — showcase platform depth)
 export const FREE_LEADERBOARD_LIMIT = 1000
+
+const URL_SORT_COLUMNS: readonly SortColumn[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino']
+const SORT_BY: Record<SortColumn, string> = {
+  score: 'arena_score',
+  roi: 'roi',
+  pnl: 'pnl',
+  winrate: 'win_rate',
+  mdd: 'max_drawdown',
+  sortino: 'sortino_ratio',
+}
+
+function isUrlSortColumn(value: string | null): value is SortColumn {
+  return value !== null && URL_SORT_COLUMNS.includes(value as SortColumn)
+}
+
+function urlSortColumn(value: string | null): SortColumn {
+  // Alpha has no trusted public source contract. Keep old shared links useful
+  // by resolving them to the canonical score order, never by forwarding alpha
+  // to the API or reintroducing an unproven ranking surface.
+  return value === 'alpha' ? 'score' : isUrlSortColumn(value) ? value : 'score'
+}
+
+function urlSortDir(value: string | null): SortDir {
+  return value === 'asc' || value === 'desc' ? value : 'desc'
+}
+
+function normalizeInitialPageIndex(value: number | undefined): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0
+}
+
+function pageIndexFromUrl(value: string | null): number | null {
+  if (!value || !/^[1-9]\d{0,4}$/.test(value)) return null
+  const oneBased = Number(value)
+  return Number.isSafeInteger(oneBased) ? oneBased - 1 : null
+}
+
+function apiCategoryFor(category: CategoryType): string | undefined {
+  return category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
+}
+
+function categoryFromUrl(value: string | null): CategoryType | null {
+  if (value === 'futures' || value === 'spot' || value === 'all') return value
+  return value === 'web3' || value === 'onchain' ? 'web3' : null
+}
+
+function canApplyPersistedExchange(): boolean {
+  // Local exchange preference is a convenience for the clean landing page,
+  // never an implicit extra filter on a share/deep link. Query URLs must be
+  // reproducible independently of the viewer's browser storage.
+  return (
+    typeof window !== 'undefined' &&
+    window.location.pathname === '/' &&
+    window.location.search === ''
+  )
+}
+
+function commitExchangeCohortUrl(exchange: string, eventTimeRange: unknown): void {
+  const params = new URLSearchParams(window.location.search)
+  params.delete('exchange')
+  params.delete('ex')
+  params.delete('page')
+  params.set('ex', exchange)
+  if (eventTimeRange === '7D' || eventTimeRange === '30D' || eventTimeRange === '90D') {
+    params.delete('range')
+    if (eventTimeRange !== '90D') params.set('range', eventTimeRange)
+  }
+  const query = params.toString()
+  window.history.replaceState(
+    null,
+    '',
+    query ? `${window.location.pathname}?${query}` : window.location.pathname
+  )
+}
+
+function commitCategoryCohortUrl(category: CategoryType): void {
+  const params = new URLSearchParams(window.location.search)
+  params.delete('category')
+  params.delete('page')
+  if (category !== 'all') params.set('category', category === 'web3' ? 'onchain' : category)
+  const query = params.toString()
+  window.history.replaceState(
+    null,
+    '',
+    query ? `${window.location.pathname}?${query}` : window.location.pathname
+  )
+}
 
 // Helper to get stored preferences
 function getStoredPreferences() {
@@ -63,8 +150,16 @@ function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
       )
         return false
     }
-    if (config.roi_min != null && (trader.roi ?? 0) < config.roi_min) return false
-    if (config.roi_max != null && (trader.roi ?? 0) > config.roi_max) return false
+    if (
+      config.roi_min != null &&
+      (trader.roi == null || !Number.isFinite(trader.roi) || trader.roi < config.roi_min)
+    )
+      return false
+    if (
+      config.roi_max != null &&
+      (trader.roi == null || !Number.isFinite(trader.roi) || trader.roi > config.roi_max)
+    )
+      return false
     if (
       config.drawdown_min != null &&
       trader.max_drawdown != null &&
@@ -80,7 +175,9 @@ function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
     if (config.min_pnl != null && (trader.pnl == null || trader.pnl < config.min_pnl)) return false
     if (
       config.min_score != null &&
-      (trader.arena_score == null || trader.arena_score < config.min_score)
+      (trader.arena_score == null ||
+        !Number.isFinite(trader.arena_score) ||
+        trader.arena_score < config.min_score)
     )
       return false
     if (
@@ -88,9 +185,13 @@ function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
       (trader.win_rate == null || trader.win_rate < config.min_win_rate)
     )
       return false
-    if (config.grade && trader.arena_score != null) {
-      if (getScoreGradeLetter(trader.arena_score) !== config.grade) return false
-    }
+    if (
+      config.grade &&
+      (trader.arena_score == null ||
+        !Number.isFinite(trader.arena_score) ||
+        getScoreGradeLetter(trader.arena_score) !== config.grade)
+    )
+      return false
     return true
   })
 }
@@ -98,12 +199,25 @@ function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
 interface UseRankingFiltersOptions {
   traders: Trader[]
   activeTimeRange: TimeRange
-  totalCount?: number
-  categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
+  totalCount?: number | null
+  categoryCounts?: {
+    all: number | null
+    futures: number | null
+    spot: number | null
+    onchain: number | null
+  }
+  /** Zero-based SSR page whose rows arrived with this hook's first render. */
+  initialPageIndex?: number
+  /** URL has a sort/category/exchange/filter that Page cannot SSR faithfully. */
+  requiresInitialCohortFetch?: boolean
+  /** Incremented to retry a direct-link cohort after a failed first request. */
+  initialCohortAttempt?: number
+  /** The parent keeps SSR neutral until the target cohort request succeeds. */
+  onInitialCohortSettled?: (succeeded: boolean) => void
   fetchPage?: (
     page: number,
     opts?: { category?: string; sortBy?: string; sortDir?: string; exchange?: string }
-  ) => Promise<void>
+  ) => Promise<boolean>
 }
 
 export function useRankingFilters({
@@ -111,6 +225,10 @@ export function useRankingFilters({
   activeTimeRange,
   totalCount: _totalCount,
   categoryCounts: _categoryCounts,
+  initialPageIndex,
+  requiresInitialCohortFetch = false,
+  initialCohortAttempt = 0,
+  onInitialCohortSettled,
   fetchPage,
 }: UseRankingFiltersOptions) {
   const router = useRouter()
@@ -127,23 +245,33 @@ export function useRankingFilters({
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
-  const [sortColumn, setSortColumn] = useState<
-    'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
-  >('score')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [sortColumn, setSortColumn] = useState<SortColumn>('score')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [currentPage, setCurrentPage] = useState(
+    () => normalizeInitialPageIndex(initialPageIndex) + 1
+  )
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null)
 
   // Listen for exchange filter events from ExchangePartners bar
   useEffect(() => {
     const handler = (e: Event) => {
-      const exchange = (e as CustomEvent).detail?.exchange
+      const { exchange, timeRange } = (e as CustomEvent).detail ?? {}
       if (exchange) {
-        setSelectedExchange(exchange)
-        setCurrentPage(1)
         if (fetchPage) {
-          fetchPage(0, { exchange })
+          // Keep the currently labelled cohort on screen until the server
+          // confirms this exchange page. Otherwise old rows momentarily wear
+          // a new filter label.
+          void fetchPage(0, { exchange }).then((succeeded) => {
+            if (!succeeded) return
+            const committedExchange = resolveExchangeSlug(exchange)
+            setSelectedExchange(committedExchange)
+            setCurrentPage(1)
+            commitExchangeCohortUrl(committedExchange, timeRange)
+          })
+        } else {
+          setSelectedExchange(exchange)
+          setCurrentPage(1)
         }
       }
     }
@@ -154,11 +282,19 @@ export function useRankingFilters({
   // Server-side category change: fetch page 0 of the new category
   const setCategory = useCallback(
     (cat: CategoryType) => {
-      setCategoryRaw(cat)
-      setCurrentPage(1)
       if (fetchPage) {
-        const apiCategory = cat === 'web3' ? 'onchain' : cat === 'all' ? undefined : cat
-        fetchPage(0, { category: apiCategory })
+        // Do not relabel the current rows as a new category before the API
+        // has returned that category's first page.
+        void fetchPage(0, { category: apiCategoryFor(cat) }).then((succeeded) => {
+          if (!succeeded) return
+          setCategoryRaw(cat)
+          setCurrentPage(1)
+          commitCategoryCohortUrl(cat)
+        })
+      } else {
+        setCategoryRaw(cat)
+        setCurrentPage(1)
+        commitCategoryCohortUrl(cat)
       }
     },
     [fetchPage]
@@ -166,6 +302,10 @@ export function useRankingFilters({
 
   // Reset pagination when time range changes
   const prevTimeRange = useRef(activeTimeRange)
+  // `useEffect` runs after React has committed a render. Derive page one for
+  // that transition render so a newly committed range page 0 can never paint
+  // beneath an old page-3 control label.
+  const displayedCurrentPage = prevTimeRange.current === activeTimeRange ? currentPage : 1
   useEffect(() => {
     if (prevTimeRange.current !== activeTimeRange) {
       setCurrentPage(1)
@@ -184,8 +324,23 @@ export function useRankingFilters({
     const minPnl = searchParams.get('min_pnl')
     const minScore = searchParams.get('min_score')
     const minWr = searchParams.get('min_wr')
-    const exchange = searchParams.get('exchange')
     const fcat = searchParams.get('fcat')
+    const urlSortRaw = searchParams.get('sort')
+    const urlOrderRaw = searchParams.get('order')
+    const urlPage = searchParams.get('page')
+    const urlQ = searchParams.get('q')
+    const urlPreset = searchParams.get('preset') as PresetId | null
+    const urlEx = searchParams.get('ex')
+    const urlCategory = categoryFromUrl(searchParams.get('category'))
+    const legacyExchange = searchParams.get('exchange')
+    const requestedSort = urlSortColumn(urlSortRaw)
+    const requestedSortDir = urlSortDir(urlOrderRaw)
+    const urlPageIndex = pageIndexFromUrl(urlPage)
+    const hasServerPage = initialPageIndex !== undefined
+    const targetPageIndex = hasServerPage
+      ? normalizeInitialPageIndex(initialPageIndex)
+      : (urlPageIndex ?? 0)
+    const requestedExchange = urlEx || legacyExchange
 
     if (roiMin) config.roi_min = Number(roiMin)
     if (roiMax) config.roi_max = Number(roiMax)
@@ -194,18 +349,17 @@ export function useRankingFilters({
     if (minPnl) config.min_pnl = Number(minPnl)
     if (minScore) config.min_score = Number(minScore)
     if (minWr) config.min_win_rate = Number(minWr)
-    // Legacy ?exchange= param: route through selectedExchange (server-side) instead of
-    // client-side advanced filter. Old links like /?exchange=binance-futures still work.
-    if (exchange && !searchParams.get('ex')) {
-      const resolvedEx = resolveExchangeSlug(exchange.split(',')[0])
-      setSelectedExchange(resolvedEx)
-      if (fetchPage) {
-        fetchPage(0, { exchange: resolvedEx })
-      }
-    }
     if (fcat) config.category = fcat.split(',')
 
     const storedPrefs = getStoredPreferences()
+    // A persisted exchange is a real server cohort, not a cosmetic filter.
+    // It must take the same fetch-before-reveal path as an `?ex=` share link;
+    // otherwise default SSR all-exchange rows are falsely labelled as scoped.
+    const persistedExchange = canApplyPersistedExchange() ? storedPrefs.exchange : undefined
+    const targetExchange = requestedExchange || persistedExchange || undefined
+    const resolvedExchange = targetExchange
+      ? resolveExchangeSlug(targetExchange.split(',')[0])
+      : undefined
 
     if (Object.keys(config).length > 0) {
       setFilterConfig(config)
@@ -222,24 +376,25 @@ export function useRankingFilters({
       /* ignore */
     }
 
-    const urlSort = searchParams.get('sort') as typeof sortColumn | null
-    const urlOrder = searchParams.get('order') as 'asc' | 'desc' | null
-    const urlPage = searchParams.get('page')
-    const urlQ = searchParams.get('q')
-    const urlPreset = searchParams.get('preset') as PresetId | null
-    const urlEx = searchParams.get('ex')
-
-    if (
-      urlSort &&
-      ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino', 'alpha'].includes(urlSort)
-    ) {
-      setSortColumn(urlSort)
-    }
-    if (urlOrder && ['asc', 'desc'].includes(urlOrder)) {
-      setSortDir(urlOrder)
-    }
-    if (urlPage) setCurrentPage(Math.max(1, parseInt(urlPage, 10) || 1))
+    if (isUrlSortColumn(urlSortRaw) || urlSortRaw === 'alpha') setSortColumn(requestedSort)
+    if (urlOrderRaw === 'asc' || urlOrderRaw === 'desc') setSortDir(requestedSortDir)
+    // Page is server-authoritative whenever it was provided through the SSR
+    // snapshot. A client-only use of this hook may still restore a URL page.
+    if (!hasServerPage && urlPageIndex !== null) setCurrentPage(urlPageIndex + 1)
     if (urlQ) setSearchQuery(urlQ)
+
+    if (urlCategory) setCategoryRaw(urlCategory)
+
+    if (urlSortRaw === 'alpha') {
+      const canonicalParams = new URLSearchParams(window.location.search)
+      canonicalParams.set('sort', 'score')
+      const canonicalQuery = canonicalParams.toString()
+      window.history.replaceState(
+        null,
+        '',
+        canonicalQuery ? `${window.location.pathname}?${canonicalQuery}` : window.location.pathname
+      )
+    }
 
     if (urlPreset && isValidPresetId(urlPreset)) {
       setActivePreset(urlPreset)
@@ -247,18 +402,35 @@ export function useRankingFilters({
       setActivePreset(storedPrefs.preset)
     }
 
-    if (urlEx) {
-      const resolvedEx = resolveExchangeSlug(urlEx)
-      setSelectedExchange(resolvedEx)
-      // Trigger server-side fetch filtered by exchange (e.g. from /exchange/binance-futures redirect)
-      if (fetchPage) {
-        fetchPage(0, { exchange: resolvedEx })
-      }
-    } else if (storedPrefs.exchange) {
-      setSelectedExchange(storedPrefs.exchange)
+    if (resolvedExchange) setSelectedExchange(resolvedExchange)
+
+    // Page/range are read by Page and arrive as a coherent SSR snapshot. Any
+    // other query state needs one matching client fetch before the target sort,
+    // category, exchange, or filter is allowed to replace that neutral shell.
+    const shouldFetchInitialCohort =
+      requiresInitialCohortFetch ||
+      resolvedExchange !== undefined ||
+      (!hasServerPage &&
+        (urlPageIndex !== null ||
+          urlSortRaw !== null ||
+          urlOrderRaw !== null ||
+          urlCategory !== null ||
+          resolvedExchange !== undefined))
+    if (shouldFetchInitialCohort && fetchPage) {
+      void fetchPage(targetPageIndex, {
+        category: apiCategoryFor(urlCategory ?? 'all'),
+        sortBy: SORT_BY[requestedSort],
+        sortDir: requestedSortDir,
+        exchange: resolvedExchange,
+      }).then((succeeded) => onInitialCohortSettled?.(succeeded))
+    } else if (requiresInitialCohortFetch) {
+      onInitialCohortSettled?.(false)
     }
+    // `initialCohortAttempt` is deliberately the only changing dependency:
+    // repeating this same URL cohort is the retry path after a failed first
+    // request. All query-derived target values are read afresh above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [initialCohortAttempt])
 
   // Debounce ref for URL sync
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -273,20 +445,22 @@ export function useRankingFilters({
   // Use refs for URL sync to avoid recreating syncStateToUrl on every state change
   // This prevents cascading dependency changes that cause infinite re-render loops
   const stateRef = useRef({
+    category,
     filterConfig,
     sortColumn,
     sortDir,
-    currentPage,
+    currentPage: displayedCurrentPage,
     searchQuery,
     activePreset,
     selectedExchange,
   })
   useEffect(() => {
     stateRef.current = {
+      category,
       filterConfig,
       sortColumn,
       sortDir,
-      currentPage,
+      currentPage: displayedCurrentPage,
       searchQuery,
       activePreset,
       selectedExchange,
@@ -298,6 +472,7 @@ export function useRankingFilters({
     (
       overrides: {
         config?: FilterConfig
+        category?: CategoryType | null
         sort?: string
         order?: string
         page?: number
@@ -323,6 +498,7 @@ export function useRankingFilters({
           'min_score',
           'min_wr',
           'exchange',
+          'category',
           'fcat',
           'sort',
           'order',
@@ -341,6 +517,11 @@ export function useRankingFilters({
         if (config.min_win_rate != null) params.set('min_wr', String(config.min_win_rate))
         if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
         if (config.category?.length) params.set('fcat', config.category.join(','))
+
+        const urlCategory = overrides.category !== undefined ? overrides.category : s.category
+        if (urlCategory && urlCategory !== 'all') {
+          params.set('category', urlCategory === 'web3' ? 'onchain' : urlCategory)
+        }
 
         const sort = overrides.sort ?? s.sortColumn
         const order = overrides.order ?? s.sortDir
@@ -396,32 +577,28 @@ export function useRankingFilters({
 
   // Sort/page/search handlers — trigger server-side fetch when fetchPage is available
   const handleSortChange = useCallback(
-    (
-      col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha',
-      dir: 'asc' | 'desc'
-    ) => {
+    (col: SortColumn, dir: SortDir) => {
       trackEvent('ranking_sort', { column: col, direction: dir })
-      setSortColumn(col)
-      setSortDir(dir)
-      setCurrentPage(1)
-      syncStateToUrl({ sort: col, order: dir, page: 1 })
       if (fetchPage) {
-        const sortByMap: Record<string, string> = {
-          score: 'arena_score',
-          roi: 'roi',
-          pnl: 'pnl',
-          winrate: 'win_rate',
-          mdd: 'max_drawdown',
-          sortino: 'sortino_ratio',
-          alpha: 'alpha',
-        }
-        const apiCategory =
-          category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
-        fetchPage(0, {
-          category: apiCategory,
-          sortBy: sortByMap[col] || 'arena_score',
+        // The table keeps its prior header/page labels while this request is
+        // in flight. `fetchPage` resolves true only for the newest successful
+        // cohort, so an older response cannot commit stale UI state.
+        void fetchPage(0, {
+          category: apiCategoryFor(category),
+          sortBy: SORT_BY[col],
           sortDir: dir,
+        }).then((succeeded) => {
+          if (!succeeded) return
+          setSortColumn(col)
+          setSortDir(dir)
+          setCurrentPage(1)
+          syncStateToUrl({ sort: col, order: dir, page: 1 })
         })
+      } else {
+        setSortColumn(col)
+        setSortDir(dir)
+        setCurrentPage(1)
+        syncStateToUrl({ sort: col, order: dir, page: 1 })
       }
     },
     [syncStateToUrl, fetchPage, category]
@@ -429,25 +606,21 @@ export function useRankingFilters({
 
   const handlePageChange = useCallback(
     (page: number) => {
-      setCurrentPage(page)
-      syncStateToUrl({ page })
+      const safePage = Number.isSafeInteger(page) && page > 0 ? page : 1
       if (fetchPage) {
-        const sortByMap: Record<string, string> = {
-          score: 'arena_score',
-          roi: 'roi',
-          pnl: 'pnl',
-          winrate: 'win_rate',
-          mdd: 'max_drawdown',
-          sortino: 'sortino_ratio',
-          alpha: 'alpha',
-        }
-        const apiCategory =
-          category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
-        fetchPage(page - 1, {
-          category: apiCategory,
-          sortBy: sortByMap[sortColumn] || 'arena_score',
+        // Avoid displaying old page rows under the requested page number.
+        void fetchPage(safePage - 1, {
+          category: apiCategoryFor(category),
+          sortBy: SORT_BY[sortColumn],
           sortDir: sortDir,
+        }).then((succeeded) => {
+          if (!succeeded) return
+          setCurrentPage(safePage)
+          syncStateToUrl({ page: safePage })
         })
+      } else {
+        setCurrentPage(safePage)
+        syncStateToUrl({ page: safePage })
       }
     },
     [syncStateToUrl, fetchPage, category, sortColumn, sortDir]
@@ -713,7 +886,12 @@ export function useRankingFilters({
               id: string
               title: string
               avatar?: string | null
-              meta?: { roi?: number; arena_score?: number; platform?: string; is_bot?: boolean }
+              meta?: {
+                roi?: number | null
+                arena_score?: number | null
+                platform?: string
+                is_bot?: boolean
+              }
             }) => {
               const [platform, ...keyParts] = sr.id.split(':')
               const traderKey = keyParts.join(':')
@@ -721,9 +899,9 @@ export function useRankingFilters({
                 id: traderKey || sr.id,
                 handle: sr.title?.replace(/^@/, '') || traderKey || sr.id,
                 source: sr.meta?.platform || platform || '',
-                roi: sr.meta?.roi ?? 0,
+                roi: sr.meta?.roi ?? null,
                 followers: 0,
-                arena_score: sr.meta?.arena_score ?? undefined,
+                arena_score: sr.meta?.arena_score ?? null,
                 avatar_url: sr.avatar || null,
                 is_bot: sr.meta?.is_bot ?? false,
               } satisfies Trader
@@ -787,19 +965,48 @@ export function useRankingFilters({
   }, [showToast, t])
 
   const handleResetFilters = useCallback(() => {
-    handleFilterChange({})
-    setShowAdvancedFilter(false)
-    setSortColumn('score')
-    setSortDir('desc')
-    setSelectedExchange(null)
-    setActivePreset(null)
-    setCategory('all')
-    // Clear sticky exchange filter and refetch all-exchange data
-    if (fetchPage) {
-      fetchPage(0, { exchange: undefined, category: undefined })
+    const commitReset = () => {
+      // Commit all labels together only after the matching all-board/score
+      // response has landed. This prevents old ROI/exchange rows from being
+      // displayed as Score/all rows during a failed reset request.
+      handleFilterChange({})
+      setShowAdvancedFilter(false)
+      setSortColumn('score')
+      setSortDir('desc')
+      setSelectedExchange(null)
+      setActivePreset(null)
+      setCategoryRaw('all')
+      setCurrentPage(1)
+      try {
+        localStorage.removeItem(LS_KEY_PRESET)
+        localStorage.removeItem(LS_KEY_EXCHANGE)
+      } catch {
+        /* ignore */
+      }
+      syncStateToUrl({
+        config: {},
+        category: null,
+        sort: 'score',
+        order: 'desc',
+        page: 1,
+        preset: null,
+        ex: null,
+      })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleFilterChange, fetchPage])
+
+    if (fetchPage) {
+      void fetchPage(0, {
+        category: undefined,
+        exchange: undefined,
+        sortBy: 'arena_score',
+        sortDir: 'desc',
+      }).then((succeeded) => {
+        if (succeeded) commitReset()
+      })
+      return
+    }
+    commitReset()
+  }, [fetchPage, handleFilterChange, syncStateToUrl])
 
   const handleFilterToggle = useCallback(() => {
     if (window.matchMedia('(max-width: 768px)').matches) {
@@ -829,7 +1036,7 @@ export function useRankingFilters({
     // Sort/page/search
     sortColumn,
     sortDir,
-    currentPage,
+    currentPage: displayedCurrentPage,
     searchQuery,
     // Computed data
     source,

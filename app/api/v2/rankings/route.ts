@@ -1,365 +1,571 @@
 /**
  * GET /api/v2/rankings
  *
- * Unified leaderboard endpoint.
- * Reads ONLY from database - no external fetching.
+ * Legacy-compatible single-source leaderboard endpoint. Its ranked cohort is
+ * exclusively `public.public_ranked_leaderboard`: the database security-barrier
+ * view establishes publication eligibility before this route applies caller
+ * filters, ordering, or pagination. Do not substitute its retained parent
+ * relation, a count cache, or a post-fetch filter for that boundary.
  *
- * Query params:
- *   window: '7d' | '30d' | '90d' (required)
- *   platform: string (required)
- *   market_type: string (default: 'futures')
- *   limit: number (default: 100, max: 500)
- *   offset: number (default: 0)
- *   sort: 'arena_score' | 'arena_score_v3' | 'roi' | 'pnl' | 'sortino' | 'calmar' | 'alpha' (default: 'arena_score')
- *   trading_style: 'scalper' | 'swing' | 'trend' | 'position' (optional filter, legacy names also accepted)
- *   min_alpha: number (optional minimum alpha threshold)
- *   min_sortino: number (optional minimum sortino threshold)
- *   min_roi: number (optional minimum ROI %)
- *   min_pnl: number (optional minimum PnL $)
- *   min_win_rate: number (optional minimum win rate %)
- *   max_drawdown: number (optional maximum drawdown %)
- *   min_score: number (optional minimum arena score)
- *
- * Response includes:
- *   - traders: RankingEntry[]
- *   - meta: { platform, market_type, window, total_count, updated_at, staleness_seconds }
+ * `alpha` and `min_alpha` are deliberately unsupported. The public view does
+ * not publish an alpha contract, so accepting either would silently label an
+ * Arena Score page as a different ranking.
  */
 
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import type {
-  Window,
-  LeaderboardPlatform,
-  RankingEntry,
-  RankingsResponse,
-} from '@/lib/types/leaderboard'
-import {
-  VALID_TRADING_STYLES,
-  TRADING_STYLE_LEGACY_MAP,
-  type TradingStyle,
-} from '@/lib/utils/trading-style'
-import { WINDOWS } from '@/lib/types/leaderboard'
+import type { LeaderboardPlatform, MarketType, RankingEntry, Window } from '@/lib/types/leaderboard'
 import {
   SOURCE_TYPE_MAP,
   parsePublicActiveRankingSource,
+  type SourceType,
   type TraderSource,
 } from '@/lib/constants/exchanges'
+import {
+  TRADING_STYLE_LEGACY_MAP,
+  VALID_TRADING_STYLES,
+  type TradingStyle,
+} from '@/lib/utils/trading-style'
 import { withPublic } from '@/lib/api/middleware'
-import { getOrSetWithLock } from '@/lib/cache'
 import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
 import {
-  PUBLIC_RANKING_POSTGREST_EXCLUSION,
-  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_REDIS_TAG,
   isPublicRankingSourceQuarantined,
-  publicRankingCacheKey,
-  sanitizePublicRankingSourcePayload,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 
-// Publication actively invalidates the Redis generation; the route itself must
-// not create a separate CDN/ISR generation that the publisher cannot purge.
+// Publication actively invalidates its own serving authority. This route must
+// not introduce a second CDN/ISR generation that can outlive that authority.
 export const dynamic = 'force-dynamic'
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
 
-// ── Input validation schema ──────────────────────────────────────────────────
-const v2RankingsSchema = z.object({
-  window: z.enum(WINDOWS),
-  platform: z.custom<TraderSource>(
-    (value) => parsePublicActiveRankingSource(value) !== null,
-    'Invalid platform'
-  ),
-  market_type: z.string().default('futures'),
-  limit: z.coerce.number().int().min(1).max(500).catch(100),
-  offset: z.coerce.number().int().min(0).catch(0),
-  sort: z
-    .enum(['arena_score', 'arena_score_v3', 'roi', 'pnl', 'sortino', 'calmar', 'alpha'])
-    .catch('arena_score'),
-  trading_style: z.string().optional(),
-  min_alpha: z.coerce.number().optional(),
-  min_sortino: z.coerce.number().optional(),
-  min_roi: z.coerce.number().optional(),
-  min_pnl: z.coerce.number().optional(),
-  min_win_rate: z.coerce.number().optional(),
-  max_drawdown: z.coerce.number().optional(),
-  min_score: z.coerce.number().optional(),
-})
+const VALID_WINDOWS = ['7d', '30d', '90d'] as const
+const VALID_MARKET_TYPES = ['futures', 'spot', 'web3'] as const
+const VALID_SORTS = ['arena_score', 'arena_score_v3', 'roi', 'pnl', 'sortino', 'calmar'] as const
+const ALLOWED_QUERY_PARAMS = new Set([
+  'window',
+  'platform',
+  'market_type',
+  'limit',
+  'offset',
+  'sort',
+  'trading_style',
+  'min_sortino',
+  'min_roi',
+  'min_pnl',
+  'min_win_rate',
+  'max_drawdown',
+  'min_score',
+])
+
+const MAX_LIMIT = 500
+const DEFAULT_LIMIT = 100
+const MAX_OFFSET = 20_000_000
+
+type PublicV2Window = (typeof VALID_WINDOWS)[number]
+type PublicV2Sort = (typeof VALID_SORTS)[number]
+
+const SORT_COLUMN: Record<
+  PublicV2Sort,
+  'arena_score' | 'arena_score_v3' | 'roi' | 'pnl' | 'sortino_ratio' | 'calmar_ratio'
+> = {
+  arena_score: 'arena_score',
+  arena_score_v3: 'arena_score_v3',
+  roi: 'roi',
+  pnl: 'pnl',
+  sortino: 'sortino_ratio',
+  calmar: 'calmar_ratio',
+}
+
+// Explicitly select the public view projection plus the proof fields needed
+// for the defensive response-boundary validation below. Those proof fields do
+// not leave this endpoint as a separate publication contract.
+const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
+  'source, source_trader_id, handle, avatar_url, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, arena_score_v3, rank, computed_at, season_id, sharpe_ratio, sortino_ratio, calmar_ratio, profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated, trading_style, avg_holding_hours, trader_type, is_outlier'
+
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+/**
+ * Local read-only bridge until generated Supabase types include the additive
+ * public view. It only exposes the query operations this route needs, keeping
+ * the generated client untouched.
+ */
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: unknown): PublicRankedLeaderboardQuery
+  gte(column: string, value: number): PublicRankedLeaderboardQuery
+  lte(column: string, value: number): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  range(from: number, to: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardRow = Record<string, unknown> & { rank: number }
+
+type V2RankingEntry = RankingEntry & {
+  arena_score_v3: number | null
+  sortino_ratio: number | null
+  calmar_ratio: number | null
+  // Preserved for legacy callers as an explicit unknown. The public cohort has
+  // no reviewed alpha basis, so it is never synthesized from Arena Score.
+  alpha: null
+  trading_style: string | null
+}
+
+interface V2RankingsResponse {
+  traders: V2RankingEntry[]
+  meta: {
+    platform: LeaderboardPlatform
+    market_type: MarketType
+    window: Window
+    // There is no view-native, generation-bound count authority. `null` is
+    // intentionally distinct from a visible-page lower bound.
+    total_count: number | null
+    total_count_is_exact: boolean
+    has_more: boolean
+    updated_at: string | null
+    staleness_seconds: number | null
+    is_stale: boolean
+    source_freshness: Array<{
+      source: string
+      updated_at: string | null
+      is_stale: boolean
+      age_seconds: number | null
+    }>
+    sort: PublicV2Sort
+    limit: number
+    offset: number
+  }
+  ranking_visibility?: 'partial'
+  ranking_visibility_reason?: string
+  ranking_visibility_reasons?: string[]
+}
+
+class InvalidV2RankingsParameter extends Error {}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(
+  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>
+): PublicRankedLeaderboardClient {
+  const candidate: unknown = supabase
+  if (!isRecord(candidate) || typeof candidate.from !== 'function') {
+    throw new TypeError('Supabase client does not expose a public ranked cohort reader')
+  }
+  return candidate as PublicRankedLeaderboardClient
+}
+
+function singleQueryParam(searchParams: URLSearchParams, name: string): string | null {
+  const values = searchParams.getAll(name)
+  if (values.length > 1) {
+    throw new InvalidV2RankingsParameter(`Query parameter ${name} may only be specified once`)
+  }
+  return values[0] ?? null
+}
+
+function requiredQueryParam(searchParams: URLSearchParams, name: string): string {
+  const value = singleQueryParam(searchParams, name)
+  if (value === null || value.length === 0) {
+    throw new InvalidV2RankingsParameter(`Missing ${name}`)
+  }
+  return value
+}
+
+function parseStrictInteger(
+  raw: string | null,
+  fallback: number,
+  name: string,
+  min: number,
+  max: number
+): number {
+  if (raw === null) return fallback
+  if (!/^\d+$/.test(raw)) throw new InvalidV2RankingsParameter(`Invalid ${name}`)
+  const parsed = Number(raw)
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw new InvalidV2RankingsParameter(`Invalid ${name}`)
+  }
+  return parsed
+}
+
+function parseOptionalFiniteNumber(raw: string | null, name: string): number | null {
+  if (raw === null) return null
+  if (raw.trim() === '') throw new InvalidV2RankingsParameter(`Invalid ${name}`)
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) throw new InvalidV2RankingsParameter(`Invalid ${name}`)
+  return parsed
+}
+
+function parseWindow(value: string): PublicV2Window {
+  if (!(VALID_WINDOWS as readonly string[]).includes(value)) {
+    throw new InvalidV2RankingsParameter('Invalid window')
+  }
+  return value as PublicV2Window
+}
+
+function parsePlatform(value: string): TraderSource {
+  const source = parsePublicActiveRankingSource(value)
+  if (!source) throw new InvalidV2RankingsParameter('Invalid platform')
+  return source
+}
+
+function parseMarketType(value: string | null, platform: TraderSource): SourceType {
+  if (value === null) {
+    const canonical = SOURCE_TYPE_MAP[platform]
+    if (!canonical) throw new InvalidV2RankingsParameter('Platform has no canonical market type')
+    return canonical
+  }
+  if (!(VALID_MARKET_TYPES as readonly string[]).includes(value)) {
+    throw new InvalidV2RankingsParameter('Invalid market_type')
+  }
+  return value as SourceType
+}
+
+function parseSort(value: string | null): PublicV2Sort {
+  if (value === null) return 'arena_score'
+  if (!(VALID_SORTS as readonly string[]).includes(value)) {
+    throw new InvalidV2RankingsParameter(`Unsupported sort: ${value}`)
+  }
+  return value as PublicV2Sort
+}
+
+function parseTradingStyle(value: string | null): TradingStyle | null {
+  if (value === null) return null
+  const allValidStyles = new Set<string>([
+    ...VALID_TRADING_STYLES,
+    ...Object.keys(TRADING_STYLE_LEGACY_MAP),
+  ])
+  if (!allValidStyles.has(value)) {
+    throw new InvalidV2RankingsParameter(
+      `Invalid trading_style. Must be one of: ${VALID_TRADING_STYLES.join(', ')}`
+    )
+  }
+  return (
+    TRADING_STYLE_LEGACY_MAP[value as keyof typeof TRADING_STYLE_LEGACY_MAP] ??
+    (value as TradingStyle)
+  )
+}
+
+function isPositivePublishedRank(row: unknown): row is PublicRankedLeaderboardRow {
+  return (
+    isRecord(row) && typeof row.rank === 'number' && Number.isSafeInteger(row.rank) && row.rank > 0
+  )
+}
+
+function isExpectedPublicRankedRow(
+  row: unknown,
+  platform: TraderSource,
+  marketType: SourceType,
+  seasonId: string
+): row is PublicRankedLeaderboardRow {
+  return (
+    isPositivePublishedRank(row) &&
+    row.source === platform &&
+    row.source_type === marketType &&
+    row.season_id === seasonId
+  )
+}
+
+function nullableFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function emptyResponse(
+  platform: LeaderboardPlatform,
+  marketType: MarketType,
+  window: Window,
+  sort: PublicV2Sort,
+  limit: number,
+  offset: number,
+  options: {
+    totalCount: number | null
+    totalCountIsExact: boolean
+    updatedAt?: string | null
+    stalenessSeconds?: number | null
+    sourceFreshness?: V2RankingsResponse['meta']['source_freshness']
+    reason: string
+    reasons: string[]
+  }
+): V2RankingsResponse {
+  return {
+    traders: [],
+    meta: {
+      platform,
+      market_type: marketType,
+      window,
+      total_count: options.totalCount,
+      total_count_is_exact: options.totalCountIsExact,
+      has_more: false,
+      updated_at: options.updatedAt ?? null,
+      staleness_seconds: options.stalenessSeconds ?? null,
+      is_stale: true,
+      source_freshness: options.sourceFreshness ?? [],
+      sort,
+      limit,
+      offset,
+    },
+    ranking_visibility: 'partial',
+    ranking_visibility_reason: options.reason,
+    ranking_visibility_reasons: options.reasons,
+  }
+}
+
+function jsonResponse(payload: V2RankingsResponse, status = 200) {
+  return NextResponse.json(payload, {
+    status,
+    headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL },
+  })
+}
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const { searchParams } = new URL(request.url)
-    const rawParams = Object.fromEntries(searchParams)
-    const parsed = v2RankingsSchema.safeParse(rawParams)
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid parameters', details: parsed.error.flatten() },
-        { status: 400 }
-      )
-    }
+    let window: PublicV2Window
+    let requestedPlatform: TraderSource
+    let marketType: SourceType
+    let limit: number
+    let offset: number
+    let sort: PublicV2Sort
+    let tradingStyle: TradingStyle | null
+    let minSortino: number | null
+    let minRoi: number | null
+    let minPnl: number | null
+    let minWinRate: number | null
+    let maxDrawdown: number | null
+    let minScore: number | null
 
-    const {
-      window,
-      platform: requestedPlatform,
-      market_type: marketType,
-      limit,
-      offset,
-      sort,
-    } = parsed.data
-
-    if (isPublicRankingSourceQuarantined(requestedPlatform)) {
-      return NextResponse.json(
-        {
-          traders: [],
-          meta: {
-            platform: requestedPlatform,
-            market_type: marketType,
-            window,
-            total_count: 0,
-            updated_at: null,
-            staleness_seconds: null,
-            is_stale: true,
-            source_freshness: [],
-          },
-          ranking_visibility: 'partial',
-          ranking_visibility_reason: 'publication_policy_filtered',
-          ranking_visibility_reasons: ['quarantined_source_requested'],
-        },
-        {
-          headers: {
-            'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL,
-          },
+    try {
+      for (const [name] of searchParams) {
+        if (!ALLOWED_QUERY_PARAMS.has(name)) {
+          throw new InvalidV2RankingsParameter(`Unsupported query parameter: ${name}`)
         }
+      }
+
+      window = parseWindow(requiredQueryParam(searchParams, 'window'))
+      requestedPlatform = parsePlatform(requiredQueryParam(searchParams, 'platform'))
+      marketType = parseMarketType(singleQueryParam(searchParams, 'market_type'), requestedPlatform)
+      limit = parseStrictInteger(
+        singleQueryParam(searchParams, 'limit'),
+        DEFAULT_LIMIT,
+        'limit',
+        1,
+        MAX_LIMIT
       )
+      offset = parseStrictInteger(
+        singleQueryParam(searchParams, 'offset'),
+        0,
+        'offset',
+        0,
+        MAX_OFFSET
+      )
+      sort = parseSort(singleQueryParam(searchParams, 'sort'))
+      tradingStyle = parseTradingStyle(singleQueryParam(searchParams, 'trading_style'))
+      minSortino = parseOptionalFiniteNumber(
+        singleQueryParam(searchParams, 'min_sortino'),
+        'min_sortino'
+      )
+      minRoi = parseOptionalFiniteNumber(singleQueryParam(searchParams, 'min_roi'), 'min_roi')
+      minPnl = parseOptionalFiniteNumber(singleQueryParam(searchParams, 'min_pnl'), 'min_pnl')
+      minWinRate = parseOptionalFiniteNumber(
+        singleQueryParam(searchParams, 'min_win_rate'),
+        'min_win_rate'
+      )
+      maxDrawdown = parseOptionalFiniteNumber(
+        singleQueryParam(searchParams, 'max_drawdown'),
+        'max_drawdown'
+      )
+      minScore = parseOptionalFiniteNumber(singleQueryParam(searchParams, 'min_score'), 'min_score')
+    } catch (error) {
+      if (error instanceof InvalidV2RankingsParameter) {
+        return NextResponse.json(
+          { error: 'Invalid parameters', message: error.message },
+          {
+            status: 400,
+            headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL },
+          }
+        )
+      }
+      throw error
     }
 
     const platform = requestedPlatform as LeaderboardPlatform
-    const tradingStyle = parsed.data.trading_style || null
-    const _minAlpha = parsed.data.min_alpha ?? null
-    const minSortino = parsed.data.min_sortino ?? null
-    const minRoi = parsed.data.min_roi ?? null
-    const minPnl = parsed.data.min_pnl ?? null
-    const minWinRate = parsed.data.min_win_rate ?? null
-    const maxDrawdown = parsed.data.max_drawdown ?? null
-    const minScore = parsed.data.min_score ?? null
+    const responseMarketType = marketType as MarketType
 
-    // Validate trading_style against known values (accept both current and legacy names)
-    const allValidStyles = [...VALID_TRADING_STYLES, ...Object.keys(TRADING_STYLE_LEGACY_MAP)]
-    if (tradingStyle && !allValidStyles.includes(tradingStyle)) {
-      return NextResponse.json(
-        { error: `Invalid trading_style. Must be one of: ${VALID_TRADING_STYLES.join(', ')}` },
-        { status: 400 }
+    // Quarantine is a declared empty public scope, so zero is exact here. It
+    // is not a fallback for a failed count or an unverified query.
+    if (isPublicRankingSourceQuarantined(requestedPlatform)) {
+      return jsonResponse(
+        emptyResponse(platform, responseMarketType, window, sort, limit, offset, {
+          totalCount: 0,
+          totalCountIsExact: true,
+          reason: 'publication_policy_filtered',
+          reasons: ['quarantined_source_requested'],
+        })
       )
     }
-    // Normalize legacy style names to current names
-    const normalizedStyle = tradingStyle
-      ? TRADING_STYLE_LEGACY_MAP[tradingStyle as keyof typeof TRADING_STYLE_LEGACY_MAP] ||
-        (tradingStyle as TradingStyle)
-      : null
 
-    // Redis cache — 120s TTL (data refreshes via cron every 30 min, 2-min cache is safe)
-    const cacheKey = publicRankingCacheKey(
-      `v2-rankings:v3:${platform}:${window}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
+    const seasonId = window.toUpperCase()
+    // The view's security barrier must run before all request-derived clauses.
+    // Keep filters, deterministic order, and the bounded lookahead range in
+    // one SQL builder; never construct this page from raw rank rows.
+    let query = publicRankedLeaderboardClient(supabase)
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
+      .eq('source', requestedPlatform)
+      .eq('source_type', marketType)
+      .eq('season_id', seasonId)
+      .not('rank', 'is', null)
+
+    if (tradingStyle) query = query.eq('trading_style', tradingStyle)
+    if (minSortino !== null) query = query.gte('sortino_ratio', minSortino)
+    if (minRoi !== null) query = query.gte('roi', minRoi)
+    if (minPnl !== null) query = query.gte('pnl', minPnl)
+    if (minWinRate !== null) query = query.gte('win_rate', minWinRate)
+    if (maxDrawdown !== null) query = query.lte('max_drawdown', maxDrawdown)
+    if (minScore !== null) query = query.gte('arena_score', minScore)
+
+    query = query.order(SORT_COLUMN[sort], { ascending: false, nullsFirst: false })
+    // Persisted rank is the only final tiebreaker. It keeps pages stable even
+    // for a metric sort whose primary values are equal.
+    query = query.order('rank', { ascending: true, nullsFirst: false })
+
+    // PostgREST ranges are inclusive. One same-cohort lookahead row is the
+    // only pagination witness; no count cache can prove a total.
+    const { data, error } = await query.range(offset, offset + limit)
+    if (error) {
+      throw new Error('public_ranked_leaderboard query failed')
+    }
+
+    const rawRows = Array.isArray(data) ? data : []
+    const sanitized = sanitizePublicRankingPayload(
+      { traders: rawRows, window: seasonId },
+      { expectedPeriod: seasonId }
+    ) as { traders?: unknown[] }
+    const safeRows = Array.isArray(sanitized.traders)
+      ? sanitized.traders.filter((row) =>
+          isExpectedPublicRankedRow(row, requestedPlatform, marketType, seasonId)
+        )
+      : ([] as PublicRankedLeaderboardRow[])
+
+    // A view/proxy/schema violation must not be repaired by removing one row
+    // and shifting a later record into this offset page. Return the complete
+    // page as partial/unknown instead.
+    if (safeRows.length !== rawRows.length) {
+      return jsonResponse(
+        emptyResponse(platform, responseMarketType, window, sort, limit, offset, {
+          totalCount: null,
+          totalCountIsExact: false,
+          reason: 'publication_policy_filtered',
+          reasons: ['ineligible_public_cohort_row_removed'],
+        })
+      )
+    }
+
+    const pageRows = safeRows.slice(0, limit)
+    // `source_as_of` is independent upstream evidence; score computation time
+    // is never a freshness substitute. A missing/error watermark hides ranked
+    // rows rather than downgrading them to a cosmetic stale warning.
+    const freshnessResult = await supabase
+      .from('leaderboard_source_freshness')
+      .select('source,source_as_of')
+      .eq('season_id', seasonId)
+      .eq('source', requestedPlatform)
+    const freshnessSummary = summarizeSourceFreshness(
+      freshnessResult.error ? [] : ((freshnessResult.data || []) as SourceFreshnessRow[]),
+      [requestedPlatform]
     )
 
-    const cached = await getOrSetWithLock<RankingsResponse>(
-      cacheKey,
-      async () => {
-        // Database query — use leaderboard_ranks (precomputed, unified source of truth)
-        // instead of trader_snapshots v1 which has stale/inconsistent data
+    if (pageRows.length > 0 && freshnessSummary.isStale) {
+      return jsonResponse(
+        emptyResponse(platform, responseMarketType, window, sort, limit, offset, {
+          totalCount: null,
+          totalCountIsExact: false,
+          updatedAt: freshnessSummary.asOf,
+          stalenessSeconds: freshnessSummary.ageSeconds,
+          sourceFreshness: freshnessSummary.sources,
+          reason: 'source_freshness_unverified',
+          reasons: ['source_freshness_unverified'],
+        })
+      )
+    }
 
-        // Map window to season_id format used in leaderboard_ranks (uppercase)
-        const seasonId = window.toUpperCase()
-
-        let query = supabase
-          .from('leaderboard_ranks')
-          .select(
-            `source, source_trader_id, handle, avatar_url, source_type,
-       roi, pnl, win_rate, max_drawdown, trades_count, followers,
-       arena_score, rank, computed_at, season_id,
-       sharpe_ratio,
-       profitability_score, risk_control_score, execution_score, score_completeness,
-       trading_style, avg_holding_hours, trader_type`
-          )
-          .eq('source', platform)
-          .eq('season_id', seasonId)
-          .not('rank', 'is', null)
-          .not('arena_score', 'is', null)
-          .or('is_outlier.is.null,is_outlier.eq.false')
-
-        if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-          query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-        }
-
-        // V3 Filters
-        if (normalizedStyle) {
-          query = query.eq('trading_style', normalizedStyle)
-        }
-        if (minSortino !== null) {
-          query = query.gte('sharpe_ratio', minSortino) // sortino not in leaderboard_ranks, use sharpe as proxy
-        }
-        if (minRoi !== null) {
-          query = query.gte('roi', minRoi)
-        }
-        if (minPnl !== null) {
-          query = query.gte('pnl', minPnl)
-        }
-        if (minWinRate !== null) {
-          query = query.gte('win_rate', minWinRate)
-        }
-        if (maxDrawdown !== null) {
-          query = query.lte('max_drawdown', maxDrawdown)
-        }
-        if (minScore !== null) {
-          query = query.gte('arena_score', minScore)
-        }
-
-        // Sort — leaderboard_ranks doesn't have alpha/arena_score_v3 columns,
-        // fall back to arena_score for those sorts
-        switch (sort) {
-          case 'roi':
-            query = query.order('roi', { ascending: false, nullsFirst: false })
-            break
-          case 'pnl':
-            query = query.order('pnl', { ascending: false, nullsFirst: false })
-            break
-          case 'sortino':
-            query = query.order('sharpe_ratio', { ascending: false, nullsFirst: false }) // sortino not in leaderboard_ranks
-            break
-          case 'calmar':
-            query = query.order('arena_score', { ascending: false, nullsFirst: false }) // calmar not in leaderboard_ranks
-            break
-          case 'arena_score_v3':
-          case 'alpha':
-          default:
-            query = query.order('arena_score', { ascending: false, nullsFirst: false })
-        }
-
-        // Persisted rank is the final authority for every metric tie.
-        query = query.order('rank', { ascending: true, nullsFirst: false })
-
-        query = query.range(offset, offset + limit - 1)
-
-        const {
-          data: rows,
-          count,
-          error,
-        } = (await query) as {
-          data: Record<string, unknown>[] | null
-          count: number | null
-          error: { message: string } | null
-        }
-
-        if (error) {
-          throw new Error('Database query failed')
-        }
-
-        // leaderboard_ranks already has handle + avatar_url — no need for separate
-        // trader_profiles / trader_sources joins (eliminated 2 extra DB queries)
-
-        let freshnessQuery = supabase
-          .from('leaderboard_source_freshness')
-          .select('source,source_as_of')
-          .eq('season_id', seasonId)
-          .eq('source', platform)
-        if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-          freshnessQuery = freshnessQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-        }
-        const { data: sourceWatermarkRows } = await freshnessQuery
-        const freshnessSummary = summarizeSourceFreshness(
-          (sourceWatermarkRows || []) as SourceFreshnessRow[],
-          [platform]
-        )
-
-        // Build response — maintain exact same response format for frontend consumers
-        const traders: RankingEntry[] = (rows || [])
-          .filter((r) => r.rank != null)
-          .map((r) => {
-            const sourceType =
-              (r.source_type as string) || SOURCE_TYPE_MAP[String(r.source)] || marketType
-            const baseEntry = {
-              platform: r.source as LeaderboardPlatform,
-              market_type: sourceType,
-              trader_key: String(r.source_trader_id),
-              display_name: (r.handle as string) || null,
-              avatar_url: (r.avatar_url as string) || null,
-              window: window as Window,
-              metrics: {
-                roi: r.roi != null ? Number(r.roi) : null,
-                pnl: r.pnl != null ? Number(r.pnl) : null,
-                win_rate: r.win_rate != null ? Number(r.win_rate) : null,
-                max_drawdown: r.max_drawdown != null ? Number(r.max_drawdown) : null,
-                sharpe_ratio: r.sharpe_ratio != null ? Number(r.sharpe_ratio) : null,
-                sortino_ratio: null, // not in leaderboard_ranks
-                trades_count: r.trades_count != null ? Number(r.trades_count) : null,
-                followers: r.followers != null ? Number(r.followers) : null,
-                copiers: null as number | null,
-                aum: null as number | null,
-                platform_rank: Number(r.rank),
-                arena_score: r.arena_score != null ? Number(r.arena_score) : null,
-                return_score: null as number | null,
-                drawdown_score: null as number | null,
-                stability_score: null as number | null,
-                volatility_pct: null as number | null,
-                avg_holding_hours: r.avg_holding_hours != null ? Number(r.avg_holding_hours) : null,
-                profit_factor: null, // not in leaderboard_ranks
-              },
-              quality_flags: {
-                missing_fields: [] as string[],
-                non_standard_fields: {} as Record<string, string>,
-                window_native: true,
-                notes: [] as string[],
-              },
-              updated_at: freshnessSummary.asOf,
-              is_stale: freshnessSummary.isStale,
-              computed_at: String(r.computed_at || '') || null,
-            }
-
-            return {
-              ...baseEntry,
-              // V3 extended fields
-              arena_score_v3: null,
-              sortino_ratio: null, // not in leaderboard_ranks
-              calmar_ratio: null, // not in leaderboard_ranks
-              alpha: null,
-              trading_style: (r.trading_style as string) || null,
-            } as RankingEntry & {
-              arena_score_v3: number | null
-              sortino_ratio: number | null
-              calmar_ratio: number | null
-              alpha: number | null
-              trading_style: string | null
-            }
-          })
-
-        return sanitizePublicRankingSourcePayload({
-          traders,
-          meta: {
-            platform,
-            market_type: marketType as 'futures',
-            window: window as Window,
-            total_count: count || 0,
-            updated_at: freshnessSummary.asOf,
-            staleness_seconds: freshnessSummary.ageSeconds,
-            is_stale: freshnessSummary.isStale,
-            source_freshness: freshnessSummary.sources,
-          },
-        }) as RankingsResponse
-      }, // end fetcher
-      {
-        ttl: 120,
-        tags: [PUBLIC_RANKING_REDIS_TAG, `season:${window.toUpperCase()}`],
-        skipMemory: true,
-        writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-      }
-    ) // end getOrSetWithLock
-
-    const safeCached = sanitizePublicRankingSourcePayload(cached)
-
-    return NextResponse.json(safeCached, {
-      headers: {
-        'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL,
+    const traders: V2RankingEntry[] = pageRows.map((row) => ({
+      platform,
+      market_type: responseMarketType,
+      trader_key: String(row.source_trader_id),
+      display_name: typeof row.handle === 'string' ? row.handle : null,
+      avatar_url: typeof row.avatar_url === 'string' ? row.avatar_url : null,
+      window,
+      metrics: {
+        roi: nullableFiniteNumber(row.roi),
+        pnl: nullableFiniteNumber(row.pnl),
+        win_rate: nullableFiniteNumber(row.win_rate),
+        max_drawdown: nullableFiniteNumber(row.max_drawdown),
+        sharpe_ratio: nullableFiniteNumber(row.sharpe_ratio),
+        sortino_ratio: nullableFiniteNumber(row.sortino_ratio),
+        trades_count: nullableFiniteNumber(row.trades_count),
+        followers: nullableFiniteNumber(row.followers),
+        copiers: nullableFiniteNumber(row.copiers),
+        aum: null,
+        platform_rank: row.rank,
+        arena_score: nullableFiniteNumber(row.arena_score),
+        return_score: null,
+        drawdown_score: null,
+        stability_score: null,
+        volatility_pct: null,
+        avg_holding_hours: nullableFiniteNumber(row.avg_holding_hours),
+        profit_factor: null,
       },
-    })
+      quality_flags: {
+        missing_fields: [],
+        non_standard_fields: {},
+        window_native: true,
+        notes: [],
+      },
+      updated_at: freshnessSummary.asOf,
+      is_stale: freshnessSummary.isStale,
+      computed_at: typeof row.computed_at === 'string' ? row.computed_at : null,
+      // V2's historical extension fields remain shape-compatible, but now
+      // reflect only columns explicitly published by the SQL view. Alpha stays
+      // `null` because there is no public alpha proof contract.
+      arena_score_v3: nullableFiniteNumber(row.arena_score_v3),
+      sortino_ratio: nullableFiniteNumber(row.sortino_ratio),
+      calmar_ratio: nullableFiniteNumber(row.calmar_ratio),
+      alpha: null,
+      trading_style: typeof row.trading_style === 'string' ? row.trading_style : null,
+    }))
+
+    const response: V2RankingsResponse = {
+      traders,
+      meta: {
+        platform,
+        market_type: responseMarketType,
+        window,
+        total_count: null,
+        total_count_is_exact: false,
+        has_more: rawRows.length > limit,
+        updated_at: freshnessSummary.asOf,
+        staleness_seconds: freshnessSummary.ageSeconds,
+        is_stale: freshnessSummary.isStale,
+        source_freshness: freshnessSummary.sources,
+        sort,
+        limit,
+        offset,
+      },
+    }
+    return jsonResponse(response)
   },
   { name: 'v2-rankings' }
 )

@@ -7,6 +7,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260816151614_public_ranked_leaderboard.sql"
+SOURCE_FRESHNESS_MIGRATION="$ROOT_DIR/supabase/migrations/20260816184500_public_ranked_leaderboard_source_freshness_gate.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -21,6 +22,10 @@ if [[ "$("$PG_BIN/psql" --version)" != psql\ \(PostgreSQL\)\ 17.* ]]; then
 fi
 if [[ ! -f "$MIGRATION" ]]; then
   echo "Required migration not found: $MIGRATION" >&2
+  exit 1
+fi
+if [[ ! -f "$SOURCE_FRESHNESS_MIGRATION" ]]; then
+  echo "Required source freshness migration not found: $SOURCE_FRESHNESS_MIGRATION" >&2
   exit 1
 fi
 
@@ -498,3 +503,531 @@ rg -q 'permission denied for function leaderboard_rank_row_is_public_eligible' "
   sed -n '1,100p' "$ERROR_FILE" >&2
   exit 1
 }
+
+
+# ---------------------------------------------------------------------------
+# Constant-time sealed serving authority successor. This fixture exposes the
+# same protocol edge as the real full seal: immutable receipt -> local cohort
+# marker -> all-source freshness UPSERT. The migration must capture only that
+# same transaction and public reads must not call the full proof.
+# ---------------------------------------------------------------------------
+
+psql_db -q <<'SQL'
+ALTER ROLE service_role BYPASSRLS;
+
+ALTER TABLE public.leaderboard_ranks
+  ADD COLUMN rank_publication_id uuid;
+
+CREATE TABLE public.leaderboard_source_freshness (
+  season_id text NOT NULL,
+  source text NOT NULL,
+  source_as_of timestamptz NOT NULL,
+  recorded_at timestamptz NOT NULL,
+  score_cohort_id uuid,
+  rank_mutation_seq bigint,
+  published_rank_count integer,
+  published_identity_sha256 text,
+  PRIMARY KEY (season_id, source)
+);
+ALTER TABLE public.leaderboard_source_freshness ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "leaderboard_source_freshness_public_read"
+  ON public.leaderboard_source_freshness FOR SELECT USING (true);
+GRANT SELECT ON public.leaderboard_source_freshness TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.leaderboard_source_freshness TO service_role;
+
+CREATE TABLE arena.leaderboard_rank_mutation_fences (
+  season_id text NOT NULL,
+  source text NOT NULL,
+  mutation_seq bigint NOT NULL,
+  PRIMARY KEY (season_id, source)
+);
+
+CREATE TABLE arena.leaderboard_rank_publications (
+  id uuid PRIMARY KEY,
+  season_id text NOT NULL,
+  request_sha256 text NOT NULL,
+  source_count integer NOT NULL,
+  trader_count integer NOT NULL,
+  proofs jsonb NOT NULL,
+  published_at timestamptz NOT NULL,
+  UNIQUE (id, season_id)
+);
+ALTER TABLE arena.leaderboard_rank_publications ENABLE ROW LEVEL SECURITY;
+
+-- Fixture receipts mirror the production immutable publication contract.
+
+CREATE FUNCTION arena.reject_leaderboard_rank_publication_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $fixture_function$
+BEGIN
+  RAISE EXCEPTION 'leaderboard publication receipts are immutable'
+    USING ERRCODE = '55000';
+END;
+$fixture_function$;
+ALTER FUNCTION arena.reject_leaderboard_rank_publication_mutation() OWNER TO postgres;
+REVOKE ALL ON FUNCTION arena.reject_leaderboard_rank_publication_mutation()
+  FROM PUBLIC, anon, authenticated, service_role, rogue_reader;
+CREATE TRIGGER leaderboard_rank_publication_immutable
+BEFORE UPDATE OR DELETE ON arena.leaderboard_rank_publications
+FOR EACH ROW
+EXECUTE FUNCTION arena.reject_leaderboard_rank_publication_mutation();
+
+UPDATE arena.sources SET status = 'inactive' WHERE slug = 'active_source';
+INSERT INTO arena.sources (slug, exchange_id, status, serving_mode, seasons)
+VALUES
+  ('seal_alpha', 1, 'active', 'serving', ARRAY['30D']::text[]),
+  ('seal_beta', 1, 'active', 'serving', ARRAY['30D']::text[]),
+  ('stale_exact', 1, 'active', 'serving', ARRAY['7D']::text[]),
+  ('lease_source', 1, 'active', 'serving', ARRAY['90D']::text[]);
+
+CREATE FUNCTION public.arena_leaderboard_publication_proofs(
+  p_season_id text,
+  p_sources text[]
+)
+RETURNS TABLE (
+  season_id text,
+  source text,
+  source_as_of timestamptz,
+  recorded_at timestamptz,
+  score_cohort_id uuid,
+  rank_mutation_seq bigint,
+  current_mutation_seq bigint,
+  published_rank_count integer,
+  published_identity_sha256 text,
+  is_sealed boolean
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT p_season_id, requested.source, freshness.source_as_of,
+    freshness.recorded_at, freshness.score_cohort_id,
+    freshness.rank_mutation_seq, COALESCE(fence.mutation_seq, 0),
+    freshness.published_rank_count, freshness.published_identity_sha256, false
+  FROM pg_catalog.unnest(p_sources) AS requested(source)
+  LEFT JOIN public.leaderboard_source_freshness AS freshness
+    ON freshness.season_id = p_season_id AND freshness.source = requested.source
+  LEFT JOIN arena.leaderboard_rank_mutation_fences AS fence
+    ON fence.season_id = p_season_id AND fence.source = requested.source;
+$function$;
+ALTER FUNCTION public.arena_leaderboard_publication_proofs(text, text[]) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.arena_leaderboard_publication_proofs(text, text[])
+  FROM PUBLIC, anon, authenticated, service_role, rogue_reader;
+GRANT EXECUTE ON FUNCTION public.arena_leaderboard_publication_proofs(text, text[])
+  TO service_role;
+
+CREATE FUNCTION public.seal_leaderboard_rank_publication(
+  p_season_id text,
+  p_score_cohort_id uuid,
+  p_source_publications jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_expected text[];
+  v_count integer;
+  v_published_at timestamptz := pg_catalog.statement_timestamp();
+  v_proofs jsonb;
+BEGIN
+  SELECT pg_catalog.array_agg(authority.source ORDER BY authority.source COLLATE "C")
+  INTO v_expected
+  FROM (
+    SELECT DISTINCT expected.filter_source COLLATE "C" AS source
+    FROM public.arena_freshness_expected_sources() AS expected
+    WHERE expected.season_id = p_season_id
+  ) AS authority;
+  v_count := pg_catalog.cardinality(v_expected);
+
+  IF p_score_cohort_id IS NULL
+     OR v_count NOT BETWEEN 1 AND 256
+     OR p_source_publications IS NULL
+     OR pg_catalog.jsonb_typeof(p_source_publications) <> 'array'
+     OR pg_catalog.jsonb_array_length(p_source_publications) IS DISTINCT FROM v_count
+     OR EXISTS (
+       SELECT authority.source FROM pg_catalog.unnest(v_expected) AS authority(source)
+       EXCEPT
+       SELECT item.value->>'source'
+       FROM pg_catalog.jsonb_array_elements(p_source_publications) AS item(value)
+     )
+     OR EXISTS (
+       SELECT item.value->>'source'
+       FROM pg_catalog.jsonb_array_elements(p_source_publications) AS item(value)
+       EXCEPT
+       SELECT pg_catalog.unnest(v_expected)
+     )
+     OR EXISTS (
+       SELECT 1
+       FROM public.leaderboard_ranks AS rank_row
+       JOIN pg_catalog.unnest(v_expected) AS authority(source)
+         ON authority.source = rank_row.source
+       WHERE rank_row.season_id = p_season_id
+         AND rank_row.rank_publication_id IS DISTINCT FROM p_score_cohort_id
+     ) THEN
+    RAISE EXCEPTION 'fixture full seal validation failed' USING ERRCODE = '23514';
+  END IF;
+
+  INSERT INTO arena.leaderboard_rank_mutation_fences (season_id, source, mutation_seq)
+  SELECT p_season_id, authority.source, 0
+  FROM pg_catalog.unnest(v_expected) AS authority(source)
+  ON CONFLICT (season_id, source) DO NOTHING;
+
+  WITH requested AS (
+    SELECT item.value->>'source' AS source,
+      (item.value->>'source_as_of')::timestamptz AS source_as_of
+    FROM pg_catalog.jsonb_array_elements(p_source_publications) AS item(value)
+  ),
+  proof_rows AS (
+    SELECT requested.source, requested.source_as_of, fence.mutation_seq,
+      (SELECT pg_catalog.count(*)::integer
+       FROM public.leaderboard_ranks AS rank_row
+       WHERE rank_row.season_id = p_season_id
+         AND rank_row.source = requested.source) AS published_rank_count
+    FROM requested
+    JOIN arena.leaderboard_rank_mutation_fences AS fence
+      ON fence.season_id = p_season_id AND fence.source = requested.source
+  )
+  SELECT pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'source', proof.source,
+      'source_as_of', pg_catalog.to_char(
+        proof.source_as_of AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      ),
+      'recorded_at', pg_catalog.to_char(
+        v_published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      ),
+      'score_cohort_id', p_score_cohort_id,
+      'rank_mutation_seq', proof.mutation_seq,
+      'published_rank_count', proof.published_rank_count,
+      'published_identity_sha256', repeat('a', 64)
+    )
+    ORDER BY proof.source COLLATE "C"
+  )
+  INTO STRICT v_proofs
+  FROM proof_rows AS proof;
+
+  INSERT INTO arena.leaderboard_rank_publications (
+    id, season_id, request_sha256, source_count, trader_count, proofs, published_at
+  )
+  SELECT p_score_cohort_id, p_season_id, repeat('a', 64), v_count,
+    pg_catalog.count(*)::integer, v_proofs, v_published_at
+  FROM public.leaderboard_ranks AS rank_row
+  JOIN pg_catalog.unnest(v_expected) AS authority(source)
+    ON authority.source = rank_row.source
+  WHERE rank_row.season_id = p_season_id;
+
+  PERFORM pg_catalog.set_config(
+    'arena.leaderboard_seal_cohort', p_score_cohort_id::text, true
+  );
+
+  INSERT INTO public.leaderboard_source_freshness (
+    season_id, source, source_as_of, recorded_at, score_cohort_id,
+    rank_mutation_seq, published_rank_count, published_identity_sha256
+  )
+  SELECT p_season_id, proof.value->>'source',
+    (proof.value->>'source_as_of')::timestamptz, v_published_at,
+    p_score_cohort_id, (proof.value->>'rank_mutation_seq')::bigint,
+    (proof.value->>'published_rank_count')::integer,
+    proof.value->>'published_identity_sha256'
+  FROM pg_catalog.jsonb_array_elements(v_proofs) AS proof(value)
+  ON CONFLICT (season_id, source) DO UPDATE
+  SET source_as_of = EXCLUDED.source_as_of,
+      recorded_at = EXCLUDED.recorded_at,
+      score_cohort_id = EXCLUDED.score_cohort_id,
+      rank_mutation_seq = EXCLUDED.rank_mutation_seq,
+      published_rank_count = EXCLUDED.published_rank_count,
+      published_identity_sha256 = EXCLUDED.published_identity_sha256;
+
+  RETURN pg_catalog.jsonb_build_object('is_sealed', true);
+END;
+$function$;
+ALTER FUNCTION public.seal_leaderboard_rank_publication(text, uuid, jsonb) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.seal_leaderboard_rank_publication(text, uuid, jsonb)
+  FROM PUBLIC, anon, authenticated, service_role, rogue_reader;
+GRANT EXECUTE ON FUNCTION public.seal_leaderboard_rank_publication(text, uuid, jsonb)
+  TO service_role;
+
+INSERT INTO public.leaderboard_ranks (
+  id, season_id, source, source_type, source_trader_id, rank, arena_score,
+  roi, pnl, win_rate, max_drawdown, computed_at, score_completeness,
+  is_outlier, metrics_estimated, rank_publication_id
+)
+VALUES
+  (101, '30D', 'seal_alpha', 'futures', 'alpha-one', 1, 100,
+   10, 100, 60, 10, statement_timestamp(), 'full', false, false,
+   '11111111-1111-4111-8111-111111111111'::uuid),
+  -- Same cohort, but source is absent from captured authority.
+  (102, '30D', 'outsider', 'futures', 'outsider-one', 2, 95,
+   10, 100, 60, 10, statement_timestamp(), 'full', false, false,
+   '11111111-1111-4111-8111-111111111111'::uuid),
+  (103, '30D', 'seal_beta', 'futures', 'beta-one', 3, 90,
+   10, 100, 60, 10, statement_timestamp(), 'full', false, false,
+   '11111111-1111-4111-8111-111111111111'::uuid),
+  (104, '30D', 'seal_alpha', 'futures', 'alpha-two', 4, 80,
+   10, 100, 60, 10, statement_timestamp(), 'full', false, false,
+   '11111111-1111-4111-8111-111111111111'::uuid),
+  (201, '7D', 'stale_exact', 'futures', 'stale-exact', 1, 90,
+   10, 100, 60, 10, statement_timestamp(), 'full', false, false,
+   '77777777-7777-4777-8777-777777777777'::uuid),
+  (301, '90D', 'lease_source', 'futures', 'lease-one', 1, 90,
+   10, 100, 60, 10, statement_timestamp(), 'full', false, false,
+   '88888888-8888-4888-8888-888888888888'::uuid);
+SQL
+
+psql_db -q -f "$SOURCE_FRESHNESS_MIGRATION"
+
+seal_30d() {
+  local cohort="$1"
+  local age="$2"
+  psql_db -q -c "
+    SELECT public.seal_leaderboard_rank_publication(
+      '30D', '$cohort'::uuid,
+      pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object(
+          'source', 'seal_alpha',
+          'source_as_of', pg_catalog.statement_timestamp() - interval '$age'
+        ),
+        pg_catalog.jsonb_build_object(
+          'source', 'seal_beta',
+          'source_as_of', pg_catalog.statement_timestamp() - interval '$age'
+        )
+      )
+    );"
+}
+
+seal_30d '11111111-1111-4111-8111-111111111111' '1 hour'
+psql_db -q <<'SQL'
+SELECT public.seal_leaderboard_rank_publication(
+  '7D', '77777777-7777-4777-8777-777777777777'::uuid,
+  pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+    'source', 'stale_exact',
+    'source_as_of', pg_catalog.statement_timestamp() - interval '48 hours'
+  ))
+);
+SELECT public.seal_leaderboard_rank_publication(
+  '90D', '88888888-8888-4888-8888-888888888888'::uuid,
+  pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+    'source', 'lease_source',
+    'source_as_of', pg_catalog.statement_timestamp() + interval '5 minutes'
+  ))
+);
+SQL
+
+VISIBLE_30D="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT COALESCE(string_agg(source_trader_id, ',' ORDER BY rank), '')
+  FROM public.public_ranked_leaderboard WHERE season_id = '30D';")"
+assert_equal "sealed head exposes only exact expected source cohorts" \
+  "alpha-one,beta-one,alpha-two" "$VISIBLE_30D"
+
+OFFSET_30D="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT source_trader_id FROM public.public_ranked_leaderboard
+  WHERE season_id = '30D' ORDER BY rank OFFSET 1 LIMIT 1;")"
+assert_equal "all authority filters run before caller pagination" "beta-one" "$OFFSET_30D"
+
+STALE_7D="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT count(*) FROM public.public_ranked_leaderboard WHERE season_id = '7D';")"
+assert_equal "exact 48h source freshness is expired" "0" "$STALE_7D"
+
+LEASE_BOUNDS="$(psql_db -Atqc "
+  SELECT
+    EXISTS (
+      SELECT 1 FROM arena.public_ranked_leaderboard_serving_seasons((
+        SELECT source_as_of - interval '5 minutes'
+        FROM public.leaderboard_source_freshness
+        WHERE season_id = '90D' AND source = 'lease_source'
+      )) WHERE season_id = '90D'
+    )::text || '|' ||
+    EXISTS (
+      SELECT 1 FROM arena.public_ranked_leaderboard_serving_seasons((
+        SELECT source_as_of - interval '5 minutes 1 microsecond'
+        FROM public.leaderboard_source_freshness
+        WHERE season_id = '90D' AND source = 'lease_source'
+      )) WHERE season_id = '90D'
+    )::text || '|' ||
+    EXISTS (
+      SELECT 1 FROM arena.public_ranked_leaderboard_serving_seasons((
+        SELECT rank_valid_until + interval '1 microsecond'
+        FROM arena.public_ranked_leaderboard_serving_heads WHERE season_id = '90D'
+      )) WHERE season_id = '90D'
+    )::text;")"
+assert_equal "future bound is inclusive and computed lease expiry is fail-closed" \
+  "true|false|false" "$LEASE_BOUNDS"
+
+ACL_CONTRACT="$(psql_db -Atqc "
+  SELECT
+    has_function_privilege('anon',
+      'public.arena_leaderboard_publication_proofs(text,text[])', 'EXECUTE')::text
+    || '|' || has_function_privilege('authenticated',
+      'public.arena_leaderboard_publication_proofs(text,text[])', 'EXECUTE')::text
+    || '|' || has_function_privilege('service_role',
+      'public.arena_leaderboard_publication_proofs(text,text[])', 'EXECUTE')::text
+    || '|' || has_function_privilege('anon',
+      'arena.public_ranked_leaderboard_serving_seasons(timestamp with time zone)',
+      'EXECUTE')::text
+    || '|' || has_table_privilege('anon',
+      'public.leaderboard_source_freshness', 'SELECT')::text
+    || '|' || has_table_privilege('anon',
+      'arena.public_ranked_leaderboard_serving_heads', 'SELECT')::text;")"
+assert_equal "full proof/source tokens remain private; season capability is callable" \
+  "false|false|true|true|false|false" "$ACL_CONTRACT"
+
+# A raw marker on a historical publication cannot repopulate a deleted head.
+psql_db -q <<'SQL'
+DELETE FROM ONLY arena.public_ranked_leaderboard_serving_heads WHERE season_id = '30D';
+BEGIN;
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config(
+  'arena.leaderboard_seal_cohort',
+  '11111111-1111-4111-8111-111111111111',
+  true
+);
+UPDATE public.leaderboard_source_freshness
+SET recorded_at = recorded_at
+WHERE season_id = '30D' AND source = 'seal_alpha';
+COMMIT;
+SQL
+
+RAW_BACKFILL="$(psql_db -Atqc "
+  SELECT count(*) FROM ONLY arena.public_ranked_leaderboard_serving_heads
+  WHERE season_id = '30D';")"
+assert_equal "historical receipt plus raw marker cannot establish a head" "0" "$RAW_BACKFILL"
+
+psql_db -q <<'SQL'
+UPDATE public.leaderboard_ranks
+SET rank_publication_id = '22222222-2222-4222-8222-222222222222'::uuid
+WHERE season_id = '30D' AND source IN ('seal_alpha', 'seal_beta');
+SQL
+seal_30d '22222222-2222-4222-8222-222222222222' '30 minutes'
+
+RESEALED="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT count(*) FROM public.public_ranked_leaderboard WHERE season_id = '30D';")"
+assert_equal "new actual seal restores the season head" "3" "$RESEALED"
+
+# A freshness tuple drift invalidates the complete globally ordered season.
+psql_db -q <<'SQL'
+UPDATE public.leaderboard_source_freshness
+SET source_as_of = statement_timestamp() - interval '5 minutes'
+WHERE season_id = '30D' AND source = 'seal_beta';
+SQL
+FRESHNESS_DRIFT="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT count(*) FROM public.public_ranked_leaderboard WHERE season_id = '30D';")"
+assert_equal "one source proof drift hides every source in the season" "0" "$FRESHNESS_DRIFT"
+
+psql_db -q <<'SQL'
+UPDATE public.leaderboard_ranks
+SET rank_publication_id = '33333333-3333-4333-8333-333333333333'::uuid
+WHERE season_id = '30D' AND source IN ('seal_alpha', 'seal_beta');
+SQL
+seal_30d '33333333-3333-4333-8333-333333333333' '10 minutes'
+
+# Beta DML must invalidate alpha too, because rank ordering is season-global.
+psql_db -q <<'SQL'
+UPDATE public.leaderboard_ranks
+SET handle = 'Beta changed'
+WHERE season_id = '30D' AND source = 'seal_beta';
+SQL
+OTHER_SOURCE_DML="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT count(*) FROM public.public_ranked_leaderboard
+  WHERE season_id = '30D' AND source = 'seal_alpha';")"
+assert_equal "other-source rank DML invalidates the full season" "0" "$OTHER_SOURCE_DML"
+
+psql_db -q <<'SQL'
+UPDATE public.leaderboard_ranks
+SET rank_publication_id = '44444444-4444-4444-8444-444444444444'::uuid
+WHERE season_id = '30D' AND source IN ('seal_alpha', 'seal_beta');
+SQL
+seal_30d '44444444-4444-4444-8444-444444444444' '5 minutes'
+psql_db -q <<'SQL'
+INSERT INTO arena.sources (slug, exchange_id, status, serving_mode, seasons)
+VALUES ('registry_drift', 1, 'active', 'serving', ARRAY['30D']::text[]);
+SQL
+
+REGISTRY_DRIFT="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT count(*) FROM public.public_ranked_leaderboard WHERE season_id = '30D';")"
+assert_equal "registry source-set drift invalidates the whole head" "0" "$REGISTRY_DRIFT"
+
+psql_db -q <<'SQL'
+DELETE FROM arena.sources WHERE slug = 'registry_drift';
+SQL
+REGISTRY_RESTORED="$(psql_db -Atqc "
+  SET ROLE anon;
+  SELECT COALESCE(string_agg(source_trader_id, ',' ORDER BY rank), '')
+  FROM public.public_ranked_leaderboard WHERE season_id = '30D';")"
+assert_equal "exact registry restoration revalidates the sealed head" \
+  "alpha-one,beta-one,alpha-two" "$REGISTRY_RESTORED"
+
+VIEW_CONTRACT="$(psql_db -Atqc "
+  SELECT
+    (relation.reloptions @> ARRAY[
+      'security_barrier=true', 'security_invoker=false'
+    ]::text[])::text || '|' ||
+    EXISTS (
+      SELECT 1 FROM pg_catalog.pg_attribute AS attribute
+      WHERE attribute.attrelid = 'public.public_ranked_leaderboard'::regclass
+        AND attribute.attname = 'rank_publication_id'
+        AND attribute.attnum > 0 AND NOT attribute.attisdropped
+    )::text
+  FROM pg_catalog.pg_class AS relation
+  WHERE relation.oid = 'public.public_ranked_leaderboard'::regclass;")"
+assert_equal "public view keeps barrier and omits cohort token" "true|false" "$VIEW_CONTRACT"
+
+VIEW_PLAN="$(psql_db -Atqc "
+  EXPLAIN (COSTS OFF)
+  SELECT source_trader_id FROM public.public_ranked_leaderboard
+  WHERE season_id = '30D' ORDER BY rank LIMIT 25;")"
+if [[ "$VIEW_PLAN" == *"arena_leaderboard_publication_proofs"* || \
+      "$VIEW_PLAN" == *"WindowAgg"* ]]; then
+  echo "public serving plan unexpectedly invokes the full-proof/window path" >&2
+  exit 1
+fi
+
+set +e
+psql_db -q >"$ERROR_FILE" 2>&1 <<'SQL'
+SET ROLE anon;
+SELECT * FROM public.arena_leaderboard_publication_proofs(
+  '30D', ARRAY['seal_alpha', 'seal_beta']::text[]
+);
+SQL
+DIRECT_PROOF_STATUS=$?
+set -e
+if ((DIRECT_PROOF_STATUS == 0)); then
+  echo "anon unexpectedly executed the full publication proof" >&2
+  exit 1
+fi
+rg -q 'permission denied for function arena_leaderboard_publication_proofs' "$ERROR_FILE" || {
+  echo "full proof denial failed for an unexpected reason" >&2
+  sed -n '1,120p' "$ERROR_FILE" >&2
+  exit 1
+}
+
+set +e
+psql_db -q >"$ERROR_FILE" 2>&1 <<'SQL'
+SET ROLE anon;
+SELECT * FROM public.leaderboard_source_freshness;
+SQL
+DIRECT_FRESHNESS_STATUS=$?
+set -e
+if ((DIRECT_FRESHNESS_STATUS == 0)); then
+  echo "anon unexpectedly read source proof tuples" >&2
+  exit 1
+fi
+rg -q 'permission denied for table leaderboard_source_freshness' "$ERROR_FILE" || {
+  echo "source tuple denial failed for an unexpected reason" >&2
+  sed -n '1,120p' "$ERROR_FILE" >&2
+  exit 1
+}
+
+echo "public ranked leaderboard PG17 proof passed"

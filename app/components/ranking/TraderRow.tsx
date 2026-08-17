@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { Box } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { Trader } from './RankingTable'
+import { normalizeFiniteScore, normalizeTraderArenaScoreForPresentation } from './RankingTableTypes'
 import type { SourceInfo } from './utils'
 import { formatDisplayName } from './utils'
 import { RankDisplay, ArenaScoreCircle, areTraderPropsEqual } from './shared/TraderDisplay'
@@ -98,6 +99,15 @@ export const TraderRow = memo(
     roiSpark,
   }: TraderRowProps) {
     const { t } = useLanguage()
+    // A row can also be rendered outside RankingTable, so keep the score
+    // boundary here as well before handing props to visual score components.
+    const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
+    const presentationScore = presentationTrader.arena_score
+    const profitabilityScore = normalizeFiniteScore(trader.profitability_score)
+    const riskControlScore = normalizeFiniteScore(trader.risk_control_score)
+    const executionScore = normalizeFiniteScore(trader.execution_score)
+    const hasFiniteBreakdownScore =
+      profitabilityScore != null || riskControlScore != null || executionScore != null
     const traderHandle = trader.handle || trader.id
     const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
     const displayName =
@@ -184,6 +194,10 @@ export const TraderRow = memo(
             : undefined
 
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${href}` : href
+    const roiAria =
+      trader.roi != null && Number.isFinite(trader.roi)
+        ? `ROI ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(2)}%`
+        : 'ROI unknown'
 
     return (
       <>
@@ -247,7 +261,7 @@ export const TraderRow = memo(
             prefetch={false}
             className="ranking-row-link"
             style={{ ...LINK_BASE_STYLE, '--row-index': rank } as React.CSSProperties}
-            aria-label={`#${rank} ${displayName}, ROI ${Number(trader.roi ?? 0) >= 0 ? '+' : ''}${Number(trader.roi ?? 0).toFixed(2)}%`}
+            aria-label={`#${rank} ${displayName}, ${roiAria}`}
             tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === ' ') {
@@ -292,16 +306,16 @@ export const TraderRow = memo(
                 <div style={SCORE_CELL_STACK_STYLE}>
                   <div style={SCORE_CELL_ROW_STYLE}>
                     <ArenaScoreCircle
-                      score={trader.arena_score}
+                      score={presentationScore}
                       roi={trader.roi}
                       pnl={trader.pnl}
                       showConfidence
-                      trader={trader}
+                      trader={presentationTrader}
                     />
-                    <ScoreBreakdownTooltip trader={trader} language={language} />
+                    <ScoreBreakdownTooltip trader={presentationTrader} language={language} />
                   </div>
-                  {trader.arena_score != null && (
-                    <ScoreMiniBar score={Number(trader.arena_score)} width={44} height={4} />
+                  {presentationScore != null && (
+                    <ScoreMiniBar score={presentationScore} width={44} height={4} />
                   )}
                 </div>
               </Box>
@@ -320,51 +334,48 @@ export const TraderRow = memo(
           </Link>
 
           {/* The expand control is a sibling of the row link, not a nested button. */}
-          {onToggleExpand &&
-            (trader.profitability_score != null ||
-              trader.risk_control_score != null ||
-              trader.execution_score != null) && (
-              <button
-                type="button"
-                onClick={(e: React.MouseEvent) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onToggleExpand(trader.id)
-                }}
-                aria-label={t('expandScoreDetails')}
-                aria-expanded={isExpanded}
-                style={EXPAND_BTN_STYLE}
-                className="expand-btn"
-                title={t('expandScoreDetails')}
+          {onToggleExpand && hasFiniteBreakdownScore && (
+            <button
+              type="button"
+              onClick={(e: React.MouseEvent) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onToggleExpand(trader.id)
+              }}
+              aria-label={t('expandScoreDetails')}
+              aria-expanded={isExpanded}
+              style={EXPAND_BTN_STYLE}
+              className="expand-btn"
+              title={t('expandScoreDetails')}
+            >
+              <svg
+                width={10}
+                height={10}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                style={isExpanded ? CHEVRON_EXPANDED_STYLE : CHEVRON_COLLAPSED_STYLE}
               >
-                <svg
-                  width={10}
-                  height={10}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  style={isExpanded ? CHEVRON_EXPANDED_STYLE : CHEVRON_COLLAPSED_STYLE}
-                >
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-            )}
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          )}
 
           {/* Expanded Score Breakdown */}
           {isExpanded && (
             <ScoreBreakdownLazy
-              profitability_score={trader.profitability_score}
-              risk_control_score={trader.risk_control_score}
-              execution_score={trader.execution_score}
+              profitability_score={profitabilityScore}
+              risk_control_score={riskControlScore}
+              execution_score={executionScore}
               score_completeness={trader.score_completeness}
-              max_drawdown={trader.max_drawdown}
-              win_rate={trader.win_rate}
-              roi={trader.roi}
-              arena_score={trader.arena_score}
+              max_drawdown={normalizeFiniteScore(trader.max_drawdown)}
+              win_rate={normalizeFiniteScore(trader.win_rate)}
+              roi={normalizeFiniteScore(trader.roi)}
+              arena_score={presentationScore}
             />
           )}
         </TraderRowSwipeActions>

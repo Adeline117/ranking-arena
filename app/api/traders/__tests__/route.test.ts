@@ -1,6 +1,6 @@
 /**
  * /api/traders 路由参数验证测试
- * 
+ *
  * 测试 URL 参数解析和验证逻辑
  */
 
@@ -25,26 +25,25 @@ describe('/api/traders parameter validation', () => {
     const SORT_COLUMN: Record<string, string> = {
       arena_score: 'arena_score',
       roi: 'roi',
+      pnl: 'pnl',
       win_rate: 'win_rate',
       max_drawdown: 'max_drawdown',
+      sortino_ratio: 'sortino_ratio',
     }
 
-    it('should accept valid sort columns', () => {
-      for (const col of Object.keys(SORT_COLUMN)) {
-        expect(SORT_COLUMN[col]).toBeDefined()
-      }
+    it('documents the six public-view sort columns', () => {
+      expect(Object.keys(SORT_COLUMN)).toEqual([
+        'arena_score',
+        'roi',
+        'pnl',
+        'win_rate',
+        'max_drawdown',
+        'sortino_ratio',
+      ])
     })
 
-    it('should fallback to arena_score for invalid sort', () => {
-      const sortBy = 'invalid_column'
-      const sortColumn = SORT_COLUMN[sortBy] || 'arena_score'
-      expect(sortColumn).toBe('arena_score')
-    })
-
-    it('should fallback to arena_score when null', () => {
-      const sortBy = null
-      const effectiveSortBy = sortBy || 'arena_score'
-      expect(effectiveSortBy).toBe('arena_score')
+    it('keeps alpha outside the public sort contract', () => {
+      expect(SORT_COLUMN).not.toHaveProperty('alpha')
     })
   })
 
@@ -123,7 +122,14 @@ describe('/api/traders parameter validation', () => {
 
   describe('cache key generation', () => {
     it('should generate unique cache keys for different params', () => {
-      const buildKey = (timeRange: string, exchange: string | null, sortBy: string, order: string, cursor: string | null, limit: number) =>
+      const buildKey = (
+        timeRange: string,
+        exchange: string | null,
+        sortBy: string,
+        order: string,
+        cursor: string | null,
+        limit: number
+      ) =>
         `leaderboard:${timeRange}:${exchange || 'all'}:${sortBy}:${order}:${cursor || 'start'}:${limit}`
 
       const key1 = buildKey('90D', null, 'arena_score', 'desc', null, 50)
