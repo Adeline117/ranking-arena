@@ -82,9 +82,9 @@ const SKIP_ROUTE_PREFIXES = ['/_next', '/favicon.ico', '/api/health']
 const CRON_ROUTE_PREFIXES = ['/api/cron', '/api/v1/cron'] as const
 
 // Exact route handoffs that own their response contract. In particular, the
-// retired Phemex acquisition route, referral-attribution hold, and public
-// avatar compatibility route must reply before any global Redis rate limit or
-// bot guard can intervene.
+// retired Phemex acquisition route, referral-attribution hold, public avatar
+// compatibility route, and code-quality evaluator hold must reply before any
+// global Redis rate limit or bot guard can intervene.
 const SKIP_EXACT_ROUTES = new Set(['/api/proxy/phemex'])
 const AVATAR_PROXY_BYPASS_PATHS = new Set(['/api/avatar', '/api/v1/avatar'])
 const REFERRAL_PROGRAM_BYPASS_PATHS = new Set([
@@ -92,6 +92,10 @@ const REFERRAL_PROGRAM_BYPASS_PATHS = new Set([
   '/api/referral/apply',
   '/api/v1/referral',
   '/api/v1/referral/apply',
+])
+const HEALTH_EVALUATE_REPORT_BYPASS_PATHS = new Set([
+  '/api/health/evaluate-report',
+  '/api/v1/health/evaluate-report',
 ])
 
 // ============================================
@@ -287,11 +291,16 @@ export function isReferralProgramProxyBypassPath(pathname: string): boolean {
   return REFERRAL_PROGRAM_BYPASS_PATHS.has(pathname)
 }
 
+export function isHealthEvaluateReportProxyBypassPath(pathname: string): boolean {
+  return HEALTH_EVALUATE_REPORT_BYPASS_PATHS.has(pathname)
+}
+
 export function shouldSkip(pathname: string): boolean {
   return (
     SKIP_EXACT_ROUTES.has(pathname) ||
     isAvatarProxyBypassPath(pathname) ||
     isReferralProgramProxyBypassPath(pathname) ||
+    isHealthEvaluateReportProxyBypassPath(pathname) ||
     SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route)) ||
     isCronProxyBypassPath(pathname)
   )
@@ -455,7 +464,8 @@ async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextRes
     !pathname.startsWith('/api/') ||
     isCronProxyBypassPath(pathname) ||
     isAvatarProxyBypassPath(pathname) ||
-    isReferralProgramProxyBypassPath(pathname)
+    isReferralProgramProxyBypassPath(pathname) ||
+    isHealthEvaluateReportProxyBypassPath(pathname)
   ) {
     return null
   }

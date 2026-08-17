@@ -410,20 +410,32 @@ database、cache、provider 或 network 工作前结束。这只是 source-only 
 
 ## 11. 工具与其他
 
-| 路由                         | 方法                | 描述                                                                                                                                                                   | 认证       |
-| ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `/api/health`                | GET                 | 健康检查                                                                                                                                                               | 否         |
-| `/api/health/detailed`       | GET                 | 详细健康状态                                                                                                                                                           | 否         |
-| `/api/proxy/phemex`          | GET                 | V1 legacy proxy acquisition auth-first hold；无效认证 `401`，有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`；三层 `no-store`，不解析 URL/query、不 fetch 或 log | Cron Token |
-| `/api/hooks/post-deploy`     | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估                                    | Cron Token |
-| `/api/translate`             | POST                | 翻译服务                                                                                                                                                               | 是         |
-| `/api/settings/export`       | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                                                                  | 是 + CSRF  |
-| `/api/saved-filters`         | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                                                     | 是         |
-| `/api/search/suggestions`    | GET                 | 搜索建议                                                                                                                                                               | 否         |
-| `/api/portfolio/suggestions` | GET                 | 已下线；所有 tier 固定返回 403                                                                                                                                         | 不适用     |
+| 路由                          | 方法                | 描述                                                                                                                                                                   | 认证       |
+| ----------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/health`                 | GET                 | 健康检查                                                                                                                                                               | 否         |
+| `/api/health/detailed`        | GET                 | 详细健康状态                                                                                                                                                           | 否         |
+| `/api/health/evaluate-report` | GET                 | V1 source-only evaluator hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query 或执行评估工作              | Cron Token |
+| `/api/proxy/phemex`           | GET                 | V1 legacy proxy acquisition auth-first hold；无效认证 `401`，有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`；三层 `no-store`，不解析 URL/query、不 fetch 或 log | Cron Token |
+| `/api/hooks/post-deploy`      | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估                                    | Cron Token |
+| `/api/translate`              | POST                | 翻译服务                                                                                                                                                               | 是         |
+| `/api/settings/export`        | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                                                                  | 是 + CSRF  |
+| `/api/saved-filters`          | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                                                     | 是         |
+| `/api/search/suggestions`     | GET                 | 搜索建议                                                                                                                                                               | 否         |
+| `/api/portfolio/suggestions`  | GET                 | 已下线；所有 tier 固定返回 403                                                                                                                                         | 不适用     |
 
 人类可读 API 文档页面是 `/api-docs`；机器契约保存在仓库
 `docs/openapi.yaml`，不存在 `/api/docs` App Router endpoint。
+
+### V1 health evaluator source boundary
+
+本源码版本中，只有 `GET /api/health/evaluate-report` 使用固定、非环境的
+`V1_CRON_EXECUTION_PUBLISHED=false` gate。它先验证 service secret：缺失或无效时返回
+`401`，有效时固定返回 `410 CRON_EXECUTION_NOT_PUBLISHED`；两种响应都有三层 `no-store`，且在
+query 解析或任何 evaluator state / alert / rate-limit 工作前结束。`/api/v1/health/evaluate-report`
+在 rewrite 前仅作该 exact path 的 proxy handoff，不能扩展到其他 versioned health 路由。
+
+这只是 source-only handler contract，不能停止、检查或证明已部署的 code-quality hook、evaluator、
+alert delivery 或外部 scheduler 的状态。
 
 ---
 
