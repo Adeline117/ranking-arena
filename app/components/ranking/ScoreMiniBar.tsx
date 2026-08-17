@@ -12,6 +12,7 @@
 import React from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { getScoreColorInfo } from '@/lib/utils/score-colors'
+import { normalizeFiniteScore } from './RankingTableTypes'
 
 export interface ScoreMiniBarProps {
   /** Arena score (0–100). */
@@ -34,9 +35,12 @@ export default function ScoreMiniBar({
   className,
   style,
 }: ScoreMiniBarProps) {
-  const rounded = Math.round(score)
-  const pct = Math.max(0, Math.min(score, 100))
-  const color = getScoreColorInfo(score).color
+  const finiteScore = normalizeFiniteScore(score)
+  if (finiteScore == null) return null
+
+  const rounded = Math.round(finiteScore)
+  const pct = Math.max(0, Math.min(finiteScore, 100))
+  const color = getScoreColorInfo(finiteScore).color
 
   return (
     <div

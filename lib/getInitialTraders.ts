@@ -10,31 +10,22 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
-import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
+import { PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS } from '@/lib/data/trader/queries'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import * as cache from '@/lib/cache'
 import {
-  currentScoredSources,
-  type LeaderboardCountCacheRow,
-} from '@/lib/data/leaderboard-count-cache'
-import {
   summarizeSourceFreshness,
   type SourceFreshnessRow,
   type SourceFreshnessSummary,
 } from '@/lib/rankings/source-freshness'
-import { PUBLIC_ACTIVE_RANKING_SOURCES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import {
-  PUBLIC_RANKING_POSTGREST_EXCLUSION,
   PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_QUARANTINED_SOURCES,
   PUBLIC_RANKING_REDIS_TAG,
-  filterPublicRankingRows,
-  filterPublicRankingSources,
   publicRankingCacheKey,
-  publicRankingCountFromCache,
-  sanitizePublicRankingSourcePayload,
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 
 /** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
@@ -43,8 +34,10 @@ export interface InitialTrader {
   handle: string
   /** Persisted publication rank; never inferred from page position. */
   rank: number
-  roi: number
-  pnl: number
+  /** Null is an unknown source metric, never a synthetic zero. */
+  roi: number | null
+  /** Null is an unknown source metric, never a synthetic zero. */
+  pnl: number | null
   win_rate: number | null
   max_drawdown: number | null
   followers: number
@@ -53,7 +46,8 @@ export interface InitialTrader {
   avatar_url: string | null
   /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
   avatar_url_mirror?: string | null
-  arena_score: number
+  /** Null means the source did not publish a score we can safely present. */
+  arena_score: number | null
   /** Sharpe ratio — populated from leaderboard_ranks.sharpe_ratio (DEX/computed
    *  sources); null for CEX that don't supply it. Was dropped by this type so the
    *  SSR card always rendered "—" (audit 2026-07-03). */
@@ -61,11 +55,23 @@ export interface InitialTrader {
   /** Closed trades in the window. Explicit 0 = confirmed zero-trade wallet
    *  ("Holder" — win% undefined by design); null = unknown/not captured. */
   trades_count: number | null
-  score_confidence: ScoreConfidence
+  /** The source did not provide a confidence level. Keep that uncertainty explicit. */
+  score_confidence: ScoreConfidence | null
   /** Rank movement vs previous compute run (+ = climbed) — drives ↑/↓ arrows. */
   rank_change?: number | null
   /** First appearance on the board this run (NEW badge). */
   is_new?: boolean
+  /**
+   * Cache-revalidation evidence copied from the verified cohort view. These
+   * columns are public view fields, not derived UI state: retaining them lets
+   * a Redis payload be rechecked before it can re-enter a ranking surface.
+   */
+  source_trader_id: string
+  season_id: Period
+  score_completeness: 'full'
+  metrics_estimated: false
+  computed_at: string
+  is_outlier: false
 }
 
 /**
@@ -73,15 +79,15 @@ export interface InitialTrader {
  */
 function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
   if (t.rank == null) return null
+  // Never let a legacy aggregator key be relabelled into a public source after
+  // the database cohort has selected it. The verified view already enforces
+  // this; keeping the guard here makes a malformed proxy/cache response fail
+  // closed before the Copin display-only rewrite below can hide its origin.
+  if (!isPublicRankingSourceAllowed(t.platform)) return null
+  if (t.scoreCompleteness !== 'full' || t.metricsEstimated !== false || t.isOutlier) return null
 
-  // For copin aggregator: extract real platform from trader_key (e.g., "hyperliquid:0x..." → "hyperliquid")
-  let displayPlatform = t.platform
-  let displayKey = t.traderKey
-  if (t.platform === 'copin' && t.traderKey?.includes(':')) {
-    const [realPlatform, ...rest] = t.traderKey.split(':')
-    displayPlatform = realPlatform
-    displayKey = rest.join(':')
-  }
+  const displayPlatform = t.platform
+  const displayKey = t.traderKey
 
   const rawHandle = (t.handle && t.handle.trim()) || displayKey
   // Format 0x addresses nicely: 0x880ac484a174... → 0x880a...a174
@@ -94,8 +100,8 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
     id: displayKey,
     handle: displayHandle,
     rank: t.rank,
-    roi: t.roi ?? 0,
-    pnl: t.pnl ?? 0,
+    roi: t.roi,
+    pnl: t.pnl,
     win_rate: t.winRate,
     max_drawdown: t.maxDrawdown,
     followers: t.followers ?? 0,
@@ -103,35 +109,184 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
     source_type: (t.sourceType as 'futures' | 'spot' | 'web3') || 'futures',
     avatar_url: t.avatarUrl,
     avatar_url_mirror: null, // enriched post-fetch via attachAvatarMirrors
-    arena_score: t.arenaScore ?? 0,
+    arena_score: t.arenaScore,
     sharpe: t.sharpeRatio ?? null,
     trades_count: t.tradesCount ?? null,
-    score_confidence: 'full', // leaderboard_ranks only includes confident scores
+    // Do not infer confidence from a rank or from the presence of other fields.
+    // An absent source value is unknown, not "full" confidence.
+    score_confidence:
+      t.scoreConfidence === 'full' ||
+      t.scoreConfidence === 'partial' ||
+      t.scoreConfidence === 'minimal'
+        ? t.scoreConfidence
+        : null,
     rank_change: t.rankChange ?? null,
     is_new: t.isNew === true,
+    // getLeaderboard reads public_ranked_leaderboard, which fixes these
+    // values as part of the database eligibility predicate. Preserve the
+    // values actually observed at that boundary instead of manufacturing
+    // proof constants: a Redis entry must remain independently recheckable
+    // by sanitizePublicRankingPayload on every read.
+    source_trader_id: t.traderKey,
+    season_id: t.period,
+    score_completeness: t.scoreCompleteness,
+    metrics_estimated: t.metricsEstimated,
+    computed_at: t.lastUpdated ?? '',
+    is_outlier: t.isOutlier,
   }
 }
 
 export interface CategoryCounts {
-  all: number
-  futures: number
-  spot: number
-  onchain: number
+  /** Unknown until a same-predicate cohort count authority exists. */
+  all: number | null
+  futures: number | null
+  spot: number | null
+  onchain: number | null
 }
 
 export interface InitialTradersResult {
   traders: InitialTrader[]
   lastUpdated: string | null
   isStale: boolean
-  totalCount: number
+  /** Null means no same-predicate exact count authority is available. */
+  totalCount: number | null
+  /** A total is only displayable as exact when this is true. */
+  totalCountIsExact: boolean
+  /** Determined by an extra row from public_ranked_leaderboard. */
+  hasMore: boolean
   categoryCounts: CategoryCounts
+  /** Category badges are hidden unless this is true. */
+  categoryCountsAreExact: boolean
+  /**
+   * Page-scoped upstream watermarks retained only to re-evaluate a Redis
+   * payload. The client receives the resulting `lastUpdated`/`isStale`, not
+   * this internal proof list.
+   */
+  sourceFreshness: SourceFreshnessRow[]
+}
+
+const UNKNOWN_CATEGORY_COUNTS: CategoryCounts = {
+  all: null,
+  futures: null,
+  spot: null,
+  onchain: null,
+}
+
+function unknownInitialTradersResult(isStale = true): InitialTradersResult {
+  return {
+    traders: [],
+    lastUpdated: null,
+    isStale,
+    totalCount: null,
+    totalCountIsExact: false,
+    hasMore: false,
+    categoryCounts: UNKNOWN_CATEGORY_COUNTS,
+    categoryCountsAreExact: false,
+    sourceFreshness: [],
+  }
+}
+
+function hasPublishedInitialRank(value: unknown): value is InitialTrader {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const rank = (value as { rank?: unknown }).rank
+  return typeof rank === 'number' && Number.isSafeInteger(rank) && rank > 0
+}
+
+function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): boolean {
+  const computedAtMs = Date.parse(value.computed_at)
+  return (
+    Number.isFinite(computedAtMs) &&
+    computedAtMs >= nowMs - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS
+  )
+}
+
+function sanitizeCachedFreshnessRows(value: unknown): SourceFreshnessRow[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((row) => {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) return []
+    const record = row as Record<string, unknown>
+    if (typeof record.source !== 'string' || record.source.length === 0) return []
+    if (record.source_as_of !== null && typeof record.source_as_of !== 'string') return []
+    return [{ source: record.source, source_as_of: record.source_as_of }]
+  })
+}
+
+/**
+ * Redis is an availability cache, never a ranking authority. Re-run the full
+ * row proof before serving it and downgrade all count/paging claims whenever
+ * any row is removed. The strict proof fields are intentionally retained on
+ * InitialTrader for this purpose.
+ */
+function sanitizeInitialTradersResult(
+  payload: InitialTradersResult | null,
+  timeRange: Period,
+  options: { fromCache?: boolean } = {}
+): InitialTradersResult | null {
+  if (payload === null) return null
+
+  const sanitized = sanitizePublicRankingPayload(payload, { expectedPeriod: timeRange })
+  const originalTraders = Array.isArray(payload.traders) ? payload.traders : []
+  const proofValidTraders = Array.isArray(sanitized.traders)
+    ? sanitized.traders
+        .filter(hasPublishedInitialRank)
+        .filter((trader) => isCurrentHomepageCohortRow(trader))
+    : []
+  const sourceFreshness = sanitizeCachedFreshnessRows(payload.sourceFreshness)
+  const freshness = summarizeInitialTraderFreshness({
+    watermarkRows: sourceFreshness,
+    observedSources: proofValidTraders.map((trader) => trader.source),
+  })
+  // A cached source watermark can cross the hard serving boundary while the
+  // Redis entry remains alive. `computed_at` is not a substitute for upstream
+  // capture time: if any displayed source is missing, invalid, stale, or too
+  // far in the future, none of its cached rows may retain a public rank.
+  const filteredTraders = freshness.isStale ? [] : proofValidTraders
+  const removed = filteredTraders.length !== originalTraders.length
+  const totalCountIsExact =
+    !removed &&
+    sanitized.totalCountIsExact === true &&
+    typeof sanitized.totalCount === 'number' &&
+    Number.isSafeInteger(sanitized.totalCount) &&
+    sanitized.totalCount >= 0
+
+  return {
+    ...sanitized,
+    traders: filteredTraders,
+    // A Redis entry retains only the visible page, not the SQL look-ahead row
+    // that originally witnessed `hasMore`. Even when every visible row still
+    // passes revalidation, that omitted witness might have become partial,
+    // stale, or otherwise ineligible meanwhile. Do not turn a cached boolean
+    // into a navigation claim without rechecking the extra row too.
+    //
+    // Fresh DB results retain their in-request, view-filtered look-ahead
+    // witness. A future cache format may preserve and revalidate that witness
+    // explicitly; until then cache hits fail closed for next-page navigation.
+    hasMore: options.fromCache ? false : removed ? false : sanitized.hasMore === true,
+    totalCount: totalCountIsExact ? sanitized.totalCount : null,
+    totalCountIsExact,
+    categoryCounts: UNKNOWN_CATEGORY_COUNTS,
+    categoryCountsAreExact: false,
+    sourceFreshness,
+    lastUpdated: freshness.asOf,
+    isStale: removed || freshness.isStale || sanitized.isStale === true,
+  }
 }
 
 function staleCacheResult(
   ...candidates: Array<InitialTradersResult | null>
 ): InitialTradersResult | null {
-  const stale = candidates.find((candidate) => candidate && candidate.traders.length > 0)
+  const stale = candidates.find(
+    (candidate) => candidate && Array.isArray(candidate.traders) && candidate.traders.length > 0
+  )
   return stale ? { ...stale, isStale: true } : null
+}
+
+function normalizeInitialPageLimit(value: number): number {
+  return Number.isSafeInteger(value) ? Math.min(Math.max(value, 1), 50) : 20
+}
+
+function normalizeInitialPage(value: number): number {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0
 }
 
 /**
@@ -142,11 +297,24 @@ function staleCacheResult(
  * entries (without the new fields) don't serve arrow-less rows for hours.
  * v4 (2026-07-18): lastUpdated is the oldest live source-data watermark,
  * never leaderboard_ranks.computed_at.
+ * v5 (2026-08-16): nullable ROI/PnL/score/confidence are preserved end-to-end.
+ * v6 (2026-08-16): rows now originate in public_ranked_leaderboard and retain
+ * proof fields for cache revalidation; old source-only cache entries cannot
+ * participate in ranking pagination.
+ * v7 (2026-08-16): includes page-scoped source-watermark proof and normalized
+ * page size; cached rows are rechecked against the homepage's 6-hour cohort
+ * window rather than the generic 48-hour publication ceiling.
  */
-export function homeInitialTradersCacheKeys(timeRange: Period, page: number) {
+export function homeInitialTradersCacheKeys(timeRange: Period, page: number, limit = 50) {
+  const safePage = normalizeInitialPage(page)
+  const safeLimit = normalizeInitialPageLimit(limit)
   return {
-    cacheKey: publicRankingCacheKey(`home-initial-traders-v4:${timeRange}:p${page}`),
-    fallbackKey: publicRankingCacheKey(`home-initial-traders-fallback-v4:${timeRange}:p${page}`),
+    cacheKey: publicRankingCacheKey(
+      `home-initial-traders-v7:${timeRange}:n${safeLimit}:p${safePage}`
+    ),
+    fallbackKey: publicRankingCacheKey(
+      `home-initial-traders-fallback-v7:${timeRange}:n${safeLimit}:p${safePage}`
+    ),
   }
 }
 
@@ -162,9 +330,10 @@ export async function refreshHomeInitialTradersCache(
 ): Promise<number> {
   const writeFence = await cache.readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
   if (!writeFence) throw new Error('SSR homepage cache write fence was not available')
-  const result = await fetchLeaderboardFromDB(timeRange, limit, 0)
+  const safeLimit = normalizeInitialPageLimit(limit)
+  const result = await fetchLeaderboardFromDB(timeRange, safeLimit, 0)
   if (result.traders.length === 0) return 0
-  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0)
+  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0, safeLimit)
   const writes = await Promise.all([
     cache.set(cacheKey, result, {
       ttl: 7200,
@@ -192,13 +361,7 @@ export async function getInitialTraders(
 ): Promise<InitialTradersResult> {
   // During Vercel build, Supabase queries hang (iad1 build server -> timeout).
   if (process.env.NEXT_PHASE === 'phase-production-build') {
-    return {
-      traders: [],
-      lastUpdated: null,
-      isStale: true,
-      totalCount: 0,
-      categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
-    }
+    return unknownInitialTradersResult()
   }
 
   // Capture before the first cache read and before any database query. If a
@@ -210,21 +373,25 @@ export async function getInitialTraders(
   // Two-tier cache strategy:
   //   1. Primary cache (2h TTL) — normal serving
   //   2. Fallback cache (4h TTL) — safety net when DB is down/slow
-  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, page)
+  const safeLimit = normalizeInitialPageLimit(limit)
+  const safePage = normalizeInitialPage(page)
+  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, safePage, safeLimit)
   let cached: InitialTradersResult | null = null
   let fallbackCached: InitialTradersResult | null = null
   if (writeFence !== null) {
     try {
       cached = await cache.get<InitialTradersResult>(cacheKey, { skipMemory: true })
       if (cached && cached.traders && cached.traders.length > 0) {
-        const safeCached = sanitizePublicRankingSourcePayload(cached)
-        if (safeCached.traders.length > 0) return safeCached
+        const safeCached = sanitizeInitialTradersResult(cached, timeRange, { fromCache: true })
+        if (safeCached && safeCached.traders.length > 0) return safeCached
         cached = safeCached
       }
       // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
       fallbackCached = await cache.get<InitialTradersResult>(fallbackKey, { skipMemory: true })
       if (fallbackCached) {
-        fallbackCached = sanitizePublicRankingSourcePayload(fallbackCached)
+        fallbackCached = sanitizeInitialTradersResult(fallbackCached, timeRange, {
+          fromCache: true,
+        })
         const stale = staleCacheResult(fallbackCached)
         if (stale) return stale
       }
@@ -237,9 +404,11 @@ export async function getInitialTraders(
   // Supabase requests. Do not race it with a second timer here: that used to
   // abandon still-running PostgREST requests whenever the outer race won.
   try {
-    const result = sanitizePublicRankingSourcePayload(
-      await fetchLeaderboardFromDB(timeRange, limit, page)
-    )
+    const result =
+      sanitizeInitialTradersResult(
+        await fetchLeaderboardFromDB(timeRange, safeLimit, safePage),
+        timeRange
+      ) ?? unknownInitialTradersResult()
 
     // Defensive fallback for DB errors/timeouts that are normalized to an
     // empty result by fetchLeaderboardFromDB. In normal serving, a non-empty
@@ -275,28 +444,22 @@ export async function getInitialTraders(
     logger.warn(
       `[getInitialTraders] DB fetch failed/timed out: ${err instanceof Error ? err.message : err}`
     )
-    // Stale cache fallback — during compute-leaderboard cron contention the
-    // diverse RPC + category counts spike to 15-30s. Returning empty zeros
-    // produces user-visible "0 traders" flash on the homepage. Stale data
-    // (even hours old) is much better than nothing.
+    // Availability fallback during compute-leaderboard contention. Only rows
+    // whose cached publication proof *and upstream source watermark* still
+    // pass were retained above; an expired/unknown source never wins merely
+    // because it is more visually convenient than an empty ranking state.
     const stale = staleCacheResult(
-      sanitizePublicRankingSourcePayload(cached),
-      sanitizePublicRankingSourcePayload(fallbackCached)
+      sanitizeInitialTradersResult(cached, timeRange, { fromCache: true }),
+      sanitizeInitialTradersResult(fallbackCached, timeRange, { fromCache: true })
     )
     if (stale) {
       logger.info(
-        `[getInitialTraders] Serving STALE cache after DB timeout (page=${page}, traders=${stale.traders.length})`
+        `[getInitialTraders] Serving STALE cache after DB timeout (page=${safePage}, traders=${stale.traders.length})`
       )
       return stale
     }
     // No cache either — Phase 2 client will fetch from API on hydration.
-    return {
-      traders: [],
-      lastUpdated: null,
-      isStale: true,
-      totalCount: 0,
-      categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
-    }
+    return unknownInitialTradersResult()
   }
 }
 
@@ -304,10 +467,13 @@ export async function getInitialTraders(
  * Direct Supabase fetch -- used by cron to populate cache and as fallback.
  * Exported so the cron refresh route can call it without triggering cache reads.
  *
- * Strategy:
- * 1. Page zero queries through getLeaderboard with the exact public active
- *    source allowlist applied in SQL before LIMIT.
- * 2. Deeper pages apply the same allowlist before OFFSET/RANGE.
+ * The underlying reader is the security-barrier public cohort view. It applies
+ * every publication predicate before its `limit + 1` range, so a partial,
+ * stale, estimated, or quarantined row can never consume a homepage slot.
+ *
+ * There is deliberately no total/category-count lookup here: the historic
+ * count cache has a weaker predicate than the cohort view. Until a dedicated
+ * same-predicate count authority exists, the UI gets `hasMore` only.
  */
 export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
@@ -315,52 +481,59 @@ export async function fetchLeaderboardFromDB(
   page: number = 0
 ): Promise<InitialTradersResult> {
   const supabase = getSupabaseAdmin()
-  const emptyCounts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
+  const safeLimit = normalizeInitialPageLimit(limit)
+  const safePage = normalizeInitialPage(page)
 
-  // 5s timeout — paginated queries with OFFSET can be slower than page 0 RPC
+  // Keep a single deadline across the public cohort query, avatar enrichment,
+  // and the page's own source-watermark rows. Do not race abandoned requests.
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 5_000)
   const { signal } = controller
 
   try {
-    let tradersPromise: Promise<{ traders: InitialTrader[]; lastUpdated: string | null }>
-    if (page > 0) {
-      tradersPromise = fetchPaginatedFromDB(supabase, timeRange, limit, page, signal)
-    } else {
-      // The diverse RPC applies LIMIT internally and cannot receive the exact
-      // active-source contract. Use the direct reader so both the active
-      // allowlist and publication quarantine execute before LIMIT.
-      tradersPromise = fetchLeaderboardLegacy(supabase, timeRange, limit, signal)
-    }
-
-    // Fetch traders + category counts in parallel. Every top-level PostgREST
-    // request shares this deadline (the diverse RPC derives a shorter child
-    // deadline), so timeout cancels DB work instead of abandoning a race loser.
-    const [tradersResult, rawCounts, freshnessRows] = await Promise.all([
-      tradersPromise,
-      fetchCategoryCounts(supabase, timeRange, signal),
-      fetchInitialFreshnessRows(supabase, timeRange, signal),
-    ])
+    const pageResult = await fetchInitialLeaderboardPage(
+      supabase,
+      timeRange,
+      safeLimit,
+      safePage,
+      signal
+    )
     if (signal.aborted) throw signal.reason
 
     // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
-    // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
-    const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders, signal)
+    // Missing mirrors do not change ranking eligibility, so this enrichment is
+    // availability-only and leaves the verified cohort rows otherwise intact.
+    const observedSources = pageResult.traders.map((trader) => trader.source)
+    const [enrichedTraders, watermarkRows] = await Promise.all([
+      attachAvatarMirrors(supabase, pageResult.traders, signal),
+      fetchInitialFreshnessRows(supabase, timeRange, observedSources, signal),
+    ])
     if (signal.aborted) throw signal.reason
-    const counts = publicInitialCategoryCounts(freshnessRows.countRows, enrichedTraders, rawCounts)
+
     const freshness = summarizeInitialTraderFreshness({
-      countRows: freshnessRows.countRows,
-      watermarkRows: freshnessRows.watermarkRows,
+      watermarkRows,
       observedSources: enrichedTraders.map((trader) => trader.source),
     })
-    return sanitizePublicRankingSourcePayload({
-      ...tradersResult,
-      traders: enrichedTraders,
-      lastUpdated: freshness.asOf,
-      isStale: freshness.isStale,
-      totalCount: counts.all,
-      categoryCounts: counts,
-    })
+
+    return (
+      sanitizeInitialTradersResult(
+        {
+          traders: enrichedTraders,
+          lastUpdated: freshness.asOf,
+          isStale: freshness.isStale,
+          // The view currently has no same-predicate count authority. Even a
+          // terminal page is not a safe substitute: a defensive mapping reject
+          // would make its offset arithmetic diverge from the rendered cohort.
+          totalCount: null,
+          totalCountIsExact: false,
+          hasMore: pageResult.hasMore,
+          categoryCounts: UNKNOWN_CATEGORY_COUNTS,
+          categoryCountsAreExact: false,
+          sourceFreshness: watermarkRows,
+        },
+        timeRange
+      ) ?? unknownInitialTradersResult()
+    )
   } catch (err: unknown) {
     const isTimeout =
       err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'))
@@ -371,230 +544,78 @@ export async function fetchLeaderboardFromDB(
     } else {
       logger.error('[getInitialTraders] Error:', err)
     }
-    return {
-      traders: [],
-      lastUpdated: null,
-      isStale: true,
-      totalCount: 0,
-      categoryCounts: emptyCounts,
-    }
+    return unknownInitialTradersResult()
   } finally {
     clearTimeout(timer)
   }
 }
 
-async function fetchInitialFreshnessRows(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period,
-  signal: AbortSignal
-): Promise<{
-  countRows: LeaderboardCountCacheRow[]
-  watermarkRows: SourceFreshnessRow[]
-}> {
-  let watermarkQuery = supabase
-    .from('leaderboard_source_freshness')
-    .select('source,source_as_of')
-    .eq('season_id', timeRange)
-    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
-  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-    watermarkQuery = watermarkQuery.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-  }
-
-  const [countResult, watermarkResult] = await Promise.all([
-    supabase
-      .from('leaderboard_count_cache')
-      .select('source,total_count,updated_at')
-      .eq('season_id', timeRange)
-      .like('source', '%_gt0')
-      .abortSignal(signal),
-    watermarkQuery.abortSignal(signal),
-  ])
-
-  return {
-    countRows: (countResult.data || []) as LeaderboardCountCacheRow[],
-    watermarkRows: (watermarkResult.data || []) as SourceFreshnessRow[],
-  }
-}
-
-/**
- * SSR must use the same source-level contract as the JSON APIs. Prefer the
- * complete live-source set from the atomic count-cache generation; only fall
- * back to the sources observed on the rendered page when that cache is
- * unavailable.
- */
-export function summarizeInitialTraderFreshness(params: {
-  countRows: readonly LeaderboardCountCacheRow[]
-  watermarkRows: readonly SourceFreshnessRow[]
-  observedSources: readonly string[]
-  nowMs?: number
-}): SourceFreshnessSummary {
-  const liveSources = filterPublicRankingSources(currentScoredSources(params.countRows))
-  const observedSources = filterPublicRankingSources(params.observedSources)
-  const nowMs = params.nowMs ?? Date.now()
-  if (liveSources.length === 0 && observedSources.length > 0) {
-    const observed = summarizeSourceFreshness(params.watermarkRows, observedSources, nowMs)
-    return { ...observed, isStale: true }
-  }
-  return summarizeSourceFreshness(params.watermarkRows, liveSources, nowMs)
-}
-
-/** Source-only counts from one atomic count-cache generation. */
-export function publicInitialCategoryCounts(
-  countRows: readonly LeaderboardCountCacheRow[],
-  visibleTraders: readonly InitialTrader[],
-  fallback: CategoryCounts
-): CategoryCounts {
-  if (PUBLIC_RANKING_QUARANTINED_SOURCES.length === 0) return fallback
-
-  const publicSources = filterPublicRankingSources(currentScoredSources(countRows))
-  const sourceGroups = {
-    futures: publicSources.filter((source) => (SOURCE_TYPE_MAP[source] || 'futures') === 'futures'),
-    spot: publicSources.filter((source) => SOURCE_TYPE_MAP[source] === 'spot'),
-    onchain: publicSources.filter((source) => SOURCE_TYPE_MAP[source] === 'web3'),
-  }
-  const all = publicRankingCountFromCache(countRows)
-  const futures = publicRankingCountFromCache(countRows, { sources: sourceGroups.futures })
-  const spot = publicRankingCountFromCache(countRows, { sources: sourceGroups.spot })
-  const onchain = publicRankingCountFromCache(countRows, { sources: sourceGroups.onchain })
-  if (all !== null && futures !== null && spot !== null && onchain !== null) {
-    return { all, futures, spot, onchain }
-  }
-
-  return visibleTraders.reduce<CategoryCounts>(
-    (counts, trader) => {
-      counts.all += 1
-      if (trader.source_type === 'spot') counts.spot += 1
-      else if (trader.source_type === 'web3') counts.onchain += 1
-      else counts.futures += 1
-      return counts
-    },
-    { all: 0, futures: 0, spot: 0, onchain: 0 }
-  )
-}
-
-/**
- * Fetch category counts from leaderboard_ranks using a single aggregation query.
- */
-async function fetchCategoryCounts(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period,
-  signal: AbortSignal
-): Promise<CategoryCounts> {
-  const { data, error } = await supabase
-    .rpc('get_leaderboard_category_counts', {
-      p_season_id: timeRange,
-    })
-    .abortSignal(signal)
-
-  if (!error && data && Array.isArray(data)) {
-    const counts: CategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 }
-    for (const row of data as Array<{ source_type: string; count: number }>) {
-      const ct = Number(row.count)
-      counts.all += ct
-      if (row.source_type === 'futures') counts.futures = ct
-      else if (row.source_type === 'spot') counts.spot = ct
-      else if (row.source_type === 'web3') counts.onchain = ct
-    }
-    return counts
-  }
-
-  // Fallback: return estimated counts instead of exact (exact takes 25s+ per query)
-  if (error) {
-    logger.warn(
-      '[getInitialTraders] RPC get_leaderboard_category_counts unavailable, using estimates:',
-      error.message
-    )
-  }
-  // Use pg_class estimate via a single fast query instead of 4 parallel count(exact)
-  return { all: 12000, futures: 5000, spot: 1500, onchain: 5500 }
-}
-
-/**
- * Paginated fetch: simple offset-based pagination for page > 0.
- * Page 0 uses the direct getLeaderboard reader with the same source allowlist.
- */
-async function fetchPaginatedFromDB(
+async function fetchInitialLeaderboardPage(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   timeRange: Period,
   limit: number,
   page: number,
   signal: AbortSignal
-): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
-  const offset = page * limit
-  // Explicit column list (not select('*')) so Postgres can use the
-  // idx_leaderboard_ranks_api_default covering index with index-only scan.
-  // SELECT * forces heap fetch for the ~10 columns we don't actually read
-  // (raw_data, metrics_estimated, internal flags, etc.) adding 30-80ms.
-  const SSR_COLS =
-    'source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, avatar_url, rank, rank_change, is_new, computed_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier, season_id'
-  let query = supabase
-    .from('leaderboard_ranks')
-    .select(SSR_COLS)
-    .eq('season_id', timeRange)
-    .not('rank', 'is', null)
-    .in('source', [...PUBLIC_ACTIVE_RANKING_SOURCES])
-    .gt('arena_score', 0)
-    .or('is_outlier.is.null,is_outlier.eq.false')
+): Promise<{ traders: InitialTrader[]; hasMore: boolean }> {
+  const result = await getLeaderboard(supabase, {
+    period: timeRange,
+    limit,
+    offset: page * limit,
+    // Preserve the homepage's established score threshold, but apply it to
+    // every page so pagination stays one coherent, SQL-filtered cohort.
+    minScore: 10,
+    sortBy: 'arena_score',
+    signal,
+  })
+  if (result.error) throw new Error(result.error)
 
-  if (PUBLIC_RANKING_POSTGREST_EXCLUSION) {
-    query = query.not('source', 'in', PUBLIC_RANKING_POSTGREST_EXCLUSION)
-  }
-
-  const { data, error } = await query
-    .order('arena_score', { ascending: false })
-    .order('rank', { ascending: true, nullsFirst: false })
-    .range(offset, offset + limit - 1)
-    .abortSignal(signal)
-
-  if (error || !data) {
-    logger.error('[fetchPaginatedFromDB] Error:', error?.message)
-    return { traders: [], lastUpdated: null }
-  }
-
-  // Filter on the raw DB source before mapUnifiedToInitial can rewrite legacy
-  // copin keys such as "hyperliquid:0x..." into an apparently active source.
-  const unifiedTraders = filterPublicRankingRows(
-    data as Record<string, unknown>[],
-    (row) => row.source
-  )
-    .filter((row) => row.rank != null)
-    .map((row) => mapLeaderboardRow(row))
-  const initialTraders = unifiedTraders
+  const traders = result.traders
     .map(mapUnifiedToInitial)
     .filter((trader): trader is InitialTrader => trader !== null)
-  const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
+  if (traders.length !== result.traders.length) {
+    throw new Error('public cohort response failed local proof revalidation')
+  }
+  return { traders, hasMore: result.hasMore }
+}
 
-  return { traders: initialTraders, lastUpdated }
+async function fetchInitialFreshnessRows(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  timeRange: Period,
+  observedSources: readonly string[],
+  signal: AbortSignal
+): Promise<SourceFreshnessRow[]> {
+  const sources = [...new Set(observedSources.filter((source) => source.length > 0))]
+  if (sources.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('leaderboard_source_freshness')
+    .select('source,source_as_of')
+    .eq('season_id', timeRange)
+    .in('source', sources)
+    .abortSignal(signal)
+  if (error) {
+    throw new Error(`source freshness query failed: ${error.message}`)
+  }
+  return (data || []) as SourceFreshnessRow[]
 }
 
 /**
- * Lightweight fallback: fetch only 50 rows sorted by arena_score DESC.
- * Avoids the expensive 2000-row fetch + JS-side filtering that caused LCP spikes.
+ * Source freshness describes only the rows actually rendered by this finite
+ * homepage page. We intentionally do not borrow the old count-cache source
+ * set because that cache has a weaker membership predicate than the verified
+ * public cohort view.
  */
-async function fetchLeaderboardLegacy(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  timeRange: Period,
-  limit: number,
-  signal: AbortSignal
-): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
-  const { traders: unifiedTraders } = await getLeaderboard(supabase, {
-    period: timeRange as '7D' | '30D' | '90D',
-    limit: Math.min(limit, 50),
-    minScore: 10,
-    excludeOutliers: true,
-    sortBy: 'arena_score',
-    allowedSources: PUBLIC_ACTIVE_RANKING_SOURCES,
-    excludeSources: PUBLIC_RANKING_QUARANTINED_SOURCES,
-    signal,
-  })
-
-  const initialTraders = unifiedTraders
-    .map(mapUnifiedToInitial)
-    .filter((trader): trader is InitialTrader => trader !== null)
-  const lastUpdated = unifiedTraders.length > 0 ? unifiedTraders[0].lastUpdated : null
-
-  return {
-    traders: initialTraders,
-    lastUpdated,
-  }
+export function summarizeInitialTraderFreshness(params: {
+  watermarkRows: readonly SourceFreshnessRow[]
+  observedSources: readonly string[]
+  nowMs?: number
+}): SourceFreshnessSummary {
+  const sources = [
+    ...new Set(
+      params.observedSources.filter(
+        (source) => source.length > 0 && isPublicRankingSourceAllowed(source)
+      )
+    ),
+  ]
+  return summarizeSourceFreshness(params.watermarkRows, sources, params.nowMs)
 }
