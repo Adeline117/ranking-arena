@@ -1,171 +1,390 @@
 /**
- * Personalized Recommendation Engine
+ * Personalized trader recommendations.
  *
- * Rule-based personalization using:
- * - Traders similar to those the user follows (same exchange, similar ROI)
- * - User's preferred exchanges (inferred from follows)
- * - Arena score proximity
+ * Candidate selection may be cached by the route, but ranking-derived fields
+ * are deliberately materialized from the sealed public cohort for every
+ * response. A candidate is never ranking authority.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 
 const logger = createLogger('personal-rec')
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+const PERSONAL_RECOMMENDATION_PERIOD = '90D'
+const MAX_PERSONAL_RECOMMENDATIONS = 50
+const PERSONAL_RECOMMENDATION_SELECT =
+  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,score_completeness,metrics_estimated,is_outlier,computed_at'
+
+const PERSONAL_RECOMMENDATION_REASONS = [
+  'similar_to_follow',
+  'preferred_exchange',
+  'top_performer',
+] as const
+
+export type PersonalRecommendationReason = (typeof PERSONAL_RECOMMENDATION_REASONS)[number]
+export type PersonalRecommendationVisibility = 'verified' | 'partial' | 'unknown'
+
+/**
+ * This is the only shape that may cross the candidate-cache boundary. It has
+ * no score, rank, ROI, PnL, or seed metric: those are all current-cohort data.
+ */
+export interface PersonalRecommendationCandidate {
+  source: string
+  source_trader_id: string
+  reason: PersonalRecommendationReason
+  reference_source?: string
+  reference_trader_id?: string
+}
 
 export interface PersonalRecommendation {
   source: string
   source_trader_id: string
   handle: string | null
   avatar_url: string | null
-  arena_score: number | null
-  roi: number | null
-  pnl: number | null
-  win_rate: number | null
-  reason: 'similar_to_follow' | 'preferred_exchange' | 'top_performer'
+  arena_score: number
+  roi: number
+  pnl: number
+  win_rate: number
+  reason: PersonalRecommendationReason
   reason_detail: string
+}
+
+export interface PersonalRecommendationResult {
+  recommendations: PersonalRecommendation[]
+  rankingVisibility: PersonalRecommendationVisibility
+  rankingVisibilityReason: string | null
 }
 
 interface FollowedTrader {
   source: string
   source_trader_id: string
-  arena_score: number | null
-  roi: number | null
+  roi: number
 }
 
-interface RankRow {
+interface FollowedTraderResult {
+  traders: FollowedTrader[]
+  hasFollows: boolean
+}
+
+interface PublicPersonalRankRow extends Record<string, unknown> {
   source: string
   source_trader_id: string
-  handle: string | null
-  avatar_url: string | null
-  arena_score: number | null
-  roi: number | null
-  pnl: number | null
-  win_rate: number | null
+  season_id: string
+  rank: number
+  arena_score: number
+  roi: number
+  pnl: number
+  win_rate: number
 }
 
-// ---------------------------------------------------------------------------
-// Supabase helper
-// ---------------------------------------------------------------------------
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: unknown | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  gt(column: string, value: number): PublicRankedLeaderboardQuery
+  gte(column: string, value: number): PublicRankedLeaderboardQuery
+  lte(column: string, value: number): PublicRankedLeaderboardQuery
+  neq(column: string, value: string): PublicRankedLeaderboardQuery
+  or(expression: string): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+interface PublicPersonalCohort {
+  rows: PublicPersonalRankRow[]
+  rankingVisibility: PersonalRecommendationVisibility
+  rankingVisibilityReason: string | null
+}
+
+interface ParsedCandidates {
+  candidates: PersonalRecommendationCandidate[]
+  rejected: boolean
+}
 
 function getSupabase() {
   return getSupabaseAdmin()
 }
 
-// ---------------------------------------------------------------------------
-// Core
-// ---------------------------------------------------------------------------
-
-/**
- * Generate personalized recommendations for a user.
- */
-export async function getPersonalRecommendations(
-  userId: string,
-  limit = 20
-): Promise<PersonalRecommendation[]> {
-  const supabase = getSupabase()
-
-  // 1. Get user's followed traders (via user_follows -> trader mapping)
-  const followedTraders = await getUserFollowedTraders(supabase, userId)
-
-  if (followedTraders.length === 0) {
-    // Fallback: return top performers across exchanges
-    return getTopPerformersFallback(supabase, limit)
-  }
-
-  // 2. Identify preferred exchanges
-  const exchangeCounts = new Map<string, number>()
-  for (const t of followedTraders) {
-    exchangeCounts.set(t.source, (exchangeCounts.get(t.source) || 0) + 1)
-  }
-  const preferredExchanges = [...exchangeCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([ex]) => ex)
-
-  // 3. Build exclusion set (already followed)
-  const followedSet = new Set(followedTraders.map((t) => `${t.source}:${t.source_trader_id}`))
-
-  const recommendations: PersonalRecommendation[] = []
-
-  // 4. Find similar traders (same exchange, similar ROI range)
-  for (const trader of followedTraders.slice(0, 10)) {
-    const similar = await findSimilarTraders(supabase, trader, 5)
-    for (const s of similar) {
-      const key = `${s.source}:${s.source_trader_id}`
-      if (!followedSet.has(key)) {
-        followedSet.add(key) // deduplicate
-        recommendations.push({
-          ...s,
-          reason: 'similar_to_follow',
-          reason_detail: `Similar to ${trader.source_trader_id} on ${trader.source}`,
-        })
-      }
-    }
-  }
-
-  // 5. Top performers from preferred exchanges
-  if (recommendations.length < limit) {
-    const needed = limit - recommendations.length
-    const topFromPreferred = await getTopFromExchanges(supabase, preferredExchanges, needed * 2)
-    for (const t of topFromPreferred) {
-      const key = `${t.source}:${t.source_trader_id}`
-      if (!followedSet.has(key)) {
-        followedSet.add(key)
-        recommendations.push({
-          ...t,
-          reason: 'preferred_exchange',
-          reason_detail: `Top on ${t.source}`,
-        })
-      }
-      if (recommendations.length >= limit) break
-    }
-  }
-
-  return recommendations.slice(0, limit)
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/**
+ * Generated Supabase types may lag the security-barrier view. Keep this
+ * narrow bridge local so this module cannot accidentally select another
+ * ranking relation.
+ */
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function isCanonicalPublicSource(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value === value.trim().toLowerCase() &&
+    isPublicRankingSourceAllowed(value)
+  )
+}
+
+function isTraderIdentity(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value === value.trim()
+}
+
+function personalIdentity(source: string, sourceTraderId: string): string {
+  return `${source}:${sourceTraderId}`
+}
+
+function isPersonalRecommendationReason(value: unknown): value is PersonalRecommendationReason {
+  return (
+    typeof value === 'string' &&
+    (PERSONAL_RECOMMENDATION_REASONS as readonly string[]).includes(value)
+  )
+}
+
+function hasVerifiedPublicPersonalRank(row: unknown): row is PublicPersonalRankRow {
+  return (
+    isRecord(row) &&
+    isCanonicalPublicSource(row.source) &&
+    isTraderIdentity(row.source_trader_id) &&
+    row.season_id === PERSONAL_RECOMMENDATION_PERIOD &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0 &&
+    typeof row.arena_score === 'number' &&
+    Number.isFinite(row.arena_score) &&
+    row.arena_score > 0 &&
+    typeof row.roi === 'number' &&
+    Number.isFinite(row.roi) &&
+    typeof row.pnl === 'number' &&
+    Number.isFinite(row.pnl) &&
+    typeof row.win_rate === 'number' &&
+    Number.isFinite(row.win_rate) &&
+    row.win_rate >= 0 &&
+    row.win_rate <= 100
+  )
+}
+
+/**
+ * A malformed or filtered view response is not a smaller finite cohort. The
+ * whole query becomes partial so a later row cannot silently replace it.
+ */
+function verifyPublicPersonalCohort(value: unknown): PublicPersonalCohort {
+  if (!Array.isArray(value)) {
+    return {
+      rows: [],
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_cohort_unavailable',
+    }
+  }
+
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value, period: PERSONAL_RECOMMENDATION_PERIOD },
+    { expectedPeriod: PERSONAL_RECOMMENDATION_PERIOD }
+  ) as { traders?: unknown[] }
+  const rows = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter(hasVerifiedPublicPersonalRank)
+    : []
+
+  if (rows.length !== value.length) {
+    return {
+      rows: [],
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_cohort_unverified',
+    }
+  }
+
+  return { rows, rankingVisibility: 'verified', rankingVisibilityReason: null }
+}
+
+async function readPublicPersonalCohort(
+  supabase: ReturnType<typeof getSupabase>,
+  buildQuery: (query: PublicRankedLeaderboardQuery) => PublicRankedLeaderboardQuery
+): Promise<PublicPersonalCohort> {
+  try {
+    const query = publicRankedLeaderboardClient(supabase)
+      .from('public_ranked_leaderboard')
+      .select(PERSONAL_RECOMMENDATION_SELECT)
+      .eq('season_id', PERSONAL_RECOMMENDATION_PERIOD)
+      .not('rank', 'is', null)
+
+    const { data, error } = await buildQuery(query)
+    if (error) {
+      logger.warn('Personal recommendation cohort query failed', { error })
+      return {
+        rows: [],
+        rankingVisibility: 'unknown',
+        rankingVisibilityReason: 'public_cohort_unavailable',
+      }
+    }
+
+    return verifyPublicPersonalCohort(data)
+  } catch (error) {
+    logger.warn('Personal recommendation cohort is unavailable', { error })
+    return {
+      rows: [],
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_cohort_unavailable',
+    }
+  }
+}
+
+function rowsForExpectedScope(
+  cohort: PublicPersonalCohort,
+  predicate: (row: PublicPersonalRankRow) => boolean
+): PublicPersonalRankRow[] {
+  if (cohort.rankingVisibility !== 'verified') return []
+  // The view predicates should make this redundant. Treat a proxy/schema
+  // boundary that returns an out-of-scope row as an invalid cohort, not a
+  // source for a near-match recommendation.
+  return cohort.rows.every(predicate) ? cohort.rows : []
+}
+
+function clampLimit(value: number, fallback = 20): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(MAX_PERSONAL_RECOMMENDATIONS, Math.max(1, Math.floor(value)))
+}
+
+function parseCandidate(value: unknown): PersonalRecommendationCandidate | null {
+  if (!isRecord(value)) return null
+  if (
+    !isCanonicalPublicSource(value.source) ||
+    !isTraderIdentity(value.source_trader_id) ||
+    !isPersonalRecommendationReason(value.reason)
+  ) {
+    return null
+  }
+
+  if (value.reason === 'similar_to_follow') {
+    if (
+      !isCanonicalPublicSource(value.reference_source) ||
+      !isTraderIdentity(value.reference_trader_id) ||
+      (value.reference_source === value.source &&
+        value.reference_trader_id === value.source_trader_id)
+    ) {
+      return null
+    }
+    return {
+      source: value.source,
+      source_trader_id: value.source_trader_id,
+      reason: value.reason,
+      reference_source: value.reference_source,
+      reference_trader_id: value.reference_trader_id,
+    }
+  }
+
+  return {
+    source: value.source,
+    source_trader_id: value.source_trader_id,
+    reason: value.reason,
+  }
+}
+
+function parseCandidates(value: unknown, limit: number): ParsedCandidates {
+  if (!Array.isArray(value)) return { candidates: [], rejected: value !== undefined }
+
+  const candidates: PersonalRecommendationCandidate[] = []
+  const seen = new Set<string>()
+  let rejected = false
+  for (const rawCandidate of value) {
+    const candidate = parseCandidate(rawCandidate)
+    if (!candidate) {
+      rejected = true
+      continue
+    }
+
+    const identity = personalIdentity(candidate.source, candidate.source_trader_id)
+    if (seen.has(identity)) {
+      rejected = true
+      continue
+    }
+    seen.add(identity)
+    candidates.push(candidate)
+    if (candidates.length >= limit) break
+  }
+  return { candidates, rejected }
+}
+
+/**
+ * Public helper for cache callers. It creates a new, metric-free object, so
+ * obsolete cache entries cannot make a score or ROI available to consumers.
+ */
+export function sanitizePersonalRecommendationCandidates(
+  value: unknown,
+  limit = MAX_PERSONAL_RECOMMENDATIONS
+): PersonalRecommendationCandidate[] {
+  return parseCandidates(value, clampLimit(limit, MAX_PERSONAL_RECOMMENDATIONS)).candidates
+}
 
 async function getUserFollowedTraders(
   supabase: ReturnType<typeof getSupabase>,
   userId: string
-): Promise<FollowedTrader[]> {
+): Promise<FollowedTraderResult> {
   try {
-    // user_follows tracks user-to-user follows; we need to find if the followed
-    // users have linked trader profiles. For simplicity, check if user_follows
-    // has a trader_source / trader_id pattern, or fall back to leaderboard lookup.
-    const { data: follows } = await supabase
+    const { data: follows, error } = await supabase
       .from('user_follows')
       .select('following_id')
       .eq('follower_id', userId)
       .limit(50)
 
-    if (!follows || follows.length === 0) return []
+    if (error) {
+      logger.warn('Personal recommendation follows query failed', { error })
+      return { traders: [], hasFollows: true }
+    }
 
-    // Look up followed users' linked traders via profiles or leaderboard
-    const followingIds = follows.map((f: { following_id: string }) => f.following_id)
+    if (!Array.isArray(follows)) {
+      logger.warn('Personal recommendation follows response is malformed')
+      return { traders: [], hasFollows: true }
+    }
+    const rawFollows = follows
+    if (rawFollows.length === 0) return { traders: [], hasFollows: false }
 
-    // Try to find traders these users are associated with via leaderboard_ranks
-    // (profiles may have a linked_trader_source / linked_trader_id)
-    // Fallback: treat following_id as potential source_trader_id
-    const { data: ranks } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, arena_score, roi')
-      .eq('season_id', '90D')
-      .not('rank', 'is', null)
-      .in('source_trader_id', followingIds)
-      .limit(50)
+    const followingIds = [
+      ...new Set(
+        rawFollows
+          .map((follow) => (isRecord(follow) ? follow.following_id : null))
+          .filter(isTraderIdentity)
+      ),
+    ]
+    if (followingIds.length === 0) return { traders: [], hasFollows: true }
 
-    return (ranks || []) as FollowedTrader[]
-  } catch (err) {
-    logger.error('getUserFollowedTraders failed', { error: err })
-    return []
+    const cohort = await readPublicPersonalCohort(supabase, (query) =>
+      query.in('source_trader_id', followingIds).limit(50)
+    )
+    const rows = rowsForExpectedScope(cohort, (row) => followingIds.includes(row.source_trader_id))
+    if (rows.length === 0) return { traders: [], hasFollows: true }
+    return {
+      traders: rows.map((row) => ({
+        source: row.source,
+        source_trader_id: row.source_trader_id,
+        roi: row.roi,
+      })),
+      hasFollows: true,
+    }
+  } catch (error) {
+    logger.warn('Personal recommendation followed traders failed', { error })
+    return { traders: [], hasFollows: true }
   }
 }
 
@@ -173,69 +392,294 @@ async function findSimilarTraders(
   supabase: ReturnType<typeof getSupabase>,
   baseTrader: FollowedTrader,
   limit: number
-): Promise<RankRow[]> {
-  const baseRoi = baseTrader.roi ?? 0
-  const roiMin = baseRoi * 0.7
-  const roiMax = baseRoi * 1.3
+): Promise<PublicPersonalRankRow[]> {
+  const firstBound = baseTrader.roi * 0.7
+  const secondBound = baseTrader.roi * 1.3
+  const roiMin = Math.min(firstBound, secondBound)
+  const roiMax = Math.max(firstBound, secondBound)
 
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate')
-    .eq('season_id', '90D')
-    .not('rank', 'is', null)
-    .eq('source', baseTrader.source)
-    .gte('roi', roiMin)
-    .lte('roi', roiMax)
-    .neq('source_trader_id', baseTrader.source_trader_id)
-    .not('arena_score', 'is', null)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .order('rank', { ascending: true, nullsFirst: false })
-    .limit(limit)
+  const cohort = await readPublicPersonalCohort(supabase, (query) =>
+    query
+      .eq('source', baseTrader.source)
+      .gte('roi', roiMin)
+      .lte('roi', roiMax)
+      .neq('source_trader_id', baseTrader.source_trader_id)
+      .gt('arena_score', 0)
+      .or('is_outlier.is.null,is_outlier.eq.false')
+      .order('arena_score', { ascending: false, nullsFirst: false })
+      .order('rank', { ascending: true, nullsFirst: false })
+      .limit(limit)
+  )
 
-  return (data || []) as unknown as RankRow[]
+  return rowsForExpectedScope(
+    cohort,
+    (row) =>
+      row.source === baseTrader.source && row.source_trader_id !== baseTrader.source_trader_id
+  )
 }
 
 async function getTopFromExchanges(
   supabase: ReturnType<typeof getSupabase>,
-  exchanges: string[],
+  exchanges: readonly string[],
   limit: number
-): Promise<RankRow[]> {
+): Promise<PublicPersonalRankRow[]> {
   if (exchanges.length === 0) return []
 
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate')
-    .eq('season_id', '90D')
-    .not('rank', 'is', null)
-    .in('source', exchanges)
-    .not('arena_score', 'is', null)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .order('rank', { ascending: true, nullsFirst: false })
-    .limit(limit)
-
-  return (data || []) as unknown as RankRow[]
+  const cohort = await readPublicPersonalCohort(supabase, (query) =>
+    query
+      .in('source', exchanges)
+      .gt('arena_score', 0)
+      .or('is_outlier.is.null,is_outlier.eq.false')
+      .order('arena_score', { ascending: false, nullsFirst: false })
+      .order('rank', { ascending: true, nullsFirst: false })
+      .limit(limit)
+  )
+  return rowsForExpectedScope(cohort, (row) => exchanges.includes(row.source))
 }
 
 async function getTopPerformersFallback(
   supabase: ReturnType<typeof getSupabase>,
   limit: number
-): Promise<PersonalRecommendation[]> {
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate')
-    .eq('season_id', '90D')
-    .not('rank', 'is', null)
-    .not('arena_score', 'is', null)
-    .or('is_outlier.is.null,is_outlier.eq.false')
-    .order('arena_score', { ascending: false })
-    .order('rank', { ascending: true, nullsFirst: false })
-    .limit(limit)
+): Promise<PersonalRecommendationCandidate[]> {
+  const cohort = await readPublicPersonalCohort(supabase, (query) =>
+    query
+      .gt('arena_score', 0)
+      .or('is_outlier.is.null,is_outlier.eq.false')
+      .order('arena_score', { ascending: false, nullsFirst: false })
+      .order('rank', { ascending: true, nullsFirst: false })
+      .limit(limit)
+  )
+  if (cohort.rankingVisibility !== 'verified') return []
 
-  return ((data || []) as unknown as RankRow[]).map((t) => ({
-    ...t,
+  return cohort.rows.map((row) => ({
+    source: row.source,
+    source_trader_id: row.source_trader_id,
     reason: 'top_performer' as const,
-    reason_detail: `Top arena score on ${t.source}`,
   }))
+}
+
+/**
+ * Build metric-free recommendation candidates. The route may cache the return
+ * value, but it must call materializePersonalRecommendations before replying.
+ */
+export async function getPersonalRecommendationCandidates(
+  userId: string,
+  limit = 20
+): Promise<PersonalRecommendationCandidate[]> {
+  const cappedLimit = clampLimit(limit)
+  const supabase = getSupabase()
+  const followed = await getUserFollowedTraders(supabase, userId)
+
+  if (!followed.hasFollows) {
+    return getTopPerformersFallback(supabase, cappedLimit)
+  }
+  // A user who does have follows but whose seed rows cannot be verified must
+  // not receive a fabricated personalization fallback. The route represents
+  // this empty candidate set as explicit unknown/partial state.
+  if (followed.traders.length === 0) return []
+
+  const followedTraders = followed.traders
+
+  const followedSet = new Set(
+    followedTraders.map((trader) => personalIdentity(trader.source, trader.source_trader_id))
+  )
+  const candidates: PersonalRecommendationCandidate[] = []
+
+  for (const trader of followedTraders.slice(0, 10)) {
+    const similar = await findSimilarTraders(supabase, trader, 5)
+    for (const current of similar) {
+      const identity = personalIdentity(current.source, current.source_trader_id)
+      if (followedSet.has(identity)) continue
+      followedSet.add(identity)
+      candidates.push({
+        source: current.source,
+        source_trader_id: current.source_trader_id,
+        reason: 'similar_to_follow',
+        reference_source: trader.source,
+        reference_trader_id: trader.source_trader_id,
+      })
+      if (candidates.length >= cappedLimit) break
+    }
+    if (candidates.length >= cappedLimit) break
+  }
+
+  if (candidates.length < cappedLimit) {
+    const preferredExchanges = [...new Set(followedTraders.map((trader) => trader.source))].slice(
+      0,
+      5
+    )
+    const topFromPreferred = await getTopFromExchanges(
+      supabase,
+      preferredExchanges,
+      (cappedLimit - candidates.length) * 2
+    )
+    for (const current of topFromPreferred) {
+      const identity = personalIdentity(current.source, current.source_trader_id)
+      if (followedSet.has(identity)) continue
+      followedSet.add(identity)
+      candidates.push({
+        source: current.source,
+        source_trader_id: current.source_trader_id,
+        reason: 'preferred_exchange',
+      })
+      if (candidates.length >= cappedLimit) break
+    }
+  }
+
+  // If a source-specific lookup cannot supply a recommendation, a current
+  // top cohort is still safer than returning a raw/partial profile observation.
+  if (candidates.length === 0) return getTopPerformersFallback(supabase, cappedLimit)
+
+  return sanitizePersonalRecommendationCandidates(candidates, cappedLimit)
+}
+
+function recommendationReasonDetail(
+  candidate: PersonalRecommendationCandidate,
+  current: PublicPersonalRankRow
+): string {
+  if (candidate.reason === 'similar_to_follow') {
+    return `Similar to ${candidate.reference_trader_id} on ${candidate.reference_source}`
+  }
+  if (candidate.reason === 'preferred_exchange') return `Top on ${current.source}`
+  return `Top arena score on ${current.source}`
+}
+
+function materializeRecommendation(
+  candidate: PersonalRecommendationCandidate,
+  current: PublicPersonalRankRow
+): PersonalRecommendation {
+  return {
+    source: current.source,
+    source_trader_id: current.source_trader_id,
+    handle: typeof current.handle === 'string' ? current.handle : null,
+    avatar_url: typeof current.avatar_url === 'string' ? current.avatar_url : null,
+    arena_score: current.arena_score,
+    roi: current.roi,
+    pnl: current.pnl,
+    win_rate: current.win_rate,
+    reason: candidate.reason,
+    reason_detail: recommendationReasonDetail(candidate, current),
+  }
+}
+
+function unavailablePersonalRecommendations(
+  rankingVisibility: PersonalRecommendationVisibility,
+  rankingVisibilityReason: string
+): PersonalRecommendationResult {
+  return { recommendations: [], rankingVisibility, rankingVisibilityReason }
+}
+
+/**
+ * Materialize only the current verified rows for cached candidates. Any stale,
+ * unverified, or malformed candidate is omitted; it is never a zero-valued
+ * substitute and never leaks cached ranking fields.
+ */
+export async function materializePersonalRecommendations(
+  cachedCandidates: unknown,
+  limit = 20
+): Promise<PersonalRecommendationResult> {
+  const cappedLimit = clampLimit(limit)
+  const parsed = parseCandidates(cachedCandidates, MAX_PERSONAL_RECOMMENDATIONS)
+  if (parsed.candidates.length === 0) {
+    return unavailablePersonalRecommendations(
+      parsed.rejected ? 'partial' : 'unknown',
+      parsed.rejected ? 'cached_candidate_unverified' : 'public_rank_unavailable'
+    )
+  }
+
+  const identitiesBySource = new Map<string, Set<string>>()
+  const addCurrentIdentity = (source: string, sourceTraderId: string) => {
+    const ids = identitiesBySource.get(source) ?? new Set<string>()
+    ids.add(sourceTraderId)
+    identitiesBySource.set(source, ids)
+  }
+  for (const candidate of parsed.candidates) {
+    addCurrentIdentity(candidate.source, candidate.source_trader_id)
+    if (candidate.reason === 'similar_to_follow') {
+      addCurrentIdentity(candidate.reference_source!, candidate.reference_trader_id!)
+    }
+  }
+
+  // Query one source at a time. A cross-product `in(source)` plus
+  // `in(source_trader_id)` query can truncate away the exact pair we need.
+  // Every source-local response still gets the complete sanitizer pass.
+  const cohorts = await Promise.all(
+    [...identitiesBySource.entries()].map(async ([source, ids]) => ({
+      source,
+      ids,
+      cohort: await readPublicPersonalCohort(getSupabase(), (query) =>
+        query
+          .eq('source', source)
+          .in('source_trader_id', [...ids])
+          .limit(ids.size)
+      ),
+    }))
+  )
+  const currentByIdentity = new Map<string, PublicPersonalRankRow>()
+  for (const { source, ids, cohort } of cohorts) {
+    if (cohort.rankingVisibility !== 'verified') {
+      return unavailablePersonalRecommendations(
+        cohort.rankingVisibility,
+        cohort.rankingVisibilityReason ?? 'public_cohort_unavailable'
+      )
+    }
+    for (const row of cohort.rows) {
+      if (row.source !== source || !ids.has(row.source_trader_id)) {
+        return unavailablePersonalRecommendations('partial', 'public_cohort_unverified')
+      }
+      const identity = personalIdentity(row.source, row.source_trader_id)
+      if (currentByIdentity.has(identity)) {
+        return unavailablePersonalRecommendations('partial', 'public_cohort_unverified')
+      }
+      currentByIdentity.set(identity, row)
+    }
+  }
+
+  const recommendations: PersonalRecommendation[] = []
+  let staleCandidate = parsed.rejected
+  for (const candidate of parsed.candidates) {
+    if (recommendations.length >= cappedLimit) break
+    const identity = personalIdentity(candidate.source, candidate.source_trader_id)
+    const current = currentByIdentity.get(identity)
+    if (!current) {
+      staleCandidate = true
+      continue
+    }
+    if (candidate.reason === 'similar_to_follow') {
+      const referenceIdentity = personalIdentity(
+        candidate.reference_source!,
+        candidate.reference_trader_id!
+      )
+      if (!currentByIdentity.has(referenceIdentity)) {
+        staleCandidate = true
+        continue
+      }
+    }
+    recommendations.push(materializeRecommendation(candidate, current))
+  }
+
+  if (recommendations.length === 0) {
+    return unavailablePersonalRecommendations(
+      staleCandidate ? 'partial' : 'unknown',
+      staleCandidate ? 'cached_candidate_unverified' : 'public_rank_unavailable'
+    )
+  }
+
+  return {
+    recommendations,
+    rankingVisibility: staleCandidate ? 'partial' : 'verified',
+    rankingVisibilityReason: staleCandidate ? 'cached_candidate_unverified' : null,
+  }
+}
+
+/**
+ * Compatibility helper for direct callers. API routes should cache only
+ * getPersonalRecommendationCandidates and always materialize before return.
+ */
+export async function getPersonalRecommendations(
+  userId: string,
+  limit = 20
+): Promise<PersonalRecommendation[]> {
+  const candidates = await getPersonalRecommendationCandidates(userId, limit)
+  return (await materializePersonalRecommendations(candidates, limit)).recommendations
 }
