@@ -122,6 +122,25 @@ describe('channel page client snapshot', () => {
     expect(page).toContain('uploadOperationRef.current?.controller.abort()')
   })
 
+  it('keeps every send path closed until the attachment upload settles', () => {
+    const page = readFileSync(join(__dirname, '../page.tsx'), 'utf8')
+    const start = page.indexOf('const handleSend = () =>')
+    const end = page.indexOf('const handleFileSelect', start)
+    const handler = page.slice(start, end)
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    expect(handler).toContain('uploading ||')
+    expect(handler).toContain('uploadOperationRef.current ||')
+    expect(handler.indexOf('uploadOperationRef.current')).toBeLessThan(
+      handler.indexOf('setNewMessage')
+    )
+    expect(page).toContain('onChange={handleFileSelect}\n        disabled={uploading}')
+    expect(page).toContain(
+      'disabled={(!newMessage.trim() && !pendingAttachment) || sending || uploading}'
+    )
+  })
+
   it('drops realtime callbacks from a superseded viewer or channel', () => {
     const page = readFileSync(join(__dirname, '../page.tsx'), 'utf8')
 

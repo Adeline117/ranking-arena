@@ -727,7 +727,16 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
 
   const handleSend = () => {
     const hasContent = newMessage.trim() || pendingAttachment
-    if (!hasContent || !userId || !channelId || !accessToken) return
+    if (
+      uploading ||
+      uploadOperationRef.current ||
+      !hasContent ||
+      !userId ||
+      !channelId ||
+      !accessToken
+    ) {
+      return
+    }
 
     const content = newMessage.trim()
     if (content.length > 2000) {
@@ -1581,6 +1590,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         type="file"
         accept="image/*,video/*,.pdf,.doc,.docx,.txt,.zip"
         onChange={handleFileSelect}
+        disabled={uploading}
         style={{ display: 'none' }}
       />
 
@@ -1799,7 +1809,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             onClick={handleSend}
             aria-label={t('send')}
             title={t('send')}
-            disabled={(!newMessage.trim() && !pendingAttachment) || sending}
+            disabled={(!newMessage.trim() && !pendingAttachment) || sending || uploading}
             style={{
               width: tokens.touchTarget.min,
               height: tokens.touchTarget.min,
@@ -1813,7 +1823,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                 newMessage.trim() || pendingAttachment
                   ? 'var(--color-on-accent)'
                   : tokens.colors.text.tertiary,
-              cursor: (newMessage.trim() || pendingAttachment) && !sending ? 'pointer' : 'default',
+              cursor:
+                (newMessage.trim() || pendingAttachment) && !sending && !uploading
+                  ? 'pointer'
+                  : 'default',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
