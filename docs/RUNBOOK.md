@@ -237,6 +237,16 @@ This source-only boundary does not change the existing `app/api/trader/onchain-e
 worker/on-chain source logic, pages, or evidence paths. It does not stop, inspect, or prove any
 deployed probe, host, scheduler, or provider state.
 
+### V1 archive enrich probe source boundary
+
+Do not use `scripts/archive/test-enrich-fix.sh` as an incident workaround. This checked-in
+compatibility path writes fixed `[RETIRED]` only to stderr, leaves stdout empty, and exits `2`
+for every invocation.
+
+This source-only boundary is limited to that file: it is not a recoverable work route and does
+not change, check, or prove any API route, on-chain pipeline, worker, deploy flow, or product
+behavior. It cannot establish any external or deployed state.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
