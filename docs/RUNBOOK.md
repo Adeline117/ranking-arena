@@ -127,6 +127,18 @@ This is source-only containment, not an instruction to stop, inspect, or prove a
 database, schedule, or historical Library data. Other Library helpers, database schema, and historical archive
 documentation remain outside this bounded conclusion.
 
+### V1 standalone Flash News CLI source boundary
+
+Do not use the standalone Flash News CLIs as an incident workaround. The checked-in source hold is limited to
+`scripts/flash-news/collect.mjs`, `scripts/flash-news/retranslate-all.mjs`,
+`scripts/backfill-flash-news-classify.mjs`, `scripts/backfill-flash-news-translate.mjs`,
+`scripts/purge-flash-news-noncrypto.mjs`, and `scripts/dedup-hot-posts.mjs`. With any arguments, each retained
+path reports fixed `RETIRED` and exits `2`; it does not fetch or mutate a database or file.
+
+This bounded source conclusion does not touch `app/api/cron/flash-news-fetch`, `/api/flash-news`, or the Flash News
+UI, and does not change shared classifier/translator runtime behavior; each remains subject to separate review. It is not an instruction to
+stop, inspect, or prove any external or already deployed script or scheduler.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
