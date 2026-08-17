@@ -220,17 +220,43 @@ V1 的公开 API-key 绑定选择器只展示 Binance、Bybit、Bitget，即当�
 
 ## 9. 定时任务 (Cron)
 
-| 路由                                      | 方法     | 描述                                                                                | 认证       |
-| ----------------------------------------- | -------- | ----------------------------------------------------------------------------------- | ---------- |
-| `/api/cron/check-trader-alerts`           | GET/POST | V1 auth-first tombstone；401/410/no-store；不评估、不发推送或邮件                   | Cron Token |
-| `/api/cron/broadcast-trader-events`       | GET      | V1 auth-first tombstone；401/410/no-store；不读取交易员事件、不写通知或发推送       | Cron Token |
-| `/api/cron/weekly-digest`                 | GET      | V1 auth-first tombstone；401/410/no-store；不读取订阅者数据、不发送个性化邮件       | Cron Token |
-| `/api/cron/check-data-freshness`          | GET      | 检查数据新鲜度                                                                      | Cron Token |
-| `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher | Cron Token |
-| `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement               | Cron Token |
-| `/api/cron/scan-data-quality`             | GET/POST | 未调度 auth-first tombstone；401/410/no-store；需 exact versioned scanner           | Cron Token |
-| `/api/cron/sync-authorized-traders`       | GET      | V1 兼容认证 no-op；不扫描授权、不创建公共 first-party 作业                          | Cron Token |
-| `/api/cron/aggregate-portfolio-snapshots` | GET      | V1 兼容认证 no-op；不读取旧凭据、不写 snapshots，且未被 Vercel 调度                 | Cron Token |
+| 路由                                      | 方法     | 描述                                                                                                                                                        | 认证       |
+| ----------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/cron/check-trader-alerts`           | GET/POST | V1 auth-first tombstone；401/410/no-store；不评估、不发推送或邮件                                                                                           | Cron Token |
+| `/api/cron/broadcast-trader-events`       | GET      | V1 auth-first tombstone；401/410/no-store；不读取交易员事件、不写通知或发推送                                                                               | Cron Token |
+| `/api/cron/weekly-digest`                 | GET      | V1 auth-first tombstone；401/410/no-store；不读取订阅者数据、不发送个性化邮件                                                                               | Cron Token |
+| `/api/cron/compute-leaderboard`           | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或发布排名                | Cron Token |
+| `/api/cron/precompute-composite`          | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或写缓存                  | Cron Token |
+| `/api/cron/sync-meilisearch`              | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/锁/数据或调用搜索提供方          | Cron Token |
+| `/api/cron/pipeline-evaluate`             | GET      | V1 ranking command auth-first hold；无效认证 401，认证后固定 410 `CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读参数/pipeline log/数据/状态或发送告警 | Cron Token |
+| `/api/cron/check-data-freshness`          | GET      | 检查数据新鲜度                                                                                                                                              | Cron Token |
+| `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher                                                                         | Cron Token |
+| `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement                                                                                       | Cron Token |
+| `/api/cron/scan-data-quality`             | GET/POST | 未调度 auth-first tombstone；401/410/no-store；需 exact versioned scanner                                                                                   | Cron Token |
+| `/api/cron/sync-authorized-traders`       | GET      | V1 兼容认证 no-op；不扫描授权、不创建公共 first-party 作业                                                                                                  | Cron Token |
+| `/api/cron/aggregate-portfolio-snapshots` | GET      | V1 兼容认证 no-op；不读取旧凭据、不写 snapshots，且未被 Vercel 调度                                                                                         | Cron Token |
+
+### V1 ranking-command source boundary
+
+在本源码版本中，下列同一排名命令链的五个 endpoint 使用固定
+`V1_CRON_EXECUTION_PUBLISHED=false` 守卫；它不是环境开关。本小节不概括其他
+`/api/cron/*` 路由：
+
+- `GET /api/cron/compute-leaderboard`
+- `GET /api/cron/precompute-composite`
+- `GET /api/cron/sync-meilisearch`
+- `GET /api/cron/pipeline-evaluate`
+- `GET` / `POST /api/hooks/post-deploy`
+
+上述入口均先验证服务认证；缺失或无效认证返回 `401`，认证有效时固定返回 `410`
+`CRON_EXECUTION_NOT_PUBLISHED`。两条路径均带三层 `no-store`，并在 request body/query
+解析、锁、pipeline log、缓存、数据库或 provider 调用之前结束。
+
+固定 `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` 是另一条 legacy downstream ranking
+command worker/scheduler/caller 源码链的边界：本版本 worker entry 会在 dotenv、DB、Redis、
+BullMQ 或 HTTP 初始化前退出，scheduler/caller 会在 BullMQ、Redis 或 network 工作前返回。
+两项源码守卫都不能停止已运行的 host process 或 checkout 外已持久化的 schedule，也不构成其
+当前运行状态的证据。
 
 ---
 
@@ -252,15 +278,16 @@ V1 的公开 API-key 绑定选择器只展示 Binance、Bybit、Bitget，即当�
 
 ## 11. 工具与其他
 
-| 路由                         | 方法                | 描述                                                                  | 认证      |
-| ---------------------------- | ------------------- | --------------------------------------------------------------------- | --------- |
-| `/api/health`                | GET                 | 健康检查                                                              | 否        |
-| `/api/health/detailed`       | GET                 | 详细健康状态                                                          | 否        |
-| `/api/translate`             | POST                | 翻译服务                                                              | 是        |
-| `/api/settings/export`       | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据） | 是 + CSRF |
-| `/api/saved-filters`         | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                    | 是        |
-| `/api/search/suggestions`    | GET                 | 搜索建议                                                              | 否        |
-| `/api/portfolio/suggestions` | GET                 | 已下线；所有 tier 固定返回 403                                        | 不适用    |
+| 路由                         | 方法                | 描述                                                                                                                                | 认证       |
+| ---------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/health`                | GET                 | 健康检查                                                                                                                            | 否         |
+| `/api/health/detailed`       | GET                 | 详细健康状态                                                                                                                        | 否         |
+| `/api/hooks/post-deploy`     | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估 | Cron Token |
+| `/api/translate`             | POST                | 翻译服务                                                                                                                            | 是         |
+| `/api/settings/export`       | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                               | 是 + CSRF  |
+| `/api/saved-filters`         | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                  | 是         |
+| `/api/search/suggestions`    | GET                 | 搜索建议                                                                                                                            | 否         |
+| `/api/portfolio/suggestions` | GET                 | 已下线；所有 tier 固定返回 403                                                                                                      | 不适用     |
 
 人类可读 API 文档页面是 `/api-docs`；机器契约保存在仓库
 `docs/openapi.yaml`，不存在 `/api/docs` App Router endpoint。

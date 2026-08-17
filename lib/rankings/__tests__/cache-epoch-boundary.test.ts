@@ -8,7 +8,6 @@ function source(path: string): string {
 describe('public ranking cache epoch boundary', () => {
   it.each([
     'app/api/rankings/live/route.ts',
-    'app/api/cron/precompute-composite/route.ts',
     'app/api/rankings/platform-stats/route.ts',
     'app/api/sidebar/top-traders/route.ts',
     'app/api/trader/[platform]/[trader_key]/route.ts',
@@ -19,6 +18,13 @@ describe('public ranking cache epoch boundary', () => {
     'lib/realtime/ranking-store.ts',
   ])('%s cannot read a pre-authority ranking cache key', (path) => {
     expect(source(path)).toContain('publicRankingCacheKey')
+  })
+
+  it('the retired composite cache command cannot read a ranking cache key during V1', () => {
+    const route = source('app/api/cron/precompute-composite/route.ts')
+
+    expect(route).toContain('v1CronExecutionGate(request) ?? v1CronExecutionUnavailableResponse()')
+    expect(route).not.toContain('publicRankingCacheKey')
   })
 
   it('epochs both the live sorted set and its detail hash', () => {

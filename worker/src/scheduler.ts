@@ -1,15 +1,14 @@
 /**
- * Job scheduler — legacy pipeline residue (score + meilisearch only).
+ * Legacy ranking command-chain scheduler.
  *
  * ENDGAME (ARENA_DATA_SPEC v1.2): all leaderboard fetching + enrichment moved
- * to the arena-ingest-worker (worker/src/ingest/). This scheduler now only
- * keeps the downstream chain alive: Arena Score recompute (reads
- * public.trader_latest, which the ingest pipeline compat-writes) and
- * Meilisearch sync. Stale fetch and enrich schedulers are actively removed
- * so retired legacy jobs can never fire again.
+ * to the arena-ingest-worker (worker/src/ingest/). Its historical role was
+ * score recompute and Meilisearch sync. The V1 gate returns before resolving
+ * or mutating BullMQ; it cannot stop a scheduler already persisted elsewhere.
  */
 
-import { getQueue, JOB, type ComputeLeaderboardData } from './queues'
+import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
+import type { ComputeLeaderboardData } from './queues'
 
 const SCORE_INTERVALS_MS = 2 * 3600_000 // every 2h
 
@@ -17,6 +16,17 @@ const SCORE_INTERVALS_MS = 2 * 3600_000 // every 2h
  * Register all repeatable jobs. Idempotent — BullMQ deduplicates by scheduler ID.
  */
 export async function registerSchedules(): Promise<void> {
+  // Do not even resolve the BullMQ queue while V1 keeps this retired command
+  // chain unpublished. In particular, do not mutate persisted schedulers as
+  // part of this source-only containment.
+  if (!isV1RankingCommandChainPublished()) {
+    console.error(
+      '[RETIRED] V1 ranking command chain is not published; schedules remain untouched.'
+    )
+    return
+  }
+
+  const { getQueue, JOB } = await import('./queues')
   const queue = getQueue()
 
   // ENDGAME cleanup: remove every legacy fetch/enrich scheduler left in Redis

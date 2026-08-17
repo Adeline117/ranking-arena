@@ -141,8 +141,9 @@ delivery deduplication.
 ## Manual Ingest Canary — disabled during V1 NO-GO
 
 The retired `unified-connector`, `batch-fetch-traders`, and `batch-enrich` HTTP
-routes must not be used. First-party collection is owned by region-affine ingest
-workers, and a canary creates real work rather than a dry run.
+routes must not be used. The historical/design ownership model assigned first-party
+collection to region-affine ingest workers, and a canary would create real work rather
+than a dry run.
 
 Do not enqueue a canary, read worker credentials, select a region, or inspect a
 worker directly from this runbook. A future owner-approved ingest plan must specify
@@ -154,10 +155,24 @@ considered.
 
 ## Manual Leaderboard Recompute — disabled during V1 NO-GO
 
-`compute-leaderboard` writes serving rows. It must not be invoked manually, by a
-cron replay, or through an automation workaround. A score recompute over unchanged
-evidence does not advance `leaderboard_source_freshness.source_as_of` and cannot
-repair a missing source/publication witness.
+The retired `compute-leaderboard` design was a serving-row writer. For the documented
+ranking-command chain, the fixed, non-environment
+`V1_CRON_EXECUTION_PUBLISHED=false` source gate guards these endpoints:
+`GET /api/cron/compute-leaderboard`, `GET /api/cron/precompute-composite`,
+`GET /api/cron/sync-meilisearch`, `GET /api/cron/pipeline-evaluate`, and
+`GET`/`POST /api/hooks/post-deploy`. Each is auth-first: invalid or missing service
+authentication receives `401`; valid authentication receives `410`
+`CRON_EXECUTION_NOT_PUBLISHED`; both paths carry three `no-store` headers and end
+before parameters, locks, pipeline logs, stores, cache, or provider work. This
+ranking-command list does not classify other cron routes.
+
+The separate fixed `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` source gate closes the
+legacy downstream worker/scheduler/caller chain before its dotenv, DB, Redis, BullMQ,
+or HTTP work. It does not stop a running process or an externally persisted schedule,
+and it is not runtime evidence. None of these direct commands may be invoked manually,
+by a cron replay, or through an automation workaround. A score recompute over
+unchanged evidence does not advance `leaderboard_source_freshness.source_as_of` and
+cannot repair a missing source/publication witness.
 
 Any future recompute requires a separately approved release plan with exact source
 evidence, cohort and freshness proof, write target, rollback witness, and post-write
@@ -278,7 +293,8 @@ non-sensitive proof; this document intentionally has no bypass workflow.
   证明，须在未来独立只读复核中重新裁定。该历史快照不能被解释成任何文件的 apply
   授权。
 - 旧 Token 公开面、legacy position-history、Tier-A writer/queue、凭据连接、
-  Portfolio 与 claim 路径都必须保持 fail closed；两台 ingest writer 继续停止。
+  Portfolio 与 claim 路径都必须保持 fail closed。历史 owner 记录把两台 ingest writer
+  置于 stop hold；这不是其当前运行状态的证明，本 runbook 也不授权启动、停止或恢复它们。
   不得通过手动 refresh、重放、ACL 放宽、补写 ledger、重新启用 cron 或恢复旧 writer
   来“修复”门禁。
 

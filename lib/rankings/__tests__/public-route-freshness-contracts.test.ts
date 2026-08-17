@@ -27,13 +27,13 @@ describe('public ranking freshness route contracts', () => {
     expect(v2).toContain('updated_at: freshnessSummary.asOf')
   })
 
-  it('composite cache joins source watermarks and does not discard stale last-good ranks', () => {
+  it('the retired composite cache command cannot read or publish source freshness during V1', () => {
     const route = source('app/api/cron/precompute-composite/route.ts')
 
-    expect(route).toContain('LEFT JOIN leaderboard_source_freshness AS freshness')
-    expect(route).toContain('freshness.source_as_of AS as_of_ts')
-    expect(route).not.toContain('computed_at >= $2')
-    expect(route).toContain("publicRankingCacheKey('precomputed:composite:all:v2')")
+    expect(route).toContain('v1CronExecutionGate(request) ?? v1CronExecutionUnavailableResponse()')
+    expect(route).not.toContain('leaderboard_source_freshness')
+    expect(route).not.toContain('publicRankingCacheKey')
+    expect(route).not.toContain('request.nextUrl')
   })
 
   it('SSR derives its timestamp from the complete live source generation', () => {

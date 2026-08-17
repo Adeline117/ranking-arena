@@ -219,40 +219,16 @@ describe('compute leaderboard source freshness writes', () => {
     ).rejects.toThrow('source freshness upsert failed: write failed')
   })
 
-  it('publishes the required watermark seal only after every cohort finalizer succeeds', () => {
-    const route = readFileSync(
-      join(process.cwd(), 'app/api/cron/compute-leaderboard/route.ts'),
-      'utf8'
-    )
-    const completeWriteGuard = route.indexOf('if (upsertAborted || upsertErrors > 0)')
-    const zeroOut = route.indexOf('await zeroOutExcluded({', completeWriteGuard)
-    const atomicCleanup = route.indexOf('await atomicPlatformCleanup(', zeroOut)
-    const rerank = route.indexOf('await rerankAllRows(', atomicCleanup)
-    const publish = route.indexOf('await upsertSourceFreshness({', rerank)
-    const publishLog = route.indexOf('logger.info(', publish)
-
-    expect(completeWriteGuard).toBeGreaterThan(-1)
-    expect(route.slice(completeWriteGuard, zeroOut)).toContain('throw new Error(')
-    expect(zeroOut).toBeGreaterThan(completeWriteGuard)
-    expect(atomicCleanup).toBeGreaterThan(zeroOut)
-    expect(rerank).toBeGreaterThan(atomicCleanup)
-    expect(publish).toBeGreaterThan(rerank)
-    expect(publishLog).toBeGreaterThan(publish)
-    expect(route.slice(publish, publishLog)).not.toMatch(/\b(?:try|catch)\b/)
-    expect(route).not.toContain('source freshness publish failed')
-    expect(route).toContain('source_as_of: trader.source_board_as_of')
-    expect(route.slice(publish, publishLog)).toContain('expectedSources: freshRankingPlatforms')
-    expect(route.slice(publish, publishLog)).toContain('sourceEvidence: freshSourceEvidence')
-  })
-
-  it('does not rescore stale source inputs while preserving their last-good rows', () => {
+  it('keeps direct leaderboard publication unavailable during V1 verification', () => {
     const route = readFileSync(
       join(process.cwd(), 'app/api/cron/compute-leaderboard/route.ts'),
       'utf8'
     )
 
-    expect(route).toContain('const freshPlatformSet = new Set(freshPlatforms)')
-    expect(route).toContain('.filter((t) => freshPlatformSet.has(t.source))')
+    expect(route).toContain('v1CronExecutionGate(request) ?? v1CronExecutionUnavailableResponse()')
+    expect(route).not.toContain('await upsertSourceFreshness(')
+    expect(route).not.toContain('await zeroOutExcluded(')
+    expect(route).not.toContain('request.nextUrl')
   })
 
   it('never zeroes a stale source while cleaning excluded rows from fresh sources', async () => {

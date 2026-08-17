@@ -326,6 +326,8 @@ jobs:
         run: npm run lint:ingest-worker
       - name: Type-check ingest worker and ownership control plane
         run: npm run type-check:ingest-worker
+      - name: V1 ranking command-chain containment
+        run: node --test worker/tests/v1-ranking-command-chain-containment.test.mjs
       - name: VPS process topology safety
         run: npm run qa:vps-topology
       - name: UI sweep unit contracts

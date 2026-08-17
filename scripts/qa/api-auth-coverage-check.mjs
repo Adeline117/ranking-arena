@@ -22,6 +22,7 @@ const AUTH_PATTERNS = [
   /\brequireAuth\b/, // lib/supabase/server.ts
   /\bverifyAuth\b/, // lib/api/auth.ts
   /\bwithCron\b/, // lib/api/with-cron.ts — timing-safe cron
+  /\bv1CronExecutionGate\b/, // V1 auth-first cron retirement gate
   /\bverifyCronSecret\b/,
   /\bverifyEdgeCronSecret\b/, // lib/auth/edge-cron-auth.ts — Web Crypto for Edge routes
   /\bwithAdminAuth\b/, // lib/api/with-admin-auth.ts
@@ -68,6 +69,9 @@ const PUBLIC_API_ROUTES = new Set([
   'rankings/live',
   'rankings/movers',
   'rankings/platform-stats',
+  // V1 compatibility response: fixed empty no-store payload, no user data or
+  // serving-side recommendation work while legacy daily evidence is quarantined.
+  'recommendations/hot',
   'trader/[platform]/[trader_key]/history',
   'traders/[handle]/badges',
   'traders/[handle]/equity',

@@ -26,6 +26,25 @@ Git-triggered Vercel deployment. These are source-only containment changes: they
 not prove or modify a deployed control plane. Historical route implementations are
 code-review context only and do not authorize an operation.
 
+This source revision also has two narrow, immutable publication holds; neither is an
+environment toggle or a claim about a deployed process:
+
+- For the documented ranking-command chain, `V1_CRON_EXECUTION_PUBLISHED=false`
+  guards five direct endpoints: `GET /api/cron/compute-leaderboard`,
+  `GET /api/cron/precompute-composite`, `GET /api/cron/sync-meilisearch`,
+  `GET /api/cron/pipeline-evaluate`, and `GET`/`POST /api/hooks/post-deploy`. Each
+  authenticates before doing work: missing or invalid service authentication returns
+  `401`; valid authentication returns `410` with `CRON_EXECUTION_NOT_PUBLISHED`; both
+  responses carry the three `no-store` headers before request parsing, locks, pipeline
+  logs, stores, cache, or provider access. This ranking-command list does not classify
+  other cron routes.
+- `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` separately closes the checked-in legacy
+  downstream ranking-command worker, scheduler, and caller chain. On this source
+  revision its worker entry exits before dotenv, database, Redis, BullMQ, or HTTP
+  initialization, and its scheduler/caller paths return before BullMQ, Redis, or
+  network work. It cannot stop an already-running host process or a schedule stored
+  outside this checkout.
+
 ## Data API
 
 Arena provides a REST API for programmatic access to trader rankings, performance data, and search across the sources currently exposed by the serving registry.
@@ -138,26 +157,26 @@ Each trader profile includes:
 
 ## Tech Stack
 
-| Layer         | Technology                                | Details                                                                        |
-| ------------- | ----------------------------------------- | ------------------------------------------------------------------------------ |
-| Framework     | Next.js 16                                | App Router, React 19, Turbopack dev server                                     |
-| Language      | TypeScript 5                              | Strict mode; Jest, Playwright, and `node:test` contract suites                 |
-| Database      | Supabase                                  | PostgreSQL, Auth, Realtime, explicit RLS policies and grants                   |
-| Caching       | Upstash Redis                             | Edge-compatible, used for leaderboard cache, rate limiting, session data       |
-| Search        | Meilisearch                               | Full-text search with fuzzy matching (pg_trgm fallback)                        |
-| Hosting       | Vercel                                    | Edge + Serverless functions, primary region hnd1 (Tokyo), ISR for static pages |
-| Payments      | Stripe                                    | Checkout, subscriptions, webhooks, customer portal                             |
-| Auth          | Supabase Auth + Privy                     | Email/password + Web3 wallet login                                             |
-| Styling       | Tailwind CSS v4                           | Design token system, dark/light theme                                          |
-| Exchange Data | 26 registered `SourceAdapter`s            | Registry-driven RAW evidence, pure parsers, staging, and serving publication   |
-| State         | Zustand + React Query + SWR               | Zustand for global state, React Query + SWR for server data fetching           |
-| Resilience    | Cockatiel                                 | Retry with exponential backoff + circuit breaker (`ConsecutiveBreaker`)        |
-| Validation    | Zod                                       | Runtime validation for pipeline payloads and protected request bodies          |
-| Monitoring    | Sentry + PipelineLogger + Healthchecks.io | Observability integrations; V1 is report-only and does not remediate           |
-| Alerts        | Telegram Bot                              | Alert integration code; no V1 automated recovery or delivery is authorized     |
-| Mobile        | Capacitor                                 | iOS + Android native apps with push, haptics, biometrics                       |
-| Web3          | viem + wagmi + RainbowKit + EAS           | Wallet login, on-chain attestation                                             |
-| Security      | CSP, HSTS, RLS, timingSafeEqual           | Security headers, route authorization, rate limiting, and input validation     |
+| Layer         | Technology                                | Details                                                                                |
+| ------------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| Framework     | Next.js 16                                | App Router, React 19, Turbopack dev server                                             |
+| Language      | TypeScript 5                              | Strict mode; Jest, Playwright, and `node:test` contract suites                         |
+| Database      | Supabase                                  | PostgreSQL, Auth, Realtime, explicit RLS policies and grants                           |
+| Caching       | Upstash Redis                             | Edge-compatible, used for leaderboard cache, rate limiting, session data               |
+| Search        | Meilisearch                               | Full-text search with fuzzy matching (pg_trgm fallback)                                |
+| Hosting       | Vercel                                    | Edge + Serverless functions, primary region hnd1 (Tokyo), ISR for static pages         |
+| Payments      | Stripe                                    | Checkout, subscriptions, webhooks, customer portal                                     |
+| Auth          | Supabase Auth + Privy                     | Email/password + Web3 wallet login                                                     |
+| Styling       | Tailwind CSS v4                           | Design token system, dark/light theme                                                  |
+| Exchange Data | 26 registered `SourceAdapter`s            | Registry-driven RAW evidence, pure parsers, staging, and serving publication           |
+| State         | Zustand + React Query + SWR               | Zustand for global state, React Query + SWR for server data fetching                   |
+| Resilience    | Cockatiel                                 | Retry with exponential backoff + circuit breaker (`ConsecutiveBreaker`)                |
+| Validation    | Zod                                       | Runtime validation for pipeline payloads and protected request bodies                  |
+| Monitoring    | Sentry + PipelineLogger + Healthchecks.io | Historical/source observability integrations; V1 is report-only and does not remediate |
+| Alerts        | Telegram Bot                              | Alert integration code; no V1 automated recovery or delivery is authorized             |
+| Mobile        | Capacitor                                 | iOS + Android native apps with push, haptics, biometrics                               |
+| Web3          | viem + wagmi + RainbowKit + EAS           | Wallet login, on-chain attestation                                                     |
+| Security      | CSP, HSTS, RLS, timingSafeEqual           | Security headers, route authorization, rate limiting, and input validation             |
 
 ## Architecture
 
@@ -200,7 +219,7 @@ Each trader profile includes:
 
 ### Key Architectural Decisions
 
-**Registry-Driven Ingest Adapters.** The worker bootstrap explicitly registers 26 `SourceAdapter` implementations in `lib/ingest/adapters/register.ts`; one adapter may serve multiple `arena.sources` rows. Each adapter declares supported surfaces, models durable RAW capture through a rate-budgeted `FetchSession`, and exposes pure parsers so stored evidence can be replayed without touching the network or clock. The database registry, not a static marketing list, decides which source/window promises are active and serving.
+**Registry-Driven Ingest Adapters.** The source bootstrap registers 26 `SourceAdapter` implementations in `lib/ingest/adapters/register.ts`; one adapter may serve multiple `arena.sources` rows. Each adapter declares supported surfaces, models durable RAW capture through a rate-budgeted `FetchSession`, and exposes pure parsers so stored evidence can be replayed without touching the network or clock. This is intended source architecture, not evidence that a worker is running. The database registry, not a static marketing list, decides which source/window promises are active and serving.
 
 **Source-Native Fetch Paths.** Adapter code models the source-specific interfaces and captures durable RAW evidence before pure parsing. During V1 NO-GO, it is not an instruction to operate a proxy, host, browser worker, or upstream fetch path. Source-network evidence must be specifically approved by the owner and remain read-only.
 
@@ -223,10 +242,14 @@ The forward migrations `20260808090000_quarantine_legacy_trader_daily_snapshots.
 
 ### V1 scheduled work and monitoring
 
-There is no V1 scheduled maintenance, fetch, cleanup, backfill, notification, or
-recovery job. Monitoring integrations are report-only. Collect production evidence
-only after the owner approves the exact read-only query; never turn an observation
-into a route invocation, task, mutation, or automatic fix.
+V1 authorizes no scheduled maintenance, fetch, cleanup, backfill, notification, or
+recovery work. The checked-in Vercel configuration has zero schedules; separate
+disabled workflow triggers and any external scheduler are not evidence of an approved
+runtime. Monitoring integrations are report-only source interfaces. This does not
+establish whether any external scheduler, host worker, or provider pipeline is
+running. Collect production evidence only after the owner approves the exact read-only
+query; never turn an observation into a route invocation, task, mutation, or automatic
+fix.
 
 ## Directory Structure
 
@@ -262,7 +285,7 @@ lib/                          # Core business logic
     unified.ts                # Unified data layer (getLeaderboard, getTraderDetail, searchTraders)
     trader/                   # Trader data functions with fallback chains
   services/                   # Business logic
-    pipeline-logger.ts        # 3-destination execution logging
+    pipeline-logger.ts        # Historical/source execution-logging interface
     pipeline-self-heal.ts     # Legacy recovery implementation; no V1 authority
     anomaly-detection.ts      # Statistical anomaly detection
     telegram-bot.ts           # Telegram alerts
@@ -309,20 +332,20 @@ Core tables (all with Row Level Security enabled):
 
 ### Trader Data
 
-| Table                     | Purpose                                                                   |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `leaderboard_ranks`       | Precomputed ranked leaderboard; each season is normally rebuilt every 2h  |
-| `arena.trader_stats`      | Point-in-time performance per (trader, timeframe) — primary write table   |
-| `arena.traders`           | Trader identity registry, keyed by `(source_id, exchange_trader_id)`      |
-| `trader_sources`          | Trader source identities (legacy serving + enrichment)                    |
-| `trader_equity_curve`     | Historical equity curve data points per period                            |
-| `arena.position_history`  | Current ingest history facts; not rank-eligible without authority proof   |
-| `trader_position_history` | Frozen forensic archive; no application reads and never ranking authority |
-| `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period   |
-| `trader_asset_breakdown`  | Asset allocation analysis per period                                      |
-| `trader_daily_snapshots`  | Frozen legacy daily rows; producer retired; never ranking authority       |
-| `trader_portfolio`        | Current open positions                                                    |
-| `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`           |
+| Table                     | Purpose                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `leaderboard_ranks`       | Precomputed ranked leaderboard; historical/design cadence was each season every 2h |
+| `arena.trader_stats`      | Point-in-time performance per (trader, timeframe) — primary write table            |
+| `arena.traders`           | Trader identity registry, keyed by `(source_id, exchange_trader_id)`               |
+| `trader_sources`          | Trader source identities (legacy serving + enrichment)                             |
+| `trader_equity_curve`     | Historical equity curve data points per period                                     |
+| `arena.position_history`  | Current ingest history facts; not rank-eligible without authority proof            |
+| `trader_position_history` | Frozen forensic archive; no application reads and never ranking authority          |
+| `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period            |
+| `trader_asset_breakdown`  | Asset allocation analysis per period                                               |
+| `trader_daily_snapshots`  | Frozen legacy daily rows; producer retired; never ranking authority                |
+| `trader_portfolio`        | Current open positions                                                             |
+| `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`                    |
 
 ### User and Social
 
@@ -340,13 +363,13 @@ Core tables (all with Row Level Security enabled):
 
 ### System
 
-| Table                        | Purpose                                                   |
-| ---------------------------- | --------------------------------------------------------- |
-| `pipeline_logs`              | Cron job execution logs (status, duration, record counts) |
-| `pipeline_job_status` (View) | Latest status per job                                     |
-| `pipeline_job_stats` (View)  | 7-day success rate and avg duration per job               |
-| `subscriptions`              | Pro membership records                                    |
-| `stripe_customers`           | Stripe customer mapping                                   |
+| Table                        | Purpose                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `pipeline_logs`              | Historical/source job-execution log schema (status, duration, record counts) |
+| `pipeline_job_status` (View) | Historical/source latest-status view per job                                 |
+| `pipeline_job_stats` (View)  | Historical/source 7-day success-rate and duration view                       |
+| `subscriptions`              | Pro membership records                                                       |
+| `stripe_customers`           | Stripe customer mapping                                                      |
 
 ## Getting Started
 
