@@ -5267,7 +5267,6 @@ const zh = {
   noGroupsFollowedYet: '还没有关注的小组',
   groupActionsTitle: '小组操作',
   newPostButton: '+ 新帖子',
-  fetchingLinkPreview: '正在获取链接预览...',
   stickerButton: '贴纸',
   stickersButton: '贴纸',
   deleteButton: '删除',

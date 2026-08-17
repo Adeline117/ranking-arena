@@ -5251,7 +5251,6 @@ const ko = {
   noGroupsFollowedYet: '팔로우한 그룹이 없습니다',
   groupActionsTitle: '그룹 작업',
   newPostButton: '+ 새 게시물',
-  fetchingLinkPreview: '링크 미리보기 가져오는 중...',
   stickerButton: '스티커',
   stickersButton: '스티커',
   deleteButton: '삭제',

@@ -5002,7 +5002,6 @@ const ja = {
   noGroupsFollowedYet: 'フォロー中のグループはありません',
   groupActionsTitle: 'グループ操作',
   newPostButton: '+ 新規投稿',
-  fetchingLinkPreview: 'リンクプレビューを取得中...',
   stickerButton: 'スタンプ',
   stickersButton: 'スタンプ',
   deleteButton: '削除',

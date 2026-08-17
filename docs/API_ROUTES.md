@@ -164,24 +164,24 @@ API 和展示/新链接传播：`GET`/`POST /api/referral` 与 `POST /api/referr
 
 ## 3. 帖子与社交
 
-| 路由                            | 方法                | 描述                 | 认证     |
-| ------------------------------- | ------------------- | -------------------- | -------- |
-| `/api/posts`                    | GET/POST            | 帖子列表/发帖        | POST: 是 |
-| `/api/posts/[id]`               | GET/PUT/DELETE      | 获取、编辑或删除帖子 | 写入: 是 |
-| `/api/posts/[id]/edit`          | PUT                 | 编辑帖子             | 是       |
-| `/api/posts/[id]/delete`        | DELETE              | 删除帖子             | 是       |
-| `/api/posts/[id]/like`          | POST                | 点赞帖子             | 是       |
-| `/api/posts/[id]/vote`          | POST                | 投票（赞/踩）        | 是       |
-| `/api/posts/[id]/poll-vote`     | GET/POST            | 查询或提交帖子投票   | POST: 是 |
-| `/api/posts/[id]/bookmark`      | GET/POST            | 查询或修改收藏状态   | 是       |
-| `/api/posts/[id]/repost`        | POST                | 转发帖子             | 是       |
-| `/api/posts/[id]/pin`           | POST                | 置顶帖子             | 是       |
-| `/api/posts/[id]/comments`      | GET/POST/PUT/DELETE | 评论列表与评论写操作 | 写入: 是 |
-| `/api/posts/[id]/comments/like` | POST                | 点赞评论             | 是       |
-| `/api/posts/bookmarks/status`   | POST                | 批量检查收藏状态     | 是       |
-| `/api/posts/link-preview`       | GET                 | 获取链接预览         | 否       |
-| `/api/posts/upload-image`       | POST                | 上传图片             | 是       |
-| `/api/posts/upload-video`       | POST                | 上传视频             | 是       |
+| 路由                            | 方法                | 描述                                                                                                       | 认证     |
+| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------- | -------- |
+| `/api/posts`                    | GET/POST            | 帖子列表/发帖                                                                                              | POST: 是 |
+| `/api/posts/[id]`               | GET/PUT/DELETE      | 获取、编辑或删除帖子                                                                                       | 写入: 是 |
+| `/api/posts/[id]/edit`          | PUT                 | 编辑帖子                                                                                                   | 是       |
+| `/api/posts/[id]/delete`        | DELETE              | 删除帖子                                                                                                   | 是       |
+| `/api/posts/[id]/like`          | POST                | 点赞帖子                                                                                                   | 是       |
+| `/api/posts/[id]/vote`          | POST                | 投票（赞/踩）                                                                                              | 是       |
+| `/api/posts/[id]/poll-vote`     | GET/POST            | 查询或提交帖子投票                                                                                         | POST: 是 |
+| `/api/posts/[id]/bookmark`      | GET/POST            | 查询或修改收藏状态                                                                                         | 是       |
+| `/api/posts/[id]/repost`        | POST                | 转发帖子                                                                                                   | 是       |
+| `/api/posts/[id]/pin`           | POST                | 置顶帖子                                                                                                   | 是       |
+| `/api/posts/[id]/comments`      | GET/POST/PUT/DELETE | 评论列表与评论写操作                                                                                       | 写入: 是 |
+| `/api/posts/[id]/comments/like` | POST                | 点赞评论                                                                                                   | 是       |
+| `/api/posts/bookmarks/status`   | POST                | 批量检查收藏状态                                                                                           | 是       |
+| `/api/posts/link-preview`       | GET                 | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不解析 URL 或发起预览请求 | 否       |
+| `/api/posts/upload-image`       | POST                | 上传图片                                                                                                   | 是       |
+| `/api/posts/upload-video`       | POST                | 上传视频                                                                                                   | 是       |
 
 ### 收藏夹
 
@@ -417,6 +417,7 @@ database、cache、provider 或 network 工作前结束。这只是 source-only 
 | `/api/health/evaluate-report` | GET                 | V1 source-only evaluator hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query 或执行评估工作              | Cron Token |
 | `/api/proxy/phemex`           | GET                 | V1 legacy proxy acquisition auth-first hold；无效认证 `401`，有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`；三层 `no-store`，不解析 URL/query、不 fetch 或 log | Cron Token |
 | `/api/hooks/post-deploy`      | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估                                    | Cron Token |
+| `/api/cdn-proxy`              | GET                 | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不解析 URL 或代理文档请求                                                             | 否         |
 | `/api/translate`              | POST                | 翻译服务                                                                                                                                                               | 是         |
 | `/api/settings/export`        | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                                                                  | 是 + CSRF  |
 | `/api/saved-filters`          | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                                                     | 是         |
@@ -436,6 +437,19 @@ query 解析或任何 evaluator state / alert / rate-limit 工作前结束。`/a
 
 这只是 source-only handler contract，不能停止、检查或证明已部署的 code-quality hook、evaluator、
 alert delivery 或外部 scheduler 的状态。
+
+### V1 public-egress source boundary
+
+`GET /api/cdn-proxy` 与 `GET /api/posts/link-preview` 共用固定、非环境的
+`V1_PUBLIC_EGRESS_PUBLISHED=false` source hold，均固定返回
+`410 PUBLIC_EGRESS_NOT_PUBLISHED` 和 `Cache-Control`、`CDN-Cache-Control`、
+`Vercel-CDN-Cache-Control` 三层 `no-store`。它们不读取 query、执行 rate limit、CORS、
+social feature guard、缓存、DNS lookup、logging 或 outbound fetch；`/api/v1/cdn-proxy` 和
+`/api/v1/posts/link-preview` 只在 rewrite 前使用同一组 exact proxy handoff，不扩展到相邻路径。
+
+这是 source-only handler contract，不能停止、检查或证明此前已部署代码、缓存内容、DNS 状态或
+external host 的状态。群组编辑器这一已知 consumer 已在同一 V1 hold 中移除；其他未列 public
+egress consumer 仍须单独审查。
 
 ---
 
