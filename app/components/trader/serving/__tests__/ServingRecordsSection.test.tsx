@@ -172,6 +172,33 @@ describe('ServingRecordsSection selection scope', () => {
     )
   })
 
+  it('respects reduced-motion for the collecting skeleton', () => {
+    ;(useCopierAggregate as jest.Mock).mockReturnValue({
+      aggregate: null,
+      isPendingUpstream: true,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(
+      <ServingRecordsSection
+        source="gmx"
+        exchangeTraderId="trader-a"
+        capability={capability(['copiers'])}
+        tf={90}
+      />
+    )
+
+    const status = screen.getByRole('status', { name: 'loading' })
+    const skeleton = status.querySelector('.serving-module-skeleton')
+    expect(skeleton).toBeInTheDocument()
+    expect(skeleton).not.toHaveAttribute('style', expect.stringContaining('animation'))
+    const skeletonStyles = screen.getByRole('tablist').parentElement?.querySelector('style')
+    expect(skeletonStyles).toHaveTextContent('@media (prefers-reduced-motion: reduce)')
+    expect(skeletonStyles).toHaveTextContent('.serving-module-skeleton { animation: none; }')
+  })
+
   it('routes a failed copier pending poll to the degraded retry panel', () => {
     const refetch = jest.fn().mockResolvedValue(undefined)
     ;(useCopierAggregate as jest.Mock).mockReturnValue({

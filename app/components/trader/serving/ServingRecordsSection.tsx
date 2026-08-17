@@ -94,13 +94,13 @@ const UNBOUND_HISTORY = {
 function ModuleSkeleton({ height }: { height: number }) {
   return (
     <div
+      className="serving-module-skeleton"
       style={{
         height,
         borderRadius: tokens.radius.lg,
         background:
           'linear-gradient(90deg, var(--color-bg-tertiary) 25%, var(--color-bg-secondary) 50%, var(--color-bg-tertiary) 75%)',
         backgroundSize: '200% 100%',
-        animation: 'servingPulse 1.4s ease infinite',
       }}
     />
   )
@@ -333,7 +333,13 @@ export default function ServingRecordsSection({
 
   return (
     <Box style={{ marginTop: tokens.spacing[6] }}>
-      <style>{`@keyframes servingPulse { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
+      <style>{`
+        @keyframes servingPulse { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+        .serving-module-skeleton { animation: servingPulse 1.4s ease infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .serving-module-skeleton { animation: none; }
+        }
+      `}</style>
       <Box
         ref={tablistRef}
         role="tablist"
