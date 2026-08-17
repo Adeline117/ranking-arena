@@ -60,6 +60,22 @@ checkpoint, and legacy-backfill entrypoints covered by the V1 tombstone contract
 RETIRED compatibility paths that exit 2 and cannot be used as an alternate operations
 route.
 
+### V1 LCP measurement CLI source boundary
+
+Do not use `scripts/performance/measure-lcp.mjs` as an incident, performance, release,
+or deployment workaround. This checked-in legacy compatibility path has no current
+operational caller. With every argument, it writes exactly `[RETIRED]
+scripts/performance/measure-lcp.mjs` to stderr, leaves stdout empty, and exits `2`.
+It does not parse a target, load Lighthouse, access a network, install dependencies,
+start or control a browser, or generate, read, overwrite, or upload a report.
+
+This is source-only containment for that one script. It does not change, disable,
+inspect, or prove the genuine Lighthouse CI/workflow, other performance tools, Vercel
+Analytics, Chrome DevTools, a deployment, browser state, or an already generated report.
+Historical performance, CI, target, or report records are not current execution or
+external-state evidence. A future measurement, CI, or reporting activity requires an
+independently approved ADR-023 owner plan and separate evidence.
+
 ### V1 ranking authority cache-purge source boundary
 
 Do not use `scripts/maintenance/purge-ranking-authority-caches.sh` as an incident workaround.
