@@ -5,16 +5,34 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import {
-  getTraderByHandle,
-  getTraderPerformance,
-  getTraderStats,
-  getTraderPortfolio,
-} from '@/lib/data/trader'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getOrSetWithLock } from '@/lib/cache'
 import { readPublicProfileAudienceByHandle } from '@/lib/profile/public-audience'
+import {
+  fetchPublicProfileRankingRows,
+  PUBLIC_PROFILE_RANKING_PERIODS,
+} from '@/lib/data/trader/public-profile-ranking'
+import {
+  projectPublicFullProfileRanking,
+  fetchPublicFullTraderIdentity,
+  sanitizePublicFullPortfolio,
+  sanitizePublicFullSimilarTraders,
+} from '@/lib/data/trader/public-full-profile'
+import { fetchSimilarTraders } from '@/lib/data/trader/similar'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const PUBLIC_PROFILE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function exactSocialCountOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
 
 export async function GET(request: NextRequest, context: { params: Promise<{ handle: string }> }) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.read)
@@ -27,20 +45,26 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
     try {
       handle = decodeURIComponent(params.handle)
     } catch {
-      return NextResponse.json({ error: 'Invalid handle' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Invalid handle' },
+        { status: 400, headers: PUBLIC_PROFILE_NO_STORE_HEADERS }
+      )
     }
 
     if (!handle || handle.length > 200) {
-      return NextResponse.json({ error: 'Handle is required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Handle is required' },
+        { status: 400, headers: PUBLIC_PROFILE_NO_STORE_HEADERS }
+      )
     }
 
     const supabase = getSupabaseAdmin()
 
     // Trader handles can exist without an app account. When an app profile is
     // present, however, service_role must prove that its current account state
-    // is publicly visible before any cached profile-owned data may be returned.
-    const [profileResult, audience] = await Promise.all([
-      getTraderByHandle(handle),
+    // is publicly visible before any profile-owned data may be returned.
+    const [identityResult, audience] = await Promise.all([
+      fetchPublicFullTraderIdentity(supabase, handle),
       readPublicProfileAudienceByHandle(getSupabaseAdmin(), handle),
     ])
 
@@ -49,142 +73,156 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
         { error: 'User not found' },
         {
           status: 404,
-          headers: { 'Cache-Control': 'private, no-store, max-age=0' },
+          headers: PUBLIC_PROFILE_NO_STORE_HEADERS,
         }
       )
     }
 
-    // Unwrap DataResult: distinguish "not found" from "data layer error"
-    const profile = profileResult?.ok ? profileResult.data : null
-    const profileError = profileResult && !profileResult.ok ? profileResult.error : null
-
-    if (!profile) {
-      // If data layer failed (vs genuine not-found), return 502 so callers can distinguish
-      if (profileError) {
-        logger.error('[API] Data layer error fetching trader profile:', profileError)
-        return NextResponse.json({ error: 'Data layer error' }, { status: 502 })
+    if (!identityResult.identity) {
+      if (identityResult.reason === 'trader_identity_unavailable') {
+        logger.error('[users/full] trader identity query unavailable', { handle })
+        return NextResponse.json(
+          { error: 'Data layer error' },
+          { status: 502, headers: PUBLIC_PROFILE_NO_STORE_HEADERS }
+        )
       }
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404, headers: PUBLIC_PROFILE_NO_STORE_HEADERS }
+      )
+    }
+    const profile = identityResult.identity
+
+    // Rank-bearing fields must observe the serving-head view for this request.
+    // Do not cache this aggregate: a cache hit cannot prove that a row remains
+    // published after a source freshness or completeness change.
+    const [rankingCohort, portfolioResult, subscriptionData] = await Promise.all([
+      fetchPublicProfileRankingRows(supabase, {
+        source: profile.source,
+        sourceTraderId: profile.id,
+        periods: PUBLIC_PROFILE_RANKING_PERIODS,
+      }),
+      (async () => {
+        try {
+          // Position identity/allocation are not ranking claims. Intentionally
+          // do not select entry price, PnL, or mark-to-market value: this old
+          // source cannot prove their price/cost basis for public display.
+          const { data, error } = await supabase
+            .from('trader_portfolio')
+            .select('symbol, direction, invested_pct')
+            .eq('source', profile.source)
+            .eq('source_trader_id', profile.id)
+            .order('captured_at', { ascending: false })
+            .limit(100)
+          if (error) throw error
+          return { positions: sanitizePublicFullPortfolio(data ?? []), error: null }
+        } catch (error) {
+          logger.error('[users/full] trader_portfolio query failed', {
+            handle,
+            error: String(error),
+          })
+          return { positions: [], error: 'portfolio_source_unavailable' }
+        }
+      })(),
+      (async () => {
+        if (audience.status !== 'active') return null
+        try {
+          const { data, error } = await supabase
+            .from('user_profiles')
+            .select(
+              'subscription_tier, show_pro_badge, follower_count, following_count, bio, avatar_url, cover_url'
+            )
+            .eq('id', audience.profile.id)
+            .maybeSingle()
+          if (error) throw error
+          return data
+        } catch (error) {
+          logger.error('[users/full] user_profiles counts query failed', {
+            handle,
+            error: String(error),
+          })
+          return null
+        }
+      })(),
+    ])
+
+    const ranking = projectPublicFullProfileRanking(rankingCohort)
+    const similarTraders =
+      ranking.rank90D !== null
+        ? sanitizePublicFullSimilarTraders(
+            await fetchSimilarTraders(
+              supabase,
+              profile.source,
+              profile.id,
+              ranking.arenaScore90D,
+              ranking.roi90D
+            ),
+            profile.source
+          )
+        : []
+    const portfolio = portfolioResult.positions
+
+    const result = {
+      profile: {
+        // Identity/profile observations can remain public even when no ranking
+        // cohort is currently available. Follower/copier values are kept out
+        // of this fresh identity object and are supplied only below.
+        handle: profile.handle,
+        id: profile.id,
+        bio: typeof subscriptionData?.bio === 'string' ? subscriptionData.bio : null,
+        avatar_url:
+          typeof subscriptionData?.avatar_url === 'string'
+            ? subscriptionData.avatar_url
+            : profile.avatarUrl,
+        cover_url:
+          typeof subscriptionData?.cover_url === 'string' ? subscriptionData.cover_url : null,
+        isRegistered: audience.status === 'active',
+        source: profile.source,
+        followers: exactSocialCountOrNull(subscriptionData?.follower_count) ?? ranking.followers90D,
+        following: exactSocialCountOrNull(subscriptionData?.following_count),
+        copiers: ranking.copiers90D,
+        subscription_tier:
+          typeof subscriptionData?.subscription_tier === 'string'
+            ? subscriptionData.subscription_tier
+            : 'free',
+        show_pro_badge:
+          typeof subscriptionData?.show_pro_badge === 'boolean'
+            ? subscriptionData.show_pro_badge
+            : true,
+      },
+      performance: ranking.performance,
+      stats: ranking.stats,
+      portfolio,
+      similarTraders,
+      ranking_visibility: ranking.rankingVisibility,
+      ranking_visibility_reason: ranking.rankingVisibilityReason,
+      ranking_visibility_reasons: ranking.rankingVisibilityReason
+        ? [ranking.rankingVisibilityReason]
+        : [],
+      // Flag unavailable evidence rather than manufacturing a zero-valued
+      // performance/statistics payload for legacy callers.
+      _errors: {
+        performance:
+          ranking.rankingVisibility === 'verified' ? undefined : ranking.rankingVisibilityReason,
+        stats:
+          ranking.rankingVisibility === 'verified' ? undefined : ranking.rankingVisibilityReason,
+        portfolio: portfolioResult.error ?? undefined,
+      },
+      meta: {
+        timestamp: new Date().toISOString(),
+        cached: false,
+      },
     }
 
-    // Route-level Redis cache — wraps all parallel DB queries with stampede protection
-    const audienceIdentity =
-      audience.status === 'active' ? `user:${audience.profile.id}` : 'unregistered'
-    const traderIdentity = `${profile.source || 'unknown'}:${profile.id}`
-    const cacheKey = `users-full:v3:${handle.toLocaleLowerCase('en-US')}:${audienceIdentity}:${traderIdentity}`
-    const result = await getOrSetWithLock(
-      cacheKey,
-      async () => {
-        // Phase 2: parallel-fetch everything else (including similarTraders now that we have profile.source)
-        const [
-          performanceResult,
-          statsResult,
-          portfolioResult,
-          subscriptionData,
-          similarTradersData,
-        ] = await Promise.all([
-          // 绩效数据 — log before degrading to null so a systemic failure
-          // (e.g. schema drift in getTraderStats) is observable, not invisible.
-          getTraderPerformance(handle, '90D').catch((e) => {
-            logger.error('[users/full] getTraderPerformance failed', { handle, error: String(e) })
-            return null
-          }),
-          // 统计数据
-          getTraderStats(handle).catch((e) => {
-            logger.error('[users/full] getTraderStats failed', { handle, error: String(e) })
-            return null
-          }),
-          // 持仓数据
-          getTraderPortfolio(handle).catch((e) => {
-            logger.error('[users/full] getTraderPortfolio failed', { handle, error: String(e) })
-            return null
-          }),
-          // 订阅状态 + 粉丝/关注缓存计数（如果是用户）
-          // follower_count / following_count are cached columns kept in sync by
-          // updateFollowCounts() on every follow/unfollow, so we read them
-          // here instead of issuing two COUNT(*) queries on user_follows.
-          (async () => {
-            if (audience.status !== 'active') return null
-            try {
-              const { data } = await supabase
-                .from('user_profiles')
-                .select('subscription_tier, show_pro_badge, follower_count, following_count')
-                .eq('id', audience.profile.id)
-                .maybeSingle()
-              return data
-            } catch (e) {
-              logger.error('[users/full] user_profiles counts query failed', {
-                handle,
-                error: String(e),
-              })
-              return null
-            }
-          })(),
-          // 相似交易员 (runs in parallel now instead of sequentially)
-          (async () => {
-            if (!profile.source) return []
-            const { data: similar } = await supabase
-              .from('leaderboard_ranks')
-              .select('source_trader_id, handle, source, roi, followers')
-              .eq('source', profile.source)
-              .eq('season_id', '90D')
-              .not('rank', 'is', null)
-              .neq('handle', handle)
-              .not('arena_score', 'is', null)
-              .order('arena_score', { ascending: false })
-              .order('rank', { ascending: true, nullsFirst: false })
-              .limit(5)
-            return similar || []
-          })(),
-        ])
-
-        const performance = performanceResult?.ok ? performanceResult.data : null
-        const stats = statsResult?.ok ? statsResult.data : null
-        const portfolio = portfolioResult?.ok ? portfolioResult.data : []
-        const similarTraders = similarTradersData
-
-        // 粉丝/关注数 — served from cached columns fetched above
-        // (subscriptionData). Falls back to profile.followers (trader row)
-        // for handles that don't have a user_profiles entry.
-        return {
-          profile: {
-            ...profile,
-            followers: subscriptionData?.follower_count ?? profile.followers ?? 0,
-            following: subscriptionData?.following_count ?? 0,
-            subscription_tier: subscriptionData?.subscription_tier || 'free',
-            show_pro_badge: subscriptionData?.show_pro_badge ?? true,
-          },
-          performance,
-          stats,
-          portfolio,
-          similarTraders,
-          // Flag partial failures so UI can show appropriate indicators
-          _errors: {
-            performance:
-              performanceResult && !performanceResult.ok ? performanceResult.error : undefined,
-            stats: statsResult && !statsResult.ok ? statsResult.error : undefined,
-            portfolio: portfolioResult && !portfolioResult.ok ? portfolioResult.error : undefined,
-          },
-          // 元信息
-          meta: {
-            timestamp: new Date().toISOString(),
-            cached: false,
-          },
-        }
-      },
-      { ttl: 120 }
-    ) // 2 min cache
-
     return NextResponse.json(result, {
-      headers: {
-        // Redis stores candidates, while every HTTP request re-checks current
-        // account visibility above. Shared/CDN caching would bypass that check.
-        'Cache-Control': 'private, no-store, max-age=0',
-      },
+      headers: PUBLIC_PROFILE_NO_STORE_HEADERS,
     })
   } catch (error: unknown) {
     // Log server-side only; never expose internal details to client
     logger.error('[API] Error fetching user full data:', error)
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500, headers: PUBLIC_PROFILE_NO_STORE_HEADERS }
+    )
   }
 }
