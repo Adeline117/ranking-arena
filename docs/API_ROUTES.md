@@ -39,6 +39,7 @@
 | `/api/traders/linked`                         | GET/PATCH/DELETE | 管理已绑定身份；DELETE 使用 service-only 原子解绑 RPC                                                                | 是   |
 | `/api/compare`                                | GET              | 对比交易员                                                                                                           | 可选 |
 | `/api/market`                                 | GET              | 获取市场数据                                                                                                         | 否   |
+| `/api/market/alpha`                           | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取 query、缓存或请求市场供应商  | 否   |
 | `/api/market/candles`                         | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取 query、选择交易所或获取 K 线 | 否   |
 | `/api/trader/[platform]/[trader_key]`         | GET              | legacy read-compatibility；固定 `refresh_job:null`，不公开旧 queue 状态                                              | 否   |
 | `/api/trader/[platform]/[trader_key]/refresh` | POST             | V1 auth-first `401/410 LEGACY_REFRESH_JOBS_NOT_PUBLISHED` 与三层 `no-store`；不读 body、限流或 queue                 | 是   |
@@ -479,12 +480,14 @@ handoff，因此两种方法都交给各自 route-owned 的认证和 hold；相�
 
 ### V1 public-egress source boundary
 
-`GET /api/cdn-proxy`、`GET /api/market/candles` 与 `GET /api/posts/link-preview` 共用固定、非环境的
+`GET /api/cdn-proxy`、`GET /api/market/alpha`、`GET /api/market/candles` 与
+`GET /api/posts/link-preview` 共用固定、非环境的
 `V1_PUBLIC_EGRESS_PUBLISHED=false` source hold，均固定返回
 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 和 `Cache-Control`、`CDN-Cache-Control`、
 `Vercel-CDN-Cache-Control` 三层 `no-store`。它们不读取 query、执行 rate limit、CORS、
-social feature guard、缓存、DNS lookup、logging 或 outbound fetch；candles handler 也不导入
-ccxt、选择 exchange 或转换 K 线。`/api/v1/cdn-proxy`、`/api/v1/market/candles` 和
+social feature guard、缓存、DNS lookup、logging 或 outbound fetch；alpha handler 也不导入
+CoinGecko、cache 或旧响应转换逻辑，candles handler 不导入 ccxt、选择 exchange 或转换 K 线。
+`/api/v1/cdn-proxy`、`/api/v1/market/alpha`、`/api/v1/market/candles` 和
 `/api/v1/posts/link-preview` 只在 rewrite 前使用同一组 exact proxy handoff，不扩展到相邻路径。
 
 这是 source-only handler contract，不能停止、检查或证明此前已部署代码、缓存内容、DNS 状态、
