@@ -1,6 +1,6 @@
 # Durable post and comment interaction count repair
 
-Date: 2026-08-08
+Date: 2026-08-17
 
 Priority: P1 data truth / release gate
 Migrations:
@@ -12,6 +12,8 @@ Migrations:
 - `20260803107000_set_comment_reaction_desired_state.sql`
 - `20260803108000_comment_reaction_causal_intents.sql`
 - `20260803110000_post_media_upload_registry.sql` (adjacent inert predeploy authority)
+- `20260803111000_post_media_claims.sql` (adjacent inert predeploy authority)
+- `20260803112000_post_media_coverage_inventory.sql` (adjacent snapshot-only predeploy authority)
 - `20260803109000_close_legacy_comment_reaction_desired_state.sql` (postdeploy)
 
 ## Outcome
@@ -125,9 +127,40 @@ runner), `8f05b95ec` / `c50ab2911` / `209661569` / `d6bad1ef2` / `92d0c926e`
 `d874d8ad9` / `fd9172450` (1090 and fixed reviewed source digests), and
 `d44e72822` (postdeploy runner). Adjacent launch evidence is `05adf3ef3` (the
 inert 1100 post-media registry) and `b8dc3e1cb` (1100 appended after 1080 in
-predeploy). This does not prove production has applied the migrations, completed
-the atomic cutover, deployed either scheduled consumer, drained either queue, or
-passed the read-only attestations. Production remains **NO-GO**.
+predeploy), followed by `de6c117e1` (the inert 1110 post-media claim substrate)
+and `741770650` (1110 appended immediately after 1100). Commit `3c5d6e660` adds
+the inert 1120 historical coverage inventory, and `46ed38a07` appends it exactly
+once immediately after 1110. This does not prove production has applied the
+migrations, executed the inventory, completed either atomic cutover, deployed
+either scheduled consumer, drained either queue, or passed the read-only
+attestations. Production remains **NO-GO**.
+
+The reviewed 1110 migration itself is **GO with P0=0/P1=0** on its additive,
+currently unreachable scope: it creates private FORCE-RLS claim evidence and four
+service-only wrappers, but repository search finds zero app/API callers and it
+does not release, lease, admit cleanup, create cron work, delete, garbage collect,
+or mutate Storage. The former TypeScript final-state/renderer grammar P1 is
+closed by `31b2e357a`, `001bdbdf2`, `35b514440`, and `f5c55e862`; the combined
+helper slice independently reviewed at **P0=0/P1=0**. App/API media-claim cutover
+remains **NO-GO** on one historical coverage/cutover P1: execute 1120 in
+production, drain legacy media source writers, seal a new generation, complete
+exact backfill/quarantine disposition, and only then move post/group callers to
+1110 with exact acknowledgement validation. The four older composed content
+authorities retain a P2 trusted-management-plane comment + `md5(current prosrc)`
+self-seal; the two 1100 functions and five new 1110 functions are pinned to
+reviewed source. None of this changes the separate 1090 zero-old-instance gate.
+
+The reviewed 1120 migration is also **GO with P0=0/P1=0** on its additive,
+observe-only scope. It publishes exactly five private FORCE-RLS evidence tables
+and seven fixed-source functions for bounded enqueue/observation, persistent
+snapshot sealing, and scope-local gate reads. It never writes a post, group,
+application, upload-registry, claim, or Storage row. Every gate fixes
+`cutover_ready=false` and `authoritative_for_gc=false`, requires a new generation
+after source drain, and has zero app/API/cron callers. Production execution, a
+source-drained new generation, and historical backfill/quarantine disposition all
+remain pending. The accepted P2 boundaries are conservative custom-CNAME handling
+and a 30-second fail-closed timeout for scope aggregation; neither may be relaxed
+into false readiness.
 
 ## Serialization contract
 
@@ -234,32 +267,41 @@ order:
 8. `20260803107000_set_comment_reaction_desired_state.sql`
 9. `20260803108000_comment_reaction_causal_intents.sql`
 10. `20260803110000_post_media_upload_registry.sql` (inert; no claim or cleanup authority)
+11. `20260803111000_post_media_claims.sql` (inert; no current caller or cleanup authority)
+12. `20260803112000_post_media_coverage_inventory.sql` (snapshot-only; no cutover or GC authority)
 
 The postdeploy manifest must then contain
 `20260803109000_close_legacy_comment_reaction_desired_state.sql` exactly once.
-Commits `37d8f9cd7`, `e1ba49111`, `6bac3ace0`, `d44e72822`, and `b8dc3e1cb`
-establish the final order. The committed runner proof covers 199 predeploy
-migrations, 17 postdeploy migrations, and 226 unique classified migrations; its
-Node contract is 19/19, and the shell syntax/format/diff checks pass. This is
-repository evidence only, not a production ledger result. Production execution
-still uses the governed migration channel and exact name/body/hash ledger; the
-local runner's mutating psql commands remain disabled by ADR-023.
+Commits `37d8f9cd7`, `e1ba49111`, `6bac3ace0`, `d44e72822`, `b8dc3e1cb`,
+`741770650`, and `46ed38a07` establish the committed order through 1120. The
+committed runner proof covers 201 predeploy migrations, 17 postdeploy migrations,
+and 228 unique classified migrations; its Node contract is 19/19, and the shell
+syntax/format/diff checks pass. This is repository evidence only, not a production
+ledger result. Production execution still uses the governed migration channel and
+exact name/body/hash ledger; the local runner's mutating psql commands remain
+disabled by ADR-023.
 
 The fixed SHA256 ledger inputs are:
 
-| Artifact      | SHA256                                                             |
-| ------------- | ------------------------------------------------------------------ |
-| 1060          | `0052b7a298e9880c692de6d8835ce7a48a6486b72efdd14005e308930a794d19` |
-| 1070          | `86d96b5793f7fde92a51743c9c3cce95e4f230f3d83911a6499d69accdf3bcbb` |
-| 1080          | `f7d808d5205c8b220d35dcd2511660bd2665e629e6bb0b7e52fcf59b551ca9a4` |
-| 1090          | `0a5326888b3d355998a1f8bbbef4e15400e6680e2f397b956518af3f2f925602` |
-| 1100          | `61871a54eab1f4ffb6931d617ca5c517b60483d0fd98f425fd2f06cdc71f7bc1` |
-| launch runner | `7b8309f630473096453f48f905131ba780cfe62879ae2335e03cb275494d0116` |
+| Artifact     | SHA256                                                             |
+| ------------ | ------------------------------------------------------------------ |
+| 1060         | `0052b7a298e9880c692de6d8835ce7a48a6486b72efdd14005e308930a794d19` |
+| 1070         | `86d96b5793f7fde92a51743c9c3cce95e4f230f3d83911a6499d69accdf3bcbb` |
+| 1080         | `f7d808d5205c8b220d35dcd2511660bd2665e629e6bb0b7e52fcf59b551ca9a4` |
+| 1090         | `0a5326888b3d355998a1f8bbbef4e15400e6680e2f397b956518af3f2f925602` |
+| 1100         | `61871a54eab1f4ffb6931d617ca5c517b60483d0fd98f425fd2f06cdc71f7bc1` |
+| 1110         | `4b87cae7dea0a2fb45693145482f1a8ff3bde05ecc75e0dc8c65db6171411dac` |
+| 1120         | `c2c437129fee69eb0f9b82c6956fd72463881e61cae98a4a20afc290022a761a` |
+| 1120 Jest    | `63d824b632d30db098bfac4379a5dd61440dbb07d31601baca649a7b9868767e` |
+| 1120 PG17    | `0f3f5f6e3fb45a510d7ef949cf4a2a04b72d8ab21557dcbc1b3ed2d401e6efec` |
+| runner shell | `984bdf613aac8d637071a1368a6e7a61f76f45c675484075f7d57ed8c11a62f5` |
+| runner test  | `a0f235adfa8ca89ae567b8b9832dcd5c96d31278526a5a63fbd3bfd4627254be` |
 
 Roll out in this order:
 
-1. deploy predeploy migrations 1040, 1045, 1050, 1060, 1070, 1080, and inert
-   registry 1100 through the approved production channel;
+1. deploy predeploy migrations 1040, 1045, 1050, 1060, 1070, 1080, inert registry
+   1100, inert claim substrate 1110, and runner-scheduled snapshot-only coverage
+   inventory 1120 through the approved production channel;
 2. verify their exact ledger body/hash and the PostgREST schema reload;
 3. bring up the same release SHA containing the causal client/API and both
    dedicated runtime workers in an isolated pool, atomically switch admission to
@@ -274,6 +316,10 @@ Roll out in this order:
 7. run both read-only attestations below from a catalog-visible maintenance role;
 8. let at least two scheduled invocations of each worker complete and confirm
    both queues remain below the runtime limits before clearing their P1 gates.
+9. execute 1120 in bounded batches for historical evidence, drain the legacy
+   media source writers, start and seal a new generation, then disposition every
+   blocked canonical reference by exact backfill or explicit quarantine; a
+   snapshot-complete response is never cutover or GC authority.
 
 Do not deploy the runtime caller before 1040: a missing RPC would make every
 scheduled repair attempt fail. Do not clear P1-31 merely because 1040 committed:
@@ -297,7 +343,9 @@ npx jest --runInBand \
   supabase/migrations/__tests__/durable-comment-reaction-count-repair.test.ts \
   supabase/migrations/__tests__/set-comment-reaction-desired-state.test.ts \
   supabase/migrations/__tests__/comment-reaction-causal-intents.test.ts \
-  supabase/migrations/__tests__/close-legacy-comment-reaction-desired-state.test.ts
+  supabase/migrations/__tests__/close-legacy-comment-reaction-desired-state.test.ts \
+  supabase/migrations/__tests__/post-media-claims.test.ts \
+  supabase/migrations/__tests__/post-media-coverage-inventory.test.ts
 
 node --test scripts/maintenance/apply-launch-migrations.test.mjs
 ```
@@ -312,13 +360,23 @@ supabase/migrations/__tests__/durable-comment-reaction-count-repair.pg17.sh
 supabase/migrations/__tests__/set-comment-reaction-desired-state.pg17.sh
 supabase/migrations/__tests__/comment-reaction-causal-intents.pg17.sh
 supabase/migrations/__tests__/close-legacy-comment-reaction-desired-state.pg17.sh
+supabase/migrations/__tests__/post-media-claims.pg17.sh
+supabase/migrations/__tests__/post-media-coverage-inventory.pg17.sh
 ```
 
 The 1080/1090 static suites contribute 20/20 passing tests; both matching PG17
 proofs pass against the real composed 1060/1070 dependency graph. The final
 runner contract is 19/19. The adjacent inert 1100 registry is separately covered
-by its dedicated Jest 13/13 and PostgreSQL 17 proof; it does not enable post-media
-claim, lease, cleanup, delete, cron, or Storage mutation.
+by its dedicated Jest 13/13 and PostgreSQL 17 proof. The adjacent inert 1110
+claims migration is separately covered by Jest 12/12 and its PostgreSQL 17
+adversarial proof. Neither migration enables lease, cleanup, delete, cron, GC, or
+Storage mutation; 1110 also has no current app/API caller.
+
+The adjacent 1120 coverage migration is separately covered by Jest 12/12 and its
+PostgreSQL 17 hostile/replay/concurrency proof. It exposes five private tables and
+seven functions but zero app/API/cron callers, always reports
+`cutover_ready=false` / `authoritative_for_gc=false`, and performs no source,
+claim, cleanup, GC, or Storage mutation.
 
 Causal comment-reaction application contracts:
 
