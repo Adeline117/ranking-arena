@@ -22,10 +22,12 @@ const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
 const marketFuturesRoute = codeOnly(source('app/api/market/futures/route.ts'))
 const marketFearGreedRoute = codeOnly(source('app/api/market/fear-greed/route.ts'))
 const marketSparklinesRoute = codeOnly(source('app/api/market/sparklines/route.ts'))
+const marketSectorsRoute = codeOnly(source('app/api/market/sectors/route.ts'))
 const linkPreviewRoute = codeOnly(source('app/api/posts/link-preview/route.ts'))
 const spotMarket = codeOnly(source('app/components/market/SpotMarket.tsx'))
 const arbitrageOpportunities = codeOnly(source('app/components/market/ArbitrageOpportunities.tsx'))
 const fearGreedGauge = codeOnly(source('app/components/market/FearGreedGauge.tsx'))
+const sectorPerformance = codeOnly(source('app/components/market/SectorPerformance.tsx'))
 const proxy = source('proxy.ts')
 const apiAuthCoverage = source('scripts/qa/api-auth-coverage-check.mjs')
 const docs = source('docs/API_ROUTES.md')
@@ -51,6 +53,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
     marketFuturesRoute,
     marketFearGreedRoute,
     marketSparklinesRoute,
+    marketSectorsRoute,
     linkPreviewRoute,
   ]) {
     assert.match(route, /export function GET\(\): NextResponse/)
@@ -67,6 +70,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
       /\b(?:memCache|CACHE_TTL|SparklineEntry)\b/,
       /\b(?:getOrSetWithLock|detectArbitrageOpportunities)\b/,
       /\b(?:fetchFearGreedIndex|FearGreedData)\b/,
+      /\b(?:fetchSectorPerformance|CryptoCategory)\b/,
       /\b(?:checkRateLimit|RateLimitPresets|Ratelimit)\b/,
       /\b(?:getSupabaseAdmin|supabase|funding_rates|open_interest)\b/,
       /\b(?:getCorsOrigin|cors|Access-Control)\b/,
@@ -80,7 +84,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
   assert.match(
     proxy,
-    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/market\/alpha['"],\s*['"]\/api\/v1\/market\/alpha['"],\s*['"]\/api\/market\/arbitrage['"],\s*['"]\/api\/v1\/market\/arbitrage['"],\s*['"]\/api\/market\/candles['"],\s*['"]\/api\/v1\/market\/candles['"],\s*['"]\/api\/market\/futures['"],\s*['"]\/api\/v1\/market\/futures['"],\s*['"]\/api\/market\/fear-greed['"],\s*['"]\/api\/v1\/market\/fear-greed['"],\s*['"]\/api\/market\/sparklines['"],\s*['"]\/api\/v1\/market\/sparklines['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
+    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/market\/alpha['"],\s*['"]\/api\/v1\/market\/alpha['"],\s*['"]\/api\/market\/arbitrage['"],\s*['"]\/api\/v1\/market\/arbitrage['"],\s*['"]\/api\/market\/candles['"],\s*['"]\/api\/v1\/market\/candles['"],\s*['"]\/api\/market\/futures['"],\s*['"]\/api\/v1\/market\/futures['"],\s*['"]\/api\/market\/fear-greed['"],\s*['"]\/api\/v1\/market\/fear-greed['"],\s*['"]\/api\/market\/sparklines['"],\s*['"]\/api\/v1\/market\/sparklines['"],\s*['"]\/api\/market\/sectors['"],\s*['"]\/api\/v1\/market\/sectors['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
   )
   assert.match(
     proxy,
@@ -88,7 +92,7 @@ test('only canonical and versioned public egress paths bypass proxy guards', () 
   )
   assert.doesNotMatch(
     proxy,
-    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|arbitrage|candles|futures|fear-greed|sparklines)|link-preview)/
+    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|arbitrage|candles|futures|fear-greed|sparklines|sectors)|link-preview)/
   )
 
   const shouldSkipStart = proxy.indexOf('export function shouldSkip(pathname: string): boolean')
@@ -145,6 +149,17 @@ test('FearGreedGauge shows a local unavailable state without an acquisition requ
   assert.doesNotMatch(fearGreedGauge, /\bretry\b/)
 })
 
+test('SectorPerformance shows a local unavailable state without an acquisition request', () => {
+  assert.match(sectorPerformance, /role=['"]status['"][\s\S]*?t\(['"]dataUnavailable['"]\)/)
+  assert.doesNotMatch(sectorPerformance, /\/api\/market\/sectors/)
+  assert.doesNotMatch(sectorPerformance, /\b(?:apiFetch|useEffect|useState)\b/)
+  assert.doesNotMatch(sectorPerformance, /\b(?:CryptoCategory|SECTOR_LABELS)\b/)
+  assert.doesNotMatch(
+    sectorPerformance,
+    /\b(?:loading|error|sectors|noDataGeneric|sidebarLoadFailed|skeleton)\b/
+  )
+})
+
 test('API allowlist and documentation describe the source-only public-egress hold', () => {
   assert.match(apiAuthCoverage, /'market\/alpha'/)
   assert.match(apiAuthCoverage, /'market\/arbitrage'/)
@@ -152,6 +167,7 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(apiAuthCoverage, /'market\/futures'/)
   assert.match(apiAuthCoverage, /'market\/fear-greed'/)
   assert.match(apiAuthCoverage, /'market\/sparklines'/)
+  assert.match(apiAuthCoverage, /'market\/sectors'/)
   assert.match(apiAuthCoverage, /V1 public compatibility tombstones/)
   assert.match(apiAuthCoverage, /V1 public-egress compatibility tombstone/)
   assert.match(docs, /`\/api\/cdn-proxy`/)
@@ -161,6 +177,7 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(docs, /`\/api\/market\/futures`/)
   assert.match(docs, /`\/api\/market\/fear-greed`/)
   assert.match(docs, /`\/api\/market\/sparklines`/)
+  assert.match(docs, /`\/api\/market\/sectors`/)
   assert.match(docs, /`\/api\/posts\/link-preview`/)
   assert.match(docs, /V1_PUBLIC_EGRESS_PUBLISHED=false/)
   assert.match(docs, /cannot stop, inspect, or prove|不能停止、检查或证明/)
