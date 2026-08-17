@@ -31,12 +31,15 @@ jest.mock('@/lib/utils/logger', () => ({
 
 import { getLeaderboard, safeQuery, withTimeout } from '../queries'
 
-function chainableQuery() {
+function chainableQuery(response: { data?: Record<string, unknown>[]; error?: unknown } = {}) {
   const query: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'eq', 'not', 'or', 'gt', 'gte', 'order', 'range']) {
+  for (const method of ['select', 'eq', 'in', 'not', 'or', 'gt', 'gte', 'order', 'range']) {
     query[method] = jest.fn(() => query)
   }
-  query.abortSignal = jest.fn().mockResolvedValue({ data: [], error: null })
+  query.abortSignal = jest.fn().mockResolvedValue({
+    data: response.data ?? [],
+    error: response.error ?? null,
+  })
   query.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
   return query
 }
@@ -163,38 +166,98 @@ describe('withTimeout', () => {
   })
 })
 
-describe('getLeaderboard source exclusion', () => {
-  it('applies an exclusion before the finite DB page even with a platform filter', async () => {
-    const leaderboardQuery = chainableQuery()
-    const countQuery = chainableQuery()
+describe('getLeaderboard public cohort view', () => {
+  it('filters the public cohort in SQL before range and does not request an exact count', async () => {
+    const leaderboardQuery = chainableQuery({
+      data: [
+        {
+          source_trader_id: 'safe-trader',
+          handle: 'Safe Trader',
+          source: 'binance_futures',
+          source_type: 'futures',
+          roi: 12,
+          pnl: 1000,
+          win_rate: 60,
+          max_drawdown: 10,
+          arena_score: 90,
+          rank: 1,
+          computed_at: '2026-08-16T00:00:00.000Z',
+          score_completeness: 'full',
+          is_outlier: false,
+          season_id: '90D',
+        },
+      ],
+    })
     const signal = new AbortController().signal
     const supabase = {
-      from: jest.fn((table: string) =>
-        table === 'leaderboard_ranks' ? leaderboardQuery : countQuery
-      ),
+      from: jest.fn(() => leaderboardQuery),
     }
 
-    await getLeaderboard(supabase as never, {
+    const result = await getLeaderboard(supabase as never, {
       period: '90D',
       platform: 'binance_futures',
+      allowedSources: ['binance_futures'],
       excludeSources: ['okx_web3_solana'],
       limit: 20,
+      minScore: 50,
       signal,
     })
 
+    expect(supabase.from).toHaveBeenCalledTimes(1)
+    expect(supabase.from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(leaderboardQuery.select).toHaveBeenCalledWith(
+      expect.stringContaining('source_trader_id')
+    )
     expect(leaderboardQuery.not).toHaveBeenCalledWith(
       'source',
       'in',
       '(okx_web3_solana,bitget_bots_futures,bitget_bots_spot,bingx,bingx_spot)'
     )
-    expect(leaderboardQuery.not).toHaveBeenCalledWith('rank', 'is', null)
+    expect(leaderboardQuery.in).toHaveBeenCalledWith('source', ['binance_futures'])
     expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'binance_futures')
-    expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 19)
+    expect(leaderboardQuery.gt).toHaveBeenCalledWith('arena_score', 50)
+    expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 20)
     expect(leaderboardQuery.abortSignal).toHaveBeenCalledWith(signal)
-    expect(countQuery.abortSignal).toHaveBeenCalledWith(signal)
-    expect(leaderboardQuery.not.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(result.total).toBeUndefined()
+    expect(result.totalCountIsExact).toBe(false)
+    expect(result.hasMore).toBe(false)
+    expect(result.traders).toHaveLength(1)
+
+    const filterCallOrders = [
+      ...leaderboardQuery.eq.mock.invocationCallOrder,
+      ...leaderboardQuery.in.mock.invocationCallOrder,
+      ...leaderboardQuery.not.mock.invocationCallOrder,
+      ...leaderboardQuery.gt.mock.invocationCallOrder,
+      ...leaderboardQuery.gte.mock.invocationCallOrder,
+    ]
+    expect(Math.max(...filterCallOrders)).toBeLessThan(
       leaderboardQuery.range.mock.invocationCallOrder[0]
     )
+  })
+
+  it('uses one view-scoped lookahead row for pagination without a count cache', async () => {
+    const leaderboardQuery = chainableQuery({
+      data: [
+        { source: 'binance_futures', source_trader_id: 'one', rank: 1, season_id: '7D' },
+        { source: 'binance_futures', source_trader_id: 'two', rank: 2, season_id: '7D' },
+        { source: 'binance_futures', source_trader_id: 'three', rank: 3, season_id: '7D' },
+      ],
+    })
+    const supabase = { from: jest.fn(() => leaderboardQuery) }
+
+    const result = await getLeaderboard(supabase as never, {
+      period: '7D',
+      limit: 2,
+    })
+
+    expect(supabase.from).toHaveBeenCalledTimes(1)
+    expect(supabase.from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 2)
+    expect(result.traders.map((trader) => trader.traderKey)).toEqual(['one', 'two'])
+    expect(result.hasMore).toBe(true)
+    expect(result.total).toBeUndefined()
+    expect(result.totalCountIsExact).toBe(false)
+    expect(leaderboardQuery.maybeSingle).not.toHaveBeenCalled()
   })
 
   it.each(['okx_web3_solana', 'bitget_bots_futures', 'bitget_bots_spot'])(
@@ -202,7 +265,11 @@ describe('getLeaderboard source exclusion', () => {
     async (platform) => {
       const from = jest.fn()
       const result = await getLeaderboard({ from } as never, { platform })
-      expect(result).toEqual({ traders: [], total: 0 })
+      expect(result).toEqual({
+        traders: [],
+        totalCountIsExact: false,
+        hasMore: false,
+      })
       expect(from).not.toHaveBeenCalled()
     }
   )

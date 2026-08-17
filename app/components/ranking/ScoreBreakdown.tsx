@@ -11,6 +11,7 @@ import {
 } from '@/lib/utils/score-explain'
 import { ScoreRadar } from './ScoreRadar'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
+import { normalizeFiniteScore } from './RankingTableTypes'
 
 interface ScoreBreakdownProps {
   profitability_score?: number | null
@@ -31,8 +32,9 @@ interface BarProps {
 }
 
 function ScoreBar({ label, score, maxScore, color }: BarProps) {
-  const value = score ?? 0
-  const pct = Math.min((value / maxScore) * 100, 100)
+  const finiteScore = normalizeFiniteScore(score)
+  const value = finiteScore ?? 0
+  const pct = Math.max(0, Math.min((value / maxScore) * 100, 100))
 
   return (
     <Box style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -60,7 +62,7 @@ function ScoreBar({ label, score, maxScore, color }: BarProps) {
             background: `linear-gradient(90deg, ${color}, ${alpha(color, 87)})`,
             borderRadius: tokens.radius.md,
             transition: 'width 0.6s ease',
-            minWidth: score != null ? 4 : 0,
+            minWidth: finiteScore != null ? 4 : 0,
             boxShadow: `0 0 6px ${alpha(color, 25)}`,
           }}
         />
@@ -73,11 +75,11 @@ function ScoreBar({ label, score, maxScore, color }: BarProps) {
             top: '50%',
             transform: 'translateY(-50%)',
             fontSize: 11,
-            color: pct > 60 ? 'white' : score != null ? color : tokens.colors.text.tertiary,
+            color: pct > 60 ? 'white' : finiteScore != null ? color : tokens.colors.text.tertiary,
             textShadow: pct > 60 ? 'var(--text-shadow-sm)' : 'none',
           }}
         >
-          {score != null ? `${score.toFixed(1)}` : '—'} / {maxScore}
+          {finiteScore != null ? `${finiteScore.toFixed(1)}` : '—'} / {maxScore}
         </Text>
       </Box>
     </Box>
@@ -100,20 +102,27 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
     arena_score,
   } = props
 
+  const profitabilityScore = normalizeFiniteScore(profitability_score)
+  const riskControlScore = normalizeFiniteScore(risk_control_score)
+  const executionScore = normalizeFiniteScore(execution_score)
+  const maxDrawdown = normalizeFiniteScore(max_drawdown)
+  const winRate = normalizeFiniteScore(win_rate)
+  const roiValue = normalizeFiniteScore(roi)
+  const arenaScore = normalizeFiniteScore(arena_score)
   const hasAnyScore =
-    profitability_score != null || risk_control_score != null || execution_score != null
+    profitabilityScore != null || riskControlScore != null || executionScore != null
 
   const explanation = hasAnyScore
     ? generateExplanation({
-        profitability_score,
-        risk_control_score,
-        execution_score,
+        profitability_score: profitabilityScore,
+        risk_control_score: riskControlScore,
+        execution_score: executionScore,
         score_completeness,
-        max_drawdown,
-        win_rate,
-        roi,
+        max_drawdown: maxDrawdown,
+        win_rate: winRate,
+        roi: roiValue,
       })
-    : arena_score != null
+    : arenaScore != null
       ? t('scoreBasisRoiPnl') ||
         'Score based on ROI and PnL data. Detailed breakdown not yet available for this trader.'
       : t('scoreNoDetails') ||
@@ -124,7 +133,7 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
   // a hidden execution bar misrepresents the confidence — downgrade the displayed
   // label/color to 'partial' when a pillar is actually absent.
   const effectiveCompleteness =
-    score_completeness === 'full' && execution_score == null ? 'partial' : score_completeness
+    score_completeness === 'full' && executionScore == null ? 'partial' : score_completeness
   const completenessLabel = getCompletenessLabel(effectiveCompleteness)
   const completenessColor = getCompletenessColor(effectiveCompleteness)
 
@@ -154,20 +163,20 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
             旧 60/40 标尺是 V3 的 ReturnScore/PnlScore,已废。 */}
         <ScoreBar
           label={t('scoreProfit')}
-          score={profitability_score}
+          score={profitabilityScore}
           maxScore={100}
           color="var(--color-score-profitability)"
         />
         <ScoreBar
           label={t('scoreRisk')}
-          score={risk_control_score}
+          score={riskControlScore}
           maxScore={100}
           color="var(--color-score-risk)"
         />
-        {execution_score != null && (
+        {executionScore != null && (
           <ScoreBar
             label={t('scoreExecution')}
-            score={execution_score}
+            score={executionScore}
             maxScore={100}
             color="var(--color-score-execution)"
           />
@@ -218,10 +227,10 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
       >
         <CompactErrorBoundary>
           <ScoreRadar
-            profitability={profitability_score ?? 0}
-            riskControl={risk_control_score ?? 0}
-            execution={execution_score ?? 0}
-            arenaScore={arena_score ?? 0}
+            profitability={profitabilityScore ?? null}
+            riskControl={riskControlScore ?? null}
+            execution={executionScore ?? null}
+            arenaScore={arenaScore ?? null}
             size={120}
           />
         </CompactErrorBoundary>

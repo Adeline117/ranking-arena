@@ -104,7 +104,8 @@ describe('useTraderData time range switch', () => {
     act(() => {
       jest.advanceTimersByTime(1)
     })
-    expect(result.current.activeTimeRange).toBe('30D')
+    // Pending range must not relabel the still-visible 90D SSR rows.
+    expect(result.current.activeTimeRange).toBe('90D')
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('timeRange=30D'),
       expect.anything()
@@ -121,6 +122,7 @@ describe('useTraderData time range switch', () => {
 
     expect(result.current.traders).toHaveLength(1)
     expect(result.current.traders[0].id).toBe('trader-30d')
+    expect(result.current.activeTimeRange).toBe('30D')
     expect(result.current.isChangingTimeRange).toBe(false)
     expect(result.current.loading).toBe(false)
   })
@@ -149,7 +151,8 @@ describe('useTraderData time range switch', () => {
       jest.advanceTimersByTime(TIME_RANGE_DEBOUNCE_MS)
     })
 
-    expect(result.current.activeTimeRange).toBe('7D')
+    // The selected range commits atomically with its successful response.
+    expect(result.current.activeTimeRange).toBe('90D')
     const calls = (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0]))
     expect(calls).toHaveLength(1)
     expect(calls[0]).toContain('timeRange=7D')
@@ -159,6 +162,46 @@ describe('useTraderData time range switch', () => {
       await Promise.resolve()
     })
     expect(result.current.traders[0].id).toBe('trader-7d')
+    expect(result.current.activeTimeRange).toBe('7D')
+  })
+
+  it('cancels a pending range when the user switches back to the visible range', async () => {
+    // This mock deliberately ignores AbortSignal. It models the browser/API
+    // race where a response resolves after the user has clicked back to 90D.
+    const { resolveFetch } = mockFetchResolving([
+      { id: 'late-30d', source: 'bybit', rank: 1, roi: 30 },
+    ])
+    const { result } = renderHook(() =>
+      useTraderData({
+        autoRefreshInterval: 0,
+        initialTraders: [initialTrader],
+        initialTimeRange: '90D',
+        initialPageIndex: 2,
+      })
+    )
+
+    act(() => {
+      result.current.changeTimeRange('30D')
+      jest.advanceTimersByTime(TIME_RANGE_DEBOUNCE_MS)
+    })
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('timeRange=30D'),
+      expect.anything()
+    )
+
+    act(() => {
+      result.current.changeTimeRange('90D')
+    })
+    expect(result.current.activeTimeRange).toBe('90D')
+    expect(result.current.traders[0].id).toBe('trader-90d')
+    expect(result.current.isChangingTimeRange).toBe(false)
+
+    await act(async () => {
+      resolveFetch()
+      await Promise.resolve()
+    })
+    expect(result.current.activeTimeRange).toBe('90D')
+    expect(result.current.traders[0].id).toBe('trader-90d')
   })
 
   it('silent fetch (auto-refresh) never flips loading', async () => {
@@ -186,6 +229,63 @@ describe('useTraderData time range switch', () => {
       resolveFetch()
       await Promise.resolve()
     })
+    expect(result.current.loading).toBe(false)
+  })
+
+  it('skips 60s silent and manual refresh while a foreground target is pending', async () => {
+    // Keep the foreground cohort pending even after AbortSignal fires, which
+    // models a slow transport that resolves late. Neither refresh path may
+    // issue a second request for an uncommitted desired cohort.
+    const pendingTarget = new Promise<Response>(() => {})
+    const fetchMock = jest.fn(() => pendingTarget)
+    global.fetch = fetchMock as jest.Mock
+
+    const { result, unmount } = renderHook(() =>
+      useTraderData({
+        autoRefreshInterval: 60_000,
+        initialTraders: [initialTrader],
+        initialTimeRange: '90D',
+      })
+    )
+
+    act(() => {
+      void result.current.fetchPage(0, { sortBy: 'roi', sortDir: 'asc' })
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await expect(result.current.refresh()).resolves.toBe(false)
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      jest.advanceTimersByTime(60_000)
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    unmount()
+  })
+
+  it('keeps the old range label and rows when a requested range fails', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('30D unavailable')) as jest.Mock
+    const { result } = renderHook(() =>
+      useTraderData({
+        autoRefreshInterval: 0,
+        initialTraders: [initialTrader],
+        initialTimeRange: '90D',
+        initialPageIndex: 0,
+      })
+    )
+
+    act(() => {
+      result.current.changeTimeRange('30D')
+      jest.advanceTimersByTime(TIME_RANGE_DEBOUNCE_MS)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.activeTimeRange).toBe('90D')
+    expect(result.current.traders[0].id).toBe('trader-90d')
     expect(result.current.loading).toBe(false)
   })
 })

@@ -1,6 +1,8 @@
 import {
   selectPublishedRankTraders,
   selectTopPublishedRankTraders,
+  normalizeFiniteScore,
+  scoreGradeOf,
   type Trader,
 } from '../RankingTableTypes'
 
@@ -57,5 +59,24 @@ describe('published ranking UI authority', () => {
       ['rank-three', 3],
     ])
     expect(selectTopPublishedRankTraders(rows, 0)).toEqual([])
+  })
+
+  it('does not classify unknown or corrupt scores as the zero-score D tier', () => {
+    expect(scoreGradeOf(null)).toBeNull()
+    expect(scoreGradeOf(undefined)).toBeNull()
+    expect(scoreGradeOf(Number.NaN)).toBeNull()
+    expect(scoreGradeOf(Number.POSITIVE_INFINITY)).toBeNull()
+    expect(scoreGradeOf(0)).toBe('D')
+    expect(scoreGradeOf(30)).toBe('C')
+    expect(scoreGradeOf(90)).toBe('S')
+  })
+
+  it('preserves missing scores and converts corrupt score scalars to unknown', () => {
+    expect(normalizeFiniteScore(null)).toBeNull()
+    expect(normalizeFiniteScore(undefined)).toBeUndefined()
+    expect(normalizeFiniteScore(0)).toBe(0)
+    expect(normalizeFiniteScore(88.5)).toBe(88.5)
+    expect(normalizeFiniteScore(Number.NaN)).toBeNull()
+    expect(normalizeFiniteScore(Number.POSITIVE_INFINITY)).toBeNull()
   })
 })
