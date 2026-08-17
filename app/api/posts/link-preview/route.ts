@@ -3,7 +3,9 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { lookup as dnsLookup } from 'node:dns/promises'
+import { BlockList, isIP } from 'node:net'
 import { safeParseInt } from '@/lib/utils/safe-parse'
+import { Agent, buildConnector, fetch as undiciFetch } from 'undici'
 
 // Body size cap (bytes) — link preview only needs the head of the document.
 // 256KB is plenty for <head> + meta tags; rejects payload-flood attacks.
@@ -15,13 +17,30 @@ const MAX_REDIRECTS = 3
 // Upstream fetch timeout per hop.
 const FETCH_TIMEOUT_MS = 10_000
 
+type ValidatedUrl = {
+  /** Browser-visible URL semantics: redirects, Host, SNI, and relative metadata. */
+  logicalUrl: URL
+  /** Network destination used by the custom connector after DNS validation. */
+  pinnedIp: string
+  /** DNS hostname required for HTTPS certificate verification; never an IP literal. */
+  tlsServername: string | null
+}
+
 // 简单的 HTML 解析函数
 function extractMetaTags(html: string) {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-  const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i)
-  const ogDescriptionMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)
-  const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
-  const descriptionMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
+  const ogTitleMatch = html.match(
+    /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i
+  )
+  const ogDescriptionMatch = html.match(
+    /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i
+  )
+  const ogImageMatch = html.match(
+    /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i
+  )
+  const descriptionMatch = html.match(
+    /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i
+  )
 
   return {
     title: ogTitleMatch?.[1] || titleMatch?.[1] || '',
@@ -44,42 +63,55 @@ const BLOCKED_HOSTNAMES = new Set([
   'metadata',
 ])
 
+const NON_PUBLIC_IPV4 = new BlockList()
+for (const [network, prefix] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+] as const) {
+  NON_PUBLIC_IPV4.addSubnet(network, prefix, 'ipv4')
+}
+const NON_PUBLIC_IPV6 = new BlockList()
+for (const [network, prefix] of [
+  // Deprecated IPv4-compatible, IPv4-mapped, and IPv4-translatable forms.
+  ['::', 96],
+  ['::ffff:0:0', 96],
+  ['::ffff:0:0:0', 96],
+  // NAT64 well-known and local-use translation prefixes.
+  ['64:ff9b::', 96],
+  ['64:ff9b:1::', 48],
+  ['100::', 64],
+  // 6to4 embeds an IPv4 destination beyond this process's address check.
+  ['2002::', 16],
+  ['2001:db8::', 32],
+  ['3fff::', 20],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['fec0::', 10],
+  ['ff00::', 8],
+] as const) {
+  NON_PUBLIC_IPV6.addSubnet(network, prefix, 'ipv6')
+}
+
 /** Reject IPv4 / IPv6 literals that point at private, loopback, link-local, or cloud-metadata ranges. */
 function isPrivateOrReservedIP(ip: string): boolean {
-  // IPv4
-  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
-  if (v4) {
-    const a = Number(v4[1])
-    const b = Number(v4[2])
-    if (a === 0) return true                                    // 0.0.0.0/8
-    if (a === 10) return true                                   // 10.0.0.0/8 private
-    if (a === 100 && b >= 64 && b <= 127) return true           // 100.64.0.0/10 CGNAT
-    if (a === 127) return true                                  // 127.0.0.0/8 loopback
-    if (a === 169 && b === 254) return true                     // 169.254.0.0/16 link-local + cloud metadata
-    if (a === 172 && b >= 16 && b <= 31) return true            // 172.16.0.0/12 private
-    if (a === 192 && b === 0) return true                       // 192.0.0.0/24 IETF
-    if (a === 192 && b === 168) return true                     // 192.168.0.0/16 private
-    if (a >= 224) return true                                   // 224.0.0.0/4 multicast + reserved
-    return false
-  }
-
-  // IPv6 (normalize to lowercase, strip brackets)
-  const v6 = ip.toLowerCase().replace(/^\[|\]$/g, '')
-  if (v6.includes(':')) {
-    if (v6 === '::' || v6 === '::1') return true               // unspecified, loopback
-    if (v6.startsWith('fe80:') || v6.startsWith('fe8') ||
-        v6.startsWith('fe9') || v6.startsWith('fea') ||
-        v6.startsWith('feb')) return true                       // fe80::/10 link-local
-    if (v6.startsWith('fc') || v6.startsWith('fd')) return true // fc00::/7 unique-local
-    if (v6.startsWith('ff')) return true                        // ff00::/8 multicast
-    // IPv4-mapped IPv6: ::ffff:127.0.0.1, ::ffff:169.254.169.254
-    const mapped = v6.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
-    if (mapped) return isPrivateOrReservedIP(mapped[1])
-    // 2002::/16 6to4 — could tunnel to private, treat as suspicious
-    if (v6.startsWith('2002:')) return true
-    return false
-  }
-  return false
+  const address = ip.toLowerCase().replace(/^\[|\]$/g, '')
+  const family = isIP(address)
+  if (family === 0) return true
+  return family === 4
+    ? NON_PUBLIC_IPV4.check(address, 'ipv4')
+    : NON_PUBLIC_IPV6.check(address, 'ipv6')
 }
 
 /** Resolve a hostname to a single pinned IP, rejecting if any resolved address is private. */
@@ -102,13 +134,13 @@ async function resolveAndPin(hostname: string): Promise<string> {
       throw new Error(`blocked: hostname resolves to private IP ${r.address}`)
     }
   }
-  // Return the first address — caller passes it to fetch() via the URL,
-  // pinning the IP for the actual request and defeating DNS rebinding.
+  // Return the first address to the custom connector, which uses the literal
+  // IP as its socket destination and prevents a second DNS lookup/rebinding.
   return records[0].address
 }
 
 /** Validate a URL is OK to fetch (protocol, hostname allowlist, no private IPs). */
-async function validateUrl(rawUrl: string): Promise<URL> {
+async function validateUrl(rawUrl: string): Promise<ValidatedUrl> {
   let parsed: URL
   try {
     parsed = new URL(rawUrl)
@@ -118,70 +150,104 @@ async function validateUrl(rawUrl: string): Promise<URL> {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error('Only HTTP/HTTPS URLs are allowed')
   }
+  if (parsed.username || parsed.password) {
+    throw new Error('URL credentials are not allowed')
+  }
   const hostname = parsed.hostname.toLowerCase()
+  const addressHost = hostname.replace(/^\[|\]$/g, '')
   if (BLOCKED_HOSTNAMES.has(hostname)) {
     throw new Error('URL not allowed')
   }
   // Resolve hostname → IP and reject if any resolved IP is private/reserved.
-  // Pin the resolved IP into the URL to defeat DNS rebinding attacks.
+  // Bind the resolved IP to this hop's custom connector to defeat rebinding.
   const pinnedIp = await resolveAndPin(hostname)
-  // Replace hostname with the pinned IP in the URL to prevent TOCTOU
-  const pinnedUrl = new URL(parsed.toString())
-  pinnedUrl.hostname = pinnedIp.includes(':') ? `[${pinnedIp}]` : pinnedIp
-  // Store original hostname for Host header (needed for virtual hosting / TLS SNI)
-  ;(pinnedUrl as URL & { _originalHost?: string })._originalHost = hostname
-  return pinnedUrl
+  return {
+    logicalUrl: parsed,
+    pinnedIp,
+    tlsServername: parsed.protocol === 'https:' && isIP(addressHost) === 0 ? hostname : null,
+  }
 }
 
 /** Fetch with size cap. Streams the response and rejects past MAX_BODY_BYTES. */
-async function fetchWithBodyCap(url: string, originalHost?: string): Promise<{ ok: boolean; status: number; body: string; redirect?: string }> {
+async function fetchWithBodyCap(
+  target: ValidatedUrl
+): Promise<{ ok: boolean; status: number; body: string; redirect?: string }> {
   const headers: Record<string, string> = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     Accept: 'text/html,application/xhtml+xml',
   }
-  if (originalHost) headers['Host'] = originalHost
-  const response = await fetch(url, {
-    headers,
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    redirect: 'manual',
+  // Fetch keeps the logical URL so Undici emits the correct Host header. The
+  // connector changes only the socket destination to the already-validated IP
+  // and explicitly retains the logical DNS name for TLS SNI/cert verification.
+  const connect = buildConnector({})
+  const dispatcher = new Agent({
+    connect(options, callback) {
+      connect(
+        {
+          ...options,
+          hostname: target.pinnedIp,
+          servername: target.tlsServername ?? undefined,
+        },
+        callback
+      )
+    },
   })
 
-  // Surface 3xx Location for caller-side redirect handling.
-  if (response.status >= 300 && response.status < 400) {
-    const location = response.headers.get('Location') || ''
-    return { ok: false, status: response.status, body: '', redirect: location }
-  }
+  try {
+    const response = await undiciFetch(target.logicalUrl.href, {
+      headers,
+      dispatcher,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      redirect: 'manual',
+    })
 
-  // Reject obvious oversize responses via Content-Length when available.
-  const contentLength = safeParseInt(response.headers.get('Content-Length'), 0)
-  if (contentLength > MAX_BODY_BYTES) {
-    return { ok: false, status: 413, body: '' }
-  }
-
-  // Stream the body and abort if cap exceeded.
-  if (!response.body) {
-    return { ok: response.ok, status: response.status, body: '' }
-  }
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-    if (value) {
-      total += value.length
-      if (total > MAX_BODY_BYTES) {
-        try { await reader.cancel() } catch (err) {
-          logger.debug('Non-critical error cancelling reader:', err instanceof Error ? err.message : String(err))
-        }
-        return { ok: false, status: 413, body: '' }
-      }
-      chunks.push(value)
+    // Surface 3xx Location for caller-side redirect handling.
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('Location') || ''
+      await response.body?.cancel()
+      return { ok: false, status: response.status, body: '', redirect: location }
     }
+
+    // Reject obvious oversize responses via Content-Length when available.
+    const contentLength = safeParseInt(response.headers.get('Content-Length'), 0)
+    if (contentLength > MAX_BODY_BYTES) {
+      await response.body?.cancel()
+      return { ok: false, status: 413, body: '' }
+    }
+
+    // Stream the body and abort if cap exceeded.
+    if (!response.body) {
+      return { ok: response.ok, status: response.status, body: '' }
+    }
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      if (value) {
+        total += value.length
+        if (total > MAX_BODY_BYTES) {
+          try {
+            await reader.cancel()
+          } catch (err) {
+            logger.debug(
+              'Non-critical error cancelling reader:',
+              err instanceof Error ? err.message : String(err)
+            )
+          }
+          return { ok: false, status: 413, body: '' }
+        }
+        chunks.push(value)
+      }
+    }
+    const decoder = new TextDecoder('utf-8', { fatal: false })
+    const body =
+      chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join('') + decoder.decode()
+    return { ok: response.ok, status: response.status, body }
+  } finally {
+    await dispatcher.close()
   }
-  const decoder = new TextDecoder('utf-8', { fatal: false })
-  const body = chunks.map((c) => decoder.decode(c, { stream: true })).join('') + decoder.decode()
-  return { ok: response.ok, status: response.status, body }
 }
 
 export async function GET(request: NextRequest) {
@@ -201,7 +267,8 @@ export async function GET(request: NextRequest) {
     // Manual redirect chain — re-validate each hop against SSRF allowlist.
     // Defeats: server returns 302 → http://169.254.169.254/...
     let currentUrl = inputUrl
-    let validUrl: URL | null = null
+    let validUrl: ValidatedUrl | null = null
+    let finalLogicalUrl: URL | null = null
     let body = ''
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       try {
@@ -209,18 +276,18 @@ export async function GET(request: NextRequest) {
       } catch (err) {
         return NextResponse.json(
           { error: err instanceof Error ? err.message : 'URL validation failed' },
-          { status: 400 },
+          { status: 400 }
         )
       }
 
-      const result = await fetchWithBodyCap(validUrl.href, (validUrl as URL & { _originalHost?: string })._originalHost)
+      const result = await fetchWithBodyCap(validUrl)
       if (result.status === 413) {
         return NextResponse.json({ error: 'Response body too large' }, { status: 413 })
       }
       if (result.redirect) {
         // Resolve relative redirects against the current URL, then loop.
         try {
-          currentUrl = new URL(result.redirect, validUrl.href).href
+          currentUrl = new URL(result.redirect, validUrl.logicalUrl).href
         } catch {
           return NextResponse.json({ error: 'Invalid redirect target' }, { status: 502 })
         }
@@ -230,18 +297,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to fetch URL' }, { status: result.status || 502 })
       }
       body = result.body
+      finalLogicalUrl = validUrl.logicalUrl
       break
     }
-    if (!validUrl || !body) {
+    if (!validUrl || !finalLogicalUrl || !body) {
       return NextResponse.json({ error: 'Too many redirects or empty body' }, { status: 502 })
     }
 
     const meta = extractMetaTags(body)
 
     // 处理相对路径的图片 URL
-    if (meta.image && !meta.image.startsWith('http')) {
+    if (meta.image) {
       try {
-        meta.image = new URL(meta.image, validUrl.origin).href
+        const imageUrl = new URL(meta.image, finalLogicalUrl)
+        meta.image = ['http:', 'https:'].includes(imageUrl.protocol) ? imageUrl.href : ''
       } catch {
         meta.image = ''
       }
@@ -254,9 +323,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Error fetching link preview:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch link preview' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch link preview' }, { status: 500 })
   }
 }
