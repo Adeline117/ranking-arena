@@ -42,9 +42,22 @@ Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with the
 headers and no upstream fetch. The named scripts report `RETIRED` and exit `2` before
 proxy, browser, import, or host work. This does not stop, inspect, or prove a deployed
 VPS proxy/scraper, Cloudflare Worker, host process, queue, or external schedule. It
-does not include the separately retired `avatar-mirror` worker. `/api/avatar`, avatar
-helpers, UI/read RPCs, adapters, and unlisted writers remain outside this proxy/import
-review.
+does not include the separately retired `avatar-mirror` worker or the separate
+avatar-proxy route below. Other avatar-related API paths/helpers, UI/read RPCs,
+adapters, and unlisted writers remain outside this proxy/import review.
+
+A separate V1 avatar-proxy source hold covers anonymous `GET /api/avatar` and its
+`/api/v1/avatar` rewrite alias. Both resolve to the same fixed `410` response with all
+three `no-store` headers (`Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control`) before query parsing, DNS lookup, upstream fetch, or
+logging. The matching proxy bypass only preserves that anonymous response contract; it
+does not authorize an upstream proxy. Registered helpers and known UI/OG consumers no
+longer generate proxy requests: a proxy-required origin without a mirror uses local,
+inline, or default fallback. This is not a claim that avatar browser/network activity
+is zero: existing Supabase mirrors and direct allowed raw-avatar URLs may still render,
+while other avatar-related API paths/helpers, adapters, and unlisted writers remain
+outside. This source-only change cannot clear old CDN cache, stop older deployed code,
+or prove external state.
 
 The canonical `GET /api/cron/backfill-avatars` route and its
 `/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only
@@ -52,9 +65,10 @@ tombstone handler. It authenticates first: missing or invalid service authentica
 returns `401`; valid authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both
 responses carry three `no-store` headers and return before parameter parsing, database,
 logging, or upstream fetch. This is not evidence that a host, external scheduler, or
-healthcheck is deployed, stopped, or healthy. `/api/avatar`, avatar helpers, UI/read
-RPCs, adapters, and unlisted writers remain outside this handler's bounded review; its
-separate `avatar-mirror` worker hold does not change that route scope.
+healthcheck is deployed, stopped, or healthy. The separate avatar-proxy route, other
+avatar-related API paths/helpers, UI/read RPCs, adapters, and unlisted writers remain
+outside this handler's bounded review; its separate `avatar-mirror` worker hold does
+not change that route scope.
 
 The checked-in `avatar-mirror` worker execution is separately source-only retired: the
 processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
@@ -63,7 +77,8 @@ queued avatar-mirror job returns as a no-op within `route()` before that handler
 no claim that the surrounding worker or BullMQ has not already established or used
 shared Redis, or acquired a job lock. It cannot stop, inspect, or prove an
 already-running worker, Redis, host process, or schedule. It does not classify
-`/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted writers.
+the separate avatar-proxy route or other avatar-related API paths/helpers, UI/read
+RPCs, adapters, or unlisted writers.
 
 Arena's ingest fleet is designed to serve customer-facing ranking freshness from two
 nodes sharing one Supabase database and Upstash Redis. A source's

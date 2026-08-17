@@ -12,7 +12,8 @@
 > `V1_INGEST_EXECUTION_PUBLISHED=false` is a third, separate source guard for the
 > checked-in native ingest command path; it is neither a live-host assertion nor a
 > blanket classification of legacy queue, proxy, or import paths. The separate legacy
-> proxy/import hold and the avatar-backfill handler (canonical `GET
+> proxy/import hold, avatar-proxy route (`GET /api/avatar` plus its `/api/v1/avatar`
+> rewrite alias), and avatar-backfill handler (canonical `GET
 /api/cron/backfill-avatars` plus its `/api/v1/cron/backfill-avatars` rewrite alias),
 > together with the separately retired `avatar-mirror` worker, each apply only to their
 > explicitly listed handler/entrypoints; none claims every source writer or helper is
@@ -178,23 +179,34 @@ URL/query、upstream fetch 或 logging 前结束。checked-in Cloudflare Worker 
 `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与三层 `no-store`、不 fetch；列出的脚本均在 proxy、
 browser、import 或 host 工作前报告 `RETIRED` 并 exit `2`。这些代码门禁不停止、不检查也不证明
 任何已部署 CF Worker、VPS proxy/scraper、host process、queue 或 external schedule。它们不涉及
-单独封存的 worker `avatar-mirror`；`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与未列
-writer 没有在本 PR 中被关闭或重新分类。
+单独封存的 worker `avatar-mirror` 或下方单独封存的 avatar-proxy route；其他 avatar-related API
+path/helper、UI/read RPC、adapter 与未列 writer 没有在本 PR 中被关闭或重新分类。
+
+独立的 V1 avatar-proxy source hold 覆盖匿名 `GET /api/avatar` 及其
+`/api/v1/avatar` rewrite alias：两条路径解析到同一固定 `410` response，并带
+`Cache-Control`、`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`，在 query
+解析、DNS lookup、upstream fetch 或 logging 前结束。matching proxy bypass 仅保持该匿名
+no-store response contract，并非 upstream-proxy permission。已登记 helper 和已知 UI/OG consumer
+不再生成 proxy request；需要 proxy 的 origin 没有 mirror 时使用 local、inline 或 default fallback。
+这不表示所有 avatar browser/network request 为零：existing Supabase mirror 与 direct allowed
+raw-avatar URL 仍可能 render，其他 avatar-related API path/helper、adapter 与未列 writer 不在此
+boundary 内。该 source-only change 不能清除旧 CDN cache、停止 older deployed code，或证明
+external state。
 
 独立的 canonical `GET /api/cron/backfill-avatars` 及其
 `/api/v1/cron/backfill-avatars` rewrite alias 解析到同一 source-only tombstone handler：先校验
 service authentication，缺失或无效认证返回 `401`；有效认证返回 `410
 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
 upstream fetch 前结束。该源码契约同样不停止、不检查也不证明已部署 host、external scheduler 或
-healthcheck；该 handler 不涵盖 `GET /api/avatar`、avatar helper、UI/read RPC、adapter 或未列
-writer，且单独的 worker `avatar-mirror` source hold 不扩大其范围。
+healthcheck；该 handler 不涵盖单独的 avatar-proxy route、其他 avatar-related API path/helper、
+UI/read RPC、adapter 或未列 writer，且单独的 worker `avatar-mirror` source hold 不扩大其范围。
 
 独立的 checked-in `avatar-mirror` worker execution 已 source-only retired：processor 为 no-op，
 scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `route()` 内以 no-op 返回，
 早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
 worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。这不停止、不检查也不证明已运行
-worker、Redis、host process 或 schedule 已停止；同样不涵盖 `GET /api/avatar`、avatar helper、
-UI/read RPC、adapter 或未列 writer。
+worker、Redis、host process 或 schedule 已停止；它不扩大单独的 avatar-proxy boundary，也不涵盖
+其他 avatar-related API path/helper、UI/read RPC、adapter 或未列 writer。
 
 未来的发布流程必须由 owner 重新定义并单独批准：精确 candidate SHA、隔离目标、受保护
 source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界和保留的审计材料。具体操作

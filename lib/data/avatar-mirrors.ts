@@ -1,16 +1,13 @@
 /**
- * Batch-attach our own Supabase-Storage avatar mirror to leaderboard rows.
+ * Batch-attach existing Supabase-Storage avatar mirrors to leaderboard rows.
  *
- * The avatar-mirror ingest worker mirrors exchange-CDN avatars into the
- * `trader-avatars` bucket and records the public URL in
- * arena.traders.avatar_url_mirror. The legacy homepage/leaderboard path reads
- * `leaderboard_ranks` (origin URL only) and proxies the exchange CDN via
- * /api/avatar — which eats cold-burst 429s. This helper enriches those rows
- * with the mirror URL (when present) in a single index-backed RPC round trip,
- * so the frontend can prefer our CDN (no proxy, no 429) via getTraderAvatarSrc.
+ * This read helper only exposes already-persisted URLs from the
+ * `trader-avatars` bucket. It does not claim a writer is active or acquire a
+ * replacement from an exchange source. Frontends can prefer a direct-safe
+ * mirror when one exists and otherwise use their local avatar fallback.
  *
- * Fail-open: any error returns the input unchanged — the origin proxy still
- * works, so a missing mirror never breaks rendering.
+ * Fail-open: any error returns the input unchanged; rendering remains subject
+ * to the source-level direct-safe avatar policy.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

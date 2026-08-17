@@ -585,8 +585,8 @@ async function fetchFromLeaderboard(
     return true
   })
 
-  // Prefer our own CDN avatar mirror over the exchange-CDN proxy (no 429 cold-burst).
-  // Fail-open + cached (getOrSetWithLock ttl 300) → one indexed RPC per cache fill.
+  // Attach existing CDN avatar mirrors. Render-time helpers later select only
+  // direct-safe sources; this read does not acquire replacements.
   dedupedTraders = await attachAvatarMirrors(supabase, dedupedTraders, signal)
 
   // Verified (claimed) badge (P3-P3, 2026-07-09): verified_traders is tiny

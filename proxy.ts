@@ -82,9 +82,10 @@ const SKIP_ROUTE_PREFIXES = ['/_next', '/favicon.ico', '/api/health']
 const CRON_ROUTE_PREFIXES = ['/api/cron', '/api/v1/cron'] as const
 
 // Exact route handoffs that own their response contract. In particular, the
-// retired Phemex acquisition route must authenticate and emit its no-store
-// 401/410 response before any global Redis rate limit or bot guard can reply.
+// retired Phemex acquisition route and the public avatar compatibility route
+// must reply before any global Redis rate limit or bot guard can intervene.
 const SKIP_EXACT_ROUTES = new Set(['/api/proxy/phemex'])
+const AVATAR_PROXY_BYPASS_PATHS = new Set(['/api/avatar', '/api/v1/avatar'])
 
 // ============================================
 // Rate Limiting
@@ -271,9 +272,14 @@ export function isCronProxyBypassPath(pathname: string): boolean {
   return CRON_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
 }
 
+export function isAvatarProxyBypassPath(pathname: string): boolean {
+  return AVATAR_PROXY_BYPASS_PATHS.has(pathname)
+}
+
 export function shouldSkip(pathname: string): boolean {
   return (
     SKIP_EXACT_ROUTES.has(pathname) ||
+    isAvatarProxyBypassPath(pathname) ||
     SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route)) ||
     isCronProxyBypassPath(pathname)
   )
@@ -433,7 +439,13 @@ function ipFloorClientIp(req: NextRequest): string {
 }
 
 async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextResponse | null> {
-  if (!pathname.startsWith('/api/') || isCronProxyBypassPath(pathname)) return null
+  if (
+    !pathname.startsWith('/api/') ||
+    isCronProxyBypassPath(pathname) ||
+    isAvatarProxyBypassPath(pathname)
+  ) {
+    return null
+  }
   const rl = getIpFloorRatelimit()
   if (!rl) return null // fail-open
   const ip = ipFloorClientIp(req)

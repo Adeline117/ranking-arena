@@ -51,7 +51,7 @@ export interface InitialTrader {
   source: string
   source_type: 'futures' | 'spot' | 'web3'
   avatar_url: string | null
-  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
+  /** Existing Supabase-Storage mirror, preferred when it remains direct-safe. */
   avatar_url_mirror?: string | null
   arena_score: number
   /** Sharpe ratio — populated from leaderboard_ranks.sharpe_ratio (DEX/computed
@@ -343,8 +343,8 @@ export async function fetchLeaderboardFromDB(
     ])
     if (signal.aborted) throw signal.reason
 
-    // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
-    // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
+    // Prefer an existing CDN mirror when present. Missing mirrors leave the
+    // origin field untouched; render-time helpers decide whether it is safe.
     const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders, signal)
     if (signal.aborted) throw signal.reason
     const counts = publicInitialCategoryCounts(freshnessRows.countRows, enrichedTraders, rawCounts)

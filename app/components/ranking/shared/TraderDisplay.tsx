@@ -9,7 +9,7 @@ import { Box, Text } from '../../base'
 import {
   getAvatarGradient,
   getAvatarInitial,
-  getTraderAvatarUrl,
+  getTraderAvatarSrc,
   isWalletAddress,
   generateBlockieSvg,
 } from '@/lib/utils/avatar'
@@ -144,12 +144,15 @@ export function TraderAvatar({
   rank: number
   size?: number
 }) {
-  // Prefer our own CDN mirror (direct-load supabase URL, no proxy, no 429);
-  // else fall back to the origin proxy (keeps generated-avatar filtering).
-  const proxyAvatarUrl = avatarMirrorUrl?.trim() || getTraderAvatarUrl(avatarUrl)
+  // Prefer a direct-safe mirror/origin; V1 withholds sources that would need
+  // the retired acquisition route and renders the existing local fallback.
+  const resolvedAvatarUrl = getTraderAvatarSrc({
+    avatarMirrorUrl,
+    avatarOriginUrl: avatarUrl,
+  })
   // For DEX wallet addresses without avatar, generate a blockie
   const blockieSrc =
-    !proxyAvatarUrl && isWalletAddress(traderId) ? generateBlockieSvg(traderId, size * 2) : null
+    !resolvedAvatarUrl && isWalletAddress(traderId) ? generateBlockieSvg(traderId, size * 2) : null
   const medalGlow =
     rank <= 3
       ? `0 0 12px ${rank === 1 ? 'var(--color-gold-glow)' : rank === 2 ? 'var(--color-silver-glow)' : 'var(--color-bronze-glow)'}`
@@ -190,12 +193,12 @@ export function TraderAvatar({
       >
         {getAvatarInitial(displayName)}
       </span>
-      {proxyAvatarUrl ? (
-        proxyAvatarUrl.startsWith('data:') ? (
+      {resolvedAvatarUrl ? (
+        resolvedAvatarUrl.startsWith('data:') ? (
           // data: URIs (inline SVG identicons/blockies) — use plain <img> to avoid
           // next/image optimization which rejects long data: URIs with 400 errors
           <img
-            src={proxyAvatarUrl}
+            src={resolvedAvatarUrl}
             alt={displayName}
             width={size}
             height={size}
@@ -214,7 +217,7 @@ export function TraderAvatar({
           />
         ) : (
           <Image
-            src={proxyAvatarUrl}
+            src={resolvedAvatarUrl}
             alt={displayName}
             width={size}
             height={size}

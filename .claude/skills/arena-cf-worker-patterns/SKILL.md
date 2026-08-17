@@ -1,4 +1,4 @@
-# Arena CF Worker, Avatar-Backfill, and Avatar-Mirror Containment — V1 NO-GO
+# Arena CF Worker, Avatar-Proxy, Avatar-Backfill, and Avatar-Mirror Containment — V1 NO-GO
 
 This skill is a report-only source-review aid during V1. It does not authorize a
 Cloudflare deployment, dashboard/API access, credential use, route invocation, proxy
@@ -24,6 +24,14 @@ handler. It authenticates first: missing or invalid service authentication retur
 carry the same three `no-store` headers and return before parameter parsing, database
 access, logging, or upstream fetch. It is not a cron-invocation or backfill procedure.
 
+Anonymous `GET /api/avatar` and its `/api/v1/avatar` rewrite alias are a separate
+source-only hold. Both resolve to one fixed `410` response with `Cache-Control`,
+`CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store` headers before query
+parsing, DNS lookup, upstream fetch, or logging. Their matching proxy bypass only
+preserves that anonymous response contract; it does not authorize upstream proxy use.
+Registered helpers and known UI/OG consumers no longer generate a proxy request: a
+proxy-required origin without a mirror falls back to local, inline, or default behavior.
+
 Treat the checked-in `avatar-mirror` worker execution as separately source-only retired:
 its processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a
 legacy queued avatar-mirror job returns as a no-op within `route()` before that handler
@@ -34,7 +42,8 @@ shared Redis, or acquired a job lock. Do not treat this as a worker-operation pr
 These are checked-in source contracts, not evidence that an external Worker, route,
 proxy, host, queue, Redis, external scheduler, or healthcheck is deployed, stopped, or
 healthy. In particular, the avatar-mirror hold cannot stop, inspect, or prove an
-already-running worker, Redis, host process, or schedule.
+already-running worker, Redis, host process, or schedule. The avatar-proxy hold cannot
+clear old CDN cache, stop older deployed code, or prove external state.
 
 ## Scope boundary
 
@@ -54,8 +63,12 @@ The scripts report `RETIRED` and exit `2` before proxy, browser, import, or host
 Do not generalize this list into a claim that all source writers have been closed. The
 separate avatar-backfill tombstone covers only its canonical/rewrite-alias handler, and
 the separately retired avatar-mirror worker covers only its processor, scheduler, and
-legacy queued-job behavior. `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and
-unlisted writers remain outside this skill's conclusion and need separate review.
+legacy queued-job behavior. The separate avatar-proxy hold covers only `GET
+/api/avatar`, its `/api/v1/avatar` rewrite alias, and the documented helper/UI/OG
+fallback contract. It does not mean avatar browser/network activity is zero: existing
+Supabase mirrors and direct allowed raw-avatar URLs may still render; other
+avatar-related API paths/helpers, adapters, and unlisted writers remain outside this
+skill's conclusion and need separate review.
 
 ## Safe review output
 
