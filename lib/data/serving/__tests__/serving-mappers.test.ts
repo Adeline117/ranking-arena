@@ -2,9 +2,15 @@
  * Serving-layer mapper tests (spec §2.4/§6) — RPC jsonb → frontend contracts.
  */
 
+const mockFetchPublicProfileRankingRows = jest.fn()
+jest.mock('@/lib/data/trader/public-profile-ranking', () => ({
+  PUBLIC_PROFILE_RANKING_PERIODS: ['7D', '30D', '90D'],
+  fetchPublicProfileRankingRows: (...args: unknown[]) => mockFetchPublicProfileRankingRows(...args),
+}))
+
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { projectBoardExtras } from '../board-extras'
-import { getFirstScreen } from '../first-screen'
+import { getFirstScreen, getPublicFirstScreen } from '../first-screen'
 import { getCoreModules, hasRequiredProfileSeries, isFresh, tfToInt } from '../core'
 import { getSourceCapabilities } from '../capabilities'
 
@@ -53,7 +59,7 @@ describe('projectBoardExtras', () => {
   })
 })
 
-describe('getFirstScreen', () => {
+describe('getPublicFirstScreen', () => {
   const rpcPayload = {
     source: 'bitget_futures',
     exchangeTraderId: 'beb24d718eb23b54ac91',
@@ -89,8 +95,20 @@ describe('getFirstScreen', () => {
     ],
   }
 
-  it('maps the RPC jsonb to TraderFirstScreen with Money pnl', async () => {
-    const fs = await getFirstScreen(rpcClient(rpcPayload), 'bitget_futures', 'beb24d718eb23b54ac91')
+  beforeEach(() => {
+    mockFetchPublicProfileRankingRows.mockResolvedValue({
+      rows: [],
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_cohort_unavailable',
+    })
+  })
+
+  it('keeps raw RPC rank/ROI/PnL unknown when the sealed cohort is unavailable', async () => {
+    const fs = await getPublicFirstScreen(
+      rpcClient(rpcPayload),
+      'bitget_futures',
+      'beb24d718eb23b54ac91'
+    )
     expect(fs).not.toBeNull()
     expect(fs!.nickname).toBe('AI-HUB')
     // Spec §1.4: no mirror → origin goes through the /api/avatar proxy
@@ -98,11 +116,84 @@ describe('getFirstScreen', () => {
       `/api/avatar?url=${encodeURIComponent('https://qrc.bgstatic.com/otc/images/a.png')}`
     )
     expect(fs!.entries).toHaveLength(1)
-    expect(fs!.entries[0].headlinePnl).toEqual({ value: 7350.77, currency: 'USDT' })
+    expect(fs!.entries[0]).toMatchObject({
+      rank: null,
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_cohort_unavailable',
+      headlineRoi: null,
+      headlinePnl: null,
+    })
+    expect(JSON.stringify(fs!.entries[0])).not.toContain('305513.07')
+    expect(JSON.stringify(fs!.entries[0])).not.toContain('7350.77')
     expect(fs!.entries[0].extras.copier_count).toBe(72)
     expect(fs!.entries[0].provenance).toEqual({
       source: 'bitget_futures',
       asOf: '2026-06-10T12:00:00Z',
+    })
+  })
+
+  it('uses only sealed rank and ROI, while keeping PnL null without a public currency proof', async () => {
+    mockFetchPublicProfileRankingRows.mockResolvedValueOnce({
+      rows: [
+        {
+          season_id: '30D',
+          source: 'bitget_futures',
+          source_trader_id: 'beb24d718eb23b54ac91',
+          rank: 5,
+          roi: 12.34,
+          pnl: 999999,
+        },
+      ],
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_period_not_published',
+    })
+
+    const fs = await getFirstScreen(rpcClient(rpcPayload), 'bitget_futures', 'beb24d718eb23b54ac91')
+
+    expect(fs?.entries[0]).toMatchObject({
+      rank: 5,
+      rankingVisibility: 'verified',
+      rankingVisibilityReason: null,
+      headlineRoi: 12.34,
+      headlinePnl: null,
+    })
+    expect(mockFetchPublicProfileRankingRows).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        source: 'bitget_futures',
+        sourceTraderId: 'beb24d718eb23b54ac91',
+        periods: ['7D', '30D', '90D'],
+      })
+    )
+  })
+
+  it('fails closed when the arena RPC identity disagrees with the sealed cohort scope', async () => {
+    mockFetchPublicProfileRankingRows.mockResolvedValueOnce({
+      rows: [
+        {
+          season_id: '30D',
+          source: 'bitget_futures',
+          source_trader_id: 'beb24d718eb23b54ac91',
+          rank: 5,
+          roi: 12.34,
+        },
+      ],
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_period_not_published',
+    })
+
+    const fs = await getPublicFirstScreen(
+      rpcClient({ ...rpcPayload, exchangeTraderId: 'different-account' }),
+      'bitget_futures',
+      'beb24d718eb23b54ac91'
+    )
+
+    expect(fs?.entries[0]).toMatchObject({
+      rank: null,
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'first_screen_identity_mismatch',
+      headlineRoi: null,
+      headlinePnl: null,
     })
   })
 

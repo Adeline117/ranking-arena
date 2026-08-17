@@ -53,8 +53,22 @@ export interface TraderFirstScreen {
   botStrategy: 'martingale' | 'grid' | 'ai' | null
   entries: Array<{
     timeframe: 7 | 30 | 90
-    rank: number
+    /**
+     * A published rank only. The arena first-screen RPC may retain a raw board
+     * observation for identity/extras, but public consumers must never receive
+     * that observation as a rank unless the current sealed ranking cohort
+     * independently proves it.
+     */
+    rank: number | null
+    /** Per-timeframe authority state for the rank/ROI/PnL projection. */
+    rankingVisibility: 'verified' | 'partial' | 'unknown'
+    rankingVisibilityReason: string | null
     headlineRoi: number | null
+    /**
+     * The published ranking view has no settlement-currency column. Do not
+     * attach a raw board currency to its numeric PnL; it remains null until a
+     * currency-attested public projection exists.
+     */
     headlinePnl: Money | null
     headlineWinRate: number | null
     /** Board-card extras the source exposed (sparkline, MDD, copiers…) —
