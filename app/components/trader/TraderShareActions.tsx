@@ -10,20 +10,15 @@
  *   - downloadable rank card
  *   - localized brag caption
  *
- * Referral wiring: when a LOGGED-IN user shares, their referral code
- * (`/api/referral` → handle) is appended as `?ref=<code>` to the shared URL so
- * every brag doubles as a referral link. Guests share without a ref (still
- * works). The `/share/rank/[trader_key]` route preserves `ref` through its
- * redirect to `/wrapped/[handle]`, where the root layout's pre-hydration
- * capture stores it — closing the loop.
+ * V1 referral publication is held. Rank sharing stays available, but it must
+ * not fetch, generate, or append a referral code to a shared URL.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { platformLabel, formatRoiShort } from '@/lib/constants/platform-labels'
 
 interface TraderShareActionsProps {
@@ -143,41 +138,15 @@ export default function TraderShareActions({
 }: TraderShareActionsProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
-  const { userId, getAuthHeadersAsync } = useAuthSession()
 
   const [open, setOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [canNativeShare, setCanNativeShare] = useState(false)
   const [ogLoaded, setOgLoaded] = useState(false)
-  // Current user's referral code (their handle). Fetched lazily on first open.
-  const [referralCode, setReferralCode] = useState<string | null>(null)
-  const referralFetched = useRef(false)
 
   useEffect(() => {
     setCanNativeShare(typeof navigator !== 'undefined' && 'share' in navigator)
   }, [])
-
-  // Lazily resolve the sharer's referral code when the panel opens (logged-in
-  // only). Best-effort: on failure we simply share without a ref.
-  useEffect(() => {
-    if (!open || !userId || referralFetched.current) return
-    referralFetched.current = true
-    let cancelled = false
-    ;(async () => {
-      try {
-        const headers = await getAuthHeadersAsync()
-        const res = await fetch('/api/referral', { headers })
-        if (!res.ok) return
-        const json = await res.json()
-        if (!cancelled && json?.referral_code) setReferralCode(String(json.referral_code))
-      } catch {
-        // best-effort — share still works without ref
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [open, userId, getAuthHeadersAsync])
 
   const name = displayName || handle
   const platLabel = platformLabel(platform)
@@ -188,10 +157,8 @@ export default function TraderShareActions({
     const params = new URLSearchParams()
     if (platform) params.set('platform', platform)
     params.set('window', windowParam)
-    // Every logged-in brag is a referral link.
-    if (referralCode) params.set('ref', referralCode)
     return `${base}/share/rank/${encodeURIComponent(routeKey || handle)}?${params}`
-  }, [handle, platform, referralCode, routeKey, windowParam])
+  }, [handle, platform, routeKey, windowParam])
 
   // OG rank-card preview / download source (query params only, no DB).
   const buildOgUrl = useCallback(() => {

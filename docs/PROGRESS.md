@@ -76,6 +76,24 @@ raw-avatar URL 仍可能 render；其他 avatar-related API path/helper、adapte
 这只是源码状态，不能清除旧 CDN cache、停止 older deployed code，或证明 external state；下方的主机、
 worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
 
+## V1 direct service-auth cron ingress source containment（2026-08-17）
+
+本轮仅在源码中将下列十个 direct service-auth cron ingress handler 纳入固定、非环境的
+`V1_CRON_EXECUTION_PUBLISHED=false` boundary：`GET /api/cron/batch-5min`、`GET
+/api/cron/check-data-freshness`、`GET /api/cron/cleanup-data`、`GET
+/api/cron/cleanup-stuck-logs`、`GET /api/cron/detect-contracts`、`GET`/`POST
+/api/cron/fetch-funding-rates`、`GET`/`POST /api/cron/fetch-market-data`、`GET`/`POST
+/api/cron/fetch-open-interest`、`GET /api/cron/qualify-referrals` 与 `GET
+/api/cron/smoke-test`。
+
+这些入口均 auth-first：缺失或无效 service authentication 固定返回 `401`；valid service
+secret 固定返回 `410 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有
+`Cache-Control`、`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`，并在
+query/body 解析、lock、`PipelineLogger`、database、cache、provider 或 network 工作前结束。
+该 source-only boundary 只覆盖这十个入口，不把其他 cron 描述为已退休；它不停止、检查或证明
+任何已部署 scheduler、host、queue 或 worker。下方主机、worker、生产验证或历史部署陈述仍不可用于
+推断当前运行状态或生成操作步骤。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）

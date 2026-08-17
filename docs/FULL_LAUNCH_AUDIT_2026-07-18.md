@@ -287,7 +287,7 @@ flowchart LR
 | `?section=alerts`           | 管理 trader alerts，返回榜单发现账户。                                   |
 | `?section=notifications`    | Follow/Like/Comment/Mention/Message/Trader event、digest、haptic。       |
 | `?section=privacy`          | Followers/Following/Pro badge 可见性、DM 权限、解除 block。              |
-| Referral card               | 查看/分享邀请进度。                                                      |
+| Referral card               | V1 仅显示推荐计划暂停状态；不显示邀请、分享、进度或自动奖励承诺。        |
 | `?section=account`          | 导出个人数据、Logout、Delete account 二次确认。                          |
 | Sticky save bar             | 有未保存变化才出现；Discard 重载服务器真值，Save 写入当前 viewer scope。 |
 

@@ -296,8 +296,8 @@ export function TraderHeaderActions({
         )}
 
         {/* Prominent quiz-grade share: OG rank-card preview + one-tap
-            X / Telegram / WhatsApp / native-share + download card, with the
-            sharer's referral code auto-appended when logged in. */}
+            X / Telegram / WhatsApp / native-share + download card. V1 keeps
+            referral codes out of shared links while the program is held. */}
         <TraderShareActions
           handle={handle}
           routeKey={routeKey}

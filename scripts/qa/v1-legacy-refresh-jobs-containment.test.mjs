@@ -43,12 +43,18 @@ test('batch discovery is an auth-first V1 cron tombstone before queue access', (
   )
 })
 
-test('batch-5min retains only hot-score maintenance and cannot consume refresh jobs', () => {
-  const handler = batchFiveMinutes.slice(batchFiveMinutes.indexOf('export async function GET'))
+test('batch-5min is retired with legacy refresh acquisition while its unused hot-score helper remains inert', () => {
+  const handler = batchFiveMinutes.slice(batchFiveMinutes.indexOf('export function GET'))
   const inlineRuntime = inlineJobs.slice(inlineJobs.indexOf('export interface InlineJobResult'))
 
-  assert.match(batchFiveMinutes, /refreshHotScoresInline/)
-  assert.doesNotMatch(handler, /runWorkerInline|refresh_jobs|claim_refresh_job/)
+  assert.match(
+    handler,
+    /v1CronExecutionGate\(request\) \?\? v1CronExecutionUnavailableResponse\(\)/
+  )
+  assert.doesNotMatch(
+    handler,
+    /refreshHotScoresInline|runWorkerInline|refresh_jobs|claim_refresh_job/
+  )
   assert.doesNotMatch(
     inlineRuntime,
     /runWorkerInline|claim_refresh_job|refresh_jobs|trader_sources|trader_profiles_v2|getConnector|fetchTrader/
@@ -92,9 +98,9 @@ test('legacy V2 page no longer renders a refresh or retry affordance', () => {
   assert.doesNotMatch(legacyPage, /TraderRefreshButton|triggerRefresh|onRetry=/)
 })
 
-test('retired discovery is absent from liveness monitoring while retained maintenance remains explicit', () => {
+test('retired refresh commands are absent from liveness monitoring', () => {
   assert.doesNotMatch(pipelineLogger, /['"]batch-discover['"]/)
   assert.doesNotMatch(metaMonitor, /['"]batch-discover['"]\s*:/)
-  assert.match(pipelineLogger, /['"]batch-5min['"]/)
-  assert.match(metaMonitor, /['"]batch-5min['"]\s*:/)
+  assert.doesNotMatch(pipelineLogger, /['"]batch-5min['"]/)
+  assert.doesNotMatch(metaMonitor, /['"]batch-5min['"]\s*:/)
 })

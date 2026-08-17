@@ -25,9 +25,24 @@ so this does not mean those routes make no Redis reads. The gate is source-only:
 does not stop, inspect, or prove a running host, queue, or external schedule.
 The checked-in legacy-refresh boundary, including the client-safe fixed-false
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately retires legacy queue admission
-and consumption: `batch-discover` is auth-first `401/410`, `batch-5min` retains only
-post hot-score maintenance, and public refresh never admits or exposes a job. Legacy
+and consumption: `batch-discover` is auth-first `401/410`, `batch-5min` is separately
+covered by the direct service-auth cron ingress boundary below, and public refresh never
+admits or exposes a job. Legacy
 proxy/import paths remain outside that refresh-job containment unit.
+
+The same fixed, non-environment `V1_CRON_EXECUTION_PUBLISHED=false` source gate
+separately holds exactly ten direct service-auth cron ingress handlers: `GET
+/api/cron/batch-5min`, `GET /api/cron/check-data-freshness`, `GET
+/api/cron/cleanup-data`, `GET /api/cron/cleanup-stuck-logs`, `GET
+/api/cron/detect-contracts`, `GET`/`POST /api/cron/fetch-funding-rates`, `GET`/`POST
+/api/cron/fetch-market-data`, `GET`/`POST /api/cron/fetch-open-interest`, `GET
+/api/cron/qualify-referrals`, and `GET /api/cron/smoke-test`. Missing or invalid
+service authentication returns `401`; a valid service secret returns `410
+CRON_EXECUTION_NOT_PUBLISHED`. Both responses carry `Cache-Control`,
+`CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store` headers and return
+before query/body parsing, locks, `PipelineLogger`, database, cache, provider, or
+network work. This bounded source-only list does not classify other cron routes and
+cannot stop, inspect, or prove an existing deployed scheduler, host, queue, or worker.
 
 The separate legacy proxy/import source hold is intentionally limited to `GET
 /api/proxy/phemex`, `cloudflare-worker/src/index.ts`,

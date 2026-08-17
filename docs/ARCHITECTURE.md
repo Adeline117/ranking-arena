@@ -9,6 +9,8 @@
 > `V1_CRON_EXECUTION_PUBLISHED=false` and
 > `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` are narrow, checked-in source guards;
 > they do not stop or prove the state of an external worker or schedule.
+> The former also applies only to the explicitly listed direct service-auth cron
+> ingress handlers below; it is not a blanket classification of other cron routes.
 > `V1_INGEST_EXECUTION_PUBLISHED=false` is a third, separate source guard for the
 > checked-in native ingest command path; it is neither a live-host assertion nor a
 > blanket classification of legacy queue, proxy, or import paths. The separate legacy
@@ -18,6 +20,10 @@
 > together with the separately retired `avatar-mirror` worker, each apply only to their
 > explicitly listed handler/entrypoints; none claims every source writer or helper is
 > disabled.
+> `V1_REFERRAL_PROGRAM_PUBLISHED=false` is a separate browser-safe source hold for
+> referral API ingress, presentation, and new referral-link propagation. It leaves a
+> V1 status view only and does not prove or alter deployed code, historical records, or
+> external reward state.
 
 ## 一、系统全景（历史 / 设计语义）
 
@@ -152,6 +158,19 @@ schedules；这只是源码候选，不证明或改变任何已部署 provider�
 worker/scheduler/caller chain 在 dotenv、DB、Redis、BullMQ 或 HTTP 工作前退出/返回。
 两者都不能停止已运行的 process 或 checkout 外已有的 schedule。
 
+同一个固定、非环境的 `V1_CRON_EXECUTION_PUBLISHED=false` source gate 还单独封存精确十个
+direct service-auth cron ingress handler：`GET /api/cron/batch-5min`、`GET
+/api/cron/check-data-freshness`、`GET /api/cron/cleanup-data`、`GET
+/api/cron/cleanup-stuck-logs`、`GET /api/cron/detect-contracts`、`GET`/`POST
+/api/cron/fetch-funding-rates`、`GET`/`POST /api/cron/fetch-market-data`、`GET`/`POST
+/api/cron/fetch-open-interest`、`GET /api/cron/qualify-referrals` 与 `GET
+/api/cron/smoke-test`。每一入口均 auth-first：缺失或无效 service authentication 返回 `401`；
+valid service secret 固定返回 `410 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均带
+`Cache-Control`、`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`，且在
+query/body 解析、lock、`PipelineLogger`、database、cache、provider 或 network 工作前结束。
+这只是上述十个入口的 source-only boundary，不概括其他 cron，也不能停止、检查或证明已部署的
+scheduler、host、queue 或 worker。
+
 独立的 `V1_INGEST_EXECUTION_PUBLISHED=false` 让已登记的 native ingest worker entry 在
 dotenv/runtime dependency 初始化前退出，scheduler/connection 在 DB、ioredis 或 BullMQ
 工作前结束，Tier-C 与 first-party bridge 不接纳新 ingest，受覆盖的 direct ingest script 也
@@ -163,7 +182,8 @@ Tier-C 的分支以 pending 降级，不初始化 provider/ioredis/BullMQ bridge
 读取。该门禁不能停止或证明 host/queue/external schedule。
 已登记的 legacy-refresh source boundary（含 client-safe 固定 false 的
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker）已单独封存 legacy `refresh_jobs`：
-`batch-discover` 为 auth-first `401/410` tombstone，`batch-5min` 已移除 queue consumer，
+`batch-discover` 为 auth-first `401/410` tombstone，`batch-5min` 由上方精确列出的 direct
+service-auth cron ingress boundary 单独封存，
 public trader refresh 不再接纳 job，legacy detail 固定 `refresh_job: null`。它不涵盖
 legacy proxy/import path；后者由下面独立且范围有限的审查封存。
 

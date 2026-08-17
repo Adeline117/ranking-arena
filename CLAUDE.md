@@ -129,6 +129,20 @@ authentication receives `410` `CRON_EXECUTION_NOT_PUBLISHED`; both paths have th
 pipeline logs, cache, data, or providers. This ranking-command list does not classify
 other cron routes.
 
+The same fixed, non-environment `V1_CRON_EXECUTION_PUBLISHED=false` source gate
+separately holds exactly ten direct service-auth cron ingress handlers: `GET
+/api/cron/batch-5min`, `GET /api/cron/check-data-freshness`, `GET
+/api/cron/cleanup-data`, `GET /api/cron/cleanup-stuck-logs`, `GET
+/api/cron/detect-contracts`, `GET`/`POST /api/cron/fetch-funding-rates`, `GET`/`POST
+/api/cron/fetch-market-data`, `GET`/`POST /api/cron/fetch-open-interest`, `GET
+/api/cron/qualify-referrals`, and `GET /api/cron/smoke-test`. Missing or invalid
+service authentication receives `401`; a valid service secret receives `410
+CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry `Cache-Control`,
+`CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store` headers and return
+before query/body parsing, locks, `PipelineLogger`, database, cache, provider, or
+network work. This bounded direct-ingress list does not classify other cron routes and
+cannot stop, inspect, or prove an existing deployed scheduler, host, queue, or worker.
+
 `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` separately holds the checked-in legacy
 downstream ranking-command worker/scheduler/caller chain. Its worker entry exits
 before dotenv, DB, Redis, BullMQ, or HTTP initialization; its scheduler and trigger
@@ -148,7 +162,8 @@ provider/ioredis/BullMQ/result-queue access. Their public rate limiter may still
 Redis, so do not describe those routes as making zero Redis reads.
 The checked-in legacy-refresh boundary includes the client-safe fixed-false
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker: its producer is an auth-first cron tombstone,
-`batch-5min` no longer consumes refresh jobs,
+`batch-5min` is separately covered by the bounded direct service-auth cron ingress
+hold above,
 and public refresh admission is auth-first `401/410` without body/rate-limit/queue
 work. Legacy detail returns `refresh_job: null` and its compatibility hook cannot post
 or poll.

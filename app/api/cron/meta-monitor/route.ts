@@ -31,19 +31,12 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   // Discovery & enrichment
   'generate-profiles': 720,
   'link-entities': 1440,
-  'batch-5min': 10,
 
   // Market data
-  'fetch-market-data': 120,
-  'fetch-funding-rates': 480,
-  'fetch-open-interest': 240,
   'flash-news-fetch': 60,
 
   // Monitoring & health
   'verify-fetchers': 360,
-  'check-data-freshness': 180,
-  'cleanup-stuck-logs': 120,
-  'cleanup-data': 1440,
   'cleanup-deleted-accounts': 1440,
 
   // Snapshots & ranks
