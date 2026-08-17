@@ -75,4 +75,18 @@ describe('HeroMetrics PnL disclosure', () => {
     expect(pnlMetricStyle).not.toContain('opacity')
     expect(pnlMetricStyle).not.toContain('transition')
   })
+
+  it('renders serving PnL with its exact source unit', () => {
+    render(<HeroMetrics roi={12} pnl={345} pnlCurrency="USDT" sparklineData={[]} />)
+
+    expect(screen.getByText('+$345.00 USDT')).toBeInTheDocument()
+    expect(screen.queryByText('+$345.00')).not.toBeInTheDocument()
+  })
+
+  it('does not invent a dollar unit when serving PnL is unbound', () => {
+    render(<HeroMetrics roi={12} pnl={345} pnlCurrency={null} sparklineData={[]} />)
+
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText(/\$345/)).not.toBeInTheDocument()
+  })
 })

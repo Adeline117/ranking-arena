@@ -37,12 +37,18 @@ jest.mock('../performance/PeriodSelector', () => ({
 jest.mock('../performance/HeroMetrics', () => ({
   HeroMetrics: ({
     pnl,
+    pnlCurrency,
     pnlDisclosure,
   }: {
     pnl?: number
+    pnlCurrency?: string | null
     pnlDisclosure?: { windowDurationDays: number }
   }) => (
-    <output data-testid="period-pnl" data-window={pnlDisclosure?.windowDurationDays}>
+    <output
+      data-testid="period-pnl"
+      data-currency={pnlCurrency ?? 'legacy'}
+      data-window={pnlDisclosure?.windowDurationDays}
+    >
       {pnl}
     </output>
   ),
@@ -117,6 +123,21 @@ describe('OverviewPerformanceCard period switching', () => {
     )
     expect(screen.getByTestId('period-pnl')).toHaveTextContent('900')
     expect(screen.getByTestId('period-pnl')).toHaveAttribute('data-window', '90')
+  })
+
+  it('passes the exact PnL unit for the selected serving window', () => {
+    render(
+      <OverviewPerformanceCard
+        performance={performance}
+        pnlCurrencies={{ '7D': null, '30D': 'USDC', '90D': 'USDT' }}
+      />
+    )
+
+    expect(screen.getByTestId('period-pnl')).toHaveAttribute('data-currency', 'USDT')
+
+    fireEvent.click(screen.getByRole('button', { name: '30D period' }))
+
+    expect(screen.getByTestId('period-pnl')).toHaveAttribute('data-currency', 'USDC')
   })
 
   it('clears pending animation timers when the card unmounts', () => {

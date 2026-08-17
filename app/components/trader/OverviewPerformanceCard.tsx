@@ -16,6 +16,7 @@ import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
 import { isValidScore } from './performance/ScoreBar'
 import { usePeriodStore } from '@/lib/stores/periodStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import type { ServingCurrency } from '@/lib/data/serving/types'
 import type {
   GmxMaxCapitalRoiDisclosure,
   GmxRealizedNetDisclosure,
@@ -80,6 +81,11 @@ export interface ExtendedPerformance extends TraderPerformance {
   avg_holding_time_hours_30d?: number
 }
 
+/** Serving modules bind monetary facts to an exact source unit per timeframe.
+ * `undefined` remains the legacy path, whose historical performance contract
+ * is USD; `null` is an explicit unknown and must not be formatted as dollars. */
+export type PnlCurrencyByPeriod = Partial<Record<Period, ServingCurrency | null>>
+
 export interface OverviewPerformanceCardProps {
   performance: ExtendedPerformance
   profitableWeeksPct?: number
@@ -92,6 +98,8 @@ export interface OverviewPerformanceCardProps {
   /** Serving capability verdict for each core timeframe. Explicitly absent
    *  periods are disabled and never render as an empty metric set. */
   availability?: PeriodAvailability
+  /** Exact serving unit for each core PnL. Omitted only on the legacy USD path. */
+  pnlCurrencies?: PnlCurrencyByPeriod
   /** Live position summary (avg leverage, long/short counts) */
   positionSummary?: {
     avgLeverage: number | null
@@ -120,6 +128,7 @@ export default function OverviewPerformanceCard({
   lastUpdated,
   source,
   availability,
+  pnlCurrencies,
   positionSummary,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
@@ -176,6 +185,7 @@ export default function OverviewPerformanceCard({
           roi: performance.roi_7d,
           roiDisclosure: performance.roiDisclosures?.['7D'],
           pnl: performance.pnl_7d,
+          pnlCurrency: pnlCurrencies ? (pnlCurrencies['7D'] ?? null) : undefined,
           pnlDisclosure: performance.pnlDisclosures?.['7D'],
           winRate: performance.win_rate_7d,
           maxDrawdown: performance.max_drawdown_7d,
@@ -200,6 +210,7 @@ export default function OverviewPerformanceCard({
           roi: performance.roi_30d,
           roiDisclosure: performance.roiDisclosures?.['30D'],
           pnl: performance.pnl_30d,
+          pnlCurrency: pnlCurrencies ? (pnlCurrencies['30D'] ?? null) : undefined,
           pnlDisclosure: performance.pnlDisclosures?.['30D'],
           winRate: performance.win_rate_30d,
           maxDrawdown: performance.max_drawdown_30d,
@@ -225,6 +236,7 @@ export default function OverviewPerformanceCard({
           roi: performance.roi_90d,
           roiDisclosure: performance.roiDisclosures?.['90D'],
           pnl: performance.pnl,
+          pnlCurrency: pnlCurrencies ? (pnlCurrencies['90D'] ?? null) : undefined,
           pnlDisclosure: performance.pnlDisclosures?.['90D'],
           winRate: performance.win_rate,
           maxDrawdown: performance.max_drawdown,
@@ -258,6 +270,7 @@ export default function OverviewPerformanceCard({
     roi,
     roiDisclosure,
     pnl,
+    pnlCurrency,
     pnlDisclosure,
     winRate,
     maxDrawdown,
@@ -365,6 +378,7 @@ export default function OverviewPerformanceCard({
                   roi={roi}
                   roiDisclosure={roiDisclosure}
                   pnl={pnl}
+                  pnlCurrency={pnlCurrency}
                   pnlDisclosure={pnlDisclosure}
                   sparklineData={sparklineData}
                 />

@@ -7,6 +7,8 @@ import { Sparkline } from '@/app/components/ui/Sparkline'
 import Metric from '@/app/components/ui/Metric'
 import InfoTooltip from '../../ui/InfoTooltip'
 import PnlContractNotice from '../serving/PnlContractNotice'
+import { formatServingPnL } from '@/lib/utils/format'
+import type { ServingCurrency } from '@/lib/data/serving/types'
 import type {
   GmxMaxCapitalRoiDisclosure,
   GmxRealizedNetDisclosure,
@@ -16,6 +18,9 @@ export interface HeroMetricsProps {
   roi: number | undefined
   roiDisclosure?: GmxMaxCapitalRoiDisclosure
   pnl: number | undefined
+  /** Exact serving unit. `null` suppresses an unbound amount; `undefined`
+   * preserves the legacy USD formatter. */
+  pnlCurrency?: ServingCurrency | null
   pnlDisclosure?: GmxRealizedNetDisclosure
   sparklineData: number[]
 }
@@ -24,10 +29,17 @@ export function HeroMetrics({
   roi,
   roiDisclosure,
   pnl,
+  pnlCurrency,
   pnlDisclosure,
   sparklineData,
 }: HeroMetricsProps) {
   const { t } = useLanguage()
+  const finitePnl = typeof pnl === 'number' && Number.isFinite(pnl) ? pnl : undefined
+  // Serving facts must retain their source unit. A missing serving unit is not
+  // USD by default — render the shared unknown glyph instead of inventing one.
+  const displayPnl = pnlCurrency === null ? undefined : finitePnl
+  const pnlDisplay =
+    displayPnl !== undefined && pnlCurrency ? formatServingPnL(displayPnl, pnlCurrency) : undefined
 
   return (
     <Box
@@ -112,13 +124,13 @@ export function HeroMetrics({
         style={{
           padding: tokens.spacing[4],
           background:
-            pnl != null && pnl >= 0
+            displayPnl != null && displayPnl >= 0
               ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.success, 3)} 0%, ${alpha(tokens.colors.accent.success, 1)} 100%)`
-              : pnl != null
+              : displayPnl != null
                 ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.error, 3)} 0%, ${alpha(tokens.colors.accent.error, 1)} 100%)`
                 : alpha(tokens.colors.bg.tertiary, 25),
           borderRadius: tokens.radius.lg,
-          border: `1px solid ${pnl != null && pnl >= 0 ? alpha(tokens.colors.accent.success, 13) : pnl != null ? alpha(tokens.colors.accent.error, 13) : tokens.colors.border.primary}`,
+          border: `1px solid ${displayPnl != null && displayPnl >= 0 ? alpha(tokens.colors.accent.success, 13) : displayPnl != null ? alpha(tokens.colors.accent.error, 13) : tokens.colors.border.primary}`,
         }}
       >
         <Text
@@ -143,8 +155,9 @@ export function HeroMetrics({
         </Text>
         {/* Secondary supporting figure — demoted below the ROI hero. */}
         <Metric
-          value={pnl}
+          value={displayPnl}
           format="pnl"
+          display={pnlDisplay}
           size="lg"
           style={{
             fontFamily: tokens.typography.fontFamily.mono.join(', '),

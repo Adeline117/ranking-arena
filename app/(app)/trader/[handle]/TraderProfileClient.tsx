@@ -1696,6 +1696,7 @@ export default function TraderProfileClient({
                       }
                       selectedPeriod={selectedPeriod}
                       periodAvailability={useThreeTab ? servingPeriodAvailability : undefined}
+                      pnlCurrencies={useThreeTab ? servingTab.currencyByPeriod : undefined}
                       hasMultipleAccounts={
                         hasMultipleAccounts || linkedAccountScope.mode === 'aggregate'
                       }

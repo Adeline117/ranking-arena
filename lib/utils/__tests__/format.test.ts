@@ -7,6 +7,7 @@ import {
   formatPercent,
   formatCurrency,
   formatCompact,
+  formatServingPnL,
   formatDrawdown,
   normalizeDrawdownMagnitude,
   truncate,
@@ -93,6 +94,15 @@ describe('format utilities', () => {
 
     it('应该处理 NaN', () => {
       expect(formatCurrency(NaN)).toBe('—')
+    })
+  })
+
+  describe('formatServingPnL', () => {
+    it('retains the authoritative source unit instead of assuming USD', () => {
+      expect(formatServingPnL(345, 'USDT')).toBe('+$345.00 USDT')
+      expect(formatServingPnL(-12.5, 'USDC')).toBe('-$12.50 USDC')
+      expect(formatServingPnL(9, 'USDx')).toBe('+$9.00 USDx')
+      expect(formatServingPnL(Number.NaN, 'USD')).toBe('—')
     })
   })
 

@@ -68,6 +68,9 @@ export interface ServingTabData {
   /** 90d core extras + currency for the §2.3 lead-meta strip (TraderMetaStrip):
    *  last-trade / copier-cap / margin-balance etc. NULL-collapses when absent. */
   metaExtras: Record<string, unknown>
+  /** Exact unit of the PnL fact in every available core window. A missing
+   * module has no implied dollar denomination, so it remains null. */
+  currencyByPeriod: Record<ServingCorePeriod, ServingCurrency | null>
   currency: ServingCurrency
   /** 90d registry-driven superset metric grid (sharpe/sortino/mdd/risk ratios,
    *  incl. DEX Tier-0 derived). NULL-collapses; same data ServingProfilePanel's
@@ -231,6 +234,17 @@ export function useServingTabData(
     }),
     [coreByPeriod]
   )
+  const currencyByPeriod = useMemo<Record<ServingCorePeriod, ServingCurrency | null>>(
+    () => ({
+      '7D': m7?.currency ?? null,
+      '30D': m30?.currency ?? null,
+      '90D': m90?.currency ?? null,
+    }),
+    [m7?.currency, m30?.currency, m90?.currency]
+  )
+  // This is used only by cross-window supporting components. Individual PnL
+  // cards receive currencyByPeriod so a 30D fact never inherits a 90D unit.
+  const currency = m90?.currency ?? m30?.currency ?? m7?.currency ?? capability?.currency ?? 'USD'
   const hasCoreModules = Object.values(coreModuleAvailability).some(Boolean)
   const isCoreLoading = enabledCoreHooks.some((core) => core.isLoading)
   const isCorePendingUpstream = enabledCoreHooks.some((core) => core.isPendingUpstream)
@@ -367,7 +381,8 @@ export function useServingTabData(
       traderPositionHistory: historyToPositionHistory(histRows ?? []),
       historyCompleteness,
       metaExtras: mergedExtras,
-      currency: m90?.currency ?? 'USD',
+      currencyByPeriod,
+      currency,
       gridStats: promoteExtrasMetrics(mergedGridStats, mergedExtras),
       gridCapabilityMetrics: [
         ...(capability?.metrics ?? Object.keys(m90?.stats ?? {})),
@@ -400,6 +415,8 @@ export function useServingTabData(
     histRows,
     historyCompleteness,
     capability,
+    currencyByPeriod,
+    currency,
     hasCoreModules,
     coreModuleAvailability,
     coreByPeriod,

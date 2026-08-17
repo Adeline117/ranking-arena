@@ -15,6 +15,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
 import OverviewPerformanceCard, {
   type ExtendedPerformance,
+  type PnlCurrencyByPeriod,
 } from '@/app/components/trader/OverviewPerformanceCard'
 import type { PeriodAvailability } from '@/app/components/trader/performance/PeriodSelector'
 import { ChartSkeleton } from '@/app/components/ui/Skeleton'
@@ -117,6 +118,9 @@ export interface OverviewTabProps {
   /** Serving sources pass the authoritative per-timeframe capability through
    *  to the shared performance selector. Legacy sources leave it unknown. */
   periodAvailability?: PeriodAvailability
+  /** Exact unit per serving core timeframe. Legacy performance stays on its
+   * historical formatter by leaving this undefined. */
+  pnlCurrencies?: PnlCurrencyByPeriod
 
   // Multi-account
   hasMultipleAccounts: boolean
@@ -144,6 +148,7 @@ export const OverviewTab = React.memo(function OverviewTab({
   positionSummary,
   selectedPeriod,
   periodAvailability,
+  pnlCurrencies,
   hasMultipleAccounts,
   activeAccount,
   aggregatedData,
@@ -230,6 +235,7 @@ export const OverviewTab = React.memo(function OverviewTab({
                 allEquityCurves={traderEquityCurve}
                 source={(traderProfile?.source as string) || data.source}
                 availability={periodAvailability}
+                pnlCurrencies={pnlCurrencies}
                 positionSummary={positionSummary}
               />
             ) : (

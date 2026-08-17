@@ -2,7 +2,11 @@ import { renderHook } from '@testing-library/react'
 import { useServingTabData } from '../useServingTabData'
 import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
-import type { HistoryCompleteness, SourceCapability } from '@/lib/data/serving/types'
+import type {
+  HistoryCompleteness,
+  ServingCurrency,
+  SourceCapability,
+} from '@/lib/data/serving/types'
 
 jest.mock('@/lib/hooks/useTraderCore', () => ({ useTraderCore: jest.fn() }))
 jest.mock('@/lib/hooks/useTraderRecords', () => ({ useTraderRecords: jest.fn() }))
@@ -37,11 +41,11 @@ function coreResult(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function coreModule(timeframe: 7 | 30 | 90) {
+function coreModule(timeframe: 7 | 30 | 90, currency: ServingCurrency = 'USD') {
   return {
     timeframe,
     stats: {},
-    currency: 'USD',
+    currency,
     series: {},
     extras: {},
     provenance: { source: 'gmx', asOf: '2026-08-16T00:00:00.000Z' },
@@ -207,6 +211,34 @@ describe('useServingTabData history completeness', () => {
       '90D': true,
     })
     expect(view.result.current.isColdCoreLoading).toBe(false)
+  })
+
+  it('keeps each core PnL bound to its exact timeframe currency', () => {
+    ;(useTraderCore as jest.Mock).mockImplementation(({ tf }: { tf: 7 | 30 | 90 }) =>
+      tf === 30 ? coreResult({ modules: coreModule(30, 'USDC') }) : coreResult()
+    )
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    // The source fallback is USD, but it must not overwrite the only received
+    // core module or invent units for 7D/90D facts that do not exist yet.
+    expect(view.result.current.currencyByPeriod).toEqual({
+      '7D': null,
+      '30D': 'USDC',
+      '90D': null,
+    })
+    expect(view.result.current.currency).toBe('USDC')
   })
 
   it('shows simultaneous collection and stale disclosure, then retries only failed timeframes', async () => {

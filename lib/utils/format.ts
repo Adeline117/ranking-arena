@@ -1,3 +1,5 @@
+import type { ServingCurrency } from '@/lib/data/serving/types'
+
 /** Unified null/missing data display symbol. Use instead of 'N/A', '--', or '-'. */
 export const NULL_DISPLAY = '—'
 
@@ -155,6 +157,19 @@ export function formatPnL(pnl: number | null | undefined): string {
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`
   if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`
   return `${sign}$${abs.toFixed(2)}`
+}
+
+/**
+ * Render a source-bound serving PnL without conflating USDT, USDC, USDx, and
+ * USD. Reuses the established PnL precision/compactness rules, then appends
+ * the authoritative quote unit from the source contract.
+ */
+export function formatServingPnL(
+  pnl: number | null | undefined,
+  currency: ServingCurrency
+): string {
+  const formatted = formatPnL(pnl)
+  return formatted === NULL_DISPLAY ? NULL_DISPLAY : `${formatted} ${currency}`
 }
 
 /**

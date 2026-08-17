@@ -14,9 +14,10 @@ import { memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { t as i18nT, getLanguage } from '@/lib/i18n'
-import { formatDateLocalized } from '@/lib/utils/format'
+import { formatDateLocalized, formatServingPnL } from '@/lib/utils/format'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import Metric from '@/app/components/ui/Metric'
+import type { ServingCurrency } from '@/lib/data/serving/types'
 import HistoryCompletenessNotice from './HistoryCompletenessNotice'
 
 interface RecentActivityCardProps {
@@ -30,6 +31,7 @@ interface OrderRow {
   symbol?: string
   side?: string
   realized_pnl?: number | string | null
+  currency?: ServingCurrency | null
 }
 
 const ROWS_SHOWN = 5
@@ -90,6 +92,11 @@ export const RecentActivityCard = memo(function RecentActivityCard({
           <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
             {recent.map((r, i) => {
               const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null
+              const currency = r.currency ?? null
+              const pnlDisplay =
+                pnl !== null && Number.isFinite(pnl) && pnl !== 0 && currency
+                  ? formatServingPnL(pnl, currency)
+                  : null
               const side = (r.side ?? '').toLowerCase()
               return (
                 <div
@@ -119,10 +126,17 @@ export const RecentActivityCard = memo(function RecentActivityCard({
                   <span style={{ flex: 1, color: 'var(--color-text-primary)' }}>
                     {r.symbol ?? '—'}
                   </span>
-                  {/* 开仓单 realized_pnl=0,整列 +$0.00 是纯噪音(走查 2026-07-10)——
-                      只在真有已实现盈亏时显示。 */}
-                  {pnl !== null && Number.isFinite(pnl) && pnl !== 0 && (
-                    <Metric value={pnl} format="pnl" size="sm" align="right" showArrow />
+                  {/* Opening rows have no realized PnL. An unbound row unit is
+                      also not safe to render as USD, so both remain hidden. */}
+                  {pnlDisplay !== null && (
+                    <Metric
+                      value={pnl}
+                      format="pnl"
+                      display={pnlDisplay}
+                      size="sm"
+                      align="right"
+                      showArrow
+                    />
                   )}
                   <span
                     style={{
