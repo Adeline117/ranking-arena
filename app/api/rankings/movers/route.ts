@@ -1,14 +1,11 @@
 /**
- * Top Movers API
+ * Public Top Movers API
  *
- * GET /api/rankings/movers
- *
- * Returns traders with the biggest ROI changes compared to the previous day.
- * Strategy: Start from trader_daily_snapshots (yesterday) -> join leaderboard_ranks (current).
- * Compares leaderboard_ranks.roi (current 90D ROI) vs trader_daily_snapshots.roi (previous).
- *
- * Response: { risers: Mover[], fallers: Mover[], period: '90D' }
- * Cache: Redis 10min + HTTP 1 hour (s-maxage=3600)
+ * A mover is a ranking over a historical metric delta, not merely a current
+ * rank row. `trader_daily_snapshots` currently has no immutable publication
+ * receipt proving the prior-day coverage, price basis, or cost basis needed
+ * for that ranking. Until a sealed historical cohort exists, this endpoint
+ * must not turn those raw snapshots into an authoritative "Top Movers" list.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -23,162 +20,144 @@ import {
 } from '@/lib/rankings/publication-policy'
 
 const log = createLogger('api:movers')
+const PERIOD = '90D'
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
 
-export const runtime = 'nodejs'
-
-interface Mover {
-  platform: string
-  trader_key: string
-  rank: number
-  arena_score: number | null
-  roiDelta: number
-  handle: string | null
-  avatar_url: string | null
+interface MoverResponse {
+  risers: []
+  fallers: []
+  period: typeof PERIOD
+  snapshotDate: null
+  compareDate: null
+  ranking_visibility: 'partial' | 'unknown'
+  ranking_visibility_reason: string
+  ranking_visibility_reasons: [string]
 }
+
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function isPublishedCurrentRank(row: unknown): boolean {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    isPublicRankingSourceAllowed(row.source) &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0
+  )
+}
+
+function unavailableMovers(visibility: 'partial' | 'unknown', reason: string): MoverResponse {
+  return {
+    risers: [],
+    fallers: [],
+    period: PERIOD,
+    snapshotDate: null,
+    compareDate: null,
+    ranking_visibility: visibility,
+    ranking_visibility_reason: reason,
+    ranking_visibility_reasons: [reason],
+  }
+}
+
+export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
 
   try {
-    const result = await getOrSetWithLock(
-      publicRankingCacheKey('api:rankings:movers'),
-      async () => computeMovers(),
-      // 120s Redis TTL (was 600s). Movers computation is cheap (~100ms, 2 queries).
-      // Short TTL ensures empty results from leaderboard outages recover quickly.
+    const result = await getOrSetWithLock<MoverResponse>(
+      // v2 cannot read the retired raw-snapshot payload during a rolling
+      // deployment. Every cached response now explicitly carries its trust
+      // state rather than looking like a complete empty leaderboard.
+      publicRankingCacheKey('api:rankings:movers:v2'),
+      () => computeMovers(),
       {
         ttl: 120,
         lockTtl: 15,
-        tags: [PUBLIC_RANKING_REDIS_TAG, 'season:90D'],
+        tags: [PUBLIC_RANKING_REDIS_TAG, `season:${PERIOD}`],
         skipMemory: true,
         writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
       }
     )
 
-    // Redis is publication-fenced; an opaque CDN object cannot be actively
-    // invalidated by the leaderboard publisher.
-    const cacheHeader = PUBLIC_RANKING_RESPONSE_CACHE_CONTROL
-
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': cacheHeader },
+      headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL },
     })
-  } catch (err) {
-    log.error('Error computing movers', { error: err instanceof Error ? err.message : String(err) })
-    return NextResponse.json(
-      { risers: [], fallers: [], period: '90D' },
-      { status: 200, headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL } }
-    )
+  } catch (error) {
+    log.error('Error determining public movers cohort', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json(unavailableMovers('unknown', 'public_cohort_unavailable'), {
+      status: 200,
+      headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL },
+    })
   }
 }
 
-async function computeMovers() {
+async function computeMovers(): Promise<MoverResponse> {
   const TIMEOUT_MS = 5000
-
-  const result = await Promise.race([
+  return Promise.race([
     computeMoversInner(),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('computeMovers timed out after 5s')), TIMEOUT_MS)
     ),
   ])
-  return result
 }
 
-async function computeMoversInner() {
+async function computeMoversInner(): Promise<MoverResponse> {
   const supabase = getSupabaseAdmin()
 
-  // Find the two most recent distinct snapshot dates.
-  // trader_daily_snapshots has many rows per date (one per trader), so we fetch
-  // a small batch and deduplicate in code to find 2 distinct dates.
-  // idx_daily_snapshots_date (btree date DESC) keeps this fast.
-  const today = new Date().toISOString().slice(0, 10)
-  const { data: dateRows } = await supabase
-    .from('trader_daily_snapshots')
-    .select('date')
-    .lte('date', today)
-    .order('date', { ascending: false })
-    .limit(50)
-
-  if (!dateRows || dateRows.length === 0) return { risers: [], fallers: [], period: '90D' }
-
-  const uniqueDates: string[] = []
-  const seen = new Set<string>()
-  for (const row of dateRows) {
-    if (!seen.has(row.date)) {
-      seen.add(row.date)
-      uniqueDates.push(row.date)
-      if (uniqueDates.length >= 2) break
-    }
-  }
-
-  if (uniqueDates.length < 2) return { risers: [], fallers: [], period: '90D' }
-  const todayDate = uniqueDates[0]
-  const yesterdayDate = uniqueDates[1]
-
-  // Get PREVIOUS day's daily snapshots (to compare against current leaderboard)
-  const { data: yesterdaySnaps } = await supabase
-    .from('trader_daily_snapshots')
-    .select('platform, trader_key, roi')
-    .eq('date', yesterdayDate)
-    .not('roi', 'is', null)
-    .limit(2000)
-
-  if (!yesterdaySnaps?.length) {
-    return { risers: [], fallers: [], period: '90D' }
-  }
-
-  // Group snapshot trader_keys by platform for efficient batch lookup
-  const snapsByPlatform = new Map<string, string[]>()
-  const yesterdayRoiMap = new Map<string, number>()
-  for (const s of yesterdaySnaps) {
-    if (s.roi == null || !isPublicRankingSourceAllowed(s.platform)) continue
-    const key = `${s.platform}:${s.trader_key}`
-    yesterdayRoiMap.set(key, parseFloat(String(s.roi)))
-    if (!snapsByPlatform.has(s.platform)) snapsByPlatform.set(s.platform, [])
-    snapsByPlatform.get(s.platform)!.push(s.trader_key)
-  }
-
-  // Fetch current leaderboard data — single query instead of N per-platform queries.
-  // The unique index (season_id, source, source_trader_id) makes this efficient.
-  const allTraderKeys = [...new Set(yesterdaySnaps.map((s) => s.trader_key))]
-  const { data: allCurrentRanks } = await supabase
-    .from('leaderboard_ranks')
-    .select('source, source_trader_id, rank, arena_score, roi, handle, avatar_url')
-    .eq('season_id', '90D')
-    .in('source_trader_id', allTraderKeys.slice(0, 1000))
+  // Keep a current publication probe on the sealed view. Its security barrier
+  // establishes eligibility before this finite query's predicate/order/limit;
+  // raw `leaderboard_ranks` is never an alternative source for this endpoint.
+  const { data, error } = await publicRankedLeaderboardClient(supabase)
+    .from('public_ranked_leaderboard')
+    .select('source,rank')
+    .eq('season_id', PERIOD)
     .not('rank', 'is', null)
-    .not('arena_score', 'is', null)
-    .limit(2000)
+    .order('rank', { ascending: true, nullsFirst: false })
+    .limit(1)
 
-  if (!allCurrentRanks || allCurrentRanks.length === 0) {
-    return { risers: [], fallers: [], period: '90D' }
-  }
+  if (error) throw error
 
-  // Compute ROI changes
-  const movers: Mover[] = []
-  for (const r of allCurrentRanks) {
-    if (!isPublicRankingSourceAllowed(r.source)) continue
-    const key = `${r.source}:${r.source_trader_id}`
-    const yesterdayRoi = yesterdayRoiMap.get(key)
-    if (yesterdayRoi == null || r.roi == null || r.arena_score == null || r.rank == null) continue
-
-    const roiDelta = r.roi - yesterdayRoi
-    if (Math.abs(roiDelta) < 0.5) continue
-
-    movers.push({
-      platform: r.source,
-      trader_key: r.source_trader_id,
-      rank: Number(r.rank),
-      arena_score: r.arena_score,
-      roiDelta: Math.round(roiDelta * 100) / 100,
-      handle: r.handle,
-      avatar_url: r.avatar_url,
-    })
-  }
-
-  movers.sort((a, b) => b.roiDelta - a.roiDelta)
-  const risers = movers.filter((m) => m.roiDelta > 0).slice(0, 5)
-  const fallers = movers.filter((m) => m.roiDelta < 0).slice(0, 5)
-
-  return { risers, fallers, period: '90D', snapshotDate: yesterdayDate, compareDate: todayDate }
+  // Do not infer that a raw daily snapshot is valid simply because today's
+  // rank is published. A current view row and a historical delta require two
+  // independent proofs. The historical publication does not exist yet.
+  const hasCurrentPublicCohort =
+    Array.isArray(data) && data.length > 0 && data.every(isPublishedCurrentRank)
+  return unavailableMovers(
+    hasCurrentPublicCohort ? 'partial' : 'unknown',
+    hasCurrentPublicCohort ? 'historical_mover_evidence_unavailable' : 'public_cohort_unavailable'
+  )
 }

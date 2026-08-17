@@ -9,6 +9,10 @@ import PageHeader from '@/app/components/ui/PageHeader'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { getServerTranslation } from '@/lib/i18n/server'
 import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
+import {
   generateExchangeCollectionPageSchema,
   generateBreadcrumbSchema,
   type ExchangeSchemaInput,
@@ -47,7 +51,11 @@ interface ExchangeData {
   displayName: string
   sourceKey: string
   sourceType: string
-  traderCount: number
+  /**
+   * Exact only when the public cohort count query succeeds. `null` is an
+   * explicit unknown, never a visible-page lower bound or an estimated count.
+   */
+  traderCount: number | null
   topTraders: Array<{
     // Human-readable label (truncated wallet / real handle) — never a fabricated "Trader N".
     displayName: string
@@ -62,59 +70,147 @@ interface ExchangeData {
   }>
 }
 
+const PUBLIC_RANKED_EXCHANGE_COLUMNS =
+  'source,source_trader_id,handle,arena_score,roi,pnl,win_rate,max_drawdown,rank,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+
+type PublicRankedLeaderboardQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+  count?: number | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(
+    columns: string,
+    options?: { count?: 'exact'; head?: boolean }
+  ): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  // The public view is deliberately additive and generated database types can
+  // lag its deployment. Keep the typed escape hatch local to this reader.
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function hasPositivePublishedRank(row: unknown, sourceKey: string): row is Record<string, unknown> {
+  return (
+    isRecord(row) &&
+    row.source === sourceKey &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0
+  )
+}
+
+function exactCountOrUnknown(
+  result: PublicRankedLeaderboardQueryResult,
+  minimumVisibleRows: number
+): number | null {
+  const count = result.count
+  if (
+    result.error ||
+    typeof count !== 'number' ||
+    !Number.isSafeInteger(count) ||
+    count < 0 ||
+    count < minimumVisibleRows
+  ) {
+    return null
+  }
+  return count
+}
+
 async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null> {
   const config = EXCHANGE_CONFIG[sourceKey as keyof typeof EXCHANGE_CONFIG]
   if (!config) return null
+  if (!isPublicRankingSourceAllowed(sourceKey)) {
+    // A known exchange may still be quarantined or retired from the public
+    // ranking contract. Do not probe its retained/raw observations here.
+    return {
+      displayName: config.name,
+      sourceKey,
+      sourceType: config.sourceType,
+      traderCount: null,
+      topTraders: [],
+    }
+  }
 
   const supabase = getExchangeSupabase()
+  const publicCohort = publicRankedLeaderboardClient(supabase)
 
   const [topResult, countResult] = await Promise.all([
-    supabase
-      .from('leaderboard_ranks')
-      .select('handle, source_trader_id, arena_score, roi, pnl, rank')
+    publicCohort
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_EXCHANGE_COLUMNS)
       .eq('source', sourceKey)
       .eq('season_id', '90D')
       .not('rank', 'is', null)
-      .not('arena_score', 'is', null)
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false')
       .order('arena_score', { ascending: false, nullsFirst: false })
       .order('rank', { ascending: true, nullsFirst: false })
       .limit(10),
-    supabase
-      .from('leaderboard_ranks')
-      .select('*', { count: 'estimated', head: true })
+    publicCohort
+      .from('public_ranked_leaderboard')
+      .select('*', { count: 'exact', head: true })
       .eq('source', sourceKey)
       .eq('season_id', '90D')
-      .not('rank', 'is', null)
-      .not('arena_score', 'is', null)
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false'),
+      .not('rank', 'is', null),
   ])
 
-  const topTraders = (topResult.data || [])
-    .filter((t) => t.rank != null)
-    .map((t, i) => {
-      const sourceTraderId = (t.source_trader_id as string) || ''
-      // Prefer the real handle; fall back to the wallet address (never a fabricated
-      // "Trader N" that would link to a non-existent /trader/Trader%20N page).
-      const linkTarget = (t.handle as string) || sourceTraderId
-      return {
-        displayName: linkTarget ? formatDisplayName(linkTarget, sourceKey) : `#${i + 1}`,
-        linkTarget,
-        sourceTraderId,
-        arena_score: t.arena_score as number | null,
-        roi: t.roi as number | null,
-        pnl: t.pnl as number | null,
-        rank: Number(t.rank),
-      }
-    })
+  const rawTopTraders = Array.isArray(topResult.data) ? topResult.data : []
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rawTopTraders, period: '90D' },
+    { expectedPeriod: '90D' }
+  ) as { traders?: unknown[] }
+  const safeTopTraders = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter((row) => hasPositivePublishedRank(row, sourceKey))
+    : ([] as Record<string, unknown>[])
+
+  // The database view makes this mismatch impossible in a healthy deployment.
+  // If an older proxy/schema layer returns a row that fails its public proof,
+  // suppress the complete preview rather than silently promoting later rows.
+  const topCohortVerified = !topResult.error && safeTopTraders.length === rawTopTraders.length
+  const topTraders = (topCohortVerified ? safeTopTraders : []).slice(0, 10).map((t) => {
+    const sourceTraderId = typeof t.source_trader_id === 'string' ? t.source_trader_id : ''
+    // Prefer the real handle; fall back to the wallet address (never a fabricated
+    // "Trader N" that would link to a non-existent /trader/Trader%20N page).
+    const linkTarget = typeof t.handle === 'string' ? t.handle : sourceTraderId
+    return {
+      displayName: linkTarget ? formatDisplayName(linkTarget, sourceKey) : `#${t.rank}`,
+      linkTarget,
+      sourceTraderId,
+      arena_score: finiteOrNull(t.arena_score),
+      roi: finiteOrNull(t.roi),
+      pnl: finiteOrNull(t.pnl),
+      rank: Number(t.rank),
+    }
+  })
 
   return {
     displayName: config.name,
     sourceKey,
     sourceType: config.sourceType,
-    traderCount: countResult.count ?? 0,
+    traderCount: exactCountOrUnknown(countResult, topTraders.length),
     topTraders,
   }
 }
@@ -134,7 +230,7 @@ export async function generateMetadata({
 
   const displayName = config.name
   const data = await fetchExchangeData(sourceKey).catch(() => null)
-  const traderCount = data?.traderCount ?? 0
+  const traderCount = data?.traderCount ?? null
   const topTrader = data?.topTraders?.[0]
 
   // Root layout template appends ' | Arena' to the metadata title; keep it out
@@ -142,7 +238,7 @@ export async function generateMetadata({
   const title = `${displayName} Top Traders & Rankings`
   const ogTitle = `${title} | Arena`
   const description =
-    traderCount > 0
+    traderCount !== null && traderCount > 0
       ? `Explore ${traderCount.toLocaleString()} ranked ${displayName} traders on Arena. ${topTrader ? `Top trader: ${topTrader.displayName}${topTrader.roi != null ? ` (${topTrader.roi >= 0 ? '+' : ''}${topTrader.roi.toFixed(1)}% ROI)` : ''}.` : ''} Compare Arena Scores, ROI, PnL, and risk metrics.`
       : `View ${displayName} crypto trader rankings on Arena. Compare performance, Arena Scores, ROI, and PnL across top traders.`
 
@@ -214,18 +310,23 @@ export default async function ExchangeLandingPage({
   }
 
   // JSON-LD structured data
-  const schemaInput: ExchangeSchemaInput = {
-    name: data.displayName,
-    slug,
-    sourceType: data.sourceType,
-    traderCount: data.traderCount,
-    topTraders: data.topTraders.map((t) => ({
-      handle: t.displayName,
-      arenaScore: t.arena_score,
-      roi: t.roi,
-    })),
-  }
-  const collectionPageJsonLd = generateExchangeCollectionPageSchema(schemaInput)
+  // Schema.org `numberOfItems` must be a real total, not the ten-row preview.
+  // When the exact public-view count is unavailable, omit this count-bearing
+  // schema rather than publishing a synthetic coverage claim.
+  const collectionPageJsonLd =
+    data.traderCount === null
+      ? null
+      : generateExchangeCollectionPageSchema({
+          name: data.displayName,
+          slug,
+          sourceType: data.sourceType,
+          traderCount: data.traderCount,
+          topTraders: data.topTraders.map((t) => ({
+            handle: t.displayName,
+            arenaScore: t.arena_score,
+            roi: t.roi,
+          })),
+        } satisfies ExchangeSchemaInput)
   const breadcrumbJsonLd = generateBreadcrumbSchema([
     { name: 'Arena', url: BASE_URL },
     { name: 'Rankings', url: `${BASE_URL}/` },
@@ -235,7 +336,8 @@ export default async function ExchangeLandingPage({
   // Localized page chrome (labels/headings/body). Metadata above stays English
   // for stable SEO/OG; visible page content follows the visitor's language.
   const { t } = await getServerTranslation()
-  const traderCountStr = data.traderCount.toLocaleString()
+  const traderCountStr =
+    data.traderCount === null ? t('dataUnknown') : data.traderCount.toLocaleString()
 
   const sourceTypeLabel =
     data.sourceType === 'futures'
@@ -246,7 +348,7 @@ export default async function ExchangeLandingPage({
 
   return (
     <>
-      <JsonLd data={collectionPageJsonLd} />
+      {collectionPageJsonLd ? <JsonLd data={collectionPageJsonLd} /> : null}
       <JsonLd data={breadcrumbJsonLd} />
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 16px' }}>
         {/* Header */}
