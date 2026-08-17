@@ -414,6 +414,8 @@ database、cache、provider 或 network 工作前结束。这只是 source-only 
 | ----------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | `/api/health`                 | GET                 | 健康检查                                                                                                                                                               | 否         |
 | `/api/health/detailed`        | GET                 | 详细健康状态                                                                                                                                                           | 否         |
+| `/api/health/heartbeat`       | GET                 | 保留既有的历史 heartbeat GET handler；仍由 route 自行校验 Cron Token                                                                                                   | Cron Token |
+| `/api/health/heartbeat`       | POST                | V1 source-only 写入 hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不解析 body 或写入数据库                    | Cron Token |
 | `/api/health/evaluate-report` | GET                 | V1 source-only evaluator hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query 或执行评估工作              | Cron Token |
 | `/api/proxy/phemex`           | GET                 | V1 legacy proxy acquisition auth-first hold；无效认证 `401`，有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`；三层 `no-store`，不解析 URL/query、不 fetch 或 log | Cron Token |
 | `/api/hooks/post-deploy`      | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估                                    | Cron Token |
@@ -437,6 +439,18 @@ query 解析或任何 evaluator state / alert / rate-limit 工作前结束。`/a
 
 这只是 source-only handler contract，不能停止、检查或证明已部署的 code-quality hook、evaluator、
 alert delivery 或外部 scheduler 的状态。
+
+### V1 health heartbeat write boundary
+
+本源码版本中，只有 `POST /api/health/heartbeat` 使用固定、非环境的
+`V1_CRON_EXECUTION_PUBLISHED=false` gate。它先验证 service secret：缺失或无效时返回 `401`，
+有效时固定返回 `410 CRON_EXECUTION_NOT_PUBLISHED`；两种响应都有三层 `no-store`，且在 body
+解析或数据库写入前结束。canonical 和 `/api/v1/health/heartbeat` rewrite alias 都在 rewrite 前仅作
+该 exact path 的 proxy handoff；这会同样将 GET 交给 route，但 GET 保留原有的 Cron Token 验证和
+历史读取语义，未被该 POST hold 停用。
+
+这是 source-only 写入边界：它不停止、检查或证明已经部署的 worker、host、scheduler、历史
+heartbeat 数据或其底层读取依赖的状态；其他 health/admin 路由与监控读取面不在这次改动范围内。
 
 ### V1 public-egress source boundary
 

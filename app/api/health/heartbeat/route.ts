@@ -1,60 +1,29 @@
 /**
- * POST /api/health/heartbeat — Platform heartbeat endpoint
+ * Platform heartbeat history endpoint.
  *
- * Called by Mac Mini scrapers, VPS scripts, and Vercel cron jobs to report
- * their health status. Makes all data sources visible in the monitoring dashboard.
- *
- * Body: { platform, source_host, status, trader_count, error_message?, metadata? }
- * Auth: CRON_SECRET (same as cron jobs)
+ * V1 keeps the authenticated GET history surface in place. The legacy POST
+ * write ingress is authenticated first and unavailable while cron execution
+ * remains unpublished.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import {
+  v1CronExecutionGate,
+  v1CronExecutionUnavailableResponse,
+} from '@/lib/cron/v1-execution-publication'
 
 export const dynamic = 'force-dynamic'
 
 async function getDb() {
-  // Use raw query to bypass generated types (platform_heartbeats is new, not in types yet)
+  // Preserve the legacy history reader without relying on generated table types.
   const { query } = await import('@/lib/db')
   return query
 }
 
-export async function POST(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const body = await request.json().catch(() => null)
-  if (!body?.platform) {
-    return NextResponse.json({ error: 'Missing required field: platform' }, { status: 400 })
-  }
-
-  const dbQuery = await getDb()
-
-  try {
-    await dbQuery(
-      `INSERT INTO platform_heartbeats (platform, source_host, status, trader_count, error_message, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (platform, immutable_date_trunc_hour(created_at)) DO UPDATE
-       SET status = EXCLUDED.status,
-           trader_count = EXCLUDED.trader_count,
-           error_message = EXCLUDED.error_message,
-           metadata = EXCLUDED.metadata`,
-      [
-        body.platform,
-        body.source_host || 'unknown',
-        body.status || 'ok',
-        body.trader_count || 0,
-        body.error_message || null,
-        JSON.stringify(body.metadata || {}),
-      ]
-    )
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
-
-  return NextResponse.json({ ok: true })
+/** POST /api/health/heartbeat — V1 legacy heartbeat write hold. */
+export function POST(request: NextRequest) {
+  return v1CronExecutionGate(request) ?? v1CronExecutionUnavailableResponse()
 }
 
 /** GET /api/health/heartbeat — Get latest heartbeat per platform */
