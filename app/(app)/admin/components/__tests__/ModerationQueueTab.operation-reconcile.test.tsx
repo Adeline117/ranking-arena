@@ -61,8 +61,10 @@ import ModerationQueueTab from '../ModerationQueueTab'
 const mockFetch = jest.fn()
 const CONTENT_ID = '4d2a4fa2-bf19-4ab4-a740-04ebaa9d636b'
 const OPERATION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+const NEXT_OPERATION_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
 
 function response(body: unknown, status = 200): Response {
+  // eslint-disable-next-line no-restricted-syntax
   return {
     ok: status >= 200 && status < 300,
     status,
@@ -70,11 +72,26 @@ function response(body: unknown, status = 200): Response {
   } as unknown as Response
 }
 
-function queueResponse(preview: string, reportId: string, contentId = CONTENT_ID): Response {
+function deferredResponse() {
+  let resolve!: (value: Response) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<Response>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+function queueResponse(
+  preview: string,
+  reportId: string,
+  contentId = CONTENT_ID,
+  options: { total?: number } = {}
+): Response {
   return response({
     success: true,
     data: {
-      total: 1,
+      total: options.total ?? 1,
       items: [
         {
           content_type: 'post',
@@ -134,7 +151,10 @@ describe('ModerationQueueTab operation replay reconciliation', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     global.fetch = mockFetch
-    jest.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(OPERATION_ID)
+    jest
+      .spyOn(globalThis.crypto, 'randomUUID')
+      .mockReturnValueOnce(OPERATION_ID)
+      .mockReturnValue(NEXT_OPERATION_ID)
   })
 
   afterEach(() => {
@@ -227,5 +247,103 @@ describe('ModerationQueueTab operation replay reconciliation', () => {
     const requestBody = JSON.parse(String(mockFetch.mock.calls[1][1]?.body))
     expect(requestBody.content_id).toBe(CONTENT_ID)
     expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('blocks concurrent target actions until the active request settles, then allows a later action', async () => {
+    const pendingReconcile = deferredResponse()
+    mockFetch
+      .mockResolvedValueOnce(
+        queueResponse('single-flight target', '30000000-0000-4000-8000-000000000005')
+      )
+      .mockResolvedValueOnce(response({ success: false, error: 'conflict' }, 409))
+      .mockReturnValueOnce(pendingReconcile.promise)
+
+    render(<ModerationQueueTab accessToken="admin-token" />)
+
+    const approve = await screen.findByRole('button', { name: 'Approve (Dismiss)' })
+    const deleteButton = screen.getByRole('button', { name: 'Delete Content' })
+
+    fireEvent.click(approve)
+    await waitFor(() => expect(approve).toBeDisabled())
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3))
+
+    fireEvent.click(deleteButton)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+
+    pendingReconcile.resolve(emptyQueueResponse())
+    expect(await screen.findByText('No items pending moderation')).toBeInTheDocument()
+
+    const approveIntent = JSON.parse(String(mockFetch.mock.calls[1][1]?.body))
+    expect(approveIntent.action).toBe('approve')
+    expect(approveIntent.operation_id).toBe(OPERATION_ID)
+  })
+
+  it('ignores a stale reconcile load after a successful acknowledgement when the access-token scope changes', async () => {
+    const pendingReconcile = deferredResponse()
+    mockFetch
+      .mockResolvedValueOnce(queueResponse('viewer a item', '30000000-0000-4000-8000-000000000006'))
+      .mockResolvedValueOnce(moderationAck())
+      .mockReturnValueOnce(pendingReconcile.promise)
+      .mockResolvedValueOnce(queueResponse('viewer b item', '30000000-0000-4000-8000-000000000007'))
+
+    const view = render(<ModerationQueueTab accessToken="token-a" />)
+
+    const approve = await screen.findByRole('button', { name: 'Approve (Dismiss)' })
+    fireEvent.click(approve)
+    await waitFor(() => expect(approve).toBeDisabled())
+
+    view.rerender(<ModerationQueueTab accessToken="token-b" />)
+    expect(await screen.findByText('viewer b item')).toBeInTheDocument()
+
+    pendingReconcile.resolve(emptyQueueResponse())
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(4)
+      expect(screen.getByText('viewer b item')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('No items pending moderation')).not.toBeInTheDocument()
+    expect(mockFetch.mock.calls[3][1]).toMatchObject({
+      headers: { Authorization: 'Bearer token-b' },
+    })
+  })
+
+  it('ignores a stale reconcile load after a successful acknowledgement when the page changes', async () => {
+    const pendingReconcile = deferredResponse()
+    mockFetch
+      .mockResolvedValueOnce(
+        queueResponse('page 1 item', '30000000-0000-4000-8000-000000000008', CONTENT_ID, {
+          total: 40,
+        })
+      )
+      .mockResolvedValueOnce(moderationAck())
+      .mockReturnValueOnce(pendingReconcile.promise)
+      .mockResolvedValueOnce(
+        queueResponse(
+          'page 2 item',
+          '30000000-0000-4000-8000-000000000009',
+          '5d2a4fa2-bf19-4ab4-a740-04ebaa9d636b',
+          { total: 40 }
+        )
+      )
+
+    render(<ModerationQueueTab accessToken="admin-token" />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve (Dismiss)' }))
+    expect(await screen.findByText('1 / 2')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'nextPage' }))
+    expect(await screen.findByText('page 2 item')).toBeInTheDocument()
+
+    pendingReconcile.resolve(emptyQueueResponse())
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(4)
+      expect(screen.getByText('page 2 item')).toBeInTheDocument()
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    })
+
+    expect(mockFetch.mock.calls[3][0]).toBe('/api/admin/moderation-queue?page=2&limit=20')
+    expect(screen.queryByText('No items pending moderation')).not.toBeInTheDocument()
   })
 })

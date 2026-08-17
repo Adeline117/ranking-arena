@@ -37,8 +37,8 @@ describe('moderation queue operation-ID lifecycle contract', () => {
   it('retains uncertainty until an HTTP body parses, including a malformed 200 acknowledgement', () => {
     const fetchCall = componentSource.indexOf("await fetch('/api/admin/moderation-queue'")
     const parseBody = componentSource.indexOf('const data = await res.json()', fetchCall)
-    const deterministicClear = componentSource.indexOf(
-      'clearOperation = res.status < 500',
+    const deterministicReconcile = componentSource.indexOf(
+      'const reconciled = await loadQueue(requestedPageRef.current, { silent: true })',
       fetchCall
     )
     const boundValidator = componentSource.indexOf(
@@ -51,13 +51,14 @@ describe('moderation queue operation-ID lifecycle contract', () => {
 
     expect(fetchCall).toBeGreaterThan(-1)
     expect(parseBody).toBeGreaterThan(fetchCall)
-    expect(deterministicClear).toBeGreaterThan(parseBody)
-    expect(boundValidator).toBeGreaterThan(deterministicClear)
+    expect(deterministicReconcile).toBeGreaterThan(parseBody)
+    expect(boundValidator).toBeGreaterThan(deterministicReconcile)
     expect(successClear).toBeGreaterThan(boundValidator)
     expect(caughtBoundary).toBeGreaterThan(successClear)
     expect(conditionalDelete).toBeGreaterThan(caughtBoundary)
-    expect(componentSource.match(/clearOperation = res\.status < 500/g)).toHaveLength(1)
-    expect(componentSource.match(/clearOperation = true/g)).toHaveLength(1)
+    expect(componentSource).toContain('releasePendingAction = false')
+    expect(componentSource).toContain('if (res.status < 500) {')
+    expect(componentSource.match(/clearOperation = true/g)).toHaveLength(2)
     expect(componentSource).toContain('result.result_operation_id !== expected.operationId')
   })
 
@@ -72,16 +73,30 @@ describe('moderation queue operation-ID lifecycle contract', () => {
 
   it('silently reconciles the queue after every successful acknowledgement', () => {
     expect(componentSource).toContain(
-      'async (pageNum: number = 1, options: { silent?: boolean } = {})'
+      'async (pageNum: number = 1, options: { silent?: boolean } = {}): Promise<LoadQueueResult>'
     )
+    expect(componentSource).toContain(
+      'const requestGeneration = loadRequestGenerationRef.current + 1'
+    )
+    expect(componentSource).toContain('loadAbortControllerRef.current?.abort()')
+    expect(componentSource).toContain('signal: abortController.signal')
     expect(componentSource).toContain('if (!silent) setLoading(true)')
     expect(componentSource).toContain('if (!silent) setLoading(false)')
-    expect(componentSource).toContain('await loadQueue(page, { silent: true })')
+    expect(componentSource).toContain("return 'stale'")
+    expect(componentSource).toContain('await loadQueue(requestedPageRef.current, { silent: true })')
   })
 
   it('drops actor-bound operation IDs only when the access token changes', () => {
-    expect(componentSource).toContain(
-      'useEffect(() => {\n    operationByTarget.current.clear()\n  }, [accessToken])'
-    )
+    expect(componentSource).toContain('actionScopeGenerationRef.current += 1')
+    expect(componentSource).toContain('loadRequestGenerationRef.current += 1')
+    expect(componentSource).toContain('loadAbortControllerRef.current?.abort()')
+    expect(componentSource).toContain('requestedPageRef.current = 1')
+    expect(componentSource).toContain('operationByTarget.current.clear()')
+    expect(componentSource).toContain('pendingActionByTarget.current.clear()')
+    expect(componentSource).toContain('setQueue([])')
+    expect(componentSource).toContain('setPage(1)')
+    expect(componentSource).toContain('setTotalPages(1)')
+    expect(componentSource).toContain('setLoading(false)')
+    expect(componentSource).toContain('setActionLoading({})')
   })
 })

@@ -35,6 +35,7 @@ interface QueueItem {
 const PAGE_SIZE = 20
 type ModerationAction = 'approve' | 'delete' | 'warn' | 'ban'
 type ModerationContentType = 'post' | 'comment'
+type LoadQueueResult = 'applied' | 'failed' | 'stale'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ACK_ENVELOPE_KEYS = ['data', 'meta', 'success'] as const
@@ -167,17 +168,49 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
   const operationByTarget = useRef(
     new Map<string, { action: ModerationAction; operationId: string }>()
   )
+  const pendingActionByTarget = useRef(
+    new Map<string, { action: ModerationAction; operationId: string; scopeGeneration: number }>()
+  )
+  const actionScopeGenerationRef = useRef(0)
+  const loadRequestGenerationRef = useRef(0)
+  const loadAbortControllerRef = useRef<AbortController | null>(null)
+  const requestedPageRef = useRef(1)
 
   useEffect(() => {
+    actionScopeGenerationRef.current += 1
+    loadRequestGenerationRef.current += 1
+    loadAbortControllerRef.current?.abort()
+    loadAbortControllerRef.current = null
+    requestedPageRef.current = 1
     operationByTarget.current.clear()
+    pendingActionByTarget.current.clear()
+    setQueue([])
+    setPage(1)
+    setTotalPages(1)
+    setLoading(false)
+    setActionLoading({})
   }, [accessToken])
 
   const loadQueue = useCallback(
-    async (pageNum: number = 1, options: { silent?: boolean } = {}) => {
-      if (!accessToken) return
+    async (pageNum: number = 1, options: { silent?: boolean } = {}): Promise<LoadQueueResult> => {
+      if (!accessToken) return 'failed'
 
       const silent = options.silent === true
+      const scopeGeneration = actionScopeGenerationRef.current
+      const requestGeneration = loadRequestGenerationRef.current + 1
+      const abortController = new AbortController()
+      requestedPageRef.current = pageNum
+      loadRequestGenerationRef.current = requestGeneration
+      loadAbortControllerRef.current?.abort()
+      loadAbortControllerRef.current = abortController
       if (!silent) setLoading(true)
+
+      const ownsLoad = () =>
+        loadRequestGenerationRef.current === requestGeneration &&
+        loadAbortControllerRef.current === abortController &&
+        actionScopeGenerationRef.current === scopeGeneration &&
+        requestedPageRef.current === pageNum
+
       try {
         const params = new URLSearchParams({
           page: String(pageNum),
@@ -186,18 +219,28 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
 
         const res = await fetch(`/api/admin/moderation-queue?${params}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
+          signal: abortController.signal,
         })
         const data = await res.json()
+
+        if (!ownsLoad()) return 'stale'
 
         if (data.success) {
           setQueue(data.data.items)
           setTotalPages(Math.ceil((data.data.total || 0) / PAGE_SIZE) || 1)
           setPage(pageNum)
+          return 'applied'
         }
+        return 'failed'
       } catch (err) {
+        if (abortController.signal.aborted) return 'stale'
         logger.error('Error loading moderation queue:', err)
+        return 'failed'
       } finally {
-        if (!silent) setLoading(false)
+        if (ownsLoad()) {
+          loadAbortControllerRef.current = null
+          if (!silent) setLoading(false)
+        }
       }
     },
     [accessToken]
@@ -218,9 +261,19 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
 
     const canonicalContentId = contentId.toLowerCase()
     const key = `${contentType}-${canonicalContentId}`
+    const existingPendingAction = pendingActionByTarget.current.get(key)
+    if (existingPendingAction) return
+
+    const scopeGeneration = actionScopeGenerationRef.current
     let operationId: string | null = null
     let clearOperation = false
-    setActionLoading((prev) => ({ ...prev, [key]: true }))
+    let releasePendingAction = true
+
+    const actionIsCurrent = () =>
+      operationId !== null &&
+      pendingActionByTarget.current.get(key)?.operationId === operationId &&
+      pendingActionByTarget.current.get(key)?.scopeGeneration === scopeGeneration &&
+      actionScopeGenerationRef.current === scopeGeneration
 
     try {
       const existingOperation = operationByTarget.current.get(key)
@@ -229,6 +282,8 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
       if (existingOperation?.action !== action) {
         operationByTarget.current.set(key, { action, operationId })
       }
+      pendingActionByTarget.current.set(key, { action, operationId, scopeGeneration })
+      setActionLoading((prev) => ({ ...prev, [key]: true }))
 
       const res = await fetch('/api/admin/moderation-queue', {
         method: 'POST',
@@ -249,7 +304,14 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
       if (!res.ok) {
         // A parsed explicit client/conflict response is deterministic. Server
         // failures remain uncertain even when their error body parses.
-        clearOperation = res.status < 500
+        if (res.status < 500) {
+          releasePendingAction = false
+          const reconciled = await loadQueue(requestedPageRef.current, { silent: true })
+          if (actionIsCurrent() && reconciled === 'applied') {
+            clearOperation = true
+            releasePendingAction = true
+          }
+        }
         return
       }
 
@@ -262,6 +324,14 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
         })
       ) {
         logger.error('Invalid moderation acknowledgement')
+        return
+      }
+
+      if (
+        pendingActionByTarget.current.get(key)?.operationId !== operationId ||
+        pendingActionByTarget.current.get(key)?.scopeGeneration !== scopeGeneration ||
+        actionScopeGenerationRef.current !== scopeGeneration
+      ) {
         return
       }
 
@@ -279,18 +349,24 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
       // The operation may be an exact ledger replay while a newer pending
       // batch already exists for this target. Reconcile authoritatively
       // without flashing the tab-level loading state.
-      await loadQueue(page, { silent: true })
+      await loadQueue(requestedPageRef.current, { silent: true })
     } catch (err) {
       logger.error('Error performing moderation action:', err)
     } finally {
+      const isCurrentPendingAction = actionIsCurrent()
+
       if (
+        isCurrentPendingAction &&
         clearOperation &&
         operationId !== null &&
         operationByTarget.current.get(key)?.operationId === operationId
       ) {
         operationByTarget.current.delete(key)
       }
-      setActionLoading((prev) => ({ ...prev, [key]: false }))
+      if (isCurrentPendingAction && releasePendingAction) {
+        pendingActionByTarget.current.delete(key)
+        setActionLoading((prev) => ({ ...prev, [key]: false }))
+      }
     }
   }
 
