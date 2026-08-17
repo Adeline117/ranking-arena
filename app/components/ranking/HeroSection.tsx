@@ -73,13 +73,23 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
   const displayName =
     trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source)
   const isAddress = handle.startsWith('0x') && handle.length > 20
-  const roi = trader.roi ?? 0
-  const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+  const roi = trader.roi != null && Number.isFinite(trader.roi) ? trader.roi : null
+  const roiColor =
+    roi == null
+      ? tokens.colors.text.tertiary
+      : roi >= 0
+        ? tokens.colors.accent.success
+        : tokens.colors.accent.error
+  const roiAria = roi != null ? `ROI ${formatROI(roi)}` : 'ROI unknown'
   const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
   const medalColor = MEDAL_COLORS[rank - 1] || tokens.colors.text.tertiary
 
   return (
-    <Link href={href} style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}>
+    <Link
+      href={href}
+      aria-label={`#${rank} ${displayName}, ${roiAria}`}
+      style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}
+    >
       <div
         className="hero-top3-card"
         style={{

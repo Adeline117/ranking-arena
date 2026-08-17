@@ -22,9 +22,15 @@ import { SSR_HEAVY_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { type DataResult, success, failure } from '@/lib/types/result'
 import {
   PUBLIC_RANKING_QUARANTINED_SOURCES,
-  filterPublicRankingRows,
   isPublicRankingSourceAllowed,
 } from '@/lib/rankings/publication-policy'
+
+// Database types are generated after the migration is applied. Keep the one
+// ungenerated relation name isolated here rather than hand-editing generated
+// Supabase types during the rolling migration deployment.
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
+/** Default freshness window shared by the homepage cache revalidator. */
+export const PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS = 6 * 60 * 60 * 1000
 
 // ============================================================
 // INTERNAL: Safe query helper
@@ -94,7 +100,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /**
  * Get ranked traders for leaderboard display.
  * Used by: homepage, /rankings/[exchange], sidebar widgets
- * Source: persisted leaderboard_ranks publication authority.
+ * Source: public_ranked_leaderboard database publication authority.
  * Response-level caches may cache this result, but sorted-set position is not
  * rank authority.
  */
@@ -106,6 +112,10 @@ export async function getLeaderboard(
     limit?: number
     offset?: number
     minScore?: number
+    /**
+     * Compatibility-only. The public cohort view always excludes outliers as
+     * part of its database eligibility contract.
+     */
     excludeOutliers?: boolean
     sortBy?: 'rank' | 'arena_score' | 'roi' | 'pnl'
     /** Optional SQL allowlist applied before finite pagination. */
@@ -117,41 +127,56 @@ export async function getLeaderboard(
     /** Share a caller-owned cancellation deadline across related Supabase queries. */
     signal?: AbortSignal
   }
-): Promise<{ traders: UnifiedTrader[]; total: number; error?: string }> {
+): Promise<{
+  traders: UnifiedTrader[]
+  /**
+   * Exact cohort total, when a same-predicate count authority is available.
+   * This reader deliberately has none, so it omits this field rather than
+   * presenting a page-derived lower bound as a total. `undefined` preserves
+   * the existing API contract, whose response layer omits unknown totals.
+   */
+  total?: number
+  totalCountIsExact: boolean
+  /** Whether this SQL-filtered cohort has another row after this page. */
+  hasMore: boolean
+  error?: string
+}> {
   const {
     platform,
     period = '90D',
     limit = 50,
     offset = 0,
     minScore,
-    excludeOutliers = true,
     sortBy = 'rank',
     allowedSources = [],
     excludeSources = [],
     signal,
   } = params
   if (platform && !isPublicRankingSourceAllowed(platform)) {
-    return { traders: [], total: 0 }
+    return { traders: [], totalCountIsExact: false, hasMore: false }
   }
   const requiredExclusions = [
     ...new Set([...excludeSources, ...PUBLIC_RANKING_QUARANTINED_SOURCES]),
   ]
 
-  // Persisted publication-authority path for every public cohort read.
-  // NOTE: Do NOT use { count: 'exact' } here. leaderboard_ranks has ~314k rows
-  // and an exact COUNT(*) can take 3-25s. Callers that need a total should use
-  // /api/rankings (returns estimated counts) or query leaderboard_count_cache.
+  // The security-barrier view applies rank membership, source freshness, and
+  // complete/non-estimated row eligibility before every caller predicate and
+  // before the finite range below. Do not query leaderboard_ranks and filter a
+  // page in application code.
+  //
+  // The view is not in generated Supabase types until the migration has run in
+  // each environment. This local relation cast is the rolling-deploy bridge;
+  // do not hand-edit lib/supabase/database.types.ts.
   let query = supabase
-    .from('leaderboard_ranks')
+    .from(PUBLIC_RANKED_LEADERBOARD as never)
     .select(
       `${LR.source_trader_id}, ${LR.handle}, ${LR.source}, source_type, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown,
        trades_count, followers, copiers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, rank_change, is_new, computed_at,
-       profitability_score, risk_control_score, execution_score, score_completeness,
+       profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated,
        trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio,
        trader_type, is_outlier, ${LR.season_id}`
     )
     .eq(LR.season_id, period)
-    .not('rank', 'is', null)
 
   if (allowedSources.length > 0) {
     query = query.in(LR.source, [...new Set(allowedSources)])
@@ -163,19 +188,14 @@ export async function getLeaderboard(
     query = query.eq(LR.source, platform)
   }
 
-  if (excludeOutliers) {
-    query = query.or('is_outlier.is.null,is_outlier.eq.false')
-  }
-
   if (minScore != null) {
     query = query.gt('arena_score', minScore)
   }
 
   // Graceful freshness: prefer data <6h old, but fall back to <24h rather than
   // showing empty rankings. The UI should indicate staleness for >6h data.
-  const FRESH_HOURS = 6
   const STALE_FALLBACK_HOURS = 24
-  const freshCutoff = new Date(Date.now() - FRESH_HOURS * 3600_000).toISOString()
+  const freshCutoff = new Date(Date.now() - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS).toISOString()
   const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
   const effectiveCutoff = params.allowStale ? staleCutoff : freshCutoff
   query = query.gte('computed_at', effectiveCutoff)
@@ -196,7 +216,10 @@ export async function getLeaderboard(
     query = query.order('rank', { ascending: true, nullsFirst: false })
   }
 
-  query = query.range(offset, offset + limit - 1)
+  // Supabase range end is inclusive. Fetch one extra row from the already
+  // security-filtered view so callers get truthful pagination without an
+  // expensive or differently-scoped exact count request.
+  query = query.range(offset, offset + limit)
 
   const querySignal = signal ?? AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
   const { data, error } = await Promise.resolve(query.abortSignal(querySignal)).catch(() => ({
@@ -206,33 +229,26 @@ export async function getLeaderboard(
 
   if (error) {
     logger.error('[unified.getLeaderboard] Query error:', error.message)
-    return { traders: [], total: 0, error: error.message }
-  }
-
-  const traders = filterPublicRankingRows(data || [], (row) => row[LR.source])
-    .filter((row) => row.rank != null)
-    .map((row: Record<string, unknown>) => mapLeaderboardRow(row))
-
-  // Total count from pre-computed cache (instant) instead of traders.length
-  // which only reflects the current page size and breaks pagination.
-  let total = traders.length
-  try {
-    const source = platform || '_all'
-    let countQuery = supabase
-      .from('leaderboard_count_cache')
-      .select('total_count')
-      .eq('season_id', period)
-      .eq('source', source)
-    if (signal) countQuery = countQuery.abortSignal(signal)
-    const { data: cacheRow } = await countQuery.maybeSingle()
-    if (cacheRow?.total_count && cacheRow.total_count > 0) {
-      total = cacheRow.total_count
+    return {
+      traders: [],
+      totalCountIsExact: false,
+      hasMore: false,
+      error: error.message,
     }
-  } catch {
-    // Non-critical — fall back to data length
   }
 
-  return { traders, total }
+  const cohortRows = data || []
+  const hasMore = cohortRows.length > limit
+  const pageRows = hasMore ? cohortRows.slice(0, limit) : cohortRows
+  const traders = pageRows.map((row: Record<string, unknown>) => mapLeaderboardRow(row))
+
+  // Do not read leaderboard_count_cache or return a page-derived lower bound
+  // as `total`: neither proves the total for this view plus caller predicates.
+  // A dedicated same-predicate count authority may populate `total` in a
+  // future reader revision. Until then `hasMore` is the only paging contract.
+  const totalCountIsExact = false
+
+  return { traders, totalCountIsExact, hasMore }
 }
 
 /**
