@@ -9,6 +9,9 @@
 > `V1_CRON_EXECUTION_PUBLISHED=false` and
 > `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` are narrow, checked-in source guards;
 > they do not stop or prove the state of an external worker or schedule.
+> `V1_INGEST_EXECUTION_PUBLISHED=false` is a third, separate source guard for the
+> checked-in native ingest command path; it is neither a live-host assertion nor a
+> blanket classification of legacy queue, proxy, or import paths.
 
 ## 一、系统全景（历史 / 设计语义）
 
@@ -143,6 +146,18 @@ schedules；这只是源码候选，不证明或改变任何已部署 provider�
 worker/scheduler/caller chain 在 dotenv、DB、Redis、BullMQ 或 HTTP 工作前退出/返回。
 两者都不能停止已运行的 process 或 checkout 外已有的 schedule。
 
+独立的 `V1_INGEST_EXECUTION_PUBLISHED=false` 让已登记的 native ingest worker entry 在
+dotenv/runtime dependency 初始化前退出，scheduler/connection 在 DB、ioredis 或 BullMQ
+工作前结束，Tier-C 与 first-party bridge 不接纳新 ingest，受覆盖的 direct ingest script 也
+不启动工作。`POST /api/trader/onchain-enrich` 固定返回 `410
+INGEST_EXECUTION_NOT_PUBLISHED` 及三层 `no-store`，先于 body、rate limit、provider 或
+serving-data 操作。`/api/traders/[handle]/core` 与 `/records` 保留 warm serving read；需要
+Tier-C 的分支以 pending 降级，不初始化 provider/ioredis/BullMQ bridge 或读取 result queue。
+两条 public route 的普通 rate limit 仍可能读 Redis，这一源码门禁并不声称它们没有 Redis
+读取。该门禁不能停止或证明 host/queue/external schedule；独立的 legacy `refresh_jobs`
+(`batch-5min`、`batch-discover`、public trader refresh) 与 legacy proxy/import path 不在本
+containment 内，须另行审查。
+
 未来的发布流程必须由 owner 重新定义并单独批准：精确 candidate SHA、隔离目标、受保护
 source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界和保留的审计材料。具体操作
 步骤不在本文档中；参见 `docs/RUNBOOK.md` 的 owner escalation boundary。
@@ -152,7 +167,7 @@ source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界�
 | 层                 | 位置                                                                                    |
 | ------------------ | --------------------------------------------------------------------------------------- |
 | Ingest adapters    | `lib/ingest/adapters/<source>/`（NOT lib/connectors）                                   |
-| Ingest worker 入口 | `worker/src/ingest-worker.ts`（历史/设计 tier A/B/C/D source entry；非运行证明）        |
+| Ingest worker 入口 | `worker/src/ingest-worker.ts`（V1 固定 source hold；不启动 native ingest，非运行证明）  |
 | 指标净化           | `lib/ingest/staging/validate.ts` + `lib/pipeline/validate-before-write.ts`              |
 | 主 perf 表         | `arena.trader_stats`（trader_latest/v2 已 DROP 2026-06-16）                             |
 | 服务层             | `public.leaderboard_ranks` + `lr_7d/30d/90d`                                            |

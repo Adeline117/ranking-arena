@@ -1,43 +1,88 @@
 /**
  * DB-driven scheduler reconciliation (spec §2.3 cadence tiers).
  *
- * arena.sources is the single source of orchestration config: this reads
- * all active sources and upserts BullMQ job schedulers per tier. Runs at
- * boot and hourly — flipping a source active/inactive or changing a
- * cadence in the DB takes effect without a deploy.
+ * This is historical orchestration code. The V1 publication gate below
+ * returns before reading source configuration or resolving BullMQ queues;
+ * it cannot inspect, remove, or stop schedules that already exist elsewhere.
  */
 
-import { getActiveSources, getServingSourceNames } from '@/lib/ingest/sources'
-import {
-  EXPECTED_METRICS,
-  EXPECTED_METRICS_BY_SOURCE,
-} from '@/lib/ingest/adapters/expected-metrics'
-import { getIngestPool } from '@/lib/ingest/db'
-import { getConnection } from '../connection'
-import {
-  fastLaneEnabled,
-  getFastQueue,
-  getIngestQueue,
-  getRegionQueue,
-  INGEST_JOB,
-  INGEST_REGIONS,
-  isFastTierA,
-  regionFastQueueName,
-  regionQueueName,
-} from './queues'
+import { isV1IngestExecutionPublished } from '@/lib/ingest/v1-execution-publication'
 
-/** Maintenance jobs are framework-level, not per-source. */
-const STATIC_SCHEDULERS = [
-  { id: 'maint:housekeeping', name: INGEST_JOB.MAINTENANCE, everyMs: 6 * 3600_000 },
-  { id: 'maint:freshness', name: INGEST_JOB.FRESHNESS, everyMs: 30 * 60_000 },
-  // 2h cadence until the 72k-trader backfill drains (≈12 days at 500/batch);
-  // steady-state weekly refresh is naturally rate-limited by the 7d staleness check.
-  { id: 'maint:avatar-mirror', name: INGEST_JOB.AVATAR_MIRROR, everyMs: 2 * 3600_000 },
-  { id: 'maint:daily-digest', name: INGEST_JOB.DAILY_DIGEST, everyMs: 24 * 3600_000 },
-  // Top-N web3 wallets recomputed on-chain (durable; replaces WAF-blocked
-  // profile detail). 12h cadence — bounded by ONCHAIN_ENRICH_TOPN + retry.
-  { id: 'maint:onchain-enrich', name: INGEST_JOB.ONCHAIN_ENRICH, everyMs: 12 * 3600_000 },
-] as const
+type ActiveSources = Awaited<ReturnType<typeof import('@/lib/ingest/sources').getActiveSources>>
+type StaticScheduler = { id: string; name: string; everyMs: number }
+
+let getActiveSources: typeof import('@/lib/ingest/sources').getActiveSources
+let getServingSourceNames: typeof import('@/lib/ingest/sources').getServingSourceNames
+let EXPECTED_METRICS: typeof import('@/lib/ingest/adapters/expected-metrics').EXPECTED_METRICS
+let EXPECTED_METRICS_BY_SOURCE: typeof import('@/lib/ingest/adapters/expected-metrics').EXPECTED_METRICS_BY_SOURCE
+let getIngestPool: typeof import('@/lib/ingest/db').getIngestPool
+let getConnection: typeof import('../connection').getConnection
+let fastLaneEnabled: typeof import('./queues').fastLaneEnabled
+let getFastQueue: typeof import('./queues').getFastQueue
+let getIngestQueue: typeof import('./queues').getIngestQueue
+let getRegionQueue: typeof import('./queues').getRegionQueue
+let INGEST_JOB: typeof import('./queues').INGEST_JOB
+let INGEST_REGIONS: typeof import('./queues').INGEST_REGIONS
+let isFastTierA: typeof import('./queues').isFastTierA
+let regionFastQueueName: typeof import('./queues').regionFastQueueName
+let regionQueueName: typeof import('./queues').regionQueueName
+let STATIC_SCHEDULERS: readonly StaticScheduler[] = []
+let SOURCE_SCOPED_JOBS = new Set<string>()
+let GLOBAL_MAINTENANCE_JOBS = new Set<string>()
+let schedulerRuntimeLoad: Promise<void> | undefined
+
+function loadSchedulerRuntime(): Promise<void> {
+  if (schedulerRuntimeLoad !== undefined) return schedulerRuntimeLoad
+
+  schedulerRuntimeLoad = (async () => {
+    const [sources, expectedMetrics, database, connection, queues] = await Promise.all([
+      import('@/lib/ingest/sources'),
+      import('@/lib/ingest/adapters/expected-metrics'),
+      import('@/lib/ingest/db'),
+      import('../connection'),
+      import('./queues'),
+    ])
+
+    getActiveSources = sources.getActiveSources
+    getServingSourceNames = sources.getServingSourceNames
+    EXPECTED_METRICS = expectedMetrics.EXPECTED_METRICS
+    EXPECTED_METRICS_BY_SOURCE = expectedMetrics.EXPECTED_METRICS_BY_SOURCE
+    getIngestPool = database.getIngestPool
+    getConnection = connection.getConnection
+    fastLaneEnabled = queues.fastLaneEnabled
+    getFastQueue = queues.getFastQueue
+    getIngestQueue = queues.getIngestQueue
+    getRegionQueue = queues.getRegionQueue
+    INGEST_JOB = queues.INGEST_JOB
+    INGEST_REGIONS = queues.INGEST_REGIONS
+    isFastTierA = queues.isFastTierA
+    regionFastQueueName = queues.regionFastQueueName
+    regionQueueName = queues.regionQueueName
+
+    // Maintenance jobs are framework-level, not per-source.
+    STATIC_SCHEDULERS = [
+      { id: 'maint:housekeeping', name: INGEST_JOB.MAINTENANCE, everyMs: 6 * 3600_000 },
+      { id: 'maint:freshness', name: INGEST_JOB.FRESHNESS, everyMs: 30 * 60_000 },
+      // 2h cadence until the 72k-trader backfill drains (≈12 days at 500/batch);
+      // steady-state weekly refresh is naturally rate-limited by the 7d staleness check.
+      { id: 'maint:avatar-mirror', name: INGEST_JOB.AVATAR_MIRROR, everyMs: 2 * 3600_000 },
+      { id: 'maint:daily-digest', name: INGEST_JOB.DAILY_DIGEST, everyMs: 24 * 3600_000 },
+      // Top-N web3 wallets recomputed on-chain (durable; replaces WAF-blocked
+      // profile detail). 12h cadence — bounded by ONCHAIN_ENRICH_TOPN + retry.
+      { id: 'maint:onchain-enrich', name: INGEST_JOB.ONCHAIN_ENRICH, everyMs: 12 * 3600_000 },
+    ]
+    SOURCE_SCOPED_JOBS = new Set<string>([
+      INGEST_JOB.TIER_A,
+      INGEST_JOB.TIER_B,
+      INGEST_JOB.TIER_B_SERIES,
+      INGEST_JOB.TIER_D,
+      INGEST_JOB.DERIVE_BOARDS,
+    ])
+    GLOBAL_MAINTENANCE_JOBS = new Set<string>(STATIC_SCHEDULERS.map((job) => job.name))
+  })()
+
+  return schedulerRuntimeLoad
+}
 
 /**
  * Tier priority by scheduler-key prefix — MUST mirror the opts.priority each
@@ -55,16 +100,6 @@ const PRIORITY_BY_PREFIX: Record<string, number> = {
   tierb: 6,
   tierbs: 9,
 }
-
-const SOURCE_SCOPED_JOBS = new Set<string>([
-  INGEST_JOB.TIER_A,
-  INGEST_JOB.TIER_B,
-  INGEST_JOB.TIER_B_SERIES,
-  INGEST_JOB.TIER_D,
-  INGEST_JOB.DERIVE_BOARDS,
-])
-
-const GLOBAL_MAINTENANCE_JOBS = new Set<string>(STATIC_SCHEDULERS.map((job) => job.name))
 
 type PendingJobIdentity = {
   id?: string
@@ -108,6 +143,14 @@ function comparePendingJobs(a: PendingJobIdentity, b: PendingJobIdentity): numbe
 }
 
 export async function reconcileSchedulers(): Promise<void> {
+  // Do not read the database, resolve BullMQ queues, or mutate persisted
+  // schedulers while this V1 ingest path is unpublished.
+  if (!isV1IngestExecutionPublished()) {
+    console.error('[RETIRED] V1 ingest execution is not published; schedules remain untouched.')
+    return
+  }
+
+  await loadSchedulerRuntime()
   const sources = await getActiveSources()
   // scheduler key → the queue NAME it must live on. A Set isn't enough: a
   // source can MOVE between the bulk and fast lanes (board grows past
@@ -418,9 +461,7 @@ export async function reconcileSchedulers(): Promise<void> {
  * Skips sources whose adapter doesn't declare yet; failures never abort the
  * reconcile (best-effort sync, next hourly run retries).
  */
-async function syncExpectedMetrics(
-  sources: Awaited<ReturnType<typeof getActiveSources>>
-): Promise<void> {
+async function syncExpectedMetrics(sources: ActiveSources): Promise<void> {
   for (const src of sources) {
     try {
       const declared = EXPECTED_METRICS_BY_SOURCE[src.slug] ?? EXPECTED_METRICS[src.adapter_slug]
@@ -451,6 +492,16 @@ async function syncExpectedMetrics(
  * drift). Best-effort: a failure here must never abort the scheduler.
  */
 export async function reconcileServingSources(): Promise<void> {
+  // This mirror writes Redis, so keep it behind the same source publication
+  // boundary even when called independently of scheduler reconciliation.
+  if (!isV1IngestExecutionPublished()) {
+    console.error(
+      '[RETIRED] V1 ingest execution is not published; serving-source mirror remains untouched.'
+    )
+    return
+  }
+
+  await loadSchedulerRuntime()
   try {
     const names = await getServingSourceNames()
     if (names.length === 0) {

@@ -135,6 +135,22 @@ before dotenv, DB, Redis, BullMQ, or HTTP initialization; its scheduler and trig
 chain return before BullMQ, Redis, or network work. This source behavior neither
 stops nor proves the state of an already-running worker or an external schedule.
 
+`V1_INGEST_EXECUTION_PUBLISHED=false` is a separate, fixed source hold for the
+checked-in native ingest command path. The ingest worker entry exits before dotenv and
+runtime dependency initialization; its scheduler and Redis connection do not begin
+database, ioredis, or BullMQ work. Tier-C and first-party bridges admit no new work,
+and the covered direct ingest scripts do not initiate ingest. `POST
+/api/trader/onchain-enrich` is a fixed `410 INGEST_EXECUTION_NOT_PUBLISHED` response
+with three `no-store` headers before body parsing, rate limiting, provider, or
+serving-data work. The profile `core` and `records` routes retain their warm
+serving-read branches; an unavailable cold Tier-C path is pending without bridge
+provider/ioredis/BullMQ/result-queue access. Their public rate limiter may still use
+Redis, so do not describe those routes as making zero Redis reads. This boundary does
+not classify the legacy `refresh_jobs` pipeline (`batch-5min`, `batch-discover`,
+public trader refresh) or legacy proxy/import paths; those require separate
+containment. Like the other source holds, it neither stops nor proves a running host,
+persisted queue, or external schedule.
+
 Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
 
 ## Exchange Adapters (`lib/ingest/adapters/`)

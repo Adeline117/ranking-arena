@@ -145,6 +145,23 @@ routes must not be used. The historical/design ownership model assigned first-pa
 collection to region-affine ingest workers, and a canary would create real work rather
 than a dry run.
 
+The checked-in fixed `V1_INGEST_EXECUTION_PUBLISHED=false` source hold prevents only
+the covered native ingest command path from initiating work: the worker entry exits
+before dotenv/runtime dependencies, its scheduler and connection do not begin DB,
+ioredis, or BullMQ work, and Tier-C/first-party bridges plus covered direct ingest
+scripts admit no new ingest. `POST /api/trader/onchain-enrich` is a fixed `410
+INGEST_EXECUTION_NOT_PUBLISHED` response with three `no-store` headers before body,
+rate-limit, provider, or serving-data work. Profile `core` and `records` retain warm
+serving reads; their cold Tier-C fallback becomes pending before provider/ioredis/
+BullMQ/result-queue access. A public route's ordinary rate limiter may still use
+Redis, so this is not a "zero Redis reads" assertion.
+
+This source gate cannot stop, inspect, or prove a running host, persisted queue, or
+external schedule. It also does not classify the separate legacy `refresh_jobs`
+pipeline (`batch-5min`, `batch-discover`, public trader refresh) or legacy
+proxy/import paths; those require separate containment rather than a canary or
+workaround.
+
 Do not enqueue a canary, read worker credentials, select a region, or inspect a
 worker directly from this runbook. A future owner-approved ingest plan must specify
 the exact source, region witness, immutable RAW capture, count gate, publication

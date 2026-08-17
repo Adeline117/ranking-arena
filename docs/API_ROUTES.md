@@ -22,28 +22,47 @@
 
 ## 1. 交易员数据
 
-| 路由                                          | 方法             | 描述                                                                                                        | 认证 |
-| --------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------- | ---- |
-| `/api/traders`                                | GET              | 获取交易员列表                                                                                              | 可选 |
-| `/api/traders/[handle]`                       | GET              | 获取交易员基本信息                                                                                          | 否   |
-| `/api/traders/[handle]/full`                  | GET              | 获取交易员完整信息                                                                                          | 否   |
-| `/api/traders/[handle]/equity`                | GET              | 日序列来源未验证，固定返回 `available:false` 空数组与三层 `no-store`；待带 publication proof 的原子发布恢复 | 否   |
-| `/api/traders/[handle]/indicators`            | GET              | 固定封存响应；不从 legacy daily rows 计算指标                                                               | 否   |
-| `/api/traders/[handle]/positions`             | GET              | 获取持仓信息                                                                                                | 否   |
-| `/api/traders/[handle]/percentile`            | GET              | 获取排名百分位                                                                                              | 否   |
-| `/api/traders/claim`                          | GET/POST         | 查询认领状态；提交 Hyperliquid/GMX V2 wallet-signature 认领并进入人工审核                                   | 是   |
-| `/api/traders/claim/wallet-challenge`         | POST             | 签发绑定用户/来源/trader/domain/nonce/expiry 的一次性钱包 challenge；Redis 不可用时 503 fail closed         | 是   |
-| `/api/traders/claim/verify-wallet`            | POST             | 旧预验证入口；匿名先返回 401，已登录返回 410，且不读取 body、消费 nonce 或写数据库                          | 是   |
-| `/api/traders/linked`                         | GET/PATCH/DELETE | 管理已绑定身份；DELETE 使用 service-only 原子解绑 RPC                                                       | 是   |
-| `/api/compare`                                | GET              | 对比交易员                                                                                                  | 可选 |
-| `/api/market`                                 | GET              | 获取市场数据                                                                                                | 否   |
-| `/api/trader/[platform]/[trader_key]/history` | GET              | 固定 `forensic_only`/unavailable 空历史；不公开 legacy rows                                                 | 否   |
-| `/api/rankings/movers`                        | GET              | 固定 `available:false` 空榜与三层 `no-store`                                                                | 否   |
-| `/api/recommendations/hot`                    | GET              | 固定 `available:false` 空推荐与三层 `no-store`                                                              | 否   |
+| 路由                                          | 方法             | 描述                                                                                                             | 认证 |
+| --------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------- | ---- |
+| `/api/traders`                                | GET              | 获取交易员列表                                                                                                   | 可选 |
+| `/api/traders/[handle]`                       | GET              | 获取交易员基本信息                                                                                               | 否   |
+| `/api/traders/[handle]/full`                  | GET              | 获取交易员完整信息                                                                                               | 否   |
+| `/api/traders/[handle]/core`                  | GET              | V1 保留 warm serving read；冷 Tier-C bridge 返回 pending，不初始化 provider/ioredis/BullMQ 或读取结果队列        | 否   |
+| `/api/traders/[handle]/records`               | GET              | V1 保留 warm serving read；冷 Tier-C bridge 返回 pending，不初始化 provider/ioredis/BullMQ 或读取结果队列        | 否   |
+| `/api/traders/[handle]/equity`                | GET              | 日序列来源未验证，固定返回 `available:false` 空数组与三层 `no-store`；待带 publication proof 的原子发布恢复      | 否   |
+| `/api/traders/[handle]/indicators`            | GET              | 固定封存响应；不从 legacy daily rows 计算指标                                                                    | 否   |
+| `/api/traders/[handle]/positions`             | GET              | 获取持仓信息                                                                                                     | 否   |
+| `/api/traders/[handle]/percentile`            | GET              | 获取排名百分位                                                                                                   | 否   |
+| `/api/traders/claim`                          | GET/POST         | 查询认领状态；提交 Hyperliquid/GMX V2 wallet-signature 认领并进入人工审核                                        | 是   |
+| `/api/traders/claim/wallet-challenge`         | POST             | 签发绑定用户/来源/trader/domain/nonce/expiry 的一次性钱包 challenge；Redis 不可用时 503 fail closed              | 是   |
+| `/api/traders/claim/verify-wallet`            | POST             | 旧预验证入口；匿名先返回 401，已登录返回 410，且不读取 body、消费 nonce 或写数据库                               | 是   |
+| `/api/traders/linked`                         | GET/PATCH/DELETE | 管理已绑定身份；DELETE 使用 service-only 原子解绑 RPC                                                            | 是   |
+| `/api/compare`                                | GET              | 对比交易员                                                                                                       | 可选 |
+| `/api/market`                                 | GET              | 获取市场数据                                                                                                     | 否   |
+| `/api/trader/[platform]/[trader_key]/history` | GET              | 固定 `forensic_only`/unavailable 空历史；不公开 legacy rows                                                      | 否   |
+| `/api/rankings/movers`                        | GET              | 固定 `available:false` 空榜与三层 `no-store`                                                                     | 否   |
+| `/api/recommendations/hot`                    | GET              | 固定 `available:false` 空推荐与三层 `no-store`                                                                   | 否   |
+| `/api/trader/onchain-enrich`                  | POST             | V1 固定 `410 INGEST_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`；不解析 body、限流、访问 provider 或 serving data | 否   |
 
 `DELETE /api/traders/linked` 不只是删除一条链接：它在同一事务内把对应 verified claim 转为终态审计记录，移除 `verified_traders`/用户链接的公开 badge 权威，重算主身份与用户资料，并清除 Arena claimed 状态。只有来源、交易员 UID 与 canonical exchange 都能精确对应时，才同时停用 CEX connection 并撤销匹配 authorization；投影漂移会原子失败，无法证明的 legacy credential mapping 不做猜测，必须进入 owner 人工审计门禁。旧 `/api/traders/claim/verify-wallet` 是 auth-first tombstone：匿名请求返回 401，已登录请求返回 410；两种路径都 fail closed，且没有凭据读取、proof consumption、direct-table fallback 或写入。
 
 Legacy `trader_daily_snapshots` 不具备 season/generation/cohort/publication proof。权益、指标、公开历史、V3 history、Movers 与 hot-trader recommendation 因此均 fail closed；不得把空响应解释为“零表现”，也不得恢复旧 producer/backfill/cleanup RPC。
+
+### V1 ingest execution source boundary
+
+固定的 `V1_INGEST_EXECUTION_PUBLISHED=false` 仅覆盖已登记的 native ingest command
+path，不是环境开关。其 worker entry 在 dotenv/runtime dependency 初始化前退出；scheduler
+和 connection 在数据库、ioredis 或 BullMQ 工作前结束；Tier-C 与 first-party bridge 不接纳新
+ingest，受覆盖的 direct ingest scripts 也不启动 ingest。`POST
+/api/trader/onchain-enrich` 无条件返回 `410 INGEST_EXECUTION_NOT_PUBLISHED` 和三层
+`no-store`，先于 body、限流、provider 或 serving-data 工作。
+
+`/core` 与 `/records` 的 warm serving-read 分支仍可使用；当它们需要 Tier-C 时，bridge 在
+provider、ioredis、BullMQ 或 result-queue access 前返回 pending。两条 public route 的一般
+rate limit 仍可能使用 Redis，因此这里不声称路由完全不读 Redis。此源码守卫不停止、检查或证明
+已运行的 host、持久化 queue 或外部 schedule；它也不概括独立的 legacy `refresh_jobs`
+(`batch-5min`、`batch-discover`、public trader refresh) 或 legacy proxy/import path，它们须由
+后续 containment 单独处理。
 
 ---
 

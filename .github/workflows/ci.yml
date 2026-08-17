@@ -328,6 +328,8 @@ jobs:
         run: npm run type-check:ingest-worker
       - name: V1 ranking command-chain containment
         run: node --test worker/tests/v1-ranking-command-chain-containment.test.mjs
+      - name: V1 native ingest execution containment
+        run: node --test scripts/qa/v1-ingest-execution-containment.test.mjs
       - name: VPS process topology safety
         run: npm run qa:vps-topology
       - name: UI sweep unit contracts

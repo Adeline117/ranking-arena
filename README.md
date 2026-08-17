@@ -26,7 +26,7 @@ Git-triggered Vercel deployment. These are source-only containment changes: they
 not prove or modify a deployed control plane. Historical route implementations are
 code-review context only and do not authorize an operation.
 
-This source revision also has two narrow, immutable publication holds; neither is an
+This source revision also has three narrow, immutable publication holds; none is an
 environment toggle or a claim about a deployed process:
 
 - For the documented ranking-command chain, `V1_CRON_EXECUTION_PUBLISHED=false`
@@ -44,6 +44,24 @@ environment toggle or a claim about a deployed process:
   initialization, and its scheduler/caller paths return before BullMQ, Redis, or
   network work. It cannot stop an already-running host process or a schedule stored
   outside this checkout.
+- `V1_INGEST_EXECUTION_PUBLISHED=false` holds the checked-in native ingest command
+  path: its worker entry exits before dotenv/runtime dependency initialization, and
+  its scheduler and Redis connection do not start database, ioredis, or BullMQ work.
+  The Tier-C and first-party bridges admit no new ingest work; `POST
+/api/trader/onchain-enrich` is a fixed `410 INGEST_EXECUTION_NOT_PUBLISHED` response
+  with three `no-store` headers before body parsing, rate limiting, provider, or
+  serving-data work. Profile `core` and `records` retain their warm serving-read
+  branches, while the cold Tier-C fallback resolves as pending without initializing a
+  provider/ioredis/BullMQ bridge or reading a Tier-C result queue. Their public rate
+  limiter may still use Redis; this hold is not a claim that those routes make zero
+  Redis reads. Covered direct ingest scripts likewise do not initiate ingest. This
+  source boundary neither stops nor proves a running host, persisted queue, or
+  external schedule.
+
+This ingest hold is deliberately not a blanket source-acquisition or queue claim. It
+does not classify the separate legacy `refresh_jobs` pipeline (`batch-5min`,
+`batch-discover`, public trader refresh) or legacy proxy/import paths; those need a
+separate containment review. Their presence in this checkout is not runtime evidence.
 
 ## Data API
 
@@ -225,7 +243,13 @@ Each trader profile includes:
 
 **Snapshot Architecture.** The codebase separates ingest staging from serving tables such as **`arena.*`** and `public.leaderboard_ranks`. `trader_snapshots_v2` was dropped 2026-06-16. This is an architectural description, not V1 authority to write, recompute, or publish data. See `docs/ARENA_REBUILD_SPEC.md`.
 
-**Gated Ingest Lifecycle.** The intended design gates RAW evidence, parsed data, and complete-board publication. V1 holds that lifecycle at NO-GO: no worker, Vercel route, OpenClaw process, or legacy recovery path has authority to discover, fetch, persist, backfill, publish, or self-repair. Their code may be reviewed locally but does not prove that a source is scheduled or healthy.
+**Gated Ingest Lifecycle.** The intended design gates RAW evidence, parsed data, and
+complete-board publication. The fixed V1 ingest source hold prevents the covered
+native worker, scheduler, connection, bridges, on-chain route, and direct scripts
+from initiating new ingest. It is not a blanket classification of legacy
+`refresh_jobs`/proxy/import paths, and it cannot stop or prove an already-running
+process, queue, or schedule. Code may be reviewed locally but does not prove that a
+source is scheduled or healthy.
 
 **Incremental Static Regeneration.** Trader profile pages declare `revalidate=300` in code. Any historical cache-warming or ingest-triggered schedule is outside the V1 plan and must not be invoked.
 
