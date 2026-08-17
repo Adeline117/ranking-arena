@@ -19,6 +19,16 @@
 详细阶段只在对应权威文档维护；`EXCHANGE_FIELD_COVERAGE.md` 是机器生成快照，禁止手改。旧日期段落保留
 为历史记录，不覆盖本表。
 
+## V1 migration-ledger repair artifact source containment（2026-08-17）
+
+本轮只封存 `scripts/migration-reconcile/ledger-repair-20260702.sql` 这一历史账本路径。该文件现为
+`[RETIRED]` 的纯注释来源记录，在 V1 NO-GO 下没有可运行内容；外部 SQL-file launcher 可能因注释
+是 no-op 而报告 exit 0，但这不是 ledger、catalog、数据库或任何 live-state 的证据，也不是工作入口。
+
+这是 source-only boundary：不运行、检查、变更或证明任何数据库、迁移、已部署服务、host、worker 或
+scheduler 的状态。它不触及 `supabase/migrations/*`、现有 ledger 或生产控制面；未来的 ledger 事项
+只能由 owner 以独立 ADR-023 计划和单独证据处理，不能从这个历史文件推断当前状态。
+
 ## V1 public health VPS probe scope（2026-08-17）
 
 公开 `GET /api/health` 的 `checks` 只报告 API transport、database、Redis 与排名 freshness；本源码
