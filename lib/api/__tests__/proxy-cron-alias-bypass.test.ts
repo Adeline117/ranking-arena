@@ -9,6 +9,12 @@ import {
   shouldSkip,
 } from '@/proxy'
 
+const BYTES32_ATTESTATION_UID = `0x${'a'.repeat(64)}`
+const UPPERCASE_BYTES32_ATTESTATION_UID = `0x${'A'.repeat(64)}`
+const SHORT_ATTESTATION_UID = `0x${'a'.repeat(63)}`
+const LONG_ATTESTATION_UID = `0x${'a'.repeat(65)}`
+const NON_HEX_ATTESTATION_UID = `0x${'g'.repeat(64)}`
+
 describe('cron proxy bypass paths', () => {
   it.each(['/api/cron/backfill-avatars', '/api/v1/cron/backfill-avatars'])(
     'bypasses proxy work for %s',
@@ -85,6 +91,8 @@ describe('public egress hold bypass paths', () => {
     '/api/v1/market/coin/bitcoin',
     '/api/market/ohlc/bitcoin',
     '/api/v1/market/ohlc/bitcoin',
+    `/api/attestation/${BYTES32_ATTESTATION_UID}`,
+    `/api/v1/attestation/${UPPERCASE_BYTES32_ATTESTATION_UID}`,
     '/api/market/futures',
     '/api/v1/market/futures',
     '/api/market/fear-greed',
@@ -159,6 +167,24 @@ describe('public egress hold bypass paths', () => {
     '/api/v1/market/ohlc/bitcoin/child',
     '/api/v1/market/ohlcs/bitcoin',
     '/api/v1/market/ohlc-history/bitcoin',
+    '/api/attestation',
+    '/api/attestation/',
+    '/api/attestation/mint',
+    `/api/attestation/${SHORT_ATTESTATION_UID}`,
+    `/api/attestation/${LONG_ATTESTATION_UID}`,
+    `/api/attestation/${NON_HEX_ATTESTATION_UID}`,
+    `/api/attestation/0X${'a'.repeat(64)}`,
+    `/api/attestation/${BYTES32_ATTESTATION_UID}/child`,
+    '/api/attestations/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    '/api/v1/attestation',
+    '/api/v1/attestation/',
+    '/api/v1/attestation/mint',
+    `/api/v1/attestation/${SHORT_ATTESTATION_UID}`,
+    `/api/v1/attestation/${LONG_ATTESTATION_UID}`,
+    `/api/v1/attestation/${NON_HEX_ATTESTATION_UID}`,
+    `/api/v1/attestation/0X${'a'.repeat(64)}`,
+    `/api/v1/attestation/${BYTES32_ATTESTATION_UID}/child`,
+    '/api/v1/attestations/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     '/api/market/futures/child',
     '/api/market/future',
     '/api/market/futures-history',
