@@ -319,6 +319,8 @@ describe('parseExactTraderFirstScreenResponse', () => {
         {
           timeframe: 90,
           rank: 7,
+          rankingVisibility: 'verified',
+          rankingVisibilityReason: null,
           headlineRoi: 0,
           headlinePnl: { value: 0, currency: 'USDT' },
           headlineWinRate: 0,
@@ -348,6 +350,8 @@ describe('parseExactTraderFirstScreenResponse', () => {
         entries: [
           {
             rank: 7,
+            rankingVisibility: 'verified',
+            rankingVisibilityReason: null,
             headlineRoi: 0,
             headlinePnl: { value: 0, currency: 'USDT' },
             headlineWinRate: 0,
@@ -492,6 +496,63 @@ describe('parseExactTraderFirstScreenResponse', () => {
         )
       ).toBeNull()
     }
+  })
+
+  it('rejects a partial or unknown entry that tries to carry ranking metrics', () => {
+    const raw = response()
+    const entry = raw.firstScreen.entries[0]
+    for (const visibility of ['partial', 'unknown'] as const) {
+      expect(
+        parseExactTraderFirstScreenResponse(
+          {
+            ...raw,
+            firstScreen: {
+              ...raw.firstScreen,
+              entries: [
+                {
+                  ...entry,
+                  rankingVisibility: visibility,
+                  rankingVisibilityReason: 'public_cohort_unavailable',
+                },
+              ],
+            },
+          },
+          expected
+        )
+      ).toBeNull()
+    }
+  })
+
+  it('retains an explicit unknown entry only when every rank-derived field is null', () => {
+    const raw = response()
+    const entry = raw.firstScreen.entries[0]
+    const parsed = parseExactTraderFirstScreenResponse(
+      {
+        ...raw,
+        firstScreen: {
+          ...raw.firstScreen,
+          entries: [
+            {
+              ...entry,
+              rank: null,
+              rankingVisibility: 'unknown',
+              rankingVisibilityReason: 'public_cohort_unavailable',
+              headlineRoi: null,
+              headlinePnl: null,
+            },
+          ],
+        },
+      },
+      expected
+    )
+
+    expect(parsed?.firstScreen.entries[0]).toMatchObject({
+      rank: null,
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_cohort_unavailable',
+      headlineRoi: null,
+      headlinePnl: null,
+    })
   })
 })
 
