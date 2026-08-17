@@ -239,14 +239,20 @@ export function useTraderRecords({
   const pages = query.data?.pages ?? []
   const hasOnlyPendingFirstPage = pages.length === 1 && pages[0].cacheState === 'pending'
   const pendingWindowActive =
+    shouldFetch &&
     hasOnlyPendingFirstPage &&
-    (query.isFetching || !query.error) &&
+    query.isFetchedAfterMount &&
+    query.fetchStatus === 'idle' &&
+    !query.isFetching &&
+    !query.error &&
     pendingPoll.current.scope === pendingScope &&
     pendingPoll.current.count < MAX_PENDING_RECORDS_POLLS
   const pendingRecoveryRequired =
+    shouldFetch &&
     hasOnlyPendingFirstPage &&
     !query.isFetching &&
     (Boolean(query.error) ||
+      query.fetchStatus === 'paused' ||
       (pendingPoll.current.scope === pendingScope &&
         pendingPoll.current.count >= MAX_PENDING_RECORDS_POLLS))
   const rows = pages.flatMap((page) => (mayDisplayPageRows(kind, page) ? page.rows : []))
@@ -269,7 +275,10 @@ export function useTraderRecords({
     isPendingRecoveryRequired: pendingRecoveryRequired,
     isLoading: query.isLoading || cursorInvalidated,
     /** No cached page exists, so the module has nothing truthful to preserve. */
-    isInitialError: !cursorInvalidated && query.isLoadingError,
+    isInitialError:
+      !cursorInvalidated &&
+      (query.isLoadingError ||
+        (shouldFetch && pages.length === 0 && query.fetchStatus === 'paused')),
     /** A later page failed; keep the successful pages visible and retry in place. */
     isFetchNextPageError: !cursorInvalidated && query.isFetchNextPageError,
     /** A background refresh failed; cached pages remain visible but must be disclosed. */

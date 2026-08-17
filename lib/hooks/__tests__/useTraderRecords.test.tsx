@@ -1217,6 +1217,66 @@ describe('useTraderRecords cursor generation reset', () => {
     }
   })
 
+  it('turns a paused pending record bridge into an explicit recovery state', async () => {
+    const client = queryClient()
+    ;(fetcher as jest.Mock).mockResolvedValue(
+      recordsResponse(recordsPage({ cacheState: 'pending' }))
+    )
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    try {
+      await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+      await act(async () => {
+        onlineManager.setOnline(false)
+        void view.result.current.refetch()
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(false))
+      expect(view.result.current.isPendingRecoveryRequired).toBe(true)
+      expect(view.result.current.isInitialError).toBe(false)
+    } finally {
+      onlineManager.setOnline(true)
+      view.unmount()
+      client.clear()
+    }
+  })
+
+  it('marks an offline first record read unavailable instead of empty', async () => {
+    const client = queryClient()
+    onlineManager.setOnline(false)
+    const view = renderHook(
+      () =>
+        useTraderRecords({
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          kind: 'orders',
+          enabled: true,
+        }),
+      { wrapper: recordsWrapper(client) }
+    )
+
+    try {
+      await waitFor(() => expect(view.result.current.isInitialError).toBe(true))
+      expect(view.result.current.rows).toEqual([])
+      expect(view.result.current.isLoading).toBe(false)
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      onlineManager.setOnline(true)
+      view.unmount()
+      client.clear()
+    }
+  })
+
   it('caps a pending record bridge, exposes recovery, and restarts only on retry', async () => {
     jest.useFakeTimers()
     const client = queryClient()
