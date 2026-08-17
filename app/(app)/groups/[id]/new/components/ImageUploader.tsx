@@ -17,10 +17,15 @@ interface ImageUploaderProps {
 }
 
 export function ImageUploader({
-  images, uploading, uploadProgress,
+  images,
+  uploading,
+  uploadProgress,
   fileInputRef,
-  onUpload, onRemove, onInsert,
-  language: _language, t,
+  onUpload,
+  onRemove,
+  onInsert,
+  language: _language,
+  t,
 }: ImageUploaderProps): React.ReactElement {
   return (
     <Box>
@@ -34,6 +39,7 @@ export function ImageUploader({
         accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
         multiple
         onChange={onUpload}
+        disabled={uploading}
         style={{ display: 'none' }}
         id="image-upload"
       />
@@ -55,7 +61,7 @@ export function ImageUploader({
               height: 100,
               borderRadius: tokens.radius.md,
               overflow: 'hidden',
-              border: ('1px solid ' + tokens.colors.border.primary),
+              border: '1px solid ' + tokens.colors.border.primary,
             }}
           >
             <img
@@ -79,11 +85,13 @@ export function ImageUploader({
               }}
             >
               <button
+                type="button"
+                aria-label={t('insertToContent')}
                 onClick={() => onInsert(image.url)}
-                title={t('imageInserted') || t('insertToContent')}
+                title={t('insertToContent')}
                 style={{
-                  width: 24,
-                  height: 24,
+                  width: tokens.touchTarget.min,
+                  height: tokens.touchTarget.min,
                   border: 'none',
                   background: 'var(--color-accent-primary)',
                   color: tokens.colors.white,
@@ -96,12 +104,14 @@ export function ImageUploader({
               >
                 ↵
               </button>
-              <button aria-label="Close"
+              <button
+                type="button"
+                aria-label={t('deleteButton')}
                 onClick={() => onRemove(index)}
                 title={t('deleteButton')}
                 style={{
-                  width: 24,
-                  height: 24,
+                  width: tokens.touchTarget.min,
+                  height: tokens.touchTarget.min,
                   border: 'none',
                   background: 'var(--color-accent-error)',
                   color: tokens.colors.white,
@@ -121,11 +131,22 @@ export function ImageUploader({
         {images.length < 9 && (
           <label
             htmlFor="image-upload"
+            role="button"
+            tabIndex={uploading ? -1 : 0}
+            aria-disabled={uploading}
+            onClick={(event) => {
+              if (uploading) event.preventDefault()
+            }}
+            onKeyDown={(event) => {
+              if (uploading || (event.key !== 'Enter' && event.key !== ' ')) return
+              event.preventDefault()
+              fileInputRef.current?.click()
+            }}
             style={{
               width: 100,
               height: 100,
               borderRadius: tokens.radius.md,
-              border: ('2px dashed ' + tokens.colors.border.primary),
+              border: '2px dashed ' + tokens.colors.border.primary,
               background: tokens.colors.bg.secondary,
               display: 'flex',
               flexDirection: 'column',
@@ -137,18 +158,49 @@ export function ImageUploader({
             }}
           >
             {uploading ? (
-              <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0 8px' }}>
-                <Text size="xs" color="secondary">{uploadProgress ? `${uploadProgress}%` : t('uploadingImage')}</Text>
+              <Box
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '0 8px',
+                }}
+              >
+                <Text size="xs" color="secondary">
+                  {uploadProgress
+                    ? t('uploadingProgress').replace('{percent}', String(uploadProgress))
+                    : t('uploadingImage')}
+                </Text>
                 {typeof uploadProgress === 'number' && uploadProgress > 0 && (
-                  <Box style={{ width: '100%', height: 3, background: tokens.colors.bg.tertiary, borderRadius: 2, overflow: 'hidden' }}>
-                    <Box style={{ width: `${uploadProgress}%`, height: '100%', background: tokens.colors.accent.primary, transition: 'width 0.2s ease' }} />
+                  <Box
+                    style={{
+                      width: '100%',
+                      height: 3,
+                      background: tokens.colors.bg.tertiary,
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Box
+                      style={{
+                        width: `${uploadProgress}%`,
+                        height: '100%',
+                        background: tokens.colors.accent.primary,
+                        transition: 'width 0.2s ease',
+                      }}
+                    />
                   </Box>
                 )}
               </Box>
             ) : (
               <>
-                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>+</Text>
-                <Text size="xs" color="secondary">{t('addImage')}</Text>
+                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>
+                  +
+                </Text>
+                <Text size="xs" color="secondary">
+                  {t('addImage')}
+                </Text>
               </>
             )}
           </label>

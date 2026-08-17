@@ -15,8 +15,13 @@ interface VideoUploaderProps {
 }
 
 export function VideoUploader({
-  videos, videoUploading, videoUploadProgress,
-  videoInputRef, onUpload, onRemove, t,
+  videos,
+  videoUploading,
+  videoUploadProgress,
+  videoInputRef,
+  onUpload,
+  onRemove,
+  t,
 }: VideoUploaderProps): React.ReactElement {
   return (
     <Box>
@@ -29,6 +34,7 @@ export function VideoUploader({
         type="file"
         accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska"
         onChange={onUpload}
+        disabled={videoUploading}
         style={{ display: 'none' }}
         id="video-upload"
       />
@@ -50,7 +56,7 @@ export function VideoUploader({
               height: 120,
               borderRadius: tokens.radius.md,
               overflow: 'hidden',
-              border: ('2px solid ' + tokens.colors.accent.brand),
+              border: '2px solid ' + tokens.colors.accent.brand,
               background: tokens.colors.black,
             }}
           >
@@ -99,15 +105,17 @@ export function VideoUploader({
               {video.fileSize ? (video.fileSize / 1024 / 1024).toFixed(1) : '?'}MB
             </Box>
             {/* Delete button */}
-            <button aria-label="Close"
+            <button
+              type="button"
+              aria-label={t('deleteVideo')}
               onClick={onRemove}
               title={t('deleteVideo')}
               style={{
                 position: 'absolute',
                 top: 4,
                 right: 4,
-                width: 24,
-                height: 24,
+                width: tokens.touchTarget.min,
+                height: tokens.touchTarget.min,
                 border: 'none',
                 background: 'var(--color-accent-error)',
                 color: tokens.colors.white,
@@ -128,11 +136,22 @@ export function VideoUploader({
         {videos.length < 1 && (
           <label
             htmlFor="video-upload"
+            role="button"
+            tabIndex={videoUploading ? -1 : 0}
+            aria-disabled={videoUploading}
+            onClick={(event) => {
+              if (videoUploading) event.preventDefault()
+            }}
+            onKeyDown={(event) => {
+              if (videoUploading || (event.key !== 'Enter' && event.key !== ' ')) return
+              event.preventDefault()
+              videoInputRef.current?.click()
+            }}
             style={{
               width: 200,
               height: 120,
               borderRadius: tokens.radius.md,
-              border: ('2px dashed ' + tokens.colors.border.primary),
+              border: '2px dashed ' + tokens.colors.border.primary,
               background: tokens.colors.bg.secondary,
               display: 'flex',
               flexDirection: 'column',
@@ -145,7 +164,9 @@ export function VideoUploader({
           >
             {videoUploading ? (
               <Box style={{ textAlign: 'center' }}>
-                <Text size="xs" color="secondary">{t('uploadingProgress').replace('{percent}', String(videoUploadProgress))}</Text>
+                <Text size="xs" color="secondary">
+                  {t('uploadingProgress').replace('{percent}', String(videoUploadProgress))}
+                </Text>
                 {/* Progress bar */}
                 <Box
                   style={{
@@ -169,9 +190,15 @@ export function VideoUploader({
               </Box>
             ) : (
               <>
-                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>Video</Text>
-                <Text size="xs" color="secondary" style={{ marginTop: 4 }}>{t('addVideo')}</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>MP4, WebM, MOV</Text>
+                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>
+                  Video
+                </Text>
+                <Text size="xs" color="secondary" style={{ marginTop: 4 }}>
+                  {t('addVideo')}
+                </Text>
+                <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+                  MP4, WebM, MOV
+                </Text>
               </>
             )}
           </label>

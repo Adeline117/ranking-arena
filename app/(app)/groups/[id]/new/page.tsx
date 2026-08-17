@@ -68,6 +68,8 @@ export default function NewGroupPostPage(): React.ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const submitRef = useRef(false)
+  const imageUploadInFlightRef = useRef(false)
+  const videoUploadInFlightRef = useRef(false)
   const publishOperationRef = useRef<BoundPostCreateOperation | null>(null)
 
   // User state
@@ -309,116 +311,129 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
 
-      const uploadToken = await tokenRefreshCoordinator.getValidToken()
-      if (!uploadToken) {
-        showToast(t('pleaseLogin'), 'warning')
+      if (imageUploadInFlightRef.current) {
+        e.currentTarget.value = ''
         return
       }
 
+      imageUploadInFlightRef.current = true
       setUploading(true)
       setUploadProgress(0)
-      const newImages: UploadedImage[] = []
-      const totalFiles = Array.from(files).filter(
-        (f) => ALLOWED_IMAGE_TYPES.includes(f.type) && f.size <= 5 * 1024 * 1024
-      ).length
-
-      let completed = 0
-      for (const file of Array.from(files)) {
-        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-          showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
-          continue
+      try {
+        const uploadToken = await tokenRefreshCoordinator.getValidToken()
+        if (!uploadToken) {
+          showToast(t('pleaseLogin'), 'warning')
+          return
         }
 
-        if (file.size > 5 * 1024 * 1024) {
-          showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
-          continue
-        }
+        const newImages: UploadedImage[] = []
+        const totalFiles = Array.from(files).filter(
+          (file) => ALLOWED_IMAGE_TYPES.includes(file.type) && file.size <= 5 * 1024 * 1024
+        ).length
 
-        try {
-          // Compress image before upload (resize to 1920px, 85% quality)
-          const compressed = await compressImage(file)
-          const formData = new FormData()
-          formData.append('file', compressed)
-          formData.append('purpose', 'post_image')
-          formData.append('userId', userId)
+        let completed = 0
+        for (const file of Array.from(files)) {
+          if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            showToast(`${file.name} ${t('formatNotSupported')}`, 'error')
+            continue
+          }
 
-          // Use XHR for upload progress tracking
-          const data = await new Promise<PostImageUploadAcknowledgement>((resolve, reject) => {
-            const xhr = new XMLHttpRequest()
-            xhr.open('POST', '/api/posts/upload-image')
-            xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
-            const csrfHeaders = getCsrfHeaders()
-            Object.entries(csrfHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v as string))
+          if (file.size > 5 * 1024 * 1024) {
+            showToast(`${file.name} ${t('fileTooLarge')}`, 'error')
+            continue
+          }
 
-            const onProgress = (e: ProgressEvent) => {
-              if (e.lengthComputable) {
-                const fileProgress = e.loaded / e.total
-                setUploadProgress(Math.round(((completed + fileProgress) / totalFiles) * 100))
-              }
-            }
+          try {
+            // Compress image before upload (resize to 1920px, 85% quality)
+            const compressed = await compressImage(file)
+            const formData = new FormData()
+            formData.append('file', compressed)
+            formData.append('purpose', 'post_image')
+            formData.append('userId', userId)
 
-            const cleanup = () => {
-              xhr.upload.removeEventListener('progress', onProgress)
-              xhr.removeEventListener('load', onLoad)
-              xhr.removeEventListener('error', onError)
-              xhr.removeEventListener('abort', onAbort)
-            }
+            // Use XHR for upload progress tracking
+            const data = await new Promise<PostImageUploadAcknowledgement>((resolve, reject) => {
+              const xhr = new XMLHttpRequest()
+              xhr.open('POST', '/api/posts/upload-image')
+              xhr.setRequestHeader('Authorization', `Bearer ${uploadToken}`)
+              const csrfHeaders = getCsrfHeaders()
+              Object.entries(csrfHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v as string))
 
-            const onLoad = () => {
-              cleanup()
-              try {
-                const responseBody: unknown = JSON.parse(xhr.responseText)
-                if (xhr.status >= 200 && xhr.status < 300) {
-                  const acknowledgement = readPostImageUploadAcknowledgement(
-                    responseBody,
-                    userId,
-                    process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-                  )
-                  if (!acknowledgement) throw new Error('Invalid response')
-                  resolve(acknowledgement)
-                } else {
-                  reject(
-                    new Error(
-                      readPostMediaUploadError(responseBody) ?? `Upload failed (${xhr.status})`
-                    )
-                  )
+              const onProgress = (e: ProgressEvent) => {
+                if (e.lengthComputable) {
+                  const fileProgress = e.loaded / e.total
+                  setUploadProgress(Math.round(((completed + fileProgress) / totalFiles) * 100))
                 }
-              } catch {
-                reject(new Error('Invalid response'))
               }
-            }
-            const onError = () => {
-              cleanup()
-              reject(new Error('Network error'))
-            }
-            const onAbort = () => {
-              cleanup()
-              reject(new Error('Upload aborted'))
-            }
 
-            xhr.upload.addEventListener('progress', onProgress)
-            xhr.addEventListener('load', onLoad)
-            xhr.addEventListener('error', onError)
-            xhr.addEventListener('abort', onAbort)
-            xhr.send(formData)
-          })
+              const cleanup = () => {
+                xhr.upload.removeEventListener('progress', onProgress)
+                xhr.removeEventListener('load', onLoad)
+                xhr.removeEventListener('error', onError)
+                xhr.removeEventListener('abort', onAbort)
+              }
 
-          newImages.push({ url: data.url, fileName: data.fileName })
-          completed++
-          setUploadProgress(Math.round((completed / totalFiles) * 100))
-        } catch (_error) {
-          completed++
-          showToast(`${file.name}: ${t('networkError')}`, 'error')
+              const onLoad = () => {
+                cleanup()
+                try {
+                  const responseBody: unknown = JSON.parse(xhr.responseText)
+                  if (xhr.status >= 200 && xhr.status < 300) {
+                    const acknowledgement = readPostImageUploadAcknowledgement(
+                      responseBody,
+                      userId,
+                      process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+                    )
+                    if (!acknowledgement) throw new Error('Invalid response')
+                    resolve(acknowledgement)
+                  } else {
+                    reject(
+                      new Error(
+                        readPostMediaUploadError(responseBody) ?? `Upload failed (${xhr.status})`
+                      )
+                    )
+                  }
+                } catch {
+                  reject(new Error('Invalid response'))
+                }
+              }
+              const onError = () => {
+                cleanup()
+                reject(new Error('Network error'))
+              }
+              const onAbort = () => {
+                cleanup()
+                reject(new Error('Upload aborted'))
+              }
+
+              xhr.upload.addEventListener('progress', onProgress)
+              xhr.addEventListener('load', onLoad)
+              xhr.addEventListener('error', onError)
+              xhr.addEventListener('abort', onAbort)
+              xhr.send(formData)
+            })
+
+            newImages.push({ url: data.url, fileName: data.fileName })
+            completed++
+            setUploadProgress(Math.round((completed / totalFiles) * 100))
+          } catch (_error) {
+            completed++
+            showToast(`${file.name}: ${t('networkError')}`, 'error')
+          }
         }
-      }
 
-      if (newImages.length > 0) {
-        setImages((prev) => [...prev, ...newImages])
-        showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
+        if (newImages.length > 0) {
+          setImages((prev) => [...prev, ...newImages])
+          showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
+        }
+      } catch (error) {
+        logger.error('Image upload error:', error)
+        showToast(t('networkError'), 'error')
+      } finally {
+        imageUploadInFlightRef.current = false
+        setUploading(false)
+        setUploadProgress(0)
+        if (fileInputRef.current) fileInputRef.current.value = ''
       }
-
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     },
     [userId, images.length, showToast, t]
   )
@@ -470,6 +485,12 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
 
+      if (videoUploadInFlightRef.current) {
+        e.currentTarget.value = ''
+        return
+      }
+
+      videoUploadInFlightRef.current = true
       setVideoUploading(true)
       setVideoUploadProgress(0)
 
@@ -555,6 +576,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         logger.error('Video upload error:', error)
         showToast(t('videoUploadFailed'), 'error')
       } finally {
+        videoUploadInFlightRef.current = false
         setVideoUploading(false)
         setVideoUploadProgress(0)
         if (videoInputRef.current) videoInputRef.current.value = ''
@@ -570,7 +592,16 @@ export default function NewGroupPostPage(): React.ReactElement {
   }, [showToast, t])
 
   const handleSubmit = async () => {
-    if (submitRef.current || loading) return
+    if (
+      submitRef.current ||
+      loading ||
+      imageUploadInFlightRef.current ||
+      videoUploadInFlightRef.current ||
+      uploading ||
+      videoUploading
+    ) {
+      return
+    }
 
     if (!title.trim()) {
       showToast(t('pleaseEnterTitle'), 'warning')
@@ -793,14 +824,19 @@ export default function NewGroupPostPage(): React.ReactElement {
 
           {/* Action buttons */}
           <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
-            <Button variant="ghost" size="md" onClick={() => router.back()} disabled={loading}>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => router.back()}
+              disabled={loading || uploading || videoUploading}
+            >
               {t('cancel')}
             </Button>
             <Button
               variant="primary"
               size="md"
               onClick={handleSubmit}
-              disabled={loading || !title.trim()}
+              disabled={loading || uploading || videoUploading || !title.trim()}
               loading={loading}
             >
               {loading ? t('publishing') : t('publish')}
