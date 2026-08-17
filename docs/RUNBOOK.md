@@ -115,6 +115,22 @@ external state. Historical diagnostic, ranking, or pipeline records are not curr
 runtime or data-state evidence; a future diagnostic or remediation requires an
 independently approved ADR-023 owner plan and separate evidence.
 
+### V1 homepage regression archive CLI source boundary
+
+Do not use `scripts/archive/check-homepage-regression.mjs` as a homepage, performance,
+release, deployment, or incident workaround. This checked-in legacy homepage diagnostic
+compatibility path has no current operational caller. With every argument, it writes
+exactly `[RETIRED] scripts/archive/check-homepage-regression.mjs` to stderr, leaves stdout
+empty, and exits `2`.
+
+This is source-only containment for that one file. It does not retire, assess, change,
+inspect, or prove `app/page.tsx`, `HomePage`, `HomePageLoader`, the SSR ranking surface,
+homepage Jest/E2E, the genuine Lighthouse CI, `/api/health`, `/api/health/pipeline`, or
+current workflows. It also does not stop, inspect, change, or prove a deployment, browser,
+or any external state. Historical homepage, test, or performance records are not current
+runtime or external-state evidence; a future check, CI, or remediation requires an
+independently approved ADR-023 owner plan and separate evidence.
+
 ### V1 ranking authority cache-purge source boundary
 
 Do not use `scripts/maintenance/purge-ranking-authority-caches.sh` as an incident workaround.
