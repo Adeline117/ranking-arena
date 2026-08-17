@@ -157,6 +157,15 @@ fetch 或读写 posts/comments。
 此 source-only boundary 不改变正常 social API、UI、RLS、cache 或既有 posts/comments；也不停止、检查
 或证明仓库外 cron、已部署 script、数据库或历史 seed 数据的状态。
 
+## V1 legacy VPS monitor source containment（2026-08-17）
+
+`scripts/vps/health-ping.sh` 与 `scripts/vps/healthcheck.mjs` 是 legacy VPS monitor
+compatibility path，现固定输出 `RETIRED` 并以 exit `2` 结束；它们不再发网络请求、读写 host 文件、
+发送 alert 或启动 HTTP server。
+
+这只是 source-only containment：不停止、检查或证明已部署 host/process、crontab、UptimeRobot 或其他
+external monitor 的状态。`/api/health`、OpenClaw、harness 和 `scripts/vps-deploy/*` 均不在此次范围内。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
