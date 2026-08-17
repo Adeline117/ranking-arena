@@ -1,6 +1,7 @@
 import {
   isAvatarProxyBypassPath,
   isHealthEvaluateReportProxyBypassPath,
+  isHealthHeartbeatProxyBypassPath,
   isPublicEgressProxyBypassPath,
   isReferralProgramProxyBypassPath,
   shouldSkip,
@@ -110,6 +111,34 @@ describe('health evaluator hold bypass paths', () => {
   it.each([
     '/api/v1/health/evaluate-reports',
     '/api/v1/health/evaluate-report/child',
+    '/api/v1/health/detailed',
+  ])('does not bypass proxy work for adjacent versioned health path %s', (pathname) => {
+    expect(shouldSkip(pathname)).toBe(false)
+  })
+})
+
+describe('health heartbeat handoff paths', () => {
+  it.each(['/api/health/heartbeat', '/api/v1/health/heartbeat'])(
+    'hands %s directly to its route-owned authentication contract',
+    (pathname) => {
+      expect(isHealthHeartbeatProxyBypassPath(pathname)).toBe(true)
+      expect(shouldSkip(pathname)).toBe(true)
+    }
+  )
+
+  it.each([
+    '/api/health/heartbeats',
+    '/api/health/heartbeat/child',
+    '/api/v1/health/heartbeats',
+    '/api/v1/health/heartbeat/child',
+    '/api/v1/health/detailed',
+  ])('does not add an exact heartbeat handoff for adjacent health path %s', (pathname) => {
+    expect(isHealthHeartbeatProxyBypassPath(pathname)).toBe(false)
+  })
+
+  it.each([
+    '/api/v1/health/heartbeats',
+    '/api/v1/health/heartbeat/child',
     '/api/v1/health/detailed',
   ])('does not bypass proxy work for adjacent versioned health path %s', (pathname) => {
     expect(shouldSkip(pathname)).toBe(false)

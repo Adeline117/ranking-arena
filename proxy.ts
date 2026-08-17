@@ -103,6 +103,10 @@ const HEALTH_EVALUATE_REPORT_BYPASS_PATHS = new Set([
   '/api/health/evaluate-report',
   '/api/v1/health/evaluate-report',
 ])
+// The canonical health namespace already skips the proxy, but the versioned
+// alias reaches it before Next.js rewrites. Hand both methods directly to the
+// route: GET keeps its own CRON_SECRET auth, and POST owns its V1 cron gate.
+const HEALTH_HEARTBEAT_BYPASS_PATHS = new Set(['/api/health/heartbeat', '/api/v1/health/heartbeat'])
 
 // ============================================
 // Rate Limiting
@@ -305,6 +309,10 @@ export function isHealthEvaluateReportProxyBypassPath(pathname: string): boolean
   return HEALTH_EVALUATE_REPORT_BYPASS_PATHS.has(pathname)
 }
 
+export function isHealthHeartbeatProxyBypassPath(pathname: string): boolean {
+  return HEALTH_HEARTBEAT_BYPASS_PATHS.has(pathname)
+}
+
 export function shouldSkip(pathname: string): boolean {
   return (
     SKIP_EXACT_ROUTES.has(pathname) ||
@@ -312,6 +320,7 @@ export function shouldSkip(pathname: string): boolean {
     isPublicEgressProxyBypassPath(pathname) ||
     isReferralProgramProxyBypassPath(pathname) ||
     isHealthEvaluateReportProxyBypassPath(pathname) ||
+    isHealthHeartbeatProxyBypassPath(pathname) ||
     SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route)) ||
     isCronProxyBypassPath(pathname)
   )
@@ -477,7 +486,8 @@ async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextRes
     isAvatarProxyBypassPath(pathname) ||
     isPublicEgressProxyBypassPath(pathname) ||
     isReferralProgramProxyBypassPath(pathname) ||
-    isHealthEvaluateReportProxyBypassPath(pathname)
+    isHealthEvaluateReportProxyBypassPath(pathname) ||
+    isHealthHeartbeatProxyBypassPath(pathname)
   ) {
     return null
   }
