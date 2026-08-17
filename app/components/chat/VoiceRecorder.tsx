@@ -14,12 +14,16 @@ export default function VoiceRecorder({ onVoiceRecorded, disabled }: VoiceRecord
   const [recording, setRecording] = useState(false)
   const [duration, setDuration] = useState(0)
   const [uploading, setUploading] = useState(false)
+  const [requesting, setRequesting] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
   const mountedRef = useRef(true)
+  const startInFlightRef = useRef(false)
+  const disabledRef = useRef(disabled)
+  disabledRef.current = disabled
 
   useEffect(() => {
     mountedRef.current = true
@@ -43,6 +47,17 @@ export default function VoiceRecorder({ onVoiceRecorded, disabled }: VoiceRecord
   }, [])
 
   const startRecording = useCallback(async () => {
+    if (
+      startInFlightRef.current ||
+      disabledRef.current ||
+      uploading ||
+      mediaRecorderRef.current?.state === 'recording'
+    ) {
+      return
+    }
+
+    startInFlightRef.current = true
+    setRequesting(true)
     // Clear any stale interval from previous recording
     if (timerRef.current) {
       clearInterval(timerRef.current)
@@ -50,7 +65,7 @@ export default function VoiceRecorder({ onVoiceRecorded, disabled }: VoiceRecord
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      if (!mountedRef.current) {
+      if (!mountedRef.current || disabledRef.current) {
         stream.getTracks().forEach((track) => track.stop())
         return
       }
@@ -100,8 +115,11 @@ export default function VoiceRecorder({ onVoiceRecorded, disabled }: VoiceRecord
       }, 1000)
     } catch (err) {
       logger.error('Microphone access denied:', err)
+    } finally {
+      startInFlightRef.current = false
+      if (mountedRef.current) setRequesting(false)
     }
-  }, [onVoiceRecorded])
+  }, [onVoiceRecorded, uploading])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -141,26 +159,29 @@ export default function VoiceRecorder({ onVoiceRecorded, disabled }: VoiceRecord
         </div>
       )}
       <button
+        type="button"
         onClick={recording ? stopRecording : startRecording}
-        disabled={disabled || uploading}
+        disabled={disabled || uploading || requesting}
+        aria-busy={requesting || uploading}
+        aria-label={recording ? t('stopRecording') : t('voiceMessage')}
         style={{
-          width: 40,
-          height: 40,
+          width: tokens.touchTarget.min,
+          height: tokens.touchTarget.min,
           borderRadius: '50%',
           border: 'none',
           background: recording ? tokens.colors.accent.error : tokens.colors.bg.secondary,
           color: recording ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-          cursor: disabled || uploading ? 'not-allowed' : 'pointer',
+          cursor: disabled || uploading || requesting ? 'not-allowed' : 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           transition: tokens.transition.fast,
-          opacity: disabled || uploading ? 0.5 : 1,
+          opacity: disabled || uploading || requesting ? 0.5 : 1,
           flexShrink: 0,
         }}
         title={recording ? t('stopRecording') : t('voiceMessage')}
       >
-        {uploading ? (
+        {uploading || requesting ? (
           <svg
             width="20"
             height="20"

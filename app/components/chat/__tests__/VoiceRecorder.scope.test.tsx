@@ -1,4 +1,5 @@
-import { fireEvent, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
+import { tokens } from '@/lib/design-tokens'
 
 const mockOnVoiceRecorded = jest.fn<Promise<void>, [File, number]>()
 const mockTrackStop = jest.fn()
@@ -125,6 +126,59 @@ describe('VoiceRecorder scoped upload handoff', () => {
     } as unknown as MediaStream)
 
     await waitFor(() => expect(mockTrackStop).toHaveBeenCalledTimes(1))
+    expect(mockOnVoiceRecorded).not.toHaveBeenCalled()
+  })
+
+  it('keeps microphone permission acquisition single-flight under rapid activation', async () => {
+    const permission = deferred<MediaStream>()
+    const getUserMedia = jest.fn().mockReturnValue(permission.promise)
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia },
+    })
+    const view = render(<VoiceRecorder onVoiceRecorded={mockOnVoiceRecorded} />)
+    const trigger = view.getByRole('button', { name: 'voiceMessage' })
+
+    fireEvent.click(trigger)
+    expect(trigger).toBeDisabled()
+    expect(trigger).toHaveAttribute('aria-busy', 'true')
+    expect(trigger).toHaveStyle({
+      width: `${tokens.touchTarget.min}px`,
+      height: `${tokens.touchTarget.min}px`,
+    })
+
+    // Prove the synchronous ref guard too, rather than relying only on the
+    // disabled DOM state installed after React flushes the first click.
+    trigger.removeAttribute('disabled')
+    fireEvent.click(trigger)
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    await act(async () =>
+      permission.resolve({
+        getTracks: () => [{ stop: mockTrackStop }],
+      } as unknown as MediaStream)
+    )
+    await waitFor(() => expect(view.getByRole('button', { name: 'stopRecording' })).toBeEnabled())
+  })
+
+  it('releases permission granted after the recorder becomes disabled', async () => {
+    const permission = deferred<MediaStream>()
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: jest.fn().mockReturnValue(permission.promise) },
+    })
+    const view = render(<VoiceRecorder onVoiceRecorded={mockOnVoiceRecorded} />)
+
+    fireEvent.click(view.getByRole('button', { name: 'voiceMessage' }))
+    view.rerender(<VoiceRecorder onVoiceRecorded={mockOnVoiceRecorded} disabled />)
+    await act(async () =>
+      permission.resolve({
+        getTracks: () => [{ stop: mockTrackStop }],
+      } as unknown as MediaStream)
+    )
+
+    await waitFor(() => expect(mockTrackStop).toHaveBeenCalledTimes(1))
+    expect(view.queryByRole('button', { name: 'stopRecording' })).not.toBeInTheDocument()
     expect(mockOnVoiceRecorded).not.toHaveBeenCalled()
   })
 })
