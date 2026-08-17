@@ -10,7 +10,7 @@ describe('ModuleDegraded', () => {
   it('distinguishes an unavailable module from an in-flight load', () => {
     render(<ModuleDegraded />)
 
-    const status = screen.getByRole('status')
+    const status = screen.getByRole('status', { name: 'moduleDataUnavailable' })
     expect(status).toHaveAttribute('aria-live', 'polite')
     expect(status).toHaveAttribute('aria-atomic', 'true')
     expect(status).toHaveTextContent('moduleDataUnavailable')
@@ -44,7 +44,7 @@ describe('ModuleDegraded', () => {
     const onRetry = jest.fn()
     render(<ModuleRefreshFailureNotice isRetrying onRetry={onRetry} />)
 
-    const status = screen.getByRole('status')
+    const status = screen.getByRole('status', { name: 'moduleRefreshFailed' })
     expect(status).toHaveTextContent('moduleRefreshFailed')
     const retry = screen.getByRole('button', { name: 'loading' })
     expect(retry).toBeDisabled()

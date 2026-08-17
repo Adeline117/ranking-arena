@@ -37,6 +37,7 @@ export default function ModuleDegraded({
       role="status"
       aria-live="polite"
       aria-atomic="true"
+      aria-label={t('moduleDataUnavailable')}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -106,6 +107,7 @@ export function ModuleRefreshFailureNotice({
       role="status"
       aria-live="polite"
       aria-atomic="true"
+      aria-label={t(messageKey)}
       style={{
         display: 'flex',
         alignItems: 'center',
