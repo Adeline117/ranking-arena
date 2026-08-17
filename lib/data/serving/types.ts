@@ -93,7 +93,7 @@ export interface TraderFirstScreenResponse {
   is_verified_data: boolean
 }
 
-export type CoreCacheState = 'warm' | 'cold-fetched' | 'pending'
+export type CoreCacheState = 'warm' | 'cold-fetched' | 'pending' | 'quarantined'
 
 /** One on-demand request per timeframe (spec §2.4-2). */
 export interface TraderCoreModules {
@@ -107,9 +107,8 @@ export interface TraderCoreModules {
   cacheState: CoreCacheState
 }
 
-/** /core route payload: full modules, or a pending shell while Tier-C runs.
- *  A stale hit returns the stale TraderCoreModules with cacheState 'pending'
- *  (data renders immediately, the client keeps polling for fresh). */
+/** /core route payload: full modules, a pending shell, or the temporary
+ * structural-empty public projection while historical core evidence is absent. */
 export type TraderCoreResponse =
   | TraderCoreModules
   | { timeframe: ServingTimeframe; cacheState: 'pending' }
