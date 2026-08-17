@@ -204,11 +204,6 @@ function RankingTableInner(props: {
   const [rankSeries, setRankSeries] = useState<Record<string, number[]>>({})
   // Keys already requested (success keeps them; abort/failure releases for retry).
   const requestedSeriesKeysRef = useRef<Set<string>>(new Set())
-  // Equity-trend sparkline for the DESKTOP table ROI cell (`${period}:${platform}:
-  // ${key}` → account_value points). Separate from rankSeries (card rank-trend);
-  // fetched non-blocking per page, absent keys keep the bare ROI number.
-  const [equitySeries, setEquitySeries] = useState<Record<string, number[]>>({})
-  const requestedEquityKeysRef = useRef<Set<string>>(new Set())
 
   // useDeferredValue allows React to interrupt the expensive 50-row render during hydration.
   // During loading state, show immediate (empty/skeleton) data.
@@ -644,59 +639,6 @@ function RankingTableInner(props: {
   const startIndex = hasServerPagination ? 0 : (currentPage - 1) * itemsPerPage
   const endIndex = hasServerPagination ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
-  // Equity-trend sparkline for the DESKTOP table ROI cell. Non-blocking, one POST
-  // per page of visible rows, streams into equitySeries. Mirrors the card-view
-  // rank-history fetch (never N+1, failure leaves the numeric fallback intact).
-  useEffect(() => {
-    if (viewMode !== 'table') return
-    const release = (keys: string[]) => {
-      for (const k of keys) requestedEquityKeysRef.current.delete(k)
-    }
-    const toFetch: { platform: string; trader_key: string }[] = []
-    for (const tr of paginatedTraders) {
-      const platform = tr.source || source || ''
-      if (!platform || !tr.id) continue
-      const cacheKey = `${seriesPeriod}:${platform}:${tr.id}`
-      if (requestedEquityKeysRef.current.has(cacheKey)) continue
-      requestedEquityKeysRef.current.add(cacheKey)
-      toFetch.push({ platform, trader_key: tr.id })
-    }
-    if (toFetch.length === 0) return
-
-    const controller = new AbortController()
-    ;(async () => {
-      for (let i = 0; i < toFetch.length; i += 60) {
-        const chunk = toFetch.slice(i, i + 60)
-        const chunkKeys = chunk.map((c) => `${seriesPeriod}:${c.platform}:${c.trader_key}`)
-        try {
-          const res = await fetch('/api/traders/sparklines', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-            body: JSON.stringify({ traders: chunk, period: seriesPeriod }),
-            signal: controller.signal,
-          })
-          if (!res.ok) {
-            release(chunkKeys)
-            continue
-          }
-          const map = (await res.json()) as Record<string, number[]>
-          if (controller.signal.aborted) {
-            release(chunkKeys)
-            return
-          }
-          const prefixed: Record<string, number[]> = {}
-          for (const [k, v] of Object.entries(map)) prefixed[`${seriesPeriod}:${k}`] = v
-          if (Object.keys(prefixed).length > 0) {
-            setEquitySeries((prev) => ({ ...prev, ...prefixed }))
-          }
-        } catch {
-          release(chunkKeys)
-          if (controller.signal.aborted) return
-        }
-      }
-    })()
-    return () => controller.abort()
-  }, [viewMode, paginatedTraders, seriesPeriod, source])
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -1470,11 +1412,6 @@ function RankingTableInner(props: {
                             getPnLTooltipFn={getPnLTooltip}
                             isExpanded={expandedRowId === trader.id}
                             onToggleExpand={handleToggleExpand}
-                            roiSpark={
-                              equitySeries[
-                                `${seriesPeriod}:${trader.source || source || ''}:${trader.id}`
-                              ]
-                            }
                           />
                         </SectionErrorBoundary>
                       </div>

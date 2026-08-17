@@ -78,8 +78,6 @@ export interface TraderRowProps {
   getPnLTooltipFn: (source: string, lang: string) => string
   isExpanded?: boolean
   onToggleExpand?: (id: string) => void
-  /** Equity-trend points for the ROI-cell sparkline (absent → numeric fallback). */
-  roiSpark?: number[]
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -96,7 +94,6 @@ export const TraderRow = memo(
     getPnLTooltipFn,
     isExpanded,
     onToggleExpand,
-    roiSpark,
   }: TraderRowProps) {
     const { t } = useLanguage()
     // A row can also be rendered outside RankingTable, so keep the score
@@ -328,7 +325,6 @@ export const TraderRow = memo(
                 language={language}
                 getPnLTooltipFn={getPnLTooltipFn}
                 t={t}
-                roiSpark={roiSpark}
               />
             </Box>
           </Link>
@@ -385,6 +381,5 @@ export const TraderRow = memo(
   (prev, next) =>
     areTraderPropsEqual(prev, next) &&
     prev.source === next.source &&
-    prev.isExpanded === next.isExpanded &&
-    prev.roiSpark === next.roiSpark
+    prev.isExpanded === next.isExpanded
 )

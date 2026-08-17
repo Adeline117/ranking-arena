@@ -1,7 +1,7 @@
 import React from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useTraderCore } from '../useTraderCore'
+import { traderCoreQueryKey, useTraderCore } from '../useTraderCore'
 import { fetcher } from '@/lib/hooks/fetchers'
 import type { ApiSuccessResponse } from '@/lib/types/index'
 import type { TraderCoreModules, TraderCoreResponse } from '@/lib/data/serving/types'
@@ -25,6 +25,16 @@ function response(data: TraderCoreResponse): ApiSuccessResponse<TraderCoreRespon
 }
 
 describe('useTraderCore timeframe identity', () => {
+  it('uses a new query epoch so an open SPA cannot replay legacy raw core data', () => {
+    expect(traderCoreQueryKey('gmx', '0x123', 90)).toEqual([
+      'trader-core',
+      'history-quarantine-v1',
+      'gmx',
+      '0x123',
+      90,
+    ])
+  })
+
   it('never exposes the previous timeframe while a cold selection is loading', async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },

@@ -73,7 +73,8 @@ describe('/api/trader/onchain-enrich quality-aware freshness', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ status: 'enriched', rows: 1 })
+    await expect(response.json()).resolves.toEqual({ status: 'enriched' })
+    expect(response.headers).toMatchObject({ 'Cache-Control': 'no-store' })
     expect(mockEnrich).toHaveBeenCalledTimes(1)
   })
 
@@ -96,6 +97,7 @@ describe('/api/trader/onchain-enrich quality-aware freshness', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ status: 'fresh', skipped: true })
+    expect(response.headers).toMatchObject({ 'Cache-Control': 'no-store' })
     expect(mockEnrich).not.toHaveBeenCalled()
     expect(mockRpc).toHaveBeenCalledTimes(1)
   })
@@ -142,6 +144,7 @@ describe('/api/trader/onchain-enrich quality-aware freshness', () => {
 
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({ error: 'enrich_failed' })
+    expect(response.headers).toMatchObject({ 'Cache-Control': 'no-store' })
     expect(mockIsQuotaExhausted).toHaveBeenCalledWith('parser invariant broken')
   })
 })
