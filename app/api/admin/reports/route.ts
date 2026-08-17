@@ -1,30 +1,68 @@
 import { NextResponse } from 'next/server'
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
-import { success as apiSuccess } from '@/lib/api/response'
+import { successWithPagination } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 import { parseReportEvidenceRef, signReportEvidenceRefs } from '@/lib/reports/evidence'
+import { parseLimit, parsePage } from '@/lib/utils/safe-parse'
 
 const _logger = createLogger('api:admin-reports')
 
 export const dynamic = 'force-dynamic'
 
+const REPORT_STATUSES = ['pending', 'resolved', 'dismissed'] as const
+const REPORT_CONTENT_TYPES = ['post', 'comment', 'message', 'user'] as const
+
+function readFilter<T extends string>(
+  value: string | null,
+  allowed: readonly T[],
+  fallback: T | 'all',
+  label: string
+): T | 'all' {
+  const candidate = value ?? fallback
+  if (candidate === 'all' || allowed.includes(candidate as T)) return candidate as T | 'all'
+  throw ApiError.validation(`Invalid ${label}`)
+}
+
 export const GET = withAdminAuth(
   async ({ supabase, request }) => {
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') || 'pending'
+    const page = parsePage(searchParams.get('page'))
+    const limit = parseLimit(searchParams.get('limit'), 20, 100)
+    const offset = (page - 1) * limit
+    const status = readFilter(
+      searchParams.get('status'),
+      REPORT_STATUSES,
+      'pending',
+      'report status'
+    )
+    const contentType = readFilter(
+      searchParams.get('content_type'),
+      REPORT_CONTENT_TYPES,
+      'all',
+      'report content type'
+    )
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('content_reports')
       .select(
-        'id, content_type, content_id, reporter_id, reason, description, images, status, created_at, resolved_by, resolved_at, action_taken'
+        'id, content_type, content_id, reporter_id, reason, description, images, status, created_at, resolved_by, resolved_at, action_taken',
+        { count: 'exact' }
       )
-      .eq('status', status)
+
+    if (status !== 'all') query = query.eq('status', status)
+    if (contentType !== 'all') query = query.eq('content_type', contentType)
+
+    const { data, count, error } = await query
       .order('created_at', { ascending: false })
-      .limit(100)
+      .order('id', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (error) {
       throw ApiError.database('Database operation failed')
+    }
+    if (!Number.isSafeInteger(count) || (count as number) < 0) {
+      throw ApiError.database('Invalid report count')
     }
 
     const reports = data || []
@@ -76,7 +114,14 @@ export const GET = withAdminAuth(
       }
     })
 
-    return apiSuccess(response, 200, { 'Cache-Control': 'private, no-store' })
+    const result = successWithPagination(response, {
+      limit,
+      offset,
+      has_more: (count as number) > offset + limit,
+      total: count as number,
+    })
+    result.headers.set('Cache-Control', 'private, no-store')
+    return result
   },
   { name: 'admin-reports-get' }
 )

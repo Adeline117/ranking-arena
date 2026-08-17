@@ -74,12 +74,19 @@ const REPORTER_ID = '11111111-1111-4111-8111-111111111111'
 const EVIDENCE_FILE = '0123456789abcdef.png'
 const EVIDENCE_REF = `reports/${REPORTER_ID}/${EVIDENCE_FILE}`
 
-function reportsQuery(result: { data: unknown; error: unknown }) {
+function reportsQuery(result: { data: unknown; error: unknown; count?: number | null }) {
   const chain: Record<string, jest.Mock> = {}
   chain.select = jest.fn(() => chain)
   chain.eq = jest.fn(() => chain)
   chain.order = jest.fn(() => chain)
-  chain.limit = jest.fn().mockResolvedValue(result)
+  chain.range = jest.fn().mockResolvedValue({
+    ...result,
+    count: Object.prototype.hasOwnProperty.call(result, 'count')
+      ? result.count
+      : Array.isArray(result.data)
+        ? result.data.length
+        : 0,
+  })
   return chain
 }
 
@@ -90,9 +97,9 @@ function profilesQuery(result: { data: unknown; error: unknown }) {
   return chain
 }
 
-function request() {
+function request(query = 'status=pending') {
   return {
-    url: 'http://localhost/api/admin/reports?status=pending',
+    url: `http://localhost/api/admin/reports?${query}`,
     method: 'GET',
   } as never
 }
@@ -150,7 +157,74 @@ describe('GET /api/admin/reports private evidence', () => {
       images: ['https://storage.test/signed/evidence'],
       reporter: { id: REPORTER_ID, handle: 'reporter', avatar_url: null },
     })
+    expect(body.meta.pagination).toEqual({ limit: 20, offset: 0, has_more: false, total: 1 })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
     expect(mockStorageFrom).toHaveBeenCalledWith('reports')
+  })
+
+  it('applies type filtering and one stable global page while treating all as no status filter', async () => {
+    const report = {
+      id: '22222222-2222-4222-8222-222222222222',
+      content_type: 'comment',
+      content_id: '33333333-3333-4333-8333-333333333333',
+      reporter_id: REPORTER_ID,
+      reason: 'spam',
+      description: null,
+      images: [EVIDENCE_REF],
+      status: 'resolved',
+      created_at: '2026-07-16T12:00:00.000Z',
+      resolved_by: 'admin-id',
+      resolved_at: '2026-07-16T12:01:00.000Z',
+      action_taken: 'content_deleted',
+    }
+    const reportQuery = reportsQuery({ data: [report], error: null, count: 45 })
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'content_reports') return reportQuery
+      if (table === 'user_profiles') return profilesQuery({ data: [], error: null })
+      throw new Error(`Unexpected table: ${table}`)
+    })
+    mockCreateSignedUrls.mockResolvedValue({
+      data: [
+        {
+          path: `${REPORTER_ID}/${EVIDENCE_FILE}`,
+          signedUrl: 'https://storage.test/signed/evidence',
+          error: null,
+        },
+      ],
+      error: null,
+    })
+
+    const response = await GET(request('page=2&limit=20&status=all&content_type=comment'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(reportQuery.select).toHaveBeenCalledWith(expect.any(String), { count: 'exact' })
+    expect(reportQuery.eq).toHaveBeenCalledTimes(1)
+    expect(reportQuery.eq).toHaveBeenCalledWith('content_type', 'comment')
+    expect(reportQuery.order).toHaveBeenNthCalledWith(1, 'created_at', { ascending: false })
+    expect(reportQuery.order).toHaveBeenNthCalledWith(2, 'id', { ascending: false })
+    expect(reportQuery.range).toHaveBeenCalledWith(20, 39)
+    expect(body.meta.pagination).toEqual({ limit: 20, offset: 20, has_more: true, total: 45 })
+  })
+
+  it.each(['status=reviewed', 'status=pending&content_type=video'])(
+    'rejects unsupported filters before querying: %s',
+    async (query) => {
+      const response = await GET(request(query))
+
+      expect(response.status).toBe(400)
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(mockStorageFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it('fails closed when the exact count acknowledgement is absent', async () => {
+    mockFrom.mockReturnValue(reportsQuery({ data: [], error: null, count: null }))
+
+    const response = await GET(request())
+
+    expect(response.status).toBe(500)
+    expect(mockStorageFrom).not.toHaveBeenCalled()
   })
 
   it('does not query or sign evidence for a non-admin request', async () => {

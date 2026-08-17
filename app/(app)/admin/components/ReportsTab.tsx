@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
+import { useToast } from '@/app/components/ui/Toast'
 import { useReports } from '../hooks/useReports'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -12,8 +13,17 @@ interface ReportsTabProps {
 }
 
 export default function ReportsTab({ accessToken }: ReportsTabProps) {
-  const { reports, pagination, loading, actionLoading, loadReports, resolveReport } =
-    useReports(accessToken)
+  const { showToast } = useToast()
+  const {
+    reports,
+    pagination,
+    loading,
+    error,
+    actionLoading,
+    loadReports,
+    resolveReport,
+    canResolveReport,
+  } = useReports(accessToken, showToast)
   const { t } = useLanguage()
 
   const REASON_LABELS: Record<string, string> = {
@@ -110,6 +120,19 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
       {loading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
           <Text color="tertiary">{t('loading')}</Text>
+        </Box>
+      ) : error ? (
+        <Box
+          role="alert"
+          style={{
+            padding: tokens.spacing[4],
+            border: `1px solid ${tokens.colors.accent.error}`,
+            borderRadius: tokens.radius.md,
+          }}
+        >
+          <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+            {error}
+          </Text>
         </Box>
       ) : reports.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
@@ -267,15 +290,17 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 {/* Actions */}
                 {report.status === 'pending' && (
                   <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => resolveReport(report.id, 'resolve')}
-                      disabled={actionLoading[report.id]}
-                      style={{ background: tokens.colors.accent.error }}
-                    >
-                      {actionLoading[report.id] ? t('processing') : t('adminDeleteContent')}
-                    </Button>
+                    {canResolveReport(report) && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => resolveReport(report.id, 'resolve')}
+                        disabled={actionLoading[report.id]}
+                        style={{ background: tokens.colors.accent.error }}
+                      >
+                        {actionLoading[report.id] ? t('processing') : t('adminDeleteContent')}
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       size="sm"
