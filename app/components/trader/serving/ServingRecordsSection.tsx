@@ -124,7 +124,6 @@ function ModulePendingState({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-busy="true"
       data-module-state={state}
       data-copier-state={isCopier ? state : undefined}
     >

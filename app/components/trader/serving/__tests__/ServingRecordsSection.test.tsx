@@ -166,7 +166,6 @@ describe('ServingRecordsSection selection scope', () => {
     )
 
     const status = screen.getByRole('status', { name: 'moduleDataPending' })
-    expect(status).toHaveAttribute('aria-busy', 'true')
     expect(status).toHaveAttribute('data-module-state', 'pending')
     expect(status).toHaveAttribute('data-copier-state', 'pending')
   })
@@ -199,7 +198,6 @@ describe('ServingRecordsSection selection scope', () => {
     )
 
     const status = screen.getByRole('status', { name: 'moduleDataPending' })
-    expect(status).toHaveAttribute('aria-busy', 'true')
     expect(status).toHaveAttribute('data-module-state', 'pending')
     expect(status).not.toHaveAttribute('data-copier-state')
   })
