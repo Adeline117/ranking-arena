@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import SwipeableView from '../SwipeableView'
 
 describe('SwipeableView accessibility', () => {
@@ -62,5 +63,17 @@ describe('SwipeableView accessibility', () => {
     expect(thirdPane).toHaveAttribute('aria-hidden', 'false')
     expect(thirdPane).not.toHaveAttribute('inert')
     expect(screen.getByRole('button', { name: 'Third panel action' })).toBeInTheDocument()
+  })
+
+  it('renders its shell during SSR before browser-only measurement starts', () => {
+    const markup = renderToStaticMarkup(
+      <SwipeableView activeIndex={0} onIndexChange={jest.fn()}>
+        <div>Overview SSR content</div>
+        <div>Stats deferred content</div>
+      </SwipeableView>
+    )
+
+    expect(markup).toContain('Overview SSR content')
+    expect(markup).toContain('data-swipeable-pane="0"')
   })
 })

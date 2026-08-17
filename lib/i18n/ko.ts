@@ -6049,6 +6049,7 @@ const ko = {
   quizQ30D: '컨센서스를 이기는 것. 남들이 놓친 것을 보고 수익을 내는 것',
 
   // ── ARENA_DATA_SPEC v1.2 서빙 레이어（spec §2.4/§6）──
+  leaderboardSnapshot: '리더보드 스냅샷',
   provenanceSource: '데이터 출처',
   provenanceTracked: '추적 데이터',
   provenanceTrackedTip:

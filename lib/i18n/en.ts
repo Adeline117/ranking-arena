@@ -6170,6 +6170,7 @@ const en = {
   winrate: 'Win Rate',
 
   // ── ARENA_DATA_SPEC v1.2 serving layer (spec §2.4/§6) ──
+  leaderboardSnapshot: 'Leaderboard snapshot',
   provenanceSource: 'Source',
   provenanceAsOf: 'as of',
   recordProvenanceSourceAsOf: 'source data as of',

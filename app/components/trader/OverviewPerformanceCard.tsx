@@ -4,7 +4,12 @@ import { useState, useEffect, useRef } from 'react'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import type { TraderPerformance } from '@/lib/data/trader'
-import { PeriodSelector, type Period, type PeriodAvailability } from './performance/PeriodSelector'
+import { PeriodSelector } from './performance/PeriodSelector'
+import {
+  resolveAvailablePeriod,
+  type Period,
+  type PeriodAvailability,
+} from './performance/period-availability'
 import { HeroMetrics } from './performance/HeroMetrics'
 import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
@@ -132,10 +137,7 @@ export default function OverviewPerformanceCard({
     ? ((['90D', '30D', '7D'] as const).find((candidate) => availability[candidate] !== 'absent') ??
       null)
     : null
-  const effectivePeriod =
-    availability?.[period] === 'absent' && preferredAvailablePeriod
-      ? preferredAvailablePeriod
-      : period
+  const effectivePeriod = resolveAvailablePeriod(period, availability)
   const noCoreTimeframeAvailable = availability !== undefined && preferredAvailablePeriod === null
   const selectedPeriodRef = useRef(effectivePeriod)
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

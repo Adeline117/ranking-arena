@@ -39,6 +39,8 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import ServingCoreStatusNotice from '@/app/components/trader/serving/ServingCoreStatusNotice'
 import ServingOverviewCoreSkeleton from '@/app/components/trader/serving/ServingOverviewCoreSkeleton'
+import ServingFirstScreenPerformance from '@/app/components/trader/serving/ServingFirstScreenPerformance'
+import SwipeableView from '@/app/components/ui/SwipeableView'
 import LinkedAccountStatus from '@/app/components/trader/LinkedAccountStatus'
 import {
   isExactSourceNotServingError,
@@ -52,7 +54,12 @@ import {
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import DataProvenanceBadge from '@/app/components/trader/DataProvenanceBadge'
 import { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
-import type { PeriodAvailability } from '@/app/components/trader/performance/PeriodSelector'
+import {
+  isPeriodAvailable,
+  resolveAvailablePeriod,
+  type Period,
+  type PeriodAvailability,
+} from '@/app/components/trader/performance/period-availability'
 // MarketCorrelationCard removed -- beta_btc/beta_eth/alpha never computed by pipeline (P0-5)
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
@@ -63,18 +70,10 @@ import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { RankSparkline } from '@/app/components/ranking/RankSparkline'
 import { LEGACY_HISTORY_COMPLETENESS_UNKNOWN } from '@/lib/data/trader/history-quarantine'
 
-// Memoized tab components — each wraps its own subtree so SWR revalidations
-// on one tab don't cause reconciliation of the others.
-//
-// Code-split: these render ONLY in the legacy (!isServing) branch, and even
-// there they live inside the ssr:false SwipeableView — so they never SSR.
-// Static imports shipped the entire legacy tab tree (Overview pulls
-// AdvancedMetricsCard + multiple charts, ~hundreds of KiB) into EVERY trader
-// page, including serving-mode pages (the majority, incl. the #1 trader) that
-// never render them — the dominant source of the page's unused-JS / high TTI.
-// dynamic() loads each tab's chunk only when it actually mounts.
+// Keep tab trees code-split. Overview is intentionally server-renderable: the
+// default serving surface can render Tier-A leaderboard facts before browser
+// /core requests start. Stats and Portfolio remain client-only until visited.
 const OverviewTab = dynamic(() => import('@/app/components/trader/tabs/OverviewTab'), {
-  ssr: false,
   loading: () => <RankingSkeleton />,
 })
 const StatsTab = dynamic(() => import('@/app/components/trader/tabs/StatsTab'), {
@@ -91,7 +90,6 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   loading: () => <RankingSkeleton />,
 })
 
-const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 // Serving-mode body (ARENA_DATA_SPEC v1.2 §2.4) — only loaded for sources
 // cut over to the arena.* read path; legacy bundles never pay for it.
 const ServingProfilePanel = dynamic(
@@ -1166,6 +1164,26 @@ export default function TraderProfileClient({
     servingViewCapability ?? null,
     useThreeTab && !suppressAccountContent
   )
+  const selectedServingPeriod = resolveAvailablePeriod(selectedPeriod, servingPeriodAvailability)
+  const selectedServingTimeframe =
+    selectedServingPeriod === '7D' ? 7 : selectedServingPeriod === '30D' ? 30 : 90
+  const hasSelectedServingCore = servingTab.coreModuleAvailability[selectedServingPeriod]
+  const hasAuthorityEligibleFirstScreenSnapshot = Boolean(
+    servingViewFirstScreen?.entries.some((entry) =>
+      isPeriodAvailable(`${entry.timeframe}D` as Period, servingPeriodAvailability)
+    )
+  )
+  const shouldRenderFirstScreenSnapshot =
+    useThreeTab &&
+    !suppressAccountContent &&
+    !hasSelectedServingCore &&
+    Boolean(servingViewCapability) &&
+    hasAuthorityEligibleFirstScreenSnapshot
+  const shouldRenderColdCoreSkeleton =
+    useThreeTab &&
+    !suppressAccountContent &&
+    !hasSelectedServingCore &&
+    (servingTab.isColdCoreLoading || servingTab.loading || servingTab.isCorePendingUpstream)
   // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
   // (bounded) instead of waiting for the 12h rotation, then refetch.
   const onchainEnrichmentState = useOnchainEnrichTrigger({
@@ -1612,7 +1630,7 @@ export default function TraderProfileClient({
                   )}
                   {/* §2.3 lead-meta strip — serving only; NULL-collapses to
                       null when no meta fields resolve (legacy renders nothing). */}
-                  {useThreeTab && !suppressAccountContent && (
+                  {useThreeTab && !suppressAccountContent && servingTab.hasCoreModules && (
                     <Box style={{ marginBottom: tokens.spacing[3] }}>
                       <TraderMetaStrip
                         extras={servingTab.metaExtras}
@@ -1641,7 +1659,13 @@ export default function TraderProfileClient({
                       />
                     </Box>
                   )}
-                  {useThreeTab && servingTab.isColdCoreLoading ? (
+                  {shouldRenderFirstScreenSnapshot ? (
+                    <ServingFirstScreenPerformance
+                      firstScreen={servingViewFirstScreen!}
+                      preferredTimeframe={selectedServingTimeframe}
+                      periodAvailability={servingPeriodAvailability}
+                    />
+                  ) : shouldRenderColdCoreSkeleton ? (
                     <ServingOverviewCoreSkeleton />
                   ) : (
                     <OverviewTab

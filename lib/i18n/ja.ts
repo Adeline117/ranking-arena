@@ -5817,6 +5817,7 @@ const ja = {
   quizQ30D: 'コンセンサスに打ち勝つこと。他人が見逃すものを見て利益にすること',
 
   // ── ARENA_DATA_SPEC v1.2 サービング層（spec §2.4/§6）──
+  leaderboardSnapshot: 'ランキングのスナップショット',
   provenanceSource: 'データ提供元',
   provenanceTracked: '追跡データ',
   provenanceTrackedTip:

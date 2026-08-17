@@ -6011,6 +6011,7 @@ const zh = {
   winrate: '胜率',
 
   // ── ARENA_DATA_SPEC v1.2 serving 层（spec §2.4/§6）──
+  leaderboardSnapshot: '排行榜快照',
   provenanceSource: '数据来源',
   provenanceTracked: '爬取数据',
   provenanceTrackedTip:

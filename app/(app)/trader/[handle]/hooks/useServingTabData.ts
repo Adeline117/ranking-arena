@@ -61,6 +61,11 @@ export interface ServingTabData {
    *  MetricGrid uses, so the default three-tab can render it too (M1/M2 unify). */
   gridStats: Record<string, number | string | null>
   gridCapabilityMetrics: string[]
+  /** At least one authoritative core module has arrived for this trader. */
+  hasCoreModules: boolean
+  /** Exact arrival state for each Overview period. Keeps a faster 7D response
+   *  from briefly replacing a truthful 90D first-screen snapshot with dashes. */
+  coreModuleAvailability: Record<'7D' | '30D' | '90D', boolean>
   /** At least one timeframe is still collecting a server-side refresh. */
   isCorePendingUpstream: boolean
   /** A failed refresh affects retained, still-visible core values. */
@@ -152,7 +157,15 @@ export function useServingTabData(
     core30Enabled ? c30 : null,
     core90Enabled ? c90 : null,
   ].filter((core): core is typeof c7 => core !== null)
-  const hasCoreModules = Boolean(m7 || m30 || m90)
+  const coreModuleAvailability = useMemo(
+    () => ({
+      '7D': Boolean(m7),
+      '30D': Boolean(m30),
+      '90D': Boolean(m90),
+    }),
+    [m7, m30, m90]
+  )
+  const hasCoreModules = Object.values(coreModuleAvailability).some(Boolean)
   const isCoreLoading = enabledCoreHooks.some((core) => core.isLoading)
   const isCoreDegraded = enabledCoreHooks.some((core) => core.isDegraded)
   const isCorePendingUpstream = enabledCoreHooks.some((core) => core.isPendingUpstream)
@@ -169,7 +182,10 @@ export function useServingTabData(
     enabledCoreHooks.length > 0 &&
     !hasCoreModules &&
     !isCoreUnavailable &&
-    (isCoreLoading || isCorePendingUpstream)
+    // React Query does not issue the /core request while server-rendering a
+    // client component. Treat that exact no-module server boundary as cold too,
+    // otherwise SSR would mistake its deliberate empty adapter shape for data.
+    (isCoreLoading || isCorePendingUpstream || typeof window === 'undefined')
 
   const { nickname, avatarSrc, entries, scores } = input
 
@@ -292,6 +308,8 @@ export function useServingTabData(
         // RPC's trader_stats column scan — allow them when present.
         ...EXTRAS_PROMOTABLE_KEYS,
       ],
+      hasCoreModules,
+      coreModuleAvailability,
       isCorePendingUpstream,
       isCoreStale,
       isCoreUnavailable,
@@ -314,6 +332,8 @@ export function useServingTabData(
     histRows,
     historyCompleteness,
     capability,
+    hasCoreModules,
+    coreModuleAvailability,
     isCorePendingUpstream,
     isCoreStale,
     isCoreUnavailable,

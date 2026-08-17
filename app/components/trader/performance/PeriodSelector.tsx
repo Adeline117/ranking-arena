@@ -5,8 +5,9 @@ import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
+import type { Period, PeriodAvailability } from './period-availability'
 
-export type Period = '7D' | '30D' | '90D'
+export type { Period, PeriodAvailability } from './period-availability'
 
 // Data source period mapping notes
 // Platforms that return cumulative (all-time) ROI instead of period-specific
@@ -38,9 +39,6 @@ export const DATA_SOURCE_NOTES: Record<
     },
   },
 }
-
-/** Serving-mode TF availability (spec §6): native | derived | absent. */
-export type PeriodAvailability = Partial<Record<Period, 'native' | 'derived' | 'absent'>>
 
 export interface PeriodSelectorProps {
   period: Period

@@ -150,6 +150,12 @@ describe('useServingTabData history completeness', () => {
     expect(view.result.current.isCorePendingUpstream).toBe(true)
     expect(view.result.current.isCoreStale).toBe(false)
     expect(view.result.current.isCoreUnavailable).toBe(false)
+    expect(view.result.current.hasCoreModules).toBe(false)
+    expect(view.result.current.coreModuleAvailability).toEqual({
+      '7D': false,
+      '30D': false,
+      '90D': false,
+    })
     expect(view.result.current.isColdCoreLoading).toBe(true)
   })
 
@@ -194,6 +200,12 @@ describe('useServingTabData history completeness', () => {
     )
 
     expect(view.result.current.isCorePendingUpstream).toBe(true)
+    expect(view.result.current.hasCoreModules).toBe(true)
+    expect(view.result.current.coreModuleAvailability).toEqual({
+      '7D': false,
+      '30D': false,
+      '90D': true,
+    })
     expect(view.result.current.isColdCoreLoading).toBe(false)
   })
 

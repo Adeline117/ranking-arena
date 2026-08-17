@@ -250,6 +250,12 @@ const enCore = {
   livePositions: 'Live Positions',
   totalPnl: 'Total PnL',
   leaderboardBreadcrumb: 'Leaderboard',
+  leaderboardSnapshot: 'Leaderboard snapshot',
+  provenanceTracked: 'Tracked',
+  provenanceAsOf: 'as of',
+  derivedBoardBadge: 'Derived',
+  derivedBoardTooltip:
+    'Derived from profile data — coverage is limited to recently ranked traders.',
 
   // ── Time / Freshness ────────────────────────────────────────────────
   secondsAgo: 'seconds ago',

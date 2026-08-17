@@ -1,6 +1,7 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { PeriodSelector } from '../PeriodSelector'
+import { resolveAvailablePeriod } from '../period-availability'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key, language: 'en' }),
@@ -57,5 +58,12 @@ describe('PeriodSelector source semantics', () => {
 
     expect(onPeriodChange).toHaveBeenCalledTimes(1)
     expect(onPeriodChange).toHaveBeenCalledWith('30D')
+  })
+
+  it('normalizes an unavailable default period before the detailed core card mounts', () => {
+    const thirtyDayOnly = { '7D': 'absent', '30D': 'native', '90D': 'absent' } as const
+
+    expect(resolveAvailablePeriod('90D', thirtyDayOnly)).toBe('30D')
+    expect(resolveAvailablePeriod('30D', thirtyDayOnly)).toBe('30D')
   })
 })
