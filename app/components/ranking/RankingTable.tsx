@@ -69,6 +69,44 @@ import { useDebounce } from '@/lib/hooks/useDebounce'
 
 // ExportRankingButton moved to RankingFilters.tsx
 
+/**
+ * Historical rank points need their own publication proof. In particular, do
+ * not accept the legacy bare `{ "source:trader": [rank] }` payload: a stale
+ * browser/CDN response in that shape predates the no-store history boundary.
+ */
+function parseVerifiedRankHistorySeries(value: unknown): Record<string, number[]> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const payload = value as Record<string, unknown>
+  if (payload.ranking_visibility !== 'verified') return null
+
+  const rawSeries = payload.series
+  if (!rawSeries || typeof rawSeries !== 'object' || Array.isArray(rawSeries)) return null
+
+  const series: Record<string, number[]> = {}
+  for (const [key, points] of Object.entries(rawSeries)) {
+    if (!Array.isArray(points) || !points.every((point) => Number.isInteger(point) && point > 0)) {
+      return null
+    }
+    series[key] = points
+  }
+  return series
+}
+
+function removeRankSeriesKeys(
+  current: Record<string, number[]>,
+  keys: readonly string[]
+): Record<string, number[]> {
+  let changed = false
+  const next = { ...current }
+  for (const key of keys) {
+    if (key in next) {
+      delete next[key]
+      changed = true
+    }
+  }
+  return changed ? next : current
+}
+
 /** Infinite scroll sentinel — triggers onVisible when scrolled into view */
 function CardLoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -548,10 +586,19 @@ function RankingTableInner(props: {
             release(chunkKeys)
             continue
           }
-          const map = (await res.json()) as Record<string, number[]>
+          const payload: unknown = await res.json()
           if (controller.signal.aborted) {
             release(chunkKeys)
             return
+          }
+          const map = parseVerifiedRankHistorySeries(payload)
+          if (!map) {
+            // Expire any old in-memory series for the visible cards. The
+            // request itself may have crossed a deployment where rank_history
+            // was formerly cacheable, so leaving the previous state would
+            // still replay a raw sparkline after the server fails closed.
+            setRankSeries((prev) => removeRankSeriesKeys(prev, chunkKeys))
+            continue
           }
           // Re-key under the active period before merging into state.
           const prefixed: Record<string, number[]> = {}

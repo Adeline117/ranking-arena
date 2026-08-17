@@ -582,6 +582,10 @@ export function parseExactRankHistory(
     root?.platform !== platform ||
     root.trader_key !== traderKey ||
     root.period !== '90D' ||
+    // A matching identity alone cannot authenticate historical observations.
+    // Legacy rank_history responses omit this proof marker and are deliberately
+    // rejected so a browser/React Query cache cannot replay old sparklines.
+    root.ranking_visibility !== 'verified' ||
     !Array.isArray(root.history)
   ) {
     return null

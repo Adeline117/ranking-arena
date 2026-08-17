@@ -64,9 +64,10 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }))
 
+const mockSupabaseFrom = jest.fn(() => ({}))
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
-    from: jest.fn(() => ({})),
+    from: mockSupabaseFrom,
   })),
 }))
 
@@ -188,6 +189,7 @@ describe('GET /api/traders/[handle]', () => {
     mockGetAggregatedStats.mockResolvedValue(null)
     mockFindUserByTrader.mockResolvedValue(null)
     mockVerifyCronSecret.mockReturnValue(false)
+    mockSupabaseFrom.mockClear()
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
   })
@@ -383,6 +385,44 @@ describe('GET /api/traders/[handle]', () => {
     expect(JSON.stringify(body.data.aggregate)).not.toMatch(
       /private-user-id|Owner private label|Another private label|50000|75000/
     )
+  })
+
+  it('returns an explicitly partial empty rank history without querying raw snapshots', async () => {
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'binance_futures',
+      traderKey: 'rank-history-subject',
+    })
+    mockGetTraderDetail.mockResolvedValueOnce({ trader: {} })
+    mockToTraderPageData.mockReturnValueOnce({
+      performance: { roi: 42.5 },
+      profile: { handle: 'RankHistorySubject' },
+    })
+
+    const response = await GET(
+      mockReq(
+        'http://localhost/api/traders/RankHistorySubject?include=rank_history&rh_period=90D&rh_days=7'
+      ) as any,
+      { params: Promise.resolve({ handle: 'RankHistorySubject' }) }
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data.rank_history).toEqual({
+      history: [],
+      platform: 'binance_futures',
+      trader_key: 'rank-history-subject',
+      period: '90D',
+      ranking_visibility: 'partial',
+      ranking_visibility_reason: 'historical_rank_evidence_unavailable',
+      ranking_visibility_reasons: ['historical_rank_evidence_unavailable'],
+      history_completeness: {
+        state: 'unknown',
+        reason: 'historical_rank_evidence_unavailable',
+      },
+    })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(mockSupabaseFrom).not.toHaveBeenCalled()
   })
 
   it('keeps aggregate fixture output allowlisted and no-store', async () => {

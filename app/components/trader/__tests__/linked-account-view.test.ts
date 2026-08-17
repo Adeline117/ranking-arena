@@ -643,6 +643,7 @@ describe('parseExactRankHistory', () => {
     platform: 'bitunix_futures',
     trader_key: 'secondary',
     period: '90D',
+    ranking_visibility: 'verified',
     history: [{ date: '2026-07-29', rank: 7, arena_score: 88 }],
   }
 
@@ -656,6 +657,23 @@ describe('parseExactRankHistory', () => {
     expect(
       parseExactRankHistory(
         { ...payload, history: [{ date: '2026-07-29', rank: 0, arena_score: 88 }] },
+        'bitunix_futures',
+        'secondary'
+      )
+    ).toBeNull()
+  })
+
+  it('rejects legacy or partial history even when its subject is exact', () => {
+    expect(
+      parseExactRankHistory(
+        { ...payload, ranking_visibility: 'partial' },
+        'bitunix_futures',
+        'secondary'
+      )
+    ).toBeNull()
+    expect(
+      parseExactRankHistory(
+        { ...payload, ranking_visibility: undefined },
         'bitunix_futures',
         'secondary'
       )
