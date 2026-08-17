@@ -16,6 +16,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
+import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
 
 const log = createLogger('cron:auto-post-market-summary')
 
@@ -29,6 +30,9 @@ export const maxDuration = 60
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
 const SYSTEM_DISPLAY_NAME = 'Arena Bot'
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
+const PUBLIC_RANKING_COLUMNS =
+  'season_id,source,source_trader_id,handle,roi,pnl,arena_score,rank,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
 interface MarketPrice {
   symbol: string
@@ -74,7 +78,13 @@ const handler = withCron('auto-post-market-summary', async (_request: NextReques
   ])
 
   // Generate post content
-  const { title, content } = generateMarketPost(prices, topPerformers, trendingTraders)
+  const rankingContentUnavailable = topPerformers.length === 0 && trendingTraders.length === 0
+  if (prices.length === 0 && rankingContentUnavailable) {
+    return { count: 0, skipped: true, reason: 'public ranking cohort unavailable' }
+  }
+  const { title, content } = generateMarketPost(prices, topPerformers, trendingTraders, {
+    rankingContentUnavailable,
+  })
 
   // Insert post
   const { data: post, error: insertError } = await supabase
@@ -168,43 +178,76 @@ async function fetchMarketPrices(supabase: AnySupabase): Promise<MarketPrice[]> 
 }
 
 async function fetchTopPerformers(supabase: AnySupabase): Promise<TopTrader[]> {
-  // leaderboard_ranks 有 handle/roi（无 display_name/roi_pct——旧 select 会 400→空段）
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source, source_trader_id, arena_score, roi')
+  const { data, error } = await supabase
+    .from(PUBLIC_RANKED_LEADERBOARD as never)
+    .select(PUBLIC_RANKING_COLUMNS)
     .eq('season_id', '7D')
-    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(3)
 
-  return (data || []).map((row) => ({
-    display_name: null,
-    handle: row.handle,
-    source: row.source,
-    source_trader_id: row.source_trader_id,
-    arena_score: Number(row.arena_score ?? 0),
-    roi_pct: row.roi != null ? Number(row.roi) : null,
-  }))
+  if (error) {
+    log.warn('Verified top-performer cohort unavailable', { error: error.message })
+    return []
+  }
+  return verifiedTopTraders(data ?? [], '7D')
 }
 
 async function fetchTrendingTraders(supabase: AnySupabase): Promise<TopTrader[]> {
-  // Trending = highest view count from trader_details in last 24h, or fallback to top by followers
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source, source_trader_id, arena_score, roi')
+  // Keep this distinct from the 7D performer segment without ever sourcing
+  // public content from an unsealed score page.
+  const { data, error } = await supabase
+    .from(PUBLIC_RANKED_LEADERBOARD as never)
+    .select(PUBLIC_RANKING_COLUMNS)
     .eq('season_id', '30D')
-    .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .range(3, 5) // offset to get different traders from top performers
 
-  return (data || []).map((row) => ({
-    display_name: null,
-    handle: row.handle,
-    source: row.source,
-    source_trader_id: row.source_trader_id,
-    arena_score: Number(row.arena_score ?? 0),
-    roi_pct: row.roi != null ? Number(row.roi) : null,
-  }))
+  if (error) {
+    log.warn('Verified trending cohort unavailable', { error: error.message })
+    return []
+  }
+  return verifiedTopTraders(data ?? [], '30D')
+}
+
+function verifiedTopTraders(rows: unknown[], period: '7D' | '30D'): TopTrader[] {
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rows, period },
+    { expectedPeriod: period }
+  ) as { traders?: unknown[]; ranking_visibility?: unknown }
+
+  if (
+    sanitized.ranking_visibility === 'partial' ||
+    sanitized.ranking_visibility === 'unknown' ||
+    sanitized.ranking_visibility === 'error' ||
+    !Array.isArray(sanitized.traders) ||
+    sanitized.traders.length === 0
+  ) {
+    return []
+  }
+
+  const traders: TopTrader[] = []
+  for (const row of sanitized.traders) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) return []
+    const record = row as Record<string, unknown>
+    if (
+      typeof record.source !== 'string' ||
+      typeof record.source_trader_id !== 'string' ||
+      typeof record.arena_score !== 'number' ||
+      !Number.isFinite(record.arena_score) ||
+      (record.roi !== null && (typeof record.roi !== 'number' || !Number.isFinite(record.roi)))
+    ) {
+      return []
+    }
+    traders.push({
+      display_name: null,
+      handle: typeof record.handle === 'string' ? record.handle : null,
+      source: record.source,
+      source_trader_id: record.source_trader_id,
+      arena_score: record.arena_score,
+      roi_pct: record.roi,
+    })
+  }
+  return traders
 }
 
 function formatPrice(price: number): string {
@@ -228,7 +271,8 @@ function formatTraderName(t: TopTrader): string {
 function generateMarketPost(
   prices: MarketPrice[],
   topPerformers: TopTrader[],
-  trendingTraders: TopTrader[]
+  trendingTraders: TopTrader[],
+  { rankingContentUnavailable }: { rankingContentUnavailable: boolean }
 ): { title: string; content: string } {
   const now = new Date()
   const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -276,6 +320,12 @@ function generateMarketPost(
       return `🔥 ${formatTraderName(t)} — Score: ${t.arena_score.toFixed(1)}${roi}`
     })
     sections.push(`**Trending Traders (30D) / 热门交易员**\n${trendingLines.join('\n')}`)
+  }
+
+  if (rankingContentUnavailable) {
+    sections.push(
+      '**Ranking Coverage / 排名覆盖说明**\nVerified ranking evidence is unavailable, so no trader ranking metrics are included. / 排名证据暂不可验证，本文未包含交易员排名指标。'
+    )
   }
 
   // Footer

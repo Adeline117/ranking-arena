@@ -2,9 +2,9 @@
  * Cron: Auto-post weekly recap (P5 社区内容厚度, 2026-07-10)
  * Schedule: 0 9 * * 1 (Mondays 09:00 UTC) — see vercel.json
  *
- * 精简版周报(不复活被删的 1192 行 auto-post-insights):7D 收益榜可信
- * Top 5(leaderboard_ranks 直查 + 可信度过滤)+ 双语。与日报同一
- * system user、同一防重模式(本周已发即跳过)。
+ * 精简版周报(不复活被删的 1192 行 auto-post-insights):仅在已封存的
+ * 7D 公开 cohort 完整可验证时发布 Top 5；与日报同一 system user、同一
+ * 防重模式(本周已发即跳过)。
  */
 
 import { NextRequest } from 'next/server'
@@ -12,13 +12,16 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { withCron } from '@/lib/api/with-cron'
 import { platformLabel } from '@/lib/constants/platform-labels'
+import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
 
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
+const PUBLIC_RANKING_COLUMNS =
+  'season_id,source,source_trader_id,handle,roi,pnl,arena_score,rank,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,trader_type'
 
-// 数据源 = public.leaderboard_ranks(7D season,serving 表)直查。
-// 曾用 arena_weekly_leaders RPC:形状真点纠偏后又实测 p_limit 15 要 49s
-// (statement timeout),且榜首全是 ROI clamp 垃圾——直查 lr 快、可过滤、可信。
+// This public post has no non-ranking body. Its input must therefore be the
+// sealed public cohort; if that cohort cannot be proven, skip the post.
 interface WeeklyLeader {
   handle: string | null
   source: string
@@ -54,20 +57,25 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
   if (existing) return { count: 0, skipped: true, reason: 'already posted this week' }
 
   const { data, error } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle, source, source_trader_id, roi, pnl, trader_type, is_outlier')
+    .from(PUBLIC_RANKED_LEADERBOARD as never)
+    .select(PUBLIC_RANKING_COLUMNS)
     .eq('season_id', '7D')
     .gte('pnl', 500)
     .gt('roi', 0)
     .lt('roi', 9999) // ROI clamp 哨兵饱和值(±10000)以下才可信
     .order('roi', { ascending: false })
     .limit(40)
-  if (error) throw new Error(`leaderboard_ranks query failed: ${error.message}`)
-  const raw = (data ?? []) as WeeklyLeader[]
+  if (error) {
+    return { count: 0, skipped: true, reason: 'public ranking cohort unavailable' }
+  }
 
-  // 可信度过滤(首次真点 2026-07-10 打脸:榜首全 +10000% clamp + PnL $11 灰尘):
-  // 剔除 bot/离群标记、roi==pnl(validate-before-write 的已知垃圾模式);
-  // 每源最多 2 个防单一来源刷屏;可信条目不足 3 个宁可跳过不发。
+  const raw = verifiedWeeklyLeaders(data ?? [])
+  if (raw.length === 0) {
+    return { count: 0, skipped: true, reason: 'public ranking cohort unavailable' }
+  }
+
+  // The sealed reader already proves public eligibility. These editorial rules
+  // only keep the recap diverse and avoid obvious clamp-shaped copy.
   const perSource = new Map<string, number>()
   const leaders: WeeklyLeader[] = []
   for (const l of raw) {
@@ -125,3 +133,49 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
 })
 
 export const GET = handler
+
+function verifiedWeeklyLeaders(rows: unknown[]): WeeklyLeader[] {
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rows, period: '7D' },
+    { expectedPeriod: '7D' }
+  ) as { traders?: unknown[]; ranking_visibility?: unknown }
+
+  if (
+    sanitized.ranking_visibility === 'partial' ||
+    sanitized.ranking_visibility === 'unknown' ||
+    sanitized.ranking_visibility === 'error' ||
+    !Array.isArray(sanitized.traders) ||
+    sanitized.traders.length === 0
+  ) {
+    return []
+  }
+
+  const leaders: WeeklyLeader[] = []
+  for (const row of sanitized.traders) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) return []
+    const record = row as Record<string, unknown>
+    if (
+      typeof record.source !== 'string' ||
+      typeof record.source_trader_id !== 'string' ||
+      typeof record.roi !== 'number' ||
+      !Number.isFinite(record.roi) ||
+      typeof record.pnl !== 'number' ||
+      !Number.isFinite(record.pnl) ||
+      (record.handle !== null && typeof record.handle !== 'string') ||
+      (record.trader_type !== null && typeof record.trader_type !== 'string') ||
+      (record.is_outlier !== null && typeof record.is_outlier !== 'boolean')
+    ) {
+      return []
+    }
+    leaders.push({
+      handle: record.handle,
+      source: record.source,
+      source_trader_id: record.source_trader_id,
+      roi: record.roi,
+      pnl: record.pnl,
+      trader_type: record.trader_type,
+      is_outlier: record.is_outlier,
+    })
+  }
+  return leaders
+}
