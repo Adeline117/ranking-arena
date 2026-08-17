@@ -111,4 +111,62 @@ describe('SSRRankingTable responsive layout', () => {
     expect(mddCells[2]).toHaveTextContent('—')
     expect(mddCells[2]).not.toHaveTextContent('▼')
   })
+
+  it('keeps unknown source metrics unknown without a fabricated zero bar or aria value', async () => {
+    const view = await SSRRankingTable({
+      traders: [
+        {
+          ...traders[0],
+          id: 'unknown-metrics',
+          handle: 'Unknown Metrics',
+          roi: null,
+          pnl: null,
+          arena_score: null,
+          score_confidence: null,
+        },
+      ],
+    })
+    const { container } = render(view)
+    const row = screen.getByRole('link', { name: /unknown metrics/i })
+
+    expect(row).toHaveAccessibleName(expect.stringContaining('Arena Score unknown, ROI unknown'))
+    expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(3)
+    expect(container.querySelector('.ssr-roi-track')).toBeNull()
+    expect(row).not.toHaveAccessibleName(expect.stringContaining('ROI +0.00%'))
+  })
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'does not server-render non-finite supporting metrics for %p',
+    async (metric) => {
+      const view = await SSRRankingTable({
+        traders: [
+          {
+            ...traders[0],
+            id: 'unknown-supporting-metrics',
+            handle: 'Unknown Supporting Metrics',
+            win_rate: metric,
+            sharpe: metric,
+          },
+        ],
+      })
+      const { container } = render(view)
+
+      expect(container.querySelector('.ssr-winrate-cell')).toHaveTextContent('—')
+      expect(container.querySelector('.ssr-sharpe-cell')).toHaveTextContent('—')
+      expect(container).not.toHaveTextContent('NaN')
+      expect(container).not.toHaveTextContent('Infinity')
+    }
+  )
+
+  it('uses neutral empty-state copy instead of an unverified refresh cadence', async () => {
+    const view = await SSRRankingTable({ traders: [] })
+    render(view)
+
+    expect(
+      screen.getByText(
+        'Latest published ranking data will appear here / 最新已发布排行数据将在此显示'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/refreshes every few minutes/i)).not.toBeInTheDocument()
+  })
 })

@@ -15,7 +15,15 @@ interface CategoryRankingTabsProps {
   onCategoryChange: (category: CategoryType) => void
   isPro: boolean
   onProRequired?: () => void
-  categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
+  /** Null means no same-cohort count authority; badges must stay hidden. */
+  categoryCounts?: {
+    all: number | null
+    futures: number | null
+    spot: number | null
+    onchain: number | null
+  } | null
+  /** False (or absent during a rolling deploy) suppresses unproven badges. */
+  categoryCountsAreExact?: boolean
 }
 
 // 锁图标
@@ -46,19 +54,30 @@ export default function CategoryRankingTabs({
   isPro,
   onProRequired,
   categoryCounts,
+  categoryCountsAreExact,
 }: CategoryRankingTabsProps) {
   const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const [hoveredTab, setHoveredTab] = useState<CategoryType | null>(null)
 
   const formatCount = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
+  const hasDisplayCount = (n: number | null | undefined): n is number =>
+    typeof n === 'number' && Number.isFinite(n) && n > 0
 
-  const CATEGORIES: Array<{ value: CategoryType; label: string; count?: number }> = [
-    { value: 'all', label: t('categoryAll'), count: categoryCounts?.all },
-    { value: 'futures', label: t('categoryFutures'), count: categoryCounts?.futures },
-    { value: 'spot', label: t('categorySpot'), count: categoryCounts?.spot },
-    { value: 'web3', label: t('categoryWeb3'), count: categoryCounts?.onchain },
-  ]
+  const CATEGORIES: Array<{ value: CategoryType; label: string; count?: number | null }> =
+    categoryCountsAreExact === true
+      ? [
+          { value: 'all', label: t('categoryAll'), count: categoryCounts?.all },
+          { value: 'futures', label: t('categoryFutures'), count: categoryCounts?.futures },
+          { value: 'spot', label: t('categorySpot'), count: categoryCounts?.spot },
+          { value: 'web3', label: t('categoryWeb3'), count: categoryCounts?.onchain },
+        ]
+      : [
+          { value: 'all', label: t('categoryAll') },
+          { value: 'futures', label: t('categoryFutures') },
+          { value: 'spot', label: t('categorySpot') },
+          { value: 'web3', label: t('categoryWeb3') },
+        ]
 
   const handleTabClick = (category: CategoryType) => {
     if (category !== 'all' && !isPro) {
@@ -147,7 +166,7 @@ export default function CategoryRankingTabs({
             }}
           >
             <span>{cat.label}</span>
-            {cat.count != null && cat.count > 0 && (
+            {hasDisplayCount(cat.count) && (
               <span
                 style={{
                   fontSize: 11,

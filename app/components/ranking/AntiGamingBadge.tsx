@@ -36,6 +36,9 @@ export default function AntiGamingBadge({
   const { t } = useLanguage()
   if (!flags || flags.length === 0) return null
 
+  const safeWinRate = winRate != null && Number.isFinite(winRate) ? Math.round(winRate) : null
+  const safeTradesCount = tradesCount != null && Number.isFinite(tradesCount) ? tradesCount : null
+
   return (
     <>
       {flags.map((code) => {
@@ -43,8 +46,8 @@ export default function AntiGamingBadge({
         const tipKey = FLAG_TIP_KEY[code]
         if (!labelKey || !tipKey) return null
         const tip = t(tipKey)
-          .replace('{winRate}', winRate != null ? String(Math.round(winRate)) : '?')
-          .replace('{trades}', tradesCount != null ? String(tradesCount) : '?')
+          .replace('{winRate}', safeWinRate != null ? String(safeWinRate) : '?')
+          .replace('{trades}', safeTradesCount != null ? String(safeTradesCount) : '?')
         return (
           <span
             key={code}
