@@ -6,9 +6,67 @@ export type MarkdownImageToken = {
   end: number
 }
 
+export type MarkdownLinkToken = {
+  raw: string
+  label: string
+  url: string
+  start: number
+  end: number
+}
+
+export type RawContentUrlToken = {
+  url: string
+  start: number
+  end: number
+}
+
 export type MarkdownImageMoveResult = {
   content: string
   status: 'moved' | 'boundary' | 'missing'
+}
+
+/**
+ * Parse the exact raw HTTP(S) URL grammar used by post content renderers.
+ * Keep this separate from Markdown destinations: their explicit delimiters
+ * intentionally allow a wider set of WHATWG-valid URL characters.
+ */
+export function findRawContentUrlTokens(content: string): RawContentUrlToken[] {
+  const pattern = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
+  const tokens: RawContentUrlToken[] = []
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(content)) !== null) {
+    tokens.push({
+      url: match[1],
+      start: match.index,
+      end: match.index + match[0].length,
+    })
+  }
+
+  return tokens
+}
+
+/** Parse non-image Markdown links without allowing destinations to span lines. */
+export function findMarkdownLinkTokens(content: string): MarkdownLinkToken[] {
+  const pattern = /\[([^\]\r\n]*)\]\(([^)\r\n]+)\)/g
+  const tokens: MarkdownLinkToken[] = []
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(content)) !== null) {
+    // Image destinations are handled by findMarkdownImageTokens, including
+    // their leading `!`, so their ranges cannot be scanned twice as raw text.
+    if (match.index > 0 && content[match.index - 1] === '!') continue
+
+    tokens.push({
+      raw: match[0],
+      label: match[1],
+      url: match[2],
+      start: match.index,
+      end: match.index + match[0].length,
+    })
+  }
+
+  return tokens
 }
 
 /** Parse the deliberately small Markdown image grammar supported by post composers. */

@@ -8,6 +8,7 @@ import {
   readCanonicalPostMediaStorageOrigin,
   readOwnedPostVideoObjectPath,
 } from './post-media-storage-path'
+import { parseContent } from '../utils/content'
 
 const OWNER = 'abcdefab-cdef-4abc-8def-abcdefabcdef'
 const OTHER = '22222222-2222-4222-8222-222222222222'
@@ -133,6 +134,54 @@ describe('post media storage paths', () => {
       [
         'explicit default port',
         `https://project.supabase.co:443/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'same-host HTTP image route',
+        `http://project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'same-host HTTP video route',
+        `http://project.supabase.co/storage/v1/object/public/posts/${OWNER}/videos/${OBJECT}.mp4`,
+      ],
+      [
+        'same-host alternate port',
+        `https://project.supabase.co:444/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'DNS root-dot hostname',
+        `https://project.supabase.co./storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'image render route',
+        `https://project.supabase.co/storage/v1/render/image/public/posts/${OWNER}/${OBJECT}.webp?width=100`,
+      ],
+      [
+        'signed object route',
+        `https://project.supabase.co/storage/v1/object/sign/posts/${OWNER}/${OBJECT}.webp?token=one`,
+      ],
+      [
+        'authenticated object route',
+        `https://project.supabase.co/storage/v1/object/authenticated/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'canonical-host S3 path-style route',
+        `https://project.supabase.co/storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`,
+      ],
+      [
+        'official direct-host S3 path-style route',
+        `https://project.storage.supabase.co/storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`,
+      ],
+      [
+        'official direct-host S3 HTTP route',
+        `http://project.storage.supabase.co/storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`,
+      ],
+      [
+        'official direct-host S3 DNS root-dot route',
+        `https://project.storage.supabase.co./storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`,
+      ],
+      [
+        'official direct-host public object route',
+        `https://project.storage.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
       ],
       [
         'zero-padded default port',
@@ -265,6 +314,21 @@ describe('post media storage paths', () => {
       })
     })
 
+    it('collects a managed video referenced only by a Markdown link', () => {
+      const videoPath = `${OWNER}/videos/${OBJECT}.mp4`
+      expect(
+        collectPostMediaClaimObjectPaths(
+          [],
+          `[video](${publicUrl(videoPath)})`,
+          OWNER,
+          STORAGE_BASE_URL
+        )
+      ).toEqual({
+        kind: 'ok',
+        objectPaths: [videoPath],
+      })
+    })
+
     it('fails closed for a managed video in the final image list', () => {
       expect(
         collectPostMediaClaimObjectPaths(
@@ -281,6 +345,50 @@ describe('post media storage paths', () => {
       ['foreign video owner', [], publicUrl(`${OTHER}/videos/${OBJECT}.mp4`)],
       ['malformed managed image', [`${publicUrl(`${OWNER}/${OBJECT}.webp`)}?download=1`], ''],
       ['malformed managed video', [], `${publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)}#preview`],
+      [
+        'same-host HTTP image',
+        [`http://project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`],
+        '',
+      ],
+      [
+        'same-host HTTP direct video',
+        [],
+        `http://project.supabase.co/storage/v1/object/public/posts/${OWNER}/videos/${OBJECT}.mp4`,
+      ],
+      [
+        'render-route Markdown image',
+        [],
+        `![image](https://project.supabase.co/storage/v1/render/image/public/posts/${OWNER}/${OBJECT}.webp?width=100)`,
+      ],
+      [
+        'signed image URL',
+        [
+          `https://project.supabase.co/storage/v1/object/sign/posts/${OWNER}/${OBJECT}.webp?token=one`,
+        ],
+        '',
+      ],
+      [
+        'signed raw direct video',
+        [],
+        `https://project.supabase.co/storage/v1/object/sign/posts/${OWNER}/videos/${OBJECT}.mp4?token=one`,
+      ],
+      [
+        'direct-host S3 image URL',
+        [
+          `https://project.storage.supabase.co/storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`,
+        ],
+        '',
+      ],
+      [
+        'direct-host S3 Markdown image',
+        [],
+        `![image](https://project.storage.supabase.co/storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one)`,
+      ],
+      [
+        'direct-host S3 raw video',
+        [],
+        `https://project.storage.supabase.co/storage/v1/s3/posts/${OWNER}/videos/${OBJECT}.mp4?X-Amz-Signature=one`,
+      ],
     ])('rejects a %s instead of omitting it from the claim manifest', (_label, images, content) => {
       expect(collectPostMediaClaimObjectPaths(images, content, OWNER, STORAGE_BASE_URL)).toEqual({
         kind: 'invalid-reference',
@@ -316,9 +424,90 @@ describe('post media storage paths', () => {
         'userinfo',
         `https://user:password@project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
       ],
-    ])('rejects a WHATWG-equivalent managed content URL with %s', (_label, content) => {
-      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+    ])('rejects a WHATWG-equivalent managed Markdown URL with %s', (_label, url) => {
+      expect(
+        collectPostMediaClaimObjectPaths([], `![image](${url})`, OWNER, STORAGE_BASE_URL)
+      ).toEqual({
         kind: 'invalid-reference',
+      })
+    })
+
+    it.each([
+      [
+        'backslash authority and path',
+        String.raw`https:\\project.supabase.co\storage\v1\object\public\posts\${OWNER}\${OBJECT}.webp`,
+      ],
+      [
+        'mixed slash authority',
+        String.raw`https:/\project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'single forward slash authority',
+        `https:/project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+      [
+        'slashless special-scheme URL',
+        `https:project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp`,
+      ],
+    ])('ignores non-rendered raw special-scheme text with %s', (_label, content) => {
+      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'ok',
+        objectPaths: [],
+      })
+    })
+
+    it.each(['{', '}', '|', '^', '\\'])(
+      'collects a managed raw video after the renderer delimiter %p',
+      (delimiter) => {
+        const videoPath = `${OWNER}/videos/${OBJECT}.mp4`
+        const content = `https://evil.example/x${delimiter}${publicUrl(videoPath)}`
+
+        expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+          kind: 'ok',
+          objectPaths: [videoPath],
+        })
+      }
+    )
+
+    it.each(['{', '}', '|', '^', '\\'])(
+      'collects a managed video inside a generic Markdown link after delimiter %p',
+      (delimiter) => {
+        const videoPath = `${OWNER}/videos/${OBJECT}.mp4`
+        const content = `[video](https://evil.example/x${delimiter}${publicUrl(videoPath)})`
+
+        expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+          kind: 'ok',
+          objectPaths: [videoPath],
+        })
+      }
+    )
+
+    it('collects a renderer-reachable managed video from a generic Markdown link label', () => {
+      const videoPath = `${OWNER}/videos/${OBJECT}.mp4`
+      const videoUrl = publicUrl(videoPath)
+      const content = `[${videoUrl}](https://evil.example/x)`
+
+      expect(parseContent(content)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'video', content: videoUrl, url: videoUrl }),
+        ])
+      )
+      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'ok',
+        objectPaths: [videoPath],
+      })
+    })
+
+    it('does not scan consumed Markdown image alt text as raw media', () => {
+      const videoUrl = publicUrl(`${OWNER}/videos/${OBJECT}.mp4`)
+      const content = `![${videoUrl}](https://cdn.example.test/image.webp)`
+
+      expect(parseContent(content)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'video', url: videoUrl })])
+      )
+      expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'ok',
+        objectPaths: [],
       })
     })
 
@@ -355,6 +544,70 @@ describe('post media storage paths', () => {
       expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
         kind: 'ok',
         objectPaths: [],
+      })
+    })
+
+    it('does not infer unsupported S3 virtual-host or custom-domain mappings', () => {
+      const virtualHost = `https://posts.project.storage.supabase.co/storage/v1/s3/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`
+      const customHost = `https://project.storage.example.test/storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`
+      const customStorageBaseUrl = 'https://media.example.test'
+      const inventedCustomAlias = `https://media.storage.example.test/storage/v1/s3/posts/${OWNER}/${OBJECT}.webp?X-Amz-Signature=one`
+
+      expect(classifyPostMediaStorageUrl(virtualHost, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'external',
+      })
+      expect(classifyPostMediaStorageUrl(customHost, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'external',
+      })
+      expect(classifyPostMediaStorageUrl(inventedCustomAlias, OWNER, customStorageBaseUrl)).toEqual(
+        {
+          kind: 'external',
+        }
+      )
+    })
+
+    it.each(['\n', '\r'])(
+      'does not claim a %p-spliced destination that the shared renderer grammar rejects',
+      (lineBreak) => {
+        const content = `![image](https://evil.example${lineBreak}@project.supabase.co/storage/v1/object/public/posts/${OWNER}/${OBJECT}.webp)`
+
+        expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+          kind: 'ok',
+          objectPaths: [],
+        })
+      }
+    )
+
+    it.each(["'", '(', ')'])(
+      'rejects a renderer-reachable managed direct video with %p in userinfo',
+      (delimiter) => {
+        const content = `https://evil.example${delimiter}@project.supabase.co/storage/v1/object/public/posts/${OWNER}/videos/${OBJECT}.mp4`
+
+        expect(new URL(content).origin).toBe(STORAGE_BASE_URL)
+        expect(collectPostMediaClaimObjectPaths([], content, OWNER, STORAGE_BASE_URL)).toEqual({
+          kind: 'invalid-reference',
+        })
+      }
+    )
+
+    it.each([
+      '//storage/v1/object/public/posts',
+      '/storage//v1/object/public/posts',
+      '/storage/v1//object/public/posts',
+      '/storage/v1/object//public/posts',
+      '/storage/v1/object/public//posts',
+    ])('rejects duplicate Storage route separators in %s', (routePrefix) => {
+      const imageUrl = `${STORAGE_BASE_URL}${routePrefix}/${OWNER}/${OBJECT}.webp`
+      const videoUrl = `${STORAGE_BASE_URL}${routePrefix}/${OWNER}/videos/${OBJECT}.mp4`
+
+      expect(classifyPostMediaStorageUrl(imageUrl, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-internal',
+      })
+      expect(collectPostMediaClaimObjectPaths([imageUrl], '', OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-reference',
+      })
+      expect(collectPostMediaClaimObjectPaths([], videoUrl, OWNER, STORAGE_BASE_URL)).toEqual({
+        kind: 'invalid-reference',
       })
     })
 

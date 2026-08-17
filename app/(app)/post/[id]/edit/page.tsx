@@ -27,7 +27,12 @@ import {
   MentionAutocomplete,
   useMentionAutocomplete,
 } from '@/app/components/post/components/MentionAutocomplete'
-import { moveMarkdownImage, removeMarkdownImage } from '@/lib/posts/markdown-images'
+import {
+  findMarkdownImageTokens,
+  findRawContentUrlTokens,
+  moveMarkdownImage,
+  removeMarkdownImage,
+} from '@/lib/posts/markdown-images'
 
 interface UploadedImage {
   url: string
@@ -59,9 +64,6 @@ function renderContentWithControls(
 ) {
   if (!text) return null
 
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-
   // 先找出所有图片
   const imageMatches: {
     start: number
@@ -70,44 +72,16 @@ function renderContentWithControls(
     url: string
     imageIndex: number
   }[] = []
-  let match
   let imgIdx = 0
-  while ((match = imageRegex.exec(text)) !== null) {
-    const normalizedUrl = normalizeHttpUrl(match[2])
+  for (const token of findMarkdownImageTokens(text)) {
+    const normalizedUrl = normalizeHttpUrl(token.url)
     if (!normalizedUrl) continue
     imageMatches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      alt: match[1],
+      start: token.start,
+      end: token.end,
+      alt: token.alt,
       url: normalizedUrl,
       imageIndex: imgIdx++,
-    })
-  }
-
-  // 如果没有图片，直接处理链接
-  if (imageMatches.length === 0) {
-    const linkParts = text.split(urlRegex)
-    return linkParts.map((part, index) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              color: tokens.colors.accent.brand,
-              textDecoration: 'underline',
-              wordBreak: 'break-all',
-            }}
-          >
-            {part}
-          </a>
-        )
-      }
-      return linkifyTagsAndMentions(part, `edit-preview-${index}`)
     })
   }
 
@@ -118,36 +92,32 @@ function renderContentWithControls(
     url?: string
     imageIndex?: number
   }[] = []
+  const appendTextWithLinks = (value: string): void => {
+    let rawStart = 0
+    for (const token of findRawContentUrlTokens(value)) {
+      if (token.start > rawStart) {
+        parts.push({ type: 'text', content: value.slice(rawStart, token.start) })
+      }
+      parts.push({ type: 'link', content: token.url, url: token.url })
+      rawStart = token.end
+    }
+
+    if (rawStart < value.length) {
+      parts.push({ type: 'text', content: value.slice(rawStart) })
+    }
+  }
   let currentIndex = 0
 
   for (const img of imageMatches) {
     if (img.start > currentIndex) {
-      const beforeText = text.slice(currentIndex, img.start)
-      const linkParts = beforeText.split(urlRegex)
-      linkParts.forEach((part) => {
-        if (urlRegex.test(part)) {
-          urlRegex.lastIndex = 0
-          parts.push({ type: 'link', content: part, url: part })
-        } else if (part) {
-          parts.push({ type: 'text', content: part })
-        }
-      })
+      appendTextWithLinks(text.slice(currentIndex, img.start))
     }
     parts.push({ type: 'image', content: img.alt, url: img.url, imageIndex: img.imageIndex })
     currentIndex = img.end
   }
 
   if (currentIndex < text.length) {
-    const afterText = text.slice(currentIndex)
-    const linkParts = afterText.split(urlRegex)
-    linkParts.forEach((part) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0
-        parts.push({ type: 'link', content: part, url: part })
-      } else if (part) {
-        parts.push({ type: 'text', content: part })
-      }
-    })
+    appendTextWithLinks(text.slice(currentIndex))
   }
 
   return parts.map((part, index) => {
@@ -282,6 +252,9 @@ function renderContentWithControls(
           {part.content}
         </a>
       )
+    }
+    if (imageMatches.length === 0) {
+      return linkifyTagsAndMentions(part.content, `edit-preview-${index}`)
     }
     return <span key={index}>{linkifyTagsAndMentions(part.content, `edit-preview-${index}`)}</span>
   })

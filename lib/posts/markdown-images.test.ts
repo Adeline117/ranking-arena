@@ -1,4 +1,10 @@
-import { findMarkdownImageTokens, moveMarkdownImage, removeMarkdownImage } from './markdown-images'
+import {
+  findMarkdownImageTokens,
+  findMarkdownLinkTokens,
+  findRawContentUrlTokens,
+  moveMarkdownImage,
+  removeMarkdownImage,
+} from './markdown-images'
 
 describe('post Markdown image controls', () => {
   const firstUrl = 'https://cdn.example/image.png'
@@ -35,5 +41,53 @@ describe('post Markdown image controls', () => {
       content: 'before\n\nafter',
       removed: true,
     })
+  })
+
+  it.each(['\n', '\r'])('does not span a %p inside an image destination', (lineBreak) => {
+    expect(
+      findMarkdownImageTokens(
+        `![image](https://evil.example${lineBreak}@project.supabase.co/image.png)`
+      )
+    ).toEqual([])
+  })
+
+  it.each(['{', '}', '|', '^', '\\'])(
+    'keeps raw URLs separated across the renderer delimiter %p',
+    (delimiter) => {
+      const first = 'https://cdn.example/first'
+      const second = 'https://cdn.example/second.mp4'
+
+      expect(findRawContentUrlTokens(`${first}${delimiter}${second}`)).toEqual([
+        { url: first, start: 0, end: first.length },
+        {
+          url: second,
+          start: first.length + delimiter.length,
+          end: first.length + delimiter.length + second.length,
+        },
+      ])
+    }
+  )
+
+  it('parses non-image Markdown links without duplicating image destinations', () => {
+    expect(
+      findMarkdownLinkTokens(
+        `[video](https://cdn.example/video.mp4) ![image](https://cdn.example/image.webp)`
+      )
+    ).toMatchObject([
+      {
+        label: 'video',
+        url: 'https://cdn.example/video.mp4',
+        start: 0,
+        end: '[video](https://cdn.example/video.mp4)'.length,
+      },
+    ])
+  })
+
+  it.each(['\n', '\r'])('does not span a %p inside a link destination', (lineBreak) => {
+    expect(
+      findMarkdownLinkTokens(
+        `[video](https://evil.example${lineBreak}@project.supabase.co/video.mp4)`
+      )
+    ).toEqual([])
   })
 })

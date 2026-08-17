@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { findMarkdownImageTokens, findRawContentUrlTokens } from '@/lib/posts/markdown-images'
 import { isAllowedContentImageUrl, linkifyTagsAndMentions } from '@/lib/utils/content'
 import VideoPlayer, { parseVideoUrl } from './VideoPlayer'
 
@@ -17,9 +18,6 @@ export function renderContentWithControls(
 ) {
   if (!text) return null
 
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-
   // Find all images
   const imageMatches: {
     start: number
@@ -28,48 +26,15 @@ export function renderContentWithControls(
     url: string
     imageIndex: number
   }[] = []
-  let match
   let imgIdx = 0
-  while ((match = imageRegex.exec(text)) !== null) {
-    if (!isAllowedContentImageUrl(match[2])) continue
+  for (const token of findMarkdownImageTokens(text)) {
+    if (!isAllowedContentImageUrl(token.url)) continue
     imageMatches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      alt: match[1],
-      url: match[2],
+      start: token.start,
+      end: token.end,
+      alt: token.alt,
+      url: token.url,
       imageIndex: imgIdx++,
-    })
-  }
-
-  // No images - just process links
-  if (imageMatches.length === 0) {
-    const linkParts = text.split(urlRegex)
-    return linkParts.map((part, index) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0
-        const video = parseVideoUrl(part)
-        if (video) {
-          return <VideoPlayer key={index} embedUrl={video.embedUrl} type={video.type} />
-        }
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              color: tokens.colors.accent.brand,
-              textDecoration: 'underline',
-              wordBreak: 'break-all',
-            }}
-          >
-            {part}
-          </a>
-        )
-      }
-      // Plain text between URLs — linkify #hashtags / @mentions (U8-9)
-      return <span key={index}>{linkifyTagsAndMentions(part, `t${index}`)}</span>
     })
   }
 
@@ -83,46 +48,38 @@ export function renderContentWithControls(
   }
 
   const parts: ContentPart[] = []
+  const appendTextWithLinks = (value: string): void => {
+    let rawStart = 0
+    for (const token of findRawContentUrlTokens(value)) {
+      if (token.start > rawStart) {
+        parts.push({ type: 'text', content: value.slice(rawStart, token.start) })
+      }
+
+      const video = parseVideoUrl(token.url)
+      if (video) {
+        parts.push({ type: 'video', content: token.url, video })
+      } else {
+        parts.push({ type: 'link', content: token.url, url: token.url })
+      }
+      rawStart = token.end
+    }
+
+    if (rawStart < value.length) {
+      parts.push({ type: 'text', content: value.slice(rawStart) })
+    }
+  }
   let currentIndex = 0
 
   for (const img of imageMatches) {
     if (img.start > currentIndex) {
-      const beforeText = text.slice(currentIndex, img.start)
-      const linkParts = beforeText.split(urlRegex)
-      linkParts.forEach((part) => {
-        if (urlRegex.test(part)) {
-          urlRegex.lastIndex = 0
-          const video = parseVideoUrl(part)
-          if (video) {
-            parts.push({ type: 'video', content: part, video })
-          } else {
-            parts.push({ type: 'link', content: part, url: part })
-          }
-        } else if (part) {
-          parts.push({ type: 'text', content: part })
-        }
-      })
+      appendTextWithLinks(text.slice(currentIndex, img.start))
     }
     parts.push({ type: 'image', content: img.alt, url: img.url, imageIndex: img.imageIndex })
     currentIndex = img.end
   }
 
   if (currentIndex < text.length) {
-    const afterText = text.slice(currentIndex)
-    const linkParts = afterText.split(urlRegex)
-    linkParts.forEach((part) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0
-        const video = parseVideoUrl(part)
-        if (video) {
-          parts.push({ type: 'video', content: part, video })
-        } else {
-          parts.push({ type: 'link', content: part, url: part })
-        }
-      } else if (part) {
-        parts.push({ type: 'text', content: part })
-      }
-    })
+    appendTextWithLinks(text.slice(currentIndex))
   }
 
   return parts.map((part, index) => {

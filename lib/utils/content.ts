@@ -6,6 +6,7 @@
 import { ReactNode, createElement } from 'react'
 import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from '@/lib/stickers'
 import { logger } from '@/lib/logger'
+import { findMarkdownImageTokens, findRawContentUrlTokens } from '@/lib/posts/markdown-images'
 import { findMentionTokens } from '@/lib/posts/mentions'
 
 // Arena 主题色
@@ -109,41 +110,33 @@ export function parseVideoUrl(url: string): VideoEmbed | null {
 export function parseContent(text: string): ContentPart[] {
   if (!text) return []
 
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-
   const parts: ContentPart[] = []
 
-  // 先找出所有图片
-  const imageMatches: { start: number; end: number; alt: string; url: string; raw: string }[] = []
-  let match
-  while ((match = imageRegex.exec(text)) !== null) {
-    imageMatches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      alt: match[1],
-      url: match[2],
-      raw: match[0],
-    })
-  }
+  // Keep rendering and the post-media authority on one deliberately small
+  // Markdown image grammar. In particular, CR/LF cannot be hidden inside a
+  // destination and then stripped by WHATWG URL parsing before an <img> load.
+  const imageMatches = findMarkdownImageTokens(text)
 
   // 处理文本中的链接（包括视频链接）
   function processTextWithLinks(str: string): void {
-    const linkParts = str.split(urlRegex)
-    linkParts.forEach((part) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0
-        // 检查是否是视频链接
-        const videoEmbed = parseVideoUrl(part)
-        if (videoEmbed) {
-          parts.push({ type: 'video', content: part, url: part, video: videoEmbed })
-        } else {
-          parts.push({ type: 'link', content: part, url: part })
-        }
-      } else if (part) {
-        parts.push({ type: 'text', content: part })
+    let currentIndex = 0
+    for (const token of findRawContentUrlTokens(str)) {
+      if (token.start > currentIndex) {
+        parts.push({ type: 'text', content: str.slice(currentIndex, token.start) })
       }
-    })
+
+      const videoEmbed = parseVideoUrl(token.url)
+      if (videoEmbed) {
+        parts.push({ type: 'video', content: token.url, url: token.url, video: videoEmbed })
+      } else {
+        parts.push({ type: 'link', content: token.url, url: token.url })
+      }
+      currentIndex = token.end
+    }
+
+    if (currentIndex < str.length) {
+      parts.push({ type: 'text', content: str.slice(currentIndex) })
+    }
   }
 
   // 构建内容片段

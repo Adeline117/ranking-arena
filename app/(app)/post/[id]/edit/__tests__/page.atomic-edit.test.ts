@@ -40,7 +40,9 @@ describe('full post editor atomic write path', () => {
 
   it('keeps preview links consistent and rejects unsafe markdown image targets', () => {
     expect(page).toContain('linkifyTagsAndMentions(part')
-    expect(page).toContain('const normalizedUrl = normalizeHttpUrl(match[2])')
+    expect(page).toContain('for (const token of findMarkdownImageTokens(text))')
+    expect(page).toContain('for (const token of findRawContentUrlTokens(value))')
+    expect(page).toContain('const normalizedUrl = normalizeHttpUrl(token.url)')
     expect(page).toContain('if (!normalizedUrl) continue')
     expect(page).toContain("window.open(part.url, '_blank', 'noopener,noreferrer')")
     expect(page).toContain('moveMarkdownImage(content, url, direction)')

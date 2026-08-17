@@ -120,6 +120,131 @@ describe('parseContent', () => {
     expect(parts).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'image' })]))
     expect(parts.map((part) => part.content).join('')).toBe(markdown)
   })
+
+  it.each(['\n', '\r'])('does not parse an image destination spanning %p', (lineBreak) => {
+    const markdown = `![image](https://evil.example${lineBreak}@project.supabase.co/image.png)`
+    const parts = parseContent(markdown)
+
+    expect(parts).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'image' })]))
+    expect(parts.map((part) => part.content).join('')).toBe(markdown)
+  })
+
+  it.each(["'", '(', ')'])(
+    'keeps %p inside a renderer-reachable direct-video URL token',
+    (delimiter) => {
+      const url = `https://evil.example${delimiter}@project.supabase.co/storage/v1/object/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/videos/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp4`
+
+      expect(new URL(url).origin).toBe('https://project.supabase.co')
+      expect(parseContent(url)).toEqual([
+        {
+          type: 'video',
+          content: url,
+          url,
+          video: { type: 'direct', embedUrl: url, originalUrl: url },
+        },
+      ])
+    }
+  )
+
+  it.each(['{', '}', '|', '^', '\\'])(
+    'parses a direct video separately after the raw URL delimiter %p',
+    (delimiter) => {
+      const externalUrl = 'https://evil.example/x'
+      const videoUrl =
+        'https://project.supabase.co/storage/v1/object/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/videos/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp4'
+      const content = `${externalUrl}${delimiter}${videoUrl}`
+      const parts = parseContent(content)
+
+      expect(parts.map((part) => part.content).join('')).toBe(content)
+      expect(parts).toEqual(
+        expect.arrayContaining([
+          { type: 'link', content: externalUrl, url: externalUrl },
+          {
+            type: 'video',
+            content: videoUrl,
+            url: videoUrl,
+            video: { type: 'direct', embedUrl: videoUrl, originalUrl: videoUrl },
+          },
+        ])
+      )
+    }
+  )
+
+  it('keeps same-host HTTP managed image and video URLs renderer-reachable', () => {
+    const imageUrl =
+      'http://project.supabase.co/storage/v1/object/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.webp'
+    const videoUrl =
+      'http://project.supabase.co/storage/v1/object/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/videos/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp4'
+
+    expect(
+      parseContent(`![image](${imageUrl})\n${videoUrl}`).filter((part) => part.type !== 'text')
+    ).toEqual([
+      { type: 'image', content: 'image', url: imageUrl },
+      {
+        type: 'video',
+        content: videoUrl,
+        url: videoUrl,
+        video: { type: 'direct', embedUrl: videoUrl, originalUrl: videoUrl },
+      },
+    ])
+  })
+
+  it('keeps alternate Storage image and signed-video routes renderer-reachable', () => {
+    const imageUrl =
+      'https://project.supabase.co/storage/v1/render/image/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.webp?width=100'
+    const videoUrl =
+      'https://project.supabase.co/storage/v1/object/sign/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/videos/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp4?token=one'
+
+    expect(
+      parseContent(`![image](${imageUrl})\n${videoUrl}`).filter((part) => part.type !== 'text')
+    ).toEqual([
+      { type: 'image', content: 'image', url: imageUrl },
+      {
+        type: 'video',
+        content: videoUrl,
+        url: videoUrl,
+        video: { type: 'direct', embedUrl: videoUrl, originalUrl: videoUrl },
+      },
+    ])
+  })
+
+  it('keeps DNS root-dot managed image and video URLs renderer-reachable', () => {
+    const imageUrl =
+      'https://project.supabase.co./storage/v1/object/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.webp'
+    const videoUrl =
+      'https://project.supabase.co./storage/v1/object/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/videos/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp4'
+
+    expect(
+      parseContent(`![image](${imageUrl})\n${videoUrl}`).filter((part) => part.type !== 'text')
+    ).toEqual([
+      { type: 'image', content: 'image', url: imageUrl },
+      {
+        type: 'video',
+        content: videoUrl,
+        url: videoUrl,
+        video: { type: 'direct', embedUrl: videoUrl, originalUrl: videoUrl },
+      },
+    ])
+  })
+
+  it('keeps official direct-host S3 image and video URLs renderer-reachable', () => {
+    const imageUrl =
+      'https://project.storage.supabase.co/storage/v1/s3/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.webp?X-Amz-Signature=one'
+    const videoUrl =
+      'https://project.storage.supabase.co/storage/v1/s3/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/videos/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp4?X-Amz-Signature=one'
+
+    expect(
+      parseContent(`![image](${imageUrl})\n${videoUrl}`).filter((part) => part.type !== 'text')
+    ).toEqual([
+      { type: 'image', content: 'image', url: imageUrl },
+      {
+        type: 'video',
+        content: videoUrl,
+        url: videoUrl,
+        video: { type: 'direct', embedUrl: videoUrl, originalUrl: videoUrl },
+      },
+    ])
+  })
 })
 
 describe('isAllowedContentImageUrl', () => {
