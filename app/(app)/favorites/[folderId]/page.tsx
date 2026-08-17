@@ -73,6 +73,11 @@ type FolderRequestScope = {
 }
 
 type OperationKind = 'save' | 'delete' | 'subscribe' | 'post-detail'
+type FolderMutationKind = Exclude<OperationKind, 'post-detail'>
+type FolderMutationOwnership = {
+  kind: FolderMutationKind
+  operationId: number
+}
 type PostsMoreStatus = 'idle' | 'loading' | 'error'
 
 const FOLDER_REQUEST_TIMEOUT_MS = 15_000
@@ -339,6 +344,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     subscribe: 0,
     'post-detail': 0,
   })
+  const folderMutationRef = useRef<FolderMutationOwnership | null>(null)
   const removeRequestIdsRef = useRef<Record<string, number>>({})
   const postDetailControllerRef = useRef<AbortController | null>(null)
 
@@ -354,6 +360,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       for (const operation of Object.keys(operationIdsRef.current) as OperationKind[]) {
         operationIdsRef.current[operation] += 1
       }
+      folderMutationRef.current = null
       removeRequestIdsRef.current = {}
       setFolder(null)
       setPosts([])
@@ -606,11 +613,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   }
 
   const handleSave = async () => {
-    if (!accessToken || !folder) return
+    if (!accessToken || !folder || folderMutationRef.current) return
 
     const scope = captureScope()
     if (!isFolderRequestScopeCurrent(scope, currentScopeRef.current)) return
     const operationId = ++operationIdsRef.current.save
+    const mutation: FolderMutationOwnership = { kind: 'save', operationId }
+    folderMutationRef.current = mutation
 
     setSaving(true)
     try {
@@ -658,57 +667,59 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       logger.error('Error saving folder:', err)
       showToast(t('saveFailed2'), 'error')
     } finally {
+      if (folderMutationRef.current === mutation) folderMutationRef.current = null
       if (isOperationCurrent('save', operationId, scope)) setSaving(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!accessToken || !folder || deleting) return
+    if (!accessToken || !folder || deleting || folderMutationRef.current) return
 
     const scope = captureScope()
     if (!isFolderRequestScopeCurrent(scope, currentScopeRef.current)) return
     const operationId = ++operationIdsRef.current.delete
+    const mutation: FolderMutationOwnership = { kind: 'delete', operationId }
+    folderMutationRef.current = mutation
     setDeleting(true)
 
-    let confirmed = false
     try {
-      confirmed = await showDangerConfirm(t('deleteFolder'), t('deleteFolderConfirm'))
-    } catch (err) {
-      if (isOperationCurrent('delete', operationId, scope)) {
-        setDeleting(false)
-        logger.error('Error confirming folder deletion:', err)
-        showToast(t('deleteFailed'), 'error')
+      let confirmed = false
+      try {
+        confirmed = await showDangerConfirm(t('deleteFolder'), t('deleteFolderConfirm'))
+      } catch (err) {
+        if (isOperationCurrent('delete', operationId, scope)) {
+          logger.error('Error confirming folder deletion:', err)
+          showToast(t('deleteFailed'), 'error')
+        }
+        return
       }
-      return
-    }
-    if (!confirmed || !isOperationCurrent('delete', operationId, scope)) {
-      if (isOperationCurrent('delete', operationId, scope)) setDeleting(false)
-      return
-    }
+      if (!confirmed || !isOperationCurrent('delete', operationId, scope)) return
 
-    try {
-      const response = await fetch(`/api/bookmark-folders/${folderId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-      })
+      try {
+        const response = await fetch(`/api/bookmark-folders/${folderId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+        })
 
-      const data: unknown = await response.json()
-      if (!isOperationCurrent('delete', operationId, scope)) return
+        const data: unknown = await response.json()
+        if (!isOperationCurrent('delete', operationId, scope)) return
 
-      if (response.ok) {
-        showToast(t('folderDeleted'), 'success')
-        router.push('/favorites')
-      } else {
-        showToast(apiErrorMessage(data, t('deleteFailed')), 'error')
+        if (response.ok) {
+          showToast(t('folderDeleted'), 'success')
+          router.push('/favorites')
+        } else {
+          showToast(apiErrorMessage(data, t('deleteFailed')), 'error')
+        }
+      } catch (err) {
+        if (!isOperationCurrent('delete', operationId, scope)) return
+        logger.error('Error deleting folder:', err)
+        showToast(t('networkError'), 'error')
       }
-    } catch (err) {
-      if (!isOperationCurrent('delete', operationId, scope)) return
-      logger.error('Error deleting folder:', err)
-      showToast(t('networkError'), 'error')
     } finally {
+      if (folderMutationRef.current === mutation) folderMutationRef.current = null
       if (isOperationCurrent('delete', operationId, scope)) setDeleting(false)
     }
   }
@@ -719,11 +730,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       return
     }
 
-    if (!folder || subscribing) return
+    if (!folder || subscribing || folderMutationRef.current) return
 
     const scope = captureScope()
     if (!isFolderRequestScopeCurrent(scope, currentScopeRef.current)) return
     const operationId = ++operationIdsRef.current.subscribe
+    const mutation: FolderMutationOwnership = { kind: 'subscribe', operationId }
+    folderMutationRef.current = mutation
     const actionWasSubscribed = isSubscribed
 
     setSubscribing(true)
@@ -758,6 +771,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       logger.error('Error subscribing to folder:', err)
       showToast(actionWasSubscribed ? t('unbookmarkFailed') : t('bookmarkFailed'), 'error')
     } finally {
+      if (folderMutationRef.current === mutation) folderMutationRef.current = null
       if (isOperationCurrent('subscribe', operationId, scope)) setSubscribing(false)
     }
   }

@@ -22,7 +22,12 @@ const translations: Record<string, string> = {
   bookmark: 'Bookmark',
   bookmarked: 'Bookmarked',
   bookmarkFailed: 'Bookmark failed',
+  delete: 'Delete',
+  deleteFolder: 'Delete folder',
+  deleteFolderConfirm: 'Delete this folder?',
+  edit: 'Edit',
   failedToLoad: 'Failed to load folder',
+  folderDeleted: 'Folder deleted',
   itemCount: '{n} items',
   loadMore: 'Load more',
   loadMoreFailed: 'Failed to load more',
@@ -34,6 +39,8 @@ const translations: Record<string, string> = {
   publicFolder: 'Public',
   removeFailed: 'Remove failed',
   subscriberCount: '{n} subscribers',
+  save: 'Save',
+  saved: 'Saved',
   unbookmarked: 'Unbookmarked',
   unbookmarkFailed: 'Unbookmark failed',
 }
@@ -294,6 +301,124 @@ describe('favorite folder detail viewer ownership', () => {
 
     expect(await screen.findByText('Failed to load folder')).toBeInTheDocument()
     expect(screen.queryByText('No bookmarks')).not.toBeInTheDocument()
+  })
+
+  it('single-flights a folder save before the disabled state renders', async () => {
+    const saveRequest = deferred<Response>()
+    const fetchMock = jest.fn((_url: string, options?: RequestInit) => {
+      if (options?.method === 'PATCH') return saveRequest.promise
+      return Promise.resolve(
+        folderDetailResponse('Owner folder', false, 0, {
+          isOwner: true,
+          ownerId: 'viewer-a',
+        })
+      )
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    renderPage()
+    expect(await screen.findByText('Owner folder')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    act(() => {
+      saveButton.click()
+      saveButton.click()
+    })
+
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'PATCH')).toHaveLength(
+      1
+    )
+
+    await act(async () => {
+      saveRequest.resolve(
+        response({
+          success: true,
+          data: {
+            folder: {
+              id: FOLDER_ID,
+              user_id: 'viewer-a',
+              name: 'Owner folder',
+              description: null,
+              avatar_url: null,
+              is_public: true,
+              is_default: false,
+              post_count: 0,
+            },
+          },
+        })
+      )
+      await saveRequest.promise
+    })
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Saved', 'success'))
+  })
+
+  it('single-flights folder deletion across its asynchronous confirmation', async () => {
+    const confirmation = deferred<boolean>()
+    const deleteRequest = deferred<Response>()
+    mockShowDangerConfirm.mockReturnValueOnce(confirmation.promise)
+    const fetchMock = jest.fn((_url: string, options?: RequestInit) => {
+      if (options?.method === 'DELETE') return deleteRequest.promise
+      return Promise.resolve(
+        folderDetailResponse('Owner folder', false, 0, {
+          isOwner: true,
+          ownerId: 'viewer-a',
+        })
+      )
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    renderPage()
+    expect(await screen.findByText('Owner folder')).toBeInTheDocument()
+    const deleteButton = screen.getByRole('button', { name: 'Delete' })
+    act(() => {
+      deleteButton.click()
+      deleteButton.click()
+    })
+
+    expect(mockShowDangerConfirm).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      confirmation.resolve(true)
+      await confirmation.promise
+    })
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([, options]) => options?.method === 'DELETE')
+      ).toHaveLength(1)
+    )
+
+    await act(async () => {
+      deleteRequest.resolve(response({ success: true, data: { message: 'Folder deleted' } }))
+      await deleteRequest.promise
+    })
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/favorites'))
+  })
+
+  it('single-flights a subscription mutation before its loading state renders', async () => {
+    const subscribeRequest = deferred<Response>()
+    const fetchMock = jest.fn((_url: string, options?: RequestInit) => {
+      if (options?.method === 'POST') return subscribeRequest.promise
+      return Promise.resolve(folderDetailResponse('Public folder'))
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    renderPage()
+    expect(await screen.findByText('Public folder')).toBeInTheDocument()
+    const subscribeButton = screen.getByRole('button', { name: 'Bookmark' })
+    act(() => {
+      subscribeButton.click()
+      subscribeButton.click()
+    })
+
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+
+    await act(async () => {
+      subscribeRequest.resolve(
+        response({ success: true, data: { is_subscribed: true, subscriber_count: 1 } })
+      )
+      await subscribeRequest.promise
+    })
+    expect(await screen.findByRole('button', { name: 'Bookmarked' })).toBeInTheDocument()
   })
 
   it('loads the remaining folder posts without replacing the visible first page', async () => {
