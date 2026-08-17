@@ -76,6 +76,38 @@ function wrappedProps(handle: string) {
   }
 }
 
+function publicRankedRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'bybit',
+    source_trader_id: 'wrapped-rank-authority-id',
+    handle: 'Verified Trader',
+    rank: 7,
+    rank_change: 2,
+    roi: 12.5,
+    pnl: 1000,
+    win_rate: 61,
+    arena_score: 83,
+    max_drawdown: 14,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    season_id: '7D',
+    ...overrides,
+  }
+}
+
+function publicRankedQuery(result: { data: unknown | null; error: { message: string } | null }) {
+  const query = {
+    select: jest.fn(),
+    eq: jest.fn(),
+    maybeSingle: jest.fn().mockResolvedValue(result),
+  }
+  query.select.mockReturnValue(query)
+  query.eq.mockReturnValue(query)
+  return query
+}
+
 describe('/wrapped/[handle] fail-soft data loading', () => {
   const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined)
 
@@ -139,5 +171,80 @@ describe('/wrapped/[handle] fail-soft data loading', () => {
         handle: 'not-ranked-yet',
       },
     })
+  })
+
+  it('uses the sealed public cohort for rank metrics and leaves an unproven total unknown', async () => {
+    const query = publicRankedQuery({ data: publicRankedRow(), error: null })
+    const from = jest.fn((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return query
+      throw new Error(`unexpected relation: ${relation}`)
+    })
+    mockGetSupabaseAdmin.mockReturnValue({ from })
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'bybit',
+      traderKey: 'wrapped-rank-authority-id',
+      handle: 'Verified Trader',
+      avatarUrl: null,
+    })
+    const props = wrappedProps('wrapped-rank-authority')
+
+    const [metadata, page] = await Promise.all([generateMetadata(props), WrappedPage(props)])
+    const data = (page as { props: { data: Record<string, unknown> } }).props.data
+
+    expect(from).toHaveBeenCalledTimes(1)
+    expect(from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(from).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(query.select).toHaveBeenCalledWith(
+      'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+    )
+    expect(query.eq).toHaveBeenCalledWith('source', 'bybit')
+    expect(query.eq).toHaveBeenCalledWith('source_trader_id', 'wrapped-rank-authority-id')
+    expect(query.eq).toHaveBeenCalledWith('season_id', '7D')
+    expect(data).toMatchObject({
+      rank: 7,
+      rankChange: 2,
+      roi: 12.5,
+      winRate: 61,
+      score: 83,
+      maxDrawdown: 14,
+      total: null,
+    })
+    expect(metadata.description).toContain('Ranked 7')
+    expect(metadata.description).not.toContain('Top ')
+    expect(JSON.stringify(metadata)).not.toContain('total=')
+  })
+
+  it('turns non-finite or otherwise unverified ranking values into unknown card fields', async () => {
+    const query = publicRankedQuery({
+      data: publicRankedRow({ roi: Number.POSITIVE_INFINITY }),
+      error: null,
+    })
+    const from = jest.fn((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return query
+      throw new Error(`unexpected relation: ${relation}`)
+    })
+    mockGetSupabaseAdmin.mockReturnValue({ from })
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'bybit',
+      traderKey: 'wrapped-rank-authority-id',
+      handle: 'Nonfinite Trader',
+      avatarUrl: null,
+    })
+
+    const props = wrappedProps('wrapped-nonfinite-rank-authority')
+    const [metadata, page] = await Promise.all([generateMetadata(props), WrappedPage(props)])
+    const data = (page as { props: { data: Record<string, unknown> } }).props.data
+
+    expect(data).toMatchObject({
+      rank: null,
+      rankChange: null,
+      roi: null,
+      winRate: null,
+      score: null,
+      maxDrawdown: null,
+      total: null,
+    })
+    expect(metadata.description).not.toContain('Ranked')
+    expect(JSON.stringify(metadata)).not.toMatch(/NaN|Infinity|total=/)
   })
 })
