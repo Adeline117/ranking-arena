@@ -84,8 +84,22 @@ three `no-store` headers and no upstream fetch. The listed script entrypoints re
 `RETIRED` and exit `2` before proxy, browser, import, or host work. This is source-only:
 it neither stops nor proves an already deployed Cloudflare Worker, VPS proxy/scraper,
 host process, queue, or schedule. That proxy/import unit does not classify or close
-the separately held `avatar-mirror` worker. `/api/avatar`, avatar helpers, UI/read
-RPCs, adapters, and unlisted writers remain outside its bounded review.
+the separately held `avatar-mirror` worker or the separate avatar-proxy route below.
+Other avatar-related API paths/helpers, UI/read RPCs, adapters, and unlisted writers
+remain outside its bounded review.
+
+A separate V1 avatar-proxy source hold covers anonymous `GET /api/avatar` and its
+`/api/v1/avatar` rewrite alias. Both resolve to the same fixed `410` response with
+`Cache-Control`, `CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store`
+headers before query parsing, DNS lookup, upstream fetch, or logging. The matching
+proxy bypass preserves that anonymous no-store response contract; it is not an
+upstream-proxy permission. Registered helpers and known UI/OG consumers no longer
+generate a proxy request: a proxy-required origin without a mirror falls back to
+local, inline, or default behavior. This does not say all avatar browser/network
+activity is zero: existing Supabase mirrors and direct allowed raw-avatar URLs may
+still render, and other avatar-related API paths/helpers, adapters, and unlisted
+writers remain outside this boundary. This source-only change cannot clear an old CDN
+cache, stop older deployed code, or prove external state.
 
 A separate source-only tombstone covers the canonical `GET /api/cron/backfill-avatars`
 route and its `/api/v1/cron/backfill-avatars` rewrite alias, which resolves to the same
@@ -94,8 +108,9 @@ authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both responses carry 
 three `no-store` headers and return before parameter parsing, database access, logging,
 or upstream fetch. This endpoint contract cannot stop, inspect, or prove an already
 deployed host, external scheduler, or healthcheck. The handler itself does not cover
-`/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted writers; the
-separate `avatar-mirror` worker hold below does not expand that handler's scope.
+the separate avatar-proxy route, other avatar-related API paths/helpers, UI/read RPCs,
+adapters, or unlisted writers; the separate `avatar-mirror` worker hold below does not
+expand that handler's scope.
 
 The checked-in V1 `avatar-mirror` worker execution is separately source-only retired:
 its processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a
@@ -104,8 +119,8 @@ calls `getConnection()`, acquires its per-job source lease, or loads a processor
 makes no claim that the surrounding worker or BullMQ has not already established or
 used shared Redis, or acquired a job lock. It cannot stop, inspect, or prove an
 already-running worker, Redis, host process, or schedule.
-It does not classify `/api/avatar`, avatar helpers, UI/read RPCs, adapters, or
-unlisted writers.
+It does not expand the separate avatar-proxy boundary or classify other avatar-related
+API paths/helpers, UI/read RPCs, adapters, or unlisted writers.
 
 ## Data API
 
@@ -294,19 +309,27 @@ from initiating new ingest. The separately fixed legacy refresh-job hold removes
 consumer and admissions while preserving only the unrelated post hot-score maintenance
 command. A separately enumerated legacy proxy/import hold retires only its named
 historical proxy, browser, and import entrypoints; it is not a declaration that every
-source writer or helper is closed. A distinct canonical `GET /api/cron/backfill-avatars`
+source writer or helper is closed. Separately, anonymous `GET /api/avatar` and its
+`/api/v1/avatar` rewrite alias are a fixed `410`/three-`no-store` source hold before
+query, DNS, fetch, or logging; the matching proxy bypass preserves that response.
+Known helpers and UI/OG consumers use local, inline, or default fallback rather than
+generate this proxy request. That does not stop existing Supabase mirror or direct
+allowed raw-avatar URL loads, clear old CDN cache, stop older deployed code, or
+classify other avatar-related API paths/helpers, adapters, or unlisted writers. A
+distinct canonical `GET /api/cron/backfill-avatars`
 route—and its same-handler `/api/v1/cron/backfill-avatars` rewrite alias—is an auth-first
 tombstone that returns `401` or `410 CRON_EXECUTION_NOT_PUBLISHED` with three `no-store`
 headers before parameters, database, logging, or upstream fetch. It covers only that
-handler—not `/api/avatar`, avatar helpers, UI/read RPCs, adapters, or unlisted
-writers—and cannot prove a host, external scheduler, or healthcheck. The separately
-retired `avatar-mirror` worker processor is a no-op; its scheduler no longer produces
-jobs, and legacy queued avatar-mirror jobs return as no-ops within `route()` before
-that handler calls `getConnection()`, acquires its per-job source lease, or loads a
-processor. This says nothing about whether the surrounding worker or BullMQ has already
-established or used shared Redis, or acquired a job lock. That separate source hold
-cannot stop, inspect, or prove an already-running worker, Redis, host process, or
-schedule, and it does not classify the same `/api/avatar`, helper, UI/read RPC,
+handler—not the separate avatar-proxy route, other avatar-related API paths/helpers,
+UI/read RPCs, adapters, or unlisted writers—and cannot prove a host, external
+scheduler, or healthcheck. The separately retired `avatar-mirror` worker processor is
+a no-op; its scheduler no longer produces jobs, and legacy queued avatar-mirror jobs
+return as no-ops within `route()` before that handler calls `getConnection()`, acquires
+its per-job source lease, or loads a processor. This says nothing about whether the
+surrounding worker or BullMQ has already established or used shared Redis, or acquired a
+job lock. That separate source hold cannot stop, inspect, or prove an already-running
+worker, Redis, host process, or schedule, and it does not enlarge the separate
+avatar-proxy boundary or classify other avatar-related API paths/helpers, UI/read RPC,
 adapter, or unlisted-writer surfaces. None of these source holds can stop or prove an
 already-running process, queue, worker, or schedule. Code may be reviewed locally but
 does not prove that a source is scheduled or healthy.

@@ -79,8 +79,25 @@ the same headers and no upstream fetch. The named scripts report `RETIRED` and e
 `2` before proxy, browser, import, or host work. This is source-only containment, not
 an instruction to stop, inspect, restart, or prove an already deployed host, worker,
 proxy, queue, or schedule. It does not classify the separately retired `avatar-mirror`
-worker; `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and unlisted writers
-remain outside this runbook's conclusion.
+worker or the separate avatar-proxy route below; other avatar-related API paths/helpers,
+UI/read RPCs, adapters, and unlisted writers remain outside this runbook's conclusion.
+
+### V1 avatar-proxy source boundary
+
+Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
+an avatar source. Both resolve to the same fixed `410` source-only response with all
+three `no-store` headers (`Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control`) before query parsing, DNS lookup, upstream fetch, or
+logging. The matching proxy bypass preserves this anonymous response contract only; it
+does not authorize upstream proxy use. Registered helpers and known UI/OG consumers no
+longer generate that request: a proxy-required origin without a mirror uses local,
+inline, or default fallback.
+
+This does not assert zero avatar browser/network activity: existing Supabase mirrors
+and direct allowed raw-avatar URLs may still render. Other avatar-related API
+paths/helpers, adapters, and unlisted writers remain outside this boundary. This
+source-only change cannot clear old CDN cache, stop older deployed code, or prove
+external state.
 
 ### V1 avatar-backfill source boundary
 
@@ -91,9 +108,9 @@ authentication returns `401`; valid authentication returns `410
 CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry the three `no-store` headers and return
 before parameter parsing, database access, logging, or upstream fetch. This checked-in
 contract does not stop, inspect, restart, or prove a deployed host, external scheduler,
-or healthcheck. `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and unlisted
-writers remain outside this handler's bounded conclusion; the separate `avatar-mirror`
-worker hold does not expand it.
+or healthcheck. The separate avatar-proxy route, other avatar-related API paths/helpers,
+UI/read RPCs, adapters, and unlisted writers remain outside this handler's bounded
+conclusion; the separate `avatar-mirror` worker hold does not expand it.
 
 ### V1 avatar-mirror worker source boundary
 
@@ -104,8 +121,8 @@ queued avatar-mirror job returns as a no-op within `route()` before that handler
 no claim that the surrounding worker or BullMQ has not already established or used
 shared Redis, or acquired a job lock. This is not an instruction to stop, inspect,
 restart, or prove an already-running worker, Redis, host process, or schedule.
-`/api/avatar`, avatar helpers, UI/read RPCs, adapters, and unlisted writers remain
-outside this worker boundary.
+The separate avatar-proxy route, other avatar-related API paths/helpers, UI/read RPCs,
+adapters, and unlisted writers remain outside this worker boundary.
 
 ### Symptom: Cron job stuck in "running" status
 

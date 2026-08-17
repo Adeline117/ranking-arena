@@ -88,8 +88,22 @@ LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与同样三层 `no-store`，不做 upstream 
 
 这是 source-only containment，不停止、不检查也不证明已部署 Cloudflare Worker、VPS
 proxy/scraper、host process、queue 或 schedule。它不涵盖单独封存的 worker
-`avatar-mirror`；`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与未列 writer
-仍须独立审查。
+`avatar-mirror` 或下方单独封存的 avatar-proxy route；其他 avatar-related API path/helper、
+UI/read RPC、adapter 与未列 writer 仍须独立审查。
+
+### V1 avatar-proxy source boundary
+
+匿名 `GET /api/avatar` 及其 `/api/v1/avatar` rewrite alias 解析到同一固定 `410`
+source-only response。两条路径均带 `Cache-Control`、`CDN-Cache-Control`、
+`Vercel-CDN-Cache-Control` 三层 `no-store`，并在 query 解析、DNS lookup、upstream fetch 或
+logging 前结束；matching proxy bypass 只保证此匿名 no-store response contract，不是 upstream
+proxy permission。已登记的 helper 与已知 UI/OG consumer 不再生成 proxy request：需要 proxy 的
+origin 没有 mirror 时使用 local、inline 或 default fallback。
+
+这不声称所有 avatar browser/network request 为零：existing Supabase mirror 与 direct allowed
+raw-avatar URL 仍可能 render，其他 avatar-related API path/helper、adapter 与未列 writer 仍在
+范围外。该 source-only change 不能清除旧 CDN cache、停止 older deployed code，也不能证明
+external state。
 
 ### V1 avatar-backfill source boundary
 
@@ -99,8 +113,8 @@ canonical `GET /api/cron/backfill-avatars` 路由及其
 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均带 `Cache-Control`、`CDN-Cache-Control`、
 `Vercel-CDN-Cache-Control` 三层 `no-store`，并在参数解析、数据库、logging 或 upstream fetch 前
 结束。该源码契约不停止、不检查也不证明已部署 host、external scheduler 或 healthcheck。
-此 handler 不涵盖 `GET /api/avatar`、avatar helper、UI/read RPC、adapter 或未列 writer；单独的
-worker `avatar-mirror` source hold 不扩大该 handler 的结论。
+此 handler 不涵盖单独的 avatar-proxy route、其他 avatar-related API path/helper、UI/read RPC、
+adapter 或未列 writer；单独的 worker `avatar-mirror` source hold 不扩大该 handler 的结论。
 
 ### V1 avatar-mirror worker source boundary
 
@@ -109,23 +123,25 @@ scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `
 早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
 worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。该源码边界不停止、不检查也不
 证明已运行的 worker、Redis、host process 或 schedule 已停止。
-它不涵盖 `GET /api/avatar`、avatar helper、UI/read RPC、adapter 或未列 writer。
+它不扩大单独的 avatar-proxy boundary，也不涵盖其他 avatar-related API path/helper、UI/read RPC、
+adapter 或未列 writer。
 
 ---
 
 ## 2. 用户管理
 
-| 路由                                                   | 方法     | 描述                     | 认证 |
-| ------------------------------------------------------ | -------- | ------------------------ | ---- |
-| `/api/users/[handle]/full`                             | GET      | 获取用户完整资料         | 否   |
-| `/api/users/[handle]/follow?list=followers\|following` | GET      | 获取用户粉丝或关注列表   | 否   |
-| `/api/users/[handle]/bookmark-folders`                 | GET      | 获取用户收藏夹           | 否   |
-| `/api/users/follow`                                    | GET/POST | 查询或修改关注状态       | 是   |
-| `/api/follow`                                          | GET/POST | 查询或修改关注状态       | 是   |
-| `/api/following`                                       | GET      | 获取当前用户关注列表     | 是   |
-| `/api/avatar`                                          | GET      | 匿名头像图片代理         | 否   |
-| `/api/upload-profile-image`                            | POST     | 上传已认证用户的资料图片 | 是   |
-| `/api/avoid-list`                                      | GET/POST | 屏蔽列表管理             | 是   |
+| 路由                                                   | 方法     | 描述                                                                                | 认证 |
+| ------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------- | ---- |
+| `/api/users/[handle]/full`                             | GET      | 获取用户完整资料                                                                    | 否   |
+| `/api/users/[handle]/follow?list=followers\|following` | GET      | 获取用户粉丝或关注列表                                                              | 否   |
+| `/api/users/[handle]/bookmark-folders`                 | GET      | 获取用户收藏夹                                                                      | 否   |
+| `/api/users/follow`                                    | GET/POST | 查询或修改关注状态                                                                  | 是   |
+| `/api/follow`                                          | GET/POST | 查询或修改关注状态                                                                  | 是   |
+| `/api/following`                                       | GET      | 获取当前用户关注列表                                                                | 是   |
+| `/api/avatar`                                          | GET      | V1 匿名 fixed `410` source hold；三层 `no-store`，不解析 query/DNS/fetch/logging    | 否   |
+| `/api/v1/avatar`                                       | GET      | rewrite alias → `/api/avatar`；同一 V1 匿名 fixed `410`/三层 `no-store` source hold | 否   |
+| `/api/upload-profile-image`                            | POST     | 上传已认证用户的资料图片                                                            | 是   |
+| `/api/avoid-list`                                      | GET/POST | 屏蔽列表管理                                                                        | 是   |
 
 ---
 

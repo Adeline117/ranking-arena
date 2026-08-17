@@ -9,10 +9,24 @@ import {
   getAvatarInitial,
   getUserAvatarUrl,
   getTraderAvatarUrl,
-  needsProxy,
   type AvatarProps,
 } from '@/lib/utils/avatar'
-import { isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
+import {
+  avatarSrc,
+  isSvgAvatarSource,
+  V1_AVATAR_PROXY_FALLBACK_SRC,
+} from '@/lib/utils/avatar-proxy'
+import { isV1AvatarProxyPublished } from '@/lib/security/v1-avatar-proxy-publication'
+
+function resolveDirectAvatarUrl(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null
+  const resolved = avatarSrc(value)
+  // `avatarSrc` deliberately emits a fixed inline fallback for its many
+  // generic callers. This component already owns a richer local gradient +
+  // initial fallback, so proxy-required values remain image-free here.
+  if (!isV1AvatarProxyPublished() && resolved === V1_AVATAR_PROXY_FALLBACK_SRC) return null
+  return resolved || null
+}
 
 function resolveAvatarUrl(
   isTrader: boolean,
@@ -22,17 +36,18 @@ function resolveAvatarUrl(
   avatarMirrorUrl?: string | null
 ): string | null {
   if (isTrader) {
-    // Prefer our own CDN mirror (direct-load supabase URL, no proxy, no 429).
+    // Prefer our own CDN mirror when it remains a direct-safe source.
     const mirror = avatarMirrorUrl?.trim()
-    if (mirror) return mirror
+    const resolvedMirror = resolveDirectAvatarUrl(mirror)
+    if (resolvedMirror) return resolvedMirror
     const resolved = getTraderAvatarUrl(avatarUrl)
-    if (resolved) return resolved
+    if (resolved) return resolveDirectAvatarUrl(resolved)
     // No generated avatars (dicebear/blockie) — always gradient + initial letter
     return null
   }
-  if (avatarUrl?.trim()) return avatarUrl
+  if (avatarUrl?.trim()) return resolveDirectAvatarUrl(avatarUrl)
   if (avatarUrl === null) return null
-  return getUserAvatarUrl(userId, null, name ?? null) ?? null
+  return resolveDirectAvatarUrl(getUserAvatarUrl(userId, null, name ?? null))
 }
 
 export default function Avatar({
@@ -52,9 +67,6 @@ export default function Avatar({
   const backgroundGradient = getAvatarGradient(userId)
 
   const finalAvatarUrl = resolveAvatarUrl(isTrader, avatarUrl, userId, name, avatarMirrorUrl)
-  // Data URIs (blockie/identicon SVGs) bypass Next.js Image Optimization — they're already tiny.
-  // All other images go through /_next/image for resize + webp conversion (749KB → ~5KB).
-  const _isDataUri = !!finalAvatarUrl?.startsWith('data:')
 
   const showDefault = imageError || !finalAvatarUrl
 
@@ -101,11 +113,7 @@ export default function Avatar({
             </Box>
           )}
           <Image
-            src={
-              needsProxy(finalAvatarUrl)
-                ? `/api/avatar?url=${encodeURIComponent(finalAvatarUrl)}`
-                : finalAvatarUrl
-            }
+            src={finalAvatarUrl}
             alt={name || userId || 'Avatar'}
             width={size}
             height={size}

@@ -33,7 +33,8 @@ LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` 和三层 `no-store`；checked-in Cloudf
 
 这不是已部署状态：它不停止、检查或证明 VPS scraper/proxy、Cloudflare Worker、host process、
 queue 或 schedule，也不封存所有 source write。worker `avatar-mirror` 已由下方单独 source-only
-封存；`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与未列 writer 都在范围外，需独立审查。
+封存；下方 avatar-proxy route 也有独立 source-only boundary。其他 avatar-related API path/helper、
+UI/read RPC、adapter 与未列 writer 都在范围外，需独立审查。
 下方的主机、worker、生产验证或历史部署陈述仍是带日期的历史记录，不能用来推断当前运行状态或
 生成操作步骤。
 
@@ -46,9 +47,9 @@ CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参�
 upstream fetch 前结束。
 
 这同样不是已部署状态：它不停止、检查或证明 host、external scheduler 或 healthcheck。worker
-`avatar-mirror` 已由下方单独 source-only 封存；`GET /api/avatar`、avatar helper、UI/read RPC、
-adapter 与未列 writer 保持范围外。下方主机、worker、生产验证或历史部署陈述不可用于推断当前
-运行状态或生成操作步骤。
+`avatar-mirror` 已由下方单独 source-only 封存；avatar-proxy route 也有独立 boundary。其他
+avatar-related API path/helper、UI/read RPC、adapter 与未列 writer 保持范围外。下方主机、worker、
+生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
 
 ## V1 avatar-mirror worker source containment（2026-08-17）
 
@@ -57,8 +58,23 @@ scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `
 早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
 worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。它不停止、检查或证明任何已运行
 worker、Redis、host process 或 schedule 已停止。
-`GET /api/avatar`、avatar helper、UI/read RPC、adapter 与未列 writer 仍在该 worker 边界范围外；
-下方主机、worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
+avatar-proxy route 有单独 boundary；其他 avatar-related API path/helper、UI/read RPC、adapter 与
+未列 writer 仍在该 worker 边界范围外。下方主机、worker、生产验证或历史部署陈述不可用于推断
+当前运行状态或生成操作步骤。
+
+## V1 avatar-proxy source containment（2026-08-17）
+
+本轮将匿名 `GET /api/avatar` 及其 `/api/v1/avatar` rewrite alias 封存为同一 fixed `410`
+source-only response：两条路径均有 `Cache-Control`、`CDN-Cache-Control`、
+`Vercel-CDN-Cache-Control` 三层 `no-store`，并在 query 解析、DNS lookup、upstream fetch 或
+logging 前结束。matching proxy bypass 只保持这个匿名 no-store response contract，不表示可以使用
+upstream proxy。已登记 helper 与已知 UI/OG consumer 不再生成 proxy request；没有 mirror 的
+proxy-required origin 退回 local、inline 或 default fallback。
+
+这不声称所有 avatar browser/network request 都已停止：existing Supabase mirror 和 direct allowed
+raw-avatar URL 仍可能 render；其他 avatar-related API path/helper、adapter 与未列 writer 仍在范围外。
+这只是源码状态，不能清除旧 CDN cache、停止 older deployed code，或证明 external state；下方的主机、
+worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
 
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 

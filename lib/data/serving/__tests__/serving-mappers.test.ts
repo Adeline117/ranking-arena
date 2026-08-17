@@ -93,10 +93,8 @@ describe('getFirstScreen', () => {
     const fs = await getFirstScreen(rpcClient(rpcPayload), 'bitget_futures', 'beb24d718eb23b54ac91')
     expect(fs).not.toBeNull()
     expect(fs!.nickname).toBe('AI-HUB')
-    // Spec §1.4: no mirror → origin goes through the /api/avatar proxy
-    expect(fs!.avatarSrc).toBe(
-      `/api/avatar?url=${encodeURIComponent('https://qrc.bgstatic.com/otc/images/a.png')}`
-    )
+    // No mirror and a proxy-required origin → client renders its local fallback.
+    expect(fs!.avatarSrc).toBeNull()
     expect(fs!.entries).toHaveLength(1)
     expect(fs!.entries[0].headlinePnl).toEqual({ value: 7350.77, currency: 'USDT' })
     expect(fs!.entries[0].extras.copier_count).toBe(72)

@@ -5,8 +5,19 @@ import Avatar, { SimpleAvatar } from '../Avatar'
 // Mock next/image to render a simple img element
 jest.mock('next/image', () => ({
   __esModule: true,
-  default: ({ src, alt, onLoad, onError, style, unoptimized: _unoptimized, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { onLoad?: () => void; onError?: () => void; unoptimized?: boolean }) => (
-     
+  default: ({
+    src,
+    alt,
+    onLoad,
+    onError,
+    style,
+    unoptimized: _unoptimized,
+    ...props
+  }: React.ImgHTMLAttributes<HTMLImageElement> & {
+    onLoad?: () => void
+    onError?: () => void
+    unoptimized?: boolean
+  }) => (
     <img
       src={src as string}
       alt={alt}
@@ -39,11 +50,11 @@ jest.mock('@/lib/design-tokens', () => ({
 
 // Mock avatar utils
 jest.mock('@/lib/utils/avatar', () => ({
-  getAvatarGradient: (userId: string) => `linear-gradient(135deg, #${userId?.slice(0, 6) || '667eea'} 0%, #764ba2 100%)`,
+  getAvatarGradient: (userId: string) =>
+    `linear-gradient(135deg, #${userId?.slice(0, 6) || '667eea'} 0%, #764ba2 100%)`,
   getAvatarInitial: (name: string) => name?.charAt(0)?.toUpperCase() || '?',
   getUserAvatarUrl: (_userId: string, _avatarUrl: string | null, _name?: string) => null,
   getTraderAvatarUrl: (avatarUrl: string | null) => avatarUrl?.trim() || null,
-  needsProxy: (_url: string | null | undefined) => false,
   isWalletAddress: (id: string) => /^0x[a-fA-F0-9]{40,}$/.test(id),
 }))
 
@@ -54,52 +65,50 @@ jest.mock('../../base', () => ({
       {children}
     </div>
   ),
-  Text: ({ children, style, ...props }: React.HTMLAttributes<HTMLSpanElement> & { size?: string; weight?: string }) => (
-    <span style={style} {...props}>{children}</span>
+  Text: ({
+    children,
+    style,
+    ...props
+  }: React.HTMLAttributes<HTMLSpanElement> & { size?: string; weight?: string }) => (
+    <span style={style} {...props}>
+      {children}
+    </span>
   ),
 }))
 
 describe('Avatar', () => {
   it('renders with initial when no avatarUrl is provided', () => {
     render(<Avatar userId="user123" name="John Doe" />)
-    
+
     expect(screen.getByText('J')).toBeInTheDocument()
   })
 
   it('renders image when avatarUrl is provided', () => {
     const { container } = render(
-      <Avatar 
-        userId="user123" 
-        name="John Doe" 
-        avatarUrl="https://example.com/avatar.jpg" 
-      />
+      <Avatar userId="user123" name="John Doe" avatarUrl="https://i.pravatar.cc/150?img=1" />
     )
-    
+
     // Image is rendered but hidden during loading
     const img = container.querySelector('img')
     expect(img).toBeInTheDocument()
-    expect(img).toHaveAttribute('src', 'https://example.com/avatar.jpg')
+    expect(img).toHaveAttribute('src', 'https://i.pravatar.cc/150?img=1')
   })
 
   it('shows initial when image fails to load', () => {
     const { container } = render(
-      <Avatar 
-        userId="user123" 
-        name="Jane Doe" 
-        avatarUrl="https://example.com/invalid.jpg" 
-      />
+      <Avatar userId="user123" name="Jane Doe" avatarUrl="https://i.pravatar.cc/150?img=2" />
     )
-    
+
     const img = container.querySelector('img')
     expect(img).toBeInTheDocument()
     fireEvent.error(img!)
-    
+
     expect(screen.getByText('J')).toBeInTheDocument()
   })
 
   it('renders with custom size', () => {
     const { container } = render(<Avatar userId="user123" name="Test" size={60} />)
-    
+
     // Get the outermost avatar box (first child of container)
     const box = container.firstChild as HTMLElement
     expect(box.style.width).toBe('60px')
@@ -108,102 +117,111 @@ describe('Avatar', () => {
 
   it('renders initial for trader without avatarUrl', () => {
     render(<Avatar userId="trader123" name="Trader Name" isTrader avatarUrl={null} />)
-    
+
     expect(screen.getByText('T')).toBeInTheDocument()
   })
 
   it('renders image for trader with avatarUrl', () => {
     const { container } = render(
-      <Avatar 
-        userId="trader123" 
-        name="Trader Name" 
-        isTrader 
-        avatarUrl="https://example.com/trader.jpg" 
+      <Avatar
+        userId="trader123"
+        name="Trader Name"
+        isTrader
+        avatarUrl="https://i.pravatar.cc/150?img=3"
       />
     )
-    
+
     const img = container.querySelector('img')
     expect(img).toBeInTheDocument()
-    expect(img).toHaveAttribute('src', 'https://example.com/trader.jpg')
+    expect(img).toHaveAttribute('src', 'https://i.pravatar.cc/150?img=3')
   })
 
   it('shows loading state while image loads', () => {
     render(
-      <Avatar 
-        userId="user123" 
-        name="Loading Test" 
-        avatarUrl="https://example.com/slow.jpg" 
-      />
+      <Avatar userId="user123" name="Loading Test" avatarUrl="https://i.pravatar.cc/150?img=4" />
     )
-    
+
     // Initial should be visible as loading placeholder
     expect(screen.getByText('L')).toBeInTheDocument()
   })
 
   it('hides loading state after image loads', () => {
     const { container } = render(
-      <Avatar 
-        userId="user123" 
-        name="Loaded Test" 
-        avatarUrl="https://example.com/avatar.jpg" 
-      />
+      <Avatar userId="user123" name="Loaded Test" avatarUrl="https://i.pravatar.cc/150?img=5" />
     )
-    
+
     const img = container.querySelector('img')
     expect(img).toBeInTheDocument()
     fireEvent.load(img!)
-    
+
     // After load, image should be visible
     expect(img!.style.display).not.toBe('none')
   })
 
   it('applies custom className', () => {
     const { container } = render(<Avatar userId="user123" name="Test" className="custom-avatar" />)
-    
+
     const box = container.firstChild as HTMLElement
     expect(box).toHaveClass('custom-avatar')
   })
 
   it('applies custom style', () => {
-    const { container } = render(<Avatar userId="user123" name="Test" style={{ border: '2px solid red' }} />)
-    
+    const { container } = render(
+      <Avatar userId="user123" name="Test" style={{ border: '2px solid red' }} />
+    )
+
     const box = container.firstChild as HTMLElement
     expect(box.style.border).toBe('2px solid red')
   })
 
   it('uses userId for initial when name is not provided', () => {
     render(<Avatar userId="abc123" />)
-    
+
     expect(screen.getByText('A')).toBeInTheDocument()
+  })
+
+  it.each([
+    'https://qrc.bgstatic.com/otc/images/a.png',
+    '/api/avatar?url=https%3A%2F%2Fexample.com%2Fa.png',
+    '/api/v1/avatar?url=x',
+  ])('uses the local gradient fallback for retired proxy value %s', (avatarUrl) => {
+    const { container } = render(
+      <Avatar userId="trader123" name="Trader Name" isTrader avatarUrl={avatarUrl} />
+    )
+
+    expect(container.querySelector('img')).not.toBeInTheDocument()
+    expect(screen.getByText('T')).toBeInTheDocument()
   })
 })
 
 describe('SimpleAvatar', () => {
   it('renders initial without image', () => {
     const { container } = render(<SimpleAvatar userId="user123" name="Simple User" />)
-    
+
     expect(screen.getByText('S')).toBeInTheDocument()
     expect(container.querySelector('img')).not.toBeInTheDocument()
   })
 
   it('renders with custom size', () => {
     const { container } = render(<SimpleAvatar userId="user123" name="Test" size={48} />)
-    
+
     const box = container.firstChild as HTMLElement
     expect(box.style.width).toBe('48px')
     expect(box.style.height).toBe('48px')
   })
 
   it('applies custom className', () => {
-    const { container } = render(<SimpleAvatar userId="user123" name="Test" className="simple-class" />)
-    
+    const { container } = render(
+      <SimpleAvatar userId="user123" name="Test" className="simple-class" />
+    )
+
     const box = container.firstChild as HTMLElement
     expect(box).toHaveClass('simple-class')
   })
 
   it('uses userId for initial when name is not provided', () => {
     render(<SimpleAvatar userId="xyz789" />)
-    
+
     expect(screen.getByText('X')).toBeInTheDocument()
   })
 })

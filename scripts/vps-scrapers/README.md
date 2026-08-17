@@ -19,6 +19,14 @@ authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry thre
 `no-store` headers and return before parameter parsing, database access, logging, or
 upstream fetch.
 
+Anonymous `GET /api/avatar` and its `/api/v1/avatar` rewrite alias are separately held
+to the same fixed `410` source-only response with `Cache-Control`,
+`CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store` headers before query
+parsing, DNS lookup, upstream fetch, or logging. The matching proxy bypass only
+preserves that anonymous response contract; it does not authorize an upstream proxy.
+Registered helpers and known UI/OG consumers no longer generate a proxy request: a
+proxy-required origin without a mirror uses local, inline, or default fallback.
+
 The checked-in `avatar-mirror` worker execution is separately source-only retired: its
 processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
 queued avatar-mirror job returns as a no-op within `route()` before that handler calls
@@ -30,7 +38,10 @@ This does not stop, inspect, restart, or prove an already deployed VPS scraper/p
 Cloudflare Worker, host process, queue, external scheduler, or healthcheck. Do not
 infer that every browser, adapter, helper, or source write is held. The avatar-mirror
 hold itself cannot stop, inspect, restart, or prove an already-running worker, Redis,
-host process, or schedule. `/api/avatar`, avatar helpers, UI/read RPCs, adapters, and
+host process, or schedule. The avatar-proxy hold cannot clear old CDN cache, stop older
+deployed code, or prove external state; it does not mean all avatar browser/network
+activity is zero, because existing Supabase mirrors and direct allowed raw-avatar URLs
+may still render. Other avatar-related API paths/helpers, UI/read RPCs, adapters, and
 unlisted writers are outside this containment review.
 
 ## Historical design surfaces
