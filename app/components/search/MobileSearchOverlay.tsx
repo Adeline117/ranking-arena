@@ -24,7 +24,8 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
   const { t, language: _language } = useLanguage()
   const router = useRouter()
   const [query, setQuery] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [activeOptionId, setActiveOptionId] = useState<string | null>(null)
+  const modalRef = useRef<HTMLDivElement>(null)
 
   const saveToHistory = useCallback((q: string) => {
     const trimmed = q.trim()
@@ -34,20 +35,19 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
   }, [])
 
   useEffect(() => {
-    if (open && inputRef.current) {
-      inputRef.current.focus()
-    }
     if (!open) {
       setQuery('')
+      setActiveOptionId(null)
     }
   }, [open])
 
-  useModalA11y({ open, onClose })
+  useModalA11y({ open, onClose, modalRef })
 
   if (!open) return null
 
   return (
     <Box
+      ref={modalRef}
       role="dialog"
       aria-modal="true"
       aria-label={t('search')}
@@ -76,21 +76,18 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
       >
         <Box style={{ flex: 1, position: 'relative' }}>
           <input
-            ref={inputRef}
             type="text"
             maxLength={200}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && query.trim()) {
-                // If the dropdown has a highlighted item, let the dropdown handle Enter
-                const dropdownEl = document.getElementById('search-dropdown-listbox')
-                const hasSelection = dropdownEl?.querySelector('[aria-selected="true"]')
-                if (hasSelection) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  return
-                }
+                // SearchDropdown owns selected-result navigation through its
+                // document keydown listener. Do not stop this event: doing so
+                // leaves an arrow-key-selected result impossible to open on
+                // mobile. The callback is the same source of truth used by the
+                // desktop combobox (NavSearchBar).
+                if (activeOptionId) return
                 e.preventDefault()
                 e.stopPropagation()
                 saveToHistory(query.trim())
@@ -101,6 +98,12 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
             enterKeyHint="search"
             placeholder={t('searchPlaceholder')}
             aria-label={t('searchPlaceholder')}
+            aria-expanded
+            aria-haspopup="listbox"
+            aria-controls="search-dropdown-listbox"
+            aria-activedescendant={activeOptionId ?? undefined}
+            aria-autocomplete="list"
+            role="combobox"
             style={{
               width: '100%',
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -115,6 +118,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
           {query && (
             <button
               onClick={() => setQuery('')}
+              aria-label={t('clearSearch')}
               style={{
                 position: 'absolute',
                 right: 12,
@@ -170,6 +174,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
         <SearchDropdown
           open={true}
           query={query}
+          onActiveOptionChange={setActiveOptionId}
           onClose={() => {
             if (query.trim()) saveToHistory(query.trim())
             onClose()
