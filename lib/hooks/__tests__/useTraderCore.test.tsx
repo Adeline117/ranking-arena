@@ -1,6 +1,6 @@
 import React from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useTraderCore } from '../useTraderCore'
 import { fetcher } from '@/lib/hooks/fetchers'
 import type { ApiSuccessResponse } from '@/lib/types/index'
@@ -25,6 +25,13 @@ function response(data: TraderCoreResponse): ApiSuccessResponse<TraderCoreRespon
 }
 
 describe('useTraderCore timeframe identity', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    onlineManager.setOnline(true)
+  })
+
+  afterEach(() => onlineManager.setOnline(true))
+
   it('never exposes the previous timeframe while a cold selection is loading', async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity } },
@@ -136,5 +143,66 @@ describe('useTraderCore timeframe identity', () => {
     now.mockRestore()
     view.unmount()
     queryClient.clear()
+  })
+
+  it('turns a paused stale refresh into immediate retained-data degradation', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    const pendingModules: TraderCoreModules = { ...modules(90, 900), cacheState: 'pending' }
+    ;(fetcher as jest.Mock).mockResolvedValue(response(pendingModules))
+
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useTraderCore({ source: 'gmx', exchangeTraderId: '0x123', tf: 90 }),
+      { wrapper: Wrapper }
+    )
+
+    try {
+      await waitFor(() => expect(view.result.current.isPendingUpstream).toBe(true))
+      await act(async () => {
+        onlineManager.setOnline(false)
+        void view.result.current.refetch()
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(view.result.current.isDegraded).toBe(true))
+      expect(view.result.current.modules?.stats.pnl).toBe(900)
+      expect(view.result.current.isPendingUpstream).toBe(false)
+    } finally {
+      onlineManager.setOnline(true)
+      view.unmount()
+      queryClient.clear()
+    }
+  })
+
+  it('turns an offline cold core read into retryable degradation', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    })
+    onlineManager.setOnline(false)
+
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    }
+
+    const view = renderHook(
+      () => useTraderCore({ source: 'gmx', exchangeTraderId: '0x123', tf: 90 }),
+      { wrapper: Wrapper }
+    )
+
+    try {
+      await waitFor(() => expect(view.result.current.isDegraded).toBe(true))
+      expect(view.result.current.modules).toBeNull()
+      expect(view.result.current.isPendingUpstream).toBe(false)
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      onlineManager.setOnline(true)
+      view.unmount()
+      queryClient.clear()
+    }
   })
 })

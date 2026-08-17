@@ -129,7 +129,15 @@ export function useTraderCore({
     data?.cacheState === 'pending' &&
     activePoll !== null &&
     Date.now() - activePoll.startedAt >= POLL_GIVE_UP_MS
-  const isDegraded = Boolean(pollGaveUp) || Boolean(query.error)
+  // A paused browser request cannot advance the bounded collection window.
+  // Surface it as retryable immediately: retain a truthful stale module when
+  // one exists, but never leave a cold profile under a misleading pending
+  // state until the 90s deadline happens to expire.
+  const isPausedWithoutProgress =
+    enabled &&
+    query.fetchStatus === 'paused' &&
+    (data === undefined || data.cacheState === 'pending')
+  const isDegraded = Boolean(pollGaveUp) || Boolean(query.error) || isPausedWithoutProgress
   const isPendingUpstream = data?.cacheState === 'pending' && !isDegraded
 
   return {
