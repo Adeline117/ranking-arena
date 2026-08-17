@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { ScoreBreakdownSection } from '../ScoreBreakdownSection'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -32,7 +33,6 @@ function section(overrides: Partial<React.ComponentProps<typeof ScoreBreakdownSe
       periodRiskControlScore={undefined}
       arenaScoreV3={undefined}
       scoreConfidence={null}
-      isVisible
       {...overrides}
     />
   )
@@ -111,5 +111,23 @@ describe('ScoreBreakdownSection trusted score states', () => {
     const tooltip = screen.getByRole('tooltip', { hidden: true })
     expect(trigger).toHaveAttribute('aria-describedby', tooltip.id)
     expect(tooltip).toHaveTextContent('scoreGuideDetail')
+  })
+
+  it('keeps score text readable in the server first paint', () => {
+    const markup = renderToStaticMarkup(
+      section({
+        periodArenaScore: 58,
+        periodProfitabilityScore: 63,
+        periodRiskControlScore: 47,
+        scoreConfidence: 'full',
+      })
+    )
+    const sectionStyle = markup.match(/^<div style="([^"]*)"/)?.[1]
+
+    expect(markup).toContain('scoreBreakdown')
+    expect(markup).toContain('58')
+    expect(sectionStyle).toBeDefined()
+    expect(sectionStyle).not.toContain('opacity')
+    expect(sectionStyle).not.toContain('transition')
   })
 })

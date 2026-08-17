@@ -1,5 +1,6 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { HeroMetrics } from '../HeroMetrics'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -28,7 +29,6 @@ describe('HeroMetrics PnL disclosure', () => {
         pnl={345}
         pnlDisclosure={disclosure}
         sparklineData={[]}
-        isVisible
       />
     )
 
@@ -41,7 +41,7 @@ describe('HeroMetrics PnL disclosure', () => {
   })
 
   it('keeps generic PnL copy when no verified contract is attached', () => {
-    render(<HeroMetrics roi={12} pnl={345} sparklineData={[]} isVisible />)
+    render(<HeroMetrics roi={12} pnl={345} sparklineData={[]} />)
 
     expect(screen.getByText('pnl')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'pnlTooltip' })).toBeInTheDocument()
@@ -52,12 +52,27 @@ describe('HeroMetrics PnL disclosure', () => {
   })
 
   it('does not infer the ROI formula from the PnL contract alone', () => {
-    render(
-      <HeroMetrics roi={12} pnl={345} pnlDisclosure={disclosure} sparklineData={[]} isVisible />
-    )
+    render(<HeroMetrics roi={12} pnl={345} pnlDisclosure={disclosure} sparklineData={[]} />)
 
     expect(screen.getByText('roi')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'roiTooltip' })).toBeInTheDocument()
     expect(screen.queryByText('gmxMaxCapitalRoiLabel')).not.toBeInTheDocument()
+  })
+
+  it('renders ROI and PnL at first paint without an opacity-gated reveal', () => {
+    const markup = renderToStaticMarkup(<HeroMetrics roi={12} pnl={345} sparklineData={[]} />)
+    const roiMetricStyle = markup.match(/class="hero-metric-value" style="([^"]*)"/)?.[1]
+    const pnlMetricStyle = markup.match(
+      /<div style="([^"]*)"><span[^>]*>\+\$345\.00<\/span><\/div>/
+    )?.[1]
+
+    expect(markup).toContain('roi')
+    expect(markup).toContain('pnl')
+    expect(roiMetricStyle).toBeDefined()
+    expect(roiMetricStyle).not.toContain('opacity')
+    expect(roiMetricStyle).not.toContain('transition')
+    expect(pnlMetricStyle).toBeDefined()
+    expect(pnlMetricStyle).not.toContain('opacity')
+    expect(pnlMetricStyle).not.toContain('transition')
   })
 })

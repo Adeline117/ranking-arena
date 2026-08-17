@@ -1,5 +1,6 @@
 import React from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import OverviewPerformanceCard from '../OverviewPerformanceCard'
 import { usePeriodStore } from '@/lib/stores/periodStore'
 
@@ -126,6 +127,13 @@ describe('OverviewPerformanceCard period switching', () => {
     view.unmount()
 
     expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('keeps the performance card readable in SSR markup before hydration', () => {
+    const markup = renderToStaticMarkup(<OverviewPerformanceCard performance={performance} />)
+
+    expect(markup).toContain('period-pnl')
+    expect(markup).not.toContain('opacity:0')
   })
 
   it('shows the dormant notice only for the selected all-zero activity period', () => {

@@ -18,7 +18,6 @@ export interface HeroMetricsProps {
   pnl: number | undefined
   pnlDisclosure?: GmxRealizedNetDisclosure
   sparklineData: number[]
-  isVisible: boolean
 }
 
 export function HeroMetrics({
@@ -27,16 +26,8 @@ export function HeroMetrics({
   pnl,
   pnlDisclosure,
   sparklineData,
-  isVisible,
 }: HeroMetricsProps) {
   const { t } = useLanguage()
-
-  // Shared entrance animation for the headline figures.
-  const enterStyle = (delayMs: number) => ({
-    opacity: isVisible ? 1 : 0,
-    transform: isVisible ? 'translateY(0)' : 'translateY(4px)',
-    transition: `opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms`,
-  })
 
   return (
     <Box
@@ -100,7 +91,6 @@ export function HeroMetrics({
             size="hero"
             style={{
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
-              ...enterStyle(100),
             }}
           />
           {(sparklineData.length > 2 || roi != null) && (
@@ -158,7 +148,6 @@ export function HeroMetrics({
           size="lg"
           style={{
             fontFamily: tokens.typography.fontFamily.mono.join(', '),
-            ...enterStyle(200),
           }}
         />
         {pnlDisclosure && <PnlContractNotice disclosure={pnlDisclosure} compact />}

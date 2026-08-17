@@ -19,7 +19,6 @@ export interface ScoreBreakdownSectionProps {
   periodRiskControlScore: number | undefined
   arenaScoreV3: number | undefined
   scoreConfidence: NormalizedScoreConfidence | null | undefined
-  isVisible: boolean
   rank?: number
   totalTraders?: number
   platformName?: string
@@ -31,7 +30,6 @@ export function ScoreBreakdownSection({
   periodRiskControlScore,
   arenaScoreV3,
   scoreConfidence,
-  isVisible,
   rank,
   totalTraders,
   platformName,
@@ -79,9 +77,6 @@ export function ScoreBreakdownSection({
         marginTop: tokens.spacing[5],
         paddingTop: tokens.spacing[5],
         borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
-        opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.4s',
         overflow: 'hidden',
       }}
     >
@@ -283,16 +278,9 @@ export function ScoreBreakdownSection({
             label={t('scoreProfit')}
             score={profitabilityScore}
             maxScore={100}
-            isVisible={isVisible}
             delay={500}
           />
-          <ScoreBar
-            label={t('scoreRisk')}
-            score={riskControlScore}
-            maxScore={100}
-            isVisible={isVisible}
-            delay={550}
-          />
+          <ScoreBar label={t('scoreRisk')} score={riskControlScore} maxScore={100} delay={550} />
         </Box>
         {/* 雷达图：优先使用V3三维度分数，回退到4维映射 */}
         <Box

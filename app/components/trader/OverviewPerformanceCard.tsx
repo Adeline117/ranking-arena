@@ -122,8 +122,6 @@ export default function OverviewPerformanceCard({
   const period = usePeriodStore((s) => s.period) as Period
   const setStorePeriod = usePeriodStore((s) => s.setPeriod)
   const [isAnimating, setIsAnimating] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [isVisible, setIsVisible] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   // Keep the default three-tab path aligned with ServingProfilePanel. An
   // explicit `absent` capability is authoritative: resolve a deep link or a
@@ -144,11 +142,7 @@ export default function OverviewPerformanceCard({
   selectedPeriodRef.current = effectivePeriod
 
   useEffect(() => {
-    setMounted(true)
-    // Small delay to trigger bar animation after mount
-    const timer = setTimeout(() => setIsVisible(true), 150)
     return () => {
-      clearTimeout(timer)
       if (animationTimerRef.current) clearTimeout(animationTimerRef.current)
     }
   }, [])
@@ -307,9 +301,6 @@ export default function OverviewPerformanceCard({
           borderRadius: tokens.radius.xl,
           border: `1px solid ${tokens.colors.border.primary}`,
           overflow: 'hidden',
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           boxShadow: `0 4px 24px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)`,
         }}
       >
@@ -374,7 +365,6 @@ export default function OverviewPerformanceCard({
                   pnl={pnl}
                   pnlDisclosure={pnlDisclosure}
                   sparklineData={sparklineData}
-                  isVisible={isVisible}
                 />
 
                 {/* 二级指标 - 紧凑徽章布局 */}
@@ -392,7 +382,7 @@ export default function OverviewPerformanceCard({
                   avgLeverage={positionSummary?.avgLeverage ?? undefined}
                   longPositions={positionSummary?.longPositions ?? undefined}
                   shortPositions={positionSummary?.shortPositions ?? undefined}
-                  isVisible={isVisible}
+                  isVisible
                 />
 
                 {/* 评分详情 - 免费展示 (period-specific) */}
@@ -402,7 +392,6 @@ export default function OverviewPerformanceCard({
                   periodRiskControlScore={periodRiskControlScore}
                   arenaScoreV3={arenaScoreV3}
                   scoreConfidence={periodScoreConfidence}
-                  isVisible={isVisible}
                 />
               </Box>
             </>
