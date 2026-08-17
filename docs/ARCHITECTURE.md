@@ -12,8 +12,10 @@
 > `V1_INGEST_EXECUTION_PUBLISHED=false` is a third, separate source guard for the
 > checked-in native ingest command path; it is neither a live-host assertion nor a
 > blanket classification of legacy queue, proxy, or import paths. The separate legacy
-> proxy/import hold applies only to its explicitly listed historical entrypoints and
-> is not a claim that every source writer or helper is disabled.
+> proxy/import hold and the avatar-backfill handler (canonical `GET
+/api/cron/backfill-avatars` plus its `/api/v1/cron/backfill-avatars` rewrite alias)
+> each apply only to their explicitly listed handler/entrypoints; neither claims every
+> source writer or helper is disabled.
 
 ## 一、系统全景（历史 / 设计语义）
 
@@ -174,9 +176,17 @@ legacy proxy/import path；后者由下面独立且范围有限的审查封存�
 URL/query、upstream fetch 或 logging 前结束。checked-in Cloudflare Worker 对任意请求固定
 `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与三层 `no-store`、不 fetch；列出的脚本均在 proxy、
 browser、import 或 host 工作前报告 `RETIRED` 并 exit `2`。这些代码门禁不停止、不检查也不证明
-任何已部署 CF Worker、VPS proxy/scraper、host process、queue 或 external schedule。它们也不
-涉及 `app/api/cron/backfill-avatars`、avatar helper、adapter 或任何未列 source/write path；后者
-没有在本 PR 中被关闭或重新分类。
+任何已部署 CF Worker、VPS proxy/scraper、host process、queue 或 external schedule。它们不涉及
+avatar helper、worker `avatar-mirror`、adapter、未列 writer 或 `GET /api/avatar`；后者没有在本
+PR 中被关闭或重新分类。
+
+独立的 canonical `GET /api/cron/backfill-avatars` 及其
+`/api/v1/cron/backfill-avatars` rewrite alias 解析到同一 source-only tombstone handler：先校验
+service authentication，缺失或无效认证返回 `401`；有效认证返回 `410
+CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
+upstream fetch 前结束。该源码契约同样不停止、不检查也不证明已部署 host、external scheduler 或
+healthcheck；该 handler 不涵盖 avatar helper、worker `avatar-mirror`、adapter、未列 writer 或
+`GET /api/avatar`。
 
 未来的发布流程必须由 owner 重新定义并单独批准：精确 candidate SHA、隔离目标、受保护
 source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界和保留的审计材料。具体操作

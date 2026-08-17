@@ -32,9 +32,21 @@ LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` 和三层 `no-store`；checked-in Cloudf
 `RETIRED`/exit `2`，不启动 proxy、browser、import 或 host work。
 
 这不是已部署状态：它不停止、检查或证明 VPS scraper/proxy、Cloudflare Worker、host process、
-queue 或 schedule，也不封存所有 source write。`app/api/cron/backfill-avatars`、avatar helper、
-adapter 与未列 import/write utility 都在范围外，需独立审查。下方的主机、worker、生产验证或
-历史部署陈述仍是带日期的历史记录，不能用来推断当前运行状态或生成操作步骤。
+queue 或 schedule，也不封存所有 source write。avatar helper、worker `avatar-mirror`、adapter、
+未列 writer 与 `GET /api/avatar` 都在范围外，需独立审查。下方的主机、worker、生产验证或历史
+部署陈述仍是带日期的历史记录，不能用来推断当前运行状态或生成操作步骤。
+
+## V1 avatar-backfill source containment（2026-08-16）
+
+本轮另将 canonical `GET /api/cron/backfill-avatars` 及其
+`/api/v1/cron/backfill-avatars` rewrite alias 作为同一 source-only tombstone handler：
+先校验 service authentication，缺失或无效认证固定返回 `401`；有效认证固定返回 `410
+CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
+upstream fetch 前结束。
+
+这同样不是已部署状态：它不停止、检查或证明 host、external scheduler 或 healthcheck。avatar
+helper、worker `avatar-mirror`、adapter、未列 writer 与 `GET /api/avatar` 保持范围外；下方主机、
+worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
 
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 

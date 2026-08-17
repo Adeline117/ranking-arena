@@ -12,11 +12,18 @@ proxy, import, or host work. The related historical import and verification entr
 listed in `scripts/import/NEW_EXCHANGES_README.md` have the same source-only behavior.
 The checked-in Cloudflare Worker separately returns fixed `410
 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with three `no-store` headers and no upstream fetch.
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same auth-first source-only
+tombstone handler: missing or invalid service authentication returns `401`; valid
+authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry three
+`no-store` headers and return before parameter parsing, database access, logging, or
+upstream fetch.
 
 This does not stop, inspect, restart, or prove an already deployed VPS scraper/proxy,
-Cloudflare Worker, host process, queue, or schedule. Do not infer that every browser,
-adapter, helper, or source write is held: `app/api/cron/backfill-avatars`, avatar
-helpers, adapters, and any unlisted path are outside this containment review.
+Cloudflare Worker, host process, queue, external scheduler, or healthcheck. Do not
+infer that every browser, adapter, helper, or source write is held: avatar helpers, the
+worker `avatar-mirror`, adapters, unlisted writers, and `GET /api/avatar` are outside
+this containment review.
 
 ## Historical design surfaces
 

@@ -78,9 +78,21 @@ checked-in Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHE
 the same headers and no upstream fetch. The named scripts report `RETIRED` and exit
 `2` before proxy, browser, import, or host work. This is source-only containment, not
 an instruction to stop, inspect, restart, or prove an already deployed host, worker,
-proxy, queue, or schedule. It does not classify `app/api/cron/backfill-avatars`, avatar
-helpers, adapters, or another unlisted source/write path; those remain outside this
-runbook's conclusion.
+proxy, queue, or schedule. It does not classify avatar helpers, the worker
+`avatar-mirror`, adapters, unlisted writers, or `GET /api/avatar`; those remain outside
+this runbook's conclusion.
+
+### V1 avatar-backfill source boundary
+
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only tombstone
+handler, not a backfill procedure. It authenticates first: missing or invalid service
+authentication returns `401`; valid authentication returns `410
+CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry the three `no-store` headers and return
+before parameter parsing, database access, logging, or upstream fetch. This checked-in
+contract does not stop, inspect, restart, or prove a deployed host, external scheduler,
+or healthcheck. Avatar helpers, the worker `avatar-mirror`, adapters, unlisted writers,
+and `GET /api/avatar` remain outside this handler's bounded conclusion.
 
 ### Symptom: Cron job stuck in "running" status
 

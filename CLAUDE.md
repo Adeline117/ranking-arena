@@ -166,9 +166,18 @@ parse URL/query, fetch, or log. The checked-in Cloudflare Worker is a fixed
 `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED`/three-`no-store` no-fetch response; the named
 script entrypoints report `RETIRED` and exit `2` before proxy, browser, import, or host
 work. This source-only hold does not stop or prove a deployed VPS/Cloudflare worker,
-host process, queue, or schedule. It also does not claim that every source write is
-closed: `app/api/cron/backfill-avatars`, avatar helpers, adapters, and any unlisted
-import/write utility remain outside this PR and need their own bounded review.
+host process, queue, or schedule. Its scope excludes avatar helpers, the worker
+`avatar-mirror`, adapters, unlisted writers, and `GET /api/avatar`.
+
+Separately, the canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only
+tombstone handler. It is auth-first: missing or invalid service authentication receives
+`401`; valid authentication receives `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths
+carry three `no-store` headers and return before parameter parsing, database access,
+logging, or upstream fetch. This checked-in contract does not stop, inspect, or prove
+an already deployed host, external scheduler, or healthcheck. Avatar helpers, the
+worker `avatar-mirror`, adapters, unlisted writers, and `GET /api/avatar` remain
+outside this handler's bounded review.
 
 Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
 

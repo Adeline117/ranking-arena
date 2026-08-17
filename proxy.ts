@@ -74,7 +74,12 @@ const PUBLIC_ROUTES = [
 ]
 
 // 需要跳过的路由前缀
-const SKIP_ROUTE_PREFIXES = ['/_next', '/favicon.ico', '/api/health', '/api/cron']
+const SKIP_ROUTE_PREFIXES = ['/_next', '/favicon.ico', '/api/health']
+
+// Next Proxy runs before the checked-in `/api/v1/*` rewrite. Keep both the
+// canonical and versioned cron namespaces outside middleware so each cron
+// route owns its authentication-first response contract.
+const CRON_ROUTE_PREFIXES = ['/api/cron', '/api/v1/cron'] as const
 
 // Exact route handoffs that own their response contract. In particular, the
 // retired Phemex acquisition route must authenticate and emit its no-store
@@ -262,10 +267,15 @@ function isProtectedRoute(pathname: string, method: string): boolean {
 /**
  * 检查是否应跳过代理
  */
-function shouldSkip(pathname: string): boolean {
+export function isCronProxyBypassPath(pathname: string): boolean {
+  return CRON_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
+
+export function shouldSkip(pathname: string): boolean {
   return (
     SKIP_EXACT_ROUTES.has(pathname) ||
-    SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route))
+    SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route)) ||
+    isCronProxyBypassPath(pathname)
   )
 }
 
@@ -423,7 +433,7 @@ function ipFloorClientIp(req: NextRequest): string {
 }
 
 async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextResponse | null> {
-  if (!pathname.startsWith('/api/') || pathname.startsWith('/api/cron/')) return null
+  if (!pathname.startsWith('/api/') || isCronProxyBypassPath(pathname)) return null
   const rl = getIpFloorRatelimit()
   if (!rl) return null // fail-open
   const ip = ipFloorClientIp(req)

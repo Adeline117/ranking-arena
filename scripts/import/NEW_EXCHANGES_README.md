@@ -23,11 +23,18 @@ LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与三层 `no-store`，不作 upstream fetch�
 `GET /api/proxy/phemex` 先鉴权，随后固定 `410
 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`。
 
+独立的 canonical `GET /api/cron/backfill-avatars` 及其
+`/api/v1/cron/backfill-avatars` rewrite alias 解析到同一 tombstone handler：先校验 service
+authentication，缺失或无效认证返回 `401`；有效认证返回 `410
+CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
+upstream fetch 前结束；它不是 backfill 操作说明。
+
 ## 边界与真相
 
 上述只是源码封存，不能停止、检查或证明已经部署的 VPS scraper/proxy、Cloudflare Worker、
-host process、queue 或 schedule。它不表示所有 `scripts/import/**`、adapter、helper 或写路径
-都已关闭；尤其 `app/api/cron/backfill-avatars` 与 avatar-related helper 不在本次结论中。
+host process、queue、external scheduler 或 healthcheck。它不表示所有 `scripts/import/**`、
+adapter、helper 或写路径都已关闭。avatar helper、worker `avatar-mirror`、adapter、未列 writer
+与 `GET /api/avatar` 均不在 avatar-backfill handler 或本文列出的 import/proxy 入口的结论中。
 任何未列入口都必须由 owner 在独立、范围明确的审查中决定，不能从本文件推导出执行权限。
 
 ## 历史设计记录
