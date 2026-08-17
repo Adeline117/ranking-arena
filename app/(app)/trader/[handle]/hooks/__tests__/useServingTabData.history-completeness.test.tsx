@@ -219,4 +219,82 @@ describe('useServingTabData history completeness', () => {
     expect(retry30).not.toHaveBeenCalled()
     expect(retry90).not.toHaveBeenCalled()
   })
+
+  it('never requests or retains source-declared absent timeframes', async () => {
+    const retry7 = jest.fn().mockResolvedValue(undefined)
+    const retry30 = jest.fn().mockResolvedValue(undefined)
+    const retry90 = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderCore as jest.Mock).mockImplementation(({ tf }: { tf: 7 | 30 | 90 }) => {
+      if (tf === 7) {
+        return coreResult({
+          modules: {
+            ...coreModule(7),
+            stats: { unsupported_7d_metric: 1 },
+            extras: { unsupported_7d_extra: 'cached-before-withdrawal' },
+          },
+          isDegraded: true,
+          isPendingUpstream: true,
+          refetch: retry7,
+        })
+      }
+      if (tf === 30) return coreResult({ modules: coreModule(30), refetch: retry30 })
+      return coreResult({
+        modules: {
+          ...coreModule(90),
+          stats: { unsupported_90d_metric: 1 },
+        },
+        isDegraded: true,
+        isPendingUpstream: true,
+        refetch: retry90,
+      })
+    })
+    ;(useTraderRecords as jest.Mock).mockImplementation(() => recordsResult(null))
+    const thirtyDayOnly: SourceCapability = {
+      ...capability,
+      timeframes: { '7': 'absent', '30': 'native', '90': 'absent' },
+    }
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        thirtyDayOnly,
+        true
+      )
+    )
+
+    expect(useTraderCore).toHaveBeenNthCalledWith(1, {
+      source: 'gmx',
+      exchangeTraderId: 'trader-a',
+      tf: 7,
+      enabled: false,
+    })
+    expect(useTraderCore).toHaveBeenNthCalledWith(2, {
+      source: 'gmx',
+      exchangeTraderId: 'trader-a',
+      tf: 30,
+      enabled: true,
+    })
+    expect(useTraderCore).toHaveBeenNthCalledWith(3, {
+      source: 'gmx',
+      exchangeTraderId: 'trader-a',
+      tf: 90,
+      enabled: false,
+    })
+    expect(view.result.current.metaExtras).not.toHaveProperty('unsupported_7d_extra')
+    expect(view.result.current.gridStats).not.toHaveProperty('unsupported_7d_metric')
+    expect(view.result.current.gridStats).not.toHaveProperty('unsupported_90d_metric')
+    expect(view.result.current.isCorePendingUpstream).toBe(false)
+    expect(view.result.current.isCoreStale).toBe(false)
+    expect(view.result.current.isCoreUnavailable).toBe(false)
+
+    await view.result.current.refetchDegradedCore()
+    expect(retry7).not.toHaveBeenCalled()
+    expect(retry30).not.toHaveBeenCalled()
+    expect(retry90).not.toHaveBeenCalled()
+  })
 })

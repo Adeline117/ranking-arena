@@ -89,6 +89,20 @@ export interface ServingTabInput {
   scores?: import('../TraderProfileClient').ServingScoreRow[]
 }
 
+/**
+ * An explicit `absent` capability is an authority verdict, not a hint. Keep
+ * the default three-tab surface aligned with ServingProfilePanel: it may
+ * optimistically fetch while the capability matrix is unknown, but it must
+ * neither enqueue Tier-C work nor retain a cached module once the source says
+ * that exact timeframe is unavailable.
+ */
+function mayRequestCoreTimeframe(
+  capability: SourceCapability | null,
+  timeframe: 7 | 30 | 90
+): boolean {
+  return capability?.timeframes?.[String(timeframe) as '7' | '30' | '90'] !== 'absent'
+}
+
 export function useServingTabData(
   input: ServingTabInput,
   capability: SourceCapability | null,
@@ -96,9 +110,12 @@ export function useServingTabData(
 ): ServingTabData {
   const { source, exchangeTraderId } = input
 
-  const c7 = useTraderCore({ source, exchangeTraderId, tf: 7, enabled })
-  const c30 = useTraderCore({ source, exchangeTraderId, tf: 30, enabled })
-  const c90 = useTraderCore({ source, exchangeTraderId, tf: 90, enabled })
+  const core7Enabled = enabled && mayRequestCoreTimeframe(capability, 7)
+  const core30Enabled = enabled && mayRequestCoreTimeframe(capability, 30)
+  const core90Enabled = enabled && mayRequestCoreTimeframe(capability, 90)
+  const c7 = useTraderCore({ source, exchangeTraderId, tf: 7, enabled: core7Enabled })
+  const c30 = useTraderCore({ source, exchangeTraderId, tf: 30, enabled: core30Enabled })
+  const c90 = useTraderCore({ source, exchangeTraderId, tf: 90, enabled: core90Enabled })
 
   const positions = useTraderRecords({
     source,
@@ -115,20 +132,27 @@ export function useServingTabData(
     enabled: enabled && Boolean(capability?.surfaces?.position_history),
   })
 
-  const m7 = c7.modules
-  const m30 = c30.modules
-  const m90 = c90.modules
+  // React Query intentionally retains cached data when a query becomes
+  // disabled. Do not let an earlier unknown-capability response survive an
+  // authoritative `absent` verdict in the default three-tab adapter.
+  const m7 = core7Enabled ? c7.modules : null
+  const m30 = core30Enabled ? c30.modules : null
+  const m90 = core90Enabled ? c90.modules : null
   const posRows = positions.rows
   const histRows = posHistory.rows
   const historyCompleteness = posHistory.completeness
+  const enabledCoreHooks = [
+    core7Enabled ? c7 : null,
+    core30Enabled ? c30 : null,
+    core90Enabled ? c90 : null,
+  ].filter((core): core is typeof c7 => core !== null)
   const hasCoreModules = Boolean(m7 || m30 || m90)
-  const isCoreDegraded = Boolean(c7.isDegraded || c30.isDegraded || c90.isDegraded)
-  const isCorePendingUpstream = Boolean(
-    c7.isPendingUpstream || c30.isPendingUpstream || c90.isPendingUpstream
-  )
+  const isCoreLoading = enabledCoreHooks.some((core) => core.isLoading)
+  const isCoreDegraded = enabledCoreHooks.some((core) => core.isDegraded)
+  const isCorePendingUpstream = enabledCoreHooks.some((core) => core.isPendingUpstream)
   const isCoreStale = isCoreDegraded && hasCoreModules
   const isCoreUnavailable = isCoreDegraded && !hasCoreModules
-  const degradedCoreHooks = [c7, c30, c90].filter((core) => core.isDegraded)
+  const degradedCoreHooks = enabledCoreHooks.filter((core) => core.isDegraded)
   const isCoreRefreshing = degradedCoreHooks.some((core) => core.isRefreshing)
 
   const { nickname, avatarSrc, entries, scores } = input
@@ -256,9 +280,8 @@ export function useServingTabData(
       isCoreStale,
       isCoreUnavailable,
       isCoreRefreshing,
-      refetchDegradedCore: () =>
-        Promise.all([c7, c30, c90].filter((core) => core.isDegraded).map((core) => core.refetch())),
-      loading: c7.isLoading || c30.isLoading || c90.isLoading,
+      refetchDegradedCore: () => Promise.all(degradedCoreHooks.map((core) => core.refetch())),
+      loading: isCoreLoading,
     }
   }, [
     exchangeTraderId,
@@ -278,8 +301,7 @@ export function useServingTabData(
     isCoreStale,
     isCoreUnavailable,
     isCoreRefreshing,
-    c7,
-    c30,
-    c90,
+    isCoreLoading,
+    degradedCoreHooks,
   ])
 }
