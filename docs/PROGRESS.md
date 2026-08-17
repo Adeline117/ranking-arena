@@ -19,6 +19,16 @@
 详细阶段只在对应权威文档维护；`EXCHANGE_FIELD_COVERAGE.md` 是机器生成快照，禁止手改。旧日期段落保留
 为历史记录，不覆盖本表。
 
+## V1 public health VPS probe scope（2026-08-17）
+
+公开 `GET /api/health` 的 `checks` 只报告 API transport、database、Redis 与排名 freshness；本源码
+不读取 VPS scraper/proxy 配置，也不向 VPS 发起 health probe。该 public route 的状态不再把 VPS
+连通性作为补充检查或总体状态输入。
+
+这只是 source-only route scope：不停止、不检查也不证明任何已部署 VPS、host process、external
+monitor 或 scheduler 的状态。OpenClaw 与 harness 的独立 VPS probe 不属于 `/api/health` contract，
+不在本变更范围内；下方的主机、worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
+
 ## V1 legacy proxy/import source containment（2026-08-16）
 
 本轮只在源码中封存指定的历史 acquisition entrypoint：`GET /api/proxy/phemex`、
