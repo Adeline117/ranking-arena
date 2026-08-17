@@ -77,8 +77,9 @@ export default function SwipeableView({
       if (!directionLockedRef.current) {
         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
           directionLockedRef.current = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
+        } else {
+          return
         }
-        return
       }
 
       // If vertical scroll, bail
@@ -121,6 +122,14 @@ export default function SwipeableView({
     directionLockedRef.current = null
   }, [offsetX, threshold, activeIndex, count, onIndexChange, VELOCITY_THRESHOLD])
 
+  const handleTouchCancel = useCallback(() => {
+    if (!trackingRef.current) return
+    trackingRef.current = false
+    setIsDragging(false)
+    setOffsetX(0)
+    directionLockedRef.current = null
+  }, [])
+
   return (
     <div
       ref={containerRef}
@@ -135,9 +144,11 @@ export default function SwipeableView({
       }}
     >
       <div
+        data-testid="swipeable-track"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
         style={{
           display: 'flex',
           // flex-start so inactive (taller) panes don't stretch the row; the

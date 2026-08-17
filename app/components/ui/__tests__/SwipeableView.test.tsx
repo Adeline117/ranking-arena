@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import SwipeableView from '../SwipeableView'
 
@@ -75,5 +75,41 @@ describe('SwipeableView accessibility', () => {
 
     expect(markup).toContain('Overview SSR content')
     expect(markup).toContain('data-swipeable-pane="0"')
+  })
+
+  it('switches on a quick single-move horizontal flick', () => {
+    const onIndexChange = jest.fn()
+    const now = jest.spyOn(Date, 'now').mockReturnValueOnce(1_000).mockReturnValueOnce(1_020)
+    render(
+      <SwipeableView activeIndex={0} onIndexChange={onIndexChange}>
+        <div>Overview</div>
+        <div>Stats</div>
+      </SwipeableView>
+    )
+
+    const track = screen.getByTestId('swipeable-track')
+    fireEvent.touchStart(track, { touches: [{ clientX: 200, clientY: 100 }] })
+    fireEvent.touchMove(track, { touches: [{ clientX: 175, clientY: 100 }] })
+    fireEvent.touchEnd(track)
+
+    expect(onIndexChange).toHaveBeenCalledWith(1)
+    now.mockRestore()
+  })
+
+  it('resets a partial horizontal gesture when the browser cancels touch input', () => {
+    render(
+      <SwipeableView activeIndex={0} onIndexChange={jest.fn()}>
+        <div>Overview</div>
+        <div>Stats</div>
+      </SwipeableView>
+    )
+
+    const track = screen.getByTestId('swipeable-track')
+    fireEvent.touchStart(track, { touches: [{ clientX: 200, clientY: 100 }] })
+    fireEvent.touchMove(track, { touches: [{ clientX: 130, clientY: 100 }] })
+    expect(track.style.transform).toContain('-70px')
+
+    fireEvent.touchCancel(track)
+    expect(track.style.transform).toContain('0px')
   })
 })
