@@ -82,11 +82,16 @@ const SKIP_ROUTE_PREFIXES = ['/_next', '/favicon.ico', '/api/health']
 const CRON_ROUTE_PREFIXES = ['/api/cron', '/api/v1/cron'] as const
 
 // Exact route handoffs that own their response contract. In particular, the
-// retired Phemex acquisition route, referral-attribution hold, public avatar
-// compatibility route, public egress holds, and code-quality evaluator hold
-// must reply before any global Redis rate limit or bot guard can intervene.
+// retired Phemex acquisition route, referral-attribution hold, direct admin
+// subscription-sync hold, public avatar compatibility route, public egress
+// holds, and code-quality evaluator hold must reply before any global Redis
+// rate limit or bot guard can intervene.
 const SKIP_EXACT_ROUTES = new Set(['/api/proxy/phemex'])
 const AVATAR_PROXY_BYPASS_PATHS = new Set(['/api/avatar', '/api/v1/avatar'])
+const ADMIN_SUBSCRIPTION_SYNC_BYPASS_PATHS = new Set([
+  '/api/admin/sync-subscription',
+  '/api/v1/admin/sync-subscription',
+])
 const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
   '/api/cdn-proxy',
   '/api/v1/cdn-proxy',
@@ -297,6 +302,10 @@ export function isAvatarProxyBypassPath(pathname: string): boolean {
   return AVATAR_PROXY_BYPASS_PATHS.has(pathname)
 }
 
+export function isAdminSubscriptionSyncProxyBypassPath(pathname: string): boolean {
+  return ADMIN_SUBSCRIPTION_SYNC_BYPASS_PATHS.has(pathname)
+}
+
 export function isPublicEgressProxyBypassPath(pathname: string): boolean {
   return PUBLIC_EGRESS_BYPASS_PATHS.has(pathname)
 }
@@ -317,6 +326,7 @@ export function shouldSkip(pathname: string): boolean {
   return (
     SKIP_EXACT_ROUTES.has(pathname) ||
     isAvatarProxyBypassPath(pathname) ||
+    isAdminSubscriptionSyncProxyBypassPath(pathname) ||
     isPublicEgressProxyBypassPath(pathname) ||
     isReferralProgramProxyBypassPath(pathname) ||
     isHealthEvaluateReportProxyBypassPath(pathname) ||
@@ -484,6 +494,7 @@ async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextRes
     !pathname.startsWith('/api/') ||
     isCronProxyBypassPath(pathname) ||
     isAvatarProxyBypassPath(pathname) ||
+    isAdminSubscriptionSyncProxyBypassPath(pathname) ||
     isPublicEgressProxyBypassPath(pathname) ||
     isReferralProgramProxyBypassPath(pathname) ||
     isHealthEvaluateReportProxyBypassPath(pathname) ||
