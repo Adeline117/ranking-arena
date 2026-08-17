@@ -63,8 +63,9 @@ const PUBLIC_API_ROUTES = new Set([
   'market/sectors',
   // DefiOverview renders a local unavailable state and makes no endpoint call.
   'market/defi',
-  'market/coin/[id]',
+  // Fund Flow and ExchangeVolume render local unavailable states and make no endpoint call.
   'market/exchanges',
+  'market/coin/[id]',
   'market/ohlc/[id]',
   'market/overview',
   'market/realtime',
