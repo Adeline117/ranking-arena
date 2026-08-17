@@ -26,18 +26,33 @@ interface EquityCurveSectionProps {
   equityCurve?: EquityCurveData
   traderHandle: string
   delay: number
+  /**
+   * Serving callers already resolve unsupported timeframes at the authority
+   * boundary. Keep this chart on that exact resolved window instead of reading
+   * a stale store value during the first client render.
+   */
+  selectedPeriod?: keyof EquityCurveData
+  /**
+   * Legacy curves may retain their historical best-available fallback. Serving
+   * curves must never silently substitute a broader timeframe for a selected
+   * window with no series evidence.
+   */
+  strictPeriod?: boolean
 }
 
 export function EquityCurveSection({
   equityCurve,
   traderHandle: _traderHandle,
   delay,
+  selectedPeriod,
+  strictPeriod = false,
 }: EquityCurveSectionProps) {
   const { t } = useLanguage()
   // Period is the SINGLE source of truth, shared via periodStore — the same
   // store OverviewPerformanceCard and the drawdown / daily-returns charts read.
   // Switching the period anywhere now moves every chart together.
-  const period = usePeriodStore((s) => s.period)
+  const storePeriod = usePeriodStore((s) => s.period)
+  const period = selectedPeriod ?? storePeriod
   const setPeriod = usePeriodStore((s) => s.setPeriod)
   const didInitPeriodRef = useRef(false)
   const [chartType, setChartType] = useState<'roi' | 'pnl'>(() => getBestChartType(equityCurve))
@@ -62,19 +77,19 @@ export function EquityCurveSection({
     return () => clearTimeout(timer)
   }, [delay, prefersReducedMotion])
 
-  // Preserve the "pick the best available period on load" UX. The shared store
-  // defaults to 90D and isn't equity-curve-aware, so if the current period has
-  // no equity data fall back to the best available one (90D → 30D → 7D). Runs
-  // once; a URL/user-chosen period that already has data is left untouched.
+  // Preserve the "pick the best available period on load" UX for legacy data.
+  // The shared store defaults to 90D and isn't equity-curve-aware, so a legacy
+  // curve may fall back to 90D → 30D → 7D. Serving callers pass the already
+  // authority-resolved window and must render its no-data state instead.
   useEffect(() => {
-    if (didInitPeriodRef.current) return
+    if (strictPeriod || didInitPeriodRef.current) return
     didInitPeriodRef.current = true
     const hasDataForCurrent = (equityCurve?.[period]?.length ?? 0) > 0
     if (!hasDataForCurrent) {
       const best = getBestInitialPeriod(equityCurve)
       if (best !== period) setPeriod(best)
     }
-  }, [equityCurve, period, setPeriod])
+  }, [equityCurve, period, setPeriod, strictPeriod])
 
   // Auto-switch chart type when the selected period has no data for current type
   useEffect(() => {

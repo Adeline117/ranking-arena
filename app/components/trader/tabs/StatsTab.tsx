@@ -14,6 +14,7 @@ import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import type { TraderStats } from '@/lib/data/trader'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import type { Period } from '@/app/components/trader/performance/period-availability'
 import type {
   AssetBreakdownData,
   PositionHistoryEntry,
@@ -35,6 +36,10 @@ export interface StatsTabProps {
   traderHandle: string
   assetBreakdown: AssetBreakdownData | undefined
   equityCurve: EquityCurveData | undefined
+  /** The serving parent resolves the active timeframe before the shared tabs
+   * render. Legacy callers leave this undefined to retain their old behavior. */
+  selectedPeriod?: Period
+  strictPeriod?: boolean
   positionHistory: PositionHistoryEntry[]
   historyCompleteness: HistoryCompleteness | null
   isPro: boolean
@@ -47,6 +52,8 @@ const StatsTab = React.memo(function StatsTab({
   traderHandle,
   assetBreakdown,
   equityCurve,
+  selectedPeriod,
+  strictPeriod = false,
   positionHistory,
   historyCompleteness,
   isPro,
@@ -71,6 +78,8 @@ const StatsTab = React.memo(function StatsTab({
         traderHandle={traderHandle}
         assetBreakdown={assetBreakdown}
         equityCurve={equityCurve}
+        selectedPeriod={selectedPeriod}
+        strictPeriod={strictPeriod}
         positionHistory={positionHistory}
         historyCompleteness={historyCompleteness}
         isPro={isPro}

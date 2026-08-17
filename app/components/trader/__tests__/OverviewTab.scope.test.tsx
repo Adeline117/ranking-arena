@@ -37,7 +37,11 @@ jest.mock('@/app/components/base', () => ({
   ),
 }))
 
-import { deriveDailyRoiPointChanges, OverviewTab } from '../tabs/OverviewTab'
+import {
+  deriveDailyRoiPointChanges,
+  OverviewTab,
+  resolveAuxiliaryEquityCurve,
+} from '../tabs/OverviewTab'
 
 const linkedAccounts: OverviewTabProps['linkedAccounts'] = [
   {
@@ -118,6 +122,17 @@ describe('OverviewTab account scope', () => {
       { date: '2026-07-28', returnPct: 1 },
       { date: '2026-07-29', returnPct: -1.5 },
     ])
+  })
+
+  it('does not substitute a retained 90D curve for a missing serving window', () => {
+    const retainedNinetyDayCurve = [
+      { date: '2026-01-01', roi: 0, pnl: 0 },
+      { date: '2026-01-02', roi: 1, pnl: 1 },
+    ]
+    const incompleteCurve = { '90D': retainedNinetyDayCurve }
+
+    expect(resolveAuxiliaryEquityCurve(incompleteCurve, '7D', true)).toBeUndefined()
+    expect(resolveAuxiliaryEquityCurve(incompleteCurve, '7D', false)).toBe(retainedNinetyDayCurve)
   })
 
   it('shows linked evidence but never primary performance or charts in All accounts scope', () => {

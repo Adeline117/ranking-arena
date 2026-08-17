@@ -41,4 +41,24 @@ describe('StatsTab history completeness', () => {
     expect(screen.queryByTestId('stats-page')).not.toBeInTheDocument()
     expect(screen.getByText('noStatsData')).toBeInTheDocument()
   })
+
+  it('threads the resolved serving period into the stats surface', () => {
+    render(
+      <StatsTab
+        {...baseProps}
+        historyCompleteness={null}
+        equityCurve={{
+          '7D': [],
+          '30D': [],
+          '90D': [{ date: '2026-01-01', roi: 1, pnl: 10 }],
+        }}
+        selectedPeriod="30D"
+        strictPeriod
+      />
+    )
+
+    expect(mockStatsPage).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedPeriod: '30D', strictPeriod: true })
+    )
+  })
 })

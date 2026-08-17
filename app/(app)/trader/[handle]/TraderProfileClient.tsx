@@ -1694,8 +1694,9 @@ export default function TraderProfileClient({
                           | null
                           | undefined
                       }
-                      selectedPeriod={selectedPeriod}
+                      selectedPeriod={useThreeTab ? selectedServingPeriod : selectedPeriod}
                       periodAvailability={useThreeTab ? servingPeriodAvailability : undefined}
+                      strictPeriod={useThreeTab}
                       pnlCurrencies={useThreeTab ? servingTab.currencyByPeriod : undefined}
                       hasMultipleAccounts={
                         hasMultipleAccounts || linkedAccountScope.mode === 'aggregate'
@@ -1783,6 +1784,8 @@ export default function TraderProfileClient({
                         traderHandle={effProfile?.handle || visibleData.handle}
                         assetBreakdown={effAssetBreakdown}
                         equityCurve={effEquityCurve}
+                        selectedPeriod={useThreeTab ? selectedServingPeriod : undefined}
+                        strictPeriod={useThreeTab}
                         positionHistory={effPositionHistory}
                         historyCompleteness={effHistoryCompleteness}
                         isPro={isPro}

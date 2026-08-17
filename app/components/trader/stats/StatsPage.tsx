@@ -20,6 +20,7 @@ import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
 import { PnlCalendarHeatmap } from '../charts/PnlCalendarHeatmap'
 import HistoryCompletenessNotice from '../serving/HistoryCompletenessNotice'
 import type { HistoryCompleteness, ServingCurrency } from '@/lib/data/serving/types'
+import type { Period } from '@/app/components/trader/performance/period-availability'
 
 // 扩展类型以支持新数据
 interface AssetBreakdownData {
@@ -56,6 +57,10 @@ interface ExtendedStatsPageProps {
   traderHandle: string
   assetBreakdown?: AssetBreakdownData
   equityCurve?: EquityCurveData
+  /** Serving pages pass their authority-resolved active window. */
+  selectedPeriod?: Period
+  /** Serving charts must not substitute a 90D series for another window. */
+  strictPeriod?: boolean
   positionHistory?: PositionHistoryItem[]
   historyCompleteness?: HistoryCompleteness | null
   isPro?: boolean
@@ -67,6 +72,8 @@ export default function StatsPage({
   traderHandle,
   assetBreakdown,
   equityCurve,
+  selectedPeriod,
+  strictPeriod = false,
   positionHistory = [],
   historyCompleteness = null,
   isPro = true,
@@ -128,6 +135,10 @@ export default function StatsPage({
   const frequentlyTraded = stats?.frequentlyTraded || []
   const trading = stats?.trading
   const additionalStats = stats?.additionalStats
+  const selectedCurve =
+    strictPeriod && selectedPeriod ? equityCurve?.[selectedPeriod] : equityCurve?.['90D']
+  const selectedCurveDays =
+    strictPeriod && selectedPeriod ? Number.parseInt(selectedPeriod, 10) : 90
 
   const statsContent = (
     <Box>
@@ -135,7 +146,7 @@ export default function StatsPage({
       <BreakdownSection assetBreakdown={assetBreakdown} fallbackData={frequentlyTraded} delay={0} />
 
       {/* PnL Calendar Heatmap — daily profit/loss visualization */}
-      {equityCurve?.['90D'] && equityCurve['90D'].length > 3 && (
+      {selectedCurve && selectedCurve.length > 3 && (
         <Box
           className="glass-card"
           style={{
@@ -146,14 +157,20 @@ export default function StatsPage({
             marginTop: tokens.spacing[6],
           }}
         >
-          <PnlCalendarHeatmap data={equityCurve['90D']} days={90} />
+          <PnlCalendarHeatmap data={selectedCurve} days={selectedCurveDays} />
         </Box>
       )}
 
       {/* Equity curve (full width). U2-6: fabricated "Compare vs BTC" card removed. */}
       <Box style={{ marginTop: tokens.spacing[6] }}>
         <SectionErrorBoundary fallbackMessage="">
-          <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
+          <EquityCurveSection
+            equityCurve={equityCurve}
+            traderHandle={traderHandle}
+            delay={0.1}
+            selectedPeriod={strictPeriod ? selectedPeriod : undefined}
+            strictPeriod={strictPeriod}
+          />
         </SectionErrorBoundary>
       </Box>
 

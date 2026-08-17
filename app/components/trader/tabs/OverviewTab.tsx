@@ -17,7 +17,7 @@ import OverviewPerformanceCard, {
   type ExtendedPerformance,
   type PnlCurrencyByPeriod,
 } from '@/app/components/trader/OverviewPerformanceCard'
-import type { PeriodAvailability } from '@/app/components/trader/performance/PeriodSelector'
+import type { Period, PeriodAvailability } from '@/app/components/trader/performance/PeriodSelector'
 import { ChartSkeleton } from '@/app/components/ui/Skeleton'
 import { features } from '@/lib/features'
 import type { TraderProfile, TraderPerformance } from '@/lib/data/trader'
@@ -28,6 +28,21 @@ import type { VerifiedTraderProfileData } from '@/app/components/trader/Verified
 
 /** Valid equity curve period keys. */
 type EquityCurvePeriod = keyof EquityCurveData
+
+/**
+ * The legacy page historically used a 90D curve when an older response omitted
+ * the selected key. Serving core responses are timeframe-scoped authority, so
+ * an absent exact key is evidence of no chart — never evidence for 90D.
+ */
+export function resolveAuxiliaryEquityCurve(
+  equityCurve: Partial<EquityCurveData> | undefined,
+  selectedPeriod: Period,
+  strictPeriod = false
+): Array<{ date: string; roi: number; pnl: number }> | undefined {
+  const selectedCurve = equityCurve?.[selectedPeriod as EquityCurvePeriod]
+  if (strictPeriod || selectedCurve !== undefined) return selectedCurve
+  return equityCurve?.['90D']
+}
 
 export function deriveDailyRoiPointChanges(
   curve: Array<{ date: string; roi: number }>
@@ -114,10 +129,13 @@ export interface OverviewTabProps {
     | undefined
 
   // Period
-  selectedPeriod: string
+  selectedPeriod: Period
   /** Serving sources pass the authoritative per-timeframe capability through
    *  to the shared performance selector. Legacy sources leave it unknown. */
   periodAvailability?: PeriodAvailability
+  /** Serving core modules are exact-window evidence. Do not use a broader
+   * curve as an implicit fallback when the selected module has no series. */
+  strictPeriod?: boolean
   /** Exact unit per serving core timeframe. Legacy performance stays on its
    * historical formatter by leaving this undefined. */
   pnlCurrencies?: PnlCurrencyByPeriod
@@ -148,6 +166,7 @@ export const OverviewTab = React.memo(function OverviewTab({
   positionSummary,
   selectedPeriod,
   periodAvailability,
+  strictPeriod = false,
   pnlCurrencies,
   hasMultipleAccounts,
   activeAccount,
@@ -165,6 +184,11 @@ export const OverviewTab = React.memo(function OverviewTab({
   const isAggregateView = hasMultipleAccounts && activeAccount === 'all'
   const showSimilarTraders = !suppressAccountContent && traderSimilar.length > 0
   const showSidebar = showSimilarTraders || features.social
+  const selectedAuxiliaryCurve = resolveAuxiliaryEquityCurve(
+    traderEquityCurve,
+    selectedPeriod,
+    strictPeriod
+  )
 
   return (
     <Box
@@ -231,7 +255,7 @@ export const OverviewTab = React.memo(function OverviewTab({
             {traderPerformance ? (
               <OverviewPerformanceCard
                 performance={traderPerformance as ExtendedPerformance}
-                equityCurve={traderEquityCurve?.['90D']}
+                equityCurve={strictPeriod ? undefined : traderEquityCurve?.['90D']}
                 allEquityCurves={traderEquityCurve}
                 source={(traderProfile?.source as string) || data.source}
                 availability={periodAvailability}
@@ -277,6 +301,8 @@ export const OverviewTab = React.memo(function OverviewTab({
                   equityCurve={traderEquityCurve}
                   traderHandle={(traderProfile?.handle as string) || data.handle}
                   delay={0}
+                  selectedPeriod={strictPeriod ? selectedPeriod : undefined}
+                  strictPeriod={strictPeriod}
                 />
               </SectionErrorBoundary>
             ) : (
@@ -298,9 +324,7 @@ export const OverviewTab = React.memo(function OverviewTab({
 
             {/* Drawdown Chart */}
             {(() => {
-              const curve =
-                traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
-                traderEquityCurve?.['90D']
+              const curve = selectedAuxiliaryCurve
               if (!curve || curve.length <= 2) return null
               return (
                 <Box
@@ -331,9 +355,7 @@ export const OverviewTab = React.memo(function OverviewTab({
 
             {/* Copy-Trade Simulator */}
             {(() => {
-              const simCurve =
-                traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
-                traderEquityCurve?.['90D']
+              const simCurve = selectedAuxiliaryCurve
               if (!simCurve || simCurve.length <= 2) return null
               return (
                 <SectionErrorBoundary>
@@ -344,9 +366,7 @@ export const OverviewTab = React.memo(function OverviewTab({
 
             {/* Daily Returns Distribution */}
             {(() => {
-              const curve =
-                traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
-                traderEquityCurve?.['90D']
+              const curve = selectedAuxiliaryCurve
               if (!curve || curve.length <= 5) return null
               // The series is cumulative ROI, not account value. A ratio of
               // consecutive cumulative percentages fabricates returns (10→11
