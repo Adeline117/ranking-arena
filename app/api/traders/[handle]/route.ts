@@ -26,6 +26,7 @@ import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 import { serializePublicLinkedAggregate } from '@/lib/data/linked-trader-public'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
+import { unavailablePublicRankHistoryProvenance } from '@/lib/rankings/public-rank-history'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -143,7 +144,10 @@ const E2E_FIXTURES: Record<string, () => unknown> = {
       is_verified: false,
       owner_id: null,
     },
-    rank_history: { history: [] },
+    rank_history: {
+      history: [],
+      ...unavailablePublicRankHistoryProvenance(),
+    },
   }),
 }
 
@@ -329,56 +333,18 @@ export async function GET(
           )
         }
 
-        // rank history (sparkline)
+        // Historical rank snapshots are mutable raw observations, not a
+        // published historical cohort. Preserve the requested subject identity,
+        // but never query or replay an unproved sparkline here.
         if (includes.includes('rank_history')) {
-          promises.push(
-            (async () => {
-              try {
-                const period = req.nextUrl.searchParams.get('rh_period') || '90D'
-                const days = Math.min(Number(req.nextUrl.searchParams.get('rh_days') || '7'), 30)
-                const cutoffDate = new Date()
-                cutoffDate.setDate(cutoffDate.getDate() - days)
-                const cutoffISO = cutoffDate.toISOString().split('T')[0]
-
-                const { data: rhData, error: rhError } = await supabase
-                  .from('rank_history')
-                  .select('snapshot_date, rank, arena_score')
-                  .eq('platform', resolved.platform)
-                  .eq('trader_key', resolved.traderKey)
-                  .eq('period', period)
-                  .gte('snapshot_date', cutoffISO)
-                  .order('snapshot_date', { ascending: true })
-                  .limit(days)
-
-                if (rhError) {
-                  logger.warn('include=rank_history query error', { error: rhError.message })
-                  extras.rank_history = {
-                    history: [],
-                    platform: resolved.platform,
-                    trader_key: resolved.traderKey,
-                    period,
-                    _error: 'query_failed',
-                  }
-                } else {
-                  extras.rank_history = {
-                    history: (rhData || []).map((row) => ({
-                      date: row.snapshot_date,
-                      rank: row.rank,
-                      arena_score: row.arena_score,
-                    })),
-                    platform: resolved.platform,
-                    trader_key: resolved.traderKey,
-                    period,
-                  }
-                }
-              } catch (e) {
-                logger.warn('include=rank_history failed', {
-                  error: e instanceof Error ? e.message : String(e),
-                })
-                extras.rank_history = { history: [], _error: 'fetch_failed' }
-              }
-            })()
-          )
+          const period = req.nextUrl.searchParams.get('rh_period') || '90D'
+          extras.rank_history = {
+            history: [],
+            platform: resolved.platform,
+            trader_key: resolved.traderKey,
+            period,
+            ...unavailablePublicRankHistoryProvenance(),
+          }
         }
 
         await Promise.all(promises)
