@@ -8,18 +8,60 @@
 
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
+import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 import { parsePage, parseLimit } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('api:audit-logs')
+const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' }
+const MAX_PREFIX_ROWS = 10_000
 
 export const dynamic = 'force-dynamic'
+
+type MergedAuditLog = {
+  id: string
+  source: 'admin' | 'group'
+  actor_id: string | null
+  action: string
+  target_type: string | null
+  target_id: string | null
+  details: unknown
+  created_at: string | null
+  group_id: string | null
+}
+
+function getCreatedAtRank(value: string | null): number {
+  if (!value) return 0
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+function compareMergedAuditLogs(a: MergedAuditLog, b: MergedAuditLog): number {
+  const createdAtDiff = getCreatedAtRank(b.created_at) - getCreatedAtRank(a.created_at)
+  if (createdAtDiff !== 0) return createdAtDiff
+
+  if (a.source !== b.source) {
+    return a.source.localeCompare(b.source)
+  }
+
+  return b.id.localeCompare(a.id)
+}
 
 export const GET = withAdminAuth(
   async ({ supabase, request }) => {
     const { searchParams } = new URL(request.url)
     const page = parsePage(searchParams.get('page'))
     const limit = parseLimit(searchParams.get('limit'), 20, 100)
+    const prefixRows = page * limit
+    if (!Number.isSafeInteger(prefixRows) || prefixRows > MAX_PREFIX_ROWS) {
+      throw ApiError.validation('Requested audit log page exceeds prefix query cap', {
+        page,
+        limit,
+        maxPrefixRows: MAX_PREFIX_ROWS,
+      })
+    }
+    const offset = (page - 1) * limit
+    const fetchEnd = prefixRows - 1
     const action = searchParams.get('action') || null
     const from = searchParams.get('from') || null
     const to = searchParams.get('to') || null
@@ -30,7 +72,9 @@ export const GET = withAdminAuth(
     // and the UI needs a correct total_pages for range navigation.
     let adminQuery = supabase
       .from('admin_logs')
-      .select('id, admin_id, action, target_type, target_id, details, created_at', { count: 'exact' })
+      .select('id, admin_id, action, target_type, target_id, details, created_at', {
+        count: 'exact',
+      })
 
     if (action) {
       adminQuery = adminQuery.eq('action', action)
@@ -44,13 +88,8 @@ export const GET = withAdminAuth(
 
     adminQuery = adminQuery
       .order('created_at', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1)
-
-    const { data: adminLogs, count: adminCount, error: adminError } = await adminQuery
-
-    if (adminError) {
-      logger.error('Error fetching admin_logs', { error: adminError })
-    }
+      .order('id', { ascending: false })
+      .range(0, fetchEnd)
 
     // Query group_audit_log
     // KEEP 'exact' — same pagination reason as admin_logs above.
@@ -70,89 +109,117 @@ export const GET = withAdminAuth(
 
     groupQuery = groupQuery
       .order('created_at', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1)
+      .order('id', { ascending: false })
+      .range(0, fetchEnd)
 
-    const { data: groupLogs, count: groupCount, error: groupError } = await groupQuery
+    const [
+      { data: adminLogs, count: adminCount, error: adminError },
+      { data: groupLogs, count: groupCount, error: groupError },
+    ] = await Promise.all([adminQuery, groupQuery])
 
+    if (adminError) {
+      logger.error('Error fetching admin_logs', { error: adminError })
+      throw ApiError.database('Failed to fetch admin audit logs')
+    }
     if (groupError) {
       logger.error('Error fetching group_audit_log', { error: groupError })
+      throw ApiError.database('Failed to fetch group audit logs')
+    }
+    if (!Number.isSafeInteger(adminCount) || (adminCount as number) < 0) {
+      throw ApiError.database('Invalid admin audit log count')
+    }
+    if (!Number.isSafeInteger(groupCount) || (groupCount as number) < 0) {
+      throw ApiError.database('Invalid group audit log count')
     }
 
-    // Get actor handles for all actor IDs
-    const actorIds = new Set<string>()
-    for (const log of adminLogs || []) {
-      if (log.admin_id) actorIds.add(log.admin_id)
-    }
-    for (const log of groupLogs || []) {
-      if (log.actor_id) actorIds.add(log.actor_id)
-    }
-
-    const actorHandles: Record<string, string> = {}
-    if (actorIds.size > 0) {
-      const { data: actors } = await supabase
-        .from('user_profiles')
-        .select('id, handle')
-        .in('id', Array.from(actorIds))
-
-      for (const a of actors || []) {
-        actorHandles[a.id] = a.handle || 'unknown'
-      }
-    }
-
-    // Get group names
-    const groupIds = new Set<string>()
-    for (const log of groupLogs || []) {
-      if (log.group_id) groupIds.add(log.group_id)
-    }
-
-    const groupNames: Record<string, string> = {}
-    if (groupIds.size > 0) {
-      const { data: groups } = await supabase
-        .from('groups')
-        .select('id, name')
-        .in('id', Array.from(groupIds))
-
-      for (const g of groups || []) {
-        groupNames[g.id] = g.name || 'unknown'
-      }
-    }
-
-    // Merge and normalize
-    const merged = [
+    const merged: MergedAuditLog[] = [
       ...(adminLogs || []).map((log) => ({
         id: log.id,
         source: 'admin' as const,
         actor_id: log.admin_id,
-        actor_handle: actorHandles[log.admin_id] || null,
         action: log.action,
         target_type: log.target_type,
         target_id: log.target_id,
         details: log.details,
         created_at: log.created_at,
-        group_name: null,
+        group_id: null,
       })),
       ...(groupLogs || []).map((log) => ({
         id: log.id,
         source: 'group' as const,
         actor_id: log.actor_id,
-        actor_handle: actorHandles[log.actor_id] || null,
         action: log.action,
         target_type: 'group_member',
         target_id: log.target_id,
         details: log.details,
         created_at: log.created_at,
-        group_name: log.group_id ? groupNames[log.group_id] || null : null,
+        group_id: log.group_id,
       })),
     ]
 
-    // Sort by created_at desc
-    merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    merged.sort(compareMergedAuditLogs)
 
-    // Trim to page size
-    const pageLogs = merged.slice(0, limit)
-    const total = (adminCount || 0) + (groupCount || 0)
+    const pageLogs = merged.slice(offset, offset + limit)
+    const total = (adminCount as number) + (groupCount as number)
 
-    return apiSuccess({ logs: pageLogs, total })
+    const actorIds = new Set<string>()
+    const groupIds = new Set<string>()
+    for (const log of pageLogs) {
+      if (log.actor_id) actorIds.add(log.actor_id)
+      if (log.group_id) groupIds.add(log.group_id)
+    }
+
+    const actorHandles: Record<string, string> = {}
+    if (actorIds.size > 0) {
+      const { data: actors, error: actorsError } = await supabase
+        .from('user_profiles')
+        .select('id, handle')
+        .in('id', Array.from(actorIds))
+
+      if (actorsError) {
+        throw ApiError.database('Failed to fetch audit log actors')
+      }
+
+      for (const actor of actors || []) {
+        actorHandles[actor.id] = actor.handle || 'unknown'
+      }
+    }
+
+    const groupNames: Record<string, string> = {}
+    if (groupIds.size > 0) {
+      const { data: groups, error: groupsError } = await supabase
+        .from('groups')
+        .select('id, name')
+        .in('id', Array.from(groupIds))
+
+      if (groupsError) {
+        throw ApiError.database('Failed to fetch audit log groups')
+      }
+
+      for (const group of groups || []) {
+        groupNames[group.id] = group.name || 'unknown'
+      }
+    }
+
+    return apiSuccess(
+      {
+        logs: pageLogs.map((log) => ({
+          id: log.id,
+          source: log.source,
+          actor_id: log.actor_id,
+          actor_handle: log.actor_id ? actorHandles[log.actor_id] || null : null,
+          action: log.action,
+          target_type: log.target_type,
+          target_id: log.target_id,
+          details: log.details,
+          created_at: log.created_at,
+          group_name: log.group_id ? groupNames[log.group_id] || null : null,
+        })),
+        total,
+      },
+      200,
+      NO_STORE_HEADERS
+    )
   },
   { name: 'admin-audit-logs' }
 )
