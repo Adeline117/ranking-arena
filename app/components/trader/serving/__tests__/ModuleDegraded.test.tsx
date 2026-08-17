@@ -29,6 +29,17 @@ describe('ModuleDegraded', () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it('disables the full unavailable retry while it is already in flight', () => {
+    const onRetry = jest.fn()
+    render(<ModuleDegraded isRetrying onRetry={onRetry} />)
+
+    const retry = screen.getByRole('button', { name: 'loading' })
+    expect(retry).toBeDisabled()
+    expect(retry).toHaveStyle({ minHeight: `${tokens.touchTarget.min}px` })
+    fireEvent.click(retry)
+    expect(onRetry).not.toHaveBeenCalled()
+  })
+
   it('discloses retained data may be stale and disables a duplicate retry', () => {
     const onRetry = jest.fn()
     render(<ModuleRefreshFailureNotice isRetrying onRetry={onRetry} />)

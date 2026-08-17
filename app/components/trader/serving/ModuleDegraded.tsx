@@ -14,6 +14,8 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 export interface ModuleDegradedProps {
   /** Show the retry button (polling window exhausted / fetch error). */
   onRetry?: () => void
+  /** Keep an in-flight retry single-flight for the user as well as the client. */
+  isRetrying?: boolean
   style?: React.CSSProperties
 }
 
@@ -24,7 +26,11 @@ export interface ModuleRefreshFailureNoticeProps {
   onRetry: () => void
 }
 
-export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) {
+export default function ModuleDegraded({
+  onRetry,
+  isRetrying = false,
+  style,
+}: ModuleDegradedProps) {
   const { t } = useLanguage()
   return (
     <Box
@@ -63,6 +69,7 @@ export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) 
         <button
           type="button"
           onClick={onRetry}
+          disabled={isRetrying}
           style={{
             minHeight: tokens.touchTarget.min,
             padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
@@ -72,10 +79,11 @@ export default function ModuleDegraded({ onRetry, style }: ModuleDegradedProps) 
             color: tokens.colors.text.primary,
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.medium,
-            cursor: 'pointer',
+            cursor: isRetrying ? 'wait' : 'pointer',
+            opacity: isRetrying ? 0.6 : 1,
           }}
         >
-          {t('moduleRetry')}
+          {isRetrying ? t('loading') : t('moduleRetry')}
         </button>
       )}
     </Box>

@@ -37,6 +37,9 @@ import { Box, Text } from '@/app/components/base'
 // (was pulled into this client bundle unnecessarily before).
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
+import ModuleDegraded, {
+  ModuleRefreshFailureNotice,
+} from '@/app/components/trader/serving/ModuleDegraded'
 import LinkedAccountStatus from '@/app/components/trader/LinkedAccountStatus'
 import {
   isExactSourceNotServingError,
@@ -1542,6 +1545,33 @@ export default function TraderProfileClient({
             }}
           >
             <div id="trader-tab-content">
+              {useThreeTab &&
+                !suppressAccountContent &&
+                (servingTab.isCorePendingUpstream ||
+                  servingTab.isCoreStale ||
+                  servingTab.isCoreUnavailable) && (
+                  <Box style={{ marginBottom: tokens.spacing[3] }}>
+                    {servingTab.isCorePendingUpstream && (
+                      <Box role="status" aria-live="polite" aria-atomic="true">
+                        <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
+                          {t('moduleDataPending')}
+                        </Text>
+                      </Box>
+                    )}
+                    {servingTab.isCoreStale && (
+                      <ModuleRefreshFailureNotice
+                        isRetrying={servingTab.isCoreRefreshing}
+                        onRetry={() => void servingTab.refetchDegradedCore()}
+                      />
+                    )}
+                    {servingTab.isCoreUnavailable && (
+                      <ModuleDegraded
+                        isRetrying={servingTab.isCoreRefreshing}
+                        onRetry={() => void servingTab.refetchDegradedCore()}
+                      />
+                    )}
+                  </Box>
+                )}
               <SwipeableView
                 activeIndex={tabKeys.indexOf(activeTab)}
                 onIndexChange={(i) => {

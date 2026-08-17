@@ -25,8 +25,28 @@ const capability: SourceCapability = {
   exchangeName: 'Test Exchange',
 }
 
-function coreResult() {
-  return { modules: null, isLoading: false }
+function coreResult(overrides: Record<string, unknown> = {}) {
+  return {
+    modules: null,
+    isPendingUpstream: false,
+    isDegraded: false,
+    isRefreshing: false,
+    isLoading: false,
+    refetch: jest.fn(),
+    ...overrides,
+  }
+}
+
+function coreModule(timeframe: 7 | 30 | 90) {
+  return {
+    timeframe,
+    stats: {},
+    currency: 'USD',
+    series: {},
+    extras: {},
+    provenance: { source: 'gmx', asOf: '2026-08-16T00:00:00.000Z' },
+    cacheState: 'warm',
+  }
 }
 
 function recordsResult(completeness: HistoryCompleteness | null) {
@@ -107,5 +127,96 @@ describe('useServingTabData history completeness', () => {
     view.rerender()
 
     expect(view.result.current.historyCompleteness).toEqual(completeness)
+  })
+
+  it('carries an in-progress core refresh to the default three-tab surface', () => {
+    ;(useTraderCore as jest.Mock).mockImplementation(() => coreResult({ isPendingUpstream: true }))
+    ;(useTraderRecords as jest.Mock).mockImplementation(() => recordsResult(null))
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    expect(view.result.current.isCorePendingUpstream).toBe(true)
+    expect(view.result.current.isCoreStale).toBe(false)
+    expect(view.result.current.isCoreUnavailable).toBe(false)
+  })
+
+  it('shows simultaneous collection and stale disclosure, then retries only failed timeframes', async () => {
+    const retry7 = jest.fn().mockResolvedValue(undefined)
+    const retry30 = jest.fn().mockResolvedValue(undefined)
+    const retry90 = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderCore as jest.Mock).mockImplementation(({ tf }: { tf: 7 | 30 | 90 }) => {
+      if (tf === 7) {
+        return coreResult({ modules: coreModule(7), isPendingUpstream: true, refetch: retry7 })
+      }
+      if (tf === 30) {
+        return coreResult({ modules: coreModule(30), isDegraded: true, refetch: retry30 })
+      }
+      return coreResult({ modules: coreModule(90), refetch: retry90 })
+    })
+    ;(useTraderRecords as jest.Mock).mockImplementation(() => recordsResult(null))
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    expect(view.result.current.isCorePendingUpstream).toBe(true)
+    expect(view.result.current.isCoreStale).toBe(true)
+    expect(view.result.current.isCoreUnavailable).toBe(false)
+    await view.result.current.refetchDegradedCore()
+    expect(retry7).not.toHaveBeenCalled()
+    expect(retry30).toHaveBeenCalledTimes(1)
+    expect(retry90).not.toHaveBeenCalled()
+  })
+
+  it('marks a cold-start failure unavailable instead of calling absent data stale', async () => {
+    const retry7 = jest.fn().mockResolvedValue(undefined)
+    const retry30 = jest.fn().mockResolvedValue(undefined)
+    const retry90 = jest.fn().mockResolvedValue(undefined)
+    ;(useTraderCore as jest.Mock).mockImplementation(({ tf }: { tf: 7 | 30 | 90 }) => {
+      if (tf === 7) return coreResult({ isDegraded: true, refetch: retry7 })
+      if (tf === 30) return coreResult({ refetch: retry30 })
+      return coreResult({ refetch: retry90 })
+    })
+    ;(useTraderRecords as jest.Mock).mockImplementation(() => recordsResult(null))
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    expect(view.result.current.isCoreStale).toBe(false)
+    expect(view.result.current.isCoreUnavailable).toBe(true)
+    await view.result.current.refetchDegradedCore()
+    expect(retry7).toHaveBeenCalledTimes(1)
+    expect(retry30).not.toHaveBeenCalled()
+    expect(retry90).not.toHaveBeenCalled()
   })
 })

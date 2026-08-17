@@ -61,6 +61,16 @@ export interface ServingTabData {
    *  MetricGrid uses, so the default three-tab can render it too (M1/M2 unify). */
   gridStats: Record<string, number | string | null>
   gridCapabilityMetrics: string[]
+  /** At least one timeframe is still collecting a server-side refresh. */
+  isCorePendingUpstream: boolean
+  /** A failed refresh affects retained, still-visible core values. */
+  isCoreStale: boolean
+  /** Core collection failed before any truthful module was available. */
+  isCoreUnavailable: boolean
+  /** A user-initiated retry is refreshing one or more failed core modules. */
+  isCoreRefreshing: boolean
+  /** Retry only timeframe modules whose bounded refresh failed. */
+  refetchDegradedCore: () => Promise<unknown>
   loading: boolean
 }
 
@@ -111,6 +121,15 @@ export function useServingTabData(
   const posRows = positions.rows
   const histRows = posHistory.rows
   const historyCompleteness = posHistory.completeness
+  const hasCoreModules = Boolean(m7 || m30 || m90)
+  const isCoreDegraded = Boolean(c7.isDegraded || c30.isDegraded || c90.isDegraded)
+  const isCorePendingUpstream = Boolean(
+    c7.isPendingUpstream || c30.isPendingUpstream || c90.isPendingUpstream
+  )
+  const isCoreStale = isCoreDegraded && hasCoreModules
+  const isCoreUnavailable = isCoreDegraded && !hasCoreModules
+  const degradedCoreHooks = [c7, c30, c90].filter((core) => core.isDegraded)
+  const isCoreRefreshing = degradedCoreHooks.some((core) => core.isRefreshing)
 
   const { nickname, avatarSrc, entries, scores } = input
 
@@ -233,6 +252,12 @@ export function useServingTabData(
         // RPC's trader_stats column scan — allow them when present.
         ...EXTRAS_PROMOTABLE_KEYS,
       ],
+      isCorePendingUpstream,
+      isCoreStale,
+      isCoreUnavailable,
+      isCoreRefreshing,
+      refetchDegradedCore: () =>
+        Promise.all([c7, c30, c90].filter((core) => core.isDegraded).map((core) => core.refetch())),
       loading: c7.isLoading || c30.isLoading || c90.isLoading,
     }
   }, [
@@ -249,8 +274,12 @@ export function useServingTabData(
     histRows,
     historyCompleteness,
     capability,
-    c7.isLoading,
-    c30.isLoading,
-    c90.isLoading,
+    isCorePendingUpstream,
+    isCoreStale,
+    isCoreUnavailable,
+    isCoreRefreshing,
+    c7,
+    c30,
+    c90,
   ])
 }
