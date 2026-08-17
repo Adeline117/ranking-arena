@@ -1,4 +1,5 @@
 import {
+  isAdminSubscriptionSyncProxyBypassPath,
   isAvatarProxyBypassPath,
   isHealthEvaluateReportProxyBypassPath,
   isHealthHeartbeatProxyBypassPath,
@@ -37,6 +38,30 @@ describe('avatar proxy compatibility bypass paths', () => {
       expect(shouldSkip(pathname)).toBe(false)
     }
   )
+})
+
+describe('admin subscription-sync hold bypass paths', () => {
+  it.each(['/api/admin/sync-subscription', '/api/v1/admin/sync-subscription'])(
+    'hands %s directly to its authentication-first hold',
+    (pathname) => {
+      expect(isAdminSubscriptionSyncProxyBypassPath(pathname)).toBe(true)
+      expect(shouldSkip(pathname)).toBe(true)
+    }
+  )
+
+  it.each([
+    '/api/admin',
+    '/api/admin/sync-subscriptions',
+    '/api/admin/sync-subscription/child',
+    '/api/admin/users',
+    '/api/v1/admin',
+    '/api/v1/admin/sync-subscriptions',
+    '/api/v1/admin/sync-subscription/child',
+    '/api/v1/admin/users',
+  ])('does not bypass proxy work for adjacent admin path %s', (pathname) => {
+    expect(isAdminSubscriptionSyncProxyBypassPath(pathname)).toBe(false)
+    expect(shouldSkip(pathname)).toBe(false)
+  })
 })
 
 describe('public egress hold bypass paths', () => {

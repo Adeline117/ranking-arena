@@ -394,17 +394,26 @@ database、cache、provider 或 network 工作前结束。这只是 source-only 
 
 ## 10. 管理后台
 
-| 路由                              | 方法     | 描述                                                                   | 认证                |
-| --------------------------------- | -------- | ---------------------------------------------------------------------- | ------------------- |
-| `/api/admin/users`                | GET      | 用户列表                                                               | 管理员              |
-| `/api/admin/users/[id]/ban`       | POST     | 封禁用户                                                               | 管理员              |
-| `/api/admin/users/[id]/unban`     | POST     | 解封用户                                                               | 管理员              |
-| `/api/admin/reports`              | GET      | 举报列表                                                               | 管理员              |
-| `/api/admin/reports/[id]/resolve` | POST     | 处理举报                                                               | 管理员              |
-| `/api/admin/alert-config`         | GET/POST | 预警配置                                                               | 管理员              |
-| `/api/admin/stats`                | GET      | 系统统计                                                               | 管理员              |
-| `/api/admin/data-freshness`       | GET      | registry + serving board + `source_as_of` 权威新鲜度（只读、不发告警） | 管理员 / Cron Token |
-| `/api/monitoring/freshness`       | GET      | 已退役旧 contract；认证后返回 410 与 successor link                    | 管理员 / Cron Token |
+| 路由                              | 方法     | 描述                                                                                                                                                                                                                                                                                              | 认证                |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `/api/admin/users`                | GET      | 用户列表                                                                                                                                                                                                                                                                                          | 管理员              |
+| `/api/admin/users/[id]/ban`       | POST     | 封禁用户                                                                                                                                                                                                                                                                                          | 管理员              |
+| `/api/admin/users/[id]/unban`     | POST     | 解封用户                                                                                                                                                                                                                                                                                          | 管理员              |
+| `/api/admin/reports`              | GET      | 举报列表                                                                                                                                                                                                                                                                                          | 管理员              |
+| `/api/admin/reports/[id]/resolve` | POST     | 处理举报                                                                                                                                                                                                                                                                                          | 管理员              |
+| `/api/admin/alert-config`         | GET/POST | 预警配置                                                                                                                                                                                                                                                                                          | 管理员              |
+| `/api/admin/stats`                | GET      | 系统统计                                                                                                                                                                                                                                                                                          | 管理员              |
+| `/api/admin/data-freshness`       | GET      | registry + serving board + `source_as_of` 权威新鲜度（只读、不发告警）                                                                                                                                                                                                                            | 管理员 / Cron Token |
+| `/api/admin/sync-subscription`    | POST     | V1 direct billing-reconciliation hold；保留 service CRON、`x-admin-token`、allowlisted admin JWT 鉴权；无效认证 `401`，认证通过固定 `410 BILLING_RECONCILIATION_NOT_PUBLISHED`，三层 `no-store`；不解析 endpoint query、不限流、不执行 endpoint-specific Stripe/Supabase/logger/DB reconciliation | 管理员 / Cron Token |
+| `/api/monitoring/freshness`       | GET      | 已退役旧 contract；认证后返回 410 与 successor link                                                                                                                                                                                                                                               | 管理员 / Cron Token |
+
+固定、非环境的 `V1_BILLING_RECONCILIATION_PUBLISHED=false` 只封存
+`POST /api/admin/sync-subscription` 这个直接管理员 command。它先由既有
+`verifyAdminAuth` 保留 service CRON bearer、`x-admin-token` 与 production
+allowlisted active-admin JWT 的认证语义；认证后固定返回
+`410 BILLING_RECONCILIATION_NOT_PUBLISHED` 和三层 `no-store`，先于 endpoint
+query、rate limit、endpoint-specific Supabase/Stripe/logger/DB 工作。该源码边界不停止、检查或证明
+已经部署的代码、Stripe webhook、checkout、customer portal、计划 reconciliation、历史账单记录或外部支付状态。
 
 ---
 
