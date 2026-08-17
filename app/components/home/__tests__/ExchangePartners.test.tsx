@@ -75,7 +75,7 @@ describe('ExchangePartners', () => {
     expect(screen.getByRole('link')).toHaveAccessibleName('Bybit · Futures · 576 Traders')
   })
 
-  it('updates the shareable URL, dispatches the real filter source, tracks, and scrolls', () => {
+  it('defers the shareable URL update until the matching cohort succeeds, then dispatches, tracks, and scrolls', () => {
     const section = document.createElement('div')
     section.className = 'home-ranking-section'
     section.scrollIntoView = jest.fn()
@@ -87,7 +87,7 @@ describe('ExchangePartners', () => {
     fireEvent.click(screen.getByRole('link'))
 
     expect(window.location.pathname).toBe('/')
-    expect(window.location.search).toBe('?range=30D&exchange=bybit')
+    expect(window.location.search).toBe('?range=30D')
     expect(mockTrackEvent).toHaveBeenCalledWith('ranking_filter', {
       kind: 'source_marquee',
       value: 'bybit',
@@ -95,7 +95,7 @@ describe('ExchangePartners', () => {
       time_range: '30D',
     })
     expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: { exchange: 'bybit' } })
+      expect.objectContaining({ detail: { exchange: 'bybit', timeRange: '30D' } })
     )
     expect(section.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' })
 

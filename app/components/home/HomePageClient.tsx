@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useLayoutEffect, useMemo, useCallback, useRef, useState } from 'react'
 import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
 import { useTraderData } from './hooks'
@@ -18,8 +17,38 @@ interface HomePageClientProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
   initialIsStale?: boolean
-  initialTotalCount?: number
+  initialTotalCount?: number | null
+  initialTotalCountIsExact?: boolean
+  initialHasMore?: boolean
   initialCategoryCounts?: CategoryCounts
+  initialCategoryCountsAreExact?: boolean
+  /** Server-resolved range for the SSR snapshot. */
+  initialTimeRange?: TimeRange
+  /** Zero-based page index for the SSR snapshot. */
+  initialPageIndex?: number
+  /** URL state needs a matching client cohort before SSR rows may be replaced. */
+  initialClientCohortPending?: boolean
+}
+
+function hasPersistedExchangeCohort(): boolean {
+  // HomePageClient is loaded through the client-only Phase 2 boundary, so a
+  // synchronous preference read here cannot create an SSR hydration mismatch.
+  // It lets us keep default SSR rows neutral while a saved exchange scope is
+  // fetched instead of briefly relabelling the all-exchange cohort.
+  try {
+    // Stored preferences are allowed to choose the clean landing page only.
+    // A share/deep link is already a complete cohort statement; layering a
+    // local exchange over `?range=30D&page=3` would make its URL lie about
+    // the rows being shown and make copied/reloaded links non-reproducible.
+    return (
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/' &&
+      window.location.search === '' &&
+      Boolean(localStorage.getItem('ranking-exchange'))
+    )
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -33,11 +62,24 @@ export default function HomePageClient({
   initialLastUpdated,
   initialIsStale,
   initialTotalCount,
+  initialTotalCountIsExact,
+  initialHasMore,
   initialCategoryCounts,
+  initialCategoryCountsAreExact,
+  initialTimeRange,
+  initialPageIndex,
+  initialClientCohortPending = false,
 }: HomePageClientProps) {
   const { isLoggedIn } = useAuthSession()
   const { t } = useLanguage()
-  const router = useRouter()
+  const [requiresInitialClientCohort] = useState(
+    () => initialClientCohortPending || hasPersistedExchangeCohort()
+  )
+  const [initialCohortStatus, setInitialCohortStatus] = useState<'ready' | 'loading' | 'failed'>(
+    () => (requiresInitialClientCohort ? 'loading' : 'ready')
+  )
+  const [initialCohortAttempt, setInitialCohortAttempt] = useState(0)
+  const pendingRangeRef = useRef<TimeRange | null>(null)
 
   // Convert InitialTrader[] to Trader[] for compatibility
   const convertedInitialTraders: Trader[] | undefined = useMemo(
@@ -79,7 +121,10 @@ export default function HomePageClient({
     retryDeferredFetch,
     isChangingTimeRange,
     totalCount,
+    totalCountIsExact,
+    hasMore,
     categoryCounts,
+    categoryCountsAreExact,
     fetchPage,
     lastRefreshFailed,
     staleDataWarning,
@@ -89,7 +134,12 @@ export default function HomePageClient({
     initialLastUpdated,
     initialIsStale,
     initialTotalCount,
+    initialTotalCountIsExact,
+    initialHasMore,
     initialCategoryCounts,
+    initialCategoryCountsAreExact,
+    initialTimeRange,
+    initialPageIndex,
   })
 
   useEffect(() => {
@@ -101,9 +151,10 @@ export default function HomePageClient({
     trackEvent('ranking_visible', {
       period: activeTimeRange,
       visible_count: traders.length,
-      total_count: totalCount,
+      total_count: totalCountIsExact && totalCount !== null ? totalCount : 'unknown',
+      has_more: hasMore,
     })
-  }, [activeTimeRange, loading, totalCount, traders.length])
+  }, [activeTimeRange, hasMore, loading, totalCount, totalCountIsExact, traders.length])
 
   // Hide SSR ranking table only AFTER we have real data to show.
   // Previously this ran on mount (useLayoutEffect + []), which hid the SSR
@@ -130,35 +181,53 @@ export default function HomePageClient({
   // source strip and both sidebar placeholders in the same shell prevents a
   // one-column → three-column jump while the deferred client bundle downloads.
   useLayoutEffect(() => {
-    if (loading) return
+    if (loading || initialCohortStatus !== 'ready') return
     const el = document.getElementById('ssr-home-content-shell')
     if (el) el.style.display = 'none'
-  }, [loading])
+  }, [initialCohortStatus, loading])
 
-  // Sync time range with URL on initial load
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const urlTimeRange = params.get('range') as TimeRange | null
-    if (
-      urlTimeRange &&
-      ['90D', '30D', '7D'].includes(urlTimeRange) &&
-      urlTimeRange !== activeTimeRange
-    ) {
-      changeTimeRange(urlTimeRange)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  const handleInitialCohortSettled = useCallback((succeeded: boolean) => {
+    setInitialCohortStatus(succeeded ? 'ready' : 'failed')
+  }, [])
+
+  const retryInitialCohort = useCallback(() => {
+    // The first client cohort intentionally withholds server-default rows. A
+    // failed request must remain retryable; refreshing the previously loaded
+    // default cohort would never make the target URL safe to reveal.
+    setInitialCohortStatus('loading')
+    setInitialCohortAttempt((attempt) => attempt + 1)
   }, [])
 
   const handleTimeRangeChange = useCallback(
     (range: TimeRange) => {
+      if (range === activeTimeRange) {
+        pendingRangeRef.current = null
+        // This forwards a click back to the visible range as an explicit
+        // cancellation of a pending 30D/7D request. Without it the stale
+        // request could still commit after the user has switched back.
+        changeTimeRange(range)
+        return
+      }
       trackEvent('ranking_filter', { kind: 'period', value: range })
+      pendingRangeRef.current = range
       changeTimeRange(range)
-      const params = new URLSearchParams(window.location.search)
-      params.set('range', range)
-      router.replace(`?${params.toString()}`, { scroll: false })
     },
-    [changeTimeRange, router]
+    [activeTimeRange, changeTimeRange]
   )
+
+  // A range URL is a statement about the rows on screen. Only rewrite it
+  // after useTraderData has atomically committed the matching successful
+  // range cohort; failed requests keep both the old rows and their old URL.
+  useEffect(() => {
+    if (pendingRangeRef.current !== activeTimeRange) return
+    pendingRangeRef.current = null
+    const params = new URLSearchParams(window.location.search)
+    params.delete('range')
+    params.delete('page')
+    if (activeTimeRange !== '90D') params.set('range', activeTimeRange)
+    const query = params.toString()
+    window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname)
+  }, [activeTimeRange])
 
   const handlePullRefresh = async () => {
     if (refresh) {
@@ -166,23 +235,42 @@ export default function HomePageClient({
     }
   }
 
+  const shouldWithholdRows = initialCohortStatus !== 'ready'
+
   return (
-    <PullToRefresh onRefresh={handlePullRefresh} disabled={loading}>
+    <PullToRefresh onRefresh={handlePullRefresh} disabled={loading || shouldWithholdRows}>
       <div style={{ position: 'relative', zIndex: 1 }}>
         <RankingSection
-          traders={traders}
-          loading={loading && traders.length === 0}
-          isRefreshing={(loading || isChangingTimeRange) && traders.length > 0}
+          traders={shouldWithholdRows ? [] : traders}
+          loading={
+            shouldWithholdRows ? initialCohortStatus === 'loading' : loading && traders.length === 0
+          }
+          isRefreshing={
+            !shouldWithholdRows && (loading || isChangingTimeRange) && traders.length > 0
+          }
           isLoggedIn={isLoggedIn}
           activeTimeRange={activeTimeRange}
           onTimeRangeChange={handleTimeRangeChange}
           lastUpdated={lastUpdated}
-          error={error}
-          onRetry={deferredFetchFailed ? retryDeferredFetch : refresh}
-          onRefresh={refresh}
+          error={initialCohortStatus === 'failed' ? t('failedToLoadRankings') : error}
+          onRetry={
+            shouldWithholdRows
+              ? retryInitialCohort
+              : deferredFetchFailed
+                ? retryDeferredFetch
+                : refresh
+          }
+          onRefresh={shouldWithholdRows ? retryInitialCohort : refresh}
           availableSources={availableSources}
           totalCount={totalCount}
+          totalCountIsExact={totalCountIsExact}
+          hasMore={hasMore}
           categoryCounts={categoryCounts}
+          categoryCountsAreExact={categoryCountsAreExact}
+          initialPageIndex={initialPageIndex}
+          requiresInitialCohortFetch={requiresInitialClientCohort}
+          initialCohortAttempt={initialCohortAttempt}
+          onInitialCohortSettled={handleInitialCohortSettled}
           fetchPage={fetchPage}
           lastRefreshFailed={lastRefreshFailed}
           staleDataWarning={staleDataWarning}
