@@ -18,6 +18,7 @@ const retiredEntrypoints = [
   'scripts/openclaw/fetch-phemex.mjs',
   'scripts/openclaw/fetch-bingx-spot.mjs',
   'scripts/vps-deploy/setup-crontab.sh',
+  'scripts/vps-deploy/setup.sh',
   'scripts/vps-deploy/cron-runner.js',
   'scripts/vps-deploy/scraper-cron.mjs',
   'scripts/vps-scrapers/bybit-detail-pnl.mjs',

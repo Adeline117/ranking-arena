@@ -168,8 +168,20 @@ workaround. These legacy VPS monitor compatibility paths report fixed `RETIRED` 
 an HTTP server.
 
 This source-only boundary does not stop, inspect, or prove an already deployed host,
-process, crontab, UptimeRobot, or external monitor. `/api/health`, OpenClaw, harness, and
-`scripts/vps-deploy/*` remain outside this bounded conclusion.
+process, crontab, UptimeRobot, or external monitor. `/api/health`, OpenClaw, harness,
+infra topology, `scripts/vps-deploy/deploy.sh`, `scripts/vps-deploy/setup-env.sh`, and
+`scripts/vps-deploy/check-vps.sh` remain outside this bounded conclusion.
+
+### V1 legacy VPS bootstrap source boundary
+
+Do not use `scripts/vps-deploy/setup.sh` as an incident workaround. This legacy VPS bootstrap
+compatibility path reports fixed `RETIRED` and exits `2`; it does not install software, create host
+files, load an environment, or make network requests.
+
+This source-only boundary covers `setup.sh` only. It does not stop, inspect, or prove infra topology,
+a deployed host, PM2, credentials, or a scheduler. `scripts/vps-deploy/deploy.sh`,
+`scripts/vps-deploy/setup-env.sh`, and `scripts/vps-deploy/check-vps.sh` remain outside this bounded
+conclusion and require independent review.
 
 ### V1 archive on-chain probe source boundary
 
