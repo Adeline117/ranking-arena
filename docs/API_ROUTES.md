@@ -40,6 +40,7 @@
 | `/api/compare`                                | GET              | 对比交易员                                                                                                                | 可选 |
 | `/api/market`                                 | GET              | 获取市场数据                                                                                                              | 否   |
 | `/api/market/alpha`                           | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取 query、缓存或请求市场供应商       | 否   |
+| `/api/market/arbitrage`                       | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、缓存或请求交易所行情       | 否   |
 | `/api/market/candles`                         | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取 query、选择交易所或获取 K 线      | 否   |
 | `/api/market/futures`                         | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、不读数据库或请求市场供应商 | 否   |
 | `/api/market/sparklines`                      | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、内存缓存或请求市场供应商   | 否   |
@@ -482,18 +483,20 @@ handoff，因此两种方法都交给各自 route-owned 的认证和 hold；相�
 
 ### V1 public-egress source boundary
 
-`GET /api/cdn-proxy`、`GET /api/market/alpha`、`GET /api/market/candles`、
-`GET /api/market/futures`、`GET /api/market/sparklines` 与 `GET /api/posts/link-preview` 共用固定、非环境的
+`GET /api/cdn-proxy`、`GET /api/market/alpha`、`GET /api/market/arbitrage`、
+`GET /api/market/candles`、`GET /api/market/futures`、`GET /api/market/sparklines` 与 `GET /api/posts/link-preview` 共用固定、非环境的
 `V1_PUBLIC_EGRESS_PUBLISHED=false` source hold，均固定返回
 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 和 `Cache-Control`、`CDN-Cache-Control`、
 `Vercel-CDN-Cache-Control` 三层 `no-store`。它们不读取 query、执行 rate limit、CORS、
 social feature guard、缓存、DNS lookup、logging 或 outbound fetch；alpha handler 也不导入
 CoinGecko、cache 或旧响应转换逻辑，candles handler 不导入 ccxt、选择 exchange 或转换 K 线。
 futures handler 不初始化 Supabase、不聚合 funding/open-interest 行，也不请求 CoinGecko。
+arbitrage handler 保留 dynamic 元数据，但不导入 ccxt、cache、logger、rate limit 或检测器；桌面卡只显示本地
+`dataUnavailable`，不请求、不重试，也不把不可用说成市场均衡或无机会。
 sparklines handler 保留 Edge/dynamic 元数据，但不使用内存缓存、rate limit 或 CoinGecko；SpotMarket 的
 7D 单元格显示本地 `dataUnavailable` 标记，不发起该 endpoint 请求。
-`/api/v1/cdn-proxy`、`/api/v1/market/alpha`、`/api/v1/market/candles`、
-`/api/v1/market/futures`、`/api/v1/market/sparklines` 和 `/api/v1/posts/link-preview` 只在 rewrite 前使用同一组 exact proxy
+`/api/v1/cdn-proxy`、`/api/v1/market/alpha`、`/api/v1/market/arbitrage`、
+`/api/v1/market/candles`、`/api/v1/market/futures`、`/api/v1/market/sparklines` 和 `/api/v1/posts/link-preview` 只在 rewrite 前使用同一组 exact proxy
 handoff，不扩展到相邻路径。独立的 Funding Rates 与 Open Interest 页面直接读取各自 RPC/回退数据，
 不经此 retired handler，仍在本边界范围外。
 

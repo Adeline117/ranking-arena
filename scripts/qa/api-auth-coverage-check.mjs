@@ -48,10 +48,11 @@ const PUBLIC_API_ROUTES = new Set([
   // —— 首次全量判定 2026-07-02（逐个人工核查 handler：全部仅 GET 或自验证/已限流）——
   // 公开市场数据（只读，产品核心是公开榜单）
   'market',
-  'market/arbitrage',
   // V1 public-egress compatibility tombstones; fixed 410/no-store with no
   // request handling, data-store/cache, logging, exchange, or market-provider work.
   'market/alpha',
+  // The desktop card renders a local unavailable state and makes no endpoint call.
+  'market/arbitrage',
   'market/candles',
   'market/futures',
   // SpotMarket renders a local unavailable 7D marker and makes no endpoint call.

@@ -17,11 +17,13 @@ function codeOnly(value) {
 const publication = source('lib/security/v1-public-egress-publication.ts')
 const cdnProxyRoute = codeOnly(source('app/api/cdn-proxy/route.ts'))
 const marketAlphaRoute = codeOnly(source('app/api/market/alpha/route.ts'))
+const marketArbitrageRoute = codeOnly(source('app/api/market/arbitrage/route.ts'))
 const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
 const marketFuturesRoute = codeOnly(source('app/api/market/futures/route.ts'))
 const marketSparklinesRoute = codeOnly(source('app/api/market/sparklines/route.ts'))
 const linkPreviewRoute = codeOnly(source('app/api/posts/link-preview/route.ts'))
 const spotMarket = codeOnly(source('app/components/market/SpotMarket.tsx'))
+const arbitrageOpportunities = codeOnly(source('app/components/market/ArbitrageOpportunities.tsx'))
 const proxy = source('proxy.ts')
 const apiAuthCoverage = source('scripts/qa/api-auth-coverage-check.mjs')
 const docs = source('docs/API_ROUTES.md')
@@ -42,6 +44,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
   for (const route of [
     cdnProxyRoute,
     marketAlphaRoute,
+    marketArbitrageRoute,
     marketCandlesRoute,
     marketFuturesRoute,
     marketSparklinesRoute,
@@ -59,6 +62,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
       /node\/dns|\b(?:dnsLookup|lookup)\b/,
       /\b(?:logger|cache|Redis|ioredis)\b/,
       /\b(?:memCache|CACHE_TTL|SparklineEntry)\b/,
+      /\b(?:getOrSetWithLock|detectArbitrageOpportunities)\b/,
       /\b(?:checkRateLimit|RateLimitPresets|Ratelimit)\b/,
       /\b(?:getSupabaseAdmin|supabase|funding_rates|open_interest)\b/,
       /\b(?:getCorsOrigin|cors|Access-Control)\b/,
@@ -72,7 +76,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
   assert.match(
     proxy,
-    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/market\/alpha['"],\s*['"]\/api\/v1\/market\/alpha['"],\s*['"]\/api\/market\/candles['"],\s*['"]\/api\/v1\/market\/candles['"],\s*['"]\/api\/market\/futures['"],\s*['"]\/api\/v1\/market\/futures['"],\s*['"]\/api\/market\/sparklines['"],\s*['"]\/api\/v1\/market\/sparklines['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
+    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/market\/alpha['"],\s*['"]\/api\/v1\/market\/alpha['"],\s*['"]\/api\/market\/arbitrage['"],\s*['"]\/api\/v1\/market\/arbitrage['"],\s*['"]\/api\/market\/candles['"],\s*['"]\/api\/v1\/market\/candles['"],\s*['"]\/api\/market\/futures['"],\s*['"]\/api\/v1\/market\/futures['"],\s*['"]\/api\/market\/sparklines['"],\s*['"]\/api\/v1\/market\/sparklines['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
   )
   assert.match(
     proxy,
@@ -80,7 +84,7 @@ test('only canonical and versioned public egress paths bypass proxy guards', () 
   )
   assert.doesNotMatch(
     proxy,
-    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|candles|futures|sparklines)|link-preview)/
+    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|arbitrage|candles|futures|sparklines)|link-preview)/
   )
 
   const shouldSkipStart = proxy.indexOf('export function shouldSkip(pathname: string): boolean')
@@ -121,8 +125,17 @@ test('SpotMarket shows a local unavailable 7D cell without a sparklines request'
   assert.doesNotMatch(spotMarket, /\b(?:requestIdleCallback|cancelIdleCallback)\b/)
 })
 
+test('ArbitrageOpportunities shows a local unavailable state without an acquisition request', () => {
+  assert.match(arbitrageOpportunities, /role=['"]status['"][\s\S]*?t\(['"]dataUnavailable['"]\)/)
+  assert.doesNotMatch(arbitrageOpportunities, /\/api\/market\/arbitrage/)
+  assert.doesNotMatch(arbitrageOpportunities, /\b(?:apiFetch|useEffect|useCallback)\b/)
+  assert.doesNotMatch(arbitrageOpportunities, /\bretry\b/)
+  assert.doesNotMatch(arbitrageOpportunities, /\b(?:arbitrageEquilibrium|arbitrageNoOpps)\b/)
+})
+
 test('API allowlist and documentation describe the source-only public-egress hold', () => {
   assert.match(apiAuthCoverage, /'market\/alpha'/)
+  assert.match(apiAuthCoverage, /'market\/arbitrage'/)
   assert.match(apiAuthCoverage, /'market\/candles'/)
   assert.match(apiAuthCoverage, /'market\/futures'/)
   assert.match(apiAuthCoverage, /'market\/sparklines'/)
@@ -130,6 +143,7 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(apiAuthCoverage, /V1 public-egress compatibility tombstone/)
   assert.match(docs, /`\/api\/cdn-proxy`/)
   assert.match(docs, /`\/api\/market\/alpha`/)
+  assert.match(docs, /`\/api\/market\/arbitrage`/)
   assert.match(docs, /`\/api\/market\/candles`/)
   assert.match(docs, /`\/api\/market\/futures`/)
   assert.match(docs, /`\/api\/market\/sparklines`/)
