@@ -54,8 +54,9 @@ const PUBLIC_API_ROUTES = new Set([
   // The desktop card renders a local unavailable state and makes no endpoint call.
   'market/arbitrage',
   'market/candles',
-  // TokenSidePanel shows local coin-detail unavailability; its separate OHLC chart remains published.
+  // TokenSidePanel shows local unavailable data; it makes no coin-detail or OHLC request.
   'market/coin/[id]',
+  'market/ohlc/[id]',
   'market/futures',
   // The Fear & Greed card renders a local unavailable state and makes no endpoint call.
   'market/fear-greed',
@@ -69,7 +70,6 @@ const PUBLIC_API_ROUTES = new Set([
   'market/exchanges',
   // GlobalMarketBar renders a local unavailable state and makes no endpoint call.
   'market/overview',
-  'market/ohlc/[id]',
   'market/realtime',
   'market/spot',
   // 公开聚合统计(交易员数/交易所数,首页 hero + 跨所百分位徽章用;无用户数据,CDN 缓存 1h)

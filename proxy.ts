@@ -124,6 +124,8 @@ const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
 const PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS = [
   /^\/api\/market\/coin\/[^/]+$/,
   /^\/api\/v1\/market\/coin\/[^/]+$/,
+  /^\/api\/market\/ohlc\/[^/]+$/,
+  /^\/api\/v1\/market\/ohlc\/[^/]+$/,
 ] as const
 const REFERRAL_PROGRAM_BYPASS_PATHS = new Set([
   '/api/referral',

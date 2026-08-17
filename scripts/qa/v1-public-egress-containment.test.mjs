@@ -24,6 +24,7 @@ const marketAlphaRoute = codeOnly(source('app/api/market/alpha/route.ts'))
 const marketArbitrageRoute = codeOnly(source('app/api/market/arbitrage/route.ts'))
 const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
 const marketCoinRoute = codeOnly(source('app/api/market/coin/[id]/route.ts'))
+const marketOhlcRoute = codeOnly(source('app/api/market/ohlc/[id]/route.ts'))
 const marketDefiRoute = codeOnly(source('app/api/market/defi/route.ts'))
 const marketExchangesRoute = codeOnly(source('app/api/market/exchanges/route.ts'))
 const marketOverviewRoute = codeOnly(source('app/api/market/overview/route.ts'))
@@ -57,13 +58,14 @@ test('V1 public egress publication is checked-in false and browser-safe', () => 
   }
 })
 
-test('anonymous public egress routes, including dynamic coin detail, are no-argument fixed no-store tombstones', () => {
+test('anonymous public egress routes, including dynamic coin detail and OHLC, are no-argument fixed no-store tombstones', () => {
   for (const route of [
     cdnProxyRoute,
     marketAlphaRoute,
     marketArbitrageRoute,
     marketCandlesRoute,
     marketCoinRoute,
+    marketOhlcRoute,
     marketDefiRoute,
     marketExchangesRoute,
     marketOverviewRoute,
@@ -104,12 +106,14 @@ test('anonymous public egress routes, including dynamic coin detail, are no-argu
   }
 })
 
-test('dynamic coin-detail hold accepts only one canonical or V1 id segment', () => {
+test('dynamic coin-detail and OHLC holds accept only one canonical or V1 id segment', () => {
   assert.match(proxy, /PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS\s*=\s*\[/)
 
   for (const pattern of [
     String.raw`/^\/api\/market\/coin\/[^/]+$/`,
     String.raw`/^\/api\/v1\/market\/coin\/[^/]+$/`,
+    String.raw`/^\/api\/market\/ohlc\/[^/]+$/`,
+    String.raw`/^\/api\/v1\/market\/ohlc\/[^/]+$/`,
   ]) {
     assert.match(proxy, new RegExp(escapeRegExp(pattern)))
   }
@@ -246,13 +250,16 @@ test('GlobalMarketBar keeps its shell but shows local unavailable without aggreg
   )
 })
 
-test('TokenSidePanel shows coin detail unavailable while retaining its separate OHLC chart', () => {
+test('TokenSidePanel shows local unavailable data without coin-detail or OHLC acquisition', () => {
   assert.match(tokenSidePanel, /role=['"]status['"][\s\S]*?t\(['"]dataUnavailable['"]\)/)
   assert.doesNotMatch(tokenSidePanel, /\/api\/market\/coin\//)
-  assert.doesNotMatch(tokenSidePanel, /\b(?:CoinDetail|coinDetail|setCoinDetail)\b/)
-  assert.match(tokenSidePanel, /\/api\/market\/ohlc\/\$\{id\}\?days=\$\{days\}/)
-  assert.match(tokenSidePanel, /\bfetchOhlc\b/)
-  assert.match(tokenSidePanel, /<TradingViewChart\b/)
+  assert.doesNotMatch(tokenSidePanel, /\/api\/market\/ohlc\//)
+  assert.doesNotMatch(tokenSidePanel, /\b(?:CoinDetail|coinDetail|setCoinDetail|fetchOhlc)\b/)
+  assert.doesNotMatch(tokenSidePanel, /\b(?:apiFetch|useEffect|useState|useCallback)\b/)
+  assert.doesNotMatch(
+    tokenSidePanel,
+    /\b(?:OHLCVDataPoint|TradingViewChart|PERIODS|selectedPeriod|chartLoading|chartError|chartTheme)\b/
+  )
 })
 
 test('API allowlist and documentation describe the source-only public-egress hold', () => {
@@ -260,6 +267,7 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(apiAuthCoverage, /'market\/arbitrage'/)
   assert.match(apiAuthCoverage, /'market\/candles'/)
   assert.match(apiAuthCoverage, /'market\/coin\/\[id\]'/)
+  assert.match(apiAuthCoverage, /'market\/ohlc\/\[id\]'/)
   assert.match(apiAuthCoverage, /'market\/defi'/)
   assert.match(apiAuthCoverage, /'market\/exchanges'/)
   assert.match(apiAuthCoverage, /'market\/overview'/)
@@ -275,6 +283,8 @@ test('API allowlist and documentation describe the source-only public-egress hol
   assert.match(docs, /`\/api\/market\/candles`/)
   assert.match(docs, /`\/api\/market\/coin\/\[id\]`/)
   assert.match(docs, /`\/api\/v1\/market\/coin\/\[id\]`/)
+  assert.match(docs, /`\/api\/market\/ohlc\/\[id\]`/)
+  assert.match(docs, /`\/api\/v1\/market\/ohlc\/\[id\]`/)
   assert.match(docs, /单个非空路径段/)
   assert.match(docs, /TokenSidePanel/)
   assert.match(docs, /`\/api\/market\/ohlc\/\[id\]`/)

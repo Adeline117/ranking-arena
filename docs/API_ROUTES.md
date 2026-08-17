@@ -43,6 +43,7 @@
 | `/api/market/arbitrage`                       | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、缓存或请求交易所行情           | 否   |
 | `/api/market/candles`                         | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取 query、选择交易所或获取 K 线          | 否   |
 | `/api/market/coin/[id]`                       | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取动态 id、缓存或请求 CoinGecko 币种详情 | 否   |
+| `/api/market/ohlc/[id]`                       | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取动态 id、缓存或请求 CoinGecko OHLC     | 否   |
 | `/api/market/defi`                            | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读取请求值、缓存或请求 DefiLlama 数据      | 否   |
 | `/api/market/exchanges`                       | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读请求、缓存或交易所量                     | 否   |
 | `/api/market/overview`                        | GET              | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不读请求、缓存或请求全局市场供应商           | 否   |
@@ -490,16 +491,15 @@ handoff，因此两种方法都交给各自 route-owned 的认证和 hold；相�
 ### V1 public-egress source boundary
 
 `GET /api/cdn-proxy`、`GET /api/market/alpha`、`GET /api/market/arbitrage`、
-`GET /api/market/candles`、`GET /api/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`GET /api/market/defi`、`GET /api/market/exchanges`、`GET /api/market/overview`、`GET /api/market/futures`、`GET /api/market/fear-greed`、
+`GET /api/market/candles`、`GET /api/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`GET /api/market/ohlc/[id]`（`[id]` 只允许单个非空路径段）、`GET /api/market/defi`、`GET /api/market/exchanges`、`GET /api/market/overview`、`GET /api/market/futures`、`GET /api/market/fear-greed`、
 `GET /api/market/sparklines`、`GET /api/market/sectors` 与 `GET /api/posts/link-preview` 共用固定、非环境的
 `V1_PUBLIC_EGRESS_PUBLISHED=false` source hold，均固定返回
 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 和 `Cache-Control`、`CDN-Cache-Control`、
 `Vercel-CDN-Cache-Control` 三层 `no-store`。它们不读取 query、执行 rate limit、CORS、
 social feature guard、缓存、DNS lookup、logging 或 outbound fetch；alpha handler 也不导入
 CoinGecko、cache 或旧响应转换逻辑，candles handler 不导入 ccxt、选择 exchange 或转换 K 线。
-coin detail handler 不读取动态 id、缓存、rate limit 或 CoinGecko；TokenSidePanel 的 coin-detail 区域只显示本地
-`dataUnavailable`，不请求、不重试，也不把不可用解释为币种详情。其独立 OHLC 图表仍通过
-`/api/market/ohlc/[id]` 获取数据，不属于此 coin-detail hold。
+coin detail 和 OHLC handler 都不读取动态 id、缓存、rate limit 或 CoinGecko；TokenSidePanel 的币种详情和
+OHLC 图表区域只显示本地 `dataUnavailable`，不请求、不重试，也不把不可用解释为币种详情或图表数据。
 defi handler 保留 Edge/dynamic 元数据，但不使用缓存、rate limit 或 DefiLlama；DefiOverview
 只显示本地 `dataUnavailable`，不发起该 endpoint 请求，也不把不可用解释为 TVL、协议或链表现。
 exchanges handler 保留 Edge/dynamic 元数据，但不使用缓存、rate limit 或 CoinGecko；实际市场页的
@@ -516,9 +516,9 @@ sparklines handler 保留 Edge/dynamic 元数据，但不使用内存缓存、ra
 sectors handler 保留 Edge/dynamic 元数据，但不使用缓存、rate limit 或 CoinGecko；SectorPerformance
 只显示本地 `dataUnavailable`，不发起该 endpoint 请求，也不把不可用解释为任一板块表现。
 `/api/v1/cdn-proxy`、`/api/v1/market/alpha`、`/api/v1/market/arbitrage`、
-`/api/v1/market/candles`、`/api/v1/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`/api/v1/market/defi`、`/api/v1/market/exchanges`、`/api/v1/market/overview`、`/api/v1/market/futures`、`/api/v1/market/fear-greed`、
+`/api/v1/market/candles`、`/api/v1/market/coin/[id]`（`[id]` 只允许单个非空路径段）、`/api/v1/market/ohlc/[id]`（`[id]` 只允许单个非空路径段）、`/api/v1/market/defi`、`/api/v1/market/exchanges`、`/api/v1/market/overview`、`/api/v1/market/futures`、`/api/v1/market/fear-greed`、
 `/api/v1/market/sparklines`、`/api/v1/market/sectors` 和 `/api/v1/posts/link-preview` 在 rewrite 前 handoff：
-静态路径使用 exact matcher，coin detail 只使用 canonical/V1 的严格单段 `[id]` matcher；两者都不扩展到相邻路径。
+静态路径使用 exact matcher，coin detail 和 OHLC 只使用 canonical/V1 的严格单段 `[id]` matcher；两者都不扩展到相邻路径。
 独立的 Funding Rates 与 Open Interest 页面直接读取各自 RPC/回退数据，
 不经此 retired handler，仍在本边界范围外。
 
