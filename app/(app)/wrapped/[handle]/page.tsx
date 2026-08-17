@@ -12,6 +12,10 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { createOgVerificationProof } from '@/lib/utils/og-verification-proof'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 import WrappedCardClient from './WrappedCardClient'
 import WrappedEmptyState from './WrappedEmptyState'
 import WrappedUnavailableState from './WrappedUnavailableState'
@@ -46,6 +50,89 @@ const PLATFORM_LABELS: Record<string, string> = {
   coinex: 'CoinEx',
 }
 
+// This browser-facing card has no count receipt scoped to the same sealed
+// cohort as its rank. Keep the row proof and the count authority separate:
+// `public_ranked_leaderboard` proves whether a row may be ranked, but it does
+// not expose a verifiable global denominator. Consequently this page never
+// derives one from an unsealed maximum rank or a cache.
+const PUBLIC_WRAPPED_RANK_COLUMNS =
+  'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+
+type PublicWrappedRankQueryResult = {
+  data: unknown | null
+  error: { message: string } | null
+}
+
+type PublicWrappedRankQuery = {
+  select(columns: string): PublicWrappedRankQuery
+  eq(column: string, value: string): PublicWrappedRankQuery
+  maybeSingle(): Promise<PublicWrappedRankQueryResult>
+}
+
+type PublicWrappedRankClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicWrappedRankQuery
+}
+
+type VerifiedWrappedRank = {
+  rank: number
+  rankChange: number | null
+  roi: number | null
+  winRate: number | null
+  score: number | null
+  maxDrawdown: number | null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Local bridge until generated Supabase types include the additive public view. */
+function publicWrappedRankClient(value: unknown): PublicWrappedRankClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicWrappedRankClient
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function positiveRankOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
+}
+
+function verifiedWrappedRank(
+  candidate: unknown,
+  source: string,
+  sourceTraderId: string,
+  seasonId: string
+): VerifiedWrappedRank | null {
+  // The view is the database authority, and this local check is the cache/
+  // proxy defense in depth. A malformed, stale, partial, estimated, or
+  // wrong-period row must become unknown instead of a shareable claim.
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: candidate === null ? [] : [candidate], period: seasonId },
+    { expectedPeriod: seasonId }
+  ) as { traders?: unknown[] }
+  const row = sanitized.traders?.[0]
+  if (!isRecord(row) || row.source !== source || row.source_trader_id !== sourceTraderId) {
+    return null
+  }
+
+  const rank = positiveRankOrNull(row.rank)
+  if (rank === null) return null
+
+  return {
+    rank,
+    rankChange: finiteOrNull(row.rank_change),
+    roi: finiteOrNull(row.roi),
+    winRate: finiteOrNull(row.win_rate),
+    score: finiteOrNull(row.arena_score),
+    maxDrawdown: finiteOrNull(row.max_drawdown),
+  }
+}
+
 /** @deprecated UI-specific. Will be replaced by UnifiedTrader adapter. */
 export interface WrappedTraderData {
   handle: string
@@ -61,6 +148,7 @@ export interface WrappedTraderData {
   verifiedDataProof: string | null
   verificationSource: string
   verificationTraderId: string
+  /** Unknown: this route has no same-cohort global denominator authority. */
   total: number | null
   roi: number | null
   winRate: number | null
@@ -130,40 +218,33 @@ async function fetchWrappedDataUncached(
       PLATFORM_LABELS[effectivePlatform] ??
       effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
-    // Fetch leaderboard rank for this trader + window
-    const { data: lr } = await Promise.race([
-      supabase
-        .from('leaderboard_ranks')
-        .select('rank, rank_change, roi, win_rate, arena_score, max_drawdown, season_id')
-        .eq('source', resolved.platform)
-        .eq('source_trader_id', resolved.traderKey)
-        .eq('season_id', seasonId)
-        .maybeSingle(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
-      ),
-    ])
+    const rankResult = isPublicRankingSourceAllowed(resolved.platform)
+      ? await Promise.race([
+          publicWrappedRankClient(supabase)
+            .from('public_ranked_leaderboard')
+            .select(PUBLIC_WRAPPED_RANK_COLUMNS)
+            .eq('source', resolved.platform)
+            .eq('source_trader_id', resolved.traderKey)
+            .eq('season_id', seasonId)
+            .maybeSingle(),
+          new Promise<PublicWrappedRankQueryResult>((resolve) =>
+            setTimeout(() => resolve({ data: null, error: null }), SSR_TIMEOUT_MS)
+          ),
+        ])
+      : { data: null, error: null }
+    if (rankResult.error) {
+      console.error(
+        `[wrapped] public_ranked_leaderboard lookup failed (source=${resolved.platform}, trader=${resolved.traderKey}, season=${seasonId}):`,
+        rankResult.error.message
+      )
+    }
+    const rankData = rankResult.error
+      ? null
+      : verifiedWrappedRank(rankResult.data, resolved.platform, resolved.traderKey, seasonId)
 
-    // Total population for the percentile. `leaderboard_ranks.rank` is a GLOBAL
-    // cross-exchange rank (ROW_NUMBER OVER ORDER BY arena_score, NO partition by
-    // source), so the denominator must be the GLOBAL population, not this one
-    // platform's — dividing a global rank by a per-platform count fabricated a
-    // wrong "on {platform}" percentile. Use the GLOBAL MAX(rank) in the season:
-    // it equals the total ranked count by construction and guarantees
-    // total >= rank. The card is framed as cross-exchange accordingly.
-    const { data: maxRankRow } = await Promise.race([
-      supabase
-        .from('leaderboard_ranks')
-        .select('rank')
-        .eq('season_id', seasonId)
-        .order('rank', { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
-      ),
-    ])
-    const total = maxRankRow?.rank ?? null
+    // No same-seal global denominator is published to this route. Never infer
+    // it from an unsealed maximum rank or a count cache.
+    const total = null
     const verifiedKeys = await getVerifiedTraderKeys(supabase)
     const isVerifiedData = verifiedKeys.has(
       verifiedTraderKey(resolved.platform, resolved.traderKey)
@@ -179,17 +260,17 @@ async function fetchWrappedDataUncached(
         displayName: resolved.handle || handle,
         platform: effectivePlatform,
         platformLabel,
-        rank: lr?.rank ?? null,
-        rankChange: lr?.rank_change ?? null,
+        rank: rankData?.rank ?? null,
+        rankChange: rankData?.rankChange ?? null,
         isVerifiedData,
         verifiedDataProof,
         verificationSource: resolved.platform,
         verificationTraderId: resolved.traderKey,
         total,
-        roi: lr?.roi ?? null,
-        winRate: lr?.win_rate ?? null,
-        score: lr?.arena_score ?? null,
-        maxDrawdown: lr?.max_drawdown ?? null,
+        roi: rankData?.roi ?? null,
+        winRate: rankData?.winRate ?? null,
+        score: rankData?.score ?? null,
+        maxDrawdown: rankData?.maxDrawdown ?? null,
         window: seasonId,
       },
     }
@@ -218,9 +299,14 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const data = result.ok ? result.data : null
 
   const name = data?.displayName || decoded
-  const rank = data?.rank
-  const roi = data?.roi
-  const topPct = rank && data?.total ? Math.ceil((rank / data.total) * 100) : null
+  const rank = positiveRankOrNull(data?.rank)
+  const total = positiveRankOrNull(data?.total)
+  const roi = finiteOrNull(data?.roi)
+  const winRate = finiteOrNull(data?.winRate)
+  const score = finiteOrNull(data?.score)
+  const rankChange = finiteOrNull(data?.rankChange)
+  const topPct =
+    rank !== null && total !== null && rank <= total ? Math.ceil((rank / total) * 100) : null
 
   const roiStr = roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null
   const rankStr = rank != null ? `Ranked ${rank}` : null
@@ -228,9 +314,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
   const parts = [rankStr, roiStr, topStr].filter(Boolean)
   const title = `${name} Rank Card`
-  // "across all tracked exchanges", NOT "on {platform}": leaderboard_ranks.rank is
-  // a GLOBAL cross-exchange rank, so "on Binance" falsely implies a per-exchange
-  // ranking (mirrors the fix already applied to share/rank/[trader_key]).
+  // A verified rank is GLOBAL across the sealed cohort, so "on Binance" would
+  // falsely imply a per-exchange ranking (mirrors share/rank/[trader_key]).
   const description = parts.length
     ? `${parts.join(' | ')} across all tracked exchanges on Arena`
     : `${name}'s trading performance card on Arena`
@@ -243,16 +328,16 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     window: data?.window ?? windowParam,
   })
   if (rank != null) ogParams.set('rank', String(rank))
-  if (data?.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
+  if (rankChange != null) ogParams.set('rankChange', String(rankChange))
   if (data?.verifiedDataProof) {
     ogParams.set('verification', data.verifiedDataProof)
     ogParams.set('verificationSource', data.verificationSource)
     ogParams.set('verificationTrader', data.verificationTraderId)
   }
-  if (data?.total != null) ogParams.set('total', String(data.total))
+  if (total != null) ogParams.set('total', String(total))
   if (roi != null) ogParams.set('roi', String(roi))
-  if (data?.winRate != null) ogParams.set('winRate', String(data.winRate))
-  if (data?.score != null) ogParams.set('score', String(data.score))
+  if (winRate != null) ogParams.set('winRate', String(winRate))
+  if (score != null) ogParams.set('score', String(score))
 
   const ogImageUrl = `${BASE_URL}/api/og/rank?${ogParams}`
   const pageUrl = `${BASE_URL}/wrapped/${encodeURIComponent(decoded)}${platform ? `?platform=${platform}` : ''}`
@@ -304,17 +389,23 @@ export default async function WrappedPage({ params, searchParams }: Props) {
     platform: data.platform,
     window: data.window,
   })
-  if (data.rank != null) ogParams.set('rank', String(data.rank))
-  if (data.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
+  const rank = positiveRankOrNull(data.rank)
+  const total = positiveRankOrNull(data.total)
+  const roi = finiteOrNull(data.roi)
+  const winRate = finiteOrNull(data.winRate)
+  const score = finiteOrNull(data.score)
+  const rankChange = finiteOrNull(data.rankChange)
+  if (rank != null) ogParams.set('rank', String(rank))
+  if (rankChange != null) ogParams.set('rankChange', String(rankChange))
   if (data.verifiedDataProof) {
     ogParams.set('verification', data.verifiedDataProof)
     ogParams.set('verificationSource', data.verificationSource)
     ogParams.set('verificationTrader', data.verificationTraderId)
   }
-  if (data.total != null) ogParams.set('total', String(data.total))
-  if (data.roi != null) ogParams.set('roi', String(data.roi))
-  if (data.winRate != null) ogParams.set('winRate', String(data.winRate))
-  if (data.score != null) ogParams.set('score', String(data.score))
+  if (total != null) ogParams.set('total', String(total))
+  if (roi != null) ogParams.set('roi', String(roi))
+  if (winRate != null) ogParams.set('winRate', String(winRate))
+  if (score != null) ogParams.set('score', String(score))
 
   const ogImageUrl = `/api/og/rank?${ogParams}`
 
