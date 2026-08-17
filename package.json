@@ -104,6 +104,8 @@
     "qa:score-projection-v2-pg17": "bash supabase/migrations/__tests__/leaderboard-metric-trust-projection-v2.pg17.sh",
     "qa:retire-legacy-position-history-pg17": "VERIFIED_POSITION_HISTORY_RETIREMENT_PROOF=1 bash supabase/migrations/__tests__/verified-position-history-publication-writer.pg17.sh",
     "qa:records-page-quarantine-pg17": "bash supabase/migrations/__tests__/record-provenance-clocks.pg17.sh",
+    "qa:notification-ranking-change-reader-fence-pg17": "bash supabase/migrations/__tests__/notification-ranking-change-reader-fence.pg17.sh",
+    "qa:arena-bot-legacy-publication-isolation-pg17": "bash supabase/migrations/__tests__/arena-bot-legacy-publication-isolation.pg17.sh",
     "qa:copier-projection-v2-pg17": "bash supabase/migrations/__tests__/copier-snapshot-projection-v2.pg17.sh",
     "qa:copier-trust-publisher-v2-pg17": "bash supabase/migrations/__tests__/copier-snapshot-trust-raw-role.pg17.sh && bash supabase/migrations/__tests__/copier-snapshot-trust-publication-substrate.pg17.sh && bash supabase/migrations/__tests__/publish-copier-snapshot-trust-v2.pg17.sh",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",

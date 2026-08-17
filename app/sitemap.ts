@@ -17,6 +17,7 @@ import { BASE_URL } from '@/lib/constants/urls'
 // on the article route. Importing here prevents this sitemap from drifting from
 // the actual published articles. articles.ts is pure data (no client-only imports).
 import { ARTICLES } from '@/app/(app)/learn/articles'
+import { ARENA_BOT_AUTHOR_ID } from '@/lib/data/arena-bot-publication-policy'
 
 // ISR: regenerate sitemaps every hour. The first request after revalidation
 // triggers a fresh DB query; subsequent requests serve from cache.
@@ -218,6 +219,9 @@ async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string
       .is('group_id', null)
       .is('original_post_id', null)
       .not('author_id', 'is', null)
+      // This service-role query deliberately bypasses post RLS for sitemap
+      // throughput, so preserve the legacy bot publication fence explicitly.
+      .neq('author_id', ARENA_BOT_AUTHOR_ID)
       .order('hot_score', { ascending: false })
       .limit(MAX_OTHER_URLS)
     if (error) {

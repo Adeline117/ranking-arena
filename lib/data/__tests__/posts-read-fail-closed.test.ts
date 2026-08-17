@@ -93,6 +93,33 @@ describe('getPosts service-role fail-closed boundary', () => {
     })
   })
 
+  it('drops only the fixed legacy bot UUID before a cached candidate can replay', async () => {
+    const legacyBot = {
+      id: 'legacy-bot-post',
+      author_id: '00000000-0000-0000-0000-000000000001',
+      author_handle: 'arena_bot',
+    }
+    const sameHandleUser = {
+      id: 'same-handle-user-post',
+      author_id: '00000000-0000-0000-0000-000000000002',
+      author_handle: 'arena_bot',
+    }
+    const rpc = jest.fn().mockResolvedValue({ data: true, error: null })
+
+    await expect(
+      filterServiceReadablePostRows(
+        { rpc } as unknown as ServiceAudienceClient,
+        [legacyBot, sameHandleUser],
+        null
+      )
+    ).resolves.toEqual([sameHandleUser])
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(rpc).toHaveBeenCalledWith('can_service_actor_read_post', {
+      p_actor_id: null,
+      p_post_id: sameHandleUser.id,
+    })
+  })
+
   it.each([
     ['missing RPC', { data: null, error: { code: 'PGRST202' } }],
     ['database error', { data: null, error: { code: 'XX000' } }],

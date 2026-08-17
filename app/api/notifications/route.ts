@@ -16,6 +16,7 @@ import {
 } from '@/lib/data/notifications'
 import { features } from '@/lib/features'
 import { getOrSet, delByPattern } from '@/lib/cache'
+import { NOTIFICATION_READER_CACHE_EPOCH } from '@/lib/notifications/ranking-change-fence'
 
 const SOCIAL_NOTIFICATION_TYPES = [
   'post_reply',
@@ -37,7 +38,9 @@ export const GET = withAuth(
       const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
       const unread_only = searchParams.get('unread_only') === 'true'
 
-      const cacheKey = `notifications:${user.id}:${limit}:${offset}:${unread_only}`
+      // Rotate this namespace so a cache entry written before the ranking
+      // notification reader fence cannot be replayed after deployment.
+      const cacheKey = `notifications:${user.id}:${NOTIFICATION_READER_CACHE_EPOCH}:${limit}:${offset}:${unread_only}`
       const { notifications: initialNotifications, unreadCount } = await getOrSet(
         cacheKey,
         () => getUserNotificationsWithCount(supabase, user.id, { limit, offset, unread_only }),
