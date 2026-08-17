@@ -31,6 +31,20 @@ Analytics、Chrome DevTools、部署或浏览器状态，也不删除、检查�
 性能、CI、部署或报告陈述不能作为当前执行或外部状态的证据；未来任何测量、CI 或报告工作均须由 owner
 在独立 ADR-023 计划中重新定义并保全单独证据。
 
+## V1 stuck-log diagnostic CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/check-stuck-simple.mjs` 这一没有当前操作 caller 的 legacy diagnostic
+compatibility path。它无论传入何种参数，均只向 stderr 输出
+`[RETIRED] scripts/archive/check-stuck-simple.mjs`、stdout 保持为空，并以 exit `2` 结束；不再读取、
+查询或变更 `pipeline_logs`，也不调用 current monitoring API、worker 或 meta-monitor。
+
+这是单一脚本的 source-only boundary：它不改变、检查或证明 `pipeline_logs`、当前 monitoring API、
+worker、meta-monitor、deployment、数据或任何外部状态。下方历史诊断、监控或 pipeline 记录不能作为
+当前运行或数据状态的证据；未来任何诊断或修复工作均须由 owner 在独立 ADR-023 计划中重新定义并保全
+单独证据。此边界不退休或评估 `lib/services/pipeline-logger.ts`、`/api/health/pipeline`、admin
+monitoring readers（包括 enrichment-completeness）、`lib/cron/auto-cleanup-stuck.ts`，或已单独 held 的
+`/api/cron/cleanup-stuck-logs`。
+
 ## V1 ranking authority cache-purge source containment（2026-08-17）
 
 本轮只封存 `scripts/maintenance/purge-ranking-authority-caches.sh` 这一 legacy compatibility path。
