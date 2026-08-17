@@ -1,9 +1,10 @@
 'use client'
 
 /**
- * Module-level degradation panel (spec §2.4): when a core module's
- * upstream fetch is pending/failed, the module says so locally — the rest
- * of the page stays rendered. NEVER escalate to a full-page error.
+ * Module-level degradation panel (spec §2.4): when a core module is
+ * unavailable after a failed or bounded upstream attempt, it says so locally
+ * while the rest of the page stays rendered. In-flight work uses a separate
+ * skeleton state; NEVER escalate either condition to a full-page error.
  */
 
 import { tokens } from '@/lib/design-tokens'
