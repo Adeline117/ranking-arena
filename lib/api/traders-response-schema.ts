@@ -41,7 +41,10 @@ export const traderOutputSchema = z.object({
 export const tradersResponseSchema = z.object({
   traders: z.array(traderOutputSchema),
   timeRange: z.string(),
-  totalCount: z.number(),
+  // A numeric count is emitted only when a query has an exact, view-native
+  // authority. Public cohort pagination normally uses a lookahead row instead.
+  totalCount: z.number().int().nonnegative().nullable(),
+  totalCountIsExact: z.boolean(),
   rankingMode: z.string(),
   lastUpdated: z.string().nullable(),
   isStale: z.boolean(),

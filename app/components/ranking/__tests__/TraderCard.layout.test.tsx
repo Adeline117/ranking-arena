@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { TraderCard } from '../TraderCard'
 import { getCriticalCss } from '@/lib/performance/critical-css'
 
@@ -64,6 +64,7 @@ jest.mock('@/app/components/ui/Sparkline', () => ({
   Sparkline: () => <span>Sparkline</span>,
 }))
 jest.mock('../RankSparkline', () => ({ RankSparkline: () => <span>Rank sparkline</span> }))
+// eslint-disable-next-line react/display-name -- concise default-export module mock
 jest.mock('../ScoreMiniBar', () => () => <span>Score bar</span>)
 jest.mock('../AntiGamingBadge', () => () => null)
 jest.mock('../VerifiedDataBadge', () => () => null)
@@ -169,4 +170,50 @@ describe('TraderCard narrow-card layout', () => {
     expect(mdd).toHaveTextContent('~0.0%')
     expect(within(mdd).getByTitle('estimatedFromRoi')).toBeInTheDocument()
   })
+
+  it('keeps unknown ROI and score unknown in the card aria label and share text', async () => {
+    const share = jest.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share })
+
+    render(
+      <TraderCard
+        trader={{ ...trader, roi: null, arena_score: null }}
+        rank={4}
+        language="en"
+        getMedalGlowClass={() => ''}
+        parseSourceInfo={() => ({ exchange: 'Binance', type: 'Futures', typeColor: '#777' })}
+      />
+    )
+
+    expect(screen.getByRole('link', { name: /ROI unknown/i })).toBeInTheDocument()
+    expect(screen.queryByText('Sparkline')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Share/i }))
+    await Promise.resolve()
+    expect(share).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringContaining('ROI unknown, Arena Score unknown'),
+      })
+    )
+  })
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'renders non-finite supporting metrics as unknown for %p',
+    (metric) => {
+      const { container } = render(
+        <TraderCard
+          trader={{ ...trader, sharpe_ratio: metric, win_rate: metric }}
+          rank={4}
+          language="en"
+          getMedalGlowClass={() => ''}
+          parseSourceInfo={() => ({ exchange: 'Binance', type: 'Futures', typeColor: '#777' })}
+        />
+      )
+
+      expect(screen.getByTestId('metric-Sharpe')).toHaveTextContent('Sharpe:—')
+      expect(screen.getByTestId('metric-WIN%')).toHaveTextContent('WIN%:—')
+      expect(container).not.toHaveTextContent('NaN')
+      expect(container).not.toHaveTextContent('Infinity')
+    }
+  )
 })
