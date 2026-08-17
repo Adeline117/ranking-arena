@@ -14,6 +14,8 @@ export type MarkdownLinkToken = {
   end: number
 }
 
+export type MarkdownVideoToken = MarkdownLinkToken
+
 export type RawContentUrlToken = {
   url: string
   start: number
@@ -67,6 +69,17 @@ export function findMarkdownLinkTokens(content: string): MarkdownLinkToken[] {
   }
 
   return tokens
+}
+
+/** Parse the exact video-marker labels persisted by post composers. */
+export function findMarkdownVideoTokens(content: string): MarkdownVideoToken[] {
+  return findMarkdownLinkTokens(content).filter(
+    (token) =>
+      token.label.toLowerCase() === 'video' ||
+      token.label === '视频' ||
+      token.label === '動画' ||
+      token.label === '동영상'
+  )
 }
 
 /** Parse the deliberately small Markdown image grammar supported by post composers. */

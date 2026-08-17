@@ -314,19 +314,40 @@ describe('post media storage paths', () => {
       })
     })
 
-    it('collects a managed video referenced only by a Markdown link', () => {
-      const videoPath = `${OWNER}/videos/${OBJECT}.mp4`
+    it.each(['video', 'VIDEO', '视频', '動画', '동영상'])(
+      'collects a canonical managed video once from the persisted %s marker',
+      (label) => {
+        const videoPath = `${OWNER}/videos/${OBJECT}.mp4`
+        expect(
+          collectPostMediaClaimObjectPaths(
+            [],
+            `[${label}](${publicUrl(videoPath)})`,
+            OWNER,
+            STORAGE_BASE_URL
+          )
+        ).toEqual({
+          kind: 'ok',
+          objectPaths: [videoPath],
+        })
+      }
+    )
+
+    it.each([
+      ['video', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+      ['视频', 'https://www.bilibili.com/video/BV1xx411c7mD'],
+    ])('keeps an external %s marker out of the managed manifest', (label, url) => {
       expect(
-        collectPostMediaClaimObjectPaths(
-          [],
-          `[video](${publicUrl(videoPath)})`,
-          OWNER,
-          STORAGE_BASE_URL
-        )
-      ).toEqual({
-        kind: 'ok',
-        objectPaths: [videoPath],
-      })
+        collectPostMediaClaimObjectPaths([], `[${label}](${url})`, OWNER, STORAGE_BASE_URL)
+      ).toEqual({ kind: 'ok', objectPaths: [] })
+    })
+
+    it('rejects managed userinfo hidden in a persisted video marker', () => {
+      const videoPath = `${OWNER}/videos/${OBJECT}.mp4`
+      const url = `https://user:password@project.supabase.co/storage/v1/object/public/posts/${videoPath}`
+
+      expect(
+        collectPostMediaClaimObjectPaths([], `[video](${url})`, OWNER, STORAGE_BASE_URL)
+      ).toEqual({ kind: 'invalid-reference' })
     })
 
     it('fails closed for a managed video in the final image list', () => {

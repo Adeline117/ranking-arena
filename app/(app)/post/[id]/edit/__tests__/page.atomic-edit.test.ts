@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { createElement } from 'react'
+import { render } from '@testing-library/react'
+import { renderContentWithLinks } from '@/lib/utils/content'
 
 const page = readFileSync(resolve(process.cwd(), 'app/(app)/post/[id]/edit/page.tsx'), 'utf8')
 
@@ -42,8 +45,13 @@ describe('full post editor atomic write path', () => {
     expect(page).toContain('linkifyTagsAndMentions(part')
     expect(page).toContain('for (const token of findMarkdownImageTokens(text))')
     expect(page).toContain('for (const token of findRawContentUrlTokens(value))')
+    expect(page).toContain('...findMarkdownVideoTokens(text).map((token) => ({')
+    expect(page).toContain('normalizeHttpUrl(token.url) ? parseVideoUrl(token.url) : null')
+    expect(page).toContain("if (part.type === 'video')")
+    expect(page).toContain('renderContentWithLinks(part.content)')
     expect(page).toContain('const normalizedUrl = normalizeHttpUrl(token.url)')
-    expect(page).toContain('if (!normalizedUrl) continue')
+    expect(page).toContain('imageIndex: normalizedUrl ? imgIdx++ : null')
+    expect(page).toContain('if (match.start < currentIndex) continue')
     expect(page).toContain("window.open(part.url, '_blank', 'noopener,noreferrer')")
     expect(page).toContain('moveMarkdownImage(content, url, direction)')
     expect(page).toContain('removeMarkdownImage(content, url)')
@@ -66,5 +74,47 @@ describe('full post editor atomic write path', () => {
     ]) {
       expect(existsSync(resolve(process.cwd(), relativePath))).toBe(false)
     }
+  })
+})
+
+describe('post edit media preview', () => {
+  const renderPreview = (content: string) =>
+    render(createElement('div', null, renderContentWithLinks(content))).container
+
+  it('renders a direct-video marker as an actual video element', () => {
+    const url = 'https://cdn.example/video.mp4'
+    const container = renderPreview(`[video](${url})`)
+
+    expect(container.querySelector('video')).toHaveAttribute('src', url)
+    expect(container.querySelector('video')).toHaveAttribute('controls')
+    expect(container.querySelector('video')).toHaveAttribute('preload', 'metadata')
+  })
+
+  it.each([
+    ['動画', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+    ['동영상', 'https://www.bilibili.com/video/BV1xx411c7mD'],
+  ])('renders the persisted %s marker through the shared iframe renderer', (label, url) => {
+    expect(renderPreview(`[${label}](${url})`).querySelector('iframe')).not.toBeNull()
+  })
+
+  it.each([
+    '[video](javascript:evil.mp4)',
+    '[video](/relative/video.mp4)',
+    '[video](https://cdn.example/video.txt)',
+  ])('preserves an invalid or unsupported marker verbatim: %s', (marker) => {
+    const container = renderPreview(marker)
+
+    expect(container.querySelector('video, iframe')).toBeNull()
+    expect(container.textContent).toBe(marker)
+  })
+
+  it.each([
+    '[video](![image](https://cdn.example/image.png))',
+    '![image]([video](https://cdn.example/video.mp4))',
+  ])('does not render a nested media token outside its outer range: %s', (content) => {
+    const container = renderPreview(content)
+
+    expect(container.querySelector('img, video, iframe')).toBeNull()
+    expect(container.textContent).toBe(content)
   })
 })

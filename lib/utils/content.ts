@@ -6,7 +6,13 @@
 import { ReactNode, createElement } from 'react'
 import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from '@/lib/stickers'
 import { logger } from '@/lib/logger'
-import { findMarkdownImageTokens, findRawContentUrlTokens } from '@/lib/posts/markdown-images'
+import {
+  findMarkdownImageTokens,
+  findMarkdownVideoTokens,
+  findRawContentUrlTokens,
+  type MarkdownImageToken,
+  type MarkdownVideoToken,
+} from '@/lib/posts/markdown-images'
 import { findMentionTokens } from '@/lib/posts/mentions'
 
 // Arena 主题色
@@ -112,10 +118,16 @@ export function parseContent(text: string): ContentPart[] {
 
   const parts: ContentPart[] = []
 
-  // Keep rendering and the post-media authority on one deliberately small
-  // Markdown image grammar. In particular, CR/LF cannot be hidden inside a
-  // destination and then stripped by WHATWG URL parsing before an <img> load.
-  const imageMatches = findMarkdownImageTokens(text)
+  // Keep rendering and the post-media authority on deliberately small shared
+  // Markdown grammars. In particular, CR/LF cannot be hidden inside a media
+  // destination and then stripped by WHATWG URL parsing before a load.
+  type MarkdownMediaMatch =
+    | { kind: 'image'; token: MarkdownImageToken }
+    | { kind: 'video'; token: MarkdownVideoToken }
+  const mediaMatches: MarkdownMediaMatch[] = [
+    ...findMarkdownImageTokens(text).map((token) => ({ kind: 'image' as const, token })),
+    ...findMarkdownVideoTokens(text).map((token) => ({ kind: 'video' as const, token })),
+  ].sort((left, right) => left.token.start - right.token.start)
 
   // 处理文本中的链接（包括视频链接）
   function processTextWithLinks(str: string): void {
@@ -141,20 +153,36 @@ export function parseContent(text: string): ContentPart[] {
 
   // 构建内容片段
   let currentIndex = 0
-  for (const img of imageMatches) {
-    // 图片前的文本
-    if (img.start > currentIndex) {
-      processTextWithLinks(text.slice(currentIndex, img.start))
+  for (const match of mediaMatches) {
+    const { start, end } = match.token
+    // The deliberately small regex grammars can find an image/video token
+    // nested inside another token's destination. The outer structural token
+    // owns that range; never render an overlapping inner token a second time.
+    if (start < currentIndex) continue
+    if (start > currentIndex) {
+      processTextWithLinks(text.slice(currentIndex, start))
     }
-    // Only http(s) markdown images become media. Preserve every rejected
-    // markdown token verbatim as ordinary text rather than partially linking
-    // or silently discarding attacker-controlled content.
-    if (isAllowedContentImageUrl(img.url)) {
-      parts.push({ type: 'image', content: img.alt, url: img.url })
+
+    if (match.kind === 'image' && isAllowedContentImageUrl(match.token.url)) {
+      parts.push({ type: 'image', content: match.token.alt, url: match.token.url })
+    } else if (match.kind === 'video' && isAllowedContentImageUrl(match.token.url)) {
+      const video = parseVideoUrl(match.token.url)
+      if (video) {
+        parts.push({
+          type: 'video',
+          content: match.token.url,
+          url: match.token.url,
+          video,
+        })
+      } else {
+        parts.push({ type: 'text', content: match.token.raw })
+      }
     } else {
-      parts.push({ type: 'text', content: img.raw })
+      // Preserve rejected/unsupported markers verbatim rather than partially
+      // linkifying or silently discarding attacker-controlled content.
+      parts.push({ type: 'text', content: match.token.raw })
     }
-    currentIndex = img.end
+    currentIndex = end
   }
 
   // 最后一个图片后的文本
@@ -162,8 +190,8 @@ export function parseContent(text: string): ContentPart[] {
     processTextWithLinks(text.slice(currentIndex))
   }
 
-  // 如果没有图片，直接处理链接
-  if (imageMatches.length === 0 && parts.length === 0) {
+  // 如果没有媒体标记，直接处理链接
+  if (mediaMatches.length === 0 && parts.length === 0) {
     processTextWithLinks(text)
   }
 

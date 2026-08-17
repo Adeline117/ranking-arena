@@ -170,6 +170,108 @@ describe('parseContent', () => {
     }
   )
 
+  it.each([
+    ['video', 'https://cdn.example/video.mp4', 'direct', 'https://cdn.example/video.mp4'],
+    [
+      'VIDEO',
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      'youtube',
+      'https://www.youtube.com/embed/dQw4w9WgXcQ',
+    ],
+    [
+      '视频',
+      'https://www.bilibili.com/video/BV1xx411c7mD',
+      'bilibili',
+      '//player.bilibili.com/player.html?bvid=BV1xx411c7mD&autoplay=0',
+    ],
+  ])(
+    'renders the persisted [%s] marker through the existing video capability',
+    (label, url, type, embedUrl) => {
+      expect(parseContent(`[${label}](${url})`)).toEqual([
+        {
+          type: 'video',
+          content: url,
+          url,
+          video: { type, embedUrl, originalUrl: url },
+        },
+      ])
+    }
+  )
+
+  it.each([
+    '[video](javascript:evil.mp4)',
+    '[video](/relative/video.mp4)',
+    '[video](https://cdn.example/video.txt)',
+  ])('preserves an invalid or unsupported video marker verbatim: %s', (marker) => {
+    expect(parseContent(marker)).toEqual([{ type: 'text', content: marker }])
+  })
+
+  it.each(['\n', '\r'])(
+    'does not consume a video marker whose destination spans %p',
+    (lineBreak) => {
+      const marker = `[video](https://evil.example${lineBreak}/video.mp4)`
+      const parts = parseContent(marker)
+
+      expect(parts).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'video' })])
+      )
+      expect(parts.map((part) => part.content).join('')).toBe(marker)
+    }
+  )
+
+  it.each([
+    '[video](![image](https://cdn.example/image.png))',
+    '![image]([video](https://cdn.example/video.mp4))',
+  ])('consumes an outer overlapping media range exactly once: %s', (content) => {
+    const parts = parseContent(content)
+
+    expect(parts.some((part) => part.type === 'image' || part.type === 'video')).toBe(false)
+    expect(parts.map((part) => part.content).join('')).toBe(content)
+  })
+
+  it('keeps marker/image order and consumes two adjacent markers independently', () => {
+    const directUrl = 'https://cdn.example/first.mp4'
+    const youtubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    const imageUrl = 'https://cdn.example/image.webp'
+
+    expect(parseContent(`[video](${directUrl})[视频](${youtubeUrl})![image](${imageUrl})`)).toEqual(
+      [
+        {
+          type: 'video',
+          content: directUrl,
+          url: directUrl,
+          video: { type: 'direct', embedUrl: directUrl, originalUrl: directUrl },
+        },
+        {
+          type: 'video',
+          content: youtubeUrl,
+          url: youtubeUrl,
+          video: {
+            type: 'youtube',
+            embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            originalUrl: youtubeUrl,
+          },
+        },
+        { type: 'image', content: 'image', url: imageUrl },
+      ]
+    )
+  })
+
+  it('continues rendering a raw direct URL after an unsupported marker', () => {
+    const marker = '[video](https://cdn.example/no-extension)'
+    const directUrl = 'https://cdn.example/video.mp4'
+
+    expect(parseContent(`${marker}${directUrl}`)).toEqual([
+      { type: 'text', content: marker },
+      {
+        type: 'video',
+        content: directUrl,
+        url: directUrl,
+        video: { type: 'direct', embedUrl: directUrl, originalUrl: directUrl },
+      },
+    ])
+  })
+
   it('keeps same-host HTTP managed image and video URLs renderer-reachable', () => {
     const imageUrl =
       'http://project.supabase.co/storage/v1/object/public/posts/abcdefab-cdef-4abc-8def-abcdefabcdef/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.webp'

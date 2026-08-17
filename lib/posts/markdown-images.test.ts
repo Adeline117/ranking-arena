@@ -1,6 +1,7 @@
 import {
   findMarkdownImageTokens,
   findMarkdownLinkTokens,
+  findMarkdownVideoTokens,
   findRawContentUrlTokens,
   moveMarkdownImage,
   removeMarkdownImage,
@@ -89,5 +90,27 @@ describe('post Markdown image controls', () => {
         `[video](https://evil.example${lineBreak}@project.supabase.co/video.mp4)`
       )
     ).toEqual([])
+  })
+
+  it.each(['video', 'Video', 'VIDEO', '视频', '動画', '동영상'])(
+    'recognizes the exact persisted video marker label %p',
+    (label) => {
+      expect(findMarkdownVideoTokens(`[${label}](https://cdn.example/video.mp4)`)).toMatchObject([
+        { label, url: 'https://cdn.example/video.mp4' },
+      ])
+    }
+  )
+
+  it.each([' video', 'video ', 'videos', '视 频', '影片', '비디오'])(
+    'does not widen the video marker label to %p',
+    (label) => {
+      expect(findMarkdownVideoTokens(`[${label}](https://cdn.example/video.mp4)`)).toEqual([])
+    }
+  )
+
+  it.each(['\n', '\r'])('does not span a %p inside a video marker', (lineBreak) => {
+    expect(findMarkdownVideoTokens(`[video](https://evil.example${lineBreak}/video.mp4)`)).toEqual(
+      []
+    )
   })
 })

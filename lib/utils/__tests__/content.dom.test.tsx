@@ -77,6 +77,32 @@ describe('markdown image DOM safety', () => {
     }
   )
 
+  it('renders a persisted direct-video marker as a video element', () => {
+    const url = 'https://cdn.example/video.mp4'
+    const { container } = render(<div>{renderContentWithLinks(`[video](${url})`)}</div>)
+
+    expect(container.querySelector('video')).toHaveAttribute('src', url)
+    expect(container.textContent).toBe('')
+  })
+
+  it('renders a persisted Chinese Bilibili marker through the existing iframe capability', () => {
+    const url = 'https://www.bilibili.com/video/BV1xx411c7mD'
+    const { container } = render(<div>{renderContentWithLinks(`[视频](${url})`)}</div>)
+
+    expect(container.querySelector('iframe')).toHaveAttribute(
+      'src',
+      '//player.bilibili.com/player.html?bvid=BV1xx411c7mD&autoplay=0'
+    )
+  })
+
+  it('preserves an unsupported video marker without creating media', () => {
+    const marker = '[video](https://cdn.example/video.txt)'
+    const { container } = render(<div>{renderContentWithLinks(marker)}</div>)
+
+    expect(container.querySelector('video, iframe')).toBeNull()
+    expect(container.textContent).toBe(marker)
+  })
+
   it.each([
     [
       'same-host HTTP public routes',

@@ -2,9 +2,13 @@
 
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import { findMarkdownImageTokens, findRawContentUrlTokens } from '@/lib/posts/markdown-images'
+import {
+  findMarkdownImageTokens,
+  findMarkdownVideoTokens,
+  findRawContentUrlTokens,
+} from '@/lib/posts/markdown-images'
 import { isAllowedContentImageUrl, linkifyTagsAndMentions } from '@/lib/utils/content'
-import VideoPlayer, { parseVideoUrl } from './VideoPlayer'
+import VideoPlayer, { parseVideoMarkerUrl, parseVideoUrl } from './VideoPlayer'
 
 /**
  * Renders post content with edit controls (move / remove) for embedded images.
@@ -18,32 +22,55 @@ export function renderContentWithControls(
 ) {
   if (!text) return null
 
-  // Find all images
-  const imageMatches: {
+  // Keep invalid image tokens in the structural range list so nested media
+  // syntax cannot escape an outer rejected token and render independently.
+  const imageTokens: {
     start: number
     end: number
+    raw: string
     alt: string
     url: string
-    imageIndex: number
+    imageIndex: number | null
   }[] = []
   let imgIdx = 0
   for (const token of findMarkdownImageTokens(text)) {
-    if (!isAllowedContentImageUrl(token.url)) continue
-    imageMatches.push({
+    const renderable = isAllowedContentImageUrl(token.url)
+    imageTokens.push({
       start: token.start,
       end: token.end,
+      raw: token.raw,
       alt: token.alt,
       url: token.url,
-      imageIndex: imgIdx++,
+      imageIndex: renderable ? imgIdx++ : null,
     })
   }
+
+  type MediaMatch =
+    | ({ kind: 'image' } & (typeof imageTokens)[number])
+    | {
+        kind: 'video'
+        start: number
+        end: number
+        raw: string
+        video: ReturnType<typeof parseVideoMarkerUrl>
+      }
+  const mediaMatches: MediaMatch[] = [
+    ...imageTokens.map((image) => ({ kind: 'image' as const, ...image })),
+    ...findMarkdownVideoTokens(text).map((token) => ({
+      kind: 'video' as const,
+      start: token.start,
+      end: token.end,
+      raw: token.raw,
+      video: isAllowedContentImageUrl(token.url) ? parseVideoMarkerUrl(token.url) : null,
+    })),
+  ].sort((left, right) => left.start - right.start)
 
   // Build content fragments
   type ContentPart = {
     type: 'text' | 'image' | 'link' | 'video'
     content: string
     url?: string
-    video?: { embedUrl: string; type: string }
+    video?: NonNullable<ReturnType<typeof parseVideoMarkerUrl>>
     imageIndex?: number
   }
 
@@ -70,12 +97,26 @@ export function renderContentWithControls(
   }
   let currentIndex = 0
 
-  for (const img of imageMatches) {
-    if (img.start > currentIndex) {
-      appendTextWithLinks(text.slice(currentIndex, img.start))
+  for (const match of mediaMatches) {
+    if (match.start < currentIndex) continue
+    if (match.start > currentIndex) {
+      appendTextWithLinks(text.slice(currentIndex, match.start))
     }
-    parts.push({ type: 'image', content: img.alt, url: img.url, imageIndex: img.imageIndex })
-    currentIndex = img.end
+    if (match.kind === 'image' && match.imageIndex !== null) {
+      parts.push({
+        type: 'image',
+        content: match.alt,
+        url: match.url,
+        imageIndex: match.imageIndex,
+      })
+    } else if (match.kind === 'image') {
+      parts.push({ type: 'text', content: match.raw })
+    } else if (match.video) {
+      parts.push({ type: 'video', content: match.raw, video: match.video })
+    } else {
+      parts.push({ type: 'text', content: match.raw })
+    }
+    currentIndex = match.end
   }
 
   if (currentIndex < text.length) {
@@ -85,7 +126,7 @@ export function renderContentWithControls(
   return parts.map((part, index) => {
     if (part.type === 'image') {
       const isFirst = part.imageIndex === 0
-      const isLast = part.imageIndex === imageMatches.length - 1
+      const isLast = part.imageIndex === imgIdx - 1
       return (
         <span
           key={index}

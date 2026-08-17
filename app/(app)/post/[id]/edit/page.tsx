@@ -2,7 +2,7 @@
 
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
-import { useState, useEffect, useRef } from 'react'
+import { Fragment, useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
@@ -22,13 +22,14 @@ import {
   readPostImageUploadAcknowledgement,
   readPostMediaUploadError,
 } from '@/lib/posts/post-media-upload-contract'
-import { linkifyTagsAndMentions } from '@/lib/utils/content'
+import { linkifyTagsAndMentions, parseVideoUrl, renderContentWithLinks } from '@/lib/utils/content'
 import {
   MentionAutocomplete,
   useMentionAutocomplete,
 } from '@/app/components/post/components/MentionAutocomplete'
 import {
   findMarkdownImageTokens,
+  findMarkdownVideoTokens,
   findRawContentUrlTokens,
   moveMarkdownImage,
   removeMarkdownImage,
@@ -64,30 +65,52 @@ function renderContentWithControls(
 ) {
   if (!text) return null
 
-  // 先找出所有图片
-  const imageMatches: {
+  // Keep rejected image tokens as structural ranges so nested media syntax
+  // cannot escape an outer marker and render independently.
+  const imageTokens: {
     start: number
     end: number
+    raw: string
     alt: string
-    url: string
-    imageIndex: number
+    url: string | null
+    imageIndex: number | null
   }[] = []
   let imgIdx = 0
   for (const token of findMarkdownImageTokens(text)) {
     const normalizedUrl = normalizeHttpUrl(token.url)
-    if (!normalizedUrl) continue
-    imageMatches.push({
+    imageTokens.push({
       start: token.start,
       end: token.end,
+      raw: token.raw,
       alt: token.alt,
       url: normalizedUrl,
-      imageIndex: imgIdx++,
+      imageIndex: normalizedUrl ? imgIdx++ : null,
     })
   }
 
+  type MediaMatch =
+    | ({ kind: 'image' } & (typeof imageTokens)[number])
+    | {
+        kind: 'video'
+        start: number
+        end: number
+        raw: string
+        video: ReturnType<typeof parseVideoUrl>
+      }
+  const mediaMatches: MediaMatch[] = [
+    ...imageTokens.map((image) => ({ kind: 'image' as const, ...image })),
+    ...findMarkdownVideoTokens(text).map((token) => ({
+      kind: 'video' as const,
+      start: token.start,
+      end: token.end,
+      raw: token.raw,
+      video: normalizeHttpUrl(token.url) ? parseVideoUrl(token.url) : null,
+    })),
+  ].sort((left, right) => left.start - right.start)
+
   // 构建内容片段
   const parts: {
-    type: 'text' | 'image' | 'link'
+    type: 'text' | 'image' | 'link' | 'video'
     content: string
     url?: string
     imageIndex?: number
@@ -108,12 +131,26 @@ function renderContentWithControls(
   }
   let currentIndex = 0
 
-  for (const img of imageMatches) {
-    if (img.start > currentIndex) {
-      appendTextWithLinks(text.slice(currentIndex, img.start))
+  for (const match of mediaMatches) {
+    if (match.start < currentIndex) continue
+    if (match.start > currentIndex) {
+      appendTextWithLinks(text.slice(currentIndex, match.start))
     }
-    parts.push({ type: 'image', content: img.alt, url: img.url, imageIndex: img.imageIndex })
-    currentIndex = img.end
+    if (match.kind === 'image' && match.url && match.imageIndex !== null) {
+      parts.push({
+        type: 'image',
+        content: match.alt,
+        url: match.url,
+        imageIndex: match.imageIndex,
+      })
+    } else if (match.kind === 'image') {
+      parts.push({ type: 'text', content: match.raw })
+    } else if (match.video) {
+      parts.push({ type: 'video', content: match.raw })
+    } else {
+      parts.push({ type: 'text', content: match.raw })
+    }
+    currentIndex = match.end
   }
 
   if (currentIndex < text.length) {
@@ -123,7 +160,7 @@ function renderContentWithControls(
   return parts.map((part, index) => {
     if (part.type === 'image') {
       const isFirst = part.imageIndex === 0
-      const isLast = part.imageIndex === imageMatches.length - 1
+      const isLast = part.imageIndex === imgIdx - 1
       return (
         <span
           key={index}
@@ -253,7 +290,10 @@ function renderContentWithControls(
         </a>
       )
     }
-    if (imageMatches.length === 0) {
+    if (part.type === 'video') {
+      return <Fragment key={index}>{renderContentWithLinks(part.content)}</Fragment>
+    }
+    if (imgIdx === 0) {
       return linkifyTagsAndMentions(part.content, `edit-preview-${index}`)
     }
     return <span key={index}>{linkifyTagsAndMentions(part.content, `edit-preview-${index}`)}</span>
