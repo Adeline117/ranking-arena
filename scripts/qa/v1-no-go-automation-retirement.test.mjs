@@ -24,6 +24,7 @@ const retiredEntrypoints = [
   'scripts/sync-vps-key.sh',
   'infra/vps-cron/deploy-vps-cron.sh',
   'infra/vps-cron/vps-cron-htx.sh',
+  'worker/deploy.sh',
 ]
 
 const forbiddenTombstoneSyntax =
