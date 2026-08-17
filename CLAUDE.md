@@ -77,7 +77,8 @@ public services or use controlled read credentials. During V1, run one only when
 the current task or owner grants an exact read-only evidence request; never treat
 the command names as permission to contact a production service.
 
-The retained legacy `backfill-*.ts` paths and
+The retained legacy `backfill-*.ts` paths,
+`scripts/compute-leaderboard-risk-metrics.mjs`, and
 `scripts/archive/backfill-metrics-v2.mjs` are compatibility tombstones: during V1
 they report `RETIRED` and exit 2 rather than performing a write. A future backfill
 would need its own reviewed, provenance-bound release plan and explicit owner GO;
