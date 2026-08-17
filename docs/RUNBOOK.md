@@ -101,6 +101,19 @@ Both responses carry `Cache-Control`, `CDN-Cache-Control`, and
 does not classify other cron routes and cannot stop, inspect, restart, or prove a
 deployed scheduler, host, queue, or worker.
 
+### V1 direct rankings-export source boundary
+
+Do not use `GET /api/export/rankings` or its `/api/v1/export/rankings` rewrite alias as an
+incident workaround. This direct Edge service-auth export ingress is fixed under the non-environment
+`V1_RANKINGS_EXPORT_PUBLISHED=false` source boundary: missing or invalid service authentication returns
+`401`; valid authentication returns `410 RANKINGS_EXPORT_NOT_PUBLISHED`. Both responses carry the three
+`no-store` headers before query parsing, Redis rate limiting, ranked-cohort reads, CSV/JSON construction,
+or logging.
+
+This boundary is limited to that direct ingress. It does not classify the V3 CSV endpoint or authenticated
+`/api/settings/export`, and it cannot stop, inspect, or prove an already deployed route, external automation,
+cache, or data-reading state.
+
 ### V1 avatar-proxy source boundary
 
 Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy

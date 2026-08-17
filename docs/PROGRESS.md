@@ -94,6 +94,18 @@ query/body 解析、lock、`PipelineLogger`、database、cache、provider 或 ne
 任何已部署 scheduler、host、queue 或 worker。下方主机、worker、生产验证或历史部署陈述仍不可用于
 推断当前运行状态或生成操作步骤。
 
+## V1 direct rankings-export source containment（2026-08-17）
+
+本轮将 direct service-auth `GET /api/export/rankings` 及其 `/api/v1/export/rankings`
+rewrite alias 纳入固定、非环境的 `V1_RANKINGS_EXPORT_PUBLISHED=false` source boundary。
+缺失或无效 Edge service secret 返回 `401`；有效 secret 固定返回
+`410 RANKINGS_EXPORT_NOT_PUBLISHED`。两种响应均有三层 `no-store`，并在 query、Redis rate
+limit、Supabase ranked-cohort read、CSV/JSON 生成或 logging 前结束。
+
+该边界只覆盖这一个 arbitrary service-auth export ingress；V3 CSV endpoint 和 authenticated
+`/api/settings/export` 保持范围外。它不停止、检查或证明已部署 route、仓库外 automation、cache 或
+数据读取状态。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）

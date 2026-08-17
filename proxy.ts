@@ -143,6 +143,7 @@ const INTERNAL_NOTIFICATION_DELIVERY_BYPASS_PATHS = new Set([
   '/api/notifications/send',
   '/api/v1/notifications/send',
 ])
+const RANKINGS_EXPORT_BYPASS_PATHS = new Set(['/api/export/rankings', '/api/v1/export/rankings'])
 const HEALTH_EVALUATE_REPORT_BYPASS_PATHS = new Set([
   '/api/health/evaluate-report',
   '/api/v1/health/evaluate-report',
@@ -361,6 +362,10 @@ export function isInternalNotificationDeliveryProxyBypassPath(pathname: string):
   return INTERNAL_NOTIFICATION_DELIVERY_BYPASS_PATHS.has(pathname)
 }
 
+export function isRankingsExportProxyBypassPath(pathname: string): boolean {
+  return RANKINGS_EXPORT_BYPASS_PATHS.has(pathname)
+}
+
 export function isHealthEvaluateReportProxyBypassPath(pathname: string): boolean {
   return HEALTH_EVALUATE_REPORT_BYPASS_PATHS.has(pathname)
 }
@@ -377,6 +382,7 @@ export function shouldSkip(pathname: string): boolean {
     isPublicEgressProxyBypassPath(pathname) ||
     isReferralProgramProxyBypassPath(pathname) ||
     isInternalNotificationDeliveryProxyBypassPath(pathname) ||
+    isRankingsExportProxyBypassPath(pathname) ||
     isHealthEvaluateReportProxyBypassPath(pathname) ||
     isHealthHeartbeatProxyBypassPath(pathname) ||
     SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route)) ||
@@ -546,6 +552,7 @@ async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextRes
     isPublicEgressProxyBypassPath(pathname) ||
     isReferralProgramProxyBypassPath(pathname) ||
     isInternalNotificationDeliveryProxyBypassPath(pathname) ||
+    isRankingsExportProxyBypassPath(pathname) ||
     isHealthEvaluateReportProxyBypassPath(pathname) ||
     isHealthHeartbeatProxyBypassPath(pathname)
   ) {
