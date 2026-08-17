@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import { useState, useEffect } from 'react'
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
+import type { TimeRange } from './hooks/useTraderData'
 
 /**
  * HomePageLoader — keeps the provider-heavy Phase 2 graph out of the initial
@@ -30,8 +31,19 @@ export interface HomePageLoaderProps {
   initialLastUpdated?: string | null
   initialIsStale?: boolean
   heroStats?: { traderCount: number; sourceBoardCount: number }
-  initialTotalCount?: number
+  initialTotalCount?: number | null
+  initialTotalCountIsExact?: boolean
+  initialHasMore?: boolean
   initialCategoryCounts?: CategoryCounts
+  initialCategoryCountsAreExact?: boolean
+  /** Server-resolved range; must describe the same SSR rows passed above. */
+  initialTimeRange?: TimeRange
+  /** Zero-based server page matching initialTraders/hasMore. */
+  initialPageIndex?: number
+  /** True when URL state needs a client API cohort before rows may be shown. */
+  initialClientCohortPending?: boolean
+  /** Stable full query identity; remounts client state for a distinct URL cohort. */
+  initialClientCohortKey?: string
 }
 
 export default function HomePageLoader(props: HomePageLoaderProps) {

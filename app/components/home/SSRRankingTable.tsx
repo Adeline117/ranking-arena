@@ -49,7 +49,7 @@ export default async function SSRRankingTable({ traders }: Props) {
     return (
       <div className="ssr-ranking-empty">
         <p>Loading rankings... / 加载排名中...</p>
-        <p>Data refreshes every few minutes / 数据每几分钟刷新一次</p>
+        <p>Latest published ranking data will appear here / 最新已发布排行数据将在此显示</p>
       </div>
     )
   }
@@ -69,14 +69,14 @@ export default async function SSRRankingTable({ traders }: Props) {
       <div className="ssr-ranking-body">
         {traders.map((trader) => {
           const rank = trader.rank
-          const roi = trader.roi ?? 0
+          const roi = trader.roi != null && Number.isFinite(trader.roi) ? trader.roi : null
           const score =
             trader.arena_score != null && Number.isFinite(Number(trader.arena_score))
               ? Number(trader.arena_score)
               : null
           const scoreStyle = score != null ? getScoreColorInfo(score) : null
           const winRate =
-            trader.win_rate != null
+            trader.win_rate != null && Number.isFinite(trader.win_rate)
               ? `${Number(trader.win_rate).toFixed(1)}%`
               : trader.trades_count === 0
                 ? t('holderBadge')
@@ -95,7 +95,7 @@ export default async function SSRRankingTable({ traders }: Props) {
               key={`${trader.source}-${trader.id}`}
               href={href}
               className={`ssr-ranking-entry ssr-ranking-grid${rank <= 3 ? ` ssr-ranking-entry-rank-${rank}` : ''}`}
-              aria-label={`Rank ${rank}: ${trader.handle}. Arena Score ${score != null ? score.toFixed(0) : 'not available'}, ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
+              aria-label={`Rank ${rank}: ${trader.handle}. Arena Score ${score != null ? score.toFixed(0) : 'unknown'}, ROI ${roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : 'unknown'}`}
             >
               <div className="ssr-rank-cell">
                 <RankBadge rank={rank} />
@@ -140,16 +140,18 @@ export default async function SSRRankingTable({ traders }: Props) {
               </div>
 
               <div className="ssr-roi-cell">
-                <div className="ssr-roi-track" aria-hidden="true">
-                  <span
-                    style={{
-                      width: `${Math.min(100, Math.abs(roi) / 20)}%`,
-                      background:
-                        roi >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
-                    }}
-                  />
-                </div>
-                <Metric value={trader.roi} format="roi" size="md" showArrow as="span" />
+                {roi != null && (
+                  <div className="ssr-roi-track" aria-hidden="true">
+                    <span
+                      style={{
+                        width: `${Math.min(100, Math.abs(roi) / 20)}%`,
+                        background:
+                          roi >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
+                      }}
+                    />
+                  </div>
+                )}
+                <Metric value={roi} format="roi" size="md" showArrow as="span" />
               </div>
 
               <div className="ssr-supporting-metrics">
@@ -188,7 +190,9 @@ export default async function SSRRankingTable({ traders }: Props) {
                 <div className="ssr-metric-cell ssr-sharpe-cell">
                   <span className="ssr-mobile-metric-label">Sharpe</span>
                   <span className="ssr-metric-value">
-                    {trader.sharpe != null ? Number(trader.sharpe).toFixed(2) : '—'}
+                    {trader.sharpe != null && Number.isFinite(Number(trader.sharpe))
+                      ? Number(trader.sharpe).toFixed(2)
+                      : '—'}
                   </span>
                 </div>
               </div>
