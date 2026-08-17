@@ -3,6 +3,7 @@ import {
   isAvatarProxyBypassPath,
   isHealthEvaluateReportProxyBypassPath,
   isHealthHeartbeatProxyBypassPath,
+  isInternalNotificationDeliveryProxyBypassPath,
   isPublicEgressProxyBypassPath,
   isReferralProgramProxyBypassPath,
   shouldSkip,
@@ -110,6 +111,32 @@ describe('referral-program hold bypass paths', () => {
     '/api/v1/referral/apply/child',
   ])('does not bypass proxy work for adjacent referral path %s', (pathname) => {
     expect(isReferralProgramProxyBypassPath(pathname)).toBe(false)
+    expect(shouldSkip(pathname)).toBe(false)
+  })
+})
+
+describe('internal notification-delivery hold bypass paths', () => {
+  it.each(['/api/notifications/send', '/api/v1/notifications/send'])(
+    'hands %s directly to its service-authentication-first hold',
+    (pathname) => {
+      expect(isInternalNotificationDeliveryProxyBypassPath(pathname)).toBe(true)
+      expect(shouldSkip(pathname)).toBe(true)
+    }
+  )
+
+  it.each([
+    '/api/notifications',
+    '/api/notifications/mark-read',
+    '/api/notifications/ranking-changes',
+    '/api/notifications/send/child',
+    '/api/notifications/sends',
+    '/api/v1/notifications',
+    '/api/v1/notifications/mark-read',
+    '/api/v1/notifications/ranking-changes',
+    '/api/v1/notifications/send/child',
+    '/api/v1/notifications/sends',
+  ])('does not bypass proxy work for adjacent notification path %s', (pathname) => {
+    expect(isInternalNotificationDeliveryProxyBypassPath(pathname)).toBe(false)
     expect(shouldSkip(pathname)).toBe(false)
   })
 })
