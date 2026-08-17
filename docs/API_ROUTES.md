@@ -262,21 +262,30 @@ API 和展示/新链接传播：`GET`/`POST /api/referral` 与 `POST /api/referr
 
 ## 7. 通知与预警
 
-| 路由                                 | 方法            | 描述                                                                                             | 认证       |
-| ------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------ | ---------- |
-| `/api/notifications`                 | GET/PUT/DELETE  | 查询、更新或删除通知                                                                             | 是         |
-| `/api/notifications/mark-read`       | POST            | 标记已读                                                                                         | 是         |
-| `/api/push/subscribe`                | POST/DELETE     | 订阅或退订推送                                                                                   | 是         |
-| `/api/push/send`                     | POST            | V1 auth-first tombstone；401/410/no-store；不读请求体、不查角色或调用推送提供商                  | 是         |
-| `/api/alerts`                        | GET             | V1 仅查询本人 legacy 提醒历史；`available:false`、`TRADER_ALERTS_NOT_PUBLISHED`、三层 `no-store` | 是         |
-| `/api/trader-alerts`                 | GET/POST/DELETE | V1 GET 仅列出本人 legacy 配置，POST 固定 503，DELETE 仅清理本人配置；全程 `no-store`             | 是         |
-| `/api/notifications/ranking-changes` | POST            | V1 auth-first tombstone；401/410 `no-store`，不读取排名、不写通知或发送邮件/推送                 | Cron Token |
+| 路由                                 | 方法            | 描述                                                                                                                                                                                                                                                              | 认证                      |
+| ------------------------------------ | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `/api/notifications`                 | GET/PUT/DELETE  | 查询、更新或删除通知                                                                                                                                                                                                                                              | 是                        |
+| `/api/notifications/mark-read`       | POST            | 标记已读                                                                                                                                                                                                                                                          | 是                        |
+| `/api/notifications/send`            | POST            | V1 direct internal-delivery hold；保留 `CRON_SECRET` Bearer 或 `x-internal-key`/`INTERNAL_API_KEY` 鉴权；无效认证 `401`，认证通过固定 `410 INTERNAL_NOTIFICATION_DELIVERY_NOT_PUBLISHED`，三层 `no-store`；不读 body、不限流、不初始化 Supabase/logger 或写通知行 | Cron Token / Internal Key |
+| `/api/push/subscribe`                | POST/DELETE     | 订阅或退订推送                                                                                                                                                                                                                                                    | 是                        |
+| `/api/push/send`                     | POST            | V1 auth-first tombstone；401/410/no-store；不读请求体、不查角色或调用推送提供商                                                                                                                                                                                   | 是                        |
+| `/api/alerts`                        | GET             | V1 仅查询本人 legacy 提醒历史；`available:false`、`TRADER_ALERTS_NOT_PUBLISHED`、三层 `no-store`                                                                                                                                                                  | 是                        |
+| `/api/trader-alerts`                 | GET/POST/DELETE | V1 GET 仅列出本人 legacy 配置，POST 固定 503，DELETE 仅清理本人配置；全程 `no-store`                                                                                                                                                                              | 是                        |
+| `/api/notifications/ranking-changes` | POST            | V1 auth-first tombstone；401/410 `no-store`，不读取排名、不写通知或发送邮件/推送                                                                                                                                                                                  | Cron Token                |
 
 V1 不发布交易员提醒监测、新配置、排名变动提醒或个性化投递。`/api/alerts` 和
 `/api/trader-alerts` 只保留 owner-scoped legacy 清理/取证面，不能把已有行解释为
 仍在监测；未发布响应分别使用 `TRADER_ALERTS_NOT_PUBLISHED` 或
 `TRADER_NOTIFICATION_NOT_PUBLISHED`。这些是源码契约，不构成任何已部署计划、
 worker 或第三方投递已停止的运行事实。
+
+固定、非环境的 `V1_INTERNAL_NOTIFICATION_DELIVERY_PUBLISHED=false` 只封存
+`POST /api/notifications/send` 这个直接、任意 service-auth HTTP ingress。它先由既有
+`verifyServiceAuth` 保留 `CRON_SECRET` Bearer 与 `x-internal-key`/`INTERNAL_API_KEY`
+认证语义；认证后固定返回 `410 INTERNAL_NOTIFICATION_DELIVERY_NOT_PUBLISHED` 和三层
+`no-store`，先于 body、rate limit、Supabase/logger 或通知行写入。这一 source-only
+boundary 不停止、检查或证明已部署代码、历史通知记录或外部投递状态；站内直接通知路径（包括
+正常用户交互、Stripe webhook 和群组流程）不在此 direct ingress hold 的范围内。
 
 ---
 
