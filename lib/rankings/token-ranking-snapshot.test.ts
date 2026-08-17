@@ -44,6 +44,68 @@ function tokenRow(rank = 1) {
   }
 }
 
+function publicProfile(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    source: 'hyperliquid',
+    source_trader_id: 'wallet-1',
+    season_id: '90D',
+    rank: 42,
+    handle: 'Published Alice',
+    avatar_url: 'https://example.com/alice.png',
+    arena_score: 86,
+    roi: 12.5,
+    pnl: 456.78,
+    win_rate: 61,
+    max_drawdown: 18,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+function cachedTokenPage(
+  generation = '1',
+  traderOverrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    contract: TOKEN_RANKING_PAGE_CONTRACT,
+    generation,
+    publishedAt: PUBLISHED_AT,
+    publishedAtEpochMs: PUBLISHED_AT_EPOCH_MS,
+    windowThroughDate: '2026-07-29',
+    sourceAsOf: null,
+    sourceThroughDate: '2026-07-29',
+    dailyRowCount: 123,
+    popularRowCount: 3,
+    profilePublicationId: 'retired-profile-cache-fence',
+    token: 'BTC',
+    period: '90D',
+    lookbackDays: 90,
+    limit: 50,
+    offset: 0,
+    total: 1,
+    traders: [
+      {
+        source: 'hyperliquid',
+        source_trader_id: 'wallet-1',
+        handle: 'Stale Alice',
+        avatar_url: 'https://example.com/stale.png',
+        arena_score: 99,
+        roi: 999,
+        total_pnl: 999_999,
+        token_rank: 1,
+        token_pnl: 123.45,
+        token_trade_count: 9,
+        token_win_rate: 55.5,
+        token_avg_pnl_pct: null,
+        ...traderOverrides,
+      },
+    ],
+  }
+}
+
 function tokenPayload(
   generation = '1',
   options: {
@@ -233,6 +295,173 @@ describe('generation-coordinated token trader reads', () => {
     )
   })
 
+  test('overlays generic profile metrics only from the sealed exact public cohort', async () => {
+    const { client, from, query } = makeSupabase({
+      heads: [{ data: [publicationHead('1')], error: null }],
+      tokenPages: [{ data: tokenPayload('1'), error: null }],
+      profiles: { data: [publicProfile()], error: null },
+    })
+
+    const result = await getTokenTraderRankingSnapshot(client, {
+      token: 'BTC',
+      period: '90D',
+      limit: 50,
+      offset: 0,
+    })
+
+    expect(from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(from).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(query.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(query.in).toHaveBeenCalledWith('source', ['hyperliquid'])
+    expect(query.in).toHaveBeenCalledWith('source_trader_id', ['wallet-1'])
+    expect(result.traders).toEqual([
+      expect.objectContaining({
+        source: 'hyperliquid',
+        source_trader_id: 'wallet-1',
+        handle: 'Published Alice',
+        avatar_url: 'https://example.com/alice.png',
+        arena_score: 86,
+        roi: 12.5,
+        total_pnl: 456.78,
+        token_rank: 1,
+        token_pnl: 123.45,
+      }),
+    ])
+  })
+
+  test('does not attach a same-id public profile from a different source', async () => {
+    const sharedIdRows = [
+      { ...tokenRow(1), source: 'hyperliquid', source_trader_id: 'shared-id' },
+      { ...tokenRow(2), source: 'bybit', source_trader_id: 'shared-id' },
+    ]
+    const { client } = makeSupabase({
+      heads: [{ data: [publicationHead('1')], error: null }],
+      tokenPages: [
+        {
+          data: tokenPayload('1', { total: 2, traders: sharedIdRows }),
+          error: null,
+        },
+      ],
+      profiles: {
+        data: [
+          publicProfile({
+            source: 'bybit',
+            source_trader_id: 'shared-id',
+            handle: 'Bybit profile',
+            arena_score: 77,
+          }),
+        ],
+        error: null,
+      },
+    })
+
+    const result = await getTokenTraderRankingSnapshot(client, {
+      token: 'BTC',
+      period: '90D',
+      limit: 50,
+      offset: 0,
+    })
+
+    expect(result.traders).toEqual([
+      expect.objectContaining({
+        source: 'hyperliquid',
+        source_trader_id: 'shared-id',
+        token_rank: 1,
+        token_pnl: 123.45,
+        handle: null,
+        arena_score: null,
+        roi: null,
+        total_pnl: null,
+      }),
+      expect.objectContaining({
+        source: 'bybit',
+        source_trader_id: 'shared-id',
+        token_rank: 2,
+        token_pnl: 123.45,
+        handle: 'Bybit profile',
+        arena_score: 77,
+        roi: 12.5,
+        total_pnl: 456.78,
+      }),
+    ])
+  })
+
+  test('replaces stale cached generic metrics with a live public profile overlay', async () => {
+    mockTieredGetOrSet.mockResolvedValue(cachedTokenPage())
+    const { client, rpc } = makeSupabase({
+      heads: [{ data: [publicationHead('1')], error: null }],
+      profiles: {
+        data: [
+          publicProfile({
+            handle: 'Live Alice',
+            avatar_url: 'https://example.com/live.png',
+            arena_score: 71,
+            roi: 7.25,
+            pnl: 1234,
+          }),
+        ],
+        error: null,
+      },
+    })
+
+    const result = await getTokenTraderRankingSnapshot(client, {
+      token: 'BTC',
+      period: '90D',
+      limit: 50,
+      offset: 0,
+    })
+
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['get_token_ranking_publication_head'])
+    expect(result.profilePublicationId).toBeNull()
+    expect(result.traders).toEqual([
+      expect.objectContaining({
+        token_rank: 1,
+        token_pnl: 123.45,
+        handle: 'Live Alice',
+        avatar_url: 'https://example.com/live.png',
+        arena_score: 71,
+        roi: 7.25,
+        total_pnl: 1234,
+      }),
+    ])
+  })
+
+  test('drops stale cached generic metrics when the current public cohort is unavailable', async () => {
+    mockTieredGetOrSet.mockResolvedValue(
+      cachedTokenPage('1', {
+        handle: { stale: true },
+        avatar_url: 42,
+        arena_score: 'not-a-number',
+        roi: 'not-a-number',
+        total_pnl: 'not-a-number',
+      })
+    )
+    const { client, rpc } = makeSupabase({
+      heads: [{ data: [publicationHead('1')], error: null }],
+      profiles: { data: null, error: { code: 'PGRST003', message: 'unavailable' } },
+    })
+
+    const result = await getTokenTraderRankingSnapshot(client, {
+      token: 'BTC',
+      period: '90D',
+      limit: 50,
+      offset: 0,
+    })
+
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['get_token_ranking_publication_head'])
+    expect(result.traders).toEqual([
+      expect.objectContaining({
+        token_rank: 1,
+        token_pnl: 123.45,
+        handle: null,
+        avatar_url: null,
+        arena_score: null,
+        roi: null,
+        total_pnl: null,
+      }),
+    ])
+  })
+
   test('preserves the authoritative total on an empty out-of-range page', async () => {
     const { client, from } = makeSupabase({
       heads: [{ data: [publicationHead('1')], error: null }],
@@ -255,7 +484,7 @@ describe('generation-coordinated token trader reads', () => {
     expect(from).not.toHaveBeenCalled()
   })
 
-  test('labels optional profile metrics with their independent publication fence', async () => {
+  test('does not use a token-cache fence as a generic profile publication fence', async () => {
     mockTieredGetOrSet.mockImplementation(
       async (
         _key: string,
@@ -274,7 +503,7 @@ describe('generation-coordinated token trader reads', () => {
       offset: 0,
     })
 
-    expect(result.profilePublicationId).toBe('profile-fence-7')
+    expect(result.profilePublicationId).toBeNull()
   })
 
   test('rereads the head once after an unbound conflict and succeeds on G2', async () => {
@@ -384,25 +613,34 @@ describe('generation-coordinated token trader reads', () => {
     }).catch((error) => expectReadError(error, 'contract'))
   })
 
-  test('fails closed when profile enrichment errors so partial nulls are not cached', async () => {
+  test('keeps token authority while a live public profile lookup is unavailable', async () => {
     const { client } = makeSupabase({
       heads: [{ data: [publicationHead('1')], error: null }],
       tokenPages: [{ data: tokenPayload('1'), error: null }],
       profiles: { data: null, error: { code: 'PGRST003', message: 'unavailable' } },
     })
 
-    await getTokenTraderRankingSnapshot(client, {
+    const result = await getTokenTraderRankingSnapshot(client, {
       token: 'BTC',
       period: '90D',
       limit: 50,
       offset: 0,
-    }).catch((error) => {
-      expectReadError(error, 'database')
-      expect((error as TokenRankingReadError).databaseCode).toBe('PGRST003')
     })
+
+    expect(result.traders).toEqual([
+      expect.objectContaining({
+        token_rank: 1,
+        token_pnl: 123.45,
+        handle: null,
+        avatar_url: null,
+        arena_score: null,
+        roi: null,
+        total_pnl: null,
+      }),
+    ])
   })
 
-  test('validates profile enrichment before the cache layer can commit it', async () => {
+  test('keeps malformed profile proof out of the response without withholding token facts', async () => {
     let cacheCommitReached = false
     mockTieredGetOrSet.mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) => {
       const value = await fetcher()
@@ -413,29 +651,59 @@ describe('generation-coordinated token trader reads', () => {
       heads: [{ data: [publicationHead('1')], error: null }],
       tokenPages: [{ data: tokenPayload('1'), error: null }],
       profiles: {
-        data: [
-          {
-            source: 'hyperliquid',
-            source_trader_id: 'wallet-1',
-            handle: { unsafe: true },
-            avatar_url: null,
-            arena_score: 90,
-            roi: 12,
-            pnl: 100,
-          },
-        ],
+        data: [publicProfile({ handle: { unsafe: true } })],
         error: null,
       },
     })
 
-    await getTokenTraderRankingSnapshot(client, {
+    const result = await getTokenTraderRankingSnapshot(client, {
       token: 'BTC',
       period: '90D',
       limit: 50,
       offset: 0,
-    }).catch((error) => expectReadError(error, 'contract'))
+    })
 
-    expect(cacheCommitReached).toBe(false)
+    expect(cacheCommitReached).toBe(true)
+    expect(result.traders[0]).toEqual(
+      expect.objectContaining({
+        token_rank: 1,
+        token_pnl: 123.45,
+        handle: null,
+        arena_score: null,
+        roi: null,
+        total_pnl: null,
+      })
+    )
+  })
+
+  test('withholds generic fields when the public row fails completeness sanitization', async () => {
+    const { client } = makeSupabase({
+      heads: [{ data: [publicationHead('1')], error: null }],
+      tokenPages: [{ data: tokenPayload('1'), error: null }],
+      profiles: {
+        data: [publicProfile({ metrics_estimated: true })],
+        error: null,
+      },
+    })
+
+    const result = await getTokenTraderRankingSnapshot(client, {
+      token: 'BTC',
+      period: '90D',
+      limit: 50,
+      offset: 0,
+    })
+
+    expect(result.traders).toEqual([
+      expect.objectContaining({
+        token_rank: 1,
+        token_pnl: 123.45,
+        handle: null,
+        avatar_url: null,
+        arena_score: null,
+        roi: null,
+        total_pnl: null,
+      }),
+    ])
   })
 
   test('binds one caller deadline to head, v2, and profile enrichment', async () => {
