@@ -443,24 +443,37 @@ query、rate limit、endpoint-specific Supabase/Stripe/logger/DB 工作。该源
 
 ## 11. 工具与其他
 
-| 路由                          | 方法                | 描述                                                                                                                                                                   | 认证       |
-| ----------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `/api/health`                 | GET                 | 健康检查                                                                                                                                                               | 否         |
-| `/api/health/detailed`        | GET                 | 详细健康状态                                                                                                                                                           | 否         |
-| `/api/health/heartbeat`       | GET                 | V1 source-only heartbeat-history availability hold；无效 service secret `401`，有效 secret 固定 `410 HEARTBEAT_HISTORY_NOT_PUBLISHED`；三层 `no-store`，不打开历史依赖 | Cron Token |
-| `/api/health/heartbeat`       | POST                | V1 source-only 写入 hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不解析 body 或写入数据库                    | Cron Token |
-| `/api/health/evaluate-report` | GET                 | V1 source-only evaluator hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query 或执行评估工作              | Cron Token |
-| `/api/proxy/phemex`           | GET                 | V1 legacy proxy acquisition auth-first hold；无效认证 `401`，有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`；三层 `no-store`，不解析 URL/query、不 fetch 或 log | Cron Token |
-| `/api/hooks/post-deploy`      | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估                                    | Cron Token |
-| `/api/cdn-proxy`              | GET                 | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不解析 URL 或代理文档请求                                                             | 否         |
-| `/api/translate`              | POST                | 翻译服务                                                                                                                                                               | 是         |
-| `/api/settings/export`        | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                                                                  | 是 + CSRF  |
-| `/api/saved-filters`          | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                                                     | 是         |
-| `/api/search/suggestions`     | GET                 | 搜索建议                                                                                                                                                               | 否         |
-| `/api/portfolio/suggestions`  | GET                 | 已下线；所有 tier 固定返回 403                                                                                                                                         | 不适用     |
+| 路由                          | 方法                | 描述                                                                                                                                                                                | 认证       |
+| ----------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `/api/health`                 | GET                 | 健康检查                                                                                                                                                                            | 否         |
+| `/api/health/detailed`        | GET                 | 详细健康状态                                                                                                                                                                        | 否         |
+| `/api/health/heartbeat`       | GET                 | V1 source-only heartbeat-history availability hold；无效 service secret `401`，有效 secret 固定 `410 HEARTBEAT_HISTORY_NOT_PUBLISHED`；三层 `no-store`，不打开历史依赖              | Cron Token |
+| `/api/health/heartbeat`       | POST                | V1 source-only 写入 hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不解析 body 或写入数据库                                 | Cron Token |
+| `/api/health/evaluate-report` | GET                 | V1 source-only evaluator hold；无效 service secret `401`，有效 secret 固定 `410 CRON_EXECUTION_NOT_PUBLISHED`；三层 `no-store`，不读 query 或执行评估工作                           | Cron Token |
+| `/api/proxy/phemex`           | GET                 | V1 legacy proxy acquisition auth-first hold；无效认证 `401`，有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`；三层 `no-store`，不解析 URL/query、不 fetch 或 log              | Cron Token |
+| `/api/hooks/post-deploy`      | GET/POST            | V1 ranking-command source hold；auth-first 401/410 `CRON_EXECUTION_NOT_PUBLISHED` 与三层 `no-store`，不读取部署参数或执行发布后评估                                                 | Cron Token |
+| `/api/export/rankings`        | GET                 | V1 direct rankings-export auth-first hold；无效 Edge service secret `401`，有效 secret 固定 `410 RANKINGS_EXPORT_NOT_PUBLISHED`；三层 `no-store`，不读 query、Redis、榜单或生成 CSV | Cron Token |
+| `/api/cdn-proxy`              | GET                 | V1 public-egress hold；固定 `410 PUBLIC_EGRESS_NOT_PUBLISHED` 与三层 `no-store`，不解析 URL 或代理文档请求                                                                          | 否         |
+| `/api/translate`              | POST                | 翻译服务                                                                                                                                                                            | 是         |
+| `/api/settings/export`        | POST                | 当前用户可移植数据导出（24 小时一次，含无密文 legacy Portfolio 数据）                                                                                                               | 是 + CSRF  |
+| `/api/saved-filters`          | GET/POST/PUT/DELETE | 查询与管理筛选条件                                                                                                                                                                  | 是         |
+| `/api/search/suggestions`     | GET                 | 搜索建议                                                                                                                                                                            | 否         |
+| `/api/portfolio/suggestions`  | GET                 | 已下线；所有 tier 固定返回 403                                                                                                                                                      | 不适用     |
 
 人类可读 API 文档页面是 `/api-docs`；机器契约保存在仓库
 `docs/openapi.yaml`，不存在 `/api/docs` App Router endpoint。
+
+### V1 direct rankings-export source boundary
+
+`GET /api/export/rankings` 与 `/api/v1/export/rankings` rewrite alias 保留既有 Edge
+service-secret 认证语义：缺失或无效 secret 返回 `401`，有效 secret 固定返回
+`410 RANKINGS_EXPORT_NOT_PUBLISHED`。两种响应均有 `Cache-Control`、
+`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`，并在 endpoint query、
+Redis rate limit、Supabase ranked-cohort read、CSV/JSON 生成或 logging 前结束。
+
+该固定、非环境的 `V1_RANKINGS_EXPORT_PUBLISHED=false` boundary 只覆盖这个直接
+service-auth HTTP ingress；它不改变 V3 CSV endpoint 或 authenticated `/api/settings/export`，也不停止、
+检查或证明已部署 route、仓库外 automation、缓存或数据读取的状态。
 
 ### V1 health evaluator source boundary
 

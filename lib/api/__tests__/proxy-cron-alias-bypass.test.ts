@@ -5,6 +5,7 @@ import {
   isHealthHeartbeatProxyBypassPath,
   isInternalNotificationDeliveryProxyBypassPath,
   isPublicEgressProxyBypassPath,
+  isRankingsExportProxyBypassPath,
   isReferralProgramProxyBypassPath,
   shouldSkip,
 } from '@/proxy'
@@ -245,6 +246,30 @@ describe('public egress hold bypass paths', () => {
     '/api/v1/posts/link-preview/child',
   ])('does not bypass proxy work for adjacent public egress path %s', (pathname) => {
     expect(isPublicEgressProxyBypassPath(pathname)).toBe(false)
+    expect(shouldSkip(pathname)).toBe(false)
+  })
+})
+
+describe('rankings-export hold bypass paths', () => {
+  it.each(['/api/export/rankings', '/api/v1/export/rankings'])(
+    'hands %s directly to its authentication-first hold',
+    (pathname) => {
+      expect(isRankingsExportProxyBypassPath(pathname)).toBe(true)
+      expect(shouldSkip(pathname)).toBe(true)
+    }
+  )
+
+  it.each([
+    '/api/export',
+    '/api/export/ranking',
+    '/api/export/rankings/child',
+    '/api/export/rankings.csv',
+    '/api/v1/export',
+    '/api/v1/export/ranking',
+    '/api/v1/export/rankings/child',
+    '/api/v1/export/rankings.csv',
+  ])('does not bypass proxy work for adjacent export path %s', (pathname) => {
+    expect(isRankingsExportProxyBypassPath(pathname)).toBe(false)
     expect(shouldSkip(pathname)).toBe(false)
   })
 })

@@ -16,7 +16,6 @@ describe('public ranked-cohort reader contract', () => {
     'app/api/v3/route.ts',
     'lib/getInitialTraders.ts',
     'lib/data/trader/queries.ts',
-    'app/api/export/rankings/route.ts',
     'app/api/sidebar/top-traders/route.ts',
     'app/(quiz)/quiz/result/page.tsx',
   ])('%s excludes unpublished rank rows in PostgREST', (path) => {
