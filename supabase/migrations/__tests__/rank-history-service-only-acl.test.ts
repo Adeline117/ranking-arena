@@ -150,16 +150,22 @@ describe('rank_history service-only ACL migration', () => {
     expect(migration).not.toContain('cli_login_postgres')
   })
 
-  it('preserves the exact service operations used by existing internal callers without reopening browser reads', () => {
-    for (const route of [snapshotRanksRoute, broadcastEventsRoute, rankingChangesRoute]) {
-      expect(route).toContain(".from('rank_history')")
-      expect(route).toContain('getSupabaseAdmin()')
-    }
-
+  it('preserves snapshot-rank service CRUD while fencing unproven notification writers', () => {
+    expect(snapshotRanksRoute).toContain(".from('rank_history')")
+    expect(snapshotRanksRoute).toContain('getSupabaseAdmin()')
     expect(snapshotRanksRoute).toContain('.upsert(batch')
     expect(snapshotRanksRoute).toContain('.delete()')
-    expect(broadcastEventsRoute).toContain(".select('trader_key, platform, rank')")
-    expect(rankingChangesRoute).toContain(".select('platform, trader_key, rank')")
+
+    for (const route of [broadcastEventsRoute, rankingChangesRoute]) {
+      expect(route).not.toContain(".from('rank_history')")
+      expect(route).not.toContain(".from('leaderboard_ranks')")
+      expect(route).not.toContain(".from('trader_daily_snapshots')")
+      expect(route).not.toContain(".from('notifications')")
+      expect(route).not.toContain('getSupabaseAdmin()')
+      expect(route).toContain("status: 'skipped'")
+      expect(route).toContain("ranking_visibility: 'unknown'")
+    }
+
     expect(migration).toContain('rank_history service role CRUD ACL is incomplete')
     expect(migration).toContain('rank_history service role retained unnecessary % capability')
   })

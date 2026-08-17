@@ -1192,6 +1192,70 @@ describe('POST /api/settings/export', () => {
     }
   })
 
+  it('does not replay legacy ranking_change payloads through an account export', async () => {
+    const defaultCursorRead = mockFetchAllExportRowsByCursor.getMockImplementation()
+    mockFetchAllExportRowsByCursor.mockImplementation(async (client, dataset, owner) => {
+      if (dataset.name === 'notifications') {
+        return [
+          {
+            id: 'unsafe-ranking-change',
+            type: 'ranking_change',
+            title: 'Unsafe rank #9 to #1',
+            message: 'ROI 80%, PnL $100000, score 99',
+            link: '/trader/unsafe',
+            read: false,
+            actor_id: null,
+            reference_id: 'unsafe-ranking-change',
+            created_at: '2026-08-17T00:00:00.000Z',
+            read_at: null,
+          },
+          {
+            id: 'safe-system-notice',
+            type: 'system',
+            title: 'Safe account notice',
+            message: 'No ranking payload',
+            link: '/settings',
+            read: false,
+            actor_id: null,
+            reference_id: 'safe-system-notice',
+            created_at: '2026-08-17T00:01:00.000Z',
+            read_at: null,
+          },
+        ]
+      }
+      return defaultCursorRead?.(client, dataset, owner)
+    })
+
+    const response = await POST(request())
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.notifications).toEqual([
+      {
+        id: 'safe-system-notice',
+        type: 'system',
+        title: 'Safe account notice',
+        message: 'No ranking payload',
+        link: '/settings',
+        read: false,
+        actor_id: null,
+        reference_id: 'safe-system-notice',
+        created_at: '2026-08-17T00:01:00.000Z',
+        read_at: null,
+      },
+    ])
+    expect(
+      body.manifest.datasets.find((dataset: { name: string }) => dataset.name === 'notifications')
+    ).toEqual({
+      name: 'notifications',
+      status: 'complete',
+      row_count: 1,
+    })
+    expect(JSON.stringify(body.notifications)).not.toMatch(
+      /Unsafe rank|ROI 80|PnL \$100000|score 99|unsafe-ranking-change/
+    )
+  })
+
   it('fails closed without cooldown when preferences cannot be read completely', async () => {
     mockFetchAllExportRowsByCursor.mockRejectedValueOnce(
       new DataExportReadError('settings.preferences', { code: 'XX001' })

@@ -4,8 +4,10 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { PostWithAuthor, PostListOptions } from './posts'
+import type { PostWithAuthor, PostListOptions } from './posts'
 import { logger } from '@/lib/logger'
+import { ARENA_BOT_AUTHOR_ID } from '@/lib/data/arena-bot-publication-policy'
+import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
 
 export interface WeightedPostListOptions extends PostListOptions {
   /**
@@ -120,68 +122,33 @@ export async function getWeightedSearchResults(
     weight_factor?: number
   } = {}
 ): Promise<PostWithAuthor[]> {
-  const {
-    limit = 20,
-    offset = 0,
-    enable_weight = true,
-    weight_factor = 0.4, // 搜索中权重影响更大
-  } = options
+  const { limit = 20, offset = 0 } = options
 
-  if (!enable_weight) {
-    // 标准搜索查询
-    const { data, error } = await supabase
-      .from('posts')
-      .select(
-        `
-        id, title, content, author_id, author_handle, group_id,
-        poll_enabled, poll_id, poll_bull, poll_bear, poll_wait,
-        like_count, dislike_count, comment_count, bookmark_count,
-        repost_count, view_count, hot_score, is_pinned, images,
-        created_at, updated_at, original_post_id, groups(name, name_en)
+  // The legacy database RPC returned title/content directly and had no
+  // canonical audience or publication-receipt decision. It is revoked by the
+  // companion migration. Keep this compatibility helper service-side only and
+  // authorize every candidate before returning any rendered text.
+  const sanitizedQuery = searchQuery.replace(/[,.()\[\]\\%_]/g, '')
+  if (!sanitizedQuery) return []
+
+  const { data, error } = await supabase
+    .from('posts')
+    .select(
       `
-      )
-      .or(
-        `title.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%, content.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%`
-      )
-      .order('hot_score', { ascending: false })
-      .range(offset, offset + limit - 1)
+      id, title, content, author_id, author_handle, group_id,
+      poll_enabled, poll_id, poll_bull, poll_bear, poll_wait,
+      like_count, dislike_count, comment_count, bookmark_count,
+      repost_count, view_count, hot_score, is_pinned, images,
+      created_at, updated_at, original_post_id, groups(name, name_en)
+    `
+    )
+    .neq('status', 'deleted')
+    .is('deleted_at', null)
+    .neq('author_id', ARENA_BOT_AUTHOR_ID)
+    .or(`title.ilike.%${sanitizedQuery}%, content.ilike.%${sanitizedQuery}%`)
+    .order('hot_score', { ascending: false })
+    .range(offset, offset + limit - 1)
 
-    if (error) throw error
-    return data || []
-  }
-
-  // 权重增强的搜索查询
-  const { data: searchResults, error } = await supabase.rpc('search_posts_with_weight', {
-    search_query: searchQuery,
-    result_limit: Math.max(limit * 2, 50), // 获取更多结果用于重排序
-    result_offset: offset,
-    weight_factor: weight_factor,
-  })
-
-  if (error) {
-    logger.error('Weighted search RPC failed, falling back to standard search:', error)
-
-    // 回退到标准搜索
-    const { data: fallbackData, error: fallbackError } = await supabase
-      .from('posts')
-      .select(
-        `
-        id, title, content, author_id, author_handle, group_id,
-        poll_enabled, poll_id, poll_bull, poll_bear, poll_wait,
-        like_count, dislike_count, comment_count, bookmark_count,
-        repost_count, view_count, hot_score, is_pinned, images,
-        created_at, updated_at, original_post_id, groups(name, name_en)
-      `
-      )
-      .or(
-        `title.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%, content.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%`
-      )
-      .order('hot_score', { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    if (fallbackError) throw fallbackError
-    return fallbackData || []
-  }
-
-  return (searchResults || []).slice(0, limit)
+  if (error) throw error
+  return filterServiceReadablePostRows(supabase, (data ?? []) as PostWithAuthor[])
 }
