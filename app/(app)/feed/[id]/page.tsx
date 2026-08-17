@@ -4,7 +4,6 @@
  * Allows each activity to be shared via link with a rich preview.
  */
 
-import { cache } from 'react'
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { features } from '@/lib/features'
@@ -18,6 +17,10 @@ import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { isEmailLike } from '@/lib/utils/content'
+import {
+  hasPublicNonRankingActivityTypes,
+  isPublicNonRankingActivity,
+} from '@/lib/feed/public-activity-policy'
 
 // Anonymity guard: masked-email handles must never leak into the shared page,
 // its <title>, or OG metadata (the list view already anonymizes them). Mirrors
@@ -26,16 +29,19 @@ const ANON_NAME = 'Anonymous trader'
 
 const logger = createLogger('feed-detail')
 
-export const revalidate = 300 // ISR: 5 minutes
+// Old ranking event rows have no event-time receipt, so share pages and their
+// metadata must not persist through ISR.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // ---------------------------------------------------------------------------
 // Server data fetch
 // ---------------------------------------------------------------------------
 
-const fetchActivity = cache(async function fetchActivity(
-  id: string
-): Promise<TraderActivity | null> {
+async function fetchActivity(id: string): Promise<TraderActivity | null> {
   try {
+    if (!hasPublicNonRankingActivityTypes()) return null
+
     const supabase = getSupabaseAdmin()
 
     const { data, error } = await supabase
@@ -46,7 +52,7 @@ const fetchActivity = cache(async function fetchActivity(
       .eq('id', id)
       .single()
 
-    if (error || !data) return null
+    if (error || !data || !isPublicNonRankingActivity(data)) return null
     return data as TraderActivity
   } catch (error) {
     logger.warn(
@@ -55,7 +61,7 @@ const fetchActivity = cache(async function fetchActivity(
     )
     return null
   }
-})
+}
 
 // ---------------------------------------------------------------------------
 // Metadata (OG card)
@@ -115,8 +121,8 @@ export default async function ActivitySharePage({ params }: PageProps) {
 
   const meta = ACTIVITY_META[activity.activity_type as ActivityType]
   const color = meta.colorVar
-  // i18n limitation: this is an ISR-cached server component (revalidate=300) with a
-  // single shared render across all users, so it cannot read the per-user language
+  // i18n limitation: this is a server component with a single shared render, so it
+  // cannot read the per-user language
   // (stored client-side in localStorage by LanguageProvider). The date is therefore
   // formatted with a fixed neutral 'en-US' locale rather than the active language.
   const occurredDate = new Date(activity.occurred_at).toLocaleString('en-US', {

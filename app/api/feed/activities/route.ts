@@ -13,6 +13,7 @@
  */
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 import { NextRequest } from 'next/server'
 import {
@@ -24,6 +25,14 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import {
+  filterPublicNonRankingActivities,
+  hasPublicNonRankingActivityTypes,
+  isPublicNonRankingActivity,
+  noStorePublicActivity,
+  PUBLIC_NON_RANKING_ACTIVITY_TYPES,
+  unavailablePublicActivityFeed,
+} from '@/lib/feed/public-activity-policy'
 
 const ACTIVITY_SELECT =
   'id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at'
@@ -33,6 +42,7 @@ const PRIVATE_NO_STORE_HEADERS = {
   'Cache-Control': 'private, no-store, max-age=0',
   'CDN-Cache-Control': 'no-store',
   'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
 }
 
 type ActivityRow = {
@@ -76,6 +86,7 @@ async function readFollowedActivities(
         .select(ACTIVITY_SELECT)
         .eq('source', source)
         .in('source_trader_id', traderIds)
+        .in('activity_type', PUBLIC_NON_RANKING_ACTIVITY_TYPES)
         .order('occurred_at', { ascending: false })
         .order('id', { ascending: false })
         .limit(options.limit + 1)
@@ -100,7 +111,8 @@ async function readFollowedActivities(
       // must not be able to widen a user's followed identities.
       if (
         activity.source !== source ||
-        !allowedIdentities.has(followedIdentity(activity.source, activity.source_trader_id))
+        !allowedIdentities.has(followedIdentity(activity.source, activity.source_trader_id)) ||
+        !isPublicNonRankingActivity(activity)
       ) {
         continue
       }
@@ -117,10 +129,9 @@ async function readFollowedActivities(
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return noStorePublicActivity(rateLimitResponse)
 
   try {
-    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
 
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 100 }) ?? 50
@@ -133,6 +144,20 @@ export async function GET(request: NextRequest) {
     // get an empty result so the client can fall back to Discover.
     const followingOnly =
       searchParams.get('following') === '1' || searchParams.get('following') === 'true'
+
+    // The current public admission set is intentionally empty. Returning
+    // before auth/follow/table reads prevents a stale or widened query from
+    // re-exposing legacy free-form activity rows in either feed mode.
+    if (!hasPublicNonRankingActivityTypes()) {
+      const response = success(
+        unavailablePublicActivityFeed(limit),
+        200,
+        followingOnly ? PRIVATE_NO_STORE_HEADERS : undefined
+      )
+      return followingOnly ? response : noStorePublicActivity(response)
+    }
+
+    const supabase = getSupabaseAdmin()
 
     let followedBySource: Map<string, Set<string>> | null = null
     if (followingOnly) {
@@ -150,7 +175,7 @@ export async function GET(request: NextRequest) {
         .eq('user_id', user.id)
         .limit(500)
       if (followErr) {
-        return handleError(followErr)
+        return noStorePublicActivity(handleError(followErr))
       }
       followedBySource = new Map()
       for (const follow of follows ?? []) {
@@ -191,6 +216,7 @@ export async function GET(request: NextRequest) {
       let query = supabase
         .from('trader_activities')
         .select(ACTIVITY_SELECT)
+        .in('activity_type', PUBLIC_NON_RANKING_ACTIVITY_TYPES)
         .order('occurred_at', { ascending: false })
         .order('id', { ascending: false })
         .limit(limit + 1) // fetch one extra to determine hasMore
@@ -212,24 +238,21 @@ export async function GET(request: NextRequest) {
         error.message?.includes('does not exist') ||
         error.message?.includes('Could not find')
       if (isMissingTable) {
-        return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
+        return noStorePublicActivity(
+          success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
+        )
       }
-      return handleError(error)
+      return noStorePublicActivity(handleError(error))
     }
 
-    const items = data ?? []
+    const items = filterPublicNonRankingActivities(data ?? [])
     const hasMore = items.length > limit
     const page = hasMore ? items.slice(0, limit) : items
     const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].occurred_at : null
 
-    // The `following=1` path is per-user (scoped to the caller's follows) and MUST
-    // NOT be shared-cached. The default (no `following`) path is identical public
-    // data to /api/feed, so it gets the same brief edge cache.
-    const cacheHeaders = followingOnly
-      ? PRIVATE_NO_STORE_HEADERS
-      : { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' }
-
-    return success(
+    // Default/discover responses are public in audience but never cacheable:
+    // an event row is admissible only under the current publication policy.
+    const response = success(
       {
         activities: page,
         pagination: {
@@ -239,9 +262,10 @@ export async function GET(request: NextRequest) {
         },
       },
       200,
-      cacheHeaders
+      followingOnly ? PRIVATE_NO_STORE_HEADERS : undefined
     )
+    return followingOnly ? response : noStorePublicActivity(response)
   } catch (err) {
-    return handleError(err)
+    return noStorePublicActivity(handleError(err))
   }
 }
