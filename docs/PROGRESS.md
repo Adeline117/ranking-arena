@@ -127,6 +127,18 @@ limit、Supabase ranked-cohort read、CSV/JSON 生成或 logging 前结束。
 这是 source-only boundary：不停止、检查或证明任何已部署 collector、数据库、schedule 或历史数据状态；
 其他 Library helper、数据库结构和历史 archive 文档均不在此次范围内。
 
+## V1 standalone Flash News CLI source boundary（2026-08-17）
+
+本轮只封存六个 standalone Flash News CLI compatibility path：
+`scripts/flash-news/collect.mjs`、`scripts/flash-news/retranslate-all.mjs`、
+`scripts/backfill-flash-news-classify.mjs`、`scripts/backfill-flash-news-translate.mjs`、
+`scripts/purge-flash-news-noncrypto.mjs` 与 `scripts/dedup-hot-posts.mjs`。无论传入何种参数，
+它们均固定输出 `RETIRED` 并以 exit `2` 结束，不发起 fetch，亦不进行 database 或 file mutation。
+
+该边界不触及 `app/api/cron/flash-news-fetch`、`/api/flash-news` 或 Flash News UI，且不改变共享
+classifier/translator 的运行时行为；它们仍需独立审查。这只是 checked-in source 状态，不停止、检查或证明任何
+仓库外、已部署 script 或 scheduler 的状态。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
