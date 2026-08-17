@@ -468,6 +468,16 @@ non-sensitive proof; this document intentionally has no bypass workflow.
 > 目标、最小权限执行者、exact candidate SHA、兼容回退边界和证据保全方式后，才可
 > 另行建立受控执行计划；该计划不在本 runbook 中。
 
+### Retired migration-ledger repair artifact — V1 NO-GO
+
+`scripts/migration-reconcile/ledger-repair-20260702.sql` 是 `[RETIRED]` 的纯注释历史记录，
+不含可运行内容。外部 SQL-file launcher 可能因注释是 no-op 而报告 exit 0；这不是 ledger、catalog、
+数据库或任何 live-state 的证据，也不是工作入口。
+
+这是 source-only boundary：它不运行、检查、变更或证明当前数据库、迁移、已部署服务、host、worker
+或 scheduler 状态。本 runbook 不提供该历史文件的数据库、MCP、CLI 或回退流程；未来任何 ledger
+事项只能由 owner 在独立 ADR-023 中重新定义并保全单独证据。
+
 #### 当前事实
 
 - `V1_EXECUTION_STATUS_2026-08-03.md` 是公开服务与 launch 的唯一权威。
