@@ -285,6 +285,8 @@ function canonicalUtcMillisecondTimestamp(value: unknown): string | null {
 
 function verifiedCopierCompleteness(payload: Record<string, unknown>): HistoryCompleteness | null {
   const receiptId = nonNegativeSafeIntegerOrNull(payload.receiptId)
+  const observedAt = canonicalUtcMillisecondTimestamp(payload.observedAt)
+  const publishedAt = canonicalUtcMillisecondTimestamp(payload.publishedAt)
   if (
     payload.receiptBound !== true ||
     receiptId === null ||
@@ -296,8 +298,9 @@ function verifiedCopierCompleteness(payload: Record<string, unknown>): HistoryCo
     payload.scanTerminalState !== 'exhausted' ||
     !Array.isArray(payload.blockerReasons) ||
     payload.blockerReasons.length !== 0 ||
-    canonicalUtcMillisecondTimestamp(payload.observedAt) === null ||
-    canonicalUtcMillisecondTimestamp(payload.publishedAt) === null
+    observedAt === null ||
+    publishedAt === null ||
+    Date.parse(publishedAt) < Date.parse(observedAt)
   ) {
     return null
   }

@@ -323,6 +323,13 @@ describe('copier PII rule (spec §6)', () => {
     ['a non-finite PnL', { totalCopierPnl: Number.POSITIVE_INFINITY }],
     ['negative zero PnL', { totalCopierPnl: -0 }],
     ['a nonzero PnL for a measured zero-count snapshot', { copierCount: 0, totalCopierPnl: 1 }],
+    [
+      'a publication clock before the completed capture',
+      {
+        observedAt: '2026-06-10T12:01:00.000Z',
+        publishedAt: '2026-06-10T12:00:00.000Z',
+      },
+    ],
   ] as const)('fails closed for a receipt-bound aggregate with %s', async (_label, overrides) => {
     const aggregate = await getCopierAggregate(
       rpcClient(verifiedCopierPayload(overrides)),
