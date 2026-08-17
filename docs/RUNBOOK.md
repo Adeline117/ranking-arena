@@ -76,6 +76,25 @@ Historical performance, CI, target, or report records are not current execution 
 external-state evidence. A future measurement, CI, or reporting activity requires an
 independently approved ADR-023 owner plan and separate evidence.
 
+### V1 stuck-log diagnostic CLI source boundary
+
+Do not use `scripts/archive/check-stuck-simple.mjs` as an incident, monitoring, or
+pipeline workaround. This checked-in legacy diagnostic compatibility path has no
+current operational caller. With every argument, it writes exactly `[RETIRED]
+scripts/archive/check-stuck-simple.mjs` to stderr, leaves stdout empty, and exits `2`.
+It does not read, query, or mutate `pipeline_logs`, or call a current monitoring API,
+worker, or meta-monitor.
+
+This is source-only containment for that one script. It does not change, inspect, or
+prove `pipeline_logs`, current monitoring APIs, workers, meta-monitor, deployment,
+data, or any external state. Historical diagnostic, monitoring, or pipeline records
+are not current runtime or data-state evidence. A future diagnostic or remediation
+requires an independently approved ADR-023 owner plan and separate evidence. This
+boundary does not retire or assess `lib/services/pipeline-logger.ts`,
+`/api/health/pipeline`, admin monitoring readers (including enrichment-completeness),
+`lib/cron/auto-cleanup-stuck.ts`, or the separately held
+`/api/cron/cleanup-stuck-logs`.
+
 ### V1 ranking authority cache-purge source boundary
 
 Do not use `scripts/maintenance/purge-ranking-authority-caches.sh` as an incident workaround.

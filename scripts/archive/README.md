@@ -12,3 +12,7 @@ crontab 中均无引用。它们保留在 git 历史里可随时找回，归档�
 `scripts/archive/test-enrich-fix.sh` is retired during V1 NO-GO. It writes `[RETIRED]`
 only to stderr and exits `2`; do not treat it as a recoverable work route. This limited
 status covers that file only.
+
+`scripts/archive/check-stuck-simple.mjs` is separately retired during V1 NO-GO. It writes
+`[RETIRED] scripts/archive/check-stuck-simple.mjs` only to stderr, leaves stdout empty, and
+exits `2`; it is not a `pipeline_logs` diagnostic or recovery route.
