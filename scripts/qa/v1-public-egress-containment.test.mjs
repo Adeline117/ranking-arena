@@ -19,7 +19,9 @@ const cdnProxyRoute = codeOnly(source('app/api/cdn-proxy/route.ts'))
 const marketAlphaRoute = codeOnly(source('app/api/market/alpha/route.ts'))
 const marketCandlesRoute = codeOnly(source('app/api/market/candles/route.ts'))
 const marketFuturesRoute = codeOnly(source('app/api/market/futures/route.ts'))
+const marketSparklinesRoute = codeOnly(source('app/api/market/sparklines/route.ts'))
 const linkPreviewRoute = codeOnly(source('app/api/posts/link-preview/route.ts'))
+const spotMarket = codeOnly(source('app/components/market/SpotMarket.tsx'))
 const proxy = source('proxy.ts')
 const apiAuthCoverage = source('scripts/qa/api-auth-coverage-check.mjs')
 const docs = source('docs/API_ROUTES.md')
@@ -42,6 +44,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
     marketAlphaRoute,
     marketCandlesRoute,
     marketFuturesRoute,
+    marketSparklinesRoute,
     linkPreviewRoute,
   ]) {
     assert.match(route, /export function GET\(\): NextResponse/)
@@ -55,6 +58,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
       /\bCoinGecko\b|coingecko\.com/,
       /node\/dns|\b(?:dnsLookup|lookup)\b/,
       /\b(?:logger|cache|Redis|ioredis)\b/,
+      /\b(?:memCache|CACHE_TTL|SparklineEntry)\b/,
       /\b(?:checkRateLimit|RateLimitPresets|Ratelimit)\b/,
       /\b(?:getSupabaseAdmin|supabase|funding_rates|open_interest)\b/,
       /\b(?:getCorsOrigin|cors|Access-Control)\b/,
@@ -68,7 +72,7 @@ test('anonymous public egress routes are no-argument fixed no-store tombstones',
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
   assert.match(
     proxy,
-    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/market\/alpha['"],\s*['"]\/api\/v1\/market\/alpha['"],\s*['"]\/api\/market\/candles['"],\s*['"]\/api\/v1\/market\/candles['"],\s*['"]\/api\/market\/futures['"],\s*['"]\/api\/v1\/market\/futures['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
+    /PUBLIC_EGRESS_BYPASS_PATHS\s*=\s*new Set\(\[\s*['"]\/api\/cdn-proxy['"],\s*['"]\/api\/v1\/cdn-proxy['"],\s*['"]\/api\/market\/alpha['"],\s*['"]\/api\/v1\/market\/alpha['"],\s*['"]\/api\/market\/candles['"],\s*['"]\/api\/v1\/market\/candles['"],\s*['"]\/api\/market\/futures['"],\s*['"]\/api\/v1\/market\/futures['"],\s*['"]\/api\/market\/sparklines['"],\s*['"]\/api\/v1\/market\/sparklines['"],\s*['"]\/api\/posts\/link-preview['"],\s*['"]\/api\/v1\/posts\/link-preview['"],?\s*\]\)/s
   )
   assert.match(
     proxy,
@@ -76,7 +80,7 @@ test('only canonical and versioned public egress paths bypass proxy guards', () 
   )
   assert.doesNotMatch(
     proxy,
-    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|candles|futures)|link-preview)/
+    /SKIP_ROUTE_PREFIXES[^\n]*(?:cdn-proxy|market\/(?:alpha|candles|futures|sparklines)|link-preview)/
   )
 
   const shouldSkipStart = proxy.indexOf('export function shouldSkip(pathname: string): boolean')
@@ -106,16 +110,29 @@ test('only canonical and versioned public egress paths bypass proxy guards', () 
   assert.ok(publicEgressFloorBypass > ipFloorStart)
 })
 
+test('SpotMarket shows a local unavailable 7D cell without a sparklines request', () => {
+  assert.match(
+    spotMarket,
+    /key:\s*['"]sparkline['"][\s\S]*?render:\s*\(\)\s*=>[\s\S]*?t\(['"]dataUnavailable['"]\)/
+  )
+  assert.doesNotMatch(spotMarket, /\/api\/market\/sparklines/)
+  assert.doesNotMatch(spotMarket, /\bapiFetch\b/)
+  assert.doesNotMatch(spotMarket, /\b(?:Sparkline|SparklineEntry)\b/)
+  assert.doesNotMatch(spotMarket, /\b(?:requestIdleCallback|cancelIdleCallback)\b/)
+})
+
 test('API allowlist and documentation describe the source-only public-egress hold', () => {
   assert.match(apiAuthCoverage, /'market\/alpha'/)
   assert.match(apiAuthCoverage, /'market\/candles'/)
   assert.match(apiAuthCoverage, /'market\/futures'/)
+  assert.match(apiAuthCoverage, /'market\/sparklines'/)
   assert.match(apiAuthCoverage, /V1 public compatibility tombstones/)
   assert.match(apiAuthCoverage, /V1 public-egress compatibility tombstone/)
   assert.match(docs, /`\/api\/cdn-proxy`/)
   assert.match(docs, /`\/api\/market\/alpha`/)
   assert.match(docs, /`\/api\/market\/candles`/)
   assert.match(docs, /`\/api\/market\/futures`/)
+  assert.match(docs, /`\/api\/market\/sparklines`/)
   assert.match(docs, /`\/api\/posts\/link-preview`/)
   assert.match(docs, /V1_PUBLIC_EGRESS_PUBLISHED=false/)
   assert.match(docs, /cannot stop, inspect, or prove|不能停止、检查或证明/)

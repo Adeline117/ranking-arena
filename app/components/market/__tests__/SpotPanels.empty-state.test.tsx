@@ -6,16 +6,13 @@ jest.mock('@/lib/hooks/useRealtimePrices', () => ({
   useRealtimePrices: () => ({ prices: {}, flashes: {} }),
 }))
 
-jest.mock('@/lib/utils/api-fetch', () => ({
-  apiFetch: jest.fn().mockResolvedValue([]),
-}))
-
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({
     t: (key: string) =>
       (
         ({
           noDataGeneric: 'No data available',
+          dataUnavailable: 'Unavailable',
           sectorTreemapLoading: 'Loading market data',
           sectorTreemapTitle: 'Sector performance',
           sectorTreemap1h: '1H',
@@ -50,6 +47,41 @@ describe('spot-data panels successful empty states', () => {
 
     expect(screen.getByText('No data available')).toBeInTheDocument()
     expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
+  })
+
+  it('renders an unavailable noninteractive 7D cell without requesting sparklines', async () => {
+    const originalFetch = global.fetch
+    const fetchSpy = jest.fn()
+    global.fetch = fetchSpy as unknown as typeof fetch
+
+    try {
+      render(
+        <SpotMarket
+          initialData={[
+            {
+              id: 'bitcoin',
+              symbol: 'BTC',
+              name: 'Bitcoin',
+              image: '',
+              price: 100,
+              change24h: 1,
+              high24h: 101,
+              low24h: 99,
+              volume24h: 1000,
+              marketCap: 2000,
+              rank: 1,
+            },
+          ]}
+        />
+      )
+
+      const unavailable = await screen.findByText('Unavailable')
+      expect(unavailable.tagName).toBe('SPAN')
+      expect(unavailable.closest('button, a, input')).toBeNull()
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      global.fetch = originalFetch
+    }
   })
 
   it('renders an empty sector state without claiming it is still loading', () => {

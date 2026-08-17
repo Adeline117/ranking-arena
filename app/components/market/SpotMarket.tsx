@@ -6,8 +6,6 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimePrices'
 import MarketTable, { Column } from './MarketTable'
-import Sparkline from './PriceSparkline'
-import { apiFetch } from '@/lib/utils/api-fetch'
 import { formatTokenPrice } from '@/lib/utils/format'
 import type { SpotCoin as SharedSpotCoin } from '@/lib/hooks/useMarketSpot'
 
@@ -23,12 +21,6 @@ interface SpotCoin {
   volume24h: number
   marketCap: number
   rank: number
-}
-
-interface SparklineEntry {
-  id: string
-  prices: number[]
-  change7d: number | null
 }
 
 function formatNum(n: number | null, decimals = 2): string {
@@ -176,7 +168,6 @@ export default function SpotMarket({
   const [search, setSearch] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [showFavOnly, setShowFavOnly] = useState(false)
-  const [sparklines, setSparklines] = useState<Map<string, SparklineEntry>>(new Map())
   const { prices: realtimePrices, flashes } = useRealtimePrices({ enabled: true })
 
   // Use shared spotData from parent when available
@@ -185,35 +176,6 @@ export default function SpotMarket({
     setData(spotData as unknown as SpotCoin[])
     setLoading(false)
   }, [spotData])
-
-  useEffect(() => {
-    // The sparklines payload is ~152KB (largest market-data fetch, bigger than the
-    // 100-coin spot data itself) and feeds the below-the-fold 7D column — not first
-    // paint. Defer it to idle so it doesn't compete with hydration/interaction.
-    let cancelled = false
-    const load = () => {
-      if (cancelled) return
-      apiFetch<unknown>('/api/market/sparklines')
-        .then((d: unknown) => {
-          if (cancelled || !Array.isArray(d)) return
-          const map = new Map<string, SparklineEntry>()
-          ;(d as SparklineEntry[]).forEach((entry) => {
-            if (entry && typeof entry.id === 'string') map.set(entry.id, entry)
-          })
-          setSparklines(map)
-        })
-        .catch(() => {}) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-    }
-    const useIdle = typeof window !== 'undefined' && 'requestIdleCallback' in window
-    const handle = useIdle
-      ? window.requestIdleCallback(load, { timeout: 2000 })
-      : setTimeout(load, 1200)
-    return () => {
-      cancelled = true
-      if (useIdle) window.cancelIdleCallback(handle as number)
-      else clearTimeout(handle as ReturnType<typeof setTimeout>)
-    }
-  }, [])
 
   useEffect(() => {
     try {
@@ -345,19 +307,19 @@ export default function SpotMarket({
         align: 'center',
         width: '10%',
         sortable: false,
-        render: (r) => {
-          const entry = sparklines.get(r.id)
-          if (!entry || entry.prices.length < 2)
-            return <span style={{ display: 'inline-block', width: 88, height: 34 }} />
-          return (
-            <Sparkline
-              prices={entry.prices}
-              width={88}
-              height={34}
-              positive={entry.change7d !== null ? entry.change7d >= 0 : undefined}
-            />
-          )
-        },
+        render: () => (
+          <span
+            aria-label={t('dataUnavailable')}
+            title={t('dataUnavailable')}
+            style={{
+              color: tokens.colors.text.tertiary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.medium,
+            }}
+          >
+            {t('dataUnavailable')}
+          </span>
+        ),
       },
       {
         key: 'price',
@@ -446,7 +408,7 @@ export default function SpotMarket({
         },
       },
     ],
-    [t, sparklines, flashes, favorites, toggleFav]
+    [t, flashes, favorites, toggleFav]
   )
 
   return (

@@ -54,6 +54,8 @@ const PUBLIC_API_ROUTES = new Set([
   'market/alpha',
   'market/candles',
   'market/futures',
+  // SpotMarket renders a local unavailable 7D marker and makes no endpoint call.
+  'market/sparklines',
   'market/coin/[id]',
   'market/defi',
   'market/exchanges',
@@ -62,7 +64,6 @@ const PUBLIC_API_ROUTES = new Set([
   'market/overview',
   'market/realtime',
   'market/sectors',
-  'market/sparklines',
   'market/spot',
   // 公开聚合统计(交易员数/交易所数,首页 hero + 跨所百分位徽章用;无用户数据,CDN 缓存 1h)
   'hero-stats',
