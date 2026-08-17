@@ -4,7 +4,7 @@ import { BASE_URL } from '@/lib/constants/urls'
 export const metadata: Metadata = {
   title: 'Arena Pro',
   description:
-    'Upgrade to Arena Pro for advanced trader alerts, unlimited comparison tools, enhanced filters, and 1-year historical performance data. Flexible plans starting from $4.99/month. Limited Founding Member Lifetime access available at $49.99.',
+    'Upgrade to Arena Pro for advanced analytics, unlimited comparison tools, enhanced filters, and 1-year historical performance data. Flexible plans starting from $4.99/month. Limited Founding Member Lifetime access available at $49.99.',
   alternates: {
     canonical: `${BASE_URL}/pricing`,
   },
@@ -12,14 +12,14 @@ export const metadata: Metadata = {
     'Arena Pro',
     'crypto trader tools',
     'copy trading premium',
-    'trader alerts',
+    'trader analytics',
     'trader comparison',
     'Arena pricing',
   ],
   openGraph: {
     title: 'Arena Pro',
     description:
-      'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
+      'Upgrade to Arena Pro — advanced analytics, enhanced filters, and unlimited comparisons. Starting at $4.99/month.',
     url: `${BASE_URL}/pricing`,
     siteName: 'Arena',
     type: 'website',
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Arena Pro',
     description:
-      'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
+      'Upgrade to Arena Pro — advanced analytics, enhanced filters, and unlimited comparisons. Starting at $4.99/month.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },

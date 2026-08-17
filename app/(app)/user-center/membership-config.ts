@@ -21,7 +21,6 @@ export const getProFeatures = (t: (key: string) => string) => [
     title: t('featureCategoryRanking'),
     desc: t('featureCategoryRankingDesc'),
   },
-  { key: 'trader_alerts', title: t('featureTraderAlerts'), desc: t('featureTraderAlertsDesc') },
   {
     key: 'score_breakdown',
     title: t('featureScoreBreakdown'),
@@ -60,7 +59,6 @@ export const getComparisonData = (t: (key: string) => string): ComparisonRow[] =
   { feature: t('compFeatureTraderDetails'), free: true, pro: true },
   { feature: t('compFeatureAdvancedFilters'), free: false, pro: t('compProMultiFilter') },
   { feature: t('compFeatureTraderCompare'), free: false, pro: t('compProUpTo10Traders') },
-  { feature: t('compFeatureTraderAlerts'), free: false, pro: t('compProInAppEmailPush') },
   {
     feature: t('compFeatureArenaScore'),
     free: t('compFreeTotalScore'),
@@ -107,7 +105,6 @@ export const getPricingComparisonData = (t: (key: string) => string): Comparison
   { feature: t('pricingCompareTraderComparison'), free: false, pro: true },
   { feature: t('pricingCompareCategoryRankings'), free: false, pro: true },
   { feature: t('pricingCompareCsvExport'), free: false, pro: true },
-  { feature: t('pricingCompareTraderAlerts'), free: false, pro: true },
   { feature: t('pricingCompareCommunityPosts'), free: true, pro: true },
   { feature: t('pricingComparePublicGroups'), free: true, pro: true },
   { feature: t('pricingCompareMarketOverview'), free: true, pro: true },

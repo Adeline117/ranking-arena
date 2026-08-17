@@ -1,83 +1,45 @@
 /**
- * Push Notification Send API
+ * Retired arbitrary push-sender endpoint.
  *
- * POST - Send push notification to user(s)
- * Requires admin role or the notification to be self-targeted.
+ * V1 does not publish personalized trader/ranking alert delivery. This route
+ * previously allowed an authenticated caller to supply arbitrary push payloads,
+ * including retired alert types. It now authenticates before returning a fixed
+ * no-store tombstone and never parses a body, reads a role, or contacts a push
+ * provider.
  */
 
-import { NextResponse } from 'next/server'
-import { withAuth } from '@/lib/api/middleware'
-import { getPushNotificationService } from '@/lib/services/push-notification'
-import type { PushNotification } from '@/lib/services/push-notification'
-import logger from '@/lib/logger'
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthUser } from '@/lib/supabase/server'
+import {
+  TRADER_ALERTS_NO_STORE_HEADERS,
+  TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+  TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/alerts/trader-alert-publication'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-export const POST = withAuth(
-  async ({ user, request, supabase }) => {
-    const body = await request.json()
-    const { userIds, title, body: messageBody, data, imageUrl } = body
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  let user: Awaited<ReturnType<typeof getAuthUser>>
+  try {
+    user = await getAuthUser(request)
+  } catch {
+    user = null
+  }
 
-    // Validate required fields
-    if (!title || !messageBody) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Missing required fields: title, body',
-        },
-        { status: 400 }
-      )
-    }
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+    )
+  }
 
-    // Check if user is admin (for sending to others)
-    const targetUserIds: string[] = userIds || [user.id]
-    const isSelfTarget = targetUserIds.length === 1 && targetUserIds[0] === user.id
-
-    if (!isSelfTarget) {
-      // Check admin role
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (profile?.role !== 'admin') {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Admin role required to send to other users',
-          },
-          { status: 403 }
-        )
-      }
-    }
-
-    try {
-      const service = getPushNotificationService()
-      const notification: PushNotification = {
-        title,
-        body: messageBody,
-        data,
-        imageUrl,
-        channelId: 'arena_default',
-      }
-
-      const results = await service.sendToUsers(targetUserIds, notification)
-
-      return NextResponse.json({
-        success: true,
-        results,
-      })
-    } catch (error: unknown) {
-      logger.error('[push/send] Failed to send notification:', error)
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Failed to send notification',
-        },
-        { status: 500 }
-      )
-    }
-  },
-  { name: 'push-send', rateLimit: 'write' }
-)
+  return NextResponse.json(
+    {
+      error: 'Retired push sender',
+      code: TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+      message: TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+    },
+    { status: 410, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+  )
+}

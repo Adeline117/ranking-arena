@@ -909,10 +909,10 @@ test('writer detector does not confuse a reviewed read or another table write wi
     "const snapshots = await db.from('trader_daily_snapshots').select('date, roi')",
     "await db.from('notifications').insert(snapshots)",
   ].join('\n')
-  const result = scanVirtual('app/api/cron/broadcast-trader-events/route.ts', source)
+  const result = scanVirtual('app/api/legacy-snapshot-audit/route.ts', source)
   assert.deepEqual(result.offenses, [])
   assert.deepEqual(result.reads, [
-    { file: 'app/api/cron/broadcast-trader-events/route.ts', mechanism: 'postgrest' },
+    { file: 'app/api/legacy-snapshot-audit/route.ts', mechanism: 'postgrest' },
   ])
 })
 

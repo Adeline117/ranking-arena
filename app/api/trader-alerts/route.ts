@@ -1,61 +1,31 @@
 /**
- * 交易员变动提醒 API
- * Pro 会员功能：管理关注交易员的变动提醒配置
+ * V1 legacy trader-alert inventory and cleanup API.
+ *
+ * Monitoring, delivery, and new configuration publication are paused. Owners
+ * may only list or delete their own persisted legacy rows.
  */
 
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  TRADER_ALERTS_NOT_PUBLISHED_CODE,
+  TRADER_ALERTS_NO_STORE_HEADERS,
+  TRADER_ALERTS_PUBLISHED,
+  TRADER_ALERTS_UNAVAILABLE_MESSAGE,
+} from '@/lib/alerts/trader-alert-publication'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const logger = createLogger('trader-alerts')
 
-// Zod schema for POST /api/trader-alerts
-const TraderAlertSchema = z.object({
-  trader_id: z.string().min(1, 'trader_id is required'),
-  source: z.string().trim().min(1).max(64).optional().nullable(),
-  alert_roi_change: z.boolean().optional().default(true),
-  roi_change_threshold: z.number().min(0).max(100).optional().default(10),
-  alert_drawdown: z.boolean().optional().default(true),
-  drawdown_threshold: z.number().min(0).max(100).optional().default(20),
-  alert_pnl_change: z.boolean().optional().default(false),
-  pnl_change_threshold: z.number().min(0).optional().default(5000),
-  alert_score_change: z.boolean().optional().default(true),
-  score_change_threshold: z.number().min(0).max(100).optional().default(5),
-  alert_rank_change: z.boolean().optional().default(false),
-  rank_change_threshold: z.number().min(0).optional().default(5),
-  one_time: z.boolean().optional().default(false),
-  enabled: z.boolean().optional().default(true),
-})
-
-/**
- * GET - 获取用户的提醒配置列表
- */
+/** GET — list the authenticated owner's legacy configurations for cleanup. */
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
-    // Access must reflect a currently active paid entitlement. Reading only
-    // `tier` left canceled/expired subscriptions able to configure a feature
-    // the scheduler correctly refuses to execute.
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .select('tier, status')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .in('tier', ['pro', 'lifetime'])
-      .limit(1)
-      .maybeSingle()
-
-    if (subscriptionError) throw new Error('Failed to verify Pro membership')
-    if (!subscription) {
-      return NextResponse.json(
-        { success: false, error: 'Pro membership required' },
-        { status: 403 }
-      )
-    }
-
-    // 获取查询参数
+    // Legacy inventory remains readable to its owner so a lapsed subscriber can
+    // remove a configuration that V1 no longer monitors.
     const { searchParams } = new URL(request.url)
     const traderId = searchParams.get('trader_id')
     const source = searchParams.get('source')
@@ -80,126 +50,41 @@ export const GET = withAuth(
       throw new Error('Failed to fetch alert config')
     }
 
-    return { alerts: alerts || [] }
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          available: TRADER_ALERTS_PUBLISHED,
+          code: TRADER_ALERTS_NOT_PUBLISHED_CODE,
+          alerts: alerts || [],
+        },
+      },
+      { headers: TRADER_ALERTS_NO_STORE_HEADERS }
+    )
   },
   { name: 'get-trader-alerts', rateLimit: 'authenticated' }
 )
 
-/**
- * POST - 创建或更新提醒配置
- */
+/** POST — publication hold: new and updated configurations are unavailable. */
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .select('tier, status')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .in('tier', ['pro', 'lifetime'])
-      .limit(1)
-      .maybeSingle()
-
-    if (subscriptionError) throw new Error('Failed to verify Pro membership')
-    if (!subscription) {
-      return NextResponse.json(
-        { success: false, error: 'Pro membership required' },
-        { status: 403 }
-      )
-    }
-
-    const body = await request.json()
-    const parsed = TraderAlertSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
-      )
-    }
-    const config = parsed.data
-
-    // Check existing config for this trader
-    let existingQuery = supabase
-      .from('trader_alerts')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('trader_id', config.trader_id)
-    existingQuery = config.source
-      ? existingQuery.eq('source', config.source)
-      : existingQuery.is('source', null)
-    const { data: existing } = await existingQuery.maybeSingle()
-
-    // Enforce max 50 alerts per user
-    // KEEP 'exact' — hard limit enforcement, scoped per-user via
-    // (user_id) index. Must be accurate to block the 51st add.
-    if (!existing) {
-      const { count } = await supabase
-        .from('trader_alerts')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-      if ((count ?? 0) >= 50) {
-        return NextResponse.json(
-          { success: false, error: 'Maximum 50 alerts. Delete some first.' },
-          { status: 400 }
-        )
-      }
-    }
-
-    const alertData = {
-      user_id: user.id,
-      trader_id: config.trader_id,
-      source: config.source || null,
-      alert_roi_change: config.alert_roi_change,
-      roi_change_threshold: config.roi_change_threshold,
-      alert_drawdown: config.alert_drawdown,
-      drawdown_threshold: config.drawdown_threshold,
-      alert_pnl_change: config.alert_pnl_change,
-      pnl_change_threshold: config.pnl_change_threshold,
-      alert_score_change: config.alert_score_change,
-      score_change_threshold: config.score_change_threshold,
-      alert_rank_change: config.alert_rank_change,
-      rank_change_threshold: config.rank_change_threshold,
-      one_time: config.one_time,
-      enabled: config.enabled,
-    }
-
-    let result
-    if (existing) {
-      // 更新现有配置
-      const { data, error: updateError } = await supabase
-        .from('trader_alerts')
-        .update(alertData)
-        .eq('id', existing.id)
-        .select()
-        .single()
-
-      if (updateError) {
-        logger.error('[trader-alerts] 更新Failed:', updateError)
-        throw new Error('Failed to update alert config')
-      }
-      result = data
-    } else {
-      // 创建新配置
-      const { data, error: insertError } = await supabase
-        .from('trader_alerts')
-        .insert(alertData)
-        .select()
-        .single()
-
-      if (insertError) {
-        logger.error('[trader-alerts] 创建Failed:', insertError)
-        throw new Error('Failed to create alert config')
-      }
-      result = data
-    }
-
-    return { alert: result, created: !existing }
+  async () => {
+    // withAuth performs authentication and CSRF validation before this handler.
+    // Do not parse the body or query tables: V1 must not create, update, or
+    // re-enable an alert that cannot be automatically evaluated or delivered.
+    return NextResponse.json(
+      {
+        success: false,
+        available: TRADER_ALERTS_PUBLISHED,
+        code: TRADER_ALERTS_NOT_PUBLISHED_CODE,
+        error: TRADER_ALERTS_UNAVAILABLE_MESSAGE,
+      },
+      { status: 503, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+    )
   },
   { name: 'post-trader-alerts', rateLimit: 'authenticated' }
 )
 
-/**
- * DELETE - 删除提醒配置
- */
+/** DELETE — remove an authenticated owner's legacy configuration. */
 export const DELETE = withAuth(
   async ({ user, supabase, request }) => {
     const { searchParams } = new URL(request.url)
@@ -210,7 +95,7 @@ export const DELETE = withAuth(
     if (!alertId && !traderId) {
       return NextResponse.json(
         { success: false, error: 'Either id or trader_id is required' },
-        { status: 400 }
+        { status: 400, headers: TRADER_ALERTS_NO_STORE_HEADERS }
       )
     }
 
@@ -230,7 +115,10 @@ export const DELETE = withAuth(
       throw new Error('Failed to delete alert config')
     }
 
-    return { deleted: true }
+    return NextResponse.json(
+      { success: true, data: { deleted: true } },
+      { headers: TRADER_ALERTS_NO_STORE_HEADERS }
+    )
   },
   { name: 'delete-trader-alerts', rateLimit: 'authenticated' }
 )

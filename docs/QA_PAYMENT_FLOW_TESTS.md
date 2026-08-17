@@ -1,8 +1,14 @@
-# 付费链路 QA 测试用例文档
+# 付费链路 QA 测试用例文档（历史基线）
 
 > 版本: 1.1.0
 > 更新日期: 2026-01-21
 > 目标: 付费链路零功能问题
+>
+> **V1 状态（2026-08-16）**：本文保留为历史支付 QA 基线，不能作为当前产品权益或
+> 自动投递能力的发布证明。V1 中 `trader_alerts`、`advanced_alerts`、
+> `email_notifications` 和 `push_notifications` 不随 Free/Pro tier 开放；交易员提醒、
+> 排名变动提醒和个性化 digest 均未发布。下文凡涉及这些功能的历史断言，均以本说明和
+> 当前 `docs/API_ROUTES.md` 的停用契约为准。
 
 ---
 
@@ -39,7 +45,7 @@
   - `user_profiles.subscription_tier` = 'pro'
   - `pro_official_group_members` 表新增记录（自动入群）
 - **期望权限结果**：
-  - `checkFeatureAccess('trader_alerts')` 返回 `hasAccess: true`
+  - `checkFeatureAccess('trader_alerts')` 对所有 tier 返回 `hasAccess: false`（V1 未发布，不是 Pro 权益）
   - 历史数据从7天扩展到90天
 - **失败时应提示**：支付失败时显示具体原因，不显示空白页
 - **严重程度**：致命
@@ -135,7 +141,7 @@
   - `pro_official_group_members` 移除该用户
 - **期望权限结果**：
   - `useIsPremium()` 返回 false
-  - `checkFeatureAccess('trader_alerts')` 返回 `hasAccess: false`
+  - `checkFeatureAccess('trader_alerts')` 仍返回 `hasAccess: false`（V1 对所有 tier 未发布）
 - **失败时应提示**：N/A
 - **严重程度**：致命
 
@@ -210,33 +216,33 @@
 
 ## B. 权限矩阵
 
-| 功能                   | Free 可见 | Free 可用   | Pro 可见 | Pro 可用       | 验证点                                |
-| ---------------------- | --------- | ----------- | -------- | -------------- | ------------------------------------- |
-| 排行榜浏览             | ✅        | ✅          | ✅       | ✅             | 首页可访问                            |
-| 基础筛选（交易所）     | ✅        | ✅          | ✅       | ✅             | 下拉菜单可用                          |
-| **高级筛选（多条件）** | ✅        | ❌ Paywall  | ✅       | ✅             | `advanced_filter` feature check       |
-| 交易员详情页           | ✅        | ✅          | ✅       | ✅             | `/trader/[handle]` 可访问             |
-| **Arena Score 详情**   | ✅        | ❌ 模糊     | ✅       | ✅             | `score_breakdown` feature check       |
-| **交易员对比**         | ✅        | ❌ Paywall  | ✅       | ✅ (10次/月)   | `trader_comparison` feature check     |
-| 历史数据               | ✅        | ✅ (7天)    | ✅       | ✅ (90天)      | `historical_data` feature check       |
-| 关注交易员             | ✅        | ✅ (10人)   | ✅       | ✅ (50人)      | `useFollowLimit()` hook               |
-| 发帖                   | ✅        | ✅ (3条/天) | ✅       | ✅ (无限)      | API 层检查                            |
-| **交易员预警**         | ❌        | -           | ✅       | ✅             | `trader_alerts` feature check         |
-| **Pro官方群**          | ❌        | -           | ✅       | ✅             | `premium_groups` feature check        |
-| **数据导出**           | ✅        | ❌          | ✅       | ✅ (10次/月)   | `export_data` feature check           |
-| **API访问**            | ❌        | -           | ✅       | ✅ (1000次/天) | `api_access` feature check            |
-| Pro徽章                | ❌        | -           | ✅       | ✅             | `pro_badge` feature check             |
-| 分类排行               | ✅        | ❌          | ✅       | ✅             | `category_ranking` feature check      |
-| 邮件通知               | ❌        | -           | ✅       | ✅             | `email_notifications` feature check   |
-| 推送通知               | ❌        | -           | ✅       | ✅             | `push_notifications` feature check    |
-| 自定义排行             | ❌        | -           | ✅       | ✅             | `custom_rankings` feature check       |
-| 投资组合建议           | ❌        | -           | ✅       | ✅             | `portfolio_suggestions` feature check |
+| 功能                      | Free 可见         | Free 可用   | Pro 可见          | Pro 可用       | 验证点                                     |
+| ------------------------- | ----------------- | ----------- | ----------------- | -------------- | ------------------------------------------ |
+| 排行榜浏览                | ✅                | ✅          | ✅                | ✅             | 首页可访问                                 |
+| 基础筛选（交易所）        | ✅                | ✅          | ✅                | ✅             | 下拉菜单可用                               |
+| **高级筛选（多条件）**    | ✅                | ❌ Paywall  | ✅                | ✅             | `advanced_filter` feature check            |
+| 交易员详情页              | ✅                | ✅          | ✅                | ✅             | `/trader/[handle]` 可访问                  |
+| **Arena Score 详情**      | ✅                | ❌ 模糊     | ✅                | ✅             | `score_breakdown` feature check            |
+| **交易员对比**            | ✅                | ❌ Paywall  | ✅                | ✅ (10次/月)   | `trader_comparison` feature check          |
+| 历史数据                  | ✅                | ✅ (7天)    | ✅                | ✅ (90天)      | `historical_data` feature check            |
+| 关注交易员                | ✅                | ✅ (10人)   | ✅                | ✅ (50人)      | `useFollowLimit()` hook                    |
+| 发帖                      | ✅                | ✅ (3条/天) | ✅                | ✅ (无限)      | API 层检查                                 |
+| **交易员预警/个性化提醒** | ✅ 仅 legacy 清理 | ❌ 未发布   | ✅ 仅 legacy 清理 | ❌ 未发布      | `trader_alerts` 固定无权益；不监测、不投递 |
+| **Pro官方群**             | ❌                | -           | ✅                | ✅             | `premium_groups` feature check             |
+| **数据导出**              | ✅                | ❌          | ✅                | ✅ (10次/月)   | `export_data` feature check                |
+| **API访问**               | ❌                | -           | ✅                | ✅ (1000次/天) | `api_access` feature check                 |
+| Pro徽章                   | ❌                | -           | ✅                | ✅             | `pro_badge` feature check                  |
+| 分类排行                  | ✅                | ❌          | ✅                | ✅             | `category_ranking` feature check           |
+| 交易员邮件/推送通知       | ✅ 偏好可查看     | ❌ 未发布   | ✅ 偏好可查看     | ❌ 未发布      | 不为交易员提醒、排名变动或 digest 自动投递 |
+| 自定义排行                | ❌                | -           | ✅                | ✅             | `custom_rankings` feature check            |
+| 投资组合建议              | ❌                | -           | ✅                | ✅             | `portfolio_suggestions` feature check      |
 
 **验证方法**：
 
 ```typescript
 // 前端验证
-const { hasAccess, remaining } = useFeatureAccess('trader_alerts')
+const { hasAccess } = useFeatureAccess('trader_alerts')
+// V1: Free 和 Pro 都必须为 false；不能用 tier 恢复提醒监测或投递。
 
 // 后端验证 (API路由)
 if (!hasFeatureAccess(tier, 'premium_groups')) {

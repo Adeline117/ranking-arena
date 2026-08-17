@@ -9,22 +9,27 @@ const logger = createLogger('pricing-page')
 
 export const metadata: Metadata = {
   title: 'Pricing',
-  description: 'Arena Pro membership plans - unlock advanced trading analytics, alerts, and exclusive features.',
+  description:
+    'Arena Pro membership plans - unlock advanced trading analytics and exclusive features.',
   alternates: {
     canonical: `${BASE_URL}/pricing`,
   },
   openGraph: {
     title: 'Pricing — Arena Pro',
-    description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
+    description:
+      'Unlock advanced trading analytics and exclusive features with Arena Pro membership.',
     url: `${BASE_URL}/pricing`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro Pricing' }],
+    images: [
+      { url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro Pricing' },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Pricing — Arena Pro',
-    description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
+    description:
+      'Unlock advanced trading analytics and exclusive features with Arena Pro membership.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
@@ -62,7 +67,8 @@ export default async function PricingPage() {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: 'Arena Pro',
-    description: 'Professional crypto trader analytics and ranking platform with advanced filters, alerts, and score breakdowns.',
+    description:
+      'Professional crypto trader analytics and ranking platform with advanced filters and score breakdowns.',
     url: `${BASE_URL}/pricing`,
     brand: {
       '@type': 'Organization',

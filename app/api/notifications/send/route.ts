@@ -8,7 +8,7 @@
  *
  * Body: {
  *   user_id: string        // 接收通知的用户
- *   type: string           // follow/like/comment/mention/system/copy_trade/trader_alert/...
+ *   type: string           // follow/like/comment/mention/system/copy_trade/...
  *   title: string          // 通知标题
  *   message: string        // 通知正文
  *   link?: string          // 可选跳转链接
@@ -18,21 +18,35 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getSupabaseAdmin,
-  handleError,
-} from '@/lib/api'
+import { getSupabaseAdmin, handleError } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { verifyServiceAuth as verifyServiceAuthShared } from '@/lib/auth/verify-service-auth'
+import {
+  TRADER_ALERTS_NO_STORE_HEADERS,
+  TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+  TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/alerts/trader-alert-publication'
 
 export const dynamic = 'force-dynamic'
 
 const VALID_TYPES = [
-  'follow', 'like', 'comment', 'mention', 'system',
-  'copy_trade', 'trader_alert', 'message', 'post_reply',
-  'new_follower', 'group_update', 'ranking_change', 'referral_reward',
+  'follow',
+  'like',
+  'comment',
+  'mention',
+  'system',
+  'copy_trade',
+  'trader_alert',
+  'message',
+  'post_reply',
+  'new_follower',
+  'group_update',
+  'ranking_change',
+  'referral_reward',
 ]
+
+const UNPUBLISHED_TRADER_NOTIFICATION_TYPES = new Set(['trader_alert', 'ranking_change'])
 
 /**
  * Verify caller is an internal/service caller (timing-safe).
@@ -44,20 +58,34 @@ function verifyServiceAuth(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
-
   try {
     // Service-role only: reject any regular user JWT calls
     if (!verifyServiceAuth(request)) {
       return NextResponse.json(
         { error: 'Forbidden: notifications must be sent by internal services only' },
-        { status: 403 }
+        { status: 401, headers: TRADER_ALERTS_NO_STORE_HEADERS }
       )
     }
 
     const body = await request.json()
     const { user_id, type, title, message, link, actor_id, reference_id } = body
+
+    // Do this before rate limiting or database access. V1 must not accept a
+    // direct service-authenticated injection for an unpublished trader/ranking
+    // notification type.
+    if (typeof type === 'string' && UNPUBLISHED_TRADER_NOTIFICATION_TYPES.has(type)) {
+      return NextResponse.json(
+        {
+          error: 'Retired notification type',
+          code: TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+          message: TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+        },
+        { status: 410, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+      )
+    }
+
+    const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResp) return rateLimitResp
 
     // 验证必填字段
     if (!user_id || typeof user_id !== 'string') {
@@ -78,7 +106,11 @@ export async function POST(request: NextRequest) {
 
     // 防止给自己发通知
     if (actor_id && actor_id === user_id) {
-      return NextResponse.json({ success: true, message: 'Skipped self-notification', skipped: true })
+      return NextResponse.json({
+        success: true,
+        message: 'Skipped self-notification',
+        skipped: true,
+      })
     }
 
     const supabase = getSupabaseAdmin()

@@ -163,13 +163,21 @@ Legacy `trader_daily_snapshots` 不具备 season/generation/cohort/publication p
 
 ## 7. 通知与预警
 
-| 路由                           | 方法            | 描述                       | 认证 |
-| ------------------------------ | --------------- | -------------------------- | ---- |
-| `/api/notifications`           | GET/PUT/DELETE  | 查询、更新或删除通知       | 是   |
-| `/api/notifications/mark-read` | POST            | 标记已读                   | 是   |
-| `/api/push/subscribe`          | POST/DELETE     | 订阅或退订推送             | 是   |
-| `/api/alerts`                  | GET             | 预警列表                   | 是   |
-| `/api/trader-alerts`           | GET/POST/DELETE | 查询、创建或删除交易员预警 | 是   |
+| 路由                                 | 方法            | 描述                                                                                             | 认证       |
+| ------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------ | ---------- |
+| `/api/notifications`                 | GET/PUT/DELETE  | 查询、更新或删除通知                                                                             | 是         |
+| `/api/notifications/mark-read`       | POST            | 标记已读                                                                                         | 是         |
+| `/api/push/subscribe`                | POST/DELETE     | 订阅或退订推送                                                                                   | 是         |
+| `/api/push/send`                     | POST            | V1 auth-first tombstone；401/410/no-store；不读请求体、不查角色或调用推送提供商                  | 是         |
+| `/api/alerts`                        | GET             | V1 仅查询本人 legacy 提醒历史；`available:false`、`TRADER_ALERTS_NOT_PUBLISHED`、三层 `no-store` | 是         |
+| `/api/trader-alerts`                 | GET/POST/DELETE | V1 GET 仅列出本人 legacy 配置，POST 固定 503，DELETE 仅清理本人配置；全程 `no-store`             | 是         |
+| `/api/notifications/ranking-changes` | POST            | V1 auth-first tombstone；401/410 `no-store`，不读取排名、不写通知或发送邮件/推送                 | Cron Token |
+
+V1 不发布交易员提醒监测、新配置、排名变动提醒或个性化投递。`/api/alerts` 和
+`/api/trader-alerts` 只保留 owner-scoped legacy 清理/取证面，不能把已有行解释为
+仍在监测；未发布响应分别使用 `TRADER_ALERTS_NOT_PUBLISHED` 或
+`TRADER_NOTIFICATION_NOT_PUBLISHED`。这些是源码契约，不构成任何已部署计划、
+worker 或第三方投递已停止的运行事实。
 
 ---
 
@@ -214,7 +222,9 @@ V1 的公开 API-key 绑定选择器只展示 Binance、Bybit、Bitget，即当�
 
 | 路由                                      | 方法     | 描述                                                                                | 认证       |
 | ----------------------------------------- | -------- | ----------------------------------------------------------------------------------- | ---------- |
-| `/api/cron/check-trader-alerts`           | GET      | 检查交易员预警                                                                      | Cron Token |
+| `/api/cron/check-trader-alerts`           | GET/POST | V1 auth-first tombstone；401/410/no-store；不评估、不发推送或邮件                   | Cron Token |
+| `/api/cron/broadcast-trader-events`       | GET      | V1 auth-first tombstone；401/410/no-store；不读取交易员事件、不写通知或发推送       | Cron Token |
+| `/api/cron/weekly-digest`                 | GET      | V1 auth-first tombstone；401/410/no-store；不读取订阅者数据、不发送个性化邮件       | Cron Token |
 | `/api/cron/check-data-freshness`          | GET      | 检查数据新鲜度                                                                      | Cron Token |
 | `/api/cron/aggregate-daily-snapshots`     | GET/POST | 未调度 auth-first tombstone；401/410/no-store；等待 provenance-bound 原子 publisher | Cron Token |
 | `/api/cron/cleanup-violations`            | GET/POST | 未调度 auth-first tombstone；401/410/no-store；无自动修复 replacement               | Cron Token |

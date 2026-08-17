@@ -46,7 +46,6 @@ describe('PREMIUM_FEATURES', () => {
     const featureIds = PREMIUM_FEATURES.map((f) => f.id)
     expect(featureIds).toContain('trader_comparison')
     expect(featureIds).toContain('api_access')
-    expect(featureIds).toContain('trader_alerts')
     expect(featureIds).toContain('advanced_filter')
   })
 
@@ -59,7 +58,13 @@ describe('PREMIUM_FEATURES', () => {
 
   test('每个功能都指定了可用等级（已下线功能除外）', () => {
     // 已下线的功能 tier 为空数组是正常的
-    const deprecatedFeatures = ['portfolio_suggestions']
+    const deprecatedFeatures = [
+      'portfolio_suggestions',
+      'trader_alerts',
+      'advanced_alerts',
+      'email_notifications',
+      'push_notifications',
+    ]
 
     PREMIUM_FEATURES.forEach((feature) => {
       expect(Array.isArray(feature.tier)).toBe(true)
@@ -98,6 +103,13 @@ describe('hasFeatureAccess', () => {
   test('不存在的功能返回 false', () => {
     // 促销期统一闸门对任意 featureId 短路返回 true；促销关闭后未知功能查不到 → false。
     expect(hasFeatureAccess('pro', 'nonexistent_feature' as PremiumFeatureId)).toBe(PRO_FREE_PROMO)
+  })
+
+  test('V1-unpublished trader alerts remain inaccessible during the Pro promotion', () => {
+    expect(hasFeatureAccess('free', 'trader_alerts')).toBe(false)
+    expect(hasFeatureAccess('pro', 'trader_alerts')).toBe(false)
+    expect(hasFeatureAccess('free', 'advanced_alerts')).toBe(false)
+    expect(hasFeatureAccess('pro', 'advanced_alerts')).toBe(false)
   })
 })
 

@@ -105,8 +105,10 @@ Each trader profile includes:
 - Trading groups with membership, applications, and group-level analytics
 - Post and comment system with voting, visibility controls (public/followers/group), and full-text search
 - User level progression (food chain theme): Krill, Sardine, Dolphin, Shark, Orca
-- Following system with activity feeds
-- Ranking change notifications and trader alerts, when V1 publication is available
+- Following system with activity feeds. Trader alerts and personalized
+  ranking-change notifications are temporarily unavailable during V1
+  verification; owners may only view or remove saved legacy alert
+  configurations and history.
 
 ### Library
 
@@ -215,9 +217,9 @@ repository's 53 cron/worker route implementations are not operational authority,
 evidence of deployment, or permission to invoke a route. This source-only
 containment deliberately makes no claim about any deployed control plane or host.
 
-**Daily-snapshot containment.** `aggregate-daily-snapshots`, `cleanup-violations`, and `scan-data-quality` are unscheduled auth-first tombstones: anonymous requests return 401 and authenticated requests return 410 without touching data. The scanner's former admin RPC has no versioned function body, so it is not accepted as a read-only replacement. Legacy daily rows have no season, generation, cohort, or publication-proof identity and are not ranking authority. Movers, equity, indicators, public history, V3 history, and hot-trader recommendations now return fixed empty/unavailable, three-layer `no-store` contracts; the homepage does not request Movers, and the equity hook rejects old cached positive bodies without explicit availability plus publication proof. Daily-derived ROI/PnL broadcast events are disabled while independent rank and position events remain active. V1 does not authorize manual backfill, cleanup, general-purpose SQL RPC, or restoration of a retired schedule; any future design must be separately reviewed and provenance-bound.
+**Daily-snapshot and trader-alert containment.** `aggregate-daily-snapshots`, `cleanup-violations`, and `scan-data-quality` are unscheduled auth-first tombstones: anonymous requests return 401 and authenticated requests return 410 without touching data. The scanner's former admin RPC has no versioned function body, so it is not accepted as a read-only replacement. Legacy daily rows have no season, generation, cohort, or publication-proof identity and are not ranking authority. Movers, equity, indicators, public history, V3 history, and hot-trader recommendations now return fixed empty/unavailable, three-layer `no-store` contracts; the homepage does not request Movers, and the equity hook rejects old cached positive bodies without explicit availability plus publication proof. Trader-alert evaluation, personalized trader-event broadcasts, ranking-change triggers, and weekly digests are retired auth-first tombstones: authenticated callers receive a fixed 410 response and must not read trader data, advance alert state, or deliver email/push. V1 does not authorize manual backfill, cleanup, general-purpose SQL RPC, restoration of a retired schedule, or reopening alert delivery; any future design must be separately reviewed and provenance-bound.
 
-The forward migration `20260808090000_quarantine_legacy_trader_daily_snapshots.sql` is a reviewed deployment candidate, not proof that the live database has these ACLs. It is not to be applied, verified against production, or used to infer live state during V1 NO-GO. Any future release requires a separately recorded owner GO and a bounded release plan.
+The forward migrations `20260808090000_quarantine_legacy_trader_daily_snapshots.sql` and `20260816130000_quarantine_v1_trader_alert_browser_mutations.sql` are reviewed deployment candidates, not proof that the live database has these ACLs. They are not to be applied, verified against production, or used to infer live state during V1 NO-GO. Any future release requires a separately recorded owner GO and a bounded release plan.
 
 ### V1 scheduled work and monitoring
 
@@ -264,7 +266,7 @@ lib/                          # Core business logic
     pipeline-self-heal.ts     # Legacy recovery implementation; no V1 authority
     anomaly-detection.ts      # Statistical anomaly detection
     telegram-bot.ts           # Telegram alerts
-    trader-alerts.ts          # Rank change notifications
+    trader-alerts.ts          # Legacy alert evaluator; no V1 publication authority
   hooks/                      # React hooks
   stores/                     # Zustand stores (period, inbox, multiAccount, post)
   types/                      # TypeScript types

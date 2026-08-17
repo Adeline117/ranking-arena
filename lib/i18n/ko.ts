@@ -420,7 +420,7 @@ const ko = {
   tagHighReturns: '높은 수익률',
   // Trader alerts
   traderAlerts: '트레이더 알림',
-  traderAlertsDesc: '팔로우한 트레이더의 주요 변동 시 알림을 받으세요',
+  traderAlertsDesc: 'V1 검증 중에는 트레이더 알림을 사용할 수 없습니다',
   alertSettings: '알림 설정',
   alertThreshold: '변동 임계값',
   alertEnabled: '알림 활성화됨',
@@ -500,7 +500,7 @@ const ko = {
   featureCategoryRanking: '카테고리 순위',
   featureCategoryRankingDesc: '선물/현물/온체인 별 순위 보기',
   featureTraderAlerts: '트레이더 알림',
-  featureTraderAlertsDesc: '트레이더의 주요 변동 시 알림 받기',
+  featureTraderAlertsDesc: 'V1 검증 중에는 일시적으로 사용할 수 없습니다',
   featureScoreBreakdown: 'Arena Score 상세',
   featureScoreBreakdownDesc: '세부 점수 및 백분위 순위 보기',
   featureProBadge: 'Pro 뱃지',
@@ -929,7 +929,7 @@ const ko = {
   postCommentedNotify: '게시글에 댓글이 달리면 알림 받기',
   mentionedNotify: '멘션되면 알림 받기',
   newMessageNotify: '메시지를 받으면 알림 받기',
-  traderEventsNotify: '팔로우한 트레이더의 큰 변동 시 알림 받기',
+  traderEventsNotify: 'V1 검증 중에는 트레이더 이벤트 알림을 사용할 수 없습니다',
   // Privacy settings
   showFollowerList: '팔로워 목록 표시',
   showFollowingList: '팔로잉 목록 표시',
@@ -989,6 +989,7 @@ const ko = {
   digestNone: '없음',
   digestDaily: '일간 다이제스트',
   digestWeekly: '주간 다이제스트',
+  weeklyDigestUnavailable: 'V1 검증 중에는 개인화된 주간 다이제스트를 사용할 수 없습니다.',
   unsubscribeSuccess: '구독이 성공적으로 취소되었습니다',
   unsubscribeFromDigest: '이메일 다이제스트 구독 취소',
   unsubscribeFromAll: '모든 이메일 구독 취소',
@@ -1099,11 +1100,16 @@ const ko = {
   linkedAccountCount: '계정',
   // Alerts
   traderAlertsTitle: '트레이더 알림',
-  traderAlertsDesc2: '트레이더 활동을 추적하기 위한 맞춤 알림 조건 설정 (Pro 기능)',
+  traderAlertsDesc2:
+    'V1 검증 중에는 트레이더 알림 모니터링과 전달이 중단됩니다. 저장된 설정은 확인하거나 삭제할 수 있습니다.',
   traderAlertsConfigureOnProfile:
-    '각 알림이 올바른 거래소 계정에 연결되도록 트레이더 프로필에서 알림을 설정하세요.',
+    'V1 검증 중에는 새 트레이더 알림을 설정할 수 없습니다. 이 페이지에서는 저장된 설정만 삭제할 수 있습니다.',
   traderAlertsBrowse: '트레이더 둘러보기',
-  traderAlertsNone: '설정된 트레이더 알림이 없습니다.',
+  traderAlertsNone: '저장된 레거시 트레이더 알림 설정이 없습니다.',
+  traderAlertsUnavailableTitle: '트레이더 알림을 일시적으로 사용할 수 없습니다',
+  traderAlertsUnavailableDesc:
+    'V1 검증 중에는 트레이더 알림 모니터링과 전달이 중단됩니다. 저장된 레거시 설정은 확인하거나 삭제할 수 있습니다.',
+  traderAlertsStoredNotMonitored: '저장된 설정 — 모니터링되지 않음',
   traderAlertsEnabled: '활성화됨',
   traderAlertsPaused: '일시 중지됨',
   traderAlertsNoConditions: '활성 조건 없음',
@@ -1111,7 +1117,7 @@ const ko = {
   traderAlertsRemoveConfirm: '이 트레이더 알림을 삭제할까요?',
   traderAlertsRemoveFailed: '트레이더 알림을 삭제하지 못했습니다. 다시 시도하세요.',
   traderAlertsLoadFailed: '트레이더 알림을 불러오지 못했습니다. 다시 시도하세요.',
-  traderAlertsProRequired: '트레이더 알림 관리에는 Pro가 필요합니다.',
+  traderAlertsProRequired: 'V1 검증 중에는 트레이더 알림을 사용할 수 없습니다.',
   alertScoreChangeLabel: 'Arena Score 변동',
   alertScoreChangeDesc: '이 트레이더의 Arena Score가 지정 포인트 이상 변동하면 알립니다.',
   alertScoreUnit: '점',
@@ -1666,7 +1672,7 @@ const ko = {
   alertDrawdownLabel: '낙폭 알림',
   alertDrawdownDesc: '낙폭이 임계값을 초과하면 알림',
   alertRankChangeLabel: '순위 변동',
-  alertRankChangeDesc: '순위가 임계값만큼 변동하면 알림',
+  alertRankChangeDesc: 'V1 검증 중에는 사용할 수 없습니다',
   alertChangesBy: '변동 기준',
   alertChangesByDisplay: '변동 기준',
   alertEmailNotification: '이메일 알림',
@@ -1689,7 +1695,7 @@ const ko = {
   alertNoAlerts: '설정된 알림이 없습니다',
   alertLastTriggered: '마지막 트리거',
   alertNewPositionLabel: '새 포지션 알림',
-  alertNewPositionDesc: '트레이더가 새 포지션을 열면 알림',
+  alertNewPositionDesc: 'V1 검증 중에는 사용할 수 없습니다',
 
   // ProFeaturesPanel
   proFeaturesTitle: 'Pro 기능',
@@ -2048,9 +2054,9 @@ const ko = {
   helpCompareQ: '트레이더 비교 기능은 어떻게 사용하나요?',
   helpCompareA:
     '홈페이지에서 "트레이더 비교" 버튼을 클릭하고 최대 5명의 트레이더를 검색하여 추가하면 시스템이 지표를 나란히 표시합니다.',
-  helpAlertsQ: '트레이더 알림이란 무엇인가요?',
+  helpAlertsQ: '트레이더 알림을 현재 사용할 수 있나요?',
   helpAlertsA:
-    '팔로우한 트레이더의 순위 변동, ROI 변동 또는 기타 중요한 변화가 발생하면 시스템이 자동으로 쪽지 알림을 보내드립니다.',
+    'V1 검증 중에는 트레이더 알림 모니터링과 전달을 사용할 수 없습니다. 로그인한 사용자는 저장된 레거시 설정을 확인하거나 삭제만 할 수 있습니다.',
   helpScoreBreakdownQ: 'Arena Score 상세 분석이란 무엇인가요?',
   helpScoreBreakdownA:
     '점수 상세 분석은 트레이더의 수익 점수, 낙폭 점수, 안정성 점수 및 동일 유형 트레이더 중 백분위 순위를 보여줍니다.',
@@ -2650,8 +2656,8 @@ const ko = {
   compProAnomalyDetection: '이상 감지',
   compFeatureTraderCompare: '트레이더 비교',
   compProUpTo10Traders: '최대 10명',
-  compFeatureTraderAlerts: '트레이더 변동 알림',
-  compProInAppEmailPush: '앱 내 + 이메일 + 푸시',
+  compFeatureTraderAlerts: '트레이더 알림(V1 이용 불가)',
+  compProInAppEmailPush: 'V1 검증 중 미공개',
   compFeatureArenaScore: 'Arena Score',
   compFreeTotalScore: '종합 점수',
   compProBreakdownPercentile: '상세 분석 + 백분위',
@@ -2681,7 +2687,7 @@ const ko = {
   congratsProMember: '축하합니다! Pro 회원이 되셨습니다',
   nowYouCan: '이제 다음을 이용할 수 있습니다:',
   proBenefit1: '카테고리별 순위 보기',
-  proBenefit2: '트레이더 변동 알림 받기',
+  proBenefit2: 'V1 검증 중에는 트레이더 알림을 사용할 수 없습니다',
   proBenefit3: '상세 점수 분석 보기',
   proBenefit4: '고급 필터 사용',
   proBenefit5: '여러 트레이더 비교',
@@ -2737,7 +2743,7 @@ const ko = {
   pollDuration7d: '7일',
   myWatchlist: '내 워치리스트',
   savedHubTitle: '저장됨',
-  savedHubSubtitle: '트레이더, 게시물, 성과 알림을 한곳에서 관리하세요.',
+  savedHubSubtitle: '트레이더와 게시물을 한곳에서 관리하세요.',
   savedTabTraders: '트레이더',
   savedTabPosts: '게시물',
   savedTabAlerts: '알림',
@@ -2950,7 +2956,7 @@ const ko = {
   benefitFeature: '기능',
   benefitFollowTraders: '트레이더 팔로우',
   benefitHistoricalData: '과거 데이터',
-  benefitTraderAlerts: '트레이더 변동 알림',
+  benefitTraderAlerts: '트레이더 알림(V1 사용 불가)',
   benefitTraderCompare: '트레이더 비교',
   benefitArenaScore: 'Arena Score 상세',
   benefitApiAccess: 'API 접근',
@@ -3030,9 +3036,8 @@ const ko = {
     '상세 지표 분석 및 성과 차트로 최대 4명의 트레이더를 나란히 비교할 수 있습니다.',
   aboutFeature4Title: '포트폴리오 추적',
   aboutFeature4Desc: '여러 거래소의 최고 트레이더로 맞춤 포트폴리오를 구축하고 추적하세요.',
-  aboutFeature5Title: '스마트 알림',
-  aboutFeature5Desc:
-    '팔로우한 트레이더가 목표를 달성하거나, 포지션을 변경하거나, 상위 순위에 진입하면 알림을 받으세요.',
+  aboutFeature5Title: '알림 공개 보류',
+  aboutFeature5Desc: 'V1 검증 중에는 트레이더 알림과 개인화된 전달을 사용할 수 없습니다.',
   aboutFeature6Title: '지식 라이브러리',
   aboutFeature6Desc:
     '트레이딩 전략, 리스크 관리 및 시장 분석에 관한 56K+ 엄선된 교육 리소스입니다.',
@@ -3122,8 +3127,8 @@ const ko = {
   pushNotificationError: '푸시 알림 설정 실패, 다시 시도해 주세요',
   pushNotificationsDisabled: '푸시 알림이 비활성화되었습니다',
   hapticFeedbackTitle: '햅틱 피드백',
-  hapticFeedbackDesc: '팔로우한 트레이더가 포지션을 열 때 진동을 느끼세요',
-  tradeAlertVibration: '거래 알림 진동',
+  hapticFeedbackDesc: '지원되는 앱 내 상호작용에 진동 피드백을 사용합니다',
+  tradeAlertVibration: '햅틱 피드백',
 
   // Messaging system
   messageSent: '전송됨',
@@ -4106,7 +4111,7 @@ const ko = {
   linkedAt: '연결됨',
   noFollowers: '아직 팔로워가 없습니다',
   noMessagesHint: '아직 메시지가 없습니다',
-  noAlertsDesc: '랭킹 페이지에서 트레이더를 팔로우하면 성과 변동 시 알림을 받을 수 있습니다',
+  noAlertsDesc: 'V1 검증 중에는 트레이더 알림 모니터링과 전달을 사용할 수 없습니다.',
 
   // Errors
   invalidResponse: '잘못된 응답',
@@ -4356,8 +4361,8 @@ const ko = {
 
   // Guest signup prompt
   guestSignupTitle: '최고의 트레이더 추적',
-  guestSignupSubtitle: '무료 계정을 만들어 트레이더를 팔로우하고 성과 변동 시 알림을 받으세요',
-  guestSignupFeature1: '트레이더를 팔로우하고 순위 변동 알림 받기',
+  guestSignupSubtitle: '무료 계정을 만들어 트레이더를 팔로우하고 리서치를 정리하세요.',
+  guestSignupFeature1: '트레이더를 팔로우하고 리서치를 정리',
   guestSignupFeature2: '최대 5명의 트레이더를 나란히 비교',
   guestSignupFeature3: '관심 목록을 저장하고 순위를 맞춤 설정',
   guestSignupButton: '무료 가입',
@@ -5063,7 +5068,7 @@ const ko = {
   pricingFaqSwitchA: '네, 월간과 연간 요금제를 언제든 전환할 수 있으며 차액은 일할 계산됩니다.',
   pricingFaqApiQ: 'Pro에 API 접근이 포함되나요?',
   pricingFaqApiA:
-    '아니요. 데이터 API 요금제는 Arena Pro와 별도로 판매됩니다. Pro는 트레이더 탐색, 알림, 비교 및 심층 분석을 위한 상품입니다.',
+    '아니요. 데이터 API 요금제는 Arena Pro와 별도로 판매됩니다. Pro는 트레이더 탐색, 비교 및 심층 분석을 위한 상품이며 트레이더 알림은 V1 검증 중에는 사용할 수 없습니다.',
   pricingLimitedTimeBanner: '한정 기간: 모든 Pro 기능이 현재 무료입니다!',
   pricingStatTradersRanked: '랭킹된 트레이더',
   pricingStatExchangesTracked: '운영 중 랭킹 보드',
@@ -5395,7 +5400,7 @@ const ko = {
   watchlistSignInTitle: '관심 목록을 보려면 로그인하세요',
   watchlistSignInDesc: '계정을 만들거나 로그인하여 즐겨찾는 트레이더를 저장하고 추적하세요.',
   traderAlertsSignInTitle: '트레이더 알림을 보려면 로그인하세요',
-  traderAlertsSignInDesc: '로그인하여 팔로우한 트레이더의 성과 알림을 만들고 관리하세요.',
+  traderAlertsSignInDesc: '로그인하여 저장된 트레이더 알림 설정을 확인하거나 삭제하세요.',
   watchlistEmptyTitle: '관심 목록이 비어 있습니다',
   watchlistEmptyDesc: '랭킹을 살펴보고 트레이더 프로필의 별표 아이콘을 클릭하여 추가하세요.',
   watchlistBrowseRankings: '랭킹 보기',
@@ -5513,10 +5518,10 @@ const ko = {
   winrate: '승률',
 
   // ── 2026-06-02: 433 missing keys batch (synced with en.ts) ──
-  gateAdvancedAlertsTitle: '고급 알림 잠금 해제',
+  gateAdvancedAlertsTitle: '트레이더 알림을 사용할 수 없습니다',
   gateBenefitAlertsRealtime: 'V1 검증 기간에는 트레이더 알림을 일시적으로 사용할 수 없습니다',
-  gateBenefitAlertsConditions: '알림당 5개 이상의 조건 결합',
-  gateBenefitAlertsHistory: '전체 알림 기록 및 분석',
+  gateBenefitAlertsConditions: '새 알림 설정은 게시되지 않습니다',
+  gateBenefitAlertsHistory: '저장된 레거시 설정은 삭제할 수 있습니다',
   gateComparisonTitle: '트레이더 나란히 비교',
   gateBenefitCompareSideBySide: '최대 4명의 트레이더, 모든 지표',
   gateBenefitCompareMetrics: '위험 조정 점수 세부 분석',
@@ -6346,7 +6351,7 @@ const ko = {
   proGetStarted: 'Pro 시작하기',
   proStep1: '고급 Pro 필터로 랭킹 탐색',
   proStep2: '상위 트레이더 나란히 비교',
-  proStep3: '트레이더 알림 및 환경설정',
+  proStep3: '알림 환경설정 검토',
   exploreProRankings: 'Pro 랭킹 탐색',
   inviteFriendsTitle: '친구를 Arena에 초대',
   inviteFriendsDesc: 'Arena를 공유하고 추천 보상 받기',

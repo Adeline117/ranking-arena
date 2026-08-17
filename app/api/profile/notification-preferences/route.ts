@@ -7,6 +7,12 @@ import {
 } from '@/lib/profile/notification-preferences'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  TRADER_ALERTS_NO_STORE_HEADERS,
+  TRADER_ALERTS_PUBLISHED,
+  TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+  TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/alerts/trader-alert-publication'
 
 const logger = createLogger('api:profile-notification-preferences')
 const requestSchema = z.union([
@@ -61,6 +67,21 @@ export async function PATCH(request: NextRequest) {
   const parsedBody = requestSchema.safeParse(rawBody)
   if (!parsedBody.success) {
     return NextResponse.json({ error: 'Invalid profile preference' }, { status: 400 })
+  }
+
+  const unpublishedTraderNotificationPreference =
+    parsedBody.data.field === 'notify_trader_events' ||
+    (parsedBody.data.field === 'email_digest' && parsedBody.data.value === 'weekly')
+  if (!TRADER_ALERTS_PUBLISHED && unpublishedTraderNotificationPreference) {
+    return NextResponse.json(
+      {
+        success: false,
+        available: false,
+        code: TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+        error: TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+      },
+      { status: 503, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+    )
   }
 
   try {
