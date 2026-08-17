@@ -47,6 +47,19 @@ const tokenSidePanel = codeOnly(source('app/components/market/TokenSidePanel.tsx
 const proxy = source('proxy.ts')
 const apiAuthCoverage = source('scripts/qa/api-auth-coverage-check.mjs')
 const docs = source('docs/API_ROUTES.md')
+const openapi = source('docs/openapi.yaml')
+const executionStatus = source('docs/V1_EXECUTION_STATUS_2026-08-03.md')
+
+function openapiPathBlock(pathname) {
+  const heading = `  ${pathname}:`
+  const start = openapi.indexOf(heading)
+  assert.ok(start >= 0, `OpenAPI path is missing: ${pathname}`)
+
+  const end = openapi.indexOf('\n  /', start + heading.length)
+  return openapi.slice(start, end === -1 ? undefined : end)
+}
+
+const portfolioAddressOpenapi = openapiPathBlock('/portfolio/{address}')
 
 test('V1 public egress publication is checked-in false and browser-safe', () => {
   assert.match(publication, /V1_PUBLIC_EGRESS_PUBLISHED\s*=\s*false\s+as const/)
@@ -160,6 +173,46 @@ test('EVM portfolio acquisition is fixed and has no address, public wrapper, cac
   ]) {
     assert.doesNotMatch(portfolioAddressRoute, forbidden)
   }
+})
+
+test('public EVM portfolio documentation matches the fixed source-only 410 hold', () => {
+  assert.match(openapi, /deprecated anonymous public-egress\s+source hold/)
+  assert.match(
+    portfolioAddressOpenapi,
+    /summary:\s*Retired public EVM address portfolio acquisition/
+  )
+  assert.match(portfolioAddressOpenapi, /deprecated:\s*true/)
+  assert.match(portfolioAddressOpenapi, /security:\s*\[\]/)
+  assert.match(portfolioAddressOpenapi, /Route-shape segment only/)
+  assert.match(
+    portfolioAddressOpenapi,
+    /lowercase `0x` followed by exactly\s+40 hexadecimal characters/
+  )
+  assert.match(portfolioAddressOpenapi, /pattern:\s*'\^0x\[a-fA-F0-9\]\{40\}\$'/)
+  assert.match(portfolioAddressOpenapi, /'410':/)
+  assert.match(portfolioAddressOpenapi, /PUBLIC_EGRESS_NOT_PUBLISHED/)
+  assert.match(
+    portfolioAddressOpenapi,
+    /Cache-Control:[\s\S]*?example: private, no-store, max-age=0, must-revalidate/
+  )
+  assert.match(portfolioAddressOpenapi, /CDN-Cache-Control:[\s\S]*?example: no-store/)
+  assert.match(portfolioAddressOpenapi, /Vercel-CDN-Cache-Control:[\s\S]*?example: no-store/)
+  assert.match(portfolioAddressOpenapi, /does not stop, inspect, or prove any prior deployment/)
+
+  for (const forbidden of [/five-minute/i, /X-Cache/, /'200':/, /'400':/, /'429':/, /'500':/]) {
+    assert.doesNotMatch(portfolioAddressOpenapi, forbidden)
+  }
+
+  assert.match(
+    executionStatus,
+    /此前要求保持 EVM address portfolio 与 suggestions 可用的方向已由后续 V1 source hold 取代/
+  )
+  assert.match(executionStatus, /上述 source hold 明确 supersede/)
+  assert.match(executionStatus, /不能停止、检查或证明已部署 route、cache、RPC 或链上数据/)
+  assert.doesNotMatch(
+    executionStatus,
+    /EVM address portfolio 与 suggestions 保持可用且不接触旧凭据表/
+  )
 })
 
 test('only canonical and versioned public egress paths bypass proxy guards', () => {
