@@ -10,9 +10,11 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
-import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import {
-  publicRankingResponseCacheHeaders,
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
+import {
   publicRankingResponseRejectionHeaders,
   redirectToPublicRankingResponseCacheEpoch,
 } from '@/lib/rankings/public-response-cache'
@@ -24,19 +26,45 @@ import {
 // 200)。edge 无 pg,故 DB 查询改 Supabase REST fetch、Buffer→edge base64。
 export const runtime = 'edge'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const PUBLIC_RANKING_COLUMNS =
+  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
-/** Edge-safe Supabase REST GET → first row or null. */
-async function restSelect(table: string, query: string): Promise<Record<string, unknown> | null> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function safeDecode(value: string): string {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+/** Escape PostgREST ILIKE wildcards so a source-less handle lookup is exact. */
+function exactIlike(value: string): string {
+  return encodeURIComponent(value.replace(/[\\*%_]/g, '\\$&'))
+}
+
+/**
+ * Edge-safe Supabase REST GET → exactly one row or null. Multiple rows are
+ * ambiguous identity evidence, so do not bind either one to an OG metric.
+ */
+async function restSelectOne(
+  table: string,
+  query: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    if (!supabaseUrl || !supabaseKey) return null
+    const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}&limit=2`, {
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
       signal: AbortSignal.timeout(4000),
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Record<string, unknown>[]
-    return rows[0] ?? null
+    return rows.length === 1 && isRecord(rows[0]) ? rows[0] : null
   } catch {
     return null
   }
@@ -136,51 +164,140 @@ function formatRoi(roi: number): string {
   return sign + abs.toFixed(1) + '%'
 }
 
-async function fetchTrader(handle: string) {
-  // Edge REST equivalents of the prior Supabase-js lookups. `ilike` → `ilike.*`,
-  // exact → `eq.`. PostgREST URL-encodes values in the query string.
+type TraderIdentity = {
+  handle: string
+  avatarUrl: string | null
+  source: string
+  sourceTraderId: string
+}
+
+type PublishedTraderCard = {
+  rank: number
+  roi: number
+  score: number
+  winRate: number
+  maxDrawdown: number
+}
+
+function verifiedTraderCard(
+  value: unknown,
+  source: string,
+  sourceTraderId: string,
+  period: string
+): PublishedTraderCard | null {
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value === null ? [] : [value], period },
+    { expectedPeriod: period }
+  ) as { traders?: unknown[] }
+  const row = sanitized.traders?.[0]
+  if (
+    !isRecord(row) ||
+    row.source !== source ||
+    row.source_trader_id !== sourceTraderId ||
+    row.season_id !== period ||
+    typeof row.rank !== 'number' ||
+    !Number.isSafeInteger(row.rank) ||
+    row.rank <= 0 ||
+    typeof row.roi !== 'number' ||
+    !Number.isFinite(row.roi) ||
+    typeof row.arena_score !== 'number' ||
+    !Number.isFinite(row.arena_score) ||
+    typeof row.win_rate !== 'number' ||
+    !Number.isFinite(row.win_rate) ||
+    typeof row.max_drawdown !== 'number' ||
+    !Number.isFinite(row.max_drawdown)
+  ) {
+    return null
+  }
+  return {
+    rank: row.rank,
+    roi: row.roi,
+    score: row.arena_score,
+    winRate: row.win_rate,
+    maxDrawdown: row.max_drawdown,
+  }
+}
+
+async function resolveTraderIdentity(
+  handle: string,
+  sourceHint: string | null
+): Promise<TraderIdentity | null> {
   const enc = encodeURIComponent
-  const decoded = decodeURIComponent(handle)
+  const decoded = safeDecode(handle)
   const cols = 'handle,avatar_url,source,source_trader_id'
+  const sourceFilter = sourceHint ? `&source=eq.${enc(sourceHint)}` : ''
 
   const source =
-    (await restSelect('trader_sources', `select=${cols}&handle=ilike.${enc(handle)}`)) ??
-    (await restSelect('trader_sources', `select=${cols}&source_trader_id=eq.${enc(decoded)}`)) ??
-    (await restSelect(
-      'leaderboard_ranks',
-      `select=${cols}&source_trader_id=eq.${enc(decoded)}&season_id=eq.90D`
+    (await restSelectOne(
+      'trader_sources',
+      `select=${cols}&handle=ilike.${exactIlike(decoded)}${sourceFilter}`
+    )) ??
+    (await restSelectOne(
+      'trader_sources',
+      `select=${cols}&source_trader_id=eq.${enc(decoded)}${sourceFilter}`
     ))
-
   if (!source) return null
-  const srcName = source.source as string
-  const srcTraderId = source.source_trader_id as string
-  if (!isPublicRankingSourceAllowed(srcName)) return null
 
-  // Cascade through season_ids: 90D → 30D → 7D
-  let rankData: Record<string, unknown> | null = null
-  let usedSeason = '90D'
+  const sourceName = typeof source.source === 'string' ? source.source : ''
+  const sourceTraderId = typeof source.source_trader_id === 'string' ? source.source_trader_id : ''
+  if (!sourceName || !sourceTraderId || (sourceHint !== null && sourceName !== sourceHint))
+    return null
+  return {
+    handle:
+      typeof source.handle === 'string' && source.handle.trim().length > 0
+        ? source.handle
+        : decoded,
+    avatarUrl: typeof source.avatar_url === 'string' ? source.avatar_url : null,
+    source: sourceName,
+    sourceTraderId,
+  }
+}
+
+async function fetchTrader(handle: string, sourceHint: string | null) {
+  const identity = await resolveTraderIdentity(handle, sourceHint)
+  if (!identity) return null
+
+  // An identity may remain visible even if its source is not rankable, but no
+  // source label or metric is inferred from the raw serving relation.
+  if (!isPublicRankingSourceAllowed(identity.source)) {
+    return { handle: identity.handle, avatar_url: identity.avatarUrl, platform: '', season: '90D' }
+  }
+
+  const enc = encodeURIComponent
   for (const season of ['90D', '30D', '7D']) {
-    const data = await restSelect(
-      'leaderboard_ranks',
-      `select=roi,pnl,win_rate,max_drawdown,arena_score,rank&source=eq.${enc(srcName)}&source_trader_id=eq.${enc(srcTraderId)}&season_id=eq.${season}`
+    const data = await restSelectOne(
+      'public_ranked_leaderboard',
+      `select=${PUBLIC_RANKING_COLUMNS}&source=eq.${enc(identity.source)}&source_trader_id=eq.${enc(identity.sourceTraderId)}&season_id=eq.${season}`
     )
-    if (data) {
-      rankData = data
-      usedSeason = season
-      break
+    const published = verifiedTraderCard(data, identity.source, identity.sourceTraderId, season)
+    if (published) {
+      return {
+        handle: identity.handle,
+        avatar_url: identity.avatarUrl,
+        platform: identity.source,
+        season,
+        rank: published.rank,
+        roi: published.roi,
+        arena_score: published.score,
+        win_rate: published.winRate,
+        max_drawdown: published.maxDrawdown,
+      }
     }
   }
 
-  // Note: the legacy trader_snapshots fallback was removed — that table was
-  // dropped from prod (phase1_drop_dead_tables). leaderboard_ranks cascade
-  // above is the only data source; missing traders render the no-stats card.
-
-  return { ...source, platform: srcName, season: usedSeason, ...(rankData || {}) }
+  // No raw rank/snapshot fallback: this is intentionally an identity-only OG
+  // card until a view row carries a current publication proof.
+  return {
+    handle: identity.handle,
+    avatar_url: identity.avatarUrl,
+    platform: identity.source,
+    season: '90D',
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // OG 路由不限流(与工作的 rank/homepage/compare edge OG 一致,CDN s-maxage 缓存)。
+    // OG 路由不限流；每次都从 sealed view 读取，避免 CDN 缓存旧的排名证明。
     const { searchParams } = new URL(request.url)
     const handle = searchParams.get('handle')?.slice(0, 200) || ''
 
@@ -191,8 +308,8 @@ export async function GET(request: NextRequest) {
     // Only `source` is allowed as a hint for multi-platform traders.
     // ROI/score/rank overrides removed — prevents attackers from crafting
     // misleading share links with fake stats for any trader.
-    const overrideSource = (searchParams.get('source') || '').slice(0, 50)
-    if (overrideSource && !isPublicRankingSourceAllowed(overrideSource)) {
+    const requestedSource = (searchParams.get('source') || '').slice(0, 50).trim().toLowerCase()
+    if (requestedSource && !isPublicRankingSourceAllowed(requestedSource)) {
       return new Response('Unknown or unavailable ranking source', {
         status: 404,
         headers: publicRankingResponseRejectionHeaders(),
@@ -202,8 +319,12 @@ export async function GET(request: NextRequest) {
     const epochRedirect = redirectToPublicRankingResponseCacheEpoch(request)
     if (epochRedirect) return epochRedirect
 
-    const trader = (await fetchTrader(handle)) as Record<string, unknown> | null
-    const num = (v: unknown): number | null => (typeof v === 'number' ? v : null)
+    const trader = (await fetchTrader(handle, requestedSource || null)) as Record<
+      string,
+      unknown
+    > | null
+    const num = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) ? v : null
     const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
 
     const displayName = str(trader?.display_name) || str(trader?.handle) || handle
@@ -212,7 +333,9 @@ export async function GET(request: NextRequest) {
     const rank = num(trader?.rank)
     const winRate = num(trader?.win_rate)
     const mdd = num(trader?.max_drawdown)
-    const platform = overrideSource || str(trader?.platform) || ''
+    // `source` is a lookup constraint, not a display override. The only source
+    // shown is the source that resolved the exact identity and sealed row.
+    const platform = str(trader?.platform) || ''
     const avatarUrl = str(trader?.avatar_url)
     const season = str(trader?.season) ?? '90D'
     const seasonLabel = season === 'latest' ? 'Latest' : season
@@ -658,9 +781,9 @@ export async function GET(request: NextRequest) {
       {
         width: 1200,
         height: 630,
-        headers: publicRankingResponseCacheHeaders(
-          'public, s-maxage=3600, stale-while-revalidate=86400'
-        ),
+        // A cached OG image can outlive a withdrawn rank proof. Keep this
+        // request-bound to the sealed view instead of serving stale metrics.
+        headers: publicRankingResponseRejectionHeaders(),
       }
     )
   } catch (e) {
@@ -715,9 +838,7 @@ export async function GET(request: NextRequest) {
         {
           width: 1200,
           height: 630,
-          headers: publicRankingResponseCacheHeaders(
-            'public, s-maxage=60, stale-while-revalidate=300'
-          ),
+          headers: publicRankingResponseRejectionHeaders(),
         }
       )
     } catch {
