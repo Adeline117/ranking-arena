@@ -52,6 +52,27 @@ function makeQuery(result: { data: unknown[] | null; error: unknown }) {
   return proxy
 }
 
+function rankedRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'binance-one',
+    handle: 'Binance One',
+    avatar_url: null,
+    roi: 20,
+    pnl: 200,
+    arena_score: 99,
+    rank: 1,
+    win_rate: 55,
+    max_drawdown: 12,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    season_id: '90D',
+    ...overrides,
+  }
+}
+
 import { GET } from '../route'
 
 describe('GET /api/sidebar/top-traders', () => {
@@ -76,76 +97,34 @@ describe('GET /api/sidebar/top-traders', () => {
 
     await expect(GET()).rejects.toBe(databaseError)
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      'public-rank-policy-v7:sidebar:top-traders:v2',
+      'public-rank-policy-v7:sidebar:top-traders:v3',
       expect.any(Function),
       expect.objectContaining({ ttl: 300 })
     )
   })
 
-  it('preserves persisted ranks after exchange diversification and rejects invalid ranks', async () => {
+  it('reads the sealed public view and preserves persisted ranks after exchange diversification', async () => {
     mockFrom.mockReturnValue(
       makeQuery({
         data: [
-          {
-            source: 'binance_futures',
-            source_trader_id: 'binance-one',
-            handle: 'Binance One',
-            avatar_url: null,
-            roi: 20,
-            pnl: 200,
-            arena_score: 99,
-            rank: 1,
-          },
-          {
+          rankedRow(),
+          rankedRow({
             source: 'okx_futures',
             source_trader_id: 'okx-twelve',
             handle: 'OKX Twelve',
-            avatar_url: null,
             roi: 18,
             pnl: 180,
             arena_score: 95,
             rank: 12,
-          },
-          {
-            source: 'binance_futures',
+          }),
+          rankedRow({
             source_trader_id: 'binance-two',
             handle: 'Binance Two',
-            avatar_url: null,
             roi: 17,
             pnl: 170,
             arena_score: 90,
             rank: 2,
-          },
-          {
-            source: 'bybit',
-            source_trader_id: 'null-rank',
-            handle: 'Null Rank',
-            avatar_url: null,
-            roi: 16,
-            pnl: 160,
-            arena_score: 89,
-            rank: null,
-          },
-          {
-            source: 'bybit',
-            source_trader_id: 'fractional-rank',
-            handle: 'Fractional Rank',
-            avatar_url: null,
-            roi: 15,
-            pnl: 150,
-            arena_score: 88,
-            rank: 2.5,
-          },
-          {
-            source: 'bybit',
-            source_trader_id: 'unsafe-rank',
-            handle: 'Unsafe Rank',
-            avatar_url: null,
-            roi: 14,
-            pnl: 140,
-            arena_score: 87,
-            rank: Number.MAX_SAFE_INTEGER + 1,
-          },
+          }),
         ],
         error: null,
       })
@@ -161,5 +140,25 @@ describe('GET /api/sidebar/top-traders', () => {
       ['okx-twelve', 12],
       ['binance-two', 2],
     ])
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
+  it('fails closed rather than shifting a finite sidebar selection after a proof mismatch', async () => {
+    mockFrom.mockReturnValue(
+      makeQuery({
+        data: [rankedRow(), rankedRow({ source_trader_id: 'estimated', metrics_estimated: true })],
+        error: null,
+      })
+    )
+
+    const response = await GET()
+
+    await expect(response.json()).resolves.toEqual({
+      traders: [],
+      ranking_visibility: 'partial',
+      ranking_visibility_reason: 'public_cohort_unverified',
+      ranking_visibility_reasons: ['public_cohort_unverified'],
+    })
   })
 })

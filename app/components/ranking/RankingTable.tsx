@@ -45,12 +45,16 @@ import {
   type Trader,
   type PublishedRankTrader,
   type ColumnKey,
+  type SortColumn,
+  type SortDir,
   type ViewMode,
   DEFAULT_VISIBLE_COLUMNS,
   LS_KEY_COLUMNS,
   MOBILE_CARD_MEDIA_QUERY,
   getInitialRankingViewMode,
   getStoredColumns,
+  normalizeTraderArenaScoreForPresentation,
+  scoreGradeOf,
   selectPublishedRankTraders,
 } from './RankingTableTypes'
 
@@ -102,20 +106,28 @@ function RankingTableInner(props: {
   hasActiveFilters?: boolean
   error?: string | null
   onRetry?: () => void
-  controlledSortColumn?: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
-  controlledSortDir?: 'asc' | 'desc'
+  controlledSortColumn?: SortColumn
+  controlledSortDir?: SortDir
   controlledPage?: number
   controlledSearchQuery?: string
-  onSortChange?: (
-    column: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha',
-    dir: 'asc' | 'desc'
-  ) => void
+  onSortChange?: (column: SortColumn, dir: SortDir) => void
   onPageChange?: (page: number) => void
   onSearchChange?: (query: string) => void
-  /** Server-side total count for pagination (overrides client-side count) */
-  serverTotalCount?: number
+  /** Server-side total count for pagination (overrides client-side count when exact). */
+  serverTotalCount?: number | null
+  /** False means a finite legacy total is not authoritative for this cohort. */
+  totalCountIsExact?: boolean
+  /** Limit+1 look-ahead for server pages whose total is unknown. */
+  hasMore?: boolean
   /** Category counts from server for tab badges */
-  categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
+  categoryCounts?: {
+    all: number | null
+    futures: number | null
+    spot: number | null
+    onchain: number | null
+  } | null
+  /** False means category totals cannot define a finite page boundary. */
+  categoryCountsAreExact?: boolean
 }) {
   const {
     traders: tradersRaw,
@@ -139,7 +151,10 @@ function RankingTableInner(props: {
     onPageChange,
     onSearchChange,
     serverTotalCount,
+    totalCountIsExact,
+    hasMore,
     categoryCounts,
+    categoryCountsAreExact,
   } = props
   const { t, language } = useLanguage()
 
@@ -172,10 +187,8 @@ function RankingTableInner(props: {
   const [internalPage, setInternalPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
   const [showScoreRulesModal, setShowScoreRulesModal] = useState(false)
-  const [internalSortColumn, setInternalSortColumn] = useState<
-    'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
-  >('score')
-  const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
+  const [internalSortColumn, setInternalSortColumn] = useState<SortColumn>('score')
+  const [internalSortDir, setInternalSortDir] = useState<SortDir>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [_sortAnimationKey, setSortAnimationKey] = useState(0)
   const sortTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -291,7 +304,6 @@ function RankingTableInner(props: {
     if (visibleColumns.includes('mdd')) template += ' 64px'
     if (visibleColumns.includes('sharpe')) template += ' 64px'
     if (visibleColumns.includes('sortino')) template += ' 70px'
-    if (visibleColumns.includes('alpha')) template += ' 70px'
     if (visibleColumns.includes('style')) template += ' 80px'
     if (visibleColumns.includes('followers')) template += ' 70px'
     if (visibleColumns.includes('trades')) template += ' 70px'
@@ -314,7 +326,6 @@ function RankingTableInner(props: {
     if (visibleColumns.includes('mdd')) widths.push(64)
     if (visibleColumns.includes('sharpe')) widths.push(64)
     if (visibleColumns.includes('sortino')) widths.push(70)
-    if (visibleColumns.includes('alpha')) widths.push(70)
     if (visibleColumns.includes('style')) widths.push(80)
     if (visibleColumns.includes('followers')) widths.push(70)
     if (visibleColumns.includes('trades')) widths.push(70)
@@ -338,7 +349,6 @@ function RankingTableInner(props: {
       'pnl',
       'sharpe',
       'sortino',
-      'alpha',
       'style',
       'followers',
       'trades',
@@ -349,7 +359,7 @@ function RankingTableInner(props: {
     return attrs
   }, [visibleColumns])
 
-  const handleSort = (col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha') => {
+  const handleSort = (col: SortColumn) => {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
     setJustSortedColumn(col)
     setSortAnimationKey((prev) => prev + 1)
@@ -442,23 +452,7 @@ function RankingTableInner(props: {
     }
     // Apply score grade filter
     if (scoreGradeFilter !== 'all') {
-      data = data.filter((t) => {
-        const s = t.arena_score ?? 0
-        switch (scoreGradeFilter) {
-          case 'S':
-            return s >= 90
-          case 'A':
-            return s >= 70 && s < 90
-          case 'B':
-            return s >= 50 && s < 70
-          case 'C':
-            return s >= 30 && s < 50
-          case 'D':
-            return s < 30
-          default:
-            return true
-        }
-      })
+      data = data.filter((t) => scoreGradeOf(t.arena_score) === scoreGradeFilter)
     }
     const sorted = [...data].sort((a, b) => {
       // Use null to distinguish "no data" from actual 0 — nulls always sort last
@@ -489,11 +483,13 @@ function RankingTableInner(props: {
           aRaw = a.sortino_ratio ?? null
           bRaw = b.sortino_ratio ?? null
           break
-        case 'alpha':
-          aRaw = a.alpha ?? null
-          bRaw = b.alpha ?? null
-          break
       }
+      // A non-finite network/cache scalar is unknown, never a real sorting
+      // signal. Without this boundary Infinity could promote a visually
+      // unknown metric above a published row, while NaN falls through by
+      // accident to an unrelated rank tie-break.
+      aRaw = aRaw != null && Number.isFinite(aRaw) ? aRaw : null
+      bRaw = bRaw != null && Number.isFinite(bRaw) ? bRaw : null
       // Null always goes to the bottom regardless of sort direction
       if (aRaw === null && bRaw === null) return a.rank - b.rank
       if (aRaw === null) return 1
@@ -573,28 +569,33 @@ function RankingTableInner(props: {
     return () => controller.abort()
   }, [viewMode, sortedTraders, cardVisibleCount, source, seriesPeriod])
 
-  // Server-side pagination: use serverTotalCount for total pages.
-  // When serverTotalCount is available, traders array is already one page from the API.
-  // Compute effective category count for correct pagination per tab.
+  // Server pages can deliberately omit totals. Treat an explicit unknown as
+  // server pagination (so this finite page is not sliced as a client-side
+  // collection), and let Pagination expose only the proven limit+1 direction.
+  const hasServerPagination =
+    serverTotalCount !== undefined || totalCountIsExact !== undefined || hasMore !== undefined
+  const categoryTotal =
+    category === 'all' && totalCountIsExact === true
+      ? serverTotalCount
+      : category === 'futures' && categoryCountsAreExact === true
+        ? categoryCounts?.futures
+        : category === 'spot' && categoryCountsAreExact === true
+          ? categoryCounts?.spot
+          : category === 'web3' && categoryCountsAreExact === true
+            ? categoryCounts?.onchain
+            : null
   const effectiveTotalCount =
-    serverTotalCount != null
-      ? category === 'all'
-        ? (categoryCounts?.all ?? serverTotalCount)
-        : category === 'futures'
-          ? (categoryCounts?.futures ?? serverTotalCount)
-          : category === 'spot'
-            ? (categoryCounts?.spot ?? serverTotalCount)
-            : category === 'web3'
-              ? (categoryCounts?.onchain ?? serverTotalCount)
-              : serverTotalCount
+    typeof categoryTotal === 'number' && Number.isFinite(categoryTotal) && categoryTotal >= 0
+      ? categoryTotal
       : null
-
   const totalPages =
-    effectiveTotalCount != null
+    effectiveTotalCount !== null
       ? Math.ceil(effectiveTotalCount / itemsPerPage)
-      : Math.ceil(sortedTraders.length / itemsPerPage)
-  const startIndex = serverTotalCount != null ? 0 : (currentPage - 1) * itemsPerPage
-  const endIndex = serverTotalCount != null ? sortedTraders.length : startIndex + itemsPerPage
+      : hasServerPagination
+        ? null
+        : Math.ceil(sortedTraders.length / itemsPerPage)
+  const startIndex = hasServerPagination ? 0 : (currentPage - 1) * itemsPerPage
+  const endIndex = hasServerPagination ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
   // Equity-trend sparkline for the DESKTOP table ROI cell. Non-blocking, one POST
   // per page of visible rows, streams into equitySeries. Mirrors the card-view
@@ -859,7 +860,6 @@ function RankingTableInner(props: {
             traders={traders}
             source={source}
             timeRange={timeRange}
-            categoryCounts={categoryCounts}
             density={density}
             onDensityChange={handleDensityChange}
           />
@@ -1069,19 +1069,6 @@ function RankingTableInner(props: {
                 <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
               </Box>
             )}
-            {visibleColumns.includes('alpha') && (
-              <Box
-                className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`}
-                as="button"
-                onClick={() => handleSort('alpha')}
-                title={t('alphaTooltip')}
-                aria-label={`${t('alpha')} — ${t('clickToSort')}`}
-                aria-pressed={sortColumn === 'alpha'}
-                data-sortable
-              >
-                Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
-              </Box>
-            )}
             {visibleColumns.includes('style') && (
               <Box className="col-style" style={{ textAlign: 'center' }}>
                 <Text
@@ -1289,11 +1276,12 @@ function RankingTableInner(props: {
                     const rank = trader.rank
                     const series =
                       rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
+                    const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
                     return (
                       <React.Fragment key={`${trader.id}-${trader.source || 'unknown'}`}>
                         <SectionErrorBoundary>
                           <TraderCard
-                            trader={trader}
+                            trader={presentationTrader}
                             rank={rank}
                             source={source}
                             language={language}
@@ -1417,6 +1405,7 @@ function RankingTableInner(props: {
                 >
                   {paginatedTraders.map((trader, idx) => {
                     const rank = trader.rank
+                    const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
                     return (
                       <div
                         key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
@@ -1424,7 +1413,7 @@ function RankingTableInner(props: {
                       >
                         <SectionErrorBoundary>
                           <TraderRow
-                            trader={trader}
+                            trader={presentationTrader}
                             rank={rank}
                             source={source}
                             language={language}
@@ -1448,9 +1437,9 @@ function RankingTableInner(props: {
                 {/* Registration CTA after first page for non-logged-in users */}
                 {!props.loggedIn &&
                   currentPage === 1 &&
-                  (serverTotalCount != null
-                    ? serverTotalCount > itemsPerPage
-                    : sortedTraders.length > itemsPerPage) && (
+                  totalCountIsExact === true &&
+                  serverTotalCount != null &&
+                  serverTotalCount > itemsPerPage && (
                     <button
                       onClick={() => useLoginModal.getState()?.openLoginModal?.()}
                       style={{
@@ -1501,6 +1490,12 @@ function RankingTableInner(props: {
                   <Pagination
                     currentPage={currentPage}
                     totalPages={totalPages}
+                    totalCountIsExact={
+                      effectiveTotalCount !== null ? true : hasServerPagination ? false : true
+                    }
+                    hasMore={
+                      effectiveTotalCount === null && hasServerPagination ? hasMore === true : false
+                    }
                     onPageChange={handlePaginationChange}
                   />
                 </div>

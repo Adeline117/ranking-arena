@@ -80,12 +80,16 @@ const FIXTURES: Trader[] = [
 ]
 
 const mockFetch = jest.fn()
-const mockFetchPage = jest.fn().mockResolvedValue(undefined)
+const mockFetchPage = jest.fn().mockResolvedValue(true)
 
 type HookOptions = {
   traders: Trader[]
   activeTimeRange: TimeRange
   fetchPage?: typeof mockFetchPage
+  initialPageIndex?: number
+  requiresInitialCohortFetch?: boolean
+  initialCohortAttempt?: number
+  onInitialCohortSettled?: (succeeded: boolean) => void
 }
 
 function setup(traders: Trader[] = FIXTURES, extra: Partial<HookOptions> = {}) {
@@ -97,7 +101,7 @@ function setup(traders: Trader[] = FIXTURES, extra: Partial<HookOptions> = {}) {
 beforeEach(() => {
   jest.useFakeTimers()
   jest.clearAllMocks()
-  mockFetchPage.mockResolvedValue(undefined)
+  mockFetchPage.mockResolvedValue(true)
   mockIsPro = true
   mockAuthHeaders = { Authorization: 'Bearer test' }
   global.fetch = mockFetch as never
@@ -202,12 +206,20 @@ describe('URL / localStorage 状态恢复', () => {
     expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['fut-1'])
   })
 
-  it('legacy ?exchange=binance 走服务端通道：设置 selectedExchange 并触发 fetchPage', () => {
+  it('legacy ?exchange=binance 走服务端通道：成功后才设置 selectedExchange', async () => {
     // 旧分享链接 /?exchange=binance 仍要能用 — alias binance → binance_futures
     window.history.replaceState(null, '', '/?exchange=binance')
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
     expect(result.current.selectedExchange).toBe('binance_futures')
-    expect(mockFetchPage).toHaveBeenCalledWith(0, { exchange: 'binance_futures' })
+    expect(mockFetchPage).toHaveBeenCalledWith(0, {
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+      exchange: 'binance_futures',
+    })
   })
 
   it('URL 为空时从 localStorage 恢复 filterConfig（用户偏好跨会话保留）', () => {
@@ -216,6 +228,49 @@ describe('URL / localStorage 状态恢复', () => {
     expect(result.current.filterConfig).toEqual({ min_pnl: 5000 })
     // min_pnl>=5000：fut-1(20000) 和 web3-1(8000)
     expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['fut-1', 'web3-1'])
+  })
+
+  it('a persisted exchange is an initial server cohort, never a cosmetic label on SSR all rows', async () => {
+    window.localStorage.setItem('ranking-exchange', 'binance-futures')
+    const settled = jest.fn()
+    const { result } = setup(FIXTURES, {
+      fetchPage: mockFetchPage,
+      initialPageIndex: 0,
+      requiresInitialCohortFetch: true,
+      onInitialCohortSettled: settled,
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.selectedExchange).toBe('binance_futures')
+    expect(mockFetchPage).toHaveBeenLastCalledWith(0, {
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+      exchange: 'binance_futures',
+    })
+    expect(settled).toHaveBeenLastCalledWith(true)
+  })
+
+  it('does not layer a persisted exchange over a range/page deep link', async () => {
+    window.history.replaceState(null, '', '/?range=30D&page=3')
+    window.localStorage.setItem('ranking-exchange', 'binance-futures')
+    const { result } = setup(FIXTURES, {
+      fetchPage: mockFetchPage,
+      initialPageIndex: 2,
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // The server snapshot is the URL's all-source page 3. Browser storage
+    // may not silently turn that into Binance page 3.
+    expect(result.current.selectedExchange).toBeNull()
+    expect(mockFetchPage).not.toHaveBeenCalled()
+    expect(new URLSearchParams(window.location.search).get('page')).toBe('3')
   })
 })
 
@@ -231,11 +286,15 @@ describe('分类过滤（filterByCategory 真实实现）', () => {
     expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['web3-1'])
   })
 
-  it('服务端模式：setCategory 把 web3 映射为 onchain 传给 fetchPage，客户端不再二次过滤', () => {
+  it('服务端模式：setCategory 把 web3 映射为 onchain 传给 fetchPage，客户端不再二次过滤', async () => {
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
-    act(() => result.current.setCategory('web3'))
+    await act(async () => {
+      result.current.setCategory('web3')
+      await Promise.resolve()
+    })
     expect(mockFetchPage).toHaveBeenCalledWith(0, { category: 'onchain' })
     expect(result.current.currentPage).toBe(1)
+    expect(new URLSearchParams(window.location.search).get('category')).toBe('onchain')
     // API 已按分类过滤，客户端跳过 — 否则双重过滤会把返回页过滤成空
     expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
   })
@@ -256,12 +315,22 @@ describe('高级筛选 handleFilterChange', () => {
     expect(window.localStorage.getItem('ranking-filter-config')).toBeNull()
   })
 
-  it('grade 过滤按真实评分等级（S >= 90）；score 为 null 的 trader 不被 grade 排除', () => {
-    const withNullScore = [...FIXTURES, trader('no-score', { arena_score: undefined })]
+  it('ROI 条件不会把 unknown 当作 0 放行', () => {
+    const withUnknownRoi = [...FIXTURES, trader('unknown-roi', { roi: null })]
+    const { result } = setup(withUnknownRoi)
+
+    act(() => result.current.handleFilterChange({ roi_min: 0 }))
+    expect(result.current.filteredTraders.map((t) => t.id)).not.toContain('unknown-roi')
+
+    act(() => result.current.handleFilterChange({ roi_max: 1_000 }))
+    expect(result.current.filteredTraders.map((t) => t.id)).not.toContain('unknown-roi')
+  })
+
+  it('grade 过滤按真实评分等级（S >= 90）；unknown score 不匹配任何等级', () => {
+    const withNullScore = [...FIXTURES, trader('no-score', { arena_score: null })]
     const { result } = setup(withNullScore)
     act(() => result.current.handleFilterChange({ grade: 'S' }))
-    // fut-1(95)=S 保留；null score 者按当前实现直接放行（grade 只约束有分者）
-    expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['fut-1', 'no-score'])
+    expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['fut-1'])
   })
 
   it('exchange 数组过滤走 resolveExchangeSlug（hyphen slug 也能命中下划线 source）', () => {
@@ -273,9 +342,12 @@ describe('高级筛选 handleFilterChange', () => {
 
 // ---------------------------------------------------------------------------
 describe('排序 / 分页 / 搜索', () => {
-  it('handleSortChange 更新状态、重置页码，并把列名映射为 API 字段', () => {
+  it('handleSortChange 成功后更新状态、重置页码，并把列名映射为 API 字段', async () => {
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
-    act(() => result.current.handleSortChange('winrate', 'asc'))
+    await act(async () => {
+      result.current.handleSortChange('winrate', 'asc')
+      await Promise.resolve()
+    })
     expect(result.current.sortColumn).toBe('winrate')
     expect(result.current.sortDir).toBe('asc')
     expect(result.current.currentPage).toBe(1)
@@ -298,17 +370,168 @@ describe('排序 / 分页 / 搜索', () => {
     expect(params.get('order')).toBe('asc')
   })
 
-  it('handlePageChange 把 1-based UI 页码转成 0-based API 页码，且带上当前排序', () => {
+  it('handlePageChange 成功后把 1-based UI 页码转成 0-based API 页码，且带上当前排序', async () => {
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
-    act(() => result.current.handleSortChange('roi', 'desc'))
+    await act(async () => {
+      result.current.handleSortChange('roi', 'desc')
+      await Promise.resolve()
+    })
     mockFetchPage.mockClear()
-    act(() => result.current.handlePageChange(3))
+    await act(async () => {
+      result.current.handlePageChange(3)
+      await Promise.resolve()
+    })
     expect(result.current.currentPage).toBe(3)
     expect(mockFetchPage).toHaveBeenCalledWith(2, {
       category: undefined,
       sortBy: 'roi',
       sortDir: 'desc',
     })
+  })
+
+  it('does not relabel visible rows as a new page or sort when the cohort request fails', async () => {
+    mockFetchPage.mockResolvedValueOnce(false).mockResolvedValueOnce(false)
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+
+    act(() => result.current.handlePageChange(3))
+    act(() => result.current.handleSortChange('roi', 'asc'))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.currentPage).toBe(1)
+    expect(result.current.sortColumn).toBe('score')
+    expect(result.current.sortDir).toBe('desc')
+    expect(new URLSearchParams(window.location.search).get('page')).toBeNull()
+    expect(new URLSearchParams(window.location.search).get('sort')).toBeNull()
+  })
+
+  it('keeps old page and sort labels while the next cohort request is still pending', async () => {
+    let resolvePage!: (succeeded: boolean) => void
+    let resolveSort!: (succeeded: boolean) => void
+    mockFetchPage
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolvePage = resolve
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveSort = resolve
+          })
+      )
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+
+    act(() => result.current.handlePageChange(3))
+    expect(result.current.currentPage).toBe(1)
+    resolvePage(true)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.currentPage).toBe(3)
+
+    act(() => result.current.handleSortChange('roi', 'asc'))
+    expect(result.current.sortColumn).toBe('score')
+    expect(result.current.sortDir).toBe('desc')
+    resolveSort(true)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.sortColumn).toBe('roi')
+    expect(result.current.sortDir).toBe('asc')
+    expect(result.current.currentPage).toBe(1)
+  })
+
+  it('loads a direct URL target before reporting its page/sort and retries that same target', async () => {
+    const settled = jest.fn()
+    window.history.replaceState(null, '', '/?sort=roi&order=asc&page=3&category=futures')
+    mockFetchPage.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    const { result, rerender } = setup(FIXTURES, {
+      fetchPage: mockFetchPage,
+      initialPageIndex: 2,
+      requiresInitialCohortFetch: true,
+      onInitialCohortSettled: settled,
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(2, {
+      category: 'futures',
+      sortBy: 'roi',
+      sortDir: 'asc',
+      exchange: undefined,
+    })
+    expect(settled).toHaveBeenLastCalledWith(false)
+
+    rerender({
+      traders: FIXTURES,
+      activeTimeRange: '90D',
+      fetchPage: mockFetchPage,
+      initialPageIndex: 2,
+      requiresInitialCohortFetch: true,
+      onInitialCohortSettled: settled,
+      initialCohortAttempt: 1,
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(2, {
+      category: 'futures',
+      sortBy: 'roi',
+      sortDir: 'asc',
+      exchange: undefined,
+    })
+    expect(settled).toHaveBeenLastCalledWith(true)
+    expect(result.current.currentPage).toBe(3)
+    expect(result.current.sortColumn).toBe('roi')
+  })
+
+  it('normalizes legacy alpha URLs to score and never sends alpha to the API', async () => {
+    window.history.replaceState(null, '', '/?sort=alpha&page=2')
+    const { result } = setup(FIXTURES, {
+      fetchPage: mockFetchPage,
+      initialPageIndex: 1,
+      requiresInitialCohortFetch: true,
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.sortColumn).toBe('score')
+    expect(mockFetchPage).toHaveBeenLastCalledWith(1, {
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+      exchange: undefined,
+    })
+    expect(new URLSearchParams(window.location.search).get('sort')).toBe('score')
+  })
+
+  it('renders page one in the first committed range-switch frame, before its effect reset', () => {
+    const renderedPages: number[] = []
+    const { rerender } = renderHook(
+      ({ range }: { range: TimeRange }) => {
+        const filters = useRankingFilters({
+          traders: FIXTURES,
+          activeTimeRange: range,
+          initialPageIndex: 2,
+        })
+        renderedPages.push(filters.currentPage)
+        return filters
+      },
+      { initialProps: { range: '90D' as TimeRange } }
+    )
+    expect(renderedPages.at(-1)).toBe(3)
+
+    const renderCountBeforeRangeCommit = renderedPages.length
+    rerender({ range: '30D' })
+    // Index immediately after rerender is the pre-effect render. A delayed
+    // effect-only reset would leave 3 here and momentarily label 30D p0 rows
+    // as page 3 in the browser.
+    expect(renderedPages[renderCountBeforeRangeCommit]).toBe(1)
   })
 
   it('handleSearchChange 设置 query 并重置页码（新搜索不该停留在旧页）', () => {
@@ -415,27 +638,89 @@ describe('保存筛选器 API', () => {
 
 // ---------------------------------------------------------------------------
 describe('重置与外部事件', () => {
-  it('handleResetFilters 清空全部筛选并显式清除服务端 sticky exchange/category', () => {
+  it('handleResetFilters 在完整 all/score cohort 成功后才清空 UI，并显式清除 sticky filters', async () => {
     window.history.replaceState(null, '', '/?ex=binance-futures&roi_min=60')
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
     mockFetchPage.mockClear()
-    act(() => result.current.handleResetFilters())
+    await act(async () => {
+      result.current.handleResetFilters()
+      await Promise.resolve()
+    })
     expect(result.current.hasActiveFilters).toBe(false)
     expect(result.current.selectedExchange).toBeNull()
     expect(result.current.category).toBe('all')
-    // exchange: undefined 必须显式传 — fetchPage 的 sticky filter 只认显式覆盖
-    expect(mockFetchPage).toHaveBeenCalledWith(0, { exchange: undefined, category: undefined })
+    expect(result.current.sortColumn).toBe('score')
+    expect(result.current.sortDir).toBe('desc')
+    // Every server cohort dimension is explicit — otherwise a previous ROI
+    // sticky sort can return under a newly reset Score label.
+    expect(mockFetchPage).toHaveBeenCalledWith(0, {
+      exchange: undefined,
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+    })
   })
 
-  it('arena:filter-exchange 事件（交易所合作栏点击）设置筛选并触发服务端拉取', () => {
+  it('a failed reset retains the old displayed sort/filter state', async () => {
+    window.history.replaceState(null, '', '/?sort=roi&order=asc&ex=binance-futures')
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
-    act(() => {
+    await act(async () => {
+      await Promise.resolve()
+    })
+    mockFetchPage.mockReset()
+    mockFetchPage.mockResolvedValue(false)
+
+    await act(async () => {
+      result.current.handleResetFilters()
+      await Promise.resolve()
+    })
+
+    expect(result.current.sortColumn).toBe('roi')
+    expect(result.current.sortDir).toBe('asc')
+    expect(result.current.selectedExchange).toBe('binance_futures')
+    expect(mockFetchPage).toHaveBeenCalledWith(0, {
+      exchange: undefined,
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+    })
+  })
+
+  it('arena:filter-exchange 事件（交易所合作栏点击）成功后设置筛选并触发服务端拉取', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
       window.dispatchEvent(
         new CustomEvent('arena:filter-exchange', { detail: { exchange: 'bybit' } })
       )
+      await Promise.resolve()
     })
     expect(result.current.selectedExchange).toBe('bybit')
     expect(mockFetchPage).toHaveBeenCalledWith(0, { exchange: 'bybit' })
+    expect(new URLSearchParams(window.location.search).get('ex')).toBe('bybit')
+    expect(new URLSearchParams(window.location.search).get('page')).toBeNull()
+  })
+
+  it('an exchange marquee failure leaves the existing URL and displayed cohort untouched', async () => {
+    window.history.replaceState(null, '', '/?range=30D&page=3')
+    mockFetchPage.mockResolvedValue(false)
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('arena:filter-exchange', {
+          detail: { exchange: 'bybit', timeRange: '30D' },
+        })
+      )
+      await Promise.resolve()
+    })
+
+    expect(result.current.selectedExchange).toBeNull()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('range')).toBe('30D')
+    expect(params.get('page')).toBe('3')
+    expect(params.get('ex')).toBeNull()
   })
 
   it('formatLastUpdated 按时间差返回对应文案 key（表尾新鲜度提示）', () => {

@@ -45,6 +45,15 @@ export interface UnifiedTrader {
   riskControlScore: number | null
   executionScore: number | null
   scoreConfidence: string | null
+  /**
+   * Exact publication-proof value when this record came from the verified
+   * public cohort. It is deliberately separate from display confidence: a
+   * numeric legacy completeness value must not be upgraded to `full` merely
+   * because a UI mapper can render it that way.
+   */
+  scoreCompleteness?: string | null
+  /** Exact publication-proof value from the ranked cohort, when available. */
+  metricsEstimated?: boolean | null
 
   // Rankings
   rank: number | null

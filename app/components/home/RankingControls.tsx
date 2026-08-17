@@ -16,10 +16,20 @@ const RANGES = ['90D', '30D', '7D'] as const
 
 interface Props {
   activeRange: string
+  /** Zero-based SSR/data page index. URLs themselves are deliberately one-based. */
   page: number
-  totalCount: number
+  /** Null means this SSR response has no same-cohort total authority. */
+  totalCount: number | null
+  /** False makes any legacy numeric value non-authoritative for pagination/UI copy. */
+  totalCountIsExact?: boolean
+  /** Look-ahead result for the current server-side page when totals are unknown. */
+  hasMore?: boolean
   perPage: number
   lastUpdated: string | null
+}
+
+function finiteNonNegative(value: number | null): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
 /** Format a Date to "HH:MM" in the user's locale */
@@ -46,6 +56,8 @@ export default function RankingControls({
   activeRange,
   page,
   totalCount,
+  totalCountIsExact,
+  hasMore,
   perPage,
   lastUpdated,
 }: Props) {
@@ -57,7 +69,19 @@ export default function RankingControls({
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [lastDataTime, setLastDataTime] = useState<string>('')
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / perPage))
+  // A page-derived count is not a total. Only show total-based controls and
+  // promotion copy when the caller explicitly has a finite, exact authority.
+  // Otherwise pagination must be driven solely by the view's limit+1 look-ahead.
+  const exactTotal = totalCountIsExact === true && finiteNonNegative(totalCount) ? totalCount : null
+  const safePerPage = Number.isFinite(perPage) && perPage > 0 ? perPage : null
+  const totalPages =
+    exactTotal !== null && safePerPage !== null
+      ? Math.max(1, Math.ceil(exactTotal / safePerPage))
+      : null
+  const currentPage = Number.isSafeInteger(page) && page >= 0 ? page : 0
+  const hasExactTotal = totalPages !== null
+  const canGoNext = hasExactTotal ? currentPage < totalPages - 1 : hasMore === true
+  const shouldShowPagination = hasExactTotal ? totalPages > 1 : currentPage > 0 || hasMore === true
 
   // Format only after hydration because the browser timezone can differ from
   // the server timezone. The value itself is the leaderboard's compute time,
@@ -104,9 +128,14 @@ export default function RankingControls({
       setNavError(false)
       lastNavRef.current = { range, pg }
 
-      const params = new URLSearchParams()
+      // Preserve client-owned filter/search params while changing the two
+      // dimensions that this SSR island owns. A public URL is human one-based:
+      // `?page=2` means the second page, whereas the reader receives pg=1.
+      const params = new URLSearchParams(window.location.search)
+      params.delete('range')
+      params.delete('page')
       if (range !== '90D') params.set('range', range)
-      if (pg > 0) params.set('page', String(pg))
+      if (pg > 0) params.set('page', String(pg + 1))
       const qs = params.toString()
 
       // PROD-2 (audit): reduced from 8s → 3s. Users started repeat-clicking
@@ -214,48 +243,54 @@ export default function RankingControls({
         ))}
       </div>
 
-      {totalPages > 1 && (
+      {shouldShowPagination && (
         <div className="ssr-pagination">
+          {hasExactTotal && (
+            <button
+              className="ssr-page-btn"
+              onClick={() => navigate(activeRange, 0)}
+              disabled={currentPage <= 0 || isPending}
+              aria-label="First page"
+            >
+              «
+            </button>
+          )}
           <button
             className="ssr-page-btn"
-            onClick={() => navigate(activeRange, 0)}
-            disabled={page <= 0 || isPending}
-            aria-label="First page"
-          >
-            «
-          </button>
-          <button
-            className="ssr-page-btn"
-            onClick={() => navigate(activeRange, page - 1)}
-            disabled={page <= 0 || isPending}
+            onClick={() => navigate(activeRange, currentPage - 1)}
+            disabled={currentPage <= 0 || isPending}
             aria-label="Previous page"
           >
             ‹ {t('rankingControlsPrev')}
           </button>
-          <span className="ssr-page-info" aria-live="polite" aria-atomic="true">
-            {page + 1} / {totalPages}
-          </span>
+          {hasExactTotal && (
+            <span className="ssr-page-info" aria-live="polite" aria-atomic="true">
+              {currentPage + 1} / {totalPages}
+            </span>
+          )}
           <button
             className="ssr-page-btn"
-            onClick={() => navigate(activeRange, page + 1)}
-            disabled={page >= totalPages - 1 || isPending}
+            onClick={() => navigate(activeRange, currentPage + 1)}
+            disabled={!canGoNext || isPending}
             aria-label="Next page"
           >
             {t('rankingControlsNext')} ›
           </button>
-          <button
-            className="ssr-page-btn"
-            onClick={() => navigate(activeRange, totalPages - 1)}
-            disabled={page >= totalPages - 1 || isPending}
-            aria-label="Last page"
-          >
-            »
-          </button>
+          {hasExactTotal && (
+            <button
+              className="ssr-page-btn"
+              onClick={() => navigate(activeRange, totalPages - 1)}
+              disabled={!canGoNext || isPending}
+              aria-label="Last page"
+            >
+              »
+            </button>
+          )}
         </div>
       )}
 
       {/* promo 期(#6):诚实信息条,不推付费——全站限免,"全部已解锁"而非"升级解锁" */}
-      {totalCount > 0 && BETA_PRO_FEATURES_FREE && (
+      {exactTotal !== null && totalPages !== null && exactTotal > 0 && BETA_PRO_FEATURES_FREE && (
         <div
           style={{
             display: 'flex',
@@ -272,13 +307,13 @@ export default function RankingControls({
         >
           {t('rankingControlsShowingTopPromo').replace(
             '{count}',
-            totalCount.toLocaleString('en-US')
+            exactTotal.toLocaleString('en-US')
           )}
         </div>
       )}
 
       {/* Free-tier limit banner — always visible so users know scope upfront */}
-      {totalCount > 0 && !BETA_PRO_FEATURES_FREE && (
+      {exactTotal !== null && totalPages !== null && exactTotal > 0 && !BETA_PRO_FEATURES_FREE && (
         <a
           href="/pricing"
           style={{
@@ -293,20 +328,20 @@ export default function RankingControls({
             fontWeight: tokens.typography.fontWeight.medium,
             color: 'var(--color-text-secondary)',
             background:
-              page >= totalPages - 1
+              currentPage >= totalPages - 1
                 ? 'linear-gradient(135deg, var(--color-bg-secondary, #1a1a2e) 0%, rgba(167,139,250,0.12) 100%)'
                 : 'transparent',
             border:
-              page >= totalPages - 1
+              currentPage >= totalPages - 1
                 ? '1px solid rgba(167, 139, 250, 0.2)'
                 : '1px solid transparent',
             textDecoration: 'none',
             transition: 'border-color 0.2s, background 0.2s',
-            opacity: page >= totalPages - 1 ? 1 : 0.7,
+            opacity: currentPage >= totalPages - 1 ? 1 : 0.7,
           }}
         >
           <span style={{ flex: 1 }}>
-            {t('rankingControlsShowingTop').replace('{count}', totalCount.toLocaleString('en-US'))}
+            {t('rankingControlsShowingTop').replace('{count}', exactTotal.toLocaleString('en-US'))}
           </span>
           <span
             style={{

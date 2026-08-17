@@ -92,6 +92,27 @@ function rankBadges() {
   })
 }
 
+function publicRankedRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: 'binance_futures',
+    source_trader_id: 'trader-id',
+    handle: 'Trader',
+    avatar_url: null,
+    roi: 30,
+    pnl: 1000,
+    win_rate: 60,
+    max_drawdown: 20,
+    arena_score: 99,
+    rank: 1,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    season_id: '90D',
+    ...overrides,
+  }
+}
+
 import { GET } from '../route'
 
 describe('exchange OG rank authority', () => {
@@ -100,68 +121,28 @@ describe('exchange OG rank authority', () => {
     mockImageTree = null
   })
 
-  it('renders persisted safe-integer ranks, reserves medals for actual top three, and drops invalid ranks', async () => {
+  it('renders persisted safe-integer ranks from the public cohort and reserves medals for actual top three', async () => {
     const topQueryCalls: QueryCall[] = []
+    const countQueryCalls: QueryCall[] = []
     mockFrom
       .mockReturnValueOnce(
         makeQuery(
           {
             data: [
-              {
-                source_trader_id: 'rank-one',
-                handle: 'Rank One',
-                avatar_url: null,
-                roi: 30,
-                arena_score: 99,
-                rank: 1,
-              },
-              {
-                source_trader_id: 'null-rank',
-                handle: 'Null Rank',
-                avatar_url: null,
-                roi: 29,
-                arena_score: 98,
-                rank: null,
-              },
-              {
+              publicRankedRow({ source_trader_id: 'rank-one', handle: 'Rank One', rank: 1 }),
+              publicRankedRow({
                 source_trader_id: 'anonymous-id',
                 handle: null,
-                avatar_url: null,
-                roi: 28,
-                arena_score: 97,
                 rank: 12,
-              },
-              {
-                source_trader_id: 'fractional-rank',
-                handle: 'Fractional Rank',
-                avatar_url: null,
-                roi: 27,
-                arena_score: 96,
-                rank: 2.5,
-              },
-              {
-                source_trader_id: 'rank-two',
-                handle: 'Rank Two',
-                avatar_url: null,
-                roi: 26,
-                arena_score: 95,
-                rank: 2,
-              },
-              {
-                source_trader_id: 'unsafe-rank',
-                handle: 'Unsafe Rank',
-                avatar_url: null,
-                roi: 25,
-                arena_score: 94,
-                rank: Number.MAX_SAFE_INTEGER + 1,
-              },
+              }),
+              publicRankedRow({ source_trader_id: 'rank-two', handle: 'Rank Two', rank: 2 }),
             ],
             error: null,
           },
           topQueryCalls
         )
       )
-      .mockReturnValueOnce(makeQuery({ count: 42, error: null }))
+      .mockReturnValueOnce(makeQuery({ count: 42, error: null }, countQueryCalls))
 
     await GET({ url: 'https://arenafi.org/api/og/exchange?exchange=binance_futures' } as never)
 
@@ -180,18 +161,25 @@ describe('exchange OG rank authority', () => {
     expect(colors[2]).toBe('#C0C0C0')
 
     const text = collectText(mockImageTree)
-    expect(text).not.toContain('Null Rank')
-    expect(text).not.toContain('Fractional Rank')
-    expect(text).not.toContain('Unsafe Rank')
+    expect(text).toContain('42 ranked traders')
 
     const select = topQueryCalls.find(({ method }) => method === 'select')
-    expect(select?.args[0]).toBe('source_trader_id, handle, avatar_url, roi, arena_score, rank')
+    expect(select?.args[0]).toBe(
+      'source,source_trader_id,handle,avatar_url,roi,pnl,win_rate,max_drawdown,arena_score,rank,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+    )
     expect(
       topQueryCalls.filter(({ method }) => method === 'order').map(({ args }) => args)
     ).toEqual([
       ['rank', { ascending: true, nullsFirst: false }],
       ['arena_score', { ascending: false, nullsFirst: false }],
     ])
+    expect(countQueryCalls.find(({ method }) => method === 'select')?.args).toEqual([
+      '*',
+      { count: 'exact', head: true },
+    ])
+    expect(mockFrom).toHaveBeenCalledTimes(2)
+    expect(mockFrom).toHaveBeenNthCalledWith(1, 'public_ranked_leaderboard')
+    expect(mockFrom).toHaveBeenNthCalledWith(2, 'public_ranked_leaderboard')
   })
 
   it('uses a stable source identity for an anonymous handle instead of a positional trader name', async () => {
@@ -199,14 +187,13 @@ describe('exchange OG rank authority', () => {
       .mockReturnValueOnce(
         makeQuery({
           data: [
-            {
+            publicRankedRow({
               source_trader_id: 'anonymous-id',
               handle: null,
-              avatar_url: null,
               roi: 20,
               arena_score: 90,
               rank: 12,
-            },
+            }),
           ],
           error: null,
         })
@@ -220,43 +207,67 @@ describe('exchange OG rank authority', () => {
     expect(text).not.toContain('Trader 1')
   })
 
+  it('fails closed instead of replacing a malformed public row with later candidates', async () => {
+    mockFrom
+      .mockReturnValueOnce(
+        makeQuery({
+          data: [
+            publicRankedRow({ source_trader_id: 'rank-one', handle: 'Rank One', rank: 1 }),
+            publicRankedRow({
+              source_trader_id: 'invalid-rank',
+              handle: 'Invalid Rank',
+              rank: null,
+            }),
+            publicRankedRow({ source_trader_id: 'rank-two', handle: 'Rank Two', rank: 2 }),
+          ],
+          error: null,
+        })
+      )
+      .mockReturnValueOnce(makeQuery({ count: 42, error: null }))
+
+    await GET({ url: 'https://arenafi.org/api/og/exchange?exchange=binance_futures' } as never)
+
+    const text = collectText(mockImageTree)
+    expect(text).toContain('Rankings coming soon')
+    expect(text).toContain('Ranked trader count unavailable')
+    expect(text).not.toContain('Rank One')
+    expect(text).not.toContain('Rank Two')
+    expect(rankBadges()).toHaveLength(0)
+  })
+
   it('excludes ranked rows whose ROI or Arena Score is non-finite', async () => {
     mockFrom
       .mockReturnValueOnce(
         makeQuery({
           data: [
-            {
+            publicRankedRow({
               source_trader_id: 'non-finite-roi-nan',
               handle: 'Non-finite ROI NaN',
-              avatar_url: null,
               roi: Number.NaN,
               arena_score: 90,
               rank: 4,
-            },
-            {
+            }),
+            publicRankedRow({
               source_trader_id: 'non-finite-score-infinity',
               handle: 'Non-finite Score Infinity',
-              avatar_url: null,
               roi: 20,
               arena_score: Number.POSITIVE_INFINITY,
               rank: 5,
-            },
-            {
+            }),
+            publicRankedRow({
               source_trader_id: 'non-finite-roi-infinity',
               handle: 'Non-finite ROI Infinity',
-              avatar_url: null,
               roi: Number.NEGATIVE_INFINITY,
               arena_score: 80,
               rank: 6,
-            },
-            {
+            }),
+            publicRankedRow({
               source_trader_id: 'non-finite-score-nan',
               handle: 'Non-finite Score NaN',
-              avatar_url: null,
               roi: 10,
               arena_score: Number.NaN,
               rank: 7,
-            },
+            }),
           ],
           error: null,
         })
@@ -273,5 +284,23 @@ describe('exchange OG rank authority', () => {
     expect(text).not.toContain('Non-finite Score NaN')
     expect(text.some((value) => /NaN|Infinity/.test(value))).toBe(false)
     expect(rankBadges()).toHaveLength(0)
+  })
+
+  it('keeps valid cards but marks the count unknown when the exact view count fails', async () => {
+    mockFrom
+      .mockReturnValueOnce(
+        makeQuery({
+          data: [publicRankedRow({ source_trader_id: 'rank-one', handle: 'Rank One', rank: 1 })],
+          error: null,
+        })
+      )
+      .mockReturnValueOnce(makeQuery({ count: null, error: { message: 'count unavailable' } }))
+
+    await GET({ url: 'https://arenafi.org/api/og/exchange?exchange=binance_futures' } as never)
+
+    const text = collectText(mockImageTree)
+    expect(text).toContain('Rank One')
+    expect(text).toContain('Ranked trader count unavailable')
+    expect(text).not.toContain('0 ranked traders')
   })
 })

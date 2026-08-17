@@ -11,6 +11,7 @@ import { useToast } from '../ui/Toast'
 import { type CategoryType } from './CategoryRankingTabs'
 import { FilterIcon, CompareIcon, SettingsIcon, LockIconSmall } from './Icons'
 import type { ColumnKey, RankingDensity } from './RankingTable'
+import { scoreGradeOf } from './RankingTableTypes'
 import { getFilterableStyles, classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
 
 const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = [
@@ -23,7 +24,7 @@ const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = [
   'followers',
   'trades',
 ]
-// Brand/metric abbreviations (score/roi/pnl/sharpe/sortino/alpha) are
+// Brand/metric abbreviations (score/roi/pnl/sharpe/sortino) are
 // language-neutral literals; the rest resolve via t() for native ja/ko.
 const COLUMN_LITERALS: Partial<Record<ColumnKey, string>> = {
   score: 'Arena Score',
@@ -31,7 +32,6 @@ const COLUMN_LITERALS: Partial<Record<ColumnKey, string>> = {
   pnl: 'PnL',
   sharpe: 'Sharpe',
   sortino: 'Sortino',
-  alpha: 'Alpha',
 }
 const COLUMN_LABEL_KEYS: Partial<Record<ColumnKey, TranslationKey>> = {
   winrate: 'winRate',
@@ -58,9 +58,9 @@ interface ExportRankingButtonProps {
     id: string
     handle: string | null
     source?: string
-    arena_score?: number
+    arena_score?: number | null
     rank?: number | null
-    roi: number
+    roi: number | null
     pnl?: number | null
     win_rate?: number | null
     max_drawdown?: number | null
@@ -428,12 +428,8 @@ export function RankingFilters({
   const scoreCounts = useMemo(() => {
     const c: Record<'S' | 'A' | 'B' | 'C' | 'D', number> = { S: 0, A: 0, B: 0, C: 0, D: 0 }
     for (const tr of traders) {
-      const s = tr.arena_score ?? 0
-      if (s >= 90) c.S++
-      else if (s >= 70) c.A++
-      else if (s >= 50) c.B++
-      else if (s >= 30) c.C++
-      else c.D++
+      const grade = scoreGradeOf(tr.arena_score)
+      if (grade) c[grade]++
     }
     return c
   }, [traders])
