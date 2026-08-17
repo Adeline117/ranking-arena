@@ -15,20 +15,26 @@ import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  filterPublicNonRankingActivities,
+  hasPublicNonRankingActivityTypes,
+  PUBLIC_NON_RANKING_ACTIVITY_TYPES,
+} from '@/lib/feed/public-activity-policy'
 
 const logger = createLogger('feed')
 
-export const revalidate = 60 // ISR: 1 minute
+// An activity row without event-time evidence cannot be retained by ISR and
+// reinterpreted after a publication-policy change.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export const metadata: Metadata = {
   title: 'Trader Activity Feed',
-  description:
-    'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+  description: 'Live feed of reviewed non-ranking trader activity milestones.',
   alternates: { canonical: `${BASE_URL}/feed` },
   openGraph: {
     title: 'Trader Activity Feed',
-    description:
-      'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+    description: 'Live feed of reviewed non-ranking trader activity milestones.',
     url: `${BASE_URL}/feed`,
     siteName: 'Arena',
     type: 'website',
@@ -44,8 +50,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Trader Activity Feed',
-    description:
-      'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+    description: 'Live feed of reviewed non-ranking trader activity milestones.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
@@ -62,14 +67,18 @@ export async function fetchInitialActivities(): Promise<{
   status: 'success' | 'error'
 }> {
   try {
-    const supabase = getSupabaseAdmin()
-
     const LIMIT = 50
+    if (!hasPublicNonRankingActivityTypes()) {
+      return { activities: [], hasMore: false, nextCursor: null, status: 'success' }
+    }
+
+    const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
       .from('trader_activities')
       .select(
         'id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at'
       )
+      .in('activity_type', PUBLIC_NON_RANKING_ACTIVITY_TYPES)
       .order('occurred_at', { ascending: false })
       .limit(LIMIT + 1)
 
@@ -78,8 +87,9 @@ export async function fetchInitialActivities(): Promise<{
       return { activities: [], hasMore: false, nextCursor: null, status: 'error' }
     }
 
-    const hasMore = data.length > LIMIT
-    const page = hasMore ? data.slice(0, LIMIT) : data
+    const admitted = filterPublicNonRankingActivities(data)
+    const hasMore = admitted.length > LIMIT
+    const page = hasMore ? admitted.slice(0, LIMIT) : admitted
     const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].occurred_at : null
 
     return {

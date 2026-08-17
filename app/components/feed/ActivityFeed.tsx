@@ -20,6 +20,11 @@ import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
 import ActivityFeedItem, { activityTypeLabel } from './ActivityFeedItem'
 import { formatTimeAgo } from '@/lib/utils/date'
+import {
+  filterPublicNonRankingActivities,
+  PUBLIC_ACTIVITY_CACHE_EPOCH,
+  PUBLIC_NON_RANKING_ACTIVITY_TYPES,
+} from '@/lib/feed/public-activity-policy'
 
 // ---------------------------------------------------------------------------
 // Filter options
@@ -37,9 +42,9 @@ const _PLATFORM_OPTIONS: { label: string; value: string | null }[] = [
 
 const _TYPE_OPTIONS: { label: string; value: ActivityType | null }[] = [
   { label: 'All', value: null },
-  ...Object.entries(ACTIVITY_META).map(([key, meta]) => ({
-    label: meta.label,
-    value: key as ActivityType,
+  ...PUBLIC_NON_RANKING_ACTIVITY_TYPES.map((type) => ({
+    label: ACTIVITY_META[type].label,
+    value: type,
   })),
 ]
 
@@ -128,9 +133,9 @@ export default function ActivityFeed({
   const typeOptions = useMemo(
     () => [
       { label: t('activityFilterAll'), value: null as ActivityType | null },
-      ...Object.keys(ACTIVITY_META).map((key) => ({
-        label: activityTypeLabel(key as ActivityType, t),
-        value: key as ActivityType,
+      ...PUBLIC_NON_RANKING_ACTIVITY_TYPES.map((type) => ({
+        label: activityTypeLabel(type, t),
+        value: type,
       })),
     ],
     [t]
@@ -150,7 +155,7 @@ export default function ActivityFeed({
     error: queryError,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ['activities', platform, fixedHandle, following],
+    queryKey: [PUBLIC_ACTIVITY_CACHE_EPOCH, 'activities', platform, fixedHandle, following],
     queryFn: async ({ pageParam }: { pageParam: string | null }) => {
       const params = new URLSearchParams()
       params.set('limit', '50')
@@ -193,7 +198,11 @@ export default function ActivityFeed({
   })
 
   const error = queryError ? t('loadFailed') : null
-  const activities = data?.pages.flatMap((p) => p.activities) ?? []
+  // The server is the authority, but retain a client release-boundary check so
+  // an old in-memory/cache payload cannot re-render a ranking-derived row.
+  const activities = filterPublicNonRankingActivities(
+    data?.pages.flatMap((p) => p.activities) ?? []
+  )
   const hasMore = hasNextPage ?? false
 
   const handlePlatformChange = (newPlatform: string | null) => {
@@ -294,7 +303,7 @@ export default function ActivityFeed({
                 ? `${t('activityFeedUpdatedPrefix')} ${formatTimeAgo(newestAt, language)}`
                 : error
                   ? t('loadFailed')
-                  : t('activityFeedLive')}
+                  : t('activityFeedEmpty')}
           </span>
         </div>
       </div>
