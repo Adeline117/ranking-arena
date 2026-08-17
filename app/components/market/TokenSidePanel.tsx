@@ -1,19 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRef } from 'react'
 // CSS animations replace framer-motion (~40KB bundle savings)
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import dynamic from 'next/dynamic'
-import { apiFetch } from '@/lib/utils/api-fetch'
-import type { OHLCVDataPoint } from '@/app/components/charts/TradingViewChart'
-import type { Time } from 'lightweight-charts'
-
-const TradingViewChart = dynamic(() => import('@/app/components/charts/TradingViewChart'), {
-  ssr: false,
-})
 
 interface TokenInfo {
   id: string
@@ -28,14 +20,6 @@ interface TokenInfo {
   low24h: number
   rank: number
 }
-
-const PERIODS = [
-  { label: '1D', days: '1' },
-  { label: '7D', days: '7' },
-  { label: '30D', days: '30' },
-  { label: '90D', days: '90' },
-  { label: '1Y', days: '365' },
-] as const
 
 function formatNum(n: number | null | undefined): string {
   if (n == null) return '--'
@@ -83,55 +67,10 @@ export default function TokenSidePanel({
   token: TokenInfo | null
   onClose: () => void
 }) {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const panelRef = useRef<HTMLDivElement>(null)
-  const [ohlcData, setOhlcData] = useState<OHLCVDataPoint[]>([])
-  const [selectedPeriod, setSelectedPeriod] = useState('30')
-  const [chartLoading, setChartLoading] = useState(false)
-  const [chartError, setChartError] = useState(false)
-  const [chartTheme, setChartTheme] = useState<'dark' | 'light'>('dark')
-
-  useEffect(() => {
-    const getTheme = () =>
-      (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark'
-    setChartTheme(getTheme())
-    const observer = new MutationObserver(() => setChartTheme(getTheme()))
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    })
-    return () => observer.disconnect()
-  }, [])
 
   useModalA11y({ open: !!token, onClose })
-
-  // Fetch OHLC data
-  const fetchOhlc = useCallback(async (id: string, days: string) => {
-    setChartLoading(true)
-    setChartError(false)
-    try {
-      const raw = await apiFetch<number[][]>(`/api/market/ohlc/${id}?days=${days}`)
-      const data: OHLCVDataPoint[] = raw.map(([ts, o, h, l, c]) => ({
-        time: (ts / 1000) as Time,
-        open: o,
-        high: h,
-        low: l,
-        close: c,
-      }))
-      setOhlcData(data)
-    } catch {
-      setChartError(true)
-      setOhlcData([])
-    } finally {
-      setChartLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!token) return
-    fetchOhlc(token.id, selectedPeriod)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
-  }, [token?.id, selectedPeriod, fetchOhlc])
 
   const headerChange24h = token?.change24h ?? 0
 
@@ -304,104 +243,22 @@ export default function TokenSidePanel({
                 </span>
               </div>
 
-              {/* Chart */}
-              <div
-                style={{
-                  marginBottom: 20,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  borderRadius: tokens.radius.lg,
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Period selector */}
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 4,
-                    padding: '8px 12px',
-                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                  }}
-                >
-                  {PERIODS.map((p) => (
-                    <button
-                      key={p.days}
-                      type="button"
-                      onClick={() => setSelectedPeriod(p.days)}
-                      aria-pressed={selectedPeriod === p.days}
-                      style={{
-                        background:
-                          selectedPeriod === p.days ? 'var(--color-brand-deep)' : 'transparent',
-                        color:
-                          selectedPeriod === p.days
-                            ? tokens.colors.white
-                            : tokens.colors.text.tertiary,
-                        border: 'none',
-                        borderRadius: tokens.radius.sm,
-                        padding: '4px 10px',
-                        fontSize: tokens.typography.fontSize.xs,
-                        fontWeight: tokens.typography.fontWeight.semibold,
-                        cursor: 'pointer',
-                        transition: tokens.transition.fast,
-                      }}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ position: 'relative', minHeight: 280 }}>
-                  {chartLoading && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 2,
-                        color: tokens.colors.text.tertiary,
-                        fontSize: tokens.typography.fontSize.sm,
-                      }}
-                    >
-                      {t('loading')}
-                    </div>
-                  )}
-                  {chartError && !chartLoading && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: tokens.colors.text.tertiary,
-                        fontSize: tokens.typography.fontSize.sm,
-                      }}
-                    >
-                      {t('chartUnavailable')}
-                    </div>
-                  )}
-                  {ohlcData.length > 0 && (
-                    <TradingViewChart
-                      data={ohlcData}
-                      type="candlestick"
-                      height={280}
-                      theme={chartTheme}
-                      locale={language}
-                    />
-                  )}
-                </div>
-              </div>
-
+              {/* Retired OHLC acquisition */}
               <div
                 role="status"
                 style={{
                   marginBottom: 20,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.lg,
+                  minHeight: 160,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   padding: 16,
                   background: tokens.colors.bg.tertiary,
-                  borderRadius: tokens.radius.md,
-                  textAlign: 'center',
                   color: tokens.colors.text.tertiary,
                   fontSize: tokens.typography.fontSize.sm,
+                  textAlign: 'center',
                 }}
               >
                 {t('dataUnavailable')}
