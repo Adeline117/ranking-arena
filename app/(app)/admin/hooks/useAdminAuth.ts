@@ -1,72 +1,163 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
+import { useEffect, useRef } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { authedFetch } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import { getGlobalToast } from '@/lib/hooks/useApiMutation'
 import { t } from '@/lib/i18n'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
-// Admin check is done via database role in user_profiles.role
-// This prevents exposing admin emails in the client bundle
+type AdminVerification = 'checking' | 'authorized' | 'forbidden' | 'unavailable'
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const expected = [...keys].sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function readAdminSessionAcknowledgement(value: unknown, expectedUserId: string): boolean {
+  if (!isRecord(value) || !hasExactKeys(value, ['success', 'data', 'meta'])) return false
+  if (value.success !== true || !isRecord(value.data) || !isRecord(value.meta)) return false
+  if (!hasExactKeys(value.data, ['admin']) || !hasExactKeys(value.meta, ['timestamp'])) return false
+  if (
+    typeof value.meta.timestamp !== 'string' ||
+    !Number.isFinite(Date.parse(value.meta.timestamp))
+  ) {
+    return false
+  }
+
+  const admin = value.data.admin
+  return (
+    isRecord(admin) &&
+    hasExactKeys(admin, ['email', 'id']) &&
+    admin.id === expectedUserId &&
+    typeof admin.email === 'string'
+  )
+}
+
+// Admin UI authority is intentionally verified by the same server boundary as
+// every privileged API. Client-side user_profiles.role is not equivalent to
+// the production ADMIN_EMAILS + active-profile contract in verifyAdmin().
 export function useAdminAuth() {
   const router = useRouter()
   const pathname = usePathname()
-  const [email, setEmail] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [authChecking, setAuthChecking] = useState(true)
-  const [userId, setUserId] = useState<string | null>(null)
+  const auth = useAuthSession()
+  const { getToken } = auth
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${auth.userId ?? ''}\u0000${auth.accessToken ?? ''}`
+  const scopeKeyRef = useRef(scopeKey)
+  scopeKeyRef.current = scopeKey
+  const [verification, setVerification] = useViewerOwnedState<AdminVerification>(
+    'checking',
+    () => 'checking',
+    scopeKey
+  )
 
   useEffect(() => {
-    checkAuth()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; checkAuth uses router/supabase which are stable
-  }, [])
+    if (!auth.authChecked || auth.loading) return
 
-  async function checkAuth() {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+    const controller = new AbortController()
+    const requestScopeKey = scopeKey
+    const requestIsCurrent = () =>
+      !controller.signal.aborted && scopeKeyRef.current === requestScopeKey
 
-      if (!session?.user) {
-        router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`)
-        return
-      }
-
-      setEmail(session.user.email ?? null)
-      setAccessToken(session.access_token)
-      setUserId(session.user.id)
-
-      // Check admin status via database role (secure, server-validated)
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle()
-
-      if (profile?.role !== 'admin') {
-        // Not an admin: tell them why before redirecting (was a silent bounce
-        // to the homepage — confusing for internal staff who mis-click).
-        getGlobalToast()?.(t('u13admin_accessRequired'), 'error')
-        router.push('/')
-        return
-      }
-
-      setIsAdmin(true)
-      setAuthChecking(false)
-    } catch (error) {
-      logger.error('Auth check failed:', error)
-      router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`)
+    if (!auth.userId || !auth.accessToken || auth.viewerKey !== `user:${auth.userId}`) {
+      setVerification('forbidden')
+      router.replace(`/login?returnUrl=${encodeURIComponent(pathname)}`)
+      return () => controller.abort()
     }
-  }
+
+    const expectedUserId = auth.userId
+    const expectedGeneration = auth.sessionGeneration
+    const accessToken = auth.accessToken
+    setVerification('checking')
+
+    void (async () => {
+      try {
+        const freshToken = await getToken()
+        if (!requestIsCurrent()) return
+        if (!freshToken) {
+          setVerification('unavailable')
+          logger.error('Admin authority token refresh failed')
+          return
+        }
+        // getToken() may rotate the bearer and synchronously publish a new
+        // canonical auth scope. The new render owns the corresponding probe;
+        // never send or authorize the old scope with that replacement token.
+        if (freshToken !== accessToken) return
+
+        const result = await authedFetch<unknown>(
+          '/api/admin/authority',
+          'GET',
+          accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId,
+            expectedSessionGeneration: expectedGeneration,
+            signal: controller.signal,
+          }
+        )
+        if (result.stale || !requestIsCurrent()) return
+
+        if (result.ok && readAdminSessionAcknowledgement(result.data, expectedUserId)) {
+          setVerification('authorized')
+          return
+        }
+
+        setVerification('forbidden')
+        if (result.status === 403) {
+          getGlobalToast()?.(t('u13admin_accessRequired'), 'error')
+          router.replace('/')
+        } else {
+          setVerification('unavailable')
+          logger.error('Admin authority verification failed:', {
+            status: result.status,
+          })
+        }
+      } catch (error) {
+        if (!requestIsCurrent()) return
+        setVerification('unavailable')
+        logger.error('Admin authority verification failed:', error)
+      }
+    })()
+
+    return () => controller.abort()
+  }, [
+    auth.accessToken,
+    auth.authChecked,
+    auth.loading,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    getToken,
+    pathname,
+    router,
+    scopeKey,
+    setVerification,
+  ])
+
+  const isAdmin =
+    auth.authChecked &&
+    !auth.loading &&
+    Boolean(auth.userId && auth.accessToken) &&
+    verification === 'authorized'
+  const signedInReady =
+    auth.authChecked &&
+    !auth.loading &&
+    Boolean(auth.userId && auth.accessToken && auth.viewerKey === `user:${auth.userId}`)
 
   return {
-    email,
-    accessToken,
+    email: isAdmin ? auth.email : null,
+    accessToken: isAdmin ? auth.accessToken : null,
     isAdmin,
-    authChecking,
-    userId,
+    authChecking:
+      !auth.authChecked || auth.loading || (signedInReady && verification === 'checking'),
+    userId: isAdmin ? auth.userId : null,
   }
 }
