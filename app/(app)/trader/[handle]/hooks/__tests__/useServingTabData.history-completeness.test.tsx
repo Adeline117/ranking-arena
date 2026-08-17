@@ -41,7 +41,11 @@ function coreResult(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function coreModule(timeframe: 7 | 30 | 90, currency: ServingCurrency = 'USD') {
+function coreModule(
+  timeframe: 7 | 30 | 90,
+  currency: ServingCurrency = 'USD',
+  overrides: Record<string, unknown> = {}
+) {
   return {
     timeframe,
     stats: {},
@@ -50,6 +54,7 @@ function coreModule(timeframe: 7 | 30 | 90, currency: ServingCurrency = 'USD') {
     extras: {},
     provenance: { source: 'gmx', asOf: '2026-08-16T00:00:00.000Z' },
     cacheState: 'warm',
+    ...overrides,
   }
 }
 
@@ -239,6 +244,46 @@ describe('useServingTabData history completeness', () => {
       '90D': null,
     })
     expect(view.result.current.currency).toBe('USDC')
+  })
+
+  it('does not merge shorter-window money facts into a different canonical unit', () => {
+    ;(useTraderCore as jest.Mock).mockImplementation(({ tf }: { tf: 7 | 30 | 90 }) => {
+      if (tf === 30) {
+        return coreResult({
+          modules: coreModule(30, 'USDC', {
+            stats: { total_pnl: 30 },
+            extras: { margin_balance: 30, total_pnl: 30 },
+          }),
+        })
+      }
+      if (tf === 90) {
+        return coreResult({
+          modules: coreModule(90, 'USDT', {
+            stats: { pnl: 90 },
+            extras: { margin_balance: 90 },
+          }),
+        })
+      }
+      return coreResult()
+    })
+
+    const view = renderHook(() =>
+      useServingTabData(
+        {
+          source: 'gmx',
+          exchangeTraderId: 'trader-a',
+          nickname: 'Trader A',
+          avatarSrc: null,
+        },
+        capability,
+        true
+      )
+    )
+
+    expect(view.result.current.currency).toBe('USDT')
+    expect(view.result.current.metaExtras).toEqual({ margin_balance: 90 })
+    expect(view.result.current.gridStats).toMatchObject({ pnl: 90 })
+    expect(view.result.current.gridStats).not.toHaveProperty('total_pnl')
   })
 
   it('shows simultaneous collection and stale disclosure, then retries only failed timeframes', async () => {

@@ -274,10 +274,17 @@ export function useServingTabData(
     // M2-2e: extras fallback-merge across TFs. 90d wins; keys captured only on
     // shorter TFs (some sources emit per-TF extras) fill in WITHOUT clobbering —
     // otherwise those fields never display (the grid/card/strip read one blob).
+    // A source should use one contract currency, but if upstream violates that
+    // invariant do not combine a shorter-window money fact with this screen's
+    // canonical unit. Suppressing the incompatible fallback is safer than
+    // relabeling USDC/USDT/USDx as another amount.
+    const extras7 = m7 && m7.currency === currency ? m7.extras : {}
+    const extras30 = m30 && m30.currency === currency ? m30.extras : {}
+    const extras90 = m90 && m90.currency === currency ? m90.extras : {}
     const mergedExtras: Record<string, unknown> = {
-      ...(m7?.extras ?? {}),
-      ...(m30?.extras ?? {}),
-      ...(m90?.extras ?? {}),
+      ...extras7,
+      ...extras30,
+      ...extras90,
     }
     // M2-2e extended (2026-07-03 display audit): same cross-TF fill for TYPED
     // stat columns. Risk metrics (mdd/sharpe/win_positions) are often computed
@@ -285,8 +292,12 @@ export function useServingTabData(
     // trader HAS them at 30d/7d (audit saw MDD/Sharpe "--" in the grid but
     // present in the Stats section + drawdown chart). 90d wins; a null 90d
     // column borrows the first non-null shorter-TF value — mirrors mergedExtras.
-    const mergedGridStats: Record<string, number | string | null> = { ...(m90?.stats ?? {}) }
-    for (const src of [m30?.stats, m7?.stats]) {
+    const mergedGridStats: Record<string, number | string | null> = {
+      ...(m90 && m90.currency === currency ? m90.stats : {}),
+    }
+    for (const coreModule of [m30, m7]) {
+      if (coreModule?.currency !== currency) continue
+      const src = coreModule.stats
       if (!src) continue
       for (const [k, v] of Object.entries(src)) {
         if (
@@ -307,9 +318,9 @@ export function useServingTabData(
       tf90: m90?.stats ?? null,
       // sortino/calmar live in extras (not typed columns) — the Overview
       // MetricBadgesGrid dashed them without this (audit 2026-07-03).
-      extras7: m7?.extras ?? null,
-      extras30: m30?.extras ?? null,
-      extras90: m90?.extras ?? null,
+      extras7,
+      extras30,
+      extras90,
     })
     const pnlDisclosures: NonNullable<ExtendedPerformance['pnlDisclosures']> = {}
     const disclosure7 = readGmxRealizedNetModuleDisclosure(source, 7, m7)
