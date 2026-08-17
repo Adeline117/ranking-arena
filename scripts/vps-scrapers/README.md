@@ -1,30 +1,28 @@
-# VPS Playwright Scraper Handlers
+# Historical VPS Playwright Scraper Handlers — V1 NO-GO
 
-These scripts are designed to run on the VPS Playwright scraper (45.76.152.169:3456).
-They intercept XHR/fetch requests from exchange copy-trading SPA pages to extract trader data.
+This directory is retained as historical source/design context only. It is not a VPS
+address book, deployment guide, handler-registration recipe, process-management guide,
+or authorization to access a host.
 
-## Deployment
+## Checked-in containment
 
-1. SSH to VPS: `ssh root@45.76.152.169`
-2. Copy handler files to `/opt/scraper/handlers/`
-3. Register in `/opt/scraper/server.js`
-4. Restart: `pm2 restart arena-scraper`
+The legacy scraper/proxy source entrypoints `scripts/vps-deploy/scraper-v16-parallel.js`
+and `scripts/vps-deploy/arena-proxy.mjs` report `RETIRED` and exit `2` before browser,
+proxy, import, or host work. The related historical import and verification entrypoints
+listed in `scripts/import/NEW_EXCHANGES_README.md` have the same source-only behavior.
+The checked-in Cloudflare Worker separately returns fixed `410
+LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with three `no-store` headers and no upstream fetch.
 
-## Platforms Needing Handlers
+This does not stop, inspect, restart, or prove an already deployed VPS scraper/proxy,
+Cloudflare Worker, host process, queue, or schedule. Do not infer that every browser,
+adapter, helper, or source write is held: `app/api/cron/backfill-avatars`, avatar
+helpers, adapters, and any unlisted path are outside this containment review.
 
-| Platform | Page URL | Strategy |
-|----------|----------|----------|
-| KuCoin | https://www.kucoin.com/copytrading | Intercept `_api/copytrading/*` XHR |
-| WEEX | https://www.weex.com/en/copy-trade | Intercept copy-trade API XHR |
-| Kwenta | https://kwenta.eth.limo | Intercept leaderboard/stats XHR |
-| BitMart | https://www.bitmart.com/copy-trading | Intercept `copy-trade/v1/*` XHR |
-| BTSE | https://www.btse.com/en/futures/copy-trading | Intercept `api.btse.com` XHR |
+## Historical design surfaces
 
-## Pattern
-
-Each handler:
-1. Opens the page in headless Chrome
-2. Sets up request interception via `page.on('response')`
-3. Waits for the SPA to load and make API calls
-4. Captures the JSON response from the internal API
-5. Returns normalized trader data
+Older handlers modelled browser-observed copy-trading surfaces for KuCoin, WEEX,
+Kwenta, BitMart, and BTSE. Their presence records an old parser/normalization design;
+it does not show that a browser endpoint exists, that a source is healthy, or that a
+worker may be started. A future owner-approved plan must define the exact source,
+evidence, runtime owner, publication boundary, and rollback plan before any operational
+procedure can be published.

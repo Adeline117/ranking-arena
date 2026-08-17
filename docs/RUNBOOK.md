@@ -60,6 +60,28 @@ checkpoint, and legacy-backfill entrypoints covered by the V1 tombstone contract
 RETIRED compatibility paths that exit 2 and cannot be used as an alternate operations
 route.
 
+### V1 legacy proxy/import acquisition boundary
+
+Do not use a proxy, a browser scraper, an import script, or a Cloudflare deployment as
+a workaround for an unavailable source. The checked-in source hold is limited to these
+historical entrypoints: `GET /api/proxy/phemex`, `cloudflare-worker/src/index.ts`,
+`scripts/import/import_all_platforms.mjs`, `scripts/import/refresh.sh`,
+`scripts/import/import-all-blocked.sh`, `scripts/import/run_hl_enrichment.sh`,
+`scripts/vps-deploy/scraper-v16-parallel.js`, `scripts/vps-deploy/arena-proxy.mjs`,
+`scripts/archive/test-vps-scrapers.ts`, and
+`scripts/archive/verify-data-accuracy.mjs`.
+
+Phemex is auth-first: missing/invalid service authentication returns `401`; valid
+authentication returns `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`; both return the
+three `no-store` headers before URL/query parsing, upstream fetch, or logging. The
+checked-in Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with
+the same headers and no upstream fetch. The named scripts report `RETIRED` and exit
+`2` before proxy, browser, import, or host work. This is source-only containment, not
+an instruction to stop, inspect, restart, or prove an already deployed host, worker,
+proxy, queue, or schedule. It does not classify `app/api/cron/backfill-avatars`, avatar
+helpers, adapters, or another unlisted source/write path; those remain outside this
+runbook's conclusion.
+
 ### Symptom: Cron job stuck in "running" status
 
 Record the job identity and timestamp through an approved read-only log/catalog
@@ -162,8 +184,10 @@ fixed-false `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately removes legacy
 refresh-job admission and consumption: `batch-discover` is an auth-first `401/410`
 tombstone, public trader refresh is an auth-first `401/410` tombstone with no
 body/rate-limit/queue work, legacy detail exposes `refresh_job: null`, and
-`batch-5min` retains only post hot-score maintenance. Legacy proxy/import paths still
-require separate containment rather than a canary or workaround.
+`batch-5min` retains only post hot-score maintenance. The separately named legacy
+proxy/import entrypoints above are source tombstones; do not treat that limited list as
+authority to operate, stop, or inspect a proxy/import runtime, or as a claim that every
+source write has been closed.
 
 Do not enqueue a canary, read worker credentials, select a region, or inspect a
 worker directly from this runbook. A future owner-approved ingest plan must specify

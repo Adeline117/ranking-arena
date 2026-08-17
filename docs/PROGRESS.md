@@ -19,6 +19,23 @@
 详细阶段只在对应权威文档维护；`EXCHANGE_FIELD_COVERAGE.md` 是机器生成快照，禁止手改。旧日期段落保留
 为历史记录，不覆盖本表。
 
+## V1 legacy proxy/import source containment（2026-08-16）
+
+本轮只在源码中封存指定的历史 acquisition entrypoint：`GET /api/proxy/phemex`、
+`cloudflare-worker/src/index.ts`、`scripts/import/import_all_platforms.mjs`、
+`scripts/import/refresh.sh`、`scripts/import/import-all-blocked.sh`、
+`scripts/import/run_hl_enrichment.sh`、`scripts/vps-deploy/scraper-v16-parallel.js`、
+`scripts/vps-deploy/arena-proxy.mjs`、`scripts/archive/test-vps-scrapers.ts` 与
+`scripts/archive/verify-data-accuracy.mjs`。Phemex 保持 auth-first `401/410
+LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` 和三层 `no-store`；checked-in Cloudflare Worker
+固定 `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED`、不做 upstream fetch；列出的 scripts 固定
+`RETIRED`/exit `2`，不启动 proxy、browser、import 或 host work。
+
+这不是已部署状态：它不停止、检查或证明 VPS scraper/proxy、Cloudflare Worker、host process、
+queue 或 schedule，也不封存所有 source write。`app/api/cron/backfill-avatars`、avatar helper、
+adapter 与未列 import/write utility 都在范围外，需独立审查。下方的主机、worker、生产验证或
+历史部署陈述仍是带日期的历史记录，不能用来推断当前运行状态或生成操作步骤。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）

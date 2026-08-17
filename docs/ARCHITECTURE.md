@@ -11,7 +11,9 @@
 > they do not stop or prove the state of an external worker or schedule.
 > `V1_INGEST_EXECUTION_PUBLISHED=false` is a third, separate source guard for the
 > checked-in native ingest command path; it is neither a live-host assertion nor a
-> blanket classification of legacy queue, proxy, or import paths.
+> blanket classification of legacy queue, proxy, or import paths. The separate legacy
+> proxy/import hold applies only to its explicitly listed historical entrypoints and
+> is not a claim that every source writer or helper is disabled.
 
 ## 一、系统全景（历史 / 设计语义）
 
@@ -159,7 +161,22 @@ Tier-C 的分支以 pending 降级，不初始化 provider/ioredis/BullMQ bridge
 `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker）已单独封存 legacy `refresh_jobs`：
 `batch-discover` 为 auth-first `401/410` tombstone，`batch-5min` 已移除 queue consumer，
 public trader refresh 不再接纳 job，legacy detail 固定 `refresh_job: null`。它不涵盖
-legacy proxy/import path，后者须另行审查。
+legacy proxy/import path；后者由下面独立且范围有限的审查封存。
+
+本次单独的 legacy proxy/import source hold 现在只涵盖以下历史入口：
+`GET /api/proxy/phemex`、`cloudflare-worker/src/index.ts`、
+`scripts/import/import_all_platforms.mjs`、`scripts/import/refresh.sh`、
+`scripts/import/import-all-blocked.sh`、`scripts/import/run_hl_enrichment.sh`、
+`scripts/vps-deploy/scraper-v16-parallel.js`、`scripts/vps-deploy/arena-proxy.mjs`、
+`scripts/archive/test-vps-scrapers.ts` 和
+`scripts/archive/verify-data-accuracy.mjs`。Phemex route 保持 auth-first：无效认证 `401`，
+有效认证 `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`，两条路径均有三层 `no-store`，并在
+URL/query、upstream fetch 或 logging 前结束。checked-in Cloudflare Worker 对任意请求固定
+`410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与三层 `no-store`、不 fetch；列出的脚本均在 proxy、
+browser、import 或 host 工作前报告 `RETIRED` 并 exit `2`。这些代码门禁不停止、不检查也不证明
+任何已部署 CF Worker、VPS proxy/scraper、host process、queue 或 external schedule。它们也不
+涉及 `app/api/cron/backfill-avatars`、avatar helper、adapter 或任何未列 source/write path；后者
+没有在本 PR 中被关闭或重新分类。
 
 未来的发布流程必须由 owner 重新定义并单独批准：精确 candidate SHA、隔离目标、受保护
 source/reviewer 边界、数据库兼容性、只读证据、可逆失败边界和保留的审计材料。具体操作

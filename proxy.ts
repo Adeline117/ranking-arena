@@ -73,8 +73,13 @@ const PUBLIC_ROUTES = [
   '/api/comments', // GET 请求允许
 ]
 
-// 需要跳过的路由
-const SKIP_ROUTES = ['/_next', '/favicon.ico', '/api/health', '/api/cron']
+// 需要跳过的路由前缀
+const SKIP_ROUTE_PREFIXES = ['/_next', '/favicon.ico', '/api/health', '/api/cron']
+
+// Exact route handoffs that own their response contract. In particular, the
+// retired Phemex acquisition route must authenticate and emit its no-store
+// 401/410 response before any global Redis rate limit or bot guard can reply.
+const SKIP_EXACT_ROUTES = new Set(['/api/proxy/phemex'])
 
 // ============================================
 // Rate Limiting
@@ -258,7 +263,10 @@ function isProtectedRoute(pathname: string, method: string): boolean {
  * 检查是否应跳过代理
  */
 function shouldSkip(pathname: string): boolean {
-  return SKIP_ROUTES.some((route) => pathname.startsWith(route))
+  return (
+    SKIP_EXACT_ROUTES.has(pathname) ||
+    SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route))
+  )
 }
 
 /**
