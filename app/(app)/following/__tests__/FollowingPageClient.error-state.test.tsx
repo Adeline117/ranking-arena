@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockAuthedFetch = jest.fn()
 const mockShowToast = jest.fn()
@@ -194,6 +194,15 @@ const alice = {
   arena_score: 88,
 }
 
+const bob = {
+  ...alice,
+  id: 'bob-id',
+  identity_key: 'bybit:bob-id',
+  handle: 'Bob',
+  source: 'bybit',
+  platform: 'bybit',
+}
+
 describe('FollowingPageClient load errors', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -316,5 +325,198 @@ describe('FollowingPageClient load errors', () => {
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('operationFailed', 'error'))
     expect(screen.getAllByText('Alice').length).toBeGreaterThan(0)
     expect(mockShowToast).not.toHaveBeenCalledWith('followingUnfollowed', 'success')
+  })
+
+  it('does not let an older refresh reintroduce an account after unfollow succeeds', async () => {
+    let resolveRefresh:
+      | ((value: { data: Record<string, unknown>; ok: boolean; status: number }) => void)
+      | undefined
+    let refreshSignal: AbortSignal | undefined
+
+    mockAuthedFetch.mockImplementation(
+      (
+        _url: string,
+        method: string,
+        _token: string,
+        _body: unknown,
+        _timeout: number,
+        options: { signal?: AbortSignal }
+      ) => {
+        if (method === 'POST') {
+          return Promise.resolve(
+            response({
+              success: true,
+              data: {
+                following: false,
+                source: 'binance_futures',
+                traderId: 'alice-id',
+              },
+            })
+          )
+        }
+        if (mockAuthedFetch.mock.calls.length === 1) {
+          return Promise.resolve(response({ hasMore: false, items: [alice] }))
+        }
+        if (mockAuthedFetch.mock.calls.length > 3) {
+          return Promise.resolve(response({ hasMore: false, items: [] }))
+        }
+        refreshSignal = options.signal
+        return new Promise((resolve) => {
+          resolveRefresh = resolve
+        })
+      }
+    )
+
+    render(<FollowingPageClient />)
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh following' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(refreshSignal?.aborted).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'followingUnfollowTitle' }))
+
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+    expect(refreshSignal?.aborted).toBe(true)
+    await waitFor(() => expect(screen.queryByText('Alice')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh following' }))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
+
+    await act(async () => {
+      resolveRefresh?.(response({ hasMore: false, items: [alice] }))
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh following' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(4))
+  })
+
+  it('does not start a list snapshot while an unfollow is unresolved', async () => {
+    let resolveUnfollow:
+      | ((value: { data: Record<string, unknown>; ok: boolean; status: number }) => void)
+      | undefined
+    mockAuthedFetch
+      .mockResolvedValueOnce(response({ hasMore: false, items: [alice] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveUnfollow = resolve
+          })
+      )
+      .mockResolvedValueOnce(response({ hasMore: false, items: [] }))
+
+    render(<FollowingPageClient />)
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'followingUnfollowTitle' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh following' }))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      resolveUnfollow?.(
+        response({
+          success: true,
+          data: {
+            following: false,
+            source: 'binance_futures',
+            traderId: 'alice-id',
+          },
+        })
+      )
+      await Promise.resolve()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh following' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+  })
+
+  it('rebases the next-page offset after removing a loaded account', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(response({ hasMore: true, items: [alice, bob] }))
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          data: {
+            following: false,
+            source: 'binance_futures',
+            traderId: 'alice-id',
+          },
+        })
+      )
+      .mockResolvedValueOnce(response({ hasMore: false, items: [] }))
+
+    render(<FollowingPageClient />)
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Bob').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'followingUnfollowTitle' })[0])
+    await waitFor(() => expect(screen.queryByText('Alice')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('followingUnfollowed', 'success')
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'loadMore' }))
+    await waitFor(() =>
+      expect(mockAuthedFetch).toHaveBeenLastCalledWith(
+        `/api/following?userId=${VIEWER_A}&limit=50&offset=1`,
+        'GET',
+        'token-a',
+        undefined,
+        15_000,
+        expect.objectContaining({
+          expectedSessionGeneration: 1,
+          expectedUserId: VIEWER_A,
+          signal: expect.any(AbortSignal),
+        })
+      )
+    )
+  })
+
+  it('rebases a retained failed-page retry after unfollow succeeds', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(response({ hasMore: true, items: [alice, bob] }))
+      .mockResolvedValueOnce(response({ error: 'Unavailable' }, 503))
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          data: {
+            following: false,
+            source: 'binance_futures',
+            traderId: 'alice-id',
+          },
+        })
+      )
+      .mockResolvedValueOnce(response({ hasMore: false, items: [] }))
+
+    render(<FollowingPageClient />)
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'loadMore' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load following')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'followingUnfollowTitle' })[0])
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('followingUnfollowed', 'success')
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() =>
+      expect(mockAuthedFetch).toHaveBeenLastCalledWith(
+        `/api/following?userId=${VIEWER_A}&limit=50&offset=1`,
+        'GET',
+        'token-a',
+        undefined,
+        15_000,
+        expect.objectContaining({
+          expectedSessionGeneration: 1,
+          expectedUserId: VIEWER_A,
+          signal: expect.any(AbortSignal),
+        })
+      )
+    )
   })
 })

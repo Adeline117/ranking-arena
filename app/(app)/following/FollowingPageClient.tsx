@@ -315,6 +315,11 @@ function ViewerScopedFollowingPage({
     async (item: FollowItem, e: React.MouseEvent) => {
       e.stopPropagation()
       if (!viewer || unfollowingId || unfollowOperationRef.current) return
+      // A list snapshot started before this mutation can complete after the
+      // unfollow and reintroduce the removed item. Invalidate that snapshot
+      // before publishing the optimistic state; the mutation result is now
+      // the newest authority for this list.
+      fetchControllerRef.current?.abort()
       const operation: UnfollowOperation = {
         controller: new AbortController(),
         id: ++nextUnfollowOperationIdRef.current,
@@ -370,6 +375,16 @@ function ViewerScopedFollowingPage({
         if (!acknowledged) {
           throw new Error(`Unfollow failed (${result.status})`)
         }
+        // The server list lost one row that was already counted in our local
+        // cursor. Rebase both the next page and any retained append retry so
+        // offset pagination cannot skip the item that shifted into this slot.
+        offsetRef.current = Math.max(0, offsetRef.current - 1)
+        if (failedRequestRef.current.append) {
+          failedRequestRef.current = {
+            ...failedRequestRef.current,
+            offset: Math.max(0, failedRequestRef.current.offset - 1),
+          }
+        }
         showToast(t('followingUnfollowed'), 'success')
       } catch {
         if (
@@ -399,7 +414,7 @@ function ViewerScopedFollowingPage({
   const fetchingRef = useRef(false)
   const fetchFollowing = useCallback(
     async (offset: number, append: boolean) => {
-      if (!viewer || fetchingRef.current) return
+      if (!viewer || fetchingRef.current || unfollowOperationRef.current) return
       const operationViewer = viewer
       const controller = new AbortController()
       fetchControllerRef.current = controller
