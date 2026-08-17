@@ -120,8 +120,9 @@ const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
 ])
 // Parameterized holds cannot be enumerated in the exact-path Set. Market holds
 // deliberately accept only one non-empty route segment. Attestation verification
-// is narrower still: only a literal bytes32 UID is handed off, so mint and
-// neighboring namespaces and descendants still receive normal proxy handling.
+// and EVM portfolio acquisition are narrower still: they hand off only a literal
+// bytes32 UID or lowercase-0x 40-hex address, so neighboring namespaces and
+// descendants still receive normal proxy handling.
 const PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS = [
   /^\/api\/market\/coin\/[^/]+$/,
   /^\/api\/v1\/market\/coin\/[^/]+$/,
@@ -129,6 +130,8 @@ const PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS = [
   /^\/api\/v1\/market\/ohlc\/[^/]+$/,
   /^\/api\/attestation\/0x[a-fA-F0-9]{64}$/,
   /^\/api\/v1\/attestation\/0x[a-fA-F0-9]{64}$/,
+  /^\/api\/portfolio\/0x[a-fA-F0-9]{40}$/,
+  /^\/api\/v1\/portfolio\/0x[a-fA-F0-9]{40}$/,
 ] as const
 const REFERRAL_PROGRAM_BYPASS_PATHS = new Set([
   '/api/referral',

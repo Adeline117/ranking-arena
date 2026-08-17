@@ -134,6 +134,9 @@ const PUBLIC_API_ROUTES = new Set([
   // Attestation verification is a fixed public-egress 410: it does not read a
   // UID or invoke EAS, viem, logging, or Base RPC verification.
   'attestation/[uid]',
+  // Anonymous EVM portfolio acquisition is a fixed public-egress 410: it does
+  // not read a path value or invoke the EVM adapter, cache, logger, or RPC.
+  'portfolio/[address]',
   // 自验证型（token/签名即凭证，无会话可言）
   'auth/siwe/nonce',
   'auth/siwe/verify',

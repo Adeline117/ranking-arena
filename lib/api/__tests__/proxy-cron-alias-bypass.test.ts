@@ -14,6 +14,10 @@ const UPPERCASE_BYTES32_ATTESTATION_UID = `0x${'A'.repeat(64)}`
 const SHORT_ATTESTATION_UID = `0x${'a'.repeat(63)}`
 const LONG_ATTESTATION_UID = `0x${'a'.repeat(65)}`
 const NON_HEX_ATTESTATION_UID = `0x${'g'.repeat(64)}`
+const EVM_PORTFOLIO_ADDRESS = `0x${'a'.repeat(40)}`
+const UPPERCASE_EVM_PORTFOLIO_ADDRESS = `0x${'A'.repeat(40)}`
+const SHORT_EVM_PORTFOLIO_ADDRESS = `0x${'a'.repeat(39)}`
+const LONG_EVM_PORTFOLIO_ADDRESS = `0x${'a'.repeat(41)}`
 
 describe('cron proxy bypass paths', () => {
   it.each(['/api/cron/backfill-avatars', '/api/v1/cron/backfill-avatars'])(
@@ -93,6 +97,8 @@ describe('public egress hold bypass paths', () => {
     '/api/v1/market/ohlc/bitcoin',
     `/api/attestation/${BYTES32_ATTESTATION_UID}`,
     `/api/v1/attestation/${UPPERCASE_BYTES32_ATTESTATION_UID}`,
+    `/api/portfolio/${EVM_PORTFOLIO_ADDRESS}`,
+    `/api/v1/portfolio/${UPPERCASE_EVM_PORTFOLIO_ADDRESS}`,
     '/api/market/futures',
     '/api/v1/market/futures',
     '/api/market/fear-greed',
@@ -185,6 +191,30 @@ describe('public egress hold bypass paths', () => {
     `/api/v1/attestation/0X${'a'.repeat(64)}`,
     `/api/v1/attestation/${BYTES32_ATTESTATION_UID}/child`,
     '/api/v1/attestations/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    '/api/portfolio',
+    '/api/portfolio/',
+    '/api/portfolio/positions',
+    '/api/portfolio/snapshots',
+    '/api/portfolio/sync',
+    '/api/portfolio/suggestions',
+    '/api/portfolio/not-an-address',
+    `/api/portfolio/${SHORT_EVM_PORTFOLIO_ADDRESS}`,
+    `/api/portfolio/${LONG_EVM_PORTFOLIO_ADDRESS}`,
+    `/api/portfolio/0X${'a'.repeat(40)}`,
+    `/api/portfolio/${EVM_PORTFOLIO_ADDRESS}/child`,
+    `/api/portfolios/${EVM_PORTFOLIO_ADDRESS}`,
+    '/api/v1/portfolio',
+    '/api/v1/portfolio/',
+    '/api/v1/portfolio/positions',
+    '/api/v1/portfolio/snapshots',
+    '/api/v1/portfolio/sync',
+    '/api/v1/portfolio/suggestions',
+    '/api/v1/portfolio/not-an-address',
+    `/api/v1/portfolio/${SHORT_EVM_PORTFOLIO_ADDRESS}`,
+    `/api/v1/portfolio/${LONG_EVM_PORTFOLIO_ADDRESS}`,
+    `/api/v1/portfolio/0X${'a'.repeat(40)}`,
+    `/api/v1/portfolio/${EVM_PORTFOLIO_ADDRESS}/child`,
+    `/api/v1/portfolios/${EVM_PORTFOLIO_ADDRESS}`,
     '/api/market/futures/child',
     '/api/market/future',
     '/api/market/futures-history',
