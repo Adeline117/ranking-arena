@@ -148,6 +148,15 @@ classifier/translator 的运行时行为；它们仍需独立审查。这只是 
 manager 或 scheduler 的状态。`worker/deploy-ingest-local.sh`、`worker/deploy-ingest-sg.sh`、其各自安全
 契约以及其他 runtime ownership 路径均不在此次范围内。
 
+## V1 social seed CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/seed-quality-content.ts` 与 `scripts/social-seed/generate-posts.ts` 两个 social
+seed compatibility path。它们无论传入何种参数均固定输出 `RETIRED` 并以 exit `2` 结束，不读取环境、
+fetch 或读写 posts/comments。
+
+此 source-only boundary 不改变正常 social API、UI、RLS、cache 或既有 posts/comments；也不停止、检查
+或证明仓库外 cron、已部署 script、数据库或历史 seed 数据的状态。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
