@@ -190,14 +190,25 @@ describe('legacy trader-position-history relation freeze', () => {
         sql: withoutComments(readFileSync(join(migrationDir, name), 'utf8')),
       }))
 
-    for (const candidate of laterMigrations) {
-      expect(candidate.sql, candidate.name).not.toMatch(/\bcreate_next_tph_partition\b/i)
-      expect(candidate.sql, candidate.name).not.toMatch(
-        /GRANT\s+[\s\S]{0,180}\b(?:trader_position_history(?:_partitioned|_old)?|tph_[a-zA-Z0-9_]+)\b/i
-      )
-      expect(candidate.sql, candidate.name).not.toMatch(
-        /DROP\s+TRIGGER\s+(?:reject_legacy_position_history_before_write|reject_legacy_position_history_before_truncate)\b/i
-      )
-    }
+    // Jest's expect() takes a single argument, so collect `migration: rule`
+    // pairs and compare against [] to keep the offending file in the diff.
+    const forbidden: Array<[string, RegExp]> = [
+      ['create_next_tph_partition', /\bcreate_next_tph_partition\b/i],
+      [
+        'legacy relation grant',
+        /GRANT\s+[\s\S]{0,180}\b(?:trader_position_history(?:_partitioned|_old)?|tph_[a-zA-Z0-9_]+)\b/i,
+      ],
+      [
+        'legacy guard trigger drop',
+        /DROP\s+TRIGGER\s+(?:reject_legacy_position_history_before_write|reject_legacy_position_history_before_truncate)\b/i,
+      ],
+    ]
+    const violations = laterMigrations.flatMap((candidate) =>
+      forbidden
+        .filter(([, pattern]) => pattern.test(candidate.sql))
+        .map(([rule]) => `${candidate.name}: ${rule}`)
+    )
+
+    expect(violations).toEqual([])
   })
 })

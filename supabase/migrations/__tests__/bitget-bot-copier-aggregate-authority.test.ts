@@ -116,8 +116,10 @@ describe('Bitget bot copier aggregate authority', () => {
 
   it('maps SQL NULL or malformed JSON to the existing pending/no-store API contract', () => {
     expect(recordsReader).toContain('if (error || !isPlainRecord(data)) return null')
+    // c391be19c removed the shared cache from the copier aggregate: authority
+    // responses are no-store, and NULL/malformed still resolves to pending.
     expect(recordsRoute).toMatch(
-      /if \(aggregate\)[\s\S]*withCache\([\s\S]*return apiSuccess\(\{ cacheState: 'pending' as const \}, 200, \{ 'Cache-Control': 'no-store' \}\)/
+      /if \(aggregate\)[\s\S]*return apiSuccess\(aggregate, 200, METRIC_AUTHORITY_NO_STORE_HEADERS\)[\s\S]*return apiSuccess\(\{ cacheState: 'pending' as const \}, 200, \{ 'Cache-Control': 'no-store' \}\)/
     )
   })
 
