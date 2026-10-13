@@ -23,7 +23,7 @@ import { withPublic } from '@/lib/api/middleware'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { error as apiError, success as apiSuccess } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
-import { getFirstScreen } from '@/lib/data/serving/first-screen'
+import { getPublicFirstScreen } from '@/lib/data/serving/first-screen'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import {
   METRIC_AUTHORITY_NO_STORE_HEADERS,
@@ -116,7 +116,9 @@ export async function GET(
       if (!resolved) throw ApiError.notFound('Trader not found')
 
       const [firstScreenRaw, capabilities, verifiedKeys] = await Promise.all([
-        getFirstScreen(supabase, resolved.source, resolved.exchangeTraderId),
+        // The helper reads the current sealed public cohort before publishing
+        // rank/ROI/PnL; raw arena_first_screen values remain identity/extras only.
+        getPublicFirstScreen(supabase, resolved.source, resolved.exchangeTraderId),
         cachedCapabilities(),
         getVerifiedTraderKeys(supabase),
       ])

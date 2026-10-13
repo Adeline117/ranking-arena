@@ -1,96 +1,43 @@
 /**
- * Platform Statistics API
+ * Public platform statistics.
  *
- * GET /api/rankings/platform-stats
- *
- * Returns aggregated per-platform statistics from leaderboard_ranks (90D).
- * Includes trader count, average/median arena score, average ROI per platform.
- *
- * Response: { platforms: PlatformStat[], season: '90D' }
- * Cache: 1 hour (s-maxage=3600)
+ * Per-platform aggregate ranking metrics require their own sealed aggregate
+ * publication. The legacy RPC reads raw rank rows, so it cannot be used as a
+ * public fallback while that authority is unavailable.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/api'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { logger } from '@/lib/logger'
-import {
-  isPublicRankingSourceAllowed,
-  PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-  PUBLIC_RANKING_REDIS_TAG,
-  publicRankingCacheKey,
-} from '@/lib/rankings/publication-policy'
 
-// Remove force-dynamic so Vercel CDN can cache this response.
-// The tieredGetOrSet below caches at the Redis layer (1h TTL).
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-interface PlatformStat {
-  platform: string
-  traderCount: number
-  avgScore: number
-  avgRoi: number
-  medianScore: number
-  avgWinRate: number | null
-}
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
+const UNAVAILABLE_PLATFORM_STATS = {
+  platforms: [],
+  season: '90D',
+  ranking_visibility: 'unknown',
+  ranking_visibility_reason: 'platform_stats_publication_unavailable',
+  ranking_visibility_reasons: ['platform_stats_publication_unavailable'],
+} as const
+
+/**
+ * GET /api/rankings/platform-stats
+ *
+ * Keep the historical response shape (`platforms`, `season`) while making
+ * unavailable aggregate evidence explicit. This response deliberately reads
+ * neither Redis nor a database/RPC: an old cache entry could otherwise replay
+ * raw aggregate ranking metrics after the public authority has been removed.
+ */
 export async function GET(request: NextRequest) {
-  try {
-    const rl = await checkRateLimit(request, RateLimitPresets.read)
-    if (rl) return rl
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
+  if (rateLimitResponse) return rateLimitResponse
 
-    const CACHE_KEY = publicRankingCacheKey('rankings:platform-stats:90D')
-
-    const platformStats = await tieredGetOrSet<PlatformStat[]>(
-      CACHE_KEY,
-      async () => {
-        const supabase = getSupabaseAdmin()
-
-        // Single SQL GROUP BY via RPC — 47ms vs 4.5s (30 paginated queries)
-        const { data: rpcRows, error: rpcError } = await supabase.rpc('get_platform_stats', {
-          p_season_id: '90D',
-        })
-
-        if (rpcError) throw new Error(`RPC get_platform_stats failed: ${rpcError.message}`)
-        if (!rpcRows || rpcRows.length === 0) return []
-
-        return (
-          rpcRows as Array<{
-            platform: string
-            trader_count: number
-            avg_score: number
-            avg_roi: number
-            median_score: number
-            avg_win_rate: number
-          }>
-        )
-          .filter((row) => isPublicRankingSourceAllowed(row.platform))
-          .map((row) => ({
-            platform: row.platform,
-            traderCount: Number(row.trader_count),
-            avgScore: Number(row.avg_score),
-            avgRoi: Number(row.avg_roi),
-            medianScore: Number(row.median_score),
-            avgWinRate: row.avg_win_rate != null ? Number(row.avg_win_rate) : null,
-          }))
-      },
-      'cold', // 1-hour Redis TTL
-      [PUBLIC_RANKING_REDIS_TAG, 'platform-stats'],
-      { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
-    )
-
-    return NextResponse.json(
-      { platforms: platformStats, season: '90D' },
-      {
-        headers: {
-          'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
-        },
-      }
-    )
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    logger.error('[platform-stats]', message)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  return NextResponse.json(UNAVAILABLE_PLATFORM_STATS, { headers: NO_STORE_HEADERS })
 }

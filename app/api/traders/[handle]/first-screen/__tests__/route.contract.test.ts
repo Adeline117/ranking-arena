@@ -103,9 +103,9 @@ jest.mock('@/lib/data/serving/resolve', () => ({
   resolveServingTrader: (...args: unknown[]) => mockResolveServingTrader(...args),
 }))
 
-const mockGetFirstScreen = jest.fn()
+const mockGetPublicFirstScreen = jest.fn()
 jest.mock('@/lib/data/serving/first-screen', () => ({
-  getFirstScreen: (...args: unknown[]) => mockGetFirstScreen(...args),
+  getPublicFirstScreen: (...args: unknown[]) => mockGetPublicFirstScreen(...args),
 }))
 
 const mockGetSourceCapabilities = jest.fn()
@@ -141,7 +141,7 @@ describe('GET /api/traders/[handle]/first-screen boundary contract', () => {
     jest.clearAllMocks()
     mockGetDataMode.mockResolvedValue('serving')
     mockResolveServingTrader.mockResolvedValue(null)
-    mockGetFirstScreen.mockResolvedValue(null)
+    mockGetPublicFirstScreen.mockResolvedValue(null)
     mockGetSourceCapabilities.mockResolvedValue({})
     mockGetVerifiedTraderKeys.mockResolvedValue(new Set<string>())
   })
@@ -196,7 +196,7 @@ describe('GET /api/traders/[handle]/first-screen boundary contract', () => {
       avatarMirrorUrl: null,
       avatarOriginUrl: null,
     })
-    mockGetFirstScreen.mockResolvedValueOnce({
+    mockGetPublicFirstScreen.mockResolvedValueOnce({
       source: 'bitunix_futures',
       exchangeTraderId: 'canonical-account-id',
       nickname: 'Alias Trader',
@@ -253,7 +253,7 @@ describe('GET /api/traders/[handle]/first-screen boundary contract', () => {
       handle: 'Alias Trader',
       source: 'bitunix',
     })
-    expect(mockGetFirstScreen).toHaveBeenCalledWith(
+    expect(mockGetPublicFirstScreen).toHaveBeenCalledWith(
       mockSupabase,
       'bitunix_futures',
       'canonical-account-id'

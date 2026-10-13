@@ -1,22 +1,19 @@
 /**
- * Tier-A first screen (spec §2.4-1): one RPC call returns everything the
- * profile page needs to render with ZERO on-demand fetching — identity +
- * the latest passing leaderboard entry per timeframe, including the board
- * extras the exchange itself displayed (win rate, MDD, copiers, sparkline).
+ * Tier-A first screen (spec §2.4-1): the arena RPC supplies identity and
+ * board-display observations. Public rank/ROI/PnL are overlaid only from the
+ * current sealed public cohort; the raw RPC must never become rank authority.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logRpcError } from './log-rpc-error'
-import { money } from '@/lib/utils/money'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import { projectBoardExtras } from './board-extras'
-import type { ServingCurrency, TraderFirstScreen } from './types'
-
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
-
-function asCurrency(v: unknown, fallback: ServingCurrency = 'USDT'): ServingCurrency {
-  return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : fallback
-}
+import {
+  fetchPublicProfileRankingRows,
+  PUBLIC_PROFILE_RANKING_PERIODS,
+  type PublicProfileRankingResult,
+} from '@/lib/data/trader/public-profile-ranking'
+import type { TraderFirstScreen } from './types'
 
 function numOrNull(v: unknown): number | null {
   if (v === null || v === undefined) return null
@@ -26,16 +23,82 @@ function numOrNull(v: unknown): number | null {
 
 interface RpcEntry {
   timeframe: number
-  rank: number
-  headlineRoi: number | string | null
-  headlinePnl: number | string | null
   headlineWinRate: number | string | null
-  currency: string | null
   extras: Record<string, unknown> | null
   asOf: string
 }
 
-export async function getFirstScreen(
+type RankingPeriod = (typeof PUBLIC_PROFILE_RANKING_PERIODS)[number]
+
+function rankingPeriodFor(timeframe: 7 | 30 | 90): RankingPeriod {
+  return `${timeframe}D` as RankingPeriod
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function unknownRankingEntry(
+  entry: TraderFirstScreen['entries'][number],
+  visibility: TraderFirstScreen['entries'][number]['rankingVisibility'],
+  reason: string | null
+): TraderFirstScreen['entries'][number] {
+  return {
+    ...entry,
+    rank: null,
+    rankingVisibility: visibility,
+    rankingVisibilityReason: reason,
+    headlineRoi: null,
+    // `public_ranked_leaderboard` deliberately has no settlement-currency
+    // column. A raw board currency cannot certify a public ranking PnL value.
+    headlinePnl: null,
+  }
+}
+
+/**
+ * Apply the narrow, already-sanitized public ranking projection to an arena
+ * first-screen observation. Missing/malformed/currently-withdrawn cohort rows
+ * fail closed per timeframe: identity/extras can remain visible, but rank,
+ * ROI and PnL cannot leak from the board RPC.
+ */
+export function overlayPublicFirstScreenRanking(
+  firstScreen: TraderFirstScreen,
+  cohort: PublicProfileRankingResult
+): TraderFirstScreen {
+  const rowsByPeriod = new Map(cohort.rows.map((row) => [row.season_id, row]))
+
+  return {
+    ...firstScreen,
+    entries: firstScreen.entries.map((entry) => {
+      const row = rowsByPeriod.get(rankingPeriodFor(entry.timeframe))
+      if (!row) {
+        return unknownRankingEntry(
+          entry,
+          cohort.rankingVisibility,
+          cohort.rankingVisibilityReason ?? 'public_rank_unavailable'
+        )
+      }
+
+      const roi = finiteOrNull(row.roi)
+      if (!Number.isSafeInteger(row.rank) || row.rank <= 0 || roi === null) {
+        return unknownRankingEntry(entry, 'unknown', 'public_cohort_unverified')
+      }
+
+      return {
+        ...entry,
+        rank: row.rank,
+        rankingVisibility: 'verified',
+        rankingVisibilityReason: null,
+        headlineRoi: roi,
+        // Keep PnL unknown until the public cohort exposes a currency-attested
+        // Money projection. Never relabel a public number with raw RPC currency.
+        headlinePnl: null,
+      }
+    }),
+  }
+}
+
+async function getArenaFirstScreen(
   supabase: SupabaseClient,
   source: string,
   exchangeTraderId: string
@@ -49,7 +112,6 @@ export async function getFirstScreen(
   const d = data as Record<string, unknown>
   if (typeof d.source !== 'string' || typeof d.exchangeTraderId !== 'string') return null
 
-  const sourceCurrency = asCurrency(d.currency)
   const rawEntries = Array.isArray(d.entries) ? (d.entries as RpcEntry[]) : []
   const avatarMirrorUrl = typeof d.avatarMirrorUrl === 'string' ? d.avatarMirrorUrl : null
   const avatarOriginUrl = typeof d.avatarOriginUrl === 'string' ? d.avatarOriginUrl : null
@@ -70,12 +132,13 @@ export async function getFirstScreen(
     entries: rawEntries
       .filter((e) => e.timeframe === 7 || e.timeframe === 30 || e.timeframe === 90)
       .map((e) => {
-        const pnl = numOrNull(e.headlinePnl)
         return {
           timeframe: e.timeframe as 7 | 30 | 90,
-          rank: e.rank,
-          headlineRoi: numOrNull(e.headlineRoi),
-          headlinePnl: pnl === null ? null : money(pnl, asCurrency(e.currency, sourceCurrency)),
+          rank: null,
+          rankingVisibility: 'unknown' as const,
+          rankingVisibilityReason: 'public_cohort_unavailable',
+          headlineRoi: null,
+          headlinePnl: null,
           headlineWinRate: numOrNull(e.headlineWinRate),
           extras: projectBoardExtras(d.source as string, e.extras),
           provenance: { source: d.source as string, asOf: e.asOf },
@@ -83,3 +146,44 @@ export async function getFirstScreen(
       }),
   }
 }
+
+/**
+ * Public Tier-A reader. It intentionally bypasses cross-request rank caches:
+ * a source being withdrawn from the sealed cohort must remove its header rank
+ * on the next render rather than replay a previously valid board observation.
+ */
+export async function getPublicFirstScreen(
+  supabase: SupabaseClient,
+  source: string,
+  exchangeTraderId: string
+): Promise<TraderFirstScreen | null> {
+  const [firstScreen, cohort] = await Promise.all([
+    getArenaFirstScreen(supabase, source, exchangeTraderId),
+    fetchPublicProfileRankingRows(supabase, {
+      source,
+      sourceTraderId: exchangeTraderId,
+      periods: PUBLIC_PROFILE_RANKING_PERIODS,
+    }),
+  ])
+
+  if (!firstScreen) return null
+
+  // The RPC identity is an observation, not a reason to change the exact
+  // public-cohort scope requested by the resolved route identity. A mismatch
+  // therefore returns identity/extras only with all ranking fields unknown.
+  if (firstScreen.source !== source || firstScreen.exchangeTraderId !== exchangeTraderId) {
+    return overlayPublicFirstScreenRanking(firstScreen, {
+      rows: [],
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'first_screen_identity_mismatch',
+    })
+  }
+
+  return overlayPublicFirstScreenRanking(firstScreen, cohort)
+}
+
+/**
+ * Backward-compatible name for existing serving callers. It is deliberately
+ * the same sealed-cohort reader, never the raw arena_first_screen mapper.
+ */
+export const getFirstScreen = getPublicFirstScreen

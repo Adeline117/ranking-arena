@@ -10,73 +10,157 @@
  * point. SVG (not next/og PNG) so it embeds anywhere via <img>, scales
  * crisply, and stays tiny.
  *
- * Edge runtime + CDN-cached. Public serving data only (leaderboard_ranks /
+ * Edge runtime. Public serving data only (public_ranked_leaderboard /
  * trader_sources). Never errors the embed: an unknown handle returns a generic
  * "View on Arena" badge, not a 404, so a trader's page never shows a broken
  * image.
  */
 
 import type { NextRequest } from 'next/server'
-import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import {
-  publicRankingResponseCacheHeaders,
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
+import {
+  publicRankingResponseRejectionHeaders,
   redirectToPublicRankingResponseCacheEpoch,
 } from '@/lib/rankings/public-response-cache'
 
 export const runtime = 'edge'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const PUBLIC_RANKING_COLUMNS =
+  'season_id,source,source_trader_id,handle,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
-async function restSelect(table: string, query: string): Promise<Record<string, unknown> | null> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function safeDecode(value: string): string {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+/**
+ * PostgREST accepts `*`, `%`, and `_` as ILIKE wildcards after URL decoding.
+ * Escape each one (and the escape character itself) before encoding so a
+ * badge URL can only resolve its exact handle, case-insensitively.
+ */
+function exactIlike(value: string): string {
+  return encodeURIComponent(value.replace(/[\\*%_]/g, '\\$&'))
+}
+
+/**
+ * Fetch exactly one REST row. A duplicate is not an identity proof: return
+ * unknown instead of binding an arbitrary account to a public rank badge.
+ */
+async function restSelectOne(
+  table: string,
+  query: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    if (!supabaseUrl || !supabaseKey) return null
+    const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}&limit=2`, {
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
       signal: AbortSignal.timeout(4000),
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Record<string, unknown>[]
-    return rows[0] ?? null
+    return rows.length === 1 && isRecord(rows[0]) ? rows[0] : null
   } catch {
     return null
   }
 }
 
+type PublishedBadgeRow = {
+  rank: number
+  score: number
+}
+
+/**
+ * The REST API is deliberately treated as an untyped transport. The sealed
+ * view is the only metric authority, and this second boundary check prevents
+ * a stale/malformed proxy response from becoming a badge value.
+ */
+function verifiedBadgeRow(
+  value: unknown,
+  source: string,
+  sourceTraderId: string,
+  period: string
+): PublishedBadgeRow | null {
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value === null ? [] : [value], period },
+    { expectedPeriod: period }
+  ) as { traders?: unknown[] }
+  const row = sanitized.traders?.[0]
+  if (
+    !isRecord(row) ||
+    row.source !== source ||
+    row.source_trader_id !== sourceTraderId ||
+    row.season_id !== period ||
+    typeof row.rank !== 'number' ||
+    !Number.isSafeInteger(row.rank) ||
+    row.rank <= 0 ||
+    typeof row.arena_score !== 'number' ||
+    !Number.isFinite(row.arena_score)
+  ) {
+    return null
+  }
+  return { rank: row.rank, score: row.arena_score }
+}
+
 async function fetchRank(handle: string) {
   const enc = encodeURIComponent
-  const decoded = decodeURIComponent(handle)
+  const decoded = safeDecode(handle)
   const cols = 'handle,source,source_trader_id'
   const source =
-    (await restSelect('trader_sources', `select=${cols}&handle=ilike.${enc(handle)}`)) ??
-    (await restSelect('trader_sources', `select=${cols}&source_trader_id=eq.${enc(decoded)}`)) ??
-    (await restSelect(
-      'leaderboard_ranks',
-      `select=${cols}&source_trader_id=eq.${enc(decoded)}&season_id=eq.90D`
-    ))
+    (await restSelectOne('trader_sources', `select=${cols}&handle=ilike.${exactIlike(decoded)}`)) ??
+    (await restSelectOne('trader_sources', `select=${cols}&source_trader_id=eq.${enc(decoded)}`))
   if (!source) return null
-  const srcName = source.source as string
-  const srcTraderId = source.source_trader_id as string
-  if (!isPublicRankingSourceAllowed(srcName)) return null
+  const identityHandle =
+    typeof source.handle === 'string' && source.handle.trim().length > 0 ? source.handle : decoded
+  const srcName = typeof source.source === 'string' ? source.source : ''
+  const srcTraderId = typeof source.source_trader_id === 'string' ? source.source_trader_id : ''
+  if (!isPublicRankingSourceAllowed(srcName)) {
+    return { handle: identityHandle, rank: null, score: null, verified: false }
+  }
+  if (!srcTraderId) {
+    return { handle: identityHandle, rank: null, score: null, verified: false }
+  }
+
+  let published: PublishedBadgeRow | null = null
+  for (const season of ['90D', '30D', '7D']) {
+    const candidate = await restSelectOne(
+      'public_ranked_leaderboard',
+      `select=${PUBLIC_RANKING_COLUMNS}&source=eq.${enc(srcName)}&source_trader_id=eq.${enc(srcTraderId)}&season_id=eq.${season}`
+    )
+    const verified = verifiedBadgeRow(candidate, srcName, srcTraderId, season)
+    if (verified) {
+      published = verified
+      break
+    }
+  }
+
+  // A verified-API marker is meaningful only alongside a currently published
+  // metric row. Never let a source authorization revive an unpublished rank.
+  if (!published) {
+    return { handle: identityHandle, rank: null, score: null, verified: false }
+  }
+
   // V1 CEX connections are private and never mint a public data badge. Legacy
   // authorization-derived rows remain quarantined during the 48-hour drain and
   // are deliberately ignored here.
   const verified = false
-
-  for (const season of ['90D', '30D', '7D']) {
-    const data = await restSelect(
-      'leaderboard_ranks',
-      `select=handle,arena_score,rank&source=eq.${enc(srcName)}&source_trader_id=eq.${enc(srcTraderId)}&season_id=eq.${season}`
-    )
-    if (data && data.rank != null) {
-      return {
-        handle: (data.handle as string) || (source.handle as string) || decoded,
-        rank: Number(data.rank),
-        score: data.arena_score != null ? Number(data.arena_score) : null,
-        verified,
-      }
-    }
+  return {
+    handle: identityHandle,
+    rank: published.rank,
+    score: published.score,
+    verified,
   }
-  return { handle: (source.handle as string) || decoded, rank: null, score: null, verified }
 }
 
 /** XML-escape for safe SVG text interpolation. */
@@ -150,14 +234,12 @@ export async function GET(
   let rank: number | null = null
   let score: number | null = null
   let verified = false
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    const data = await fetchRank(handle)
-    if (data) {
-      name = data.handle
-      rank = data.rank
-      score = data.score
-      verified = !!data.verified
-    }
+  const data = await fetchRank(handle)
+  if (data) {
+    name = data.handle
+    rank = data.rank
+    score = data.score
+    verified = !!data.verified
   }
 
   const svg = buildSvg({ name, rank, score, verified })
@@ -165,10 +247,9 @@ export async function GET(
     status: 200,
     headers: {
       'Content-Type': 'image/svg+xml; charset=utf-8',
-      // CDN-cache 10 min, serve-stale a day — ranks move slowly, embeds are hot.
-      ...publicRankingResponseCacheHeaders(
-        'public, max-age=300, s-maxage=600, stale-while-revalidate=86400'
-      ),
+      // A public-rank withdrawal must take effect on the next image request;
+      // an image CDN cache cannot prove the current sealed cohort.
+      ...publicRankingResponseRejectionHeaders(),
     },
   })
 }

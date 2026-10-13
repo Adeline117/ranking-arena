@@ -90,7 +90,12 @@ describe('useOnchainEnrichTrigger', () => {
 
     await waitFor(() => expect(mockInvalidateQueries).toHaveBeenCalledTimes(1))
     expect(mockInvalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['trader-core', 'okx_web3_solana', 'SolanaWallet1111111111111111111111111111111'],
+      queryKey: [
+        'trader-core',
+        'history-quarantine-v1',
+        'okx_web3_solana',
+        'SolanaWallet1111111111111111111111111111111',
+      ],
     })
     await waitFor(() => expect(result.current).toBe('idle'))
   })

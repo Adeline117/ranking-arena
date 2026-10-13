@@ -4,7 +4,9 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import {
   PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
   PUBLIC_RANKING_REDIS_TAG,
+  isPublicRankingSourceAllowed,
   publicRankingCacheKey,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 import {
@@ -14,7 +16,9 @@ import {
 
 export const TOKEN_RANKING_PAGE_CONTRACT = 'token-ranking-page@1'
 export const POPULAR_TOKEN_PAGE_CONTRACT = 'popular-token-page@1'
-export const TOKEN_RANKING_SNAPSHOT_CACHE_VERSION = 'v4'
+// v5 keeps only token-generation facts in the shared snapshot. Generic
+// profile metrics are overlaid from the live sealed public cohort below.
+export const TOKEN_RANKING_SNAPSHOT_CACHE_VERSION = 'v5'
 export const TOKEN_RANKING_MAX_GENERATION = 9_007_199_254_740_000
 export const TOKEN_RANKING_MAX_OFFSET = 2_000_000
 export const TOKEN_RANKING_API_TIMEOUT_MS = 12_000
@@ -130,15 +134,24 @@ const FINAL_TRADER_KEYS = [
 ] as const
 
 const FINAL_POPULAR_TOKEN_KEYS = ['token', 'total_pnl', 'trade_count', 'trader_count'] as const
-const PROFILE_KEYS = [
+const PUBLIC_PROFILE_KEYS = [
   'arena_score',
   'avatar_url',
+  'computed_at',
   'handle',
+  'is_outlier',
+  'max_drawdown',
+  'metrics_estimated',
   'pnl',
+  'rank',
   'roi',
+  'score_completeness',
+  'season_id',
   'source',
   'source_trader_id',
+  'win_rate',
 ] as const
+const PUBLIC_PROFILE_COLUMNS = PUBLIC_PROFILE_KEYS.join(',')
 const RFC3339_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|([+-])(\d{2}):(\d{2}))$/
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
@@ -187,7 +200,10 @@ export interface TokenTraderRankingSnapshot extends TokenRankingPublicationHead 
   offset: number
   total: number
   traders: TokenTraderRanking[]
-  /** Opaque leaderboard publication fence for optional profile enrichment. */
+  /**
+   * Generic profile publication is deliberately unknown: profile fields are
+   * revalidated against the live sealed cohort for every response.
+   */
   profilePublicationId: string | null
 }
 
@@ -258,6 +274,22 @@ interface LeaderboardProfile {
   arena_score: number | null
   roi: number | null
   pnl: number | null
+}
+
+interface PublicRankedLeaderboardQueryResult {
+  data: unknown[] | null
+  error: unknown | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
+  abortSignal(signal: AbortSignal): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
 }
 
 function fail(
@@ -745,66 +777,187 @@ function parseRawTokenPage(
   return { total, rows: parseAggregateRows(value.traders, total, input.limit, input.offset) }
 }
 
+function profileIdentityKey(source: string, sourceTraderId: string): string {
+  return JSON.stringify([source, sourceTraderId])
+}
+
+function profileIdentityFromRow(value: unknown): string | null {
+  if (
+    !isRecord(value) ||
+    typeof value.source !== 'string' ||
+    !SOURCE_PATTERN.test(value.source) ||
+    typeof value.source_trader_id !== 'string' ||
+    value.source_trader_id.length === 0 ||
+    value.source_trader_id !== value.source_trader_id.trim()
+  ) {
+    return null
+  }
+  return profileIdentityKey(value.source, value.source_trader_id)
+}
+
+function publicProfileFiniteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && value.trim().length === 0) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function publicProfileRank(value: unknown): number | null {
+  const rank = publicProfileFiniteNumber(value)
+  return rank !== null && Number.isSafeInteger(rank) && rank > 0 ? rank : null
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  // The security-barrier view is additive while generated Supabase types catch
+  // up. Keep this escape hatch narrow so this reader cannot fall back to the
+  // raw ranking relation.
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+/**
+ * Validate one optional profile overlay independently of the token snapshot.
+ * A bad/missing row deliberately returns null: the token generation remains
+ * authoritative, while generic profile fields become unknown for that trader.
+ */
+function parsePublishedProfile(
+  value: unknown,
+  period: TokenRankingPeriod,
+  expectedIdentity: string
+): LeaderboardProfile | null {
+  if (!isRecord(value) || !hasExactKeys(value, PUBLIC_PROFILE_KEYS)) return null
+
+  if (
+    typeof value.source !== 'string' ||
+    typeof value.source_trader_id !== 'string' ||
+    (value.handle !== null && typeof value.handle !== 'string') ||
+    (value.avatar_url !== null && typeof value.avatar_url !== 'string')
+  ) {
+    return null
+  }
+  const source = value.source
+  const sourceTraderId = value.source_trader_id
+  const handle = value.handle as string | null
+  const avatarUrl = value.avatar_url as string | null
+  const identity = profileIdentityFromRow(value)
+  const rank = publicProfileRank(value.rank)
+  const arenaScore = publicProfileFiniteNumber(value.arena_score)
+  const roi = publicProfileFiniteNumber(value.roi)
+  const pnl = publicProfileFiniteNumber(value.pnl)
+  const winRate = publicProfileFiniteNumber(value.win_rate)
+  const maxDrawdown = publicProfileFiniteNumber(value.max_drawdown)
+  if (
+    identity !== expectedIdentity ||
+    value.season_id !== period ||
+    rank === null ||
+    arenaScore === null ||
+    roi === null ||
+    pnl === null ||
+    winRate === null ||
+    maxDrawdown === null ||
+    !SOURCE_PATTERN.test(source) ||
+    sourceTraderId.length === 0 ||
+    sourceTraderId !== sourceTraderId.trim()
+  ) {
+    return null
+  }
+
+  // The sanitizer is kept after number normalization because PostgREST can
+  // serialize numeric columns as strings. It still enforces the complete,
+  // current score and source-publication proof before any generic metric is
+  // attached to a token-specific row.
+  const normalized = {
+    ...value,
+    rank,
+    arena_score: arenaScore,
+    roi,
+    pnl,
+    win_rate: winRate,
+    max_drawdown: maxDrawdown,
+  }
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: [normalized], period },
+    { expectedPeriod: period }
+  ) as { traders?: unknown[] }
+  const row = sanitized.traders?.[0]
+  if (
+    !isRecord(row) ||
+    row.source !== source ||
+    row.source_trader_id !== sourceTraderId ||
+    row.season_id !== period ||
+    publicProfileRank(row.rank) !== rank
+  ) {
+    return null
+  }
+
+  return {
+    source,
+    source_trader_id: sourceTraderId,
+    handle,
+    avatar_url: avatarUrl,
+    arena_score: arenaScore,
+    roi,
+    pnl,
+  }
+}
+
 async function loadProfiles(
   supabase: SupabaseClient<Database>,
   period: TokenRankingPeriod,
   rows: AggregateTokenRow[],
   options: TokenRankingReadOptions
 ): Promise<LeaderboardProfile[]> {
-  if (rows.length === 0) return []
-  const traderIds = [...new Set(rows.map((row) => row.source_trader_id))]
-  const result = await readRpcResult(
-    'token ranking profile enrichment',
-    () =>
-      bindAbortSignal(
-        supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl')
-          .eq('season_id', period)
-          .in('source_trader_id', traderIds),
-        options.signal,
-        'token ranking profile enrichment'
-      ),
-    options.signal
+  const publicRows = rows.filter((row) => isPublicRankingSourceAllowed(row.source))
+  if (publicRows.length === 0) return []
+
+  const expectedIdentities = new Set(
+    publicRows.map((row) => profileIdentityKey(row.source, row.source_trader_id))
   )
-  if (!isRecord(result)) fail('contract', 'token ranking profile query envelope is invalid')
-  if (result.error)
-    throwRpcError('token ranking profile enrichment', result.error as RpcErrorShape, options.signal)
-  if (!Array.isArray(result.data)) fail('contract', 'token ranking profile rows are invalid')
-  const seenIdentities = new Set<string>()
-  return result.data.map((profile, index) => {
-    if (!isRecord(profile) || !hasExactKeys(profile, PROFILE_KEYS)) {
-      fail('contract', `token ranking profile row ${index} shape changed`)
+  const traderIds = [...new Set(publicRows.map((row) => row.source_trader_id))]
+  const sources = [...new Set(publicRows.map((row) => row.source))]
+
+  try {
+    const query = publicRankedLeaderboardClient(supabase)
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_PROFILE_COLUMNS)
+      .eq('season_id', period)
+      .in('source', sources)
+      .in('source_trader_id', traderIds)
+    const result = await (options.signal
+      ? bindAbortSignal(query, options.signal, 'token ranking profile enrichment')
+      : query)
+    if (!isRecord(result) || result.error || !Array.isArray(result.data)) return []
+
+    const profiles = new Map<string, LeaderboardProfile>()
+    const invalidIdentities = new Set<string>()
+    for (const profile of result.data) {
+      const identity = profileIdentityFromRow(profile)
+      // Queries use separate source and trader-id filters, so a source that
+      // shares an id with a requested trader can still be returned. Never let
+      // that row enrich a different source/trader pair.
+      if (!identity || !expectedIdentities.has(identity)) continue
+
+      const safeProfile = parsePublishedProfile(profile, period, identity)
+      if (!safeProfile || profiles.has(identity)) {
+        invalidIdentities.add(identity)
+        profiles.delete(identity)
+        continue
+      }
+      profiles.set(identity, safeProfile)
     }
-    if (
-      typeof profile.source !== 'string' ||
-      !SOURCE_PATTERN.test(profile.source) ||
-      typeof profile.source_trader_id !== 'string' ||
-      profile.source_trader_id.length === 0 ||
-      profile.source_trader_id !== profile.source_trader_id.trim() ||
-      (profile.handle !== null && typeof profile.handle !== 'string') ||
-      (profile.avatar_url !== null && typeof profile.avatar_url !== 'string')
-    ) {
-      fail('contract', `token ranking profile row ${index} is invalid`)
-    }
-    const identity = JSON.stringify([profile.source, profile.source_trader_id])
-    if (seenIdentities.has(identity)) {
-      fail('contract', `token ranking profile row ${index} repeats an identity`)
-    }
-    seenIdentities.add(identity)
-    return {
-      source: profile.source,
-      source_trader_id: profile.source_trader_id,
-      handle: profile.handle as string | null,
-      avatar_url: profile.avatar_url as string | null,
-      arena_score: parseNullableFiniteNumber(
-        profile.arena_score,
-        `token ranking profile row ${index} arena score`
-      ),
-      roi: parseNullableFiniteNumber(profile.roi, `token ranking profile row ${index} ROI`),
-      pnl: parseNullableFiniteNumber(profile.pnl, `token ranking profile row ${index} PnL`),
-    }
-  })
+
+    return [...profiles.entries()]
+      .filter(([identity]) => !invalidIdentities.has(identity))
+      .map(([, profile]) => profile)
+  } catch {
+    // Profile data is optional relative to the immutable token generation.
+    // An unavailable or malformed public cohort may never shift the token
+    // ranking; leave only its generic profile fields unknown.
+    requireActiveDeadline(options.signal, 'token ranking profile enrichment')
+    return []
+  }
 }
 
 function assertCachedPublication(
@@ -836,31 +989,31 @@ function parseFinalTrader(value: unknown, expectedRank: number, total: number): 
     Number.MAX_SAFE_INTEGER,
     'cached token trade count'
   )
-  const arenaScore = parseNullableFiniteNumber(value.arena_score, 'cached arena score')
   const winRate = parseNullableFiniteNumber(value.token_win_rate, 'cached token win rate')
   if (
     rank !== expectedRank ||
     rank > total ||
-    (arenaScore !== null && (arenaScore < 0 || arenaScore > 100)) ||
     (winRate !== null && (winRate < 0 || winRate > 100)) ||
     typeof value.source !== 'string' ||
     !SOURCE_PATTERN.test(value.source) ||
     typeof value.source_trader_id !== 'string' ||
     value.source_trader_id.length === 0 ||
-    value.source_trader_id !== value.source_trader_id.trim() ||
-    (value.handle !== null && typeof value.handle !== 'string') ||
-    (value.avatar_url !== null && typeof value.avatar_url !== 'string')
+    value.source_trader_id !== value.source_trader_id.trim()
   ) {
     fail('contract', 'cached token trader violates its authority contract')
   }
+
+  // Never trust profile fields stored in a token-generation cache. Older cache
+  // entries may contain an otherwise well-formed but retired public profile;
+  // a live sealed-cohort overlay below is the only way to expose these values.
   return {
     source: value.source,
     source_trader_id: value.source_trader_id,
-    handle: value.handle as string | null,
-    avatar_url: value.avatar_url as string | null,
-    arena_score: arenaScore,
-    roi: parseNullableFiniteNumber(value.roi, 'cached trader ROI'),
-    total_pnl: parseNullableFiniteNumber(value.total_pnl, 'cached trader total PnL'),
+    handle: null,
+    avatar_url: null,
+    arena_score: null,
+    roi: null,
+    total_pnl: null,
     token_rank: rank,
     token_pnl: parseFiniteNumber(value.token_pnl, 'cached token PnL'),
     token_trade_count: tradeCount,
@@ -907,16 +1060,6 @@ function parseCachedTokenPage(
     seenIdentities.add(identity)
     return parsed
   })
-  const profilePublicationId = value.profilePublicationId
-  if (
-    profilePublicationId !== null &&
-    (typeof profilePublicationId !== 'string' ||
-      profilePublicationId.length === 0 ||
-      profilePublicationId.length > 128 ||
-      profilePublicationId !== profilePublicationId.trim())
-  ) {
-    fail('contract', 'cached profile publication id is invalid')
-  }
   return {
     ...head,
     contract: TOKEN_RANKING_PAGE_CONTRACT,
@@ -927,7 +1070,46 @@ function parseCachedTokenPage(
     offset: input.offset,
     total,
     traders,
-    profilePublicationId,
+    // A token generation does not prove a generic profile publication. Keep
+    // this unknown rather than carrying a fence captured by an older cache
+    // writer into the current response.
+    profilePublicationId: null,
+  }
+}
+
+function aggregateRowsFromCachedPage(snapshot: TokenTraderRankingSnapshot): AggregateTokenRow[] {
+  return snapshot.traders.map((trader) => ({
+    source: trader.source,
+    source_trader_id: trader.source_trader_id,
+    token_rank: trader.token_rank,
+    token_pnl: trader.token_pnl,
+    token_trade_count: trader.token_trade_count,
+    token_win_rate: trader.token_win_rate,
+    token_avg_pnl_pct: trader.token_avg_pnl_pct,
+    total_count: snapshot.total,
+  }))
+}
+
+async function overlayLivePublicProfiles(
+  supabase: SupabaseClient<Database>,
+  snapshot: TokenTraderRankingSnapshot,
+  options: TokenRankingReadOptions
+): Promise<TokenTraderRankingSnapshot> {
+  if (snapshot.traders.length === 0) return { ...snapshot, profilePublicationId: null }
+
+  const rows = aggregateRowsFromCachedPage(snapshot)
+  const profiles = await loadProfiles(supabase, snapshot.period, rows, options)
+  const page = mergeTokenRankingsWithProfiles(rows, profiles)
+  if (page.total !== snapshot.total || page.traders.length !== snapshot.traders.length) {
+    fail('contract', 'live profile overlay changed token ranking authority')
+  }
+
+  return {
+    ...snapshot,
+    traders: page.traders,
+    // There is intentionally no cached profile publication fence. Every
+    // generic field in this response was validated during this request.
+    profilePublicationId: null,
   }
 }
 
@@ -959,7 +1141,7 @@ async function readTokenPageAtHead(
   )
   const cachedOrFresh = await tieredGetOrSet<unknown>(
     cacheKey,
-    async (writeFence) => {
+    async () => {
       const result = await readRpcResult(
         'token ranking page',
         () =>
@@ -980,11 +1162,10 @@ async function readTokenPageAtHead(
       if (result.error)
         throwRpcError('token ranking page', result.error as RpcErrorShape, options.signal)
       const { total, rows } = parseRawTokenPage(result.data, head, input)
-      const profiles = await loadProfiles(supabase, input.period, rows, options)
-      const page = rows.length
-        ? mergeTokenRankingsWithProfiles(rows, profiles)
-        : { traders: [], total }
-      if (page.total !== total) fail('contract', 'profile enrichment changed token ranking total')
+      // Persist only the token generation facts. Public profile fields have a
+      // separate serving head and must be revalidated after every cache read.
+      const page = rows.length ? mergeTokenRankingsWithProfiles(rows, []) : { traders: [], total }
+      if (page.total !== total) fail('contract', 'token snapshot changed token ranking total')
       const candidate = {
         ...head,
         contract: TOKEN_RANKING_PAGE_CONTRACT,
@@ -995,7 +1176,7 @@ async function readTokenPageAtHead(
         offset: input.offset,
         total,
         traders: page.traders,
-        profilePublicationId: writeFence?.token ?? null,
+        profilePublicationId: null,
       } satisfies TokenTraderRankingSnapshot
       return parseCachedTokenPage(candidate, head, input)
     },
@@ -1004,7 +1185,10 @@ async function readTokenPageAtHead(
     { skipMemory: true, writeFenceKey: PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY }
   )
   requireActiveDeadline(options.signal, 'token ranking page')
-  return parseCachedTokenPage(cachedOrFresh, head, input)
+  const tokenSnapshot = parseCachedTokenPage(cachedOrFresh, head, input)
+  const enriched = await overlayLivePublicProfiles(supabase, tokenSnapshot, options)
+  requireActiveDeadline(options.signal, 'token ranking page')
+  return enriched
 }
 
 function parsePopularRows(value: unknown, total: number, limit: number): PopularTokenRanking[] {

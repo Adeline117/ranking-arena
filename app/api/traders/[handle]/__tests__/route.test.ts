@@ -64,9 +64,10 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }))
 
+const mockSupabaseFrom = jest.fn(() => ({}))
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
-    from: jest.fn(() => ({})),
+    from: mockSupabaseFrom,
   })),
 }))
 
@@ -161,11 +162,6 @@ jest.mock('@/lib/auth/verify-service-auth', () => ({
   verifyCronSecret: (...args: unknown[]) => mockVerifyCronSecret(...args),
 }))
 
-const mockTieredGetOrSet = jest.fn(async (_key: string, fetcher: () => unknown) => fetcher())
-jest.mock('@/lib/cache/redis-layer', () => ({
-  tieredGetOrSet: (...args: unknown[]) => mockTieredGetOrSet(...args),
-}))
-
 import { GET } from '../route'
 
 /** Build a minimal mock request with headers needed by withApiMiddleware. */
@@ -193,6 +189,7 @@ describe('GET /api/traders/[handle]', () => {
     mockGetAggregatedStats.mockResolvedValue(null)
     mockFindUserByTrader.mockResolvedValue(null)
     mockVerifyCronSecret.mockReturnValue(false)
+    mockSupabaseFrom.mockClear()
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
   })
@@ -274,19 +271,26 @@ describe('GET /api/traders/[handle]', () => {
     expect(typeof body.error === 'string' || body.error?.code === 'NOT_FOUND').toBe(true)
   })
 
-  // --- Cache Hit ---
+  // --- Current public-cohort response ---
 
-  it('returns 200 when data is found via tieredGetOrSet', async () => {
+  it('returns a live detail projection with no shared response cache', async () => {
     const pageData = {
       performance: { roi: 42.5 },
       profile: { handle: 'CachedTrader' },
+      equityCurve: { '90D': [{ date: '2026-08-17', roi: 9, pnl: 42 }] },
+      assetBreakdown: { '90D': [{ symbol: 'BTC', weightPct: 100 }] },
+      stats: { trading: { avgProfit: 42 } },
+      portfolio: [{ market: 'BTCUSDT', price: 100, pnl: 42 }],
       positionHistory: [{ symbol: 'BTCUSDT', pnlUsd: 42 }],
+      positionSummary: { totalUnrealizedPnl: 42 },
       historyCompleteness: { state: 'complete' },
     }
-    mockTieredGetOrSet.mockResolvedValueOnce({
-      pageData,
-      resolved: { platform: 'binance_futures', traderKey: 'trader123' },
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'binance_futures',
+      traderKey: 'trader123',
     })
+    mockGetTraderDetail.mockResolvedValueOnce({ trader: {} })
+    mockToTraderPageData.mockReturnValueOnce(pageData)
 
     const request = mockReq('http://localhost/api/traders/CachedTrader')
     const params = Promise.resolve({ handle: 'CachedTrader' })
@@ -295,22 +299,36 @@ describe('GET /api/traders/[handle]', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
+    expect(body.data.equityCurve).toBeUndefined()
+    expect(body.data.assetBreakdown).toBeUndefined()
+    expect(body.data.stats).toBeNull()
+    expect(body.data.portfolio).toEqual([])
     expect(body.data.positionHistory).toEqual([])
+    expect(body.data.positionSummary).toBeNull()
     expect(body.data.historyCompleteness).toEqual({
       state: 'unknown',
       reason: 'history_evidence_not_bound',
     })
     expect(pageData.positionHistory).toHaveLength(1)
-    expect(res.headers.get('Cache-Control')).toBe(
-      'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
+    expect(mockGetTraderDetail).toHaveBeenCalledTimes(1)
+    expect(mockGetTraderDetail).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ publicProfileHistoryQuarantine: true })
     )
+    expect(mockToTraderPageData).toHaveBeenCalledWith(expect.anything(), {
+      publicProfileHistoryQuarantine: true,
+    })
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBeNull()
   })
 
   it('marks every claim-bearing response no-store even when the claim lookup degrades', async () => {
-    mockTieredGetOrSet.mockResolvedValueOnce({
-      pageData: { performance: { roi: 42.5 }, profile: { handle: 'ClaimedTrader' } },
-      resolved: { platform: 'hyperliquid', traderKey: '0xabc' },
+    mockResolveTrader.mockResolvedValueOnce({ platform: 'hyperliquid', traderKey: '0xabc' })
+    mockGetTraderDetail.mockResolvedValueOnce({ trader: {} })
+    mockToTraderPageData.mockReturnValueOnce({
+      performance: { roi: 42.5 },
+      profile: { handle: 'ClaimedTrader' },
     })
 
     const request = mockReq(
@@ -328,9 +346,11 @@ describe('GET /api/traders/[handle]', () => {
   })
 
   it('serializes include=aggregate through the subject-bound public DTO', async () => {
-    mockTieredGetOrSet.mockResolvedValueOnce({
-      pageData: { performance: { roi: 42.5 }, profile: { handle: 'LinkedTrader' } },
-      resolved: { platform: 'bybit', traderKey: 'account-42' },
+    mockResolveTrader.mockResolvedValueOnce({ platform: 'bybit', traderKey: 'account-42' })
+    mockGetTraderDetail.mockResolvedValueOnce({ trader: {} })
+    mockToTraderPageData.mockReturnValueOnce({
+      performance: { roi: 42.5 },
+      profile: { handle: 'LinkedTrader' },
     })
     mockFindUserByTrader.mockResolvedValueOnce('private-user-id')
     mockGetAggregatedStats.mockResolvedValueOnce({
@@ -406,6 +426,44 @@ describe('GET /api/traders/[handle]', () => {
     )
   })
 
+  it('returns an explicitly partial empty rank history without querying raw snapshots', async () => {
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'binance_futures',
+      traderKey: 'rank-history-subject',
+    })
+    mockGetTraderDetail.mockResolvedValueOnce({ trader: {} })
+    mockToTraderPageData.mockReturnValueOnce({
+      performance: { roi: 42.5 },
+      profile: { handle: 'RankHistorySubject' },
+    })
+
+    const response = await GET(
+      mockReq(
+        'http://localhost/api/traders/RankHistorySubject?include=rank_history&rh_period=90D&rh_days=7'
+      ) as any,
+      { params: Promise.resolve({ handle: 'RankHistorySubject' }) }
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data.rank_history).toEqual({
+      history: [],
+      platform: 'binance_futures',
+      trader_key: 'rank-history-subject',
+      period: '90D',
+      ranking_visibility: 'partial',
+      ranking_visibility_reason: 'historical_rank_evidence_unavailable',
+      ranking_visibility_reasons: ['historical_rank_evidence_unavailable'],
+      history_completeness: {
+        state: 'unknown',
+        reason: 'historical_rank_evidence_unavailable',
+      },
+    })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(mockSupabaseFrom).not.toHaveBeenCalled()
+  })
+
   it('keeps aggregate fixture output allowlisted and no-store', async () => {
     const request = mockReq(
       'http://localhost/api/traders/e2e_trader_fixture?e2e_fixture=linked_accounts'
@@ -430,7 +488,7 @@ describe('GET /api/traders/[handle]', () => {
     expect(JSON.stringify(body.data.aggregate)).not.toMatch(/e2e-private-owner|Private .* label/)
   })
 
-  it('bypasses both cache tiers only for an authenticated consistency probe', async () => {
+  it('marks an authenticated consistency probe as a live loader', async () => {
     mockVerifyCronSecret.mockReturnValue(true)
     mockResolveTrader.mockResolvedValueOnce({
       platform: 'binance_futures',
@@ -453,7 +511,6 @@ describe('GET /api/traders/[handle]', () => {
 
     expect(res.status).toBe(200)
     expect(mockVerifyCronSecret).toHaveBeenCalledWith(request)
-    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
     expect(mockResolveTrader).toHaveBeenCalledTimes(1)
     expect(body.data.consistency_probe).toEqual({
       cache_bypassed: true,
@@ -464,7 +521,7 @@ describe('GET /api/traders/[handle]', () => {
     expect(res.headers.get('X-Arena-Consistency-Proof')).toBe('live-loader-v1')
   })
 
-  it('rejects an invalid consistency probe without touching shared caches', async () => {
+  it('rejects an invalid consistency probe before loading a profile', async () => {
     mockVerifyCronSecret.mockReturnValue(false)
 
     const request = mockReq(
@@ -478,7 +535,6 @@ describe('GET /api/traders/[handle]', () => {
 
     expect(res.status).toBe(401)
     expect(mockVerifyCronSecret).toHaveBeenCalledWith(request)
-    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
     expect(mockResolveTrader).not.toHaveBeenCalled()
     expect(body.error).toMatchObject({ code: 'UNAUTHORIZED' })
     expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')

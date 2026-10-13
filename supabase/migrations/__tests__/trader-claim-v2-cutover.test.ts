@@ -397,6 +397,7 @@ describe('two-phase trader-claim V2 cutover', () => {
     expect(ci).toContain('run: npm run qa:trader-claim-v2-pg17')
     expect(runbook).toContain('Trader claim V2 two-phase cutover')
     expect(runbook).toContain('Phase B')
-    expect(runbook).toMatch(/security\s+gate is not complete/)
+    expect(runbook).toMatch(/Phase B is the only design stage that closes legacy claim writers/)
+    expect(runbook).toContain('not a valid claim-path rollback target')
   })
 })

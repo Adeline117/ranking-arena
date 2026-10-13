@@ -32,7 +32,7 @@ function queueClient(queues: Record<string, Array<{ data?: unknown; error?: unkn
     const resp = q.length > 1 ? q.shift()! : (q[0] ?? { data: null })
     const p = Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null })
     const obj: Record<string, unknown> = {}
-    for (const m of ['select', 'eq', 'in', 'order', 'limit']) obj[m] = () => obj
+    for (const m of ['select', 'eq', 'in', 'not', 'order', 'limit']) obj[m] = () => obj
     obj.maybeSingle = () => p
     obj.then = (...args: Parameters<Promise<unknown>['then']>) => p.then(...args)
     return obj
@@ -40,11 +40,11 @@ function queueClient(queues: Record<string, Array<{ data?: unknown; error?: unkn
   return { client: { from } as unknown as SupabaseClient, from }
 }
 
-function ultRow(traderId: string, isPrimary = false) {
+function ultRow(traderId: string, isPrimary = false, source = 'bybit') {
   return {
     id: `l-${traderId}`,
     user_id: 'u1',
-    source: 'bybit',
+    source,
     trader_id: traderId,
     label: null,
     is_primary: isPrimary,
@@ -80,10 +80,10 @@ function rankRow(
 beforeEach(() => mockCacheStore.clear())
 
 describe('getLinkedTraders', () => {
-  it('主表有数据 → 映射 + 用 leaderboard_ranks 补 stats', async () => {
+  it('主表有数据 → 仅用已验证的公开 cohort 补指标', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true)] }],
-      leaderboard_ranks: [{ data: [rankRow('t1', 50, 1000, 80)] }],
+      public_ranked_leaderboard: [{ data: [rankRow('t1', 50, 1000, 80)] }],
     })
     const links = await getLinkedTraders(client, 'u1')
     expect(links).toHaveLength(1)
@@ -93,15 +93,19 @@ describe('getLinkedTraders', () => {
       isPrimary: true,
       roi: 50,
       pnl: null,
-      arenaScore: null,
-      rank: null,
+      arenaScore: 80,
+      winRate: 60,
+      maxDrawdown: 20,
+      rank: 5,
+      rankingVisibility: 'verified',
+      rankingVisibilityReason: null,
     })
   })
 
-  it('keeps profile metrics visible but excludes scores without public-ranking proof', async () => {
+  it('suppresses every performance field when a returned cohort row is estimated', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true)] }],
-      leaderboard_ranks: [
+      public_ranked_leaderboard: [
         {
           data: [rankRow('t1', 50, 1000, 80, { metrics_estimated: true })],
         },
@@ -110,19 +114,21 @@ describe('getLinkedTraders', () => {
 
     const [link] = await getLinkedTraders(client, 'u1')
     expect(link).toMatchObject({
-      roi: 50,
+      roi: null,
       pnl: null,
-      winRate: 60,
-      maxDrawdown: 20,
+      winRate: null,
+      maxDrawdown: null,
       arenaScore: null,
       rank: null,
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_cohort_unverified',
     })
   })
 
-  it('fails closed for non-finite and physically invalid snapshot metrics', async () => {
+  it('fails closed for non-finite and physically invalid public-cohort metrics', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true)] }],
-      leaderboard_ranks: [
+      public_ranked_leaderboard: [
         {
           data: [
             rankRow('t1', Number.NaN, Number.POSITIVE_INFINITY, 101, {
@@ -143,6 +149,8 @@ describe('getLinkedTraders', () => {
       winRate: null,
       maxDrawdown: null,
       rank: null,
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_cohort_unverified',
     })
   })
 
@@ -151,7 +159,7 @@ describe('getLinkedTraders', () => {
       user_linked_traders: [
         { data: [ultRow('positive-cap'), ultRow('negative-cap'), ultRow('beyond-cap')] },
       ],
-      leaderboard_ranks: [
+      public_ranked_leaderboard: [
         {
           data: [
             rankRow('positive-cap', 10_000, 0, 80),
@@ -164,6 +172,60 @@ describe('getLinkedTraders', () => {
 
     const links = await getLinkedTraders(client, 'u1')
     expect(links.map((link) => link.roi)).toEqual([10_000, -10_000, null])
+    expect(links.map((link) => link.rankingVisibility)).toEqual(['verified', 'verified', 'partial'])
+  })
+
+  it('requires exactly one sanitized row for the same source + trader key', async () => {
+    const { client } = queueClient({
+      user_linked_traders: [{ data: [ultRow('duplicated', true), ultRow('exact-pair')] }],
+      public_ranked_leaderboard: [
+        {
+          data: [
+            rankRow('duplicated', 10, 100, 80),
+            rankRow('duplicated', 11, 100, 80, { rank: 6 }),
+            rankRow('exact-pair', 12, 100, 80),
+            rankRow('exact-pair', 99, 100, 80, { source: 'okx' }),
+          ],
+        },
+      ],
+    })
+
+    const links = await getLinkedTraders(client, 'u1')
+    expect(links[0]).toMatchObject({
+      traderKey: 'duplicated',
+      roi: null,
+      rank: null,
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_cohort_unverified',
+    })
+    expect(links[1]).toMatchObject({
+      traderKey: 'exact-pair',
+      roi: 12,
+      rank: 5,
+      rankingVisibility: 'verified',
+      rankingVisibilityReason: null,
+    })
+  })
+
+  it('keeps an unrankable-source membership but marks all metrics partial', async () => {
+    const { client, from } = queueClient({
+      user_linked_traders: [{ data: [ultRow('wallet-1', true, 'okx_web3_solana')] }],
+    })
+
+    const [link] = await getLinkedTraders(client, 'u1')
+    expect(link).toMatchObject({
+      platform: 'okx_web3_solana',
+      traderKey: 'wallet-1',
+      roi: null,
+      pnl: null,
+      arenaScore: null,
+      winRate: null,
+      maxDrawdown: null,
+      rank: null,
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'source_not_publicly_rankable',
+    })
+    expect(from).toHaveBeenCalledTimes(1)
   })
 
   it('does not treat an arbitrary primary membership query error as legacy fallback', async () => {
@@ -176,15 +238,24 @@ describe('getLinkedTraders', () => {
     expect(from).toHaveBeenCalledTimes(1)
   })
 
-  it('does not cache a successful-looking result when a snapshot query fails', async () => {
+  it('does not cache or replay ranking metrics when the live public cohort fails', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true)] }],
-      leaderboard_ranks: [{ error: { message: 'database unavailable' } }],
+      public_ranked_leaderboard: [{ error: { message: 'database unavailable' } }],
     })
 
-    await expect(getLinkedTraders(client, 'u1')).rejects.toThrow(
-      'linked trader snapshot lookup failed for bybit'
-    )
+    await expect(getLinkedTraders(client, 'u1')).resolves.toEqual([
+      expect.objectContaining({
+        traderKey: 't1',
+        roi: null,
+        arenaScore: null,
+        winRate: null,
+        maxDrawdown: null,
+        rank: null,
+        rankingVisibility: 'unknown',
+        rankingVisibilityReason: 'public_cohort_unavailable',
+      }),
+    ])
     expect(mockCacheStore.has('linked-traders:v2:u1')).toBe(false)
   })
 
@@ -239,7 +310,7 @@ describe('getLinkedTraders', () => {
           ],
         },
       ],
-      leaderboard_ranks: [{ data: [] }],
+      public_ranked_leaderboard: [{ data: [] }],
     })
     const links = await getLinkedTraders(client, 'u1')
     expect(links).toHaveLength(2)
@@ -259,7 +330,7 @@ describe('getLinkedTraders', () => {
   it('re-reads membership so an unlink cannot survive in process cache', async () => {
     const { client, from } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1')] }],
-      leaderboard_ranks: [{ data: [] }],
+      public_ranked_leaderboard: [{ data: [] }],
     })
     await getLinkedTraders(client, 'u1')
     const callsAfterFirst = from.mock.calls.length
@@ -272,7 +343,9 @@ describe('getAggregatedStats', () => {
   function twoAccountClient() {
     return queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true), ultRow('t2')] }],
-      leaderboard_ranks: [{ data: [rankRow('t1', 50, 1000, 80), rankRow('t2', 100, -500, 60)] }],
+      public_ranked_leaderboard: [
+        { data: [rankRow('t1', 50, 1000, 80), rankRow('t2', 100, -500, 60)] },
+      ],
     })
   }
 
@@ -294,7 +367,7 @@ describe('getAggregatedStats', () => {
   it('does not publish a best ROI from a partial account set', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true), ultRow('t2')] }],
-      leaderboard_ranks: [
+      public_ranked_leaderboard: [
         {
           data: [rankRow('t1', 0, 0, 80), rankRow('t2', null, 100, 60)],
         },
@@ -310,7 +383,7 @@ describe('getAggregatedStats', () => {
   it('preserves measured zero as profile evidence without promoting it to an aggregate', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true), ultRow('t2')] }],
-      leaderboard_ranks: [
+      public_ranked_leaderboard: [
         {
           data: [rankRow('t1', 0, 0, 80), rankRow('t2', 0, 0, 60)],
         },
@@ -325,7 +398,7 @@ describe('getAggregatedStats', () => {
   it('单账号保留真实 membership count，但不会产生聚合值', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('only')] }],
-      leaderboard_ranks: [{ data: [] }],
+      public_ranked_leaderboard: [{ data: [] }],
     })
     expect(await getAggregatedStats(client, 'u1')).toMatchObject({
       combinedPnl: null,

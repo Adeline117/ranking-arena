@@ -40,7 +40,8 @@ Evidence and escalation boundary for the Arena crypto trader ranking platform.
 
 1. Do not run a diagnostic just because it is named here: these scripts can contact
    a public endpoint or controlled credentials. Only an owner-approved, exact
-   read-only evidence request may be run.
+   read-only evidence request may be run (for example `npm run check:freshness`,
+   the published ranking freshness authority).
 2. Record the commit, release identity, observation time, source, and unavailable
    dependency. A missing heartbeat, unavailable secret channel, or absent source
    witness is unknown, not a healthy result.

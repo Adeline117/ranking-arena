@@ -118,9 +118,15 @@ const API_ENDPOINTS: Array<{
   name: string
   expectKey: string | null
   expectTrueKey?: string
+  requireVerifiedRanking?: boolean
 }> = [
   { path: '/api/traders?timeRange=90D&limit=5', name: 'Rankings API', expectKey: 'data' },
-  { path: '/api/rankings/platform-stats', name: 'Platform Stats', expectKey: 'platforms' },
+  {
+    path: '/api/rankings/platform-stats',
+    name: 'Platform Stats',
+    expectKey: 'platforms',
+    requireVerifiedRanking: true,
+  },
   {
     path: '/api/rankings/movers',
     name: 'Movers API',
@@ -169,6 +175,9 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
         ) {
           status = 'warn'
           details = `Quarantined: "${ep.expectTrueKey}" is not true`
+        } else if (ep.requireVerifiedRanking && (!body || body.ranking_visibility !== 'verified')) {
+          status = 'warn'
+          details = 'Published ranking aggregate unavailable'
         }
 
         return {

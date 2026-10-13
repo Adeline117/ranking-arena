@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
 import { ARTICLES } from '@/app/(app)/learn/articles'
+import { ARENA_BOT_AUTHOR_ID } from '@/lib/data/arena-bot-publication-policy'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -204,6 +205,9 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
         .is('deleted_at', null)
         .is('group_id', null)
         .is('original_post_id', null)
+        // This route uses service credentials, so it must not rely on RLS to
+        // keep unreleased legacy bot URLs out of a public sitemap.
+        .neq('author_id', ARENA_BOT_AUTHOR_ID)
         .order('hot_score', { ascending: false })
         .limit(1000),
       supabase

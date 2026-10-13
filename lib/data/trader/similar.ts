@@ -1,18 +1,67 @@
 /**
- * Similar traders lookup — finds traders with comparable performance.
- * Queries leaderboard_ranks which uses v1 column names (source, source_trader_id, season_id).
+ * Similar traders lookup — finds comparable traders from the sealed public
+ * cohort. The source/source_trader_id/season_id field names match the ranking
+ * projection, but no raw rank table is read here.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UnifiedTrader } from './types'
 import { mapLeaderboardRow } from './mappers'
 import { LR } from '@/lib/types/schema-mapping'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import {
   isPublicRankingSourceAllowed,
-  publicRankingCacheKey,
+  sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
+
+const PUBLIC_SIMILAR_COLUMNS =
+  'source,source_trader_id,handle,avatar_url,arena_score,roi,pnl,win_rate,max_drawdown,followers,rank,season_id,source_type,trader_type,computed_at,score_completeness,metrics_estimated,is_outlier'
+
+type PublicRankedLeaderboardQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  neq(column: string, value: string): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  gte(column: string, value: number): PublicRankedLeaderboardQuery
+  lte(column: string, value: number): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst?: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function hasPositiveScopedRank(row: unknown, source: string): row is Record<string, unknown> {
+  return (
+    isRecord(row) &&
+    row.source === source &&
+    typeof row.source_trader_id === 'string' &&
+    row.source_trader_id.length > 0 &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0
+  )
+}
 
 export async function fetchSimilarTraders(
   supabase: SupabaseClient,
@@ -22,25 +71,10 @@ export async function fetchSimilarTraders(
   roi: number | null
 ): Promise<UnifiedTrader[]> {
   if (!isPublicRankingSourceAllowed(platform)) return []
-  // Cache key bucketed by score decile to reduce cardinality (3K traders → ~10 buckets per platform)
-  const scoreBucket =
-    arenaScore != null
-      ? Math.round(arenaScore / 10) * 10
-      : roi != null
-        ? `roi${Math.round(roi / 50) * 50}`
-        : 'none'
-  const cacheKey = publicRankingCacheKey(`similar:${platform}:${scoreBucket}`)
-  try {
-    return await tieredGetOrSet(
-      cacheKey,
-      () => fetchSimilarTradersUncached(supabase, platform, traderKey, arenaScore, roi),
-      'warm', // 15min TTL — similar traders change at most once per cron cycle
-      ['similar-traders']
-    )
-  } catch {
-    // Cache miss + fetch error — return empty
-    return []
-  }
+  // A cached recommendation slice would carry rank/ROI/score fields past the
+  // current serving-head proof. Query the sealed cohort for every public
+  // profile render instead.
+  return fetchSimilarTradersUncached(supabase, platform, traderKey, arenaScore, roi)
 }
 
 async function fetchSimilarTradersUncached(
@@ -53,20 +87,19 @@ async function fetchSimilarTradersUncached(
   try {
     let data: Record<string, unknown>[] | null = null
 
-    // leaderboard_ranks column mapping: source → platform, source_trader_id → traderKey, season_id → period
+    // The view is the ranking authority. It seals source freshness and complete
+    // metrics before this range filter, so a profile's recommendation card
+    // cannot promote a raw/partial row merely because it looks similar.
     if (arenaScore != null) {
       const scoreRange = Math.max(arenaScore * 0.25, 10)
-      const result = await supabase
-        .from('leaderboard_ranks')
-        .select(
-          `${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown, followers, ${LR.rank}, ${LR.season_id}, source_type, trader_type, computed_at`
-        )
+      const result = await publicRankedLeaderboardClient(supabase)
+        .from('public_ranked_leaderboard')
+        .select(PUBLIC_SIMILAR_COLUMNS)
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
         .not('rank', 'is', null)
         .not(LR.arena_score, 'is', null)
-        .or('is_outlier.is.null,is_outlier.eq.false')
         .gte(LR.arena_score, arenaScore - scoreRange)
         .lte(LR.arena_score, arenaScore + scoreRange)
         .order(LR.arena_score, { ascending: false })
@@ -75,16 +108,13 @@ async function fetchSimilarTradersUncached(
       data = result.data as Record<string, unknown>[] | null
     } else if (roi != null) {
       const roiRange = Math.max(Math.abs(roi) * 0.3, 20)
-      const result = await supabase
-        .from('leaderboard_ranks')
-        .select(
-          `${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown, followers, ${LR.rank}, ${LR.season_id}, source_type, trader_type, computed_at`
-        )
+      const result = await publicRankedLeaderboardClient(supabase)
+        .from('public_ranked_leaderboard')
+        .select(PUBLIC_SIMILAR_COLUMNS)
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
         .not('rank', 'is', null)
-        .or('is_outlier.is.null,is_outlier.eq.false')
         .gte(LR.roi, roi - roiRange)
         .lte(LR.roi, roi + roiRange)
         .order(LR.roi, { ascending: false })
@@ -95,11 +125,23 @@ async function fetchSimilarTradersUncached(
 
     if (!data || data.length === 0) return []
 
+    const sanitized = sanitizePublicRankingPayload(
+      { traders: data, period: '90D' },
+      { expectedPeriod: '90D' }
+    ) as { traders?: unknown[] }
+    const safeRows = Array.isArray(sanitized.traders)
+      ? sanitized.traders.filter((row) => hasPositiveScopedRank(row, platform))
+      : ([] as Record<string, unknown>[])
+
+    // Filtering an invalid row after finite recommendation bounds would change
+    // the visible cohort. The sealed view should make this impossible; fail
+    // closed rather than show a shifted selection.
+    if (safeRows.length !== data.length) return []
+
     // Dedupe and map
     const seen = new Set<string>()
-    return data
+    return safeRows
       .filter((row) => {
-        if (row.rank == null) return false
         if (!isPublicRankingSourceAllowed(row[LR.source])) return false
         const id = String(row[LR.source_trader_id] || '')
         if (seen.has(id)) return false

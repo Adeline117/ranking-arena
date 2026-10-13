@@ -121,6 +121,28 @@ function buildChainMock(table: string): unknown {
 
 const mockSupabaseFrom = jest.fn((table: string) => buildChainMock(table))
 
+function publicRankedRow(row: Record<string, unknown>) {
+  return {
+    source: 'bybit',
+    source_trader_id: 'trader-1',
+    handle: 'Published trader',
+    avatar_url: null,
+    roi: 1,
+    pnl: 1,
+    win_rate: 50,
+    followers: null,
+    arena_score: 50,
+    rank: 1,
+    max_drawdown: 5,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    season_id: '90D',
+    ...row,
+  }
+}
+
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getSupabaseAdmin: jest.fn(() => ({
@@ -282,19 +304,19 @@ describe('GET /api/following', () => {
       ],
       error: null,
     })
-    mockQueryResults.set('leaderboard_ranks', {
+    mockQueryResults.set('public_ranked_leaderboard', {
       data: [
-        {
+        publicRankedRow({
           source_trader_id: 'trader-1',
           source: 'bybit',
           handle: 'Current trader',
           avatar_url: null,
           roi: 10,
-          pnl: null,
-          win_rate: null,
+          pnl: 0,
+          win_rate: 50,
           followers: null,
           arena_score: 60,
-        },
+        }),
       ],
       error: null,
     })
@@ -308,8 +330,8 @@ describe('GET /api/following', () => {
         expect.objectContaining({
           id: 'trader-1',
           roi: 10,
-          pnl: null,
-          win_rate: null,
+          pnl: 0,
+          win_rate: 50,
           followers: null,
           arena_score: 60,
         }),
@@ -339,9 +361,9 @@ describe('GET /api/following', () => {
     mockTieredGet.mockResolvedValue({
       data: { traders: [{ traderId: 'zero-trader', source: 'bybit' }], users: [] },
     })
-    mockQueryResults.set('leaderboard_ranks', {
+    mockQueryResults.set('public_ranked_leaderboard', {
       data: [
-        {
+        publicRankedRow({
           source_trader_id: 'zero-trader',
           source: 'bybit',
           handle: 'Measured Zero',
@@ -351,7 +373,7 @@ describe('GET /api/following', () => {
           win_rate: 0,
           followers: 0,
           arena_score: 50,
-        },
+        }),
       ],
       error: null,
     })
@@ -369,11 +391,52 @@ describe('GET /api/following', () => {
         arena_score: 50,
       }),
     ])
-    expect(mockQueryCalls).toContainEqual({
-      table: 'leaderboard_ranks',
-      method: 'gt',
-      args: ['arena_score', 0],
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockSupabaseFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
+  it('keeps a cached follow edge but withholds an incomplete published row', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: { traders: [{ traderId: 'partial-trader', source: 'bybit' }], users: [] },
     })
+    mockQueryResults.set('public_ranked_leaderboard', {
+      data: [
+        publicRankedRow({
+          source_trader_id: 'partial-trader',
+          handle: 'Must not expose raw metrics',
+          roi: 123,
+          pnl: 456,
+          arena_score: 99,
+          rank: 1,
+          score_completeness: 'partial',
+        }),
+      ],
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.items).toEqual([
+      expect.objectContaining({
+        id: 'partial-trader',
+        identity_key: 'trader:source:bybit:partial-trader',
+        handle: 'partial-trader',
+        rank: null,
+        roi: null,
+        pnl: null,
+        win_rate: null,
+        followers: null,
+        arena_score: null,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'public_cohort_unverified',
+      }),
+    ])
+    expect(JSON.stringify(body)).not.toContain('Must not expose raw metrics')
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockSupabaseFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 
   it('uses cached edges but re-materializes current trader fields', async () => {
@@ -390,9 +453,9 @@ describe('GET /api/following', () => {
         users: [],
       },
     })
-    mockQueryResults.set('leaderboard_ranks', {
+    mockQueryResults.set('public_ranked_leaderboard', {
       data: [
-        {
+        publicRankedRow({
           source_trader_id: 'trader1',
           source: 'bybit',
           handle: 'Current handle',
@@ -402,7 +465,7 @@ describe('GET /api/following', () => {
           win_rate: 60,
           followers: 4,
           arena_score: 80,
-        },
+        }),
       ],
       error: null,
     })
@@ -416,7 +479,8 @@ describe('GET /api/following', () => {
     expect(body.items[0].handle).toBe('Current handle')
     expect(body.count).toBe(1)
     expect(body.traderCount).toBe(1)
-    expect(mockSupabaseFrom).toHaveBeenCalledWith('leaderboard_ranks')
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockSupabaseFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 
   it('applies pagination with limit and offset', async () => {
@@ -429,18 +493,21 @@ describe('GET /api/following', () => {
     mockTieredGet.mockResolvedValue({
       data: { traders, users: [] },
     })
-    mockQueryResults.set('leaderboard_ranks', {
-      data: traders.map((candidate, i) => ({
-        source_trader_id: candidate.traderId,
-        source: candidate.source,
-        handle: `Trader${i}`,
-        avatar_url: null,
-        roi: i * 10,
-        pnl: null,
-        win_rate: null,
-        followers: null,
-        arena_score: 50 + i,
-      })),
+    mockQueryResults.set('public_ranked_leaderboard', {
+      data: traders.map((candidate, i) =>
+        publicRankedRow({
+          source_trader_id: candidate.traderId,
+          source: candidate.source,
+          handle: `Trader${i}`,
+          avatar_url: null,
+          roi: i * 10,
+          pnl: 0,
+          win_rate: 50,
+          followers: null,
+          arena_score: 50 + i,
+          rank: i + 1,
+        })
+      ),
       error: null,
     })
 
@@ -470,24 +537,27 @@ describe('GET /api/following', () => {
     ])
     let activeRankChunks = 0
     let maxActiveRankChunks = 0
-    mockQueryResponders.set('leaderboard_ranks', async (calls) => {
+    mockQueryResponders.set('public_ranked_leaderboard', async (calls) => {
       const ids = calls.find(({ method }) => method === 'in')?.args[1] as string[]
       activeRankChunks += 1
       maxActiveRankChunks = Math.max(maxActiveRankChunks, activeRankChunks)
       await new Promise((resolve) => setTimeout(resolve, 1))
       activeRankChunks -= 1
       return {
-        data: ids.map((id) => ({
-          source_trader_id: id,
-          source: 'bybit',
-          handle: id,
-          avatar_url: null,
-          roi: 1,
-          pnl: null,
-          win_rate: null,
-          followers: null,
-          arena_score: 50,
-        })),
+        data: ids.map((id, index) =>
+          publicRankedRow({
+            source_trader_id: id,
+            source: 'bybit',
+            handle: id,
+            avatar_url: null,
+            roi: 1,
+            pnl: 0,
+            win_rate: 50,
+            followers: null,
+            arena_score: 50,
+            rank: index + 1,
+          })
+        ),
         error: null,
       }
     })
@@ -517,7 +587,7 @@ describe('GET /api/following', () => {
       ['id', { ascending: false }],
     ])
     const rankInCalls = mockQueryCalls.filter(
-      ({ table, method }) => table === 'leaderboard_ranks' && method === 'in'
+      ({ table, method }) => table === 'public_ranked_leaderboard' && method === 'in'
     )
     expect(rankInCalls).toHaveLength(6)
     expect(rankInCalls.every(({ args }) => (args[1] as string[]).length <= 100)).toBe(true)
@@ -592,7 +662,7 @@ describe('GET /api/following', () => {
       data: { traders, users: [] },
     })
     let chunkNumber = 0
-    mockQueryResponders.set('leaderboard_ranks', async (calls) => {
+    mockQueryResponders.set('public_ranked_leaderboard', async (calls) => {
       const currentChunk = chunkNumber
       chunkNumber += 1
       await new Promise((resolve) => setTimeout(resolve, currentChunk === 1 ? 1 : 5))
@@ -601,17 +671,20 @@ describe('GET /api/following', () => {
       }
       const ids = calls.find(({ method }) => method === 'in')?.args[1] as string[]
       return {
-        data: ids.map((id) => ({
-          source_trader_id: id,
-          source: 'bybit',
-          handle: id,
-          avatar_url: null,
-          roi: 1,
-          pnl: null,
-          win_rate: null,
-          followers: null,
-          arena_score: 50,
-        })),
+        data: ids.map((id, index) =>
+          publicRankedRow({
+            source_trader_id: id,
+            source: 'bybit',
+            handle: id,
+            avatar_url: null,
+            roi: 1,
+            pnl: 0,
+            win_rate: 50,
+            followers: null,
+            arena_score: 50,
+            rank: index + 1,
+          })
+        ),
         error: null,
       }
     })
@@ -619,9 +692,21 @@ describe('GET /api/following', () => {
     const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
     const body = await response.json()
 
-    expect(response.status).toBe(500)
-    expect(body.error).toBe('Internal server error')
-    expect(body.items).toBeUndefined()
+    expect(response.status).toBe(200)
+    expect(body.items).toHaveLength(250)
+    expect(body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 't0',
+          rank: null,
+          roi: null,
+          pnl: null,
+          arena_score: null,
+          ranking_visibility: 'unknown',
+          ranking_visibility_reason: 'public_cohort_unavailable',
+        }),
+      ])
+    )
   })
 
   it('fails closed when a later follow-edge page fails', async () => {
@@ -645,7 +730,7 @@ describe('GET /api/following', () => {
     expect(response.status).toBe(500)
     expect(body.error).toBe('Internal server error')
     expect(mockTieredSet).not.toHaveBeenCalled()
-    expect(mockSupabaseFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(mockSupabaseFrom).not.toHaveBeenCalledWith('public_ranked_leaderboard')
   })
 
   it('clamps limit to max 200', async () => {
@@ -706,30 +791,32 @@ describe('GET /api/following', () => {
         users: [],
       },
     })
-    mockQueryResults.set('leaderboard_ranks', {
+    mockQueryResults.set('public_ranked_leaderboard', {
       data: [
-        {
+        publicRankedRow({
           source_trader_id: 'shared-id',
           source: 'binance_futures',
           handle: 'Binance trader',
           avatar_url: null,
           roi: 20,
-          pnl: null,
-          win_rate: null,
+          pnl: 0,
+          win_rate: 50,
           followers: null,
           arena_score: 70,
-        },
-        {
+          rank: 2,
+        }),
+        publicRankedRow({
           source_trader_id: 'shared-id',
           source: 'bybit',
           handle: 'Bybit trader',
           avatar_url: null,
           roi: 10,
-          pnl: null,
-          win_rate: null,
+          pnl: 0,
+          win_rate: 50,
           followers: null,
           arena_score: 60,
-        },
+          rank: 3,
+        }),
       ],
       error: null,
     })
@@ -766,7 +853,7 @@ describe('GET /api/following', () => {
         users: [],
       },
     })
-    mockQueryResults.set('leaderboard_ranks', { data: [], error: null })
+    mockQueryResults.set('public_ranked_leaderboard', { data: [], error: null })
 
     const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
     const body = await response.json()
@@ -791,7 +878,7 @@ describe('GET /api/following', () => {
         users: [],
       },
     })
-    mockQueryResults.set('leaderboard_ranks', { data: [], error: null })
+    mockQueryResults.set('public_ranked_leaderboard', { data: [], error: null })
 
     const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
     const body = await response.json()

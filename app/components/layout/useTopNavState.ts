@@ -18,6 +18,7 @@ import {
   removeOwnedRealtimeChannels,
   subscribeOwnedRealtimeChannel,
 } from '@/lib/realtime/owned-channel'
+import { SUPPRESSED_NOTIFICATION_TYPE } from '@/lib/notifications/ranking-change-fence'
 
 // Lazy-load Supabase to keep it out of the initial client bundle (~50KB savings)
 const getSupabase = () => import('@/lib/supabase/client').then((m) => m.supabase)
@@ -179,6 +180,7 @@ export function useTopNavState() {
           .select('*', { count: 'exact', head: true })
           .eq('user_id', viewer.userId)
           .eq('read', false)
+          .neq('type', SUPPRESSED_NOTIFICATION_TYPE)
         if (!operationIsCurrent()) return
         if (!notificationsResult.error && typeof notificationsResult.count === 'number') {
           setUnreadNotifications(viewer, notificationsResult.count)
@@ -249,6 +251,7 @@ export function useTopNavState() {
           .select('*', { count: 'exact', head: true })
           .eq('user_id', viewer.userId)
           .eq('read', false)
+          .neq('type', SUPPRESSED_NOTIFICATION_TYPE)
         if (operationIsCurrent() && !error && typeof count === 'number') {
           setUnreadNotifications(viewer, count)
         }

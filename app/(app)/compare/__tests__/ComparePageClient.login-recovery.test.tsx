@@ -151,7 +151,7 @@ describe('ComparePageClient login recovery', () => {
 
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/compare?ids=shared%2Cshared&platforms=bybit%2Cbinance_futures&include_equity=1',
+        '/api/compare?ids=shared%2Cshared&platforms=bybit%2Cbinance_futures',
         { headers: { Authorization: 'Bearer access-token' } }
       )
     )

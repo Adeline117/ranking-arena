@@ -57,21 +57,13 @@ describe('findTraderAcrossSources', () => {
     expect(await findTraderAcrossSources('nobody', { client })).toBeNull()
   })
 
-  it('多结果 → 优先返回有 90D 排名的那个', async () => {
+  it('多身份结果 → fail closed，且绝不以 raw 排名裁决', async () => {
     const other = { ...REC, source_trader_id: 'id2', source: 'okx' }
-    const { client } = mockClient([
-      { data: [REC, other] }, // trader_sources 查询
-      { data: [{ source_trader_id: 'id2' }] }, // leaderboard_ranks:只有 id2 有排名
-    ])
+    const { client, from } = mockClient([{ data: [REC, other] }])
     const r = await findTraderAcrossSources('whale', { client })
-    expect(r?.source_trader_id).toBe('id2')
-  })
-
-  it('多结果但都无排名 → 回退 data[0]', async () => {
-    const other = { ...REC, source_trader_id: 'id2' }
-    const { client } = mockClient([{ data: [REC, other] }, { data: [] }])
-    const r = await findTraderAcrossSources('whale', { client })
-    expect(r?.source_trader_id).toBe('id1')
+    expect(r).toBeNull()
+    expect(from).toHaveBeenCalledTimes(1)
+    expect(from).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 
   it('请求级缓存:同 handle 第二次调用不再查 DB', async () => {

@@ -12,12 +12,11 @@ import { isDeadPlatform } from '@/lib/constants/exchanges'
 import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
-import { getFirstScreen } from '@/lib/data/serving/first-screen'
+import { getPublicFirstScreen } from '@/lib/data/serving/first-screen'
 import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
-import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
 import {
   generateTraderProfilePageSchema,
@@ -28,6 +27,10 @@ import { SSR_QUERY_TIMEOUT_MS, SERVING_RESOLVE_TIMEOUT_MS } from '@/lib/constant
 import { logger } from '@/lib/logger'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { findClaimedUserHandleByIdentity } from '@/lib/identity/claimed-trader'
+import {
+  fetchPublicProfileRankingRows,
+  PUBLIC_PROFILE_RANKING_PERIODS,
+} from '@/lib/data/trader/public-profile-ranking'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -35,9 +38,9 @@ const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
 )
 
 // ---------------------------------------------------------------------------
-// unstable_cache wrappers — use Next.js data cache instead of Redis.
-// Upstash SDK uses cache: 'no-store' internally which breaks ISR entirely.
-// These functions populate the Next.js data cache (revalidated every 5 min).
+// unstable_cache wrappers below are restricted to identity/capability lookups.
+// Rank-bearing payloads intentionally bypass cross-request caches so each
+// render observes the current sealed public cohort.
 // ---------------------------------------------------------------------------
 
 const cachedResolveTraderISR = unstable_cache(
@@ -101,19 +104,6 @@ const cachedResolveTrader = cache(
   }
 )
 
-// Heavy query (~11 parallel DB queries). Caching this eliminates the dominant
-// TTFB contribution on repeat requests (expected: 973ms -> <200ms on cache hit).
-// Null results throw to prevent unstable_cache from persisting "no data" for 5min.
-const cachedGetTraderDetailISR = unstable_cache(
-  async (platform: string, traderKey: string) => {
-    const result = await getTraderDetail(getReadReplica(), { platform, traderKey })
-    if (!result) throw new Error('TRADER_DETAIL_NULL')
-    return result
-  },
-  ['trader-detail'],
-  { revalidate: 300, tags: ['trader-profile'] }
-)
-
 // SSR hard timeout — must complete within the SSR budget or page renders
 // without detail data. Without this, during compute-leaderboard cron
 // contention the underlying queries spike to 15-30s, the entire page.tsx
@@ -127,20 +117,21 @@ const cachedGetTraderDetailISR = unstable_cache(
 // AbortSignal.timeout (SSR_HEAVY_QUERY_TIMEOUT_MS) which actually cancels
 // the HTTP request. This outer Promise.race is a safety net only.
 const SSR_DETAIL_TIMEOUT_MS = SSR_QUERY_TIMEOUT_MS + 1000 // 4s: 1s headroom over inner AbortSignal
-const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
+const getCurrentPublicTraderDetail = async (platform: string, traderKey: string) => {
   try {
     return await Promise.race([
-      cachedGetTraderDetailISR(platform, traderKey),
+      getTraderDetail(getReadReplica(), {
+        platform,
+        traderKey,
+        publicProfileHistoryQuarantine: true,
+      }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
     ])
   } catch (err) {
-    // TRADER_DETAIL_NULL is expected (thrown by cachedGetTraderDetailISR to avoid
-    // caching null results). Other errors are real DB failures — log but return
-    // null to let client-side fetch retry.
-    const msg = err instanceof Error ? err.message : ''
-    if (msg !== 'TRADER_DETAIL_NULL') {
-      logger.error('[trader/page] getTraderDetail failed:', msg)
-    }
+    // The reader itself returns null for an unresolvable profile; database
+    // failures remain observable but must not block the page shell.
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error('[trader/page] getTraderDetail failed:', msg)
     return null
   }
 }
@@ -208,30 +199,23 @@ const cachedServingResolve = cache(async (handle: string, source?: string) => {
   }
 })
 
-const cachedGetFirstScreenISR = unstable_cache(
-  async (source: string, traderId: string) => {
-    const result = await getFirstScreen(getReadReplica(), source, traderId)
-    if (!result) throw new Error('TRADER_DETAIL_NULL') // never cache null
-    return result
-  },
-  ['trader-first-screen'],
-  { revalidate: 300, tags: ['trader-profile'] }
-)
-
-const cachedGetFirstScreen = async (
+// The first-screen helper overlays current sealed rank/ROI authority. It must
+// not sit behind an ISR cache: a withdrawn source has to disappear from the
+// header on the next request instead of replaying a prior cohort.
+const getCurrentPublicFirstScreen = async (
   source: string,
   traderId: string
 ): Promise<TraderFirstScreen | null> => {
   try {
     return await Promise.race([
-      cachedGetFirstScreenISR(source, traderId),
+      getPublicFirstScreen(getReadReplica(), source, traderId),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
     ])
   } catch (err) {
-    const msg = err instanceof Error ? err.message : ''
-    if (msg !== 'TRADER_DETAIL_NULL') {
-      logger.error('[trader/page] getFirstScreen failed:', msg)
-    }
+    logger.error(
+      '[trader/page] getCurrentPublicFirstScreen failed:',
+      err instanceof Error ? err.message : String(err)
+    )
     return null
   }
 }
@@ -253,42 +237,55 @@ const cachedCapabilities = async () => {
   }
 }
 
-// Per-timeframe Arena Score sub-scores + trading style for the serving path.
-// The serving three-tab data (arena_core_modules) carries raw stats only —
-// ScoreBreakdownSection and the header style tag were EMPTY in serving mode
-// (2026-07-09 audit) even though leaderboard_ranks has all these columns.
-const cachedServingScores = unstable_cache(
-  async (platform: string, traderKey: string) => {
-    const { data } = await getReadReplica()
-      .from('leaderboard_ranks')
-      .select(
-        'season_id, arena_score, arena_score_v3, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, style_confidence, avg_holding_hours'
-      )
-      .eq(LR.source, platform)
-      .eq(LR.source_trader_id, traderKey)
-      .in(LR.season_id, ['7D', '30D', '90D'])
-    return data ?? []
-  },
-  ['trader-serving-scores'],
-  { revalidate: 300, tags: ['trader-profile'] }
-)
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
 
-// Cached leaderboard query for OG metadata.
-// Avoids a duplicate DB query between generateMetadata and the page render.
-const cachedLeaderboardMeta = unstable_cache(
-  async (platform: string, traderKey: string) => {
-    const { data } = await getReadReplica()
-      .from('leaderboard_ranks')
-      .select('rank, arena_score, roi, pnl')
-      .eq(LR.source, platform)
-      .eq(LR.source_trader_id, traderKey)
-      .eq(LR.season_id, '90D')
-      .maybeSingle()
-    return data
-  },
-  ['trader-lb-meta'],
-  { revalidate: 300, tags: ['trader-profile'] }
-)
+// Per-timeframe Arena Score sub-scores + trading style for the serving path.
+// The serving three-tab data (arena_core_modules) carries raw stats only.
+// Rank-derived fields therefore come from the sealed public ranking cohort,
+// where partial/estimated observations are absent rather than zero-filled.
+async function getCurrentPublicServingScores(platform: string, traderKey: string) {
+  const cohort = await fetchPublicProfileRankingRows(getReadReplica(), {
+    source: platform,
+    sourceTraderId: traderKey,
+    periods: PUBLIC_PROFILE_RANKING_PERIODS,
+  })
+  return cohort.rows.map((row) => ({
+    season_id: row.season_id,
+    arena_score: finiteOrNull(row.arena_score),
+    arena_score_v3: finiteOrNull(row.arena_score_v3),
+    profitability_score: finiteOrNull(row.profitability_score),
+    risk_control_score: finiteOrNull(row.risk_control_score),
+    execution_score: finiteOrNull(row.execution_score),
+    score_completeness:
+      typeof row.score_completeness === 'string' || typeof row.score_completeness === 'number'
+        ? row.score_completeness
+        : null,
+    trading_style: typeof row.trading_style === 'string' ? row.trading_style : null,
+    style_confidence: finiteOrNull(row.style_confidence),
+    avg_holding_hours: finiteOrNull(row.avg_holding_hours),
+  }))
+}
+
+// Metadata is rank-bearing, so it deliberately reads the current sealed cohort
+// instead of a cross-request cached payload.
+async function getCurrentPublicLeaderboardMeta(platform: string, traderKey: string) {
+  const cohort = await fetchPublicProfileRankingRows(getReadReplica(), {
+    source: platform,
+    sourceTraderId: traderKey,
+    periods: ['90D'],
+  })
+  const row = cohort.rows[0]
+  return row
+    ? {
+        rank: row.rank,
+        arena_score: finiteOrNull(row.arena_score),
+        roi: finiteOrNull(row.roi),
+        pnl: finiteOrNull(row.pnl),
+      }
+    : null
+}
 
 // Request-deduplicated but never persistently cached: claimed ownership is an
 // authorization/privacy projection. Unlink must remove owner routing on the
@@ -311,8 +308,8 @@ const findUserHandleByTraderFresh = cache(
 // /trader/[handle] as an ISR route with special routing that rejects
 // non-ASCII percent-encoded paths (returns x-matched-path: /500).
 // Without it, the route is fully dynamic and Chinese handles work.
-// Performance impact is minimal: ISR cache (revalidate=300) still works
-// for the first visitor of each handle; only build-time pre-rendering is lost.
+// The route remains dynamically rendered because rank-bearing output must not
+// outlive the public serving-head proof.
 
 export async function generateMetadata({
   params,
@@ -404,7 +401,7 @@ export async function generateMetadata({
   } | null = null
   if (resolvedData) {
     try {
-      lr = await cachedLeaderboardMeta(resolvedData.platform, resolvedData.traderKey)
+      lr = await getCurrentPublicLeaderboardMeta(resolvedData.platform, resolvedData.traderKey)
     } catch (err) {
       // Leaderboard fetch failure should NOT prevent title generation.
       // The trader name is already known — produce metadata without stats.
@@ -488,8 +485,9 @@ export async function generateMetadata({
   }
 }
 
-// ISR: regenerate trader pages every 5 minutes
-export const revalidate = 300
+// A generated HTML payload can contain rank/ROI/score. Do not let ISR serve it
+// after the source's public serving head has changed or been withdrawn.
+export const revalidate = 0
 
 export default async function TraderPage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params
@@ -556,7 +554,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
   if (servingResolved) {
     const [firstScreenRaw, capabilities, userHandle] = await Promise.all([
-      cachedGetFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
+      getCurrentPublicFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
       cachedCapabilities(),
       findUserHandleByTraderFresh(servingResolved.source, servingResolved.exchangeTraderId),
     ])
@@ -629,13 +627,15 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // (same shape as bridge.ts:203), and thread it down as serverSimilarTraders.
     // Per-TF sub-scores + style for ScoreBreakdown/header (best-effort, 2s cap).
     const servingScores = await Promise.race([
-      cachedServingScores(servingResolved.source, servingResolved.exchangeTraderId).catch((e) => {
-        logger.warn('[trader/page] cachedServingScores failed', {
-          source: servingResolved.source,
-          error: String(e),
-        })
-        return []
-      }),
+      getCurrentPublicServingScores(servingResolved.source, servingResolved.exchangeTraderId).catch(
+        (e) => {
+          logger.warn('[trader/page] getCurrentPublicServingScores failed', {
+            source: servingResolved.source,
+            error: String(e),
+          })
+          return []
+        }
+      ),
       new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
     ])
 
@@ -658,7 +658,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     ).map((st) => ({
       handle: st.handle || st.traderKey,
       id: st.traderKey,
-      followers: st.followers ?? 0,
+      followers: st.followers ?? undefined,
       avatar_url: st.avatarUrl ?? undefined,
       source: st.platform,
       roi_90d: st.roi ?? undefined,
@@ -725,18 +725,16 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // here (return null, NOT notFound(), to avoid the page-level noindex bug).
   if (isRetiredSource(resolved.platform)) return null
 
-  // Phase 2: Fetch trader detail.
-  // cachedGetTraderDetail serves the ~11-query fetch from Next.js data cache;
-  // claim ownership is looked up in parallel by the resolved composite identity.
+  // Phase 2: Fetch trader detail. The rank-bearing projection reads the current
+  // public cohort; claim ownership is looked up in parallel by the resolved
+  // composite identity.
   const claimedUserProfile = null
 
   const [detailResult, userHandle] = await Promise.all([
-    cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch((err) => {
+    getCurrentPublicTraderDetail(resolved.platform, resolved.traderKey).catch((err) => {
       // Log real fetch failures so they aren't silently masked as "no data".
-      // cachedGetTraderDetail already handles TRADER_DETAIL_NULL internally;
-      // errors reaching here are unexpected (e.g. network/timeout).
       logger.error(
-        '[trader/page] cachedGetTraderDetail unexpected error:',
+        '[trader/page] getCurrentPublicTraderDetail unexpected error:',
         err instanceof Error ? err.message : err
       )
       return null
@@ -744,7 +742,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     findUserHandleByTraderFresh(resolved.platform, resolved.traderKey),
   ])
 
-  const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
+  const serverTraderData = detailResult
+    ? toTraderPageData(detailResult, { publicProfileHistoryQuarantine: true })
+    : null
 
   // Build UnregisteredTraderData for initial render
   const platformDead = isDeadPlatform(resolved.platform)

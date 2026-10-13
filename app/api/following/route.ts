@@ -5,7 +5,7 @@
  * This prevents users from accessing other users' private following lists.
  *
  * Optimizations:
- * - Uses leaderboard_ranks as unified data source for trader performance data
+ * - Uses the sealed public ranking cohort for trader performance data
  * - Redis cache with 60s TTL via tiered cache
  * - Pagination support via limit/offset params
  */
@@ -18,6 +18,10 @@ import { withAuth } from '@/lib/api/middleware'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { features } from '@/lib/features'
 import { isPublicProfileActive } from '@/lib/profile/public-audience'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +35,9 @@ const FOLLOW_EDGE_PAGE_SIZE = 500
 const MATERIALIZATION_CHUNK_SIZE = 100
 const MATERIALIZATION_CONCURRENCY = 3
 const QUERY_TIMEOUT_MS = 15000
+const FOLLOWING_RANKING_PERIOD = '90D'
+const PUBLIC_FOLLOWING_RANKING_COLUMNS =
+  'source_trader_id,handle,source,avatar_url,roi,pnl,win_rate,followers,arena_score,rank,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
 // 统一的关注项类型
 type FollowItem = {
@@ -51,7 +58,11 @@ type FollowItem = {
   source?: string | null
   /** Resolved profile platform used for navigation; absent for unresolved legacy edges. */
   platform?: string
+  rank?: number | null
   arena_score?: number | null
+  /** Ranking evidence is per-account; social edges remain visible when unknown. */
+  ranking_visibility?: 'verified' | 'partial' | 'unknown'
+  ranking_visibility_reason?: string | null
   followed_at?: string
 }
 
@@ -108,11 +119,139 @@ type TraderMaterializedData = {
   handle: string
   source: string
   avatar_url?: string
+  rank: number
   roi: number | null
   pnl: number | null
   win_rate: number | null
   followers: number | null
   arena_score: number | null
+}
+
+type RankingVisibility = 'verified' | 'partial' | 'unknown'
+
+type PublicRankedLeaderboardQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  abortSignal(signal: AbortSignal): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+type PublicFollowingRankedRow = Record<string, unknown> & {
+  source: string
+  source_trader_id: string
+  rank: number
+}
+
+type FollowingPublicRankingCohort = {
+  /** Complete, proof-checked rows keyed by their composite source identity. */
+  verifiedByIdentity: Map<string, PublicFollowingRankedRow[]>
+  /** Same rows grouped for pre-composite legacy follows with no source. */
+  verifiedByRawId: Map<string, PublicFollowingRankedRow[]>
+  /** Raw view rows let us distinguish absent ranks from an invalid response. */
+  rawByIdentity: Map<string, number>
+  rawByRawId: Map<string, number>
+  unavailable: boolean
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  // The security-barrier view is additive while generated Supabase types catch
+  // up. Keep the type escape hatch narrow and read-only; never fall back to
+  // the retained parent table when the view is unavailable.
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function hasPositivePublishedRank(row: unknown): row is PublicFollowingRankedRow {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    isPublicRankingSourceAllowed(row.source) &&
+    typeof row.source_trader_id === 'string' &&
+    row.source_trader_id.length > 0 &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0
+  )
+}
+
+function appendMapValue<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const values = map.get(key)
+  if (values) values.push(value)
+  else map.set(key, [value])
+}
+
+function incrementMapValue(map: Map<string, number>, key: string): void {
+  map.set(key, (map.get(key) ?? 0) + 1)
+}
+
+/**
+ * The view should only return publishable rows, but query/caching/schema drift
+ * must never turn a malformed row into a performance claim. We retain enough
+ * raw identity information to label that one followed account partial while
+ * leaving unrelated follows usable.
+ */
+function buildFollowingPublicRankingCohort(
+  value: unknown,
+  unavailable = false
+): FollowingPublicRankingCohort {
+  const rawRows = Array.isArray(value) ? value : []
+  const rawByIdentity = new Map<string, number>()
+  const rawByRawId = new Map<string, number>()
+
+  for (const row of rawRows) {
+    if (
+      !isRecord(row) ||
+      typeof row.source !== 'string' ||
+      typeof row.source_trader_id !== 'string' ||
+      row.source_trader_id.length === 0
+    ) {
+      continue
+    }
+    incrementMapValue(
+      rawByIdentity,
+      traderRowIdentity({ source: row.source, source_trader_id: row.source_trader_id })
+    )
+    incrementMapValue(rawByRawId, row.source_trader_id)
+  }
+
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rawRows, period: FOLLOWING_RANKING_PERIOD },
+    { expectedPeriod: FOLLOWING_RANKING_PERIOD }
+  ) as { traders?: unknown[] }
+  const safeRows = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter(hasPositivePublishedRank)
+    : []
+  const verifiedByIdentity = new Map<string, PublicFollowingRankedRow[]>()
+  const verifiedByRawId = new Map<string, PublicFollowingRankedRow[]>()
+
+  for (const row of safeRows) {
+    appendMapValue(verifiedByIdentity, traderRowIdentity(row), row)
+    appendMapValue(verifiedByRawId, row.source_trader_id, row)
+  }
+
+  return {
+    verifiedByIdentity,
+    verifiedByRawId,
+    rawByIdentity,
+    rawByRawId,
+    unavailable,
+  }
 }
 
 function finiteNumberOrNull(value: unknown): number | null {
@@ -301,62 +440,77 @@ async function materializeFollowingItems(
 
   if (candidates.traders.length > 0) {
     const traderIds = [...new Set(candidates.traders.map((candidate) => candidate.traderId))]
-    const lrData = await fetchRowsInChunks(traderIds, 'leaderboard_ranks', async (chunk) =>
-      supabase
-        .from('leaderboard_ranks')
-        .select(
-          'source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank'
-        )
-        .in('source_trader_id', chunk)
-        .eq('season_id', '90D')
-        .gt('arena_score', 0)
-        .or('is_outlier.is.null,is_outlier.eq.false')
-        .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS))
-    )
-
-    // A trader identity is composite. Matching only source_trader_id can attach
-    // another exchange's handle and performance when platforms reuse an ID.
-    const traderDataMap = new Map<string, TraderMaterializedData>()
-    const traderRowsByRawId = new Map<string, TraderMaterializedData[]>()
-
-    for (const row of lrData) {
-      const identity = traderRowIdentity(row)
-      if (!traderDataMap.has(identity)) {
-        const materialized = {
-          handle: row.handle || row.source_trader_id,
-          source: row.source,
-          avatar_url: row.avatar_url || undefined,
-          roi: finiteNumberOrNull(row.roi),
-          pnl: finiteNumberOrNull(row.pnl),
-          win_rate: finiteNumberOrNull(row.win_rate),
-          followers: finiteNumberOrNull(row.followers),
-          arena_score: finiteNumberOrNull(row.arena_score),
-        }
-        traderDataMap.set(identity, materialized)
-        const rows = traderRowsByRawId.get(row.source_trader_id) || []
-        rows.push(materialized)
-        traderRowsByRawId.set(row.source_trader_id, rows)
-      }
+    let publicCohort = buildFollowingPublicRankingCohort([], false)
+    try {
+      const rows = await fetchRowsInChunks(traderIds, 'public_ranked_leaderboard', async (chunk) =>
+        publicRankedLeaderboardClient(supabase)
+          .from('public_ranked_leaderboard')
+          .select(PUBLIC_FOLLOWING_RANKING_COLUMNS)
+          .in('source_trader_id', chunk)
+          .eq('season_id', FOLLOWING_RANKING_PERIOD)
+          .not('rank', 'is', null)
+          .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS))
+      )
+      publicCohort = buildFollowingPublicRankingCohort(rows)
+    } catch (error) {
+      // The follow edge is still a real user-owned relationship. A transient
+      // ranking read cannot resurrect raw metrics, but it also should not hide
+      // the edge or make an unfollow action impossible.
+      logger.warn('Published ranking cohort unavailable for following materialization', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      publicCohort = buildFollowingPublicRankingCohort([], true)
     }
 
-    for (const candidate of candidates.traders) {
-      const exactData =
-        candidate.source === null
-          ? undefined
-          : traderDataMap.get(traderCandidateIdentity(candidate))
-      const legacyMatches =
-        candidate.source === null ? traderRowsByRawId.get(candidate.traderId) || [] : []
-      const data = exactData ?? (legacyMatches.length === 1 ? legacyMatches[0] : undefined)
+    const materializeRankedRow = (row: PublicFollowingRankedRow): TraderMaterializedData => ({
+      handle:
+        typeof row.handle === 'string' && row.handle.length > 0 ? row.handle : row.source_trader_id,
+      source: row.source,
+      avatar_url:
+        typeof row.avatar_url === 'string' && row.avatar_url.length > 0
+          ? row.avatar_url
+          : undefined,
+      rank: row.rank,
+      roi: finiteNumberOrNull(row.roi),
+      pnl: finiteNumberOrNull(row.pnl),
+      win_rate: finiteNumberOrNull(row.win_rate),
+      followers: finiteNumberOrNull(row.followers),
+      arena_score: finiteNumberOrNull(row.arena_score),
+    })
 
-      if (!data && candidate.source !== null) {
-        logger.warn(
-          `Trader not found in current leaderboard_ranks: ${traderCandidateIdentity(candidate)}`
-        )
-      }
-      if (!data && candidate.source === null) {
-        logger.warn(
-          `Legacy trader follow has no unambiguous current profile: ${candidate.traderId}`
-        )
+    for (const candidate of candidates.traders) {
+      const sourceIsPublic =
+        candidate.source !== null && isPublicRankingSourceAllowed(candidate.source)
+      const rawRows =
+        candidate.source === null
+          ? (publicCohort.rawByRawId.get(candidate.traderId) ?? 0)
+          : (publicCohort.rawByIdentity.get(traderCandidateIdentity(candidate)) ?? 0)
+      const verifiedRows =
+        candidate.source === null
+          ? (publicCohort.verifiedByRawId.get(candidate.traderId) ?? [])
+          : (publicCohort.verifiedByIdentity.get(traderCandidateIdentity(candidate)) ?? [])
+
+      let data: TraderMaterializedData | undefined
+      let rankingVisibility: RankingVisibility
+      let rankingVisibilityReason: string
+      if (publicCohort.unavailable) {
+        rankingVisibility = 'unknown'
+        rankingVisibilityReason = 'public_cohort_unavailable'
+      } else if (candidate.source !== null && !sourceIsPublic) {
+        rankingVisibility = 'partial'
+        rankingVisibilityReason = 'source_not_publicly_rankable'
+      } else if (rawRows === 1 && verifiedRows.length === 1) {
+        data = materializeRankedRow(verifiedRows[0])
+        rankingVisibility = 'verified'
+        rankingVisibilityReason = ''
+      } else if (rawRows > 0) {
+        // A source/identity collision, duplicate, or filtered row is not a
+        // smaller valid cohort. Suppress this account's rank-derived fields.
+        rankingVisibility = 'partial'
+        rankingVisibilityReason = 'public_cohort_unverified'
+      } else {
+        rankingVisibility = 'unknown'
+        rankingVisibilityReason = 'public_rank_unavailable'
       }
 
       items.push({
@@ -365,13 +519,18 @@ async function materializeFollowingItems(
         handle: data?.handle || candidate.traderId,
         type: 'trader',
         avatar_url: data?.avatar_url,
-        roi: data?.roi,
-        pnl: data?.pnl,
-        win_rate: data?.win_rate,
-        followers: data?.followers,
+        rank: data?.rank ?? null,
+        roi: data?.roi ?? null,
+        roi_7d: null,
+        roi_30d: null,
+        pnl: data?.pnl ?? null,
+        win_rate: data?.win_rate ?? null,
+        followers: data?.followers ?? null,
         source: candidate.source,
         platform: candidate.source ?? data?.source,
-        arena_score: data?.arena_score,
+        arena_score: data?.arena_score ?? null,
+        ranking_visibility: rankingVisibility,
+        ranking_visibility_reason: rankingVisibilityReason || null,
         followed_at: candidate.followedAt,
       })
     }

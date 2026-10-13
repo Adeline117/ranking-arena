@@ -30,6 +30,7 @@ export const maxDuration = 60
 const logger = createLogger('onchain-enrich-api')
 const DEDUP_MINUTES = 30
 const PROVIDER_CAPACITY_COOLDOWN_MS = 5 * 60_000
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' } as const
 
 // A warm serverless process must not hit the same exhausted paid provider for
 // every profile mount. This is deliberately short-lived and process-local:
@@ -70,12 +71,15 @@ export async function POST(req: NextRequest) {
     source = String(body.source ?? '')
     exchangeTraderId = String(body.exchangeTraderId ?? '')
   } catch {
-    return NextResponse.json({ error: 'bad_request' }, { status: 400 })
+    return NextResponse.json({ error: 'bad_request' }, { status: 400, headers: NO_STORE_HEADERS })
   }
 
   const chain = chainForSource(source)
   if (!chain || !exchangeTraderId) {
-    return NextResponse.json({ error: 'not_onchain_source' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'not_onchain_source' },
+      { status: 400, headers: NO_STORE_HEADERS }
+    )
   }
 
   const supabase = getSupabaseAdmin()
@@ -95,7 +99,7 @@ export async function POST(req: NextRequest) {
       typeof at === 'string' &&
       Date.now() - Date.parse(at) < DEDUP_MINUTES * 60_000
     ) {
-      return NextResponse.json({ status: 'fresh', skipped: true })
+      return NextResponse.json({ status: 'fresh', skipped: true }, { headers: NO_STORE_HEADERS })
     }
   } catch {
     /* dedup is best-effort — proceed to enrich */
@@ -116,7 +120,7 @@ export async function POST(req: NextRequest) {
       ...onchainFetchBudget(chain, 'interactive'),
     })
     const extras = { ...enrichmentExtras(e), onchain_enriched_at: new Date().toISOString() }
-    const { data: updated, error } = await supabase.rpc('arena_apply_onchain_enrichment', {
+    const { error } = await supabase.rpc('arena_apply_onchain_enrichment', {
       p_source: source,
       p_exchange_trader_id: exchangeTraderId,
       p_extras: extras,
@@ -125,14 +129,10 @@ export async function POST(req: NextRequest) {
       p_win_rate: scoreEligibleWinRate(e) ?? undefined,
     })
     if (error) throw error
-    return NextResponse.json({
-      status: 'enriched',
-      rows: updated ?? 0,
-      realizedPnl: e.realizedPnlUsd,
-      unrealizedPnl: e.unrealizedPnlUsd,
-      winRate: e.winRate,
-      tokensTraded: e.tokensTraded,
-    })
+    // The caller only needs the completion state. Do not echo raw realized /
+    // unrealized PnL, win rate, token counts, or write counts into an anonymous
+    // response while the corresponding historical core projection is sealed.
+    return NextResponse.json({ status: 'enriched' }, { headers: NO_STORE_HEADERS })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (isQuotaExhausted(message)) {
@@ -141,6 +141,6 @@ export async function POST(req: NextRequest) {
       return providerUnavailable(chain)
     }
     logger.error('enrich failed', { source, exchangeTraderId, err })
-    return NextResponse.json({ error: 'enrich_failed' }, { status: 500 })
+    return NextResponse.json({ error: 'enrich_failed' }, { status: 500, headers: NO_STORE_HEADERS })
   }
 }

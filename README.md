@@ -453,12 +453,13 @@ request.
 | -------------------------- | ------------------------------------------------------------------------------ |
 | **Vercel**                 | Owner-controlled; no deployment or control-plane action                        |
 | **Managed services**       | No direct operation; only owner-approved, exact read-only evidence             |
-| **OpenClaw compatibility** | Retired/report-only; no auto-fix, backfill, or release authority               |
+| **OpenClaw compatibility** | Observation only; no auto-fix or release authority during V1 NO-GO             |
 | **Source routing code**    | Local review only; no proxy, worker, or host operation from this documentation |
 
 ### Monitoring
 
-- Owner-approved, query-specific read-only evidence only
+- Owner-approved, query-specific read-only evidence only (for example
+  `npm run check:freshness` for the published ranking freshness authority)
 - Local test output and code review do not establish production state
 - Alerts and monitors are observations, not remediation authority
 

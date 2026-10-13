@@ -49,6 +49,29 @@ jest.mock('@/app/components/base', () => {
 import TraderComparison from '../TraderComparison'
 
 describe('TraderComparison score bars', () => {
+  it('renders an explicit unknown ranking state without a numeric fallback', () => {
+    render(
+      <TraderComparison
+        traders={[
+          {
+            id: 'unknown',
+            handle: 'Unknown ranking',
+            source: 'bybit',
+            roi: null,
+            ranking_visibility: 'unknown',
+            ranking_visibility_reason: 'public_rank_unavailable',
+          },
+        ]}
+        showRemoveButton={false}
+      />
+    )
+
+    expect(screen.getByText('unknown')).toHaveAttribute('title', 'public_rank_unavailable')
+    const roiRow = screen.getByRole('rowheader', { name: 'compareROI90D' }).closest('tr')!
+    expect(within(roiRow).getByRole('cell')).toHaveTextContent('—')
+    expect(within(roiRow).queryByText(/^0/)).not.toBeInTheDocument()
+  })
+
   it('distinguishes measured zero dimensions from unavailable dimensions', () => {
     render(
       <TraderComparison

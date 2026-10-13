@@ -11,6 +11,7 @@ import SocialComingSoonPage from '@/app/components/ui/SocialComingSoonPage'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
 import { BASE_URL } from '@/lib/constants/urls'
+import { ARENA_BOT_PUBLICATION_CACHE_EPOCH } from '@/lib/data/arena-bot-publication-policy'
 
 export const metadata: Metadata = {
   title: 'Trading Groups & Community',
@@ -56,7 +57,8 @@ const getRecommendedPosts = unstable_cache(
       return []
     }
   },
-  ['groups-recommended-posts'],
+  // Keep a rolling instance from serving a pre-quarantine rendered post payload.
+  ['groups-recommended-posts', ARENA_BOT_PUBLICATION_CACHE_EPOCH],
   { revalidate: 300, tags: ['posts'] }
 )
 

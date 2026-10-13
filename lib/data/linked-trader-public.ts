@@ -1,4 +1,5 @@
 import { normalizeDrawdownMagnitude } from '@/lib/utils/format'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 
 export interface PublicLinkedSubject {
   platform: string
@@ -12,13 +13,23 @@ export interface PublicLinkedAccount {
   handle: string | null
   label: null
   isPrimary: boolean
+  /** Per-account proof state; relation identity remains visible when unknown. */
+  rankingVisibility: PublicLinkedRankingVisibility
+  rankingVisibilityReason: PublicLinkedRankingVisibilityReason | null
   roi: number | null
   pnl: null
-  arenaScore: null
+  arenaScore: number | null
   winRate: number | null
   maxDrawdown: number | null
-  rank: null
+  rank: number | null
 }
+
+export type PublicLinkedRankingVisibility = 'verified' | 'partial' | 'unknown'
+export type PublicLinkedRankingVisibilityReason =
+  | 'source_not_publicly_rankable'
+  | 'public_cohort_unavailable'
+  | 'public_rank_unavailable'
+  | 'public_cohort_unverified'
 
 export interface PublicLinkedAggregateData {
   combinedPnl: null
@@ -72,6 +83,56 @@ function boundedPercentOrNull(value: unknown): number | null {
     : null
 }
 
+function arenaScoreOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100
+    ? value
+    : null
+}
+
+function positiveRankOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
+}
+
+const PUBLIC_LINKED_RANKING_REASONS = new Set<string>([
+  'source_not_publicly_rankable',
+  'public_cohort_unavailable',
+  'public_rank_unavailable',
+  'public_cohort_unverified',
+])
+
+function publicRankingReasonOrNull(value: unknown): PublicLinkedRankingVisibilityReason | null {
+  if (typeof value !== 'string' || !PUBLIC_LINKED_RANKING_REASONS.has(value)) return null
+  return value as PublicLinkedRankingVisibilityReason
+}
+
+function unknownAccountRanking(
+  account: Omit<
+    PublicLinkedAccount,
+    | 'rankingVisibility'
+    | 'rankingVisibilityReason'
+    | 'roi'
+    | 'pnl'
+    | 'arenaScore'
+    | 'winRate'
+    | 'maxDrawdown'
+    | 'rank'
+  >,
+  rankingVisibility: Exclude<PublicLinkedRankingVisibility, 'verified'> = 'unknown',
+  rankingVisibilityReason: PublicLinkedRankingVisibilityReason = 'public_cohort_unavailable'
+): PublicLinkedAccount {
+  return {
+    ...account,
+    rankingVisibility,
+    rankingVisibilityReason,
+    roi: null,
+    pnl: null,
+    arenaScore: null,
+    winRate: null,
+    maxDrawdown: null,
+    rank: null,
+  }
+}
+
 function parseAccount(value: unknown): PublicLinkedAccount | null {
   const record = recordOrNull(value)
   if (!record) return null
@@ -85,12 +146,7 @@ function parseAccount(value: unknown): PublicLinkedAccount | null {
       : typeof record.handle === 'string' && record.handle.length > 0 && record.handle.length <= 512
         ? record.handle
         : null
-  const rawDrawdown =
-    typeof record.maxDrawdown === 'number' && Number.isFinite(record.maxDrawdown)
-      ? record.maxDrawdown
-      : null
-
-  return {
+  const identity = {
     id: `${encodeURIComponent(platform)}:${encodeURIComponent(traderKey)}`,
     platform,
     traderKey,
@@ -99,14 +155,54 @@ function parseAccount(value: unknown): PublicLinkedAccount | null {
     // contract exists.
     label: null,
     isPrimary: record.isPrimary,
-    roi: roiOrNull(record.roi),
-    // These values require Money/publication-proof contracts that the legacy
-    // linked rows do not carry. Force them closed even for old cached payloads.
+  }
+
+  const rankingVisibility = record.rankingVisibility
+  const rankingVisibilityReason = publicRankingReasonOrNull(record.rankingVisibilityReason)
+  if (rankingVisibility !== 'verified') {
+    // Old client/query-cache payloads predate the proof field. Their metrics
+    // cannot be replayed merely because the shape looks plausible.
+    return unknownAccountRanking(
+      identity,
+      rankingVisibility === 'partial' ? 'partial' : 'unknown',
+      rankingVisibilityReason ??
+        (rankingVisibility === 'partial' ? 'public_cohort_unverified' : 'public_cohort_unavailable')
+    )
+  }
+
+  const rawDrawdown =
+    typeof record.maxDrawdown === 'number' && Number.isFinite(record.maxDrawdown)
+      ? record.maxDrawdown
+      : null
+  const roi = roiOrNull(record.roi)
+  const arenaScore = arenaScoreOrNull(record.arenaScore)
+  const winRate = boundedPercentOrNull(record.winRate)
+  const maxDrawdown = normalizeDrawdownMagnitude(rawDrawdown)
+  const rank = positiveRankOrNull(record.rank)
+  if (
+    !isPublicRankingSourceAllowed(platform) ||
+    rankingVisibilityReason !== null ||
+    roi === null ||
+    arenaScore === null ||
+    winRate === null ||
+    maxDrawdown === null ||
+    rank === null
+  ) {
+    return unknownAccountRanking(identity, 'partial', 'public_cohort_unverified')
+  }
+
+  return {
+    ...identity,
+    rankingVisibility: 'verified',
+    rankingVisibilityReason: null,
+    roi,
+    // Per-account PnL lacks an attested settlement currency. It remains
+    // unavailable even when the ranking cohort is otherwise verified.
     pnl: null,
-    arenaScore: null,
-    winRate: boundedPercentOrNull(record.winRate),
-    maxDrawdown: normalizeDrawdownMagnitude(rawDrawdown),
-    rank: null,
+    arenaScore,
+    winRate,
+    maxDrawdown,
+    rank,
   }
 }
 

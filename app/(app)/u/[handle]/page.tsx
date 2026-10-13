@@ -12,7 +12,7 @@ import TraderProfileClient, {
   type UnregisteredTraderData,
 } from '@/app/(app)/trader/[handle]/TraderProfileClient'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
-import { getFirstScreen } from '@/lib/data/serving/first-screen'
+import { getPublicFirstScreen } from '@/lib/data/serving/first-screen'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
@@ -20,6 +20,7 @@ import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { isPublicProfileActive } from '@/lib/profile/public-audience'
+import { fetchPublicProfileRankingRows } from '@/lib/data/trader/public-profile-ranking'
 
 // Account moderation/deletion state is a request-time public audience boundary.
 // Do not let an ISR payload keep serving a profile after that state changes.
@@ -29,6 +30,10 @@ export const revalidate = 0
 // SSR timeout: during cron contention, Supabase queries can block on row locks
 // for 30+ seconds. Race against this timeout so users see a fast fallback.
 const SSR_TIMEOUT_MS = 4000
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
 
 export async function generateMetadata({
   params,
@@ -60,22 +65,20 @@ export async function generateMetadata({
 
     // If user claimed a trader, fetch their trading stats for meta description
     if (publicData?.verified_trader_source && publicData?.verified_trader_id) {
-      const { data: lr } = await Promise.race([
-        supabase
-          .from('leaderboard_ranks')
-          .select('roi, arena_score, source')
-          .eq('source', publicData.verified_trader_source)
-          .eq('source_trader_id', publicData.verified_trader_id)
-          .eq('season_id', '90D')
-          .maybeSingle(),
-        new Promise<{ data: null }>((resolve) =>
-          setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
-        ),
-      ])
+      const cohort = await fetchPublicProfileRankingRows(
+        supabase,
+        {
+          source: publicData.verified_trader_source,
+          sourceTraderId: publicData.verified_trader_id,
+          periods: ['90D'],
+        },
+        AbortSignal.timeout(SSR_TIMEOUT_MS)
+      )
+      const lr = cohort.rows[0]
       if (lr) {
         traderMeta = {
-          roi: lr.roi ?? undefined,
-          score: lr.arena_score ?? undefined,
+          roi: finiteOrNull(lr.roi) ?? undefined,
+          score: finiteOrNull(lr.arena_score) ?? undefined,
           platform: lr.source,
         }
       }
@@ -300,7 +303,9 @@ async function fetchTraderData(traderHandle: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const res = await fetch(`${baseUrl}/api/traders/${encodeURIComponent(traderHandle)}`, {
-      next: { revalidate: 60 },
+      // The response includes rank-derived metrics. Do not let this server-side
+      // fetch cache outlive the current public-cohort proof.
+      cache: 'no-store',
     })
     if (!res.ok) return null
     const json = await res.json()
@@ -366,7 +371,7 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
     if (servingResolved) {
       const [firstScreenRaw, capabilities] = await Promise.all([
         Promise.race([
-          getFirstScreen(
+          getPublicFirstScreen(
             getReadReplica(),
             servingResolved.source,
             servingResolved.exchangeTraderId

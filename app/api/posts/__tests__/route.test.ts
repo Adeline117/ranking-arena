@@ -203,9 +203,9 @@ describe('/api/posts', () => {
       expect(res.status).toBe(200)
       expect(body.success).toBe(true)
       expect(body.data.posts).toBeDefined()
-      expect(res.headers.get('Cache-Control')).toBe(
-        'public, s-maxage=30, stale-while-revalidate=120'
-      )
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+      expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
       expect(res.headers.get('Vary')).toContain('Authorization')
     })
 
@@ -556,6 +556,15 @@ describe('/api/posts', () => {
       }
 
       expect(vercelConfig.headers?.find((entry) => entry.source === '/api/posts')).toBeUndefined()
+    })
+
+    it('uses a bot-publication cache epoch and never shares anonymous payloads through a CDN', () => {
+      const route = readFileSync(join(process.cwd(), 'app/api/posts/route.ts'), 'utf8')
+
+      expect(route).toContain('ARENA_BOT_PUBLICATION_CACHE_EPOCH')
+      expect(route).toContain('posts:${ARENA_BOT_PUBLICATION_CACHE_EPOCH}:')
+      expect(route).toContain("const PUBLIC_POSTS_CACHE_CONTROL = 'private, no-store, max-age=0'")
+      expect(route).toContain("response.headers.set('Vercel-CDN-Cache-Control', 'no-store')")
     })
   })
 

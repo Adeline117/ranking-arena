@@ -56,11 +56,15 @@ export default function UserProfileContent({
   const effectiveTab: ProfileTabKey =
     !isVerifiedTrader && activeTab !== 'overview' ? 'overview' : activeTab
 
-  const traderStats = traderData?.stats ?? null
-  const traderPortfolio = traderData?.portfolio ?? []
+  // Legacy public-profile history is unavailable until it has a serving
+  // completeness proof. Keep it absent, rather than letting a stale hydration
+  // payload draw a curve or render price/PnL rows.
+  const legacyHistoryComplete = traderData?.historyCompleteness?.state === 'complete'
+  const traderStats = legacyHistoryComplete ? (traderData?.stats ?? null) : null
+  const traderPortfolio = legacyHistoryComplete ? (traderData?.portfolio ?? []) : []
   const traderPositionHistory = EMPTY_LEGACY_POSITION_HISTORY
-  const traderEquityCurve = traderData?.equityCurve
-  const traderAssetBreakdown = traderData?.assetBreakdown
+  const traderEquityCurve = legacyHistoryComplete ? traderData?.equityCurve : undefined
+  const traderAssetBreakdown = legacyHistoryComplete ? traderData?.assetBreakdown : undefined
   const traderProfile = traderData?.profile ?? null
 
   return (

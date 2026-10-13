@@ -21,6 +21,10 @@ import {
   isInboxViewerCurrent,
 } from '@/lib/inbox/viewer-scope'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+import {
+  isVisibleNotificationType,
+  NOTIFICATION_READER_CACHE_EPOCH,
+} from '@/lib/notifications/ranking-change-fence'
 
 type Notification = NotificationWithActor
 
@@ -114,7 +118,12 @@ export default function NotificationsList({
     isError: loadFailed,
     refetch: refetchNotifications,
   } = useInfiniteQuery({
-    queryKey: ['notifications', viewer?.viewerKey ?? 'inactive', viewer?.sessionGeneration ?? -1],
+    queryKey: [
+      'notifications',
+      NOTIFICATION_READER_CACHE_EPOCH,
+      viewer?.viewerKey ?? 'inactive',
+      viewer?.sessionGeneration ?? -1,
+    ],
     queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
       if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) {
         throw new Error('stale inbox viewer')
@@ -141,13 +150,19 @@ export default function NotificationsList({
       if (!data || typeof data !== 'object') throw new Error('Invalid notifications response')
       const record = data as Record<string, unknown>
       if (!Array.isArray(record.notifications)) throw new Error('Invalid notifications response')
+      const notifications = (record.notifications as Notification[]).filter((notification) =>
+        isVisibleNotificationType(notification.type)
+      )
+      const suppressedCount = record.notifications.length - notifications.length
       return {
-        notifications: record.notifications as Notification[],
+        notifications,
         unread_count:
-          typeof record.unread_count === 'number' && Number.isFinite(record.unread_count)
+          suppressedCount === 0 &&
+          typeof record.unread_count === 'number' &&
+          Number.isFinite(record.unread_count)
             ? Math.max(0, Math.floor(record.unread_count))
-            : 0,
-        hasMore: record.notifications.length >= PAGE_SIZE,
+            : notifications.filter((notification) => !notification.read).length,
+        hasMore: suppressedCount === 0 && record.notifications.length >= PAGE_SIZE,
       }
     },
     initialPageParam: 0,

@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { TRADER_CORE_QUERY_EPOCH } from '@/lib/hooks/useTraderCore'
 
 function isWeb3Source(source: string): boolean {
   return source.includes('solana') || source.includes('web3_bsc') || source.includes('_bsc')
@@ -77,7 +78,7 @@ export function useOnchainEnrichTrigger(params: {
         // Only refetch when we actually wrote something new.
         if (json.status === 'enriched') {
           await queryClient.invalidateQueries({
-            queryKey: ['trader-core', source, exchangeTraderId],
+            queryKey: ['trader-core', TRADER_CORE_QUERY_EPOCH, source, exchangeTraderId],
           })
         }
         if (!controller.signal.aborted) {

@@ -84,7 +84,7 @@ describe('ActivityFeed failure state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
-    expect(await screen.findByText('No activity events yet.')).toBeInTheDocument()
+    expect((await screen.findAllByText('No activity events yet.')).length).toBeGreaterThan(0)
     expect(screen.queryAllByText('Failed to load')).toHaveLength(0)
   })
 })

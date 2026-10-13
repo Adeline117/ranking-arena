@@ -1,22 +1,25 @@
 /**
  * 搜索建议 API
  * 提供交易员、交易对等的实时搜索建议
- * - Redis 缓存热门查询 (TTL 60s)
  * - PostgreSQL pg_trgm 模糊匹配
  * - 搜索分析日志
  */
 
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
-import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { searchTraders } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { parseLimit } from '@/lib/utils/safe-parse'
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 
-// Removed force-dynamic: Redis cache (60s) + HTTP Cache-Control headers handle freshness.
-// force-dynamic was preventing Vercel CDN from caching responses at the edge.
+// Trader metrics are materialized from the live sealed cohort by searchTraders.
+// Do not put a metric-bearing suggestion response in Redis, browser, or CDN cache.
+const SEARCH_SUGGESTIONS_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 interface SearchSuggestion {
   type: 'trader' | 'symbol' | 'keyword'
@@ -27,6 +30,7 @@ interface SearchSuggestion {
   source?: string
   roi?: number
   arenaScore?: number
+  rankingVisibility?: 'verified' | 'unknown'
 }
 
 export const GET = withPublic(
@@ -36,18 +40,7 @@ export const GET = withPublic(
     const limit = parseLimit(searchParams.get('limit'), 10, 20)
 
     if (!query || query.length < 1) {
-      return success({ suggestions: [] })
-    }
-
-    // Check Redis cache for hot queries
-    const cacheKey = `search:suggestions:${query.toLowerCase().slice(0, 50)}`
-    try {
-      const cached = await cacheGet<{ suggestions: SearchSuggestion[]; query: string }>(cacheKey)
-      if (cached) {
-        return success(cached)
-      }
-    } catch {
-      // Cache miss or error, continue with DB query
+      return success({ suggestions: [] }, 200, SEARCH_SUGGESTIONS_NO_STORE_HEADERS)
     }
 
     const suggestions: SearchSuggestion[] = []
@@ -72,6 +65,7 @@ export const GET = withPublic(
           source: t.platform,
           roi: roi ?? undefined,
           arenaScore: t.arenaScore ?? undefined,
+          rankingVisibility: t.rank != null ? 'verified' : 'unknown',
         })
       }
     } catch {
@@ -114,13 +108,6 @@ export const GET = withPublic(
       query,
     }
 
-    // Cache the result for 60 seconds
-    try {
-      await cacheSet(cacheKey, result, { ttl: 60 })
-    } catch {
-      // Cache write failure is non-critical
-    }
-
     // Log search analytics asynchronously (fire-and-forget) — skip malicious queries
     if (!isMaliciousSearchQuery(query)) {
       fireAndForget(
@@ -136,9 +123,7 @@ export const GET = withPublic(
       )
     }
 
-    return success(result, 200, {
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
-    })
+    return success(result, 200, SEARCH_SUGGESTIONS_NO_STORE_HEADERS)
   },
   { name: 'search-suggestions', rateLimit: 'read' }
 )

@@ -4,6 +4,37 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
+import { PUBLIC_PROFILE_RANKING_COLUMNS } from '@/lib/data/trader/public-profile-ranking'
+
+type PublicRankedHandleQueryResult = {
+  data: Record<string, unknown>[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedHandleQuery = PromiseLike<PublicRankedHandleQueryResult> & {
+  select(columns: string): PublicRankedHandleQuery
+  in(column: string, values: string[]): PublicRankedHandleQuery
+  eq(column: string, value: string): PublicRankedHandleQuery
+}
+
+type PublicRankedHandleClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedHandleQuery
+}
+
+function publicRankedHandleClient(value: unknown): PublicRankedHandleClient {
+  // The security-barrier view is intentionally additive while generated
+  // Supabase types catch up. Keep the escape hatch local to this identity-only
+  // projection rather than widening the caller's database client.
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedHandleClient
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 // ============================================
 // 类型定义
@@ -88,27 +119,54 @@ export async function getAvoidList(
 
   if (!data || data.length === 0) return []
 
-  // 获取交易员信息（从 leaderboard_ranks 查询，统一数据层）
+  // The avoid list needs only a display identity. It must still come from the
+  // sealed public cohort: an unpublished raw rank may not decide which handle
+  // a public endpoint associates with a vote record.
   const traderIds = data.map((d) => d.trader_id)
-  const { data: lrRows, error: lrError } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, source, handle')
+  const { data: publicRows, error: publicError } = await publicRankedHandleClient(supabase)
+    .from('public_ranked_leaderboard')
+    .select(PUBLIC_PROFILE_RANKING_COLUMNS)
     .in('source_trader_id', traderIds)
     .eq('season_id', '90D')
-  if (lrError)
-    logger.warn('[getAvoidList] leaderboard_ranks query error (drift?):', lrError.message)
+  if (publicError)
+    logger.warn('[getAvoidList] public ranking cohort query error:', publicError.message)
+
+  const sanitized = publicError
+    ? []
+    : ((
+        sanitizePublicRankingPayload(
+          { traders: publicRows ?? [], period: '90D' },
+          { expectedPeriod: '90D' }
+        ) as { traders?: unknown[] }
+      ).traders ?? [])
 
   const handleMap = new Map<string, string>()
-  lrRows?.forEach((r) => {
-    const key = `${r.source_trader_id}:${r.source}`
-    if (!handleMap.has(key)) {
-      handleMap.set(key, r.handle || r.source_trader_id)
+  const ambiguousIdentityKeys = new Set<string>()
+  for (const row of sanitized) {
+    if (!isRecord(row)) continue
+    const sourceTraderId = row.source_trader_id
+    const source = row.source
+    if (typeof sourceTraderId !== 'string' || typeof source !== 'string') continue
+
+    const key = `${sourceTraderId}:${source}`
+    // A source/key/period should be unique in the public view. Do not choose
+    // an arbitrary identity if a proxy or schema regression duplicates it.
+    if (handleMap.has(key)) {
+      ambiguousIdentityKeys.add(key)
+      handleMap.delete(key)
+      continue
     }
-  })
+    handleMap.set(
+      key,
+      typeof row.handle === 'string' && row.handle.trim().length > 0 ? row.handle : sourceTraderId
+    )
+  }
 
   return data.map((d) => ({
     ...d,
-    handle: handleMap.get(`${d.trader_id}:${d.source}`) || d.trader_id,
+    handle: ambiguousIdentityKeys.has(`${d.trader_id}:${d.source}`)
+      ? d.trader_id
+      : handleMap.get(`${d.trader_id}:${d.source}`) || d.trader_id,
   }))
 }
 

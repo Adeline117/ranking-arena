@@ -7,7 +7,6 @@ import { join } from 'node:path'
 import { GET as getEquity } from '@/app/api/traders/[handle]/equity/route'
 import { GET as getIndicators } from '@/app/api/traders/[handle]/indicators/route'
 import { GET as getHistory } from '@/app/api/trader/[platform]/[trader_key]/history/route'
-import { GET as getHotRecommendations } from '@/app/api/recommendations/hot/route'
 
 const root = process.cwd()
 const routeFiles = [
@@ -22,7 +21,6 @@ describe('unproven daily-derived public consumers', () => {
     ['equity', getEquity, 'DAILY_SERIES_NOT_PUBLISHED'],
     ['indicators', getIndicators, 'DAILY_INDICATORS_NOT_PUBLISHED'],
     ['history', getHistory, 'TRADER_HISTORY_NOT_PUBLISHED'],
-    ['hot recommendations', getHotRecommendations, 'HOT_TRADERS_NOT_PUBLISHED'],
   ] as const)(
     '%s returns a fixed unavailable, non-cacheable envelope',
     async (_name, get, code) => {
@@ -111,9 +109,10 @@ describe('unproven daily-derived public consumers', () => {
       derivedMetricsAllowed: false,
       history: { '7D': [], '30D': [], '90D': [] },
     })
-    await expect(getHotRecommendations().json()).resolves.toMatchObject({
-      contract: 'arena.daily-history-publication@1',
-      data: [],
-    })
   })
+
+  // Hot recommendations use the sealed-view probe (lib/recommendations/hot-score.ts);
+  // its fail-closed empty, no-store envelope is asserted in
+  // app/api/recommendations/hot/__tests__/route.test.ts. The route still stays
+  // in `routeFiles` above, so it cannot regain a legacy daily read or cache path.
 })

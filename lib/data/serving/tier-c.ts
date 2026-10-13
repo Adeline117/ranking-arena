@@ -22,8 +22,9 @@ import type { Redis } from 'ioredis'
 import { logger } from '@/lib/logger'
 import { isIngestRegion, type IngestRegion } from '@/lib/ingest/core/regions'
 import { tierCQueueName } from '@/lib/ingest/core/tier-c-routing'
-import type { RecordKind, ServingCurrency, TraderCoreModules } from './types'
+import type { RecordKind, TraderCoreModules } from './types'
 import { intToTf } from './core'
+import { quarantinedPublicCoreModules } from './core-quarantine'
 
 export type TierCSurface = 'profile' | RecordKind
 
@@ -163,78 +164,16 @@ export async function requestTierCWithProvider(
 // snake_case keys from lib/constants/metric-registry.ts.
 // ---------------------------------------------------------------------------
 
-const STAT_KEY_MAP: Record<string, string> = {
-  roi: 'roi',
-  pnl: 'pnl',
-  sharpe: 'sharpe',
-  mdd: 'mdd',
-  winRate: 'win_rate',
-  winPositions: 'win_positions',
-  totalPositions: 'total_positions',
-  copierPnl: 'copier_pnl',
-  copierCount: 'copier_count',
-  aum: 'aum',
-  volume: 'volume',
-  profitShareRate: 'profit_share_rate',
-  holdingDurationAvgHours: 'holding_duration_avg',
-}
-
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
-
-/** Map a Tier-C profile result into TraderCoreModules (cold-fetched). */
+/**
+ * Public core consumers must never map a raw Redis profile result while its
+ * historical stats, series, and extras lack a publication chain. Keep the
+ * mapper itself fail-closed so a future route cannot accidentally re-enable
+ * the cold-path bypass by importing this helper.
+ */
 export function coreModulesFromTierC(
-  source: string,
+  _source: string,
   timeframe: 0 | 7 | 30 | 90,
-  payload: Record<string, unknown>
-): TraderCoreModules | null {
-  const statsList = Array.isArray(payload.stats) ? (payload.stats as Record<string, unknown>[]) : []
-  // Never relabel a different window as the one the caller requested. This is
-  // especially important for profiles that also carry a cumulative
-  // (timeframe=0) row: an incomplete upstream payload must fail closed rather
-  // than render inception ROI/PnL as 7D/30D/90D performance.
-  const statsRow = statsList.find((s) => Number(s.timeframe) === timeframe)
-  if (!statsRow) return null
-
-  const stats: Record<string, number | string | null> = {}
-  const extras: Record<string, unknown> = {}
-  for (const [from, to] of Object.entries(STAT_KEY_MAP)) {
-    const v = statsRow[from]
-    if (typeof v === 'number' || typeof v === 'string') stats[to] = v
-  }
-  if (statsRow.tradingPreferences && typeof statsRow.tradingPreferences === 'object') {
-    extras.trading_preferences = statsRow.tradingPreferences
-  }
-  if (statsRow.extras && typeof statsRow.extras === 'object') {
-    Object.assign(extras, statsRow.extras as Record<string, unknown>)
-  }
-
-  const series: TraderCoreModules['series'] = {}
-  if (Array.isArray(payload.series)) {
-    for (const s of payload.series as Array<Record<string, unknown>>) {
-      if (Number(s.timeframe) !== timeframe) continue
-      if (typeof s.metric === 'string' && Array.isArray(s.points)) {
-        series[s.metric] = s.points as Array<{ ts: string; value: number }>
-      }
-    }
-  }
-
-  const asOf =
-    typeof payload.asOf === 'string'
-      ? payload.asOf
-      : typeof statsRow.asOf === 'string'
-        ? statsRow.asOf
-        : new Date().toISOString()
-
-  return {
-    timeframe: intToTf(timeframe),
-    stats,
-    currency:
-      typeof payload.currency === 'string' && CURRENCIES.has(payload.currency)
-        ? (payload.currency as ServingCurrency)
-        : 'USDT',
-    series,
-    extras,
-    provenance: { source, asOf },
-    cacheState: 'cold-fetched',
-  }
+  _payload: Record<string, unknown>
+): TraderCoreModules {
+  return quarantinedPublicCoreModules(intToTf(timeframe))
 }
