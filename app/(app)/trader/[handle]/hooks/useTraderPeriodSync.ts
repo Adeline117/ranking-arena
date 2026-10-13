@@ -11,7 +11,8 @@
  *
  * Sync rules:
  *  - On mount: read `?period=` from URL and push it into the zustand store
- *  - On store change: write the new period back to URL (replace, no scroll)
+ *  - On store change: write the new period back to URL (shallow
+ *    history.replaceState — no RSC round-trip, no scroll)
  *  - Skip the very first store-change tick (mount race — the init effect
  *    above hasn't propagated yet, so a naive sync would strip ?period=)
  *
@@ -19,17 +20,17 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { usePeriodStore } from '@/lib/stores/periodStore'
+import { replaceUrlShallow } from './replaceUrlShallow'
 
 type Period = '7D' | '30D' | '90D'
 
 export function useTraderPeriodSync(): Period {
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const selectedPeriod = usePeriodStore(s => s.period)
-  const setPeriod = usePeriodStore(s => s.setPeriod)
+  const selectedPeriod = usePeriodStore((s) => s.period)
+  const setPeriod = usePeriodStore((s) => s.setPeriod)
 
   // 1. URL → store on mount
   const urlPeriod = searchParams.get('period')
@@ -57,7 +58,8 @@ export function useTraderPeriodSync(): Period {
     const newPath = `${pathname}${qs ? `?${qs}` : ''}`
     const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
     if (newPath !== currentPath) {
-      router.replace(newPath, { scroll: false })
+      // Shallow: the server page does not read ?period=, avoid an RSC refetch.
+      replaceUrlShallow(newPath)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync when period changes
   }, [selectedPeriod])
