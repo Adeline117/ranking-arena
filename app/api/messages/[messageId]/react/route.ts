@@ -15,7 +15,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { socialFeatureGuard } from '@/lib/features'
 import { sendNotification } from '@/lib/data/notifications'
 import { getUserHandle } from '@/lib/supabase/server'
-import { fireAndForget } from '@/lib/utils/logger'
+import { createLogger, fireAndForget } from '@/lib/utils/logger'
+
+const logger = createLogger('api:messages:react')
 
 // Allowed emoji set — reuse the post reaction allowlist (crypto-relevant, focused)
 const ALLOWED_EMOJIS = new Set([
@@ -77,7 +79,7 @@ export const POST = withAuth(
     }
 
     // Check if reaction already exists (toggle)
-    const { data: existing } = await sb
+    const { data: existing, error: existingError } = await sb
       .from('message_reactions')
       .select('id')
       .eq('message_id', messageId)
@@ -85,21 +87,45 @@ export const POST = withAuth(
       .eq('emoji', emoji)
       .maybeSingle()
 
+    if (existingError) {
+      logger.error('Reaction lookup failed', { messageId, error: existingError.message })
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+    }
+
+    // A concurrent identical insert (23505) means the reaction already exists:
+    // treat as success but never notify twice.
+    let addedNow = false
     if (existing) {
-      await sb.from('message_reactions').delete().eq('id', existing.id)
+      const { error: deleteError } = await sb
+        .from('message_reactions')
+        .delete()
+        .eq('id', existing.id)
+      if (deleteError) {
+        logger.error('Reaction delete failed', { messageId, error: deleteError.message })
+        return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+      }
     } else {
-      await sb.from('message_reactions').insert({
+      const { error: insertError } = await sb.from('message_reactions').insert({
         message_id: messageId,
         user_id: user.id,
         emoji,
       })
+      if (insertError && insertError.code !== '23505') {
+        logger.error('Reaction insert failed', { messageId, error: insertError.message })
+        return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+      }
+      addedNow = !insertError
     }
 
     // Re-aggregate counts for this message
-    const { data: reactions } = await sb
+    const { data: reactions, error: reactionsError } = await sb
       .from('message_reactions')
       .select('emoji, user_id')
       .eq('message_id', messageId)
+    if (reactionsError) {
+      logger.error('Reaction re-aggregate failed', { messageId, error: reactionsError.message })
+      return NextResponse.json({ error: 'Failed to load reactions' }, { status: 500 })
+    }
 
     const counts: Record<string, number> = {}
     const userEmojis: string[] = []
@@ -109,7 +135,7 @@ export const POST = withAuth(
     }
 
     // Notify the message author when a reaction is ADDED (skip self-reactions)
-    if (!existing && parentMsg.sender_id && parentMsg.sender_id !== user.id) {
+    if (addedNow && parentMsg.sender_id && parentMsg.sender_id !== user.id) {
       fireAndForget(
         getUserHandle(user.id, user.email ?? undefined).then((handle) => {
           sendNotification(
