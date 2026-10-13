@@ -53,22 +53,24 @@ for (const lang of ['ja', 'ko'] as const) {
 
 // Track when translations finish loading (client-side re-render trigger)
 let translationVersion = 0
-const translationListeners = new Set<() => void>()
+/** Listener receives the language whose dictionary just finished loading. */
+type TranslationsReadyListener = (lang: Language) => void
+const translationListeners = new Set<TranslationsReadyListener>()
 export function getTranslationVersion() {
   return translationVersion
 }
-export function onTranslationsReady(cb: () => void) {
+export function onTranslationsReady(cb: TranslationsReadyListener) {
   translationListeners.add(cb)
   return () => {
     translationListeners.delete(cb)
   }
 }
 
-function notifyListeners() {
+function notifyListeners(lang: Language) {
   translationVersion++
   for (const cb of translationListeners) {
     try {
-      cb()
+      cb(lang)
     } catch {
       // ignore listener errors
     }
@@ -104,7 +106,7 @@ export function registerFullDict(lang: Language, dict: Record<string, string>): 
       }
     }
   }
-  notifyListeners()
+  notifyListeners(lang)
 }
 
 // In-flight promises to avoid duplicate loads
@@ -139,7 +141,7 @@ async function loadLang(lang: Language): Promise<void> {
       }
     }
 
-    notifyListeners()
+    notifyListeners(lang)
   })()
 
   loadingPromises[lang] = promise

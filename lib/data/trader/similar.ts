@@ -34,7 +34,11 @@ type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResu
     options: { ascending: boolean; nullsFirst?: boolean }
   ): PublicRankedLeaderboardQuery
   limit(count: number): PublicRankedLeaderboardQuery
+  abortSignal(signal: AbortSignal): PublicRankedLeaderboardQuery
 }
+
+/** Recommendation card is best-effort: never hold a profile render longer. */
+export const SIMILAR_TRADERS_QUERY_TIMEOUT_MS = 2_000
 
 type PublicRankedLeaderboardClient = {
   from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
@@ -105,6 +109,8 @@ async function fetchSimilarTradersUncached(
         .order(LR.arena_score, { ascending: false })
         .order(LR.rank, { ascending: true, nullsFirst: false })
         .limit(10)
+        .abortSignal(AbortSignal.timeout(SIMILAR_TRADERS_QUERY_TIMEOUT_MS))
+      if (result.error) logger.warn('[similar-traders] score query error:', result.error.message)
       data = result.data as Record<string, unknown>[] | null
     } else if (roi != null) {
       const roiRange = Math.max(Math.abs(roi) * 0.3, 20)
@@ -120,6 +126,8 @@ async function fetchSimilarTradersUncached(
         .order(LR.roi, { ascending: false })
         .order(LR.rank, { ascending: true, nullsFirst: false })
         .limit(10)
+        .abortSignal(AbortSignal.timeout(SIMILAR_TRADERS_QUERY_TIMEOUT_MS))
+      if (result.error) logger.warn('[similar-traders] roi query error:', result.error.message)
       data = result.data as Record<string, unknown>[] | null
     }
 

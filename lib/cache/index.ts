@@ -171,6 +171,56 @@ export async function get<T>(
 }
 
 /**
+ * Capture the shared publication write fence AND read shared (skipMemory)
+ * cache entries in ONE Redis round trip.
+ *
+ * A MULTI transaction bootstraps the fence (SET NX, same as
+ * readSharedCacheWriteFence) and then MGETs `[fence, ...entryKeys]`. MGET is
+ * atomic, so the fence and the entries come from the same snapshot: the fence
+ * is never newer than the entries it guards (fence-first semantics hold — a
+ * publication that advances afterwards still rejects this request's writes).
+ *
+ * Fence semantics match readSharedCacheWriteFence: null when Redis is
+ * unavailable or the fence is not a non-empty string; callers must then
+ * neither trust nor write the entries. Entries never touch process memory.
+ */
+export async function readSharedCacheWriteFenceWithEntries<T>(
+  fenceKey: string,
+  entryKeys: readonly string[]
+): Promise<{ fence: SharedCacheWriteFence | null; entries: (T | null)[] }> {
+  const empty = { fence: null, entries: entryKeys.map(() => null) }
+  if (fenceKey.length === 0 || fenceKey !== fenceKey.trim()) {
+    throw new Error('Shared cache write fence key is invalid')
+  }
+  const redis = await getRedis()
+  if (!redis) return empty
+
+  try {
+    const tx = redis.multi()
+    tx.set(fenceKey, createSharedCacheLockToken(), { nx: true })
+    tx.mget(fenceKey, ...entryKeys)
+    const results: unknown[] = await tx.exec()
+    const values = results[1]
+    if (!Array.isArray(values) || values.length !== entryKeys.length + 1) return empty
+    const token = values[0]
+    if (typeof token !== 'string' || token.length === 0) return empty
+    const entries = values.slice(1).map((raw) => {
+      if (raw === null || raw === undefined) {
+        stats.misses++
+        return null
+      }
+      stats.hits++
+      return unwrapCacheEntry<T>(raw)
+    })
+    return { fence: { key: fenceKey, token }, entries }
+  } catch (error) {
+    handleRedisError(error)
+    dataLogger.error('Redis fence+entries read failed:', { fenceKey, error })
+    return empty
+  }
+}
+
+/**
  * 设置缓存数据
  * 同时写入 Redis 和内存缓存
  */

@@ -17,8 +17,14 @@ const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
 // Debounce for rapid tab-flicking. Kept short: with the dim-not-overlay refresh UI
 // the old rows stay visible, so a long debounce only delays the fetch start.
 export const TIME_RANGE_DEBOUNCE_MS = 150
-const AUTO_REFRESH_MS = 60_000 // 60s — rankings update frequently with event-driven pipeline
+// Rankings are recomputed every PRODUCT_FACTS.leaderboardRefreshHours (2h);
+// a 60s poll only burned requests/re-renders. Freshness/staleness changes
+// still surface within one interval and on tab re-focus.
+const AUTO_REFRESH_MS = FIVE_MINUTES_MS
 const STALE_THRESHOLD_MS = AUTO_REFRESH_MS
+/** Recently viewed cohorts are reused for instant range switch-back. */
+const COHORT_CACHE_TTL_MS = 60_000
+const COHORT_CACHE_MAX_ENTRIES = 24
 const PAGE_SIZE = 50
 
 const UNKNOWN_CATEGORY_COUNTS: CategoryCounts = {
@@ -91,6 +97,53 @@ function cohortKey(cohort: LeaderboardCohort): string {
     cohort.sortDir,
     cohort.exchange,
   ])
+}
+
+/** A fully parsed /api/traders page, ready to commit to state. */
+interface ParsedCohortPage {
+  traders: Trader[]
+  lastUpdated: string | null
+  isStale: boolean
+  availableSources: string[]
+  totalCount: number | null
+  totalCountIsExact: boolean
+  hasMore: boolean
+  categoryCounts: CategoryCounts | null
+  categoryCountsAreExact: boolean
+}
+
+/**
+ * Small in-memory per-cohort cache (module scope, shared across mounts).
+ * Keyed by the complete cohort identity (range, page, category, sort, dir,
+ * exchange), so a hit can never show rows for different filters. Entries live
+ * COHORT_CACHE_TTL_MS; only range switches read it (switching back to a
+ * recently viewed period is instant), every successful fetch writes it, and
+ * manual refresh / background polls always go to the network.
+ */
+const cohortPageCache = new Map<string, { page: ParsedCohortPage; ts: number }>()
+
+function readCohortCache(key: string): ParsedCohortPage | null {
+  const hit = cohortPageCache.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.ts >= COHORT_CACHE_TTL_MS) {
+    cohortPageCache.delete(key)
+    return null
+  }
+  return hit.page
+}
+
+function writeCohortCache(key: string, page: ParsedCohortPage): void {
+  cohortPageCache.delete(key)
+  cohortPageCache.set(key, { page, ts: Date.now() })
+  while (cohortPageCache.size > COHORT_CACHE_MAX_ENTRIES) {
+    const oldest = cohortPageCache.keys().next().value
+    if (oldest === undefined) break
+    cohortPageCache.delete(oldest)
+  }
+}
+
+export function clearTraderCohortCache(): void {
+  cohortPageCache.clear()
 }
 
 function sameCohort(left: LeaderboardCohort, right: LeaderboardCohort): boolean {
@@ -512,11 +565,82 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       requestSequenceRef.current = requestSequence
       requestedCohortRef.current = requestCohort
       if (!opts?.silent) foregroundRequestSequenceRef.current = requestSequence
+      const requestKey = cohortKey(requestCohort)
+
+      // Commits a parsed page for this request. Shared by the network path
+      // and the range-switch cache path so both obey the same invariants.
+      const commitPage = (parsed: ParsedCohortPage, broadcastResult: boolean): void => {
+        // Fingerprint check: metrics, source watermark, and source-stale state
+        // together define the visible ranking state. A freshness-only change
+        // must reach the footer even when every score remains identical.
+        const traderFingerprint = parsed.traders
+          .map((t) => `${t.id}:${t.arena_score}:${t.roi}:${t.is_verified ? 'v' : ''}`)
+          .join('|')
+        const fingerprint = `${requestKey}::${traderFingerprint}::freshness:${parsed.lastUpdated ?? 'unknown'}:${parsed.isStale ? 'stale' : 'fresh'}::paging:${parsed.totalCount ?? 'unknown'}:${parsed.totalCountIsExact ? 'exact' : 'unknown'}:${parsed.hasMore ? 'more' : 'terminal'}::categories:${parsed.categoryCountsAreExact ? JSON.stringify(parsed.categoryCounts) : 'unknown'}`
+        loadedPageRef.current = pageIndex
+        loadedCohortRef.current = requestCohort
+        if (commitTimeRange && pendingTimeRangeRef.current === timeRange) {
+          pendingTimeRangeRef.current = null
+        }
+        if (foregroundRequestSequenceRef.current === requestSequence) {
+          foregroundRequestSequenceRef.current = null
+        }
+        if (fingerprint === dataFingerprintRef.current) {
+          // Data unchanged — skip dispatch to avoid unnecessary re-renders
+          dispatch({ type: 'SET_LOADING', loading: false })
+          return
+        }
+        dataFingerprintRef.current = fingerprint
+
+        dispatch({
+          type: 'LOAD_SUCCESS',
+          traders: parsed.traders,
+          lastUpdated: parsed.lastUpdated,
+          timeRange: commitTimeRange ? timeRange : undefined,
+          availableSources: parsed.availableSources,
+          totalCount: parsed.totalCount,
+          totalCountIsExact: parsed.totalCountIsExact,
+          hasMore: parsed.hasMore,
+          categoryCounts: parsed.categoryCounts ?? UNKNOWN_CATEGORY_COUNTS,
+          categoryCountsAreExact: parsed.categoryCountsAreExact,
+          isStale: parsed.isStale,
+        })
+
+        if (!broadcastResult) return
+        // Broadcast for multi-tab sync
+        const payload: RankingBroadcastPayload = {
+          timeRange,
+          traders: parsed.traders,
+          lastUpdated: parsed.lastUpdated || '',
+          isStale: parsed.isStale,
+          cohort: requestCohort,
+          availableSources: parsed.availableSources,
+          totalCount: parsed.totalCount,
+          totalCountIsExact: parsed.totalCountIsExact,
+          hasMore: parsed.hasMore,
+          categoryCounts: parsed.categoryCounts ?? UNKNOWN_CATEGORY_COUNTS,
+          categoryCountsAreExact: parsed.categoryCountsAreExact,
+        }
+        broadcast('TRADER_DATA_UPDATED', payload)
+      }
 
       // Cancel existing request
       const cancelKey = `page-${timeRange}`
       const existing = abortControllers.get(cancelKey)
       if (existing) existing.abort()
+
+      // Range switch-back: a recently fetched page for the exact cohort is
+      // committed immediately (no dim, no network). The bumped sequence above
+      // already invalidates any slower in-flight response.
+      if (commitTimeRange && !opts?.silent) {
+        const cached = readCohortCache(requestKey)
+        if (cached) {
+          if (existing) abortControllers.delete(cancelKey)
+          commitPage(cached, false)
+          return true
+        }
+      }
+
       const controller = new AbortController()
       abortControllers.set(cancelKey, controller)
 
@@ -602,65 +726,19 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         const responseCategoryCountsAreExact = responseCategoryCounts !== null
         const responseHasMore = data.hasMore === true
 
-        // Fingerprint check: metrics, source watermark, and source-stale state
-        // together define the visible ranking state. A freshness-only change
-        // must reach the footer even when every score remains identical.
-        const traderFingerprint = traders
-          .map((t) => `${t.id}:${t.arena_score}:${t.roi}:${t.is_verified ? 'v' : ''}`)
-          .join('|')
-        const fingerprint = `${cohortKey(requestCohort)}::${traderFingerprint}::freshness:${responseLastUpdated ?? 'unknown'}:${responseIsStale ? 'stale' : 'fresh'}::paging:${responseTotalCount ?? 'unknown'}:${responseTotalCountIsExact ? 'exact' : 'unknown'}:${responseHasMore ? 'more' : 'terminal'}::categories:${responseCategoryCountsAreExact ? JSON.stringify(responseCategoryCounts) : 'unknown'}`
-        if (fingerprint === dataFingerprintRef.current) {
-          // Data unchanged — skip dispatch to avoid unnecessary re-renders
-          loadedPageRef.current = pageIndex
-          loadedCohortRef.current = requestCohort
-          if (commitTimeRange && pendingTimeRangeRef.current === timeRange) {
-            pendingTimeRangeRef.current = null
-          }
-          if (foregroundRequestSequenceRef.current === requestSequence) {
-            foregroundRequestSequenceRef.current = null
-          }
-          dispatch({ type: 'SET_LOADING', loading: false })
-          return true
-        }
-        dataFingerprintRef.current = fingerprint
-
-        loadedPageRef.current = pageIndex
-        loadedCohortRef.current = requestCohort
-        if (commitTimeRange && pendingTimeRangeRef.current === timeRange) {
-          pendingTimeRangeRef.current = null
-        }
-        if (foregroundRequestSequenceRef.current === requestSequence) {
-          foregroundRequestSequenceRef.current = null
-        }
-        dispatch({
-          type: 'LOAD_SUCCESS',
+        const parsed: ParsedCohortPage = {
           traders,
           lastUpdated: responseLastUpdated,
-          timeRange: commitTimeRange ? timeRange : undefined,
+          isStale: responseIsStale,
           availableSources: Array.isArray(data.availableSources) ? data.availableSources : [],
           totalCount: responseTotalCount,
           totalCountIsExact: responseTotalCountIsExact,
           hasMore: responseHasMore,
-          categoryCounts: responseCategoryCounts ?? UNKNOWN_CATEGORY_COUNTS,
-          categoryCountsAreExact: responseCategoryCountsAreExact,
-          isStale: responseIsStale,
-        })
-
-        // Broadcast for multi-tab sync
-        const payload: RankingBroadcastPayload = {
-          timeRange,
-          traders,
-          lastUpdated: responseLastUpdated || '',
-          isStale: responseIsStale,
-          cohort: requestCohort,
-          availableSources: Array.isArray(data.availableSources) ? data.availableSources : [],
-          totalCount: responseTotalCount,
-          totalCountIsExact: responseTotalCountIsExact,
-          hasMore: responseHasMore,
-          categoryCounts: responseCategoryCounts ?? UNKNOWN_CATEGORY_COUNTS,
+          categoryCounts: responseCategoryCounts,
           categoryCountsAreExact: responseCategoryCountsAreExact,
         }
-        broadcast('TRADER_DATA_UPDATED', payload)
+        writeCohortCache(requestKey, parsed)
+        commitPage(parsed, true)
         return true
       } catch (err) {
         // A superseded request has no UI authority. In particular it must not
@@ -707,8 +785,25 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   useEffect(() => {
     if (hasInitialData && !initialDataSeeded.current) {
       initialDataSeeded.current = true
+      // The SSR page is the cohort on screen: make switching back to it
+      // instant (only if nothing fresher is already cached for it).
+      const initialKey = cohortKey(loadedCohortRef.current)
+      if (!readCohortCache(initialKey)) {
+        writeCohortCache(initialKey, {
+          traders: initialTraders || [],
+          lastUpdated: initialLastUpdated || null,
+          isStale: initialIsStale,
+          availableSources: [],
+          totalCount: initialExactTotal,
+          totalCountIsExact: initialExactTotal !== null,
+          hasMore: initialHasMore === true,
+          categoryCounts: initialExactCategoryCounts,
+          categoryCountsAreExact: initialExactCategoryCounts !== null,
+        })
+      }
       dispatch({ type: 'SET_LOADING', loading: false })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once from the SSR snapshot
   }, [hasInitialData])
 
   // The initial SSR snapshot needs no client fetch. Subsequent range changes
@@ -751,7 +846,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         return
       }
       lastFetchTime = Date.now()
-      // silent: a 60s background poll must not dim the table or show the
+      // silent: a background poll must not dim the table or show the
       // refresh spinner — fingerprint dedup means most polls change nothing.
       fetchPage(loadedPageRef.current, { silent: true }).then((succeeded) => {
         if (succeeded) {
@@ -853,6 +948,14 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         }
       }
 
+      // A cached target cohort needs no debounce: commit it now.
+      const loaded = loadedCohortRef.current
+      const targetKey = cohortKey({ ...loaded, timeRange: range, pageIndex: 0 })
+      if (readCohortCache(targetKey)) {
+        void fetchPage(0, { timeRange: range, commitTimeRange: true })
+        return
+      }
+
       timeRangeDebounceTimer = setTimeout(() => {
         timeRangeDebounceTimer = null
         if (pendingTimeRangeRef.current !== range) return
@@ -897,7 +1000,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       availableSources: state.availableSources,
       changeTimeRange,
       refresh,
-      clearCache: () => {},
+      clearCache: clearTraderCohortCache,
       deferredFetchFailed: state.deferredFetchFailed,
       retryDeferredFetch,
       isChangingTimeRange: state.isChangingTimeRange,

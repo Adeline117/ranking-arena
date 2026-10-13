@@ -19,17 +19,22 @@
  * page, clicking "Register with code" or "Login with verification code"
  * appeared to do nothing because the state toggled then immediately reset.
  *
- * Fix: (1) Always render a stable tree structure (PrivyErrorBoundary > PrivySlot)
- * from mount, so children are never remounted. (2) Use requestIdleCallback to
- * load the SDK during idle time instead of on user click, so the tree is stable
- * well before any interaction.
+ * Fix (2026-04-22): load the SDK during idle time instead of on first click.
+ *
+ * BUG FIX (2026-10-13): even the idle-time version swapped
+ * <>{children}</> for <Provider>{children}</Provider> once the SDK loaded,
+ * which still remounted the ENTIRE app subtree 1-3s after load (login inputs
+ * cleared, selected period reset, sidebars flashed). Now the Privy provider is
+ * mounted as a SIBLING host that never wraps children, so the children's
+ * position in the tree never changes. Privy state is published to app
+ * components through `usePrivyBridge()` (lib/privy/bridge-store.ts).
  */
 
 import { ReactNode, useState, useEffect, Component } from 'react'
 import type { ErrorInfo } from 'react'
 import { PRIVY_APP_ID } from '@/lib/privy/config'
 
-/** Isolate Privy SDK crashes — children render without Privy on failure */
+/** Isolate Privy SDK crashes — the app keeps rendering without Privy on failure */
 class PrivyErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
   static getDerivedStateFromError() {
@@ -43,7 +48,7 @@ class PrivyErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
     )
   }
   render() {
-    if (this.state.hasError) return <>{this.props.children}</>
+    if (this.state.hasError) return null
     return this.props.children
   }
 }
@@ -53,35 +58,22 @@ interface Props {
 }
 
 /**
- * Stable slot component that loads and renders the Privy provider.
- *
- * This component is ALWAYS present in the tree (never conditionally rendered).
- * It eagerly imports PrivyProviderInner during idle time and wraps children
- * in it once loaded.
- *
- * NOTE: When Provider transitions from null to a component, children move from
- * <Fragment> to <Provider>. This IS a tree structure change that remounts children.
- * However, because we load during idle time (1-3s after mount), this happens
- * before the user interacts with the page. The brief remount is invisible.
- *
- * This is a vast improvement over the old approach where the remount happened
- * ON the user's first click, making every first button click appear broken.
+ * Lazy sibling host: loads PrivyProviderInner during idle time and renders it
+ * NEXT TO (not around) the app. Its render output changing never affects the
+ * app subtree.
  */
-function PrivySlot({ children }: { children: ReactNode }) {
-  const [Provider, setProvider] = useState<React.ComponentType<{ children: ReactNode }> | null>(
-    null
-  )
+function PrivyHost() {
+  const [Host, setHost] = useState<React.ComponentType | null>(null)
 
   useEffect(() => {
     if (!PRIVY_APP_ID) return
 
     // Load Privy SDK during browser idle time.
-    // This defers the ~956KB bundle from blocking initial render/hydration
-    // while ensuring it's ready before user interaction (typically 1-3s).
+    // This defers the ~956KB bundle from blocking initial render/hydration.
     const loadPrivy = () => {
       import('./PrivyProviderInner')
         .then((mod) => {
-          setProvider(() => mod.default)
+          setHost(() => mod.default)
         })
         .catch((err) => {
           console.warn('[Privy] SDK failed to load, Web3 features disabled:', err?.message)
@@ -98,23 +90,20 @@ function PrivySlot({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  if (Provider) {
-    return <Provider>{children}</Provider>
-  }
-
-  return <>{children}</>
+  return Host ? <Host /> : null
 }
 
 export default function PrivyClientProvider({ children }: Props) {
-  if (!PRIVY_APP_ID) {
-    return <>{children}</>
-  }
-
-  // ALWAYS render PrivyErrorBoundary > PrivySlot. This tree structure is
-  // stable from mount — no conditional wrapping that would unmount children.
+  // Tree shape is identical with or without Privy configured / loaded:
+  // children always sit at the same position, the host is a sibling.
   return (
-    <PrivyErrorBoundary>
-      <PrivySlot>{children}</PrivySlot>
-    </PrivyErrorBoundary>
+    <>
+      {children}
+      {PRIVY_APP_ID ? (
+        <PrivyErrorBoundary>
+          <PrivyHost />
+        </PrivyErrorBoundary>
+      ) : null}
+    </>
   )
 }

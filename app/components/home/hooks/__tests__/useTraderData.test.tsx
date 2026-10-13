@@ -8,7 +8,7 @@
 
 import React from 'react'
 import { renderHook, act } from '@testing-library/react'
-import { useTraderData, TIME_RANGE_DEBOUNCE_MS } from '../useTraderData'
+import { useTraderData, TIME_RANGE_DEBOUNCE_MS, clearTraderCohortCache } from '../useTraderData'
 import type { Trader } from '../../../ranking/RankingTable'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -60,6 +60,7 @@ function mockFetchResolving(traders: Array<Record<string, unknown>>) {
 
 describe('useTraderData time range switch', () => {
   beforeEach(() => {
+    clearTraderCohortCache()
     jest.useFakeTimers()
   })
 
@@ -125,6 +126,92 @@ describe('useTraderData time range switch', () => {
     expect(result.current.activeTimeRange).toBe('30D')
     expect(result.current.isChangingTimeRange).toBe(false)
     expect(result.current.loading).toBe(false)
+  })
+
+  it('switching back to a recently viewed range is instant (cohort cache)', async () => {
+    const { resolveFetch } = mockFetchResolving([
+      { id: 'trader-30d', source: 'bybit', rank: 1, roi: 9.9 },
+    ])
+    const { result } = renderHook(() =>
+      useTraderData({
+        autoRefreshInterval: 0,
+        initialTraders: [initialTrader],
+        initialTotalCount: 1,
+      })
+    )
+
+    act(() => {
+      result.current.changeTimeRange('30D')
+    })
+    act(() => {
+      jest.advanceTimersByTime(TIME_RANGE_DEBOUNCE_MS)
+    })
+    await act(async () => {
+      resolveFetch()
+      await Promise.resolve()
+    })
+    expect(result.current.activeTimeRange).toBe('30D')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+
+    // Back to the SSR range: served from the seeded cache, no debounce/network.
+    act(() => {
+      result.current.changeTimeRange('90D')
+    })
+    expect(result.current.activeTimeRange).toBe('90D')
+    expect(result.current.traders[0].id).toBe('trader-90d')
+    expect(result.current.isChangingTimeRange).toBe(false)
+
+    // And forward again to 30D: cached from the earlier fetch.
+    act(() => {
+      result.current.changeTimeRange('30D')
+    })
+    expect(result.current.activeTimeRange).toBe('30D')
+    expect(result.current.traders[0].id).toBe('trader-30d')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+
+    // clearCache drops entries: the next switch hits the network again.
+    act(() => {
+      result.current.clearCache()
+      result.current.changeTimeRange('90D')
+    })
+    act(() => {
+      jest.advanceTimersByTime(TIME_RANGE_DEBOUNCE_MS)
+    })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('expires cached cohorts after the TTL', async () => {
+    const { resolveFetch } = mockFetchResolving([
+      { id: 'trader-30d', source: 'bybit', rank: 1, roi: 9.9 },
+    ])
+    const { result } = renderHook(() =>
+      useTraderData({
+        autoRefreshInterval: 0,
+        initialTraders: [initialTrader],
+        initialTotalCount: 1,
+      })
+    )
+    act(() => {
+      result.current.changeTimeRange('30D')
+    })
+    act(() => {
+      jest.advanceTimersByTime(TIME_RANGE_DEBOUNCE_MS)
+    })
+    await act(async () => {
+      resolveFetch()
+      await Promise.resolve()
+    })
+    expect(result.current.activeTimeRange).toBe('30D')
+
+    act(() => {
+      jest.advanceTimersByTime(61_000)
+    })
+    act(() => {
+      result.current.changeTimeRange('90D')
+    })
+    // Seeded 90D entry expired → normal debounced network path.
+    expect(result.current.activeTimeRange).toBe('30D')
+    expect(result.current.isChangingTimeRange).toBe(true)
   })
 
   it('rapid tab flicking settles on the last range with a single fetch', async () => {

@@ -18,7 +18,8 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { replaceUrlShallow } from './replaceUrlShallow'
 
 const MAX_PLATFORM_LENGTH = 64
 const MAX_TRADER_KEY_LENGTH = 512
@@ -103,7 +104,6 @@ interface PendingAccountSelection {
 }
 
 export function useTraderActiveAccount(): UseTraderActiveAccountResult {
-  const { replace } = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const searchParamsString = searchParams.toString()
@@ -128,8 +128,8 @@ export function useTraderActiveAccount(): UseTraderActiveAccountResult {
     const params = new URLSearchParams(searchParamsString)
     params.delete('account')
     const query = params.toString()
-    replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
-  }, [pathname, replace, searchParamsString, urlAccount])
+    replaceUrlShallow(`${pathname}${query ? `?${query}` : ''}`)
+  }, [pathname, searchParamsString, urlAccount])
 
   // A malformed URL is never exposed, including during the render before the
   // cleanup effect removes it. A pending control selection is used only while
@@ -157,9 +157,9 @@ export function useTraderActiveAccount(): UseTraderActiveAccountResult {
         params.set('account', canonicalSelection.activeAccount)
       }
       const query = params.toString()
-      replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
+      replaceUrlShallow(`${pathname}${query ? `?${query}` : ''}`)
     },
-    [pathname, replace, searchParamsString]
+    [pathname, searchParamsString]
   )
 
   return {

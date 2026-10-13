@@ -16,6 +16,13 @@ jest.mock('@/lib/cache', () => ({
   get: (...args: unknown[]) => mockCacheGet(...args),
   set: (...args: unknown[]) => mockCacheSet(...args),
   readSharedCacheWriteFence: (...args: unknown[]) => mockReadSharedCacheWriteFence(...args),
+  // One atomic round trip in production; modelled here as fence then each key.
+  readSharedCacheWriteFenceWithEntries: async (fenceKey: string, keys: string[]) => {
+    const fence = await mockReadSharedCacheWriteFence(fenceKey)
+    const entries: unknown[] = []
+    for (const key of keys) entries.push(await mockCacheGet(key, { skipMemory: true }))
+    return { fence, entries }
+  },
 }))
 
 jest.mock('@/lib/logger', () => ({

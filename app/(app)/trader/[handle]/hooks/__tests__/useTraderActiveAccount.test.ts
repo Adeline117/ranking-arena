@@ -1,13 +1,15 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 
 const mockReplace = jest.fn()
-const mockRouter = { replace: mockReplace }
 let mockSearchParams = new URLSearchParams()
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/trader/alice',
-  useRouter: () => mockRouter,
   useSearchParams: () => mockSearchParams,
+}))
+
+jest.mock('../replaceUrlShallow', () => ({
+  replaceUrlShallow: (url: string) => mockReplace(url),
 }))
 
 import { parseTraderActiveAccountParam, useTraderActiveAccount } from '../useTraderActiveAccount'
@@ -67,9 +69,7 @@ describe('useTraderActiveAccount', () => {
     expect(result.current.activeAccountRaw).toBeNull()
     expect(result.current.isAccountParamInvalid).toBe(true)
     await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith('/trader/alice?period=90D&tab=overview', {
-        scroll: false,
-      })
+      expect(mockReplace).toHaveBeenCalledWith('/trader/alice?period=90D&tab=overview')
     )
   })
 
@@ -82,9 +82,7 @@ describe('useTraderActiveAccount', () => {
 
     expect(result.current.activeAccountRaw).toBeNull()
     expect(result.current.isAccountParamInvalid).toBe(true)
-    await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith('/trader/alice?view=stats', { scroll: false })
-    )
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/trader/alice?view=stats'))
   })
 
   it('tracks search-parameter changes from browser navigation', async () => {
@@ -126,8 +124,7 @@ describe('useTraderActiveAccount', () => {
       traderKey: 'wallet:sub',
     })
     expect(mockReplace).toHaveBeenLastCalledWith(
-      '/trader/alice?period=90D&account=okx%3Awallet%3Asub',
-      { scroll: false }
+      '/trader/alice?period=90D&account=okx%3Awallet%3Asub'
     )
 
     act(() => {
@@ -136,6 +133,6 @@ describe('useTraderActiveAccount', () => {
 
     expect(result.current.activeAccount).toBe('all')
     expect(result.current.activeAccountRaw).toBeNull()
-    expect(mockReplace).toHaveBeenLastCalledWith('/trader/alice?period=90D', { scroll: false })
+    expect(mockReplace).toHaveBeenLastCalledWith('/trader/alice?period=90D')
   })
 })
