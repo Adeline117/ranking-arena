@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { sendNotification } from '@/lib/data/notifications'
+import { LOCAL_PRO_GRANT_PLAN } from './grant-identity'
 
 const logger = createLogger('referral-grant')
 
@@ -61,6 +62,9 @@ export async function grantProDays(
         user_id: userId,
         tier: 'pro',
         status: 'active',
+        // Identifies a non-Stripe grant: the expiry cron downgrades it by
+        // current_period_end and checkout allows upgrading from it.
+        plan: LOCAL_PRO_GRANT_PLAN,
         current_period_start: now.toISOString(),
         current_period_end: endDate.toISOString(),
       })

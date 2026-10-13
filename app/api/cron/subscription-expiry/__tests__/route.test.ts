@@ -286,6 +286,56 @@ describe('GET /api/cron/subscription-expiry', () => {
     expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user1', ended, 'monthly')
   })
 
+  it('downgrades an expired non-Stripe referral grant by its own period end', async () => {
+    queueDatabaseResults(
+      { data: [], error: null },
+      {
+        data: [
+          {
+            user_id: 'user1',
+            stripe_subscription_id: null,
+            stripe_customer_id: null,
+            plan: 'referral_grant',
+          },
+        ],
+        error: null,
+      },
+      { data: [{ id: 'user1', pro_plan: null }], error: null },
+      // conditional subscriptions update → row actually expired
+      { data: [{ user_id: 'user1' }], error: null },
+      // user_profiles downgrade
+      { data: null, error: null }
+    )
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.downgraded).toBe(1)
+    expect(body.errors).toEqual([])
+    expect(mockStripeList).not.toHaveBeenCalled()
+  })
+
+  it('does not count a grant that a concurrent checkout already converted', async () => {
+    queueDatabaseResults(
+      { data: [], error: null },
+      {
+        data: [
+          { user_id: 'user1', stripe_subscription_id: null, stripe_customer_id: null, plan: null },
+        ],
+        error: null,
+      },
+      { data: [{ id: 'user1', pro_plan: null }], error: null },
+      { data: [], error: null }
+    )
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+    const body = await res.json()
+
+    expect(body.downgraded).toBe(0)
+    expect(body.errors).toEqual([])
+  })
+
   it('repairs a stale local expiry when Stripe still says active', async () => {
     const expiredSubs = [
       {
