@@ -277,9 +277,9 @@ describe('useLinkedAccounts public identity boundary', () => {
     }
   })
 
-  it('polls the live relation every five minutes', () => {
-    expect(LINKED_ACCOUNTS_REFETCH_INTERVAL_MS).toBe(5 * 60_000)
-    expect(LINKED_ACCOUNTS_MAX_HOLD_MS).toBeLessThanOrEqual(6 * 60_000)
+  it('polls the live relation every minute', () => {
+    expect(LINKED_ACCOUNTS_REFETCH_INTERVAL_MS).toBe(60_000)
+    expect(LINKED_ACCOUNTS_MAX_HOLD_MS).toBeLessThanOrEqual(90_000)
   })
 
   it('withdraws previously authoritative data after a live revalidation error', async () => {
