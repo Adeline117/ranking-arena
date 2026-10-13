@@ -21,6 +21,7 @@ import { updateVerifiedTrader } from '@/lib/data/trader-claims'
 import { createLogger } from '@/lib/utils/logger'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
+import { parseOptionalDiscordHandle, parseOptionalProfileUrl } from '@/lib/utils/profile-url'
 
 const logger = createLogger('claim-profile')
 
@@ -77,46 +78,24 @@ export async function PUT(request: NextRequest) {
       updates.bio = bio || null
     }
 
-    // URL validation helper — only allow https URLs, block internal hosts
-    function isValidUrl(url: string): boolean {
-      try {
-        const parsed = new URL(url)
-        if (parsed.protocol !== 'https:') return false
-        const host = parsed.hostname.toLowerCase()
-        if (
-          host === 'localhost' ||
-          host === '127.0.0.1' ||
-          host === '0.0.0.0' ||
-          host.endsWith('.local')
-        )
-          return false
-        return true
-      } catch {
-        return false
-      }
-    }
-
     for (const field of ['twitter_url', 'telegram_url', 'website_url'] as const) {
       if (body[field] !== undefined) {
-        const value = typeof body[field] === 'string' ? body[field].trim() : null
-        if (value && !isValidUrl(value)) {
-          throw ApiError.validation(`Invalid URL for ${field}`)
-        }
-        updates[field] = value || null
+        const parsed = parseOptionalProfileUrl(body[field])
+        if (!parsed.ok) throw ApiError.validation(`Invalid URL for ${field}`)
+        updates[field] = parsed.value
       }
     }
 
     if (body.discord_url !== undefined) {
-      const value = typeof body.discord_url === 'string' ? body.discord_url.trim() : null
-      updates.discord_url = value || null
+      const parsed = parseOptionalDiscordHandle(body.discord_url)
+      if (!parsed.ok) throw ApiError.validation('Invalid discord_url')
+      updates.discord_url = parsed.value
     }
 
     if (body.avatar_url !== undefined) {
-      const value = typeof body.avatar_url === 'string' ? body.avatar_url.trim() : null
-      if (value && !isValidUrl(value)) {
-        throw ApiError.validation('Invalid avatar URL')
-      }
-      updates.avatar_url = value || null
+      const parsed = parseOptionalProfileUrl(body.avatar_url)
+      if (!parsed.ok) throw ApiError.validation('Invalid avatar URL')
+      updates.avatar_url = parsed.value
     }
 
     if (body.can_receive_messages !== undefined) {

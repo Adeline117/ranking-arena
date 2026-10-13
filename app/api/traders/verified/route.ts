@@ -22,6 +22,7 @@ import {
 } from '@/lib/data/trader-claims'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
+import { parseOptionalDiscordHandle, parseOptionalProfileUrl } from '@/lib/utils/profile-url'
 
 /**
  * GET /api/traders/verified?trader_id=xxx&source=yyy
@@ -106,11 +107,19 @@ export async function PUT(request: NextRequest) {
     if (body.display_name !== undefined)
       input.display_name = String(body.display_name).slice(0, 100)
     if (body.bio !== undefined) input.bio = String(body.bio).slice(0, 500)
-    if (body.avatar_url !== undefined) input.avatar_url = body.avatar_url
-    if (body.twitter_url !== undefined) input.twitter_url = body.twitter_url || null
-    if (body.telegram_url !== undefined) input.telegram_url = body.telegram_url || null
-    if (body.discord_url !== undefined) input.discord_url = body.discord_url || null
-    if (body.website_url !== undefined) input.website_url = body.website_url || null
+    // Links are rendered as href/src — only safe https URLs (shared with
+    // /api/traders/claim/profile). Rejects javascript:, data:, http, etc.
+    for (const field of ['avatar_url', 'twitter_url', 'telegram_url', 'website_url'] as const) {
+      if (body[field] === undefined) continue
+      const parsed = parseOptionalProfileUrl(body[field])
+      if (!parsed.ok) throw ApiError.validation(`Invalid URL for ${field}`)
+      input[field] = parsed.value
+    }
+    if (body.discord_url !== undefined) {
+      const parsed = parseOptionalDiscordHandle(body.discord_url)
+      if (!parsed.ok) throw ApiError.validation('Invalid discord_url')
+      input.discord_url = parsed.value
+    }
     if (body.can_receive_messages !== undefined)
       input.can_receive_messages = !!body.can_receive_messages
 
