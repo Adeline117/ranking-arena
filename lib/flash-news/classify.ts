@@ -10,9 +10,9 @@
  * CATEGORY_DISPLAY_MAP): btc_eth | altcoin | defi | macro | exchange. We never
  * emit a value the display map doesn't recognize (no 'nft').
  *
- * Extracted from app/api/cron/flash-news-fetch/route.ts so the cron + the
- * backfill script (scripts/backfill-flash-news-classify.mjs) share one source of
- * truth instead of duplicating keyword tables.
+ * Extracted from app/api/cron/flash-news-fetch/route.ts so that route retains
+ * one source of truth instead of duplicating keyword tables. The standalone
+ * maintenance CLI that once imported this module is retired under the V1 NO-GO.
  */
 
 export type CanonicalCategory = 'btc_eth' | 'altcoin' | 'defi' | 'macro' | 'exchange'

@@ -430,15 +430,18 @@ test('generic history publication remains confined to reviewed orders/transfers 
   }
   assert.deepEqual(callers.sort(), [...REVIEWED_GENERIC_HISTORY_CALLERS].sort())
 
-  const manualSmoke = readFileSync(resolve(ROOT, 'scripts/ingest-test-surfaces.ts'), 'utf8')
-  assert.doesNotMatch(manualSmoke, genericHistoryPublisherCall)
-  assert.doesNotMatch(manualSmoke, /getHistoryCursor/)
-  assert.match(manualSmoke, /buildCopierSnapshotArtifact\s*\(/)
-  assert.match(manualSmoke, /writeCopierSnapshotRawArtifact\s*\(/)
-  assert.match(manualSmoke, /publishCopierSnapshotInTransaction\s*\(/)
-  assert.match(manualSmoke, /callerLimited:\s*false/)
+  const retiredSurfaceDriver = readFileSync(
+    resolve(ROOT, 'scripts/ingest-test-surfaces.ts'),
+    'utf8'
+  )
+  assert.doesNotMatch(retiredSurfaceDriver, genericHistoryPublisherCall)
+  assert.doesNotMatch(retiredSurfaceDriver, /getHistoryCursor/)
+  // V1 retires the manual surface harness entirely: it must not provide an
+  // alternate RAW or copier publication path while native ingest is held.
+  assert.match(retiredSurfaceDriver, /\[RETIRED\]/)
+  assert.match(retiredSurfaceDriver, /process\.exitCode\s*=\s*2/)
   assert.doesNotMatch(
-    manualSmoke,
-    /for \(const kind of \[[^\]]*position_history[^\]]*\] as const\)|pages\.length\s*>=\s*3/
+    retiredSurfaceDriver,
+    /buildCopierSnapshotArtifact|writeCopierSnapshotRawArtifact|publishCopierSnapshotInTransaction|callerLimited:\s*false/
   )
 })

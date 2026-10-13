@@ -20,12 +20,12 @@ const STEPS: Step[] = [
   },
   {
     title: 'Follow Top Traders',
-    description: 'Follow traders to track their performance and get notifications',
+    description: 'Follow traders to organize your research and review their public performance',
     cta: 'Next →',
   },
   {
     title: 'Go Pro for Deep Insights',
-    description: 'Unlock advanced analytics, alerts, and trader comparison',
+    description: 'Unlock advanced analytics and trader comparison',
     cta: 'Get Started',
   },
 ]

@@ -26,6 +26,7 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
   const arrow = isRiser ? '\u2191' : '\u2193'
   const absChange = Math.abs(mover.roiDelta)
   const displayName = mover.handle || mover.trader_key.slice(0, 10)
+  const resolvedAvatarUrl = getTraderAvatarUrl(mover.avatar_url)
 
   return (
     <Box
@@ -42,9 +43,9 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
     >
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}>
         {/* Avatar */}
-        {mover.avatar_url ? (
+        {resolvedAvatarUrl ? (
           <img
-            src={getTraderAvatarUrl(mover.avatar_url) || mover.avatar_url}
+            src={resolvedAvatarUrl}
             alt={displayName}
             width={24}
             height={24}
@@ -88,12 +89,15 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
         </Box>
       </Box>
       <Box style={{ flexShrink: 0, textAlign: 'right' }}>
-        <span style={{
-          color: changeColor,
-          fontWeight: 700,
-          fontSize: tokens.typography.fontSize.sm,
-        }}>
-          {arrow}{absChange}
+        <span
+          style={{
+            color: changeColor,
+            fontWeight: 700,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
+          {arrow}
+          {absChange}
         </span>
         {mover.arena_score != null && (
           <Text size="xs" color="tertiary" style={{ display: 'block' }}>
@@ -112,68 +116,80 @@ export default function LeaderboardChangelog({ risers, fallers }: LeaderboardCha
 
   if (!hasData) {
     return (
-      <Box style={{
-        padding: tokens.spacing[4],
-        color: tokens.colors.text.tertiary,
-        fontSize: tokens.typography.fontSize.sm,
-        textAlign: 'center',
-        background: tokens.glass.bg.light,
-        borderRadius: tokens.radius.lg,
-        border: `1px solid ${tokens.colors.border.primary}`,
-      }}>
+      <Box
+        style={{
+          padding: tokens.spacing[4],
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.sm,
+          textAlign: 'center',
+          background: tokens.glass.bg.light,
+          borderRadius: tokens.radius.lg,
+          border: `1px solid ${tokens.colors.border.primary}`,
+        }}
+      >
         {t('noData')}
       </Box>
     )
   }
 
   return (
-    <Box style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: tokens.spacing[4],
-    }}>
+    <Box
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: tokens.spacing[4],
+      }}
+    >
       {/* Rising column */}
       <Box>
-        <Box style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[1],
-          marginBottom: tokens.spacing[2],
-        }}>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[1],
+            marginBottom: tokens.spacing[2],
+          }}
+        >
           <span style={{ color: 'var(--color-accent-success)', fontSize: 14 }}>{'\u2191'}</span>
           <Text size="sm" weight="bold" style={{ color: 'var(--color-accent-success)' }}>
             Rising
           </Text>
         </Box>
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {risers.map(r => (
+          {risers.map((r) => (
             <MoverRow key={`${r.platform}:${r.trader_key}`} mover={r} type="riser" />
           ))}
           {risers.length === 0 && (
-            <Text size="xs" color="tertiary">{t('noData')}</Text>
+            <Text size="xs" color="tertiary">
+              {t('noData')}
+            </Text>
           )}
         </Box>
       </Box>
 
       {/* Falling column */}
       <Box>
-        <Box style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[1],
-          marginBottom: tokens.spacing[2],
-        }}>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[1],
+            marginBottom: tokens.spacing[2],
+          }}
+        >
           <span style={{ color: 'var(--color-accent-error)', fontSize: 14 }}>{'\u2193'}</span>
           <Text size="sm" weight="bold" style={{ color: 'var(--color-accent-error)' }}>
             Falling
           </Text>
         </Box>
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {fallers.map(f => (
+          {fallers.map((f) => (
             <MoverRow key={`${f.platform}:${f.trader_key}`} mover={f} type="faller" />
           ))}
           {fallers.length === 0 && (
-            <Text size="xs" color="tertiary">{t('noData')}</Text>
+            <Text size="xs" color="tertiary">
+              {t('noData')}
+            </Text>
           )}
         </Box>
       </Box>

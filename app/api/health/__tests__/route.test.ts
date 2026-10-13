@@ -409,7 +409,7 @@ describe('GET /api/health', () => {
     }
   })
 
-  it('returns unhealthy within the core budget and skips supplementary VPS work when DB hangs', async () => {
+  it('returns unhealthy within the core budget without probing configured VPS endpoints when DB hangs', async () => {
     jest.useFakeTimers()
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
     process.env.VPS_PROXY_KEY = 'vps-key'
@@ -434,10 +434,7 @@ describe('GET /api/health', () => {
         status: 'fail',
         message: 'DB check timed out (8s)',
       })
-      expect(body.checks.vps).toEqual({
-        status: 'skip',
-        message: 'Skipped because the core database is unavailable',
-      })
+      expect(body.checks).not.toHaveProperty('vps')
       expect(fetchMock).not.toHaveBeenCalled()
       expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
       expect(jest.getTimerCount()).toBe(0)
@@ -519,77 +516,11 @@ describe('GET /api/health', () => {
     })
   })
 
-  it('bounds the VPS database heartbeat fallback', async () => {
-    jest.useFakeTimers()
+  it('does not probe configured VPS endpoints or read their pipeline heartbeat', async () => {
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
     process.env.VPS_PROXY_KEY = 'vps-key'
-    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
+    const fetchMock = jest.fn()
     const { restore } = installFetchMock(fetchMock)
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') {
-        return {
-          select: () => ({
-            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
-          }),
-        }
-      }
-      if (table === 'pipeline_logs') {
-        const chain = {
-          eq: () => chain,
-          or: () => chain,
-          gte: () => chain,
-          limit: () => chain,
-          abortSignal: (signal: AbortSignal) => {
-            observedSupabaseSignals.push(signal)
-            return chain
-          },
-          maybeSingle: () => new Promise(() => undefined),
-        }
-        return { select: () => chain }
-      }
-      throw new Error(`unexpected table: ${table}`)
-    })
-
-    try {
-      const { GET } = await import('../route')
-      const responsePromise = GET()
-      await jest.advanceTimersByTimeAsync(1_000)
-      const response = await responsePromise
-      const body = await response.json()
-
-      expect(response.status).toBe(200)
-      expect(body.checks.vps).toMatchObject({
-        status: 'skip',
-        message: expect.stringContaining('no recent heartbeat'),
-      })
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
-        '[health] checkVpsHeartbeat timed out after 1000ms'
-      )
-      expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
-      expect(jest.getTimerCount()).toBe(0)
-    } finally {
-      restore()
-      jest.useRealTimers()
-    }
-  })
-
-  it('does not expose VPS heartbeat authority errors', async () => {
-    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
-    process.env.VPS_PROXY_KEY = 'vps-key'
-    const internalError = 'postgres://vps-reader:private-secret@heartbeat-db.internal/postgres'
-    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
-    const { restore } = installFetchMock(fetchMock)
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') {
-        return {
-          select: () => ({
-            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
-          }),
-        }
-      }
-      if (table === 'pipeline_logs') throw new Error(internalError)
-      throw new Error(`unexpected table: ${table}`)
-    })
 
     try {
       const { GET } = await import('../route')
@@ -597,32 +528,20 @@ describe('GET /api/health', () => {
       const body = await response.json()
 
       expect(response.status).toBe(200)
-      expect(body.checks.vps).toMatchObject({
-        status: 'skip',
-        message: 'VPS SG unavailable (supplementary)',
-      })
-      expect(JSON.stringify(body)).not.toContain('private-secret')
-      expect(JSON.stringify(body)).not.toContain('heartbeat-db.internal')
-      expect(mockLoggerWarn).toHaveBeenCalledWith('[health] VPS SG dependency threw', {
-        error: internalError,
-      })
+      expect(body.checks).not.toHaveProperty('vps')
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(mockFrom).toHaveBeenCalledWith('trader_sources')
+      expect(mockFrom).not.toHaveBeenCalledWith('pipeline_logs')
     } finally {
       restore()
     }
   })
 
-  it('bounds the full core-plus-VPS worst path below the 15s caller budget', async () => {
+  it('bounds the core worst path below the 15s caller budget without VPS work', async () => {
     jest.useFakeTimers()
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
     process.env.VPS_PROXY_KEY = 'vps-key'
-    const observedFetchSignals: AbortSignal[] = []
-    const fetchMock = jest.fn((_url: string, init?: RequestInit) => {
-      const signal = init?.signal as AbortSignal
-      observedFetchSignals.push(signal)
-      return new Promise<Response>((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-      })
-    })
+    const fetchMock = jest.fn()
     const { restore } = installFetchMock(fetchMock)
     const delayed = <T>(value: T) =>
       new Promise<T>((resolve) => setTimeout(() => resolve(value), 7_999))
@@ -659,13 +578,8 @@ describe('GET /api/health', () => {
       expect(Date.now() - startedAt).toBeLessThanOrEqual(9_250)
       expect(15_000 - (Date.now() - startedAt)).toBeGreaterThanOrEqual(5_750)
       expect(response.status).toBe(200)
-      expect(body.checks.vps).toMatchObject({
-        status: 'skip',
-        message: expect.stringContaining('deadline was exhausted'),
-      })
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-      expect(observedFetchSignals).toHaveLength(1)
-      expect(observedFetchSignals[0].aborted).toBe(true)
+      expect(body.checks).not.toHaveProperty('vps')
+      expect(fetchMock).not.toHaveBeenCalled()
       expect(jest.getTimerCount()).toBe(0)
     } finally {
       restore()
@@ -680,6 +594,9 @@ describe('GET /api/health', () => {
 
     expect(route).not.toContain('arena_latest_snapshot_at')
     expect(route).toContain("from '@/lib/rankings/build-freshness-report'")
+    expect(route).not.toMatch(/\bVPS_(?:SCRAPER|PROXY)/)
+    expect(route).not.toContain('pipeline_logs')
+    expect(route).not.toContain('fetch(')
   })
 })
 

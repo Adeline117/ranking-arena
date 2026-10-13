@@ -205,7 +205,7 @@ const en = {
   userReviews: 'reviews',
   // Claim trader
   claimTrader: 'Claim Account',
-  referral: 'Referral',
+  referral: 'Referral status',
   claiming: 'Claiming...',
   claimSubmitted: 'Claim Submitted',
   claimSuccess: 'Claim successful! Your account has been linked to this trader.',
@@ -408,10 +408,10 @@ const en = {
   unlockProFeatures: 'Unlock Pro Features',
   proRequired: 'Pro membership required',
   // PremiumGate contextual benefits (audit P1-PROD-1)
-  gateAdvancedAlertsTitle: 'Unlock Advanced Alerts',
+  gateAdvancedAlertsTitle: 'Trader Alerts Unavailable',
   gateBenefitAlertsRealtime: 'Trader alerts are temporarily unavailable during V1 verification',
-  gateBenefitAlertsConditions: 'Combine 5+ conditions per alert',
-  gateBenefitAlertsHistory: 'Full alert history & analytics',
+  gateBenefitAlertsConditions: 'New alert configurations are not published',
+  gateBenefitAlertsHistory: 'Saved legacy configurations can be removed',
   gateComparisonTitle: 'Compare Traders Side-by-Side',
   gateBenefitCompareSideBySide: 'Up to 4 traders, all metrics',
   gateBenefitCompareMetrics: 'Risk-adjusted score breakdown',
@@ -465,7 +465,7 @@ const en = {
   tagHighReturns: 'High ROI',
   // Trader alerts
   traderAlerts: 'Trader Alerts',
-  traderAlertsDesc: 'Get notified when followed traders have significant changes',
+  traderAlertsDesc: 'Trader alerts are temporarily unavailable during V1 verification',
   alertSettings: 'Alert Settings',
   alertThreshold: 'Change Threshold',
   alertEnabled: 'Alerts enabled',
@@ -552,7 +552,7 @@ const en = {
   featureCategoryRanking: 'Category Ranking',
   featureCategoryRankingDesc: 'View rankings by Futures/Spot/On-chain',
   featureTraderAlerts: 'Trader Alerts',
-  featureTraderAlertsDesc: 'Get notified on significant trader changes',
+  featureTraderAlertsDesc: 'Temporarily unavailable during V1 verification',
   featureScoreBreakdown: 'Arena Score Details',
   featureScoreBreakdownDesc: 'View sub-scores and percentile rankings',
   featureProBadge: 'Pro Badge',
@@ -992,7 +992,8 @@ const en = {
   postCommentedNotify: 'Notify me when my posts receive comments',
   mentionedNotify: 'Notify me when I am mentioned',
   newMessageNotify: 'Notify me when I receive messages',
-  traderEventsNotify: 'Notify me about big moves from traders I follow',
+  traderEventsNotify:
+    'Trader-event notifications are temporarily unavailable during V1 verification',
   // Privacy settings
   showFollowerList: 'Show followers list',
   showFollowingList: 'Show following list',
@@ -1052,6 +1053,8 @@ const en = {
   digestNone: 'None',
   digestDaily: 'Daily digest',
   digestWeekly: 'Weekly digest',
+  weeklyDigestUnavailable:
+    'Weekly personalized digests are temporarily unavailable during V1 verification.',
   unsubscribeSuccess: 'You have been unsubscribed successfully',
   unsubscribeFromDigest: 'Unsubscribe from email digest',
   unsubscribeFromAll: 'Unsubscribe from all emails',
@@ -1164,11 +1167,16 @@ const en = {
   linkedAccountCount: 'accounts',
   // Alerts
   traderAlertsTitle: 'Trader Alerts',
-  traderAlertsDesc2: 'Set custom alert conditions to track trader activities (Pro feature)',
+  traderAlertsDesc2:
+    'Trader-alert monitoring and delivery are temporarily unavailable during V1 verification. You can view or remove saved configurations.',
   traderAlertsConfigureOnProfile:
-    'Set alerts from a trader profile so each notification is tied to the correct exchange account.',
+    'New trader-alert configurations are disabled during V1 verification. Use this page only to remove saved configurations.',
   traderAlertsBrowse: 'Browse traders',
-  traderAlertsNone: 'No trader alerts configured yet.',
+  traderAlertsNone: 'No saved legacy trader-alert configurations.',
+  traderAlertsUnavailableTitle: 'Trader alerts are temporarily unavailable',
+  traderAlertsUnavailableDesc:
+    'V1 verification has paused trader-alert monitoring and delivery. You can view or remove saved legacy configurations.',
+  traderAlertsStoredNotMonitored: 'Saved configuration — not monitored',
   traderAlertsEnabled: 'Enabled',
   traderAlertsPaused: 'Paused',
   traderAlertsNoConditions: 'No active conditions',
@@ -1176,7 +1184,7 @@ const en = {
   traderAlertsRemoveConfirm: 'Remove this trader alert?',
   traderAlertsRemoveFailed: 'Could not remove the trader alert. Please try again.',
   traderAlertsLoadFailed: 'Could not load trader alerts. Please try again.',
-  traderAlertsProRequired: 'Trader alert management is available with Pro.',
+  traderAlertsProRequired: 'Trader alerts are temporarily unavailable during V1 verification.',
   alertScoreChangeLabel: 'Arena Score change',
   alertScoreChangeDesc: "Notify me when this trader's Arena Score moves by this many points.",
   alertScoreUnit: 'pts',
@@ -1744,7 +1752,7 @@ const en = {
   alertDrawdownLabel: 'Drawdown Alert',
   alertDrawdownDesc: 'Alert when drawdown exceeds threshold',
   alertRankChangeLabel: 'Rank Change',
-  alertRankChangeDesc: 'Alert when rank changes by threshold',
+  alertRankChangeDesc: 'Unavailable during V1 verification',
   alertChangesBy: 'changes by',
   alertChangesByDisplay: 'Changes by',
   alertEmailNotification: 'Email notification',
@@ -1767,7 +1775,7 @@ const en = {
   alertNoAlerts: 'No alerts configured',
   alertLastTriggered: 'Last triggered',
   alertNewPositionLabel: 'New Position Alert',
-  alertNewPositionDesc: 'Alert when trader opens a new position',
+  alertNewPositionDesc: 'Unavailable during V1 verification',
 
   // ProFeaturesPanel
   proFeaturesTitle: 'Pro Features',
@@ -1997,7 +2005,7 @@ const en = {
   adminAlertTriggerTitle: 'Alert Trigger Conditions',
   adminStaleAlertDesc: 'Stale alert: Data not updated for over 12 hours',
   adminCriticalAlertDesc: 'Critical alert: Data not updated for over 24 hours',
-  adminAlertCronNote: 'Alerts triggered via /api/cron/check-data-freshness scheduled task',
+  adminAlertCronNote: 'V1 verification hold: automatic freshness alerts are unavailable',
 
   // Login / Register page
   loginRegisterTitle: 'Login / Register',
@@ -2130,9 +2138,9 @@ const en = {
   helpCompareQ: 'How do I use the Trader Comparison feature?',
   helpCompareA:
     'Click the "Compare Traders" button on the homepage, search and add up to 5 traders, and the system will display their metrics side by side.',
-  helpAlertsQ: 'What are Trader Alerts?',
+  helpAlertsQ: 'Are Trader Alerts available?',
   helpAlertsA:
-    'When traders you follow experience significant ranking changes, ROI fluctuations, or other important changes, the system will automatically send you private message alerts.',
+    'Trader-alert monitoring and delivery are temporarily unavailable during V1 verification. Signed-in users may only view or remove saved legacy configurations.',
   helpScoreBreakdownQ: 'What does Arena Score Breakdown show?',
   helpScoreBreakdownA:
     "Score Breakdown shows a trader's Return Score, Drawdown Score, and Stability Score, along with their percentile ranking among traders of the same type.",
@@ -2644,12 +2652,12 @@ const en = {
   viewGroupInfoAria: 'View group info & rules',
   viewGroupMembersAria: 'View member list',
 
-  // Trader page i18n - TraderPageV2, TraderRefreshButton, TraderFeed, etc.
+  // Trader page i18n - TraderPageV2, TraderFeed, etc.
   aumLabel: 'AUM',
   verifiedAccounts: 'verified accounts',
   mddLabel: 'MDD',
   tradesLabel: 'Trades',
-  dataOutdatedBanner: 'Data may be outdated. Refresh to get the latest.',
+  dataOutdatedBanner: 'Data may be outdated. Manual refresh is unavailable during V1 verification.',
   platformDataUnavailable:
     'Data for this platform is temporarily unavailable. Historical data shown below may be outdated.',
   rankTrend: 'Rank trend (7d)',
@@ -2754,8 +2762,8 @@ const en = {
   compProAnomalyDetection: 'Anomaly detection',
   compFeatureTraderCompare: 'Trader Comparison',
   compProUpTo10Traders: 'Up to 10 traders',
-  compFeatureTraderAlerts: 'Trader Change Alerts',
-  compProInAppEmailPush: 'In-app + Email + Push',
+  compFeatureTraderAlerts: 'Trader Alerts (V1 unavailable)',
+  compProInAppEmailPush: 'Not published during V1 verification',
   compFeatureArenaScore: 'Arena Score',
   compFreeTotalScore: 'Total Score',
   compProBreakdownPercentile: 'Breakdown + Percentile',
@@ -2786,7 +2794,7 @@ const en = {
   congratsProMember: 'Congratulations! You are now a Pro member',
   nowYouCan: 'Now you can:',
   proBenefit1: 'View rankings by category',
-  proBenefit2: 'Get trader change alerts',
+  proBenefit2: 'Trader alerts are temporarily unavailable during V1 verification',
   proBenefit3: 'View detailed score analysis',
   proBenefit4: 'Use advanced filters',
   proBenefit5: 'Compare multiple traders',
@@ -2843,7 +2851,7 @@ const en = {
   pollDuration7d: '7 days',
   myWatchlist: 'My Watchlist',
   savedHubTitle: 'Saved',
-  savedHubSubtitle: 'Keep your traders, posts, and performance alerts together.',
+  savedHubSubtitle: 'Keep your traders and posts together.',
   savedTabTraders: 'Traders',
   savedTabPosts: 'Posts',
   savedTabAlerts: 'Alerts',
@@ -3067,7 +3075,7 @@ const en = {
   benefitFeature: 'Feature',
   benefitFollowTraders: 'Follow Traders',
   benefitHistoricalData: 'Historical Data',
-  benefitTraderAlerts: 'Trader Change Alerts',
+  benefitTraderAlerts: 'Trader Alerts (V1 unavailable)',
   benefitTraderCompare: 'Trader Compare',
   benefitArenaScore: 'Arena Score Details',
   benefitApiAccess: 'API Access',
@@ -3147,9 +3155,9 @@ const en = {
     'Compare up to 4 traders side by side with detailed metric breakdowns and performance charts.',
   aboutFeature4Title: 'Portfolio Tracking',
   aboutFeature4Desc: 'Build and track custom portfolios of top traders across multiple exchanges.',
-  aboutFeature5Title: 'Smart Alerts',
+  aboutFeature5Title: 'Alert Publication Hold',
   aboutFeature5Desc:
-    'Get notified when traders you follow hit milestones, change positions, or enter the top rankings.',
+    'Trader alerts and personalized delivery are temporarily unavailable during V1 verification.',
   aboutFeature6Title: 'Knowledge Library',
   aboutFeature6Desc:
     '56K+ curated educational resources on trading strategies, risk management, and market analysis.',
@@ -3238,8 +3246,8 @@ const en = {
   pushNotificationError: 'Failed to set up push notifications, please try again',
   pushNotificationsDisabled: 'Push notifications disabled',
   hapticFeedbackTitle: 'Haptic Feedback',
-  hapticFeedbackDesc: 'Feel vibrations when followed traders open positions',
-  tradeAlertVibration: 'Trade Alert Vibration',
+  hapticFeedbackDesc: 'Use vibration feedback for supported in-app interactions',
+  tradeAlertVibration: 'Haptic Feedback',
 
   // Messaging system
   messageSent: 'Sent',
@@ -4245,7 +4253,7 @@ const en = {
   noFollowers: 'No followers yet',
   noMessagesHint: 'No messages yet',
   noAlertsDesc:
-    'Follow traders from the rankings page to receive alerts when their performance changes',
+    'Trader-alert monitoring and delivery are temporarily unavailable during V1 verification.',
 
   // Errors
   invalidResponse: 'Invalid response',
@@ -4509,9 +4517,8 @@ const en = {
 
   // Guest signup prompt
   guestSignupTitle: 'Track Top Traders',
-  guestSignupSubtitle:
-    'Create a free account to follow traders and get alerts when their performance changes',
-  guestSignupFeature1: 'Follow traders and get rank change alerts',
+  guestSignupSubtitle: 'Create a free account to follow traders and organize your research.',
+  guestSignupFeature1: 'Follow traders and organize your research',
   guestSignupFeature2: 'Compare up to 5 traders side by side',
   guestSignupFeature3: 'Save watchlists and personalize rankings',
   guestSignupButton: 'Sign Up Free',
@@ -5208,7 +5215,7 @@ const en = {
     'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.',
   pricingFaqApiQ: 'Does Pro include API access?',
   pricingFaqApiA:
-    'No. Data API plans are sold separately from Arena Pro. Pro is for trader discovery, alerts, comparison, and deeper analytics.',
+    'No. Data API plans are sold separately from Arena Pro. Pro is for trader discovery, comparison, and deeper analytics; trader alerts are temporarily unavailable during V1 verification.',
   pricingLimitedTimeBanner: 'Limited Time: All Pro features are currently free!',
   pricingStatTradersRanked: 'Traders Ranked',
   pricingStatExchangesTracked: 'Live Ranking Boards',
@@ -5355,7 +5362,6 @@ const en = {
   noGroupsFollowedYet: 'No groups followed yet',
   groupActionsTitle: 'Group Actions',
   newPostButton: '+ New Post',
-  fetchingLinkPreview: 'Fetching link preview...',
   stickerButton: 'Sticker',
   stickersButton: 'Stickers',
   deleteButton: 'Delete',
@@ -5546,8 +5552,8 @@ const en = {
   copyBackupCodes: 'Copy all codes',
   bioTooLong: 'Bio must be 200 characters or less',
   invalidEmailFormat: 'Invalid email format',
-  referralTitle: 'Referral Program',
-  referralDesc: 'Invite friends and earn Pro rewards',
+  referralTitle: 'Referral status',
+  referralDesc: 'Referral invitations and rewards are unavailable during the V1 verification hold.',
   copyText: 'Copy',
   auditLog: 'Audit Log',
   moderationQueue: 'Moderation Queue',
@@ -5560,7 +5566,7 @@ const en = {
   watchlistSignInTitle: 'Sign in to view your watchlist',
   watchlistSignInDesc: 'Create an account or log in to save and track your favorite traders.',
   traderAlertsSignInTitle: 'Sign in to view trader alerts',
-  traderAlertsSignInDesc: 'Log in to create and manage performance alerts for traders you follow.',
+  traderAlertsSignInDesc: 'Log in to view or remove saved trader-alert configurations.',
   watchlistEmptyTitle: 'Your watchlist is empty',
   watchlistEmptyDesc:
     'Browse the rankings and click the star icon on any trader profile to add them here.',
@@ -6441,28 +6447,33 @@ const en = {
   tokenRankingsSortTrades: 'Trades',
   tokenRankingsSortPnl: 'PnL',
   tokenRankingsNoActivity: 'No activity yet',
-  referralRewardBannerTitle: 'Refer {count} friends, get {days} days of Pro free',
+  // V1 referral-program publication hold
+  referralUnavailableTitle: 'Referral program unavailable',
+  referralUnavailableDescription:
+    'Referral invitations and rewards are unavailable during the V1 verification hold.',
+  referralUnavailableHistoryNote: 'Existing referral history does not promise automatic rewards.',
+  referralRewardBannerTitle: 'Referral program unavailable',
   referralRewardBannerSubtitle:
-    'Invite friends to Arena. When {count} sign up with your link, you get {days} days of Arena Pro — free.',
-  referralHowItWorks: 'How it works',
-  referralStep1: 'Copy your referral link below',
-  referralStep2: 'Share it with friends who love crypto',
-  referralStep3: 'When {count} friends sign up, you unlock {days} days of Pro',
-  referralFriendsReferred: 'Friends Referred',
-  referralRewardUnlocked: 'Reward unlocked!',
-  referralInviteFriends: 'Invite Friends',
-  referralReferredCount: '{count} referred',
+    'New referral invitations and rewards are unavailable during the V1 verification hold.',
+  referralHowItWorks: 'Program status',
+  referralStep1: 'New referral links are unavailable.',
+  referralStep2: 'New referral invitations are unavailable.',
+  referralStep3: 'Referral rewards are not issued automatically.',
+  referralFriendsReferred: 'Referral history',
+  referralRewardUnlocked: 'Reward unavailable',
+  referralInviteFriends: 'Referral program unavailable',
+  referralReferredCount: '{count} historical referrals',
   referralFriendTrialNote:
-    'Bonus: your friends get a {days}-day Pro trial when they join via your link.',
-  referralPromoNote:
-    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
-  referralPageSubtitle: 'Invite friends to Arena and track your referrals.',
-  referralSignInGateTitle: 'Sign in to get your referral link',
-  referralSignInGateDesc: 'Create an account or log in to start inviting friends.',
-  referralYourLink: 'Your Referral Link',
-  referralGenerating: 'Generating...',
-  referralRegenerate: 'Regenerate Code',
-  referralGenerate: 'Generate Referral Link',
+    'Referral trial rewards are unavailable during the V1 verification hold.',
+  referralPromoNote: 'Existing referral history does not promise automatic rewards.',
+  referralPageSubtitle:
+    'Referral invitations and rewards are unavailable during the V1 verification hold.',
+  referralSignInGateTitle: 'Referral program unavailable',
+  referralSignInGateDesc: 'Signing in cannot create a referral link while the V1 hold is active.',
+  referralYourLink: 'Referral links unavailable',
+  referralGenerating: 'Unavailable',
+  referralRegenerate: 'Unavailable',
+  referralGenerate: 'Unavailable',
   referralShareText: 'Check out Arena - the crypto trader ranking platform!',
   referralShareEmailSubject: 'Check out Arena',
 
@@ -6470,11 +6481,11 @@ const en = {
   proGetStarted: 'Get started with Pro',
   proStep1: 'Explore rankings with advanced Pro filters',
   proStep2: 'Compare top traders side by side',
-  proStep3: 'Set up trader alerts & preferences',
+  proStep3: 'Review notification preferences',
   exploreProRankings: 'Explore Pro rankings',
-  inviteFriendsTitle: 'Invite friends to Arena',
-  inviteFriendsDesc: 'Share Arena and unlock referral rewards',
-  inviteFriendsCta: 'Invite',
+  inviteFriendsTitle: 'Referral program unavailable',
+  inviteFriendsDesc: 'Referral invitations and rewards are paused during V1 verification.',
+  inviteFriendsCta: 'View status',
   receiptSentTo: 'Receipt sent to {email}',
   receiptEmailed: 'A receipt has been emailed to you',
   tipSentAmount: 'You sent {amount}',

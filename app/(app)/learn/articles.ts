@@ -738,13 +738,11 @@ Click on any trader to see their detailed profile including:
 Create a free account and follow traders to:
 - Build a personalized watchlist
 - Track their performance over time
-- Get notified of significant changes
 
 ## 5. Go Pro
 
 Arena Pro unlocks:
 - **Advanced analytics**: Deeper risk metrics and performance comparisons
-- **Alerts**: Get notified when followed traders have unusual activity
 - **Trader comparison**: Compare up to 4 traders side by side
 - **Export data**: Download rankings and performance data
 
@@ -780,13 +778,11 @@ Arena has a built-in social layer. Join groups, post trade ideas, and discuss st
 创建一个免费账户并关注交易员，即可：
 - 建立个性化的关注列表
 - 追踪他们随时间的表现
-- 在出现重大变化时收到通知
 
 ## 5. 升级 Pro
 
 Arena Pro 解锁：
 - **高级分析**：更深入的风险指标与表现对比
-- **提醒**：当关注的交易员出现异常活动时收到通知
 - **交易员对比**：最多可并排对比 4 位交易员
 - **数据导出**：下载排名与表现数据
 
@@ -822,13 +818,11 @@ Arena へようこそ！プラットフォームを最大限に活用する方�
 無料アカウントを作成してトレーダーをフォローすると：
 - 自分専用のウォッチリストを作成できます
 - 時系列でパフォーマンスを追跡できます
-- 大きな変化があった際に通知を受け取れます
 
 ## 5. Pro にアップグレード
 
 Arena Pro で解放される機能：
 - **高度な分析**：より深いリスク指標とパフォーマンス比較
-- **アラート**：フォロー中のトレーダーに異常な動きがあると通知
 - **トレーダー比較**：最大 4 人のトレーダーを並べて比較
 - **データエクスポート**：ランキングとパフォーマンスデータをダウンロード
 
@@ -864,13 +858,11 @@ Arena에 오신 것을 환영합니다! 플랫폼을 최대한 활용하는 방�
 무료 계정을 만들고 트레이더를 팔로우하면:
 - 개인화된 관심 목록을 만들 수 있습니다
 - 시간에 따른 성과를 추적할 수 있습니다
-- 중요한 변화가 있을 때 알림을 받습니다
 
 ## 5. Pro로 업그레이드
 
 Arena Pro가 잠금 해제하는 것:
 - **고급 분석**: 더 깊은 리스크 지표와 성과 비교
-- **알림**: 팔로우한 트레이더에게 이례적인 활동이 있을 때 알림
 - **트레이더 비교**: 최대 4명의 트레이더를 나란히 비교
 - **데이터 내보내기**: 랭킹과 성과 데이터 다운로드
 
@@ -1423,10 +1415,10 @@ Arena의 모든 트레이더 프로필에는 여러 차트가 표시됩니다. �
       ko: 'Arena Pro: 구독으로 얻는 것',
     },
     excerpt: {
-      en: 'Detailed overview of Pro features including advanced analytics, trader comparison, rank alerts, and more.',
-      zh: '详细介绍 Pro 功能，包括高级分析、交易员对比、排名提醒等等。',
-      ja: '高度な分析、トレーダー比較、ランクアラートなど、Pro 機能の詳細な概要。',
-      ko: '고급 분석, 트레이더 비교, 순위 알림 등 Pro 기능에 대한 상세 개요.',
+      en: 'Detailed overview of Pro features including advanced analytics, trader comparison, and more.',
+      zh: '详细介绍 Pro 功能，包括高级分析、交易员对比等等。',
+      ja: '高度な分析、トレーダー比較など、Pro 機能の詳細な概要。',
+      ko: '고급 분석, 트레이더 비교 등 Pro 기능에 대한 상세 개요.',
     },
     content: {
       en: `
@@ -1444,11 +1436,6 @@ Arena Pro unlocks powerful tools for serious traders and analysts. Here's what's
 - Overlay equity curves on a single chart
 - Correlation analysis between traders
 - Style compatibility matrix
-
-## Rank Alerts
-- Get notified when a followed trader enters or exits the top 100
-- Custom threshold alerts (e.g., "Alert me if ROI drops below 50%")
-- Delivered via in-app notifications and email
 
 ## Advanced Filters
 - Filter by trading style (Scalper, Swing, Trend, Position)
@@ -1484,11 +1471,6 @@ Arena Pro 为严肃的交易员和分析师解锁强大工具。以下是包含�
 - 交易员之间的相关性分析
 - 风格兼容性矩阵
 
-## 排名提醒
-- 当关注的交易员进入或退出前 100 名时收到通知
-- 自定义阈值提醒（例如「当 ROI 跌破 50% 时提醒我」）
-- 通过应用内通知和电子邮件送达
-
 ## 高级筛选
 - 按交易风格筛选（剥头皮、波段、趋势、头寸）
 - 最低分数、ROI、PnL 阈值
@@ -1523,11 +1505,6 @@ Arena Pro は、本格的なトレーダーやアナリスト向けの強力な�
 - トレーダー間の相関分析
 - スタイル相性マトリクス
 
-## ランクアラート
-- フォロー中のトレーダーがトップ 100 に入る／外れるときに通知
-- カスタムしきい値アラート（例：「ROI が 50% を下回ったら通知して」）
-- アプリ内通知とメールで配信
-
 ## 高度なフィルター
 - トレードスタイルで絞り込み（スキャルピング、スイング、トレンド、ポジション）
 - 最低スコア、ROI、PnL のしきい値
@@ -1561,11 +1538,6 @@ Arena Pro는 진지한 트레이더와 분석가를 위한 강력한 도구를 �
 - 하나의 차트에 자산 곡선을 겹쳐 표시
 - 트레이더 간 상관관계 분석
 - 스타일 호환성 매트릭스
-
-## 순위 알림
-- 팔로우한 트레이더가 상위 100위에 진입하거나 이탈할 때 알림
-- 사용자 지정 임계값 알림(예: "ROI가 50% 아래로 떨어지면 알려줘")
-- 앱 내 알림과 이메일로 전달
 
 ## 고급 필터
 - 트레이딩 스타일로 필터링(스캘핑, 스윙, 트렌드, 포지션)

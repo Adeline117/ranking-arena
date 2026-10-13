@@ -7,6 +7,10 @@
  * - Safety timeout before Vercel kills the function
  * - Structured error handling
  *
+ * V1 source currently authenticates and returns a fixed retirement response
+ * before any of this execution machinery can run. This wrapper remains as the
+ * reviewed historical implementation for a separately approved reopening.
+ *
  * Usage:
  *   export const GET = withCron('batch-fetch-traders-a', async (request, { plog, supabase }) => {
  *     const count = await doWork(supabase)
@@ -21,10 +25,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { logger } from '@/lib/logger'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
+import { v1CronExecutionGate } from '@/lib/cron/v1-execution-publication'
 import * as Sentry from '@sentry/nextjs'
 
 interface CronContext {
@@ -51,10 +55,10 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
   const { safetyTimeoutMs = 580_000 } = options
 
   return async (request: NextRequest) => {
-    // 1. Auth verification (timing-safe)
-    if (!verifyCronSecret(request)) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    }
+    // 1. Authenticate first, then stop V1-held automation before correlation,
+    // locks, PipelineLogger, Supabase, Redis, or a route handler can run.
+    const v1Gate = v1CronExecutionGate(request)
+    if (v1Gate) return v1Gate
 
     // 1.5. Bind a correlation ID for this cron run. Uses any upstream
     // X-Correlation-ID / X-Request-ID header so Vercel/OpenClaw can thread

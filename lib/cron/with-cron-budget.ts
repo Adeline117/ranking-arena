@@ -35,12 +35,19 @@
  *   }
  *
  * Existing crons can adopt this incrementally. Not a forced migration.
+ * V1 source currently returns before this execution lifecycle begins; reopening
+ * requires a separately reviewed source change.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/utils/logger'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
+import {
+  isV1CronExecutionPublished,
+  v1CronExecutionGate,
+  v1CronExecutionUnavailableResponse,
+} from './v1-execution-publication'
 
 export interface CronBudgetOptions {
   /** Cron job name for pipeline_logs (e.g. 'compute-leaderboard-90D') */
@@ -123,7 +130,9 @@ async function acquireLock(lockKey: string, ttlSec: number): Promise<boolean> {
     const result = await redis.set(lockKey, new Date().toISOString(), { nx: true, ex: ttlSec })
     return result === 'OK'
   } catch (err) {
-    logger.warn(`[withCronBudget] Redis lock acquisition failed, proceeding without lock: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[withCronBudget] Redis lock acquisition failed, proceeding without lock: ${err instanceof Error ? err.message : String(err)}`
+    )
     return true
   }
 }
@@ -135,7 +144,9 @@ async function releaseLock(lockKey: string): Promise<void> {
     if (redis) await redis.del(lockKey)
   } catch (err) {
     // Lock auto-expires via TTL — release failure is non-fatal.
-    logger.warn(`[withCronBudget] Redis lock release failed (will auto-expire): ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[withCronBudget] Redis lock release failed (will auto-expire): ${err instanceof Error ? err.message : String(err)}`
+    )
   }
 }
 
@@ -145,15 +156,26 @@ async function releaseLock(lockKey: string): Promise<void> {
  */
 export async function withCronBudget(
   opts: CronBudgetOptions,
-  fn: (ctx: CronBudgetContext) => Promise<CronBudgetSuccess | void>,
+  fn: (ctx: CronBudgetContext) => Promise<CronBudgetSuccess | void>
 ): Promise<NextResponse> {
-  // 1. Auth
+  // 1. Keep the V1 execution hold ahead of auth-adjacent setup, locks, logs,
+  // queues, and handlers. A supplied external request still authenticates
+  // before it receives the V1 retirement response.
+  if (!isV1CronExecutionPublished()) {
+    if (opts.request && !opts.skipAuth) {
+      const gate = v1CronExecutionGate(opts.request)
+      if (gate) return gate
+    }
+    return v1CronExecutionUnavailableResponse()
+  }
+
+  // 2. Auth
   if (!opts.skipAuth) {
     const authErr = await authorize(opts.request)
     if (authErr) return authErr
   }
 
-  // 2. Idempotency lock (optional)
+  // 3. Idempotency lock (optional)
   const lockKey = opts.lockKey
   const lockTtl = opts.lockTtlSec ?? 300
   if (lockKey) {
@@ -167,7 +189,7 @@ export async function withCronBudget(
     }
   }
 
-  // 3. PipelineLogger + time budget setup
+  // 4. PipelineLogger + time budget setup
   const startTime = Date.now()
   const safetyMarginSec = opts.safetyMarginSec ?? 20
   const effectiveBudgetMs = (opts.maxDurationSec - safetyMarginSec) * 1000
@@ -197,7 +219,7 @@ export async function withCronBudget(
     await plog.error(err)
   }
 
-  // 4. Run the callback with cleanup guaranteed
+  // 5. Run the callback with cleanup guaranteed
   try {
     const result = await fn({
       remainingMs,
@@ -226,7 +248,7 @@ export async function withCronBudget(
         job: opts.jobName,
         error: err instanceof Error ? err.message : String(err),
       },
-      { status: 500 },
+      { status: 500 }
     )
   } finally {
     if (lockKey) {

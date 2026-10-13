@@ -45,7 +45,7 @@ not an active audience. Treat `view_count` as vanity, not truth.
 ## What this means (the actual problem)
 
 The product is **built for imaginary users**. Engineering surface (rankings for
-34k traders, referral anti-farm, portfolio sync for 11 exchanges, trader alerts,
+34k traders, legacy referral anti-farm (the V1 referral program is held), portfolio sync for 11 exchanges, trader alerts,
 groups/posts/comments) vastly exceeds demonstrated demand: 45 accounts, ~2
 genuinely-recent authors, 2 payers, 0 measured 30-day actives, growth flat.
 

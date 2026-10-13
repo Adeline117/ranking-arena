@@ -91,8 +91,12 @@ describe('public diagnostics contract', () => {
   it('does not direct operators to the retired automatic health/fix script', () => {
     for (const document of [readme, runbook, onboarding]) {
       expect(document).not.toContain('node scripts/pipeline-health-check.mjs')
-      expect(document).toContain('npm run check:freshness')
     }
+    // README/ONBOARDING name the owner-approved read-only path; the V1 runbook
+    // deliberately carries no command recipe (scripts/qa/freshness-schedule-contract.test.mjs).
+    expect(readme).toContain('npm run check:freshness')
+    expect(onboarding).toContain('npm run check:freshness')
+    expect(runbook).not.toContain('npm run check:freshness')
     expect(runbook).not.toContain('UPDATE pipeline_logs')
   })
 

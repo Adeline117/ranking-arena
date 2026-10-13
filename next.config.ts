@@ -110,16 +110,7 @@ const nextConfig = {
     // 优先使用 AVIF（更小），回退到 WebP
     formats: ['image/avif', 'image/webp'],
 
-    // 本地 API 路由图片（允许任意 query string）
-    // 注意：省略 search 属性以允许任何查询字符串
     localPatterns: [
-      {
-        pathname: '/api/avatar',
-        // search 省略以允许 ?url=* 等查询参数
-      },
-      {
-        pathname: '/api/avatar/**',
-      },
       {
         pathname: '/stickers/**',
       },
@@ -339,13 +330,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**.bitfinex.com',
       },
-      // BTSE + dYdX: routed through /api/avatar proxy (dead platforms)
       // Jupiter
       {
         protocol: 'https',
         hostname: '**.jup.ag',
       },
-      // WhiteBit: routed through /api/avatar proxy (dead platform)
       // Toobit
       {
         protocol: 'https',
@@ -377,7 +366,7 @@ const nextConfig = {
     // 最小缓存时间（秒）- 图片缓存 24 小时（头像/logo 变更不频繁）
     minimumCacheTTL: 86400,
 
-    dangerouslyAllowSVG: false, // Disabled: avatar proxy already filters out SVG via ALLOWED_IMAGE_TYPES
+    dangerouslyAllowSVG: false, // Keep untrusted SVGs out of the image optimizer.
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },

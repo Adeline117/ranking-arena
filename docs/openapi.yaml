@@ -8,7 +8,9 @@ info:
     portable settings export, and deletion are operational account capabilities,
     not exchange-integration primitives. Legacy Portfolio connect, sync,
     positions, and snapshots return 410 in V1; the separate
-    `/portfolio/{address}` route remains a public EVM-address lookup.
+    `/portfolio/{address}` route is a deprecated anonymous public-egress
+    source hold that returns fixed `410 PUBLIC_EGRESS_NOT_PUBLISHED` rather
+    than a live EVM-address lookup.
   version: '2.0.0'
   contact:
     name: Arena
@@ -44,8 +46,10 @@ paths:
       tags: [Health]
       summary: Health Check
       description: >
-        Returns application health status including database, Redis, ranking
-        freshness, and supplementary worker connectivity.
+        Returns public application health status for API transport, database,
+        Redis, and ranking freshness. This endpoint does not probe VPS
+        scraper/proxy connectivity; separate external monitoring is outside
+        this contract.
       responses:
         '200':
           description: Healthy
@@ -77,6 +81,8 @@ paths:
                       database:
                         $ref: '#/components/schemas/HealthCheck'
                       redis:
+                        $ref: '#/components/schemas/HealthCheck'
+                      freshness:
                         $ref: '#/components/schemas/HealthCheck'
         '202':
           description: Degraded (Redis or ranking freshness unavailable)
@@ -1120,8 +1126,8 @@ paths:
         Returns only id, exchange, label, and created_at for legacy Portfolio
         rows owned by the authenticated user. It never returns credentials,
         positions, or snapshots. This owner-cleanup inventory is unrelated to
-        the public EVM lookup at `/portfolio/{address}`. Every outcome is
-        private and non-cacheable.
+        the deprecated public-egress hold at `/portfolio/{address}`. Every
+        outcome is private and non-cacheable.
       security:
         - bearerAuth: []
       responses:
@@ -1287,39 +1293,59 @@ paths:
   /portfolio/{address}:
     get:
       tags: [Traders]
-      summary: Get a public cross-chain EVM address portfolio
+      summary: Retired public EVM address portfolio acquisition
       description: >
-        Public EVM-address lookup cached for five minutes. This route does not
-        read `user_portfolios` or any retained CEX credential and is not part of
-        the retired legacy Portfolio credential plane.
+        V1 source holds this anonymous public-egress route at fixed
+        `410 PUBLIC_EGRESS_NOT_PUBLISHED`. It does not read the dynamic address,
+        cache, EVM adapter, logger, RPC, or provider, and is separate from the
+        retained legacy Portfolio credential plane. This source-only contract
+        does not stop, inspect, or prove any prior deployment, cache, RPC, or
+        external-chain state.
+      deprecated: true
       security: []
       parameters:
         - name: address
           in: path
           required: true
+          description: >
+            Route-shape segment only. Proxy hands off the canonical and
+            `/api/v1` aliases only when it is lowercase `0x` followed by exactly
+            40 hexadecimal characters; the handler does not read this value.
           schema:
             type: string
             pattern: '^0x[a-fA-F0-9]{40}$'
       responses:
-        '200':
-          description: Public EVM portfolio
+        '410':
+          description: Public EVM portfolio acquisition is not published in V1
           headers:
-            X-Cache:
-              description: Whether the response came from the five-minute cache.
+            Cache-Control:
+              description: Prevents browser and shared-cache storage.
               schema:
                 type: string
-                enum: [HIT, MISS]
+                example: private, no-store, max-age=0, must-revalidate
+            CDN-Cache-Control:
+              description: Prevents CDN storage.
+              schema:
+                type: string
+                example: no-store
+            Vercel-CDN-Cache-Control:
+              description: Prevents Vercel CDN storage.
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
-        '400':
-          description: Invalid EVM address
-        '429':
-          description: Public rate limit exceeded
-        '500':
-          description: Portfolio provider or cache operation failed
+                additionalProperties: false
+                required: [error, code]
+                properties:
+                  error:
+                    type: string
+                    enum: [Public outbound fetch is temporarily unavailable during V1 verification.]
+                  code:
+                    type: string
+                    enum: [PUBLIC_EGRESS_NOT_PUBLISHED]
 
   /settings/export:
     post:

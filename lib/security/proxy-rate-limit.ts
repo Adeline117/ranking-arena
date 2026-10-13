@@ -1,5 +1,7 @@
 export type ProxyStrictRateLimitTier = 'health' | 'admin' | 'auth' | 'upload' | 'write'
 
+const RETIRED_AVATAR_PROXY_PATHS = new Set(['/api/avatar', '/api/v1/avatar'])
+
 export const PROXY_STRICT_RATE_LIMITS: Record<
   ProxyStrictRateLimitTier,
   { requests: number; window: `${number} s`; prefix: string }
@@ -31,7 +33,12 @@ export function classifyProxyStrictRateLimit(
   if (pathname.startsWith('/api/health')) return 'health'
   if (pathname.startsWith('/api/admin/')) return 'admin'
   if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/settings/2fa/')) return 'auth'
-  if (pathname.includes('/upload') || pathname.startsWith('/api/avatar')) return 'upload'
+  if (
+    pathname.includes('/upload') ||
+    (pathname.startsWith('/api/avatar') && !RETIRED_AVATAR_PROXY_PATHS.has(pathname))
+  ) {
+    return 'upload'
+  }
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) return 'write'
   return null
 }

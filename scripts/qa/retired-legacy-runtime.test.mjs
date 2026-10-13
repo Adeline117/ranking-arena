@@ -7,11 +7,13 @@ import test from 'node:test'
 const root = process.cwd()
 const retiredScripts = [
   'arena-status-check.mjs',
+  'archive/backfill-metrics-v2.mjs',
   'backfill-risk-metrics-7d30d.ts',
   'backfill-sharpe-ratio.mjs',
   'backfill-window-24h.ts',
   'check-data-distribution.mjs',
   'compute-leaderboard-local.mjs',
+  'compute-leaderboard-risk-metrics.mjs',
   'daily-checkpoint.mjs',
   'diagnose-enrichment.mjs',
   'generate-trader-bios.ts',
@@ -24,6 +26,9 @@ const retiredScripts = [
 
 const forbiddenRuntimeSyntax =
   /@supabase|createClient|dotenv|process\.env|child_process|fetch\(|\.from\(|\.rpc\(|\.upsert\(|\.insert\(|\.update\(|\.delete\(|exec(?:Sync)?\(|spawn(?:Sync)?\(|Telegram|trader_snapshots|trader_profiles_v2|readFileSync|writeFileSync/i
+
+const directLeaderboardRiskMetricWriteSyntax =
+  /new\s+pg\.Pool|pool\.query\b|ALTER\s+TABLE\s+leaderboard_ranks|UPDATE\s+leaderboard_ranks|trader_equity_curve|DATABASE_URL/i
 
 function runRetiredScript(script, invocationArgs) {
   // These tombstones intentionally contain JavaScript-only TypeScript syntax.
@@ -47,6 +52,13 @@ test('legacy runtime paths are inert compatibility tombstones', () => {
     assert.match(source, /process\.exitCode = 2/, `${script} must return exit 2`)
     assert.match(source, new RegExp(script.replace('.', '\\.'), 'u'))
     assert.doesNotMatch(source, forbiddenRuntimeSyntax, `${script} must not retain runtime effects`)
+    if (script === 'compute-leaderboard-risk-metrics.mjs') {
+      assert.doesNotMatch(
+        source,
+        directLeaderboardRiskMetricWriteSyntax,
+        `${script} must not retain direct leaderboard DDL or writes`
+      )
+    }
 
     for (const invocationArgs of invocationSets) {
       const result = runRetiredScript(script, invocationArgs)

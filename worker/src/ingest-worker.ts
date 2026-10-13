@@ -1,63 +1,54 @@
 /**
- * Arena Ingest Worker — orchestrator for the unified scraping framework
- * (ARENA_DATA_SPEC v1.2 §2). Separate PM2 app + BullMQ queue from the
- * legacy arena-worker so the two pipelines fail independently during the
- * parallel-build migration.
+ * Historical V1 ingest worker entrypoint.
  *
- * Usage: npx tsx worker/src/ingest-worker.ts
- * Env (worker/.env): REDIS_URL, INGEST_DATABASE_URL,
- *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- *   PLAYWRIGHT_WS_SG / PLAYWRIGHT_WS_JP (only for remote-region sources)
+ * The checked-in V1 publication gate below exits before dotenv or any runtime
+ * dependency loads. This source-level hold cannot inspect, stop, or prove the
+ * state of an already-running host process, Redis queue, or external schedule.
  */
 
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { config } from 'dotenv'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const workerEnvironment = config({ path: resolve(__dirname, '..', '.env') })
-
-import { Worker, type Job } from 'bullmq'
-import { getConnection, closeConnection } from './connection'
-import {
-  INGEST_JOB,
-  ingestConnection,
-  consumedRegions,
-  regionQueueName,
-  regionFastQueueName,
-  tierCQueueName,
-  fastLaneEnabled,
-  type TierCJobData,
-} from './ingest/queues'
-import { reconcileSchedulers } from './ingest/scheduler'
-import {
-  createWorkerOwnershipHeartbeatFactory,
-  resolveWorkerRuntimeIdentity,
-  startHeartbeat,
-} from './ingest/heartbeat'
-import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
-import {
-  assertAttemptBoundCaptureEnvironmentFile,
-  assertAttemptBoundCaptureRuntimeEnabled,
-} from './ingest/attempt-bound-capture-runtime'
-import { assertPartitionedV4WorkerReadiness } from './ingest/attempt-bound-capture-readiness'
-import { startNativeIngestServing } from './ingest/startup-gate'
-import { routeJobWithSourceLease } from './ingest/source-job-routing'
-import { routeTierCJobRegion } from './ingest/tier-c-region-router'
-import { getSourceBySlug } from '@/lib/ingest/sources'
-import {
-  assertSourceJobMatchesConsumedRegion,
-  bindAuthorizedConsumedRegion,
-  requireWorkerExecutionRegion,
-  type AuthorizedConsumedRegionContext,
-} from './ingest/consumed-region-context'
-import { resolveNativeRegionConfig } from './ingest/native-region-config'
-import { acquireRegionAuthorityLifecycleWithRetry } from './ingest/region-authority-acquisition'
-import { prepareRegionConsumerRuntime } from './ingest/region-consumer-runtime'
-import { createNativeProcessCoordinator } from './ingest/native-process-coordinator'
-import { startBitgetBotAttemptHealthWatchdog } from './ingest/attempt-health-watchdog'
+import { isV1IngestExecutionPublished } from '@/lib/ingest/v1-execution-publication'
+import type { Job } from 'bullmq'
+import type { TierCJobData } from './ingest/queues'
+import type { AuthorizedConsumedRegionContext } from './ingest/consumed-region-context'
 import type { BullJobAuthority } from './ingest/job-provenance'
 import type { SourceJobRunProvenance } from './ingest/source-job-routing'
+
+type ProcessCoordinator = ReturnType<
+  typeof import('./ingest/native-process-coordinator').createNativeProcessCoordinator
+>
+
+let Worker: typeof import('bullmq').Worker
+let getConnection: typeof import('./connection').getConnection
+let closeConnection: typeof import('./connection').closeConnection
+let INGEST_JOB: typeof import('./ingest/queues').INGEST_JOB
+let ingestConnection: typeof import('./ingest/queues').ingestConnection
+let consumedRegions: typeof import('./ingest/queues').consumedRegions
+let regionQueueName: typeof import('./ingest/queues').regionQueueName
+let regionFastQueueName: typeof import('./ingest/queues').regionFastQueueName
+let tierCQueueName: typeof import('./ingest/queues').tierCQueueName
+let fastLaneEnabled: typeof import('./ingest/queues').fastLaneEnabled
+let reconcileSchedulers: typeof import('./ingest/scheduler').reconcileSchedulers
+let createWorkerOwnershipHeartbeatFactory: typeof import('./ingest/heartbeat').createWorkerOwnershipHeartbeatFactory
+let resolveWorkerRuntimeIdentity: typeof import('./ingest/heartbeat').resolveWorkerRuntimeIdentity
+let startHeartbeat: typeof import('./ingest/heartbeat').startHeartbeat
+let assertMetricTrustWorkerReadiness: typeof import('./ingest/metric-trust-readiness').assertMetricTrustWorkerReadiness
+let assertAttemptBoundCaptureEnvironmentFile: typeof import('./ingest/attempt-bound-capture-runtime').assertAttemptBoundCaptureEnvironmentFile
+let assertAttemptBoundCaptureRuntimeEnabled: typeof import('./ingest/attempt-bound-capture-runtime').assertAttemptBoundCaptureRuntimeEnabled
+let assertPartitionedV4WorkerReadiness: typeof import('./ingest/attempt-bound-capture-readiness').assertPartitionedV4WorkerReadiness
+let startNativeIngestServing: typeof import('./ingest/startup-gate').startNativeIngestServing
+let routeJobWithSourceLease: typeof import('./ingest/source-job-routing').routeJobWithSourceLease
+let routeTierCJobRegion: typeof import('./ingest/tier-c-region-router').routeTierCJobRegion
+let getSourceBySlug: typeof import('@/lib/ingest/sources').getSourceBySlug
+let assertSourceJobMatchesConsumedRegion: typeof import('./ingest/consumed-region-context').assertSourceJobMatchesConsumedRegion
+let bindAuthorizedConsumedRegion: typeof import('./ingest/consumed-region-context').bindAuthorizedConsumedRegion
+let requireWorkerExecutionRegion: typeof import('./ingest/consumed-region-context').requireWorkerExecutionRegion
+let resolveNativeRegionConfig: typeof import('./ingest/native-region-config').resolveNativeRegionConfig
+let acquireRegionAuthorityLifecycleWithRetry: typeof import('./ingest/region-authority-acquisition').acquireRegionAuthorityLifecycleWithRetry
+let prepareRegionConsumerRuntime: typeof import('./ingest/region-consumer-runtime').prepareRegionConsumerRuntime
+let createNativeProcessCoordinator: typeof import('./ingest/native-process-coordinator').createNativeProcessCoordinator
+let startBitgetBotAttemptHealthWatchdog: typeof import('./ingest/attempt-health-watchdog').startBitgetBotAttemptHealthWatchdog
+let workerEnvironment: ReturnType<typeof import('dotenv').config>
+let processCoordinator: ProcessCoordinator
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -74,7 +65,7 @@ import type { SourceJobRunProvenance } from './ingest/source-job-routing'
 // browser-source crawls are per-fetch-latency-bound, not CPU-bound — parallelism,
 // not more cores per job, is the lever. SG sets INGEST_CONCURRENCY=12 in its env;
 // local (Mac) keeps the default 5 unless overridden.
-const INGEST_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY) || 5
+let INGEST_CONCURRENCY = 5
 
 // Fast-lane pool (2026-06-13 slot-starvation root fix): light Tier-A
 // leaderboard crawls (board ≤ FAST_TIER_A_MAX_COUNT) run here, fully isolated
@@ -84,6 +75,124 @@ const INGEST_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY) || 5
 const FAST_CONCURRENCY = 3
 const RECONCILE_INTERVAL_MS = 60 * 60_000
 const NATIVE_AUTHORITY_READY_TOKEN = '[ingest-worker] native regional authority ready'
+
+if (!isV1IngestExecutionPublished()) {
+  console.error('[RETIRED] V1 ingest execution is not published; worker will not start.')
+  process.exitCode = 2
+} else {
+  void main().catch(() => {
+    if (processCoordinator === undefined) {
+      console.error('[ingest-worker] fatal startup failure')
+      process.exitCode = 2
+      return
+    }
+
+    const shutdownReason = processCoordinator.shutdownReason
+    if (shutdownReason === undefined) console.error('[ingest-worker] fatal main failure')
+    processCoordinator.settleStartup()
+    void processCoordinator.requestShutdown(shutdownReason ?? 'startup_failed')
+  })
+}
+
+async function initializeRuntime(): Promise<void> {
+  // The caller reaches this only after the fixed V1 publication gate. Keep
+  // dotenv, BullMQ, database, Redis, adapter, and provider imports deferred so
+  // a disabled entrypoint has no runtime initialization path.
+  const [{ resolve, dirname }, { fileURLToPath }, { config }] = await Promise.all([
+    import('node:path'),
+    import('node:url'),
+    import('dotenv'),
+  ])
+
+  const workerDirectory = dirname(fileURLToPath(import.meta.url))
+  workerEnvironment = config({ path: resolve(workerDirectory, '..', '.env') })
+  INGEST_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY) || 5
+
+  const [
+    bullmq,
+    connection,
+    queues,
+    scheduler,
+    heartbeat,
+    metricTrust,
+    attemptRuntime,
+    partitionedReadiness,
+    startupGate,
+    sourceRouting,
+    tierCRouting,
+    sources,
+    consumedContext,
+    nativeRegion,
+    authority,
+    consumerRuntime,
+    coordinator,
+    healthWatchdog,
+  ] = await Promise.all([
+    import('bullmq'),
+    import('./connection'),
+    import('./ingest/queues'),
+    import('./ingest/scheduler'),
+    import('./ingest/heartbeat'),
+    import('./ingest/metric-trust-readiness'),
+    import('./ingest/attempt-bound-capture-runtime'),
+    import('./ingest/attempt-bound-capture-readiness'),
+    import('./ingest/startup-gate'),
+    import('./ingest/source-job-routing'),
+    import('./ingest/tier-c-region-router'),
+    import('@/lib/ingest/sources'),
+    import('./ingest/consumed-region-context'),
+    import('./ingest/native-region-config'),
+    import('./ingest/region-authority-acquisition'),
+    import('./ingest/region-consumer-runtime'),
+    import('./ingest/native-process-coordinator'),
+    import('./ingest/attempt-health-watchdog'),
+  ])
+
+  Worker = bullmq.Worker
+  getConnection = connection.getConnection
+  closeConnection = connection.closeConnection
+  INGEST_JOB = queues.INGEST_JOB
+  ingestConnection = queues.ingestConnection
+  consumedRegions = queues.consumedRegions
+  regionQueueName = queues.regionQueueName
+  regionFastQueueName = queues.regionFastQueueName
+  tierCQueueName = queues.tierCQueueName
+  fastLaneEnabled = queues.fastLaneEnabled
+  reconcileSchedulers = scheduler.reconcileSchedulers
+  createWorkerOwnershipHeartbeatFactory = heartbeat.createWorkerOwnershipHeartbeatFactory
+  resolveWorkerRuntimeIdentity = heartbeat.resolveWorkerRuntimeIdentity
+  startHeartbeat = heartbeat.startHeartbeat
+  assertMetricTrustWorkerReadiness = metricTrust.assertMetricTrustWorkerReadiness
+  assertAttemptBoundCaptureEnvironmentFile = attemptRuntime.assertAttemptBoundCaptureEnvironmentFile
+  assertAttemptBoundCaptureRuntimeEnabled = attemptRuntime.assertAttemptBoundCaptureRuntimeEnabled
+  assertPartitionedV4WorkerReadiness = partitionedReadiness.assertPartitionedV4WorkerReadiness
+  startNativeIngestServing = startupGate.startNativeIngestServing
+  routeJobWithSourceLease = sourceRouting.routeJobWithSourceLease
+  routeTierCJobRegion = tierCRouting.routeTierCJobRegion
+  getSourceBySlug = sources.getSourceBySlug
+  assertSourceJobMatchesConsumedRegion = consumedContext.assertSourceJobMatchesConsumedRegion
+  bindAuthorizedConsumedRegion = consumedContext.bindAuthorizedConsumedRegion
+  requireWorkerExecutionRegion = consumedContext.requireWorkerExecutionRegion
+  resolveNativeRegionConfig = nativeRegion.resolveNativeRegionConfig
+  acquireRegionAuthorityLifecycleWithRetry = authority.acquireRegionAuthorityLifecycleWithRetry
+  prepareRegionConsumerRuntime = consumerRuntime.prepareRegionConsumerRuntime
+  createNativeProcessCoordinator = coordinator.createNativeProcessCoordinator
+  startBitgetBotAttemptHealthWatchdog = healthWatchdog.startBitgetBotAttemptHealthWatchdog
+
+  processCoordinator = createNativeProcessCoordinator({
+    closeDatabase: async () => {
+      const { closeIngestPool } = await import('@/lib/ingest/db')
+      await closeIngestPool()
+    },
+    closeRedis: closeConnection,
+    markFatal: (code) => {
+      console.error(`[ingest-worker] native process shutdown failed (${code})`)
+    },
+    setExitCode: (code) => {
+      process.exitCode = code
+    },
+  })
+}
 
 async function runJob(
   job: Job,
@@ -122,10 +231,8 @@ async function runJob(
       const { processDeriveBoards } = await import('./ingest/processors/derive-boards')
       return processDeriveBoards(job, context)
     }
-    case INGEST_JOB.AVATAR_MIRROR: {
-      const { processAvatarMirror } = await import('./ingest/processors/avatar-mirror')
-      return processAvatarMirror(job)
-    }
+    case INGEST_JOB.AVATAR_MIRROR:
+      return { mirrored: 0, failed: 0 }
     case INGEST_JOB.MAINTENANCE: {
       const { processMaintenance } = await import('./ingest/processors/maintenance')
       return processMaintenance(job)
@@ -153,6 +260,12 @@ async function route(
   bullJob: BullJobAuthority,
   signal?: AbortSignal
 ): Promise<unknown> {
+  // Old queue entries can remain after source publication is withdrawn. Drop
+  // this retired identity in route() before this handler's getConnection(),
+  // per-job source lease, or processor load. A running BullMQ worker can
+  // already have its shared Redis connection; this branch makes no claim about it.
+  if (job.name === INGEST_JOB.AVATAR_MIRROR) return { mirrored: 0, failed: 0 }
+
   return routeJobWithSourceLease({
     redis: getConnection(),
     job,
@@ -186,20 +299,6 @@ async function routeTierC(
   return processTierC(job, context.consumedRegion)
 }
 
-const processCoordinator = createNativeProcessCoordinator({
-  closeDatabase: async () => {
-    const { closeIngestPool } = await import('@/lib/ingest/db')
-    await closeIngestPool()
-  },
-  closeRedis: closeConnection,
-  markFatal: (code) => {
-    console.error(`[ingest-worker] native process shutdown failed (${code})`)
-  },
-  setExitCode: (code) => {
-    process.exitCode = code
-  },
-})
-
 let processHandlersInstalled = false
 
 function installProcessHandlers(): void {
@@ -224,8 +323,13 @@ function installProcessHandlers(): void {
 }
 
 async function main(): Promise<void> {
-  // Signals and fatal process events must be captured before the first await;
-  // startup may already own a database or Redis operation when they arrive.
+  // This is reachable only after the checked-in V1 gate. Dependency loading is
+  // deferred to here, before any dotenv-driven runtime, DB, Redis, BullMQ, or
+  // provider operation can begin.
+  await initializeRuntime()
+
+  // Runtime dependencies are loaded but no worker resource has been created;
+  // capture signals before beginning the first native setup phase.
   installProcessHandlers()
   console.log('[ingest-worker] starting…')
 
@@ -445,10 +549,3 @@ async function main(): Promise<void> {
     await processCoordinator.requestShutdown(shutdownReason)
   }
 }
-
-void main().catch(() => {
-  const shutdownReason = processCoordinator.shutdownReason
-  if (shutdownReason === undefined) console.error('[ingest-worker] fatal main failure')
-  processCoordinator.settleStartup()
-  void processCoordinator.requestShutdown(shutdownReason ?? 'startup_failed')
-})

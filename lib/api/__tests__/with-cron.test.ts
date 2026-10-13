@@ -31,6 +31,24 @@ jest.mock('@/lib/env', () => ({
   ),
 }))
 
+// The lifecycle tests exercise the reusable wrapper's post-publication path.
+// V1 production source stays held by default; its fail-closed contract has a
+// dedicated test alongside the publication gate.
+jest.mock('@/lib/cron/v1-execution-publication', () => ({
+  v1CronExecutionGate: jest.fn(
+    (request: { headers: { get: (key: string) => string | undefined } }) => {
+      const secret = process.env.CRON_SECRET
+      if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) {
+        return {
+          status: 401,
+          json: async () => ({ error: 'Unauthorized' }),
+        }
+      }
+      return null
+    }
+  ),
+}))
+
 // -------- next/server mock ----------
 jest.mock('next/server', () => {
   class MockNextRequest {

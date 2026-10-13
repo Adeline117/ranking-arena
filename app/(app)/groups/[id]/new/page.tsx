@@ -14,7 +14,7 @@ import { trackEvent } from '@/lib/analytics/track'
 import { compressImage } from '@/lib/utils/image-compress'
 import { logger } from '@/lib/logger'
 import { ContentWarningToggle } from '@/app/components/post/components/ContentWarningToggle'
-import type { UploadedImage, UploadedVideo, PollOption, LinkPreview } from './types'
+import type { UploadedImage, UploadedVideo, PollOption } from './types'
 import {
   TITLE_MAX_LENGTH,
   DRAFT_KEY_PREFIX,
@@ -65,11 +65,6 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [videos, setVideos] = useState<UploadedVideo[]>([])
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
-
-  // Link preview state (UF15)
-  const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null)
-  const [linkPreviewLoading, setLinkPreviewLoading] = useState(false)
-  const linkPreviewUrlRef = useRef<string | null>(null)
 
   // Content warning state
   const [isSensitive, setIsSensitive] = useState(false)
@@ -212,38 +207,6 @@ export default function NewGroupPostPage(): React.ReactElement {
       if (draftResetTimer !== null) clearTimeout(draftResetTimer)
     }
   }, [title, content, images, pollEnabled, groupId, draftKey])
-
-  // UF15: Detect URLs in content and fetch link preview
-  useEffect(() => {
-    const urlMatch = content.match(/https?:\/\/[^\s)]+/)
-    const url = urlMatch ? urlMatch[0] : null
-    if (url && url !== linkPreviewUrlRef.current) {
-      linkPreviewUrlRef.current = url
-      setLinkPreviewLoading(true)
-      const abortController = new AbortController()
-      fetch(`/api/posts/link-preview?url=${encodeURIComponent(url)}`, {
-        signal: abortController.signal,
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data && (data.title || data.description)) {
-            setLinkPreview({ url, ...data })
-          } else {
-            setLinkPreview(null)
-          }
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') setLinkPreview(null)
-        })
-        .finally(() => setLinkPreviewLoading(false))
-      return () => {
-        abortController.abort()
-      }
-    } else if (!url) {
-      linkPreviewUrlRef.current = null
-      setLinkPreview(null)
-    }
-  }, [content])
 
   // Clear draft after successful publish
   const clearDraft = useCallback(() => {
@@ -642,7 +605,7 @@ export default function NewGroupPostPage(): React.ReactElement {
             />
           </Box>
 
-          {/* Content editor with preview, link preview, sticker picker */}
+          {/* Content editor with inline text preview and sticker picker */}
           <ContentEditor
             content={content}
             setContent={setContent}
@@ -651,10 +614,6 @@ export default function NewGroupPostPage(): React.ReactElement {
             showStickerPicker={showStickerPicker}
             setShowStickerPicker={setShowStickerPicker}
             draftSaved={draftSaved}
-            linkPreview={linkPreview}
-            setLinkPreview={setLinkPreview}
-            linkPreviewLoading={linkPreviewLoading}
-            linkPreviewUrlRef={linkPreviewUrlRef}
             language={language}
             t={t}
           />

@@ -3,19 +3,18 @@
 /**
  * On-demand on-chain enrichment trigger (Phase A — 即看即算).
  *
- * When a web3 wallet profile (okx_web3_solana / binance_web3_bsc) renders in
- * serving mode WITHOUT any on-chain-computed data yet (`onchain_derivation`
- * absent from the loaded extras), POST /api/trader/onchain-enrich once to
- * compute it now, then invalidate the trader-core queries so the fresh data
- * renders. No-op for non-web3 sources or already-enriched wallets. The returned
- * state keeps optional provider-capacity degradation explicit without turning
- * it into a fatal profile error. Fires once per (source, wallet) per mount.
+ * V1 source keeps on-demand enrichment unpublished. The browser-safe fixed
+ * gate reports optional unavailability before this hook schedules a request,
+ * so profile mounts do not repeatedly POST to the endpoint's 410 tombstone.
+ * The historical request flow remains below for a separately reviewed future
+ * publication, and is exercised only with an explicit test-only GO.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { TRADER_CORE_QUERY_EPOCH } from '@/lib/hooks/useTraderCore'
+import { isV1IngestExecutionPublished } from '@/lib/ingest/v1-execution-publication'
 
 function isWeb3Source(source: string): boolean {
   return source.includes('solana') || source.includes('web3_bsc') || source.includes('_bsc')
@@ -33,6 +32,7 @@ export function useOnchainEnrichTrigger(params: {
 }) {
   const { source, exchangeTraderId, extras, enabled, loaded } = params
   const queryClient = useQueryClient()
+  const v1ExecutionUnavailable = !isV1IngestExecutionPublished()
   const requestKey = `${source}:${exchangeTraderId}`
   const hasOnchainDerivation = Boolean(extras?.onchain_derivation)
   const firedKeyRef = useRef<string | null>(null)
@@ -43,6 +43,7 @@ export function useOnchainEnrichTrigger(params: {
   const state = result.key === requestKey ? result.state : 'idle'
 
   useEffect(() => {
+    if (v1ExecutionUnavailable) return
     if (!enabled || !loaded || firedKeyRef.current === requestKey) return
     if (!source || !exchangeTraderId || !isWeb3Source(source)) return
     // Already has on-chain data (or a board that carried it) → nothing to do.
@@ -91,7 +92,16 @@ export function useOnchainEnrichTrigger(params: {
       }
     })()
     return () => controller.abort()
-  }, [enabled, loaded, source, exchangeTraderId, hasOnchainDerivation, queryClient, requestKey])
+  }, [
+    enabled,
+    loaded,
+    source,
+    exchangeTraderId,
+    hasOnchainDerivation,
+    queryClient,
+    requestKey,
+    v1ExecutionUnavailable,
+  ])
 
-  return state
+  return v1ExecutionUnavailable ? 'unavailable' : state
 }

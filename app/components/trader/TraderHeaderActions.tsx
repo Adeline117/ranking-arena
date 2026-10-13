@@ -16,6 +16,7 @@ import { formatDisplayName } from '@/app/components/ranking/utils'
 import { trackEvent } from '@/lib/analytics/track'
 import type { CompareAccountRef } from '@/lib/compare/identity'
 import { useToast } from '@/app/components/ui/Toast'
+import { TRADER_ALERTS_PUBLISHED } from '@/lib/alerts/trader-alert-publication'
 
 interface TraderHeaderActionsProps {
   traderId: string
@@ -278,9 +279,9 @@ export function TraderHeaderActions({
           />
         )}
 
-        {/* Alert bell — notify me when this trader's rank/ROI/score moves (A4).
-            Explicit opt-in; opens the existing AlertConfig in a modal. */}
-        {!isOwnProfile && source && (
+        {/* Trader alerts are not published during V1, so do not expose a setup
+            affordance from the profile. Legacy cleanup remains in Settings. */}
+        {TRADER_ALERTS_PUBLISHED && !isOwnProfile && source && (
           <AlertBellButton traderId={traderId} traderHandle={handle || traderId} source={source} />
         )}
 
@@ -295,8 +296,8 @@ export function TraderHeaderActions({
         )}
 
         {/* Prominent quiz-grade share: OG rank-card preview + one-tap
-            X / Telegram / WhatsApp / native-share + download card, with the
-            sharer's referral code auto-appended when logged in. */}
+            X / Telegram / WhatsApp / native-share + download card. V1 keeps
+            referral codes out of shared links while the program is held. */}
         <TraderShareActions
           handle={handle}
           routeKey={routeKey}

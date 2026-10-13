@@ -1,30 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { detectArbitrageOpportunities } from '@/lib/utils/arbitrage'
-import { createLogger } from '@/lib/utils/logger'
-import { getOrSetWithLock } from '@/lib/cache'
+/**
+ * Retired anonymous market-arbitrage acquisition ingress.
+ *
+ * V1 keeps this public compatibility endpoint fail-closed. This source-only
+ * boundary does not alter code already deployed, prior data, or external markets.
+ */
 
-const log = createLogger('api:arbitrage')
+import { NextResponse } from 'next/server'
+import {
+  V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+  V1_PUBLIC_EGRESS_UNAVAILABLE_BODY,
+} from '@/lib/security/v1-public-egress-publication'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
-  try {
-    const rl = await checkRateLimit(request, RateLimitPresets.read)
-    if (rl) return rl
-    const result = await getOrSetWithLock(
-      'api:market:arbitrage',
-      async () => {
-        const opportunities = await detectArbitrageOpportunities()
-        return { ok: true, opportunities, ts: Date.now() }
-      },
-      { ttl: 30, lockTtl: 15 }
-    )
-    const response = NextResponse.json(result)
-    response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60')
-    return response
-  } catch (err) {
-    log.error('Arbitrage detection failed', err)
-    return NextResponse.json({ ok: false, opportunities: [], error: 'Arbitrage detection failed' }, { status: 500 })
-  }
+/** Keep this response independent of caller-controlled values and outbound operations. */
+export function GET(): NextResponse {
+  return NextResponse.json(V1_PUBLIC_EGRESS_UNAVAILABLE_BODY, {
+    status: 410,
+    headers: V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+  })
 }

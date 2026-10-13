@@ -46,6 +46,8 @@ export async function GET() {
   return NextResponse.json({
     status: 'ok',
     bot: 'Arena Trading Bot',
-    commands: ['/rank', '/top', '/follow', '/unfollow', '/price', '/stats', '/help'],
+    // /follow is intentionally unpublished during V1. /unfollow remains only
+    // for legacy subscription cleanup.
+    commands: ['/rank', '/top', '/unfollow', '/price', '/stats', '/help'],
   })
 }

@@ -30,6 +30,12 @@ const mockFastQueue = {
 }
 const mockDbQuery = jest.fn().mockResolvedValue({ rows: [] })
 
+// The scheduler's historical invariants stay unit-tested under an explicit
+// test-only GO. The checked-in V1 source gate remains fixed-off.
+jest.mock('@/lib/ingest/v1-execution-publication', () => ({
+  isV1IngestExecutionPublished: jest.fn(() => true),
+}))
+
 jest.mock('../queues', () => ({
   INGEST_JOB: {
     TIER_A: 'tiera:leaderboard',

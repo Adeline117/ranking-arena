@@ -1,46 +1,61 @@
 /**
- * Arena Data Pipeline Worker
+ * Legacy ranking command-chain worker.
  *
- * Long-running Node.js process that replaces Vercel Cron for data-intensive jobs.
- * Runs on Mac Mini (or any VPS) with no timeout limits.
- *
- * Usage:
- *   npx tsx worker/src/index.ts
- *
- * Required env vars:
- *   REDIS_URL                     — native Redis TCP (rediss://default:TOKEN@HOST:6379)
- *   INGEST_DATABASE_URL           — Supabase session-pooler URI (port 5432)
- *   NEXT_PUBLIC_SUPABASE_URL      — Supabase project URL
- *   SUPABASE_SERVICE_ROLE_KEY     — Supabase service role key
- *
- * Architecture:
- *   Scheduler → Queue (BullMQ) → Workers (per job type)
- *   Each platform runs independently. No timeout cascading.
- *   Failed jobs auto-retry 3x with exponential backoff.
+ * The historical design used a long-running Node process to trigger ranking
+ * publication and Meilisearch sync. The fixed V1 source gate below prevents
+ * startup before dotenv or runtime dependencies load. This source file cannot
+ * establish or stop the state of an already-running host process.
  */
 
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { config } from 'dotenv'
-
-// Load worker/.env relative to this file's location
-const __dirname = dirname(fileURLToPath(import.meta.url))
-config({ path: resolve(__dirname, '..', '.env') })
-
-import { Worker } from 'bullmq'
-import { getConnection, closeConnection } from './connection'
-import { QUEUE_NAME, JOB, getQueue } from './queues'
-import { PIPELINE_WORKER_CONCURRENCY } from './pipeline-runtime'
-import { assertSuccessfulMeilisearchSyncResponse } from './pipeline-response'
-import { registerSchedules } from './scheduler'
-import { startDashboard } from './dashboard'
-import { assertMetricTrustWorkerReadiness } from './ingest/metric-trust-readiness'
+import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
 // downstream chain: Arena Score recompute + Meilisearch sync.
 
+if (!isV1RankingCommandChainPublished()) {
+  console.error('[RETIRED] V1 ranking command chain is not published; worker will not start.')
+  process.exitCode = 2
+} else {
+  void main().catch((err) => {
+    console.error('[worker] Fatal error:', err)
+    process.exit(1)
+  })
+}
+
 async function main() {
+  // Keep all dependency loading and dotenv configuration behind the checked-in
+  // V1 gate above. The disabled worker must not initialize DB, Redis, BullMQ,
+  // or downstream HTTP clients.
+  const [{ resolve, dirname }, { fileURLToPath }, { config }] = await Promise.all([
+    import('node:path'),
+    import('node:url'),
+    import('dotenv'),
+  ])
+
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  config({ path: resolve(__dirname, '..', '.env') })
+
+  const [
+    { Worker },
+    { getConnection, closeConnection },
+    { QUEUE_NAME, JOB, getQueue },
+    { PIPELINE_WORKER_CONCURRENCY },
+    { assertSuccessfulMeilisearchSyncResponse },
+    { registerSchedules },
+    { startDashboard },
+    { assertMetricTrustWorkerReadiness },
+  ] = await Promise.all([
+    import('bullmq'),
+    import('./connection'),
+    import('./queues'),
+    import('./pipeline-runtime'),
+    import('./pipeline-response'),
+    import('./scheduler'),
+    import('./dashboard'),
+    import('./ingest/metric-trust-readiness'),
+  ])
+
   console.log('[worker] Arena Pipeline Worker starting...')
 
   // Keep score schedules and consumers on the same exact database release as
@@ -136,32 +151,10 @@ async function main() {
     }
   })
 
-  worker.on('failed', async (job, err) => {
+  worker.on('failed', (job, err) => {
     const attempt = job?.attemptsMade ?? 0
     const maxAttempts = job?.opts?.attempts ?? 3
     console.error(`[worker] ✗ ${job?.name} attempt ${attempt}/${maxAttempts} failed:`, err.message)
-
-    // Log to pipeline_logs so health monitoring sees worker failures
-    try {
-      const siteUrl = process.env.SITE_URL || 'https://www.arenafi.org'
-      const secret = process.env.CRON_SECRET
-      if (secret && job) {
-        await fetch(`${siteUrl}/api/health/heartbeat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
-          body: JSON.stringify({
-            source: `worker:${job.name}`,
-            status: attempt >= maxAttempts ? 'failed' : 'retrying',
-            error: err.message,
-            attempt,
-            maxAttempts,
-          }),
-          signal: AbortSignal.timeout(5000),
-        }).catch(() => {}) // best-effort
-      }
-    } catch {
-      /* don't let logging failure crash the worker */
-    }
   })
 
   worker.on('error', (err) => {
@@ -201,8 +194,3 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'))
   process.on('SIGTERM', () => shutdown('SIGTERM'))
 }
-
-main().catch((err) => {
-  console.error('[worker] Fatal error:', err)
-  process.exit(1)
-})

@@ -116,7 +116,7 @@ export interface Trader {
   copiers?: number | null
   source?: string
   avatar_url?: string | null
-  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
+  /** Existing Supabase-Storage mirror, preferred when it remains direct-safe. */
   avatar_url_mirror?: string | null
   arena_score?: number | null
   /** Pre-computed rank from leaderboard_ranks DB table */

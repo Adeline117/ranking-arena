@@ -52,12 +52,13 @@ lib/                    # Core business logic
   supabase/             # Supabase client + helpers
 
 scripts/                # CLI tools and maintenance
-  import/               # Data import scripts
-  backfill-*.ts         # Legacy compatibility tombstones (no V1 direct invocation)
+  import/               # Historical import source; named V1 entrypoints are retired
+  backfill-*.ts; archive/backfill-metrics-v2.mjs
+                         # Legacy compatibility tombstones (no V1 direct invocation)
 
 supabase/migrations/    # SQL migration files
-worker/                 # Background job runner
-cloudflare-worker/      # CF Worker for geo-blocked APIs
+worker/                 # Worker source; this listing is architecture, not runtime state
+cloudflare-worker/      # Historical proxy source; fixed V1 no-fetch response
 ```
 
 ## Key Commands
@@ -76,15 +77,17 @@ public services or use controlled read credentials. During V1, run one only when
 the current task or owner grants an exact read-only evidence request; never treat
 the command names as permission to contact a production service.
 
-The retained legacy `backfill-*.ts` paths are compatibility tombstones: during V1
+The retained legacy `backfill-*.ts` paths,
+`scripts/compute-leaderboard-risk-metrics.mjs`, and
+`scripts/archive/backfill-metrics-v2.mjs` are compatibility tombstones: during V1
 they report `RETIRED` and exit 2 rather than performing a write. A future backfill
 would need its own reviewed, provenance-bound release plan and explicit owner GO;
 it is intentionally not part of routine diagnostics.
 
 ## Database Schema (Core Tables)
 
-> **Primary data layer = `arena.*` schema** (partitioned, populated by the ingest
-> worker): `arena.traders`, `arena.trader_stats` (per trader×timeframe),
+> **Primary data layer = `arena.*` schema** (partitioned, intended for the ingest
+> worker data model): `arena.traders`, `arena.trader_stats` (per trader×timeframe),
 > `arena.leaderboard_snapshots/entries`, `arena.positions_current`,
 > `arena.{position_history,order_records,transfer_history,copier_records}` (monthly
 > partitions). `compute-leaderboard` derives serving tables `public.leaderboard_ranks`
@@ -119,6 +122,106 @@ checked-in source. Do not infer a live schedule or deployment state from a route
 name, historic configuration, or old runbook; these source-only changes do not prove
 the deployed control-plane state.
 
+For the documented ranking-command chain, the fixed source gate
+`V1_CRON_EXECUTION_PUBLISHED=false` guards `GET /api/cron/compute-leaderboard`,
+`GET /api/cron/precompute-composite`, `GET /api/cron/sync-meilisearch`,
+`GET /api/cron/pipeline-evaluate`, and `GET`/`POST /api/hooks/post-deploy`. It is not
+an environment flag. Invalid or missing service authentication receives `401`; valid
+authentication receives `410` `CRON_EXECUTION_NOT_PUBLISHED`; both paths have three
+`no-store` headers and return before parsing parameters, acquiring locks, or touching
+pipeline logs, cache, data, or providers. This ranking-command list does not classify
+other cron routes.
+
+The same fixed, non-environment `V1_CRON_EXECUTION_PUBLISHED=false` source gate
+separately holds exactly ten direct service-auth cron ingress handlers: `GET
+/api/cron/batch-5min`, `GET /api/cron/check-data-freshness`, `GET
+/api/cron/cleanup-data`, `GET /api/cron/cleanup-stuck-logs`, `GET
+/api/cron/detect-contracts`, `GET`/`POST /api/cron/fetch-funding-rates`, `GET`/`POST
+/api/cron/fetch-market-data`, `GET`/`POST /api/cron/fetch-open-interest`, `GET
+/api/cron/qualify-referrals`, and `GET /api/cron/smoke-test`. Missing or invalid
+service authentication receives `401`; a valid service secret receives `410
+CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry `Cache-Control`,
+`CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store` headers and return
+before query/body parsing, locks, `PipelineLogger`, database, cache, provider, or
+network work. This bounded direct-ingress list does not classify other cron routes and
+cannot stop, inspect, or prove an existing deployed scheduler, host, queue, or worker.
+
+`V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` separately holds the checked-in legacy
+downstream ranking-command worker/scheduler/caller chain. Its worker entry exits
+before dotenv, DB, Redis, BullMQ, or HTTP initialization; its scheduler and trigger
+chain return before BullMQ, Redis, or network work. This source behavior neither
+stops nor proves the state of an already-running worker or an external schedule.
+
+`V1_INGEST_EXECUTION_PUBLISHED=false` is a separate, fixed source hold for the
+checked-in native ingest command path. The ingest worker entry exits before dotenv and
+runtime dependency initialization; its scheduler and Redis connection do not begin
+database, ioredis, or BullMQ work. Tier-C and first-party bridges admit no new work,
+and the covered direct ingest scripts do not initiate ingest. `POST
+/api/trader/onchain-enrich` is a fixed `410 INGEST_EXECUTION_NOT_PUBLISHED` response
+with three `no-store` headers before body parsing, rate limiting, provider, or
+serving-data work. The profile `core` and `records` routes retain their warm
+serving-read branches; an unavailable cold Tier-C path is pending without bridge
+provider/ioredis/BullMQ/result-queue access. Their public rate limiter may still use
+Redis, so do not describe those routes as making zero Redis reads.
+The checked-in legacy-refresh boundary includes the client-safe fixed-false
+`V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker: its producer is an auth-first cron tombstone,
+`batch-5min` is separately covered by the bounded direct service-auth cron ingress
+hold above,
+and public refresh admission is auth-first `401/410` without body/rate-limit/queue
+work. Legacy detail returns `refresh_job: null` and its compatibility hook cannot post
+or poll.
+
+The legacy proxy/import acquisition source hold is separately and exhaustively named:
+`GET /api/proxy/phemex`, `cloudflare-worker/src/index.ts`,
+`scripts/import/import_all_platforms.mjs`, `scripts/import/refresh.sh`,
+`scripts/import/import-all-blocked.sh`, `scripts/import/run_hl_enrichment.sh`,
+`scripts/vps-deploy/scraper-v16-parallel.js`, `scripts/vps-deploy/arena-proxy.mjs`,
+`scripts/archive/test-vps-scrapers.ts`, and
+`scripts/archive/verify-data-accuracy.mjs`. Phemex remains auth-first (`401` for
+missing/invalid service authentication, then `410
+LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` with three `no-store` headers) and does not
+parse URL/query, fetch, or log. The checked-in Cloudflare Worker is a fixed
+`410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED`/three-`no-store` no-fetch response; the named
+script entrypoints report `RETIRED` and exit `2` before proxy, browser, import, or host
+work. This source-only hold does not stop or prove a deployed VPS/Cloudflare worker,
+host process, queue, or schedule. It does not classify the separately held
+`avatar-mirror` worker or the separate avatar-proxy route below. Other avatar-related
+API paths/helpers, UI/read RPCs, adapters, and unlisted writers remain outside this
+proxy/import unit.
+
+Separately, anonymous `GET /api/avatar` and its `/api/v1/avatar` rewrite alias resolve
+to one fixed `410` source-only response with `Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control` `no-store` headers before query parsing, DNS lookup,
+upstream fetch, or logging. Their matching proxy bypass preserves this anonymous
+no-store contract; it is not an upstream-proxy permission. Registered helpers and
+known UI/OG consumers no longer generate proxy requests: a proxy-required origin
+without a mirror falls back to local, inline, or default behavior. This does not assert
+zero avatar browser/network activity: existing Supabase mirrors and direct allowed
+raw-avatar URLs may still render. Other avatar-related API paths/helpers, adapters, and
+unlisted writers remain outside this boundary. The source change cannot clear old CDN
+cache, stop older deployed code, or prove external state.
+
+Separately, the canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only
+tombstone handler. It is auth-first: missing or invalid service authentication receives
+`401`; valid authentication receives `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths
+carry three `no-store` headers and return before parameter parsing, database access,
+logging, or upstream fetch. This checked-in contract does not stop, inspect, or prove
+an already deployed host, external scheduler, or healthcheck. The handler itself does
+not cover the separate avatar-proxy route, other avatar-related API paths/helpers,
+UI/read RPCs, adapters, or unlisted writers; the separate `avatar-mirror` worker hold
+does not expand its scope.
+
+The checked-in V1 `avatar-mirror` worker execution is separately source-only retired:
+its processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a
+legacy queued avatar-mirror job returns as a no-op within `route()` before that handler
+calls `getConnection()`, acquires its per-job source lease, or loads a processor. This
+makes no claim that the surrounding worker or BullMQ has not already established or
+used shared Redis, or acquired a job lock. It cannot stop, inspect, or prove an
+already-running worker, Redis, host process, or schedule. Other avatar-related API
+paths/helpers, UI/read RPCs, adapters, and unlisted writers remain outside this worker
+boundary; the separate avatar-proxy route does not expand it.
+
 Daily snapshot production, historical violation cleanup, and the unversioned quality scanner are unscheduled 401/410 tombstones. Movers and derived daily consumers stay quarantined until provenance-bound daily publication exists.
 
 ## Exchange Adapters (`lib/ingest/adapters/`)
@@ -126,10 +229,11 @@ Daily snapshot production, historical violation cleanup, and the unversioned qua
 CEX: binance-futures, binance-spot, bybit, okx, bitget, mexc, kucoin, htx, coinex
 DEX: hyperliquid, gmx, dydx, vertex, drift, aevo, gains, kwenta
 
-Adapters register through `lib/ingest/adapters/register.ts` and are loaded by
-`worker/src/ingest-worker.ts`. Verify the current `SourceAdapter` contract and
-source-specific fixtures before changing an adapter; do not infer a path or API
-shape from old connector notes.
+The source bootstrap registers adapters through `lib/ingest/adapters/register.ts`
+and is referenced by `worker/src/ingest-worker.ts`. This is source architecture, not
+evidence that a worker is active. Verify the current `SourceAdapter` contract and
+source-specific fixtures before changing an adapter; do not infer a path or API shape
+from old connector notes.
 
 ## Arena Score Formula
 
@@ -332,8 +436,8 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
 
 ### 多会话编排纪律 — MANDATORY（漂移与卡死的元层根源）
 
-Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓库目录**。
-2026-06 血泪教训(全部活生生发生过):
+历史协作记录曾涉及最多 7 个 Claude 会话、cron 与 worker **共用同一个仓库目录**；这不是
+当前运行进程的断言。2026-06 血泪教训（全部活生生发生过）：
 
 1. **schema 变更走单一评审通道,串行化。** 多个会话各自手工 SQL-editor/MCP 应用
    迁移、用任意名字 → 仓库↔ledger 失配、幻影表、~200 迁移漂移。当前 V1 下，迁移
@@ -579,9 +683,12 @@ observation only: it must not trigger an auto-fix, worker restart, cron invocati
 backfill, deployment, or database write. Record the observation and route it through
 the owner-approved incident/release process instead.
 
-### Pipeline Logging
+### Pipeline Logging (historical/source interface)
 
-Cron jobs use `PipelineLogger` to record execution:
+`PipelineLogger` is a historical/source execution-logging interface retained for
+local code review and tests. Its presence does not show that a cron, worker, logger,
+or monitoring pipeline is active, and the example below is not an instruction to
+start one during V1:
 
 ```typescript
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
