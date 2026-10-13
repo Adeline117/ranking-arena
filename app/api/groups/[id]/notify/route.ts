@@ -131,11 +131,29 @@ export const POST = withAuth(
     }))
     const allUser1s = [...new Set(convPairs.map((p) => p.user1))]
     const allUser2s = [...new Set(convPairs.map((p) => p.user2))]
-    const { data: existingConvs } = await supabase
+    const { data: existingConvs, error: convLookupError } = await supabase
       .from('conversations')
       .select('id, user1_id, user2_id')
       .in('user1_id', allUser1s)
       .in('user2_id', allUser2s)
+    if (convLookupError) {
+      // Without the existing-conversation map every insert below would collide
+      // or duplicate — fail the DM stage visibly instead of reporting success.
+      logger.error('Failed to load existing conversations for group notify', {
+        groupId,
+        error: convLookupError.message,
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to send direct messages',
+          notified: 0,
+          failed: memberIds.length,
+          total: memberIds.length,
+        },
+        { status: 500 }
+      )
+    }
     const convMap = new Map<string, string>()
     for (const c of existingConvs || []) {
       convMap.set(`${c.user1_id}:${c.user2_id}`, c.id)
@@ -145,30 +163,51 @@ export const POST = withAuth(
     const now = new Date().toISOString()
     for (const pair of convPairs) {
       try {
-        let convId = convMap.get(`${pair.user1}:${pair.user2}`)
+        let convId = convMap.get(`${pair.user1}:${pair.user2}`) ?? null
         if (!convId) {
-          const { data: newConv } = await supabase
+          const { data: newConv, error: convInsertError } = await supabase
             .from('conversations')
             .insert({ user1_id: pair.user1, user2_id: pair.user2 })
             .select('id')
             .single()
-          convId = newConv?.id || null
+          if (convInsertError?.code === '23505') {
+            // Created concurrently — re-query instead of failing.
+            const { data: raced, error: requeryError } = await supabase
+              .from('conversations')
+              .select('id')
+              .eq('user1_id', pair.user1)
+              .eq('user2_id', pair.user2)
+              .maybeSingle()
+            if (requeryError) throw new Error(`conversation re-query: ${requeryError.message}`)
+            convId = raced?.id ?? null
+          } else if (convInsertError) {
+            throw new Error(`conversation insert: ${convInsertError.message}`)
+          } else {
+            convId = newConv?.id ?? null
+          }
         }
-        if (convId) {
-          await supabase.from('direct_messages').insert({
-            conversation_id: convId,
-            sender_id: user.id,
-            receiver_id: pair.memberId,
-            content: dmContent.slice(0, 2000),
-          })
-          await supabase
-            .from('conversations')
-            .update({ last_message_at: now, last_message_preview: dmContent.slice(0, 100) })
-            .eq('id', convId)
-        }
+        if (!convId) throw new Error('conversation id unavailable')
+
+        const { error: dmError } = await supabase.from('direct_messages').insert({
+          conversation_id: convId,
+          sender_id: user.id,
+          receiver_id: pair.memberId,
+          content: dmContent.slice(0, 2000),
+        })
+        if (dmError) throw new Error(`direct_messages insert: ${dmError.message}`)
+
+        const { error: convUpdateError } = await supabase
+          .from('conversations')
+          .update({ last_message_at: now, last_message_preview: dmContent.slice(0, 100) })
+          .eq('id', convId)
+        if (convUpdateError) throw new Error(`conversation update: ${convUpdateError.message}`)
+
         successCount++
       } catch (err: unknown) {
-        logger.error(`Failed to notify member ${pair.memberId}:`, err)
+        logger.error(`Failed to notify member ${pair.memberId}:`, {
+          groupId,
+          error: err instanceof Error ? err.message : String(err),
+        })
         errors.push(pair.memberId)
       }
     }
