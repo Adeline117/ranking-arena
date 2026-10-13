@@ -116,6 +116,6 @@ describe('readBodyCapped', () => {
 
   it('returns the body when under the cap', async () => {
     const buf = await readBodyCapped(new Response('hello'), 10)
-    expect(buf.toString()).toBe('hello')
+    expect(new TextDecoder().decode(buf)).toBe('hello')
   })
 })
