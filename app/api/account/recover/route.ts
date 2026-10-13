@@ -271,6 +271,19 @@ export const POST = withPublic(
       return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
     }
 
+    // A concurrent wrong-password attempt may have re-banned between our
+    // unban and the restore (its "still pending" check is not locked). The
+    // account is restored now, so lifting the ban again is always correct.
+    const { error: finalUnbanError } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: 'none',
+    })
+    if (finalUnbanError) {
+      logger.error('SECURITY: restored account may still be banned', {
+        userId,
+        finalUnbanError,
+      })
+    }
+
     const subscriptionResumed = await resumeSubscription(userId)
     logger.info('Account recovered successfully', { userId })
 
