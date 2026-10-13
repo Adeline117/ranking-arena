@@ -4,6 +4,8 @@ import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
+const RANK_HISTORY_PUBLICATION_AVAILABLE = false
+
 interface HistoryDataPoint {
   date: string
   roi: number
@@ -33,6 +35,11 @@ export default function RankTrendSparkline({
   const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
+    // The history endpoint returns a quarantined empty projection
+    // (historical_metric_publication_unavailable), so this sparkline could
+    // never render. Skip the request until a sealed history publication
+    // exists; flip RANK_HISTORY_PUBLICATION_AVAILABLE to restore.
+    if (!RANK_HISTORY_PUBLICATION_AVAILABLE) return
     if (!platform || !traderKey) return
     let cancelled = false
 
