@@ -6680,6 +6680,10 @@ const ko = {
   u2detail_chartMedian: '중앙값',
   u2detail_chartDays: '일수',
   u13admin_accessRequired: '관리자 권한이 필요합니다',
+  rankingsRefreshingTitle: '랭킹을 갱신하는 중입니다',
+  rankingsRefreshingDesc:
+    '최신 거래소 데이터가 검증을 통과한 후에만 랭킹을 게시합니다. 잠시 후 다시 확인해 주세요.',
+  rankingsEmptyPeriodTitle: '이 기간에 게시된 랭킹이 아직 없습니다',
 } as const
 
 export default ko

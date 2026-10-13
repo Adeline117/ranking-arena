@@ -6807,6 +6807,10 @@ const en = {
   u2detail_chartMedian: 'Median',
   u2detail_chartDays: 'Days',
   u13admin_accessRequired: 'Admin access required',
+  rankingsRefreshingTitle: 'Rankings are being refreshed',
+  rankingsRefreshingDesc:
+    'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
+  rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
 } as const
 
 export default en
