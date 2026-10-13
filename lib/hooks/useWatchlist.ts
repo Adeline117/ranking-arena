@@ -124,11 +124,12 @@ export function useWatchlist() {
   const { tryUnlock } = useAchievements()
   const queryClient = useQueryClient()
   const viewer = captureWatchlistViewer(auth)
+  const hasViewer = Boolean(viewer)
   const queryKey = useMemo(
     () => (viewer ? watchlistQueryKey(viewer) : null),
     // Access-token rotation does not change ownership of this resource.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [auth.sessionGeneration, auth.userId, auth.viewerKey, Boolean(viewer)]
+    [auth.sessionGeneration, auth.userId, auth.viewerKey, hasViewer]
   )
 
   const query = useQuery<WatchlistItem[]>({

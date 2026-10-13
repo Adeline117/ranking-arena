@@ -130,6 +130,12 @@ const eslintConfig = defineConfig([
       'react-hooks/immutability': 'off',
       'react-hooks/purity': 'off',
       'react-hooks/refs': 'off',
+      // eslint-plugin-react-hooks 7.1 (via eslint-config-next 16.4) reports
+      // React Compiler bailouts on pre-existing manual useCallback/useMemo as
+      // errors. A bailout only means the compiler skips that function (manual
+      // memoization still applies), so keep it visible as a warning instead of
+      // blocking the security upgrade; refactor those hooks separately.
+      'react-hooks/preserve-manual-memoization': 'warn',
 
       // Next link rule is nice-to-have; we allow <a> in simple 404 pages.
       '@next/next/no-html-link-for-pages': 'off',
