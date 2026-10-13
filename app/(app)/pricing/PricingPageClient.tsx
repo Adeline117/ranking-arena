@@ -98,6 +98,37 @@ function LifetimeOwnedLabel({ label }: { label: string }) {
   )
 }
 
+/**
+ * Rendered in place of purchase/trial CTAs when the server reports Stripe
+ * checkout (or lifetime checkout) is not open — the checkout route would
+ * otherwise answer 503 after the click.
+ */
+function PaymentComingSoonButton({ label }: { label: string }) {
+  return (
+    <button
+      type="button"
+      disabled
+      style={{
+        display: 'block',
+        width: '100%',
+        padding: '14px 0',
+        borderRadius: tokens.radius.md,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.tertiary,
+        textAlign: 'center',
+        color: tokens.colors.text.tertiary,
+        fontWeight: tokens.typography.fontWeight.semibold,
+        // eslint-disable-next-line no-restricted-syntax -- off-scale by design (matches sibling CTAs)
+        fontSize: 15,
+        marginTop: tokens.spacing[6],
+        cursor: 'not-allowed',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
 type ViewerPlan =
   | { state: 'anonymous' | 'loading' | 'unknown' }
   | { state: 'ready'; tier: string; plan: string | null }
@@ -187,6 +218,10 @@ function TrustStrip({ items }: { items: string[] }) {
 
 interface PricingPageClientProps {
   lifetimeCount?: number
+  /** Server-computed: Stripe checkout runtime is live and configured. */
+  paymentsReady: boolean
+  /** Server-computed: lifetime one-time checkout is open (implies paymentsReady). */
+  lifetimeCheckoutReady: boolean
 }
 
 type BillingPeriod = 'monthly' | 'yearly'
@@ -210,7 +245,11 @@ function persistBilling(billing: BillingPeriod): void {
   }
 }
 
-export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClientProps) {
+export default function PricingPageClient({
+  lifetimeCount = 0,
+  paymentsReady,
+  lifetimeCheckoutReady,
+}: PricingPageClientProps) {
   const { email, userId, getAuthHeadersAsync } = useAuthSession()
   const viewerPlan = useViewerPlan(email, userId, getAuthHeadersAsync)
   const viewerIsFree = viewerPlan.state === 'ready' && viewerPlan.tier === 'free'
@@ -299,6 +338,12 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     t('pricingLifetimeMemberLabel'),
     'pricingLifetimeMemberLabel',
     'You have Lifetime Pro'
+  )
+
+  const paymentComingSoonLabel = resolved(
+    t('paymentSystemComingSoon'),
+    'paymentSystemComingSoon',
+    'Payment system coming soon'
   )
 
   const handleCta =
@@ -799,6 +844,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             {/* Direct checkout for logged-in users; login redirect for anonymous */}
             {viewerIsLifetime ? (
               <LifetimeOwnedLabel label={lifetimeOwnedLabel} />
+            ) : !paymentsReady ? (
+              <PaymentComingSoonButton label={paymentComingSoonLabel} />
             ) : handleCta ? (
               <>
                 <button
@@ -1158,6 +1205,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
             {viewerIsLifetime ? (
               <LifetimeOwnedLabel label={lifetimeOwnedLabel} />
+            ) : !lifetimeCheckoutReady ? (
+              <PaymentComingSoonButton label={paymentComingSoonLabel} />
             ) : handleCta ? (
               <button
                 onClick={() => {
