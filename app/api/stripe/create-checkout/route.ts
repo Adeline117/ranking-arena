@@ -431,7 +431,7 @@ export async function POST(request: NextRequest) {
     if (recurringCheckout) {
       const { data: existingSub, error: existingSubError } = await supabaseAdmin
         .from('subscriptions')
-        .select('status, tier, stripe_subscription_id, plan')
+        .select('status, tier, stripe_subscription_id, stripe_customer_id, plan')
         .eq('user_id', user.id)
         .in('status', ['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused'])
         .maybeSingle()
