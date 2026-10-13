@@ -448,8 +448,8 @@ function PaymentSuccessContent() {
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 {[
-                  { href: '/rankings', label: t('proStep1') },
-                  { href: '/rankings', label: t('proStep2') },
+                  { href: '/', label: t('proStep1') },
+                  { href: '/', label: t('proStep2') },
                   { href: '/settings', label: t('proStep3') },
                 ].map((step, i) => (
                   <Link key={i} href={step.href} style={{ textDecoration: 'none' }}>
@@ -524,7 +524,7 @@ function PaymentSuccessContent() {
 
             {/* 按钮：主操作=第一价值动作（排行榜），次操作=随便逛逛 */}
             <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
-              <Link href="/rankings" style={{ textDecoration: 'none' }}>
+              <Link href="/" style={{ textDecoration: 'none' }}>
                 <Button
                   variant="primary"
                   style={{

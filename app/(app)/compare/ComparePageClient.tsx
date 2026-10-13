@@ -571,7 +571,7 @@ function CompareContent() {
                 {t('compareAddTrader')} ({traders.length}/10)
               </Text>
               <Link
-                href="/rankings"
+                href="/"
                 style={{
                   fontSize: tokens.typography.fontSize.xs,
                   fontWeight: tokens.typography.fontWeight.semibold,

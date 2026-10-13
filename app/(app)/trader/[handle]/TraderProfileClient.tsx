@@ -1296,7 +1296,7 @@ export default function TraderProfileClient({
             }}
           >
             <Link
-              href="/rankings"
+              href="/"
               style={{
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.lg,
@@ -1367,10 +1367,7 @@ export default function TraderProfileClient({
         }}
       >
         <Breadcrumb
-          items={[
-            { label: t('leaderboardBreadcrumb'), href: '/rankings' },
-            { label: visibleDisplayName },
-          ]}
+          items={[{ label: t('leaderboardBreadcrumb'), href: '/' }, { label: visibleDisplayName }]}
         />
 
         <TraderStaleBanner show={showStaleBanner} t={t} />

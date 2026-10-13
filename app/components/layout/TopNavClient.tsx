@@ -146,7 +146,7 @@ export default function TopNavClient() {
   // Prefetch common navigation targets — deferred to avoid blocking initial hydration
   useEffect(() => {
     const prefetch = () => {
-      router.prefetch('/rankings')
+      router.prefetch('/')
       router.prefetch('/market')
       router.prefetch('/pricing')
     }
