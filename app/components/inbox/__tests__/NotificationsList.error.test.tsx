@@ -36,7 +36,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
       (
         ({
           all: 'All',
-          failedToLoadRetryShort: 'Failed to load, please retry',
+          failedToLoadRetry: 'Failed to load, please retry',
           noNotifications: 'No notifications',
           retry: 'Retry',
           somethingWentWrong: 'Something went wrong',

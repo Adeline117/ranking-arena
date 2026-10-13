@@ -6807,6 +6807,21 @@ const en = {
   u2detail_chartMedian: 'Median',
   u2detail_chartDays: 'Days',
   u13admin_accessRequired: 'Admin access required',
+  rankingsRefreshingTitle: 'Rankings are being refreshed',
+  rankingsRefreshingDesc:
+    'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
+  rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
+  pricingLifetimeMemberLabel: 'You have Lifetime Pro',
+  quizBadgeMatchLegend: 'Match a Legend',
+  quizNoTradersFound: 'No matching traders found yet. Check out our rankings to discover traders.',
+  quizRoiExtreme: 'Extreme',
+  quizShareChallenge:
+    "Just scored {match}% {type} on Arena's trader personality test. My trading soulmate: {master}. Bet you can't beat my match {url}",
+  quizShareOnX: 'Share on X',
+  historyVerificationTitle: 'Historical data under verification',
+  historyVerificationDesc:
+    'Charts and detailed statistics for this trader will appear once their historical data passes verification.',
+  historyVerificationCurrentRanking: 'Current ranking ({period})',
 } as const
 
 export default en

@@ -60,7 +60,7 @@ export function TraderProfileError({ t, errorMessage }: TraderProfileErrorProps)
             {t('retry')}
           </button>
           <Link
-            href="/rankings"
+            href="/"
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
               borderRadius: tokens.radius.lg,

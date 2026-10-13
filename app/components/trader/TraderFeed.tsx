@@ -31,7 +31,7 @@ function cleanContent(text: string, maxLength = 140): string {
 
 function getFeedItemHref(item: TraderFeedItem): string {
   const postId = item.type === 'repost' && item.original_post_id ? item.original_post_id : item.id
-  return item.groupId ? `/groups/${item.groupId}` : `/posts/${postId}`
+  return item.groupId ? `/groups/${item.groupId}` : `/post/${postId}`
 }
 
 function formatRelativeTime(
@@ -77,7 +77,7 @@ export default function TraderFeed({
       })
       .catch(() => {
         /* Auth check non-critical for trader feed */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [])
 
   const sortedItems = useMemo(() => {

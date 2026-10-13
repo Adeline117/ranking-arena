@@ -20,6 +20,7 @@ import {
   recordStripeCheckoutManualReview,
 } from '@/lib/stripe/lifetime-entitlement'
 import type { Json } from '@/lib/supabase/database.types'
+import { isLifetimeSubscriptionRow, isNonStripeProGrant } from '@/lib/referral/grant-identity'
 
 const LIFETIME_RESERVATION_TTL_SECONDS = 60 * 60
 const LIFETIME_PRICE_CENTS = Math.round(PRICING.lifetime.price * 100)
@@ -430,7 +431,7 @@ export async function POST(request: NextRequest) {
     if (recurringCheckout) {
       const { data: existingSub, error: existingSubError } = await supabaseAdmin
         .from('subscriptions')
-        .select('status, tier, stripe_subscription_id')
+        .select('status, tier, stripe_subscription_id, plan')
         .eq('user_id', user.id)
         .in('status', ['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused'])
         .maybeSingle()
@@ -446,8 +447,29 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Lifetime members already own Pro: a recurring checkout is a duplicate
+      // purchase, not an unverifiable projection (previously a misleading 503).
+      if (isLifetimeSubscriptionRow(existingSub)) {
+        return NextResponse.json(
+          {
+            error: 'You already have lifetime Pro access.',
+            code: 'ALREADY_SUBSCRIBED',
+          },
+          { status: 409 }
+        )
+      }
+
       if (existingSub?.tier === 'pro' || existingSub?.tier === 'elite') {
-        localNonTerminalPro = existingSub
+        if (isNonStripeProGrant(existingSub)) {
+          // A local (referral) grant has no Stripe authority to reconcile;
+          // upgrading to a paid plan replaces it via the webhook upsert.
+          logger.info('Upgrading from a non-Stripe Pro grant', {
+            userId: user.id,
+            localStatus: existingSub.status,
+          })
+        } else {
+          localNonTerminalPro = existingSub
+        }
       }
     }
 

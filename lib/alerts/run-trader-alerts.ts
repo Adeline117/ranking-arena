@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
+import { hasFeatureAccess } from '@/lib/types/premium'
 import { buildTraderAlertDelivery } from './trader-alert-delivery'
 import {
   evaluateTraderAlert,
@@ -304,8 +305,13 @@ export async function runTraderAlerts(
 
   const subscribedUsers = new Set((subscriptions ?? []).map((row) => row.user_id))
   const activeUsers = new Set((activeProfiles ?? []).map((row) => row.id))
+  // Mirror the API gate (`hasFeatureAccess`, which honours PRO_FREE_PROMO):
+  // during the promo every active account may configure alerts, so the
+  // scheduler must not silently drop them for lacking a paid row.
+  const promoUnlocked = hasFeatureAccess('free', 'trader_alerts')
   const alerts = allAlerts.filter(
-    (alert) => subscribedUsers.has(alert.user_id) && activeUsers.has(alert.user_id)
+    (alert) =>
+      (promoUnlocked || subscribedUsers.has(alert.user_id)) && activeUsers.has(alert.user_id)
   )
   emptyResult.alertsSkippedNoSubscription = allAlerts.length - alerts.length
   if (alerts.length === 0) return emptyResult
