@@ -209,15 +209,6 @@
       ]
     },
     {
-      "source": "/",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=120, stale-while-revalidate=600"
-        }
-      ]
-    },
-    {
       "source": "/api/notifications/:path*",
       "headers": [
         {
