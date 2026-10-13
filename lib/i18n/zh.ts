@@ -6626,6 +6626,19 @@ const zh = {
   u2detail_chartMedian: '中位数',
   u2detail_chartDays: '天数',
   u13admin_accessRequired: '需要管理员权限',
+  rankingsRefreshingTitle: '排行榜数据更新中',
+  rankingsRefreshingDesc: '最新交易所数据通过校验后才会发布排名，请稍后再来查看。',
+  rankingsEmptyPeriodTitle: '该周期暂无已发布的排名',
+  pricingLifetimeMemberLabel: '您已是终身 Pro 会员',
+  quizBadgeMatchLegend: '匹配传奇大师',
+  quizNoTradersFound: '暂未找到匹配的交易员。去排行榜发现更多交易员吧。',
+  quizRoiExtreme: '极端值',
+  quizShareChallenge:
+    '我在 Arena 交易人格测试中是 {match}% 的{type}，交易灵魂伴侣是 {master}。不服来测，看你能不能超过我：{url}',
+  quizShareOnX: '分享到 X',
+  historyVerificationTitle: '历史数据验证中',
+  historyVerificationDesc: '该交易员的历史数据通过校验后，将在此显示图表和详细统计。',
+  historyVerificationCurrentRanking: '当前排名（{period}）',
 } as const
 
 export default zh

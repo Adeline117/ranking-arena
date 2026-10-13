@@ -128,7 +128,7 @@ export default function WrappedUnavailableState({ handle, reason }: WrappedUnava
             {t('retryButton')}
           </button>
           <Link
-            href="/rankings"
+            href="/"
             style={{
               padding: '13px 26px',
               borderRadius: tokens.radius.lg,

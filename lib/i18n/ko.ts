@@ -6680,6 +6680,21 @@ const ko = {
   u2detail_chartMedian: '중앙값',
   u2detail_chartDays: '일수',
   u13admin_accessRequired: '관리자 권한이 필요합니다',
+  rankingsRefreshingTitle: '랭킹을 갱신하는 중입니다',
+  rankingsRefreshingDesc:
+    '최신 거래소 데이터가 검증을 통과한 후에만 랭킹을 게시합니다. 잠시 후 다시 확인해 주세요.',
+  rankingsEmptyPeriodTitle: '이 기간에 게시된 랭킹이 아직 없습니다',
+  pricingLifetimeMemberLabel: '평생 Pro 회원입니다',
+  quizBadgeMatchLegend: '전설과 매칭',
+  quizNoTradersFound: '아직 일치하는 트레이더가 없습니다. 랭킹에서 트레이더를 찾아보세요.',
+  quizRoiExtreme: '극단값',
+  quizShareChallenge:
+    'Arena 트레이더 성향 테스트에서 {type} {match}% 일치가 나왔어요. 나의 트레이딩 소울메이트는 {master}. 내 매칭률을 넘을 수 있을까요? {url}',
+  quizShareOnX: 'X에 공유',
+  historyVerificationTitle: '과거 데이터 검증 중',
+  historyVerificationDesc:
+    '이 트레이더의 과거 데이터가 검증을 통과하면 차트와 상세 통계가 여기에 표시됩니다.',
+  historyVerificationCurrentRanking: '현재 랭킹 ({period})',
 } as const
 
 export default ko

@@ -6457,6 +6457,22 @@ const ja = {
   u2detail_chartMedian: '中央値',
   u2detail_chartDays: '日数',
   u13admin_accessRequired: '管理者権限が必要です',
+  rankingsRefreshingTitle: 'ランキングを更新中です',
+  rankingsRefreshingDesc:
+    '最新の取引所データが検証を通過した後にランキングを公開します。しばらくしてから再度ご確認ください。',
+  rankingsEmptyPeriodTitle: 'この期間のランキングはまだありません',
+  pricingLifetimeMemberLabel: 'ライフタイム Pro 会員です',
+  quizBadgeMatchLegend: 'レジェンドとマッチ',
+  quizNoTradersFound:
+    '一致するトレーダーはまだ見つかりません。ランキングでトレーダーを探してみましょう。',
+  quizRoiExtreme: '極端値',
+  quizShareChallenge:
+    'Arena のトレーダー性格診断で {type} に {match}% 一致しました。私のトレード・ソウルメイトは {master}。この一致率を超えられる？ {url}',
+  quizShareOnX: 'X でシェア',
+  historyVerificationTitle: '履歴データを検証中',
+  historyVerificationDesc:
+    'このトレーダーの履歴データが検証を通過すると、チャートと詳細な統計がここに表示されます。',
+  historyVerificationCurrentRanking: '現在のランキング（{period}）',
 } as const
 
 export default ja

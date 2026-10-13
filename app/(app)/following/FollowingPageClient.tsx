@@ -495,7 +495,7 @@ export default function FollowingPageClient() {
                   {t('goToLogin')}
                 </Link>
                 <Link
-                  href="/rankings"
+                  href="/"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -571,7 +571,7 @@ export default function FollowingPageClient() {
               description={t('noFollowingCta')}
               action={
                 <Link
-                  href="/rankings"
+                  href="/"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -962,7 +962,7 @@ export default function FollowingPageClient() {
                   {t('followingDiscoverDesc')}
                 </Text>
                 <Link
-                  href="/rankings"
+                  href="/"
                   style={{
                     display: 'inline-block',
                     padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
