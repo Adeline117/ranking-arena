@@ -10,11 +10,12 @@ import { withAuth } from '@/lib/api/middleware'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import type { PushNotification } from '@/lib/services/push-notification'
 import logger from '@/lib/logger'
+import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
-  async ({ user, request, supabase }) => {
+  async ({ user, request }) => {
     const body = await request.json()
     const { userIds, title, body: messageBody, data, imageUrl } = body
 
@@ -29,19 +30,28 @@ export const POST = withAuth(
       )
     }
 
-    // Check if user is admin (for sending to others)
-    const targetUserIds: string[] = userIds || [user.id]
+    if (
+      userIds !== undefined &&
+      (!Array.isArray(userIds) ||
+        userIds.length === 0 ||
+        userIds.length > 1000 ||
+        !userIds.every((id: unknown) => typeof id === 'string' && id.length > 0))
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'userIds must be a non-empty array of user ids' },
+        { status: 400 }
+      )
+    }
+
+    const targetUserIds: string[] = userIds ?? [user.id]
     const isSelfTarget = targetUserIds.length === 1 && targetUserIds[0] === user.id
 
     if (!isSelfTarget) {
-      // Check admin role
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (profile?.role !== 'admin') {
+      // Sending to other users is an admin action: use the shared verifyAdmin
+      // (production email allowlist + banned/deleted lifecycle checks), not a
+      // bare user_profiles.role === 'admin' read.
+      const admin = await verifyAdmin(getSupabaseAdmin(), request.headers.get('authorization'))
+      if (!admin || admin.id !== user.id) {
         return NextResponse.json(
           {
             success: false,
