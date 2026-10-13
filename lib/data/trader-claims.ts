@@ -81,7 +81,7 @@ export interface TraderClaimActivation {
 export interface UpdateVerifiedTraderInput {
   display_name?: string
   bio?: string
-  avatar_url?: string
+  avatar_url?: string | null
   twitter_url?: string | null
   telegram_url?: string | null
   discord_url?: string | null

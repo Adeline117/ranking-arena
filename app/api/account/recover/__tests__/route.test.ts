@@ -3,6 +3,9 @@
 const mockRpc = jest.fn()
 const mockAdminUpdateUser = jest.fn()
 const mockPasswordSignIn = jest.fn()
+const mockSignOut = jest.fn()
+const mockCheckRateLimit = jest.fn()
+let rebanStateResult: { data: Record<string, unknown> | null; error: unknown }
 const mockStripeUpdate = jest.fn()
 const mockSubscriptionUpdate = jest.fn()
 let tokenResult: { data: Record<string, unknown> | null; error: unknown }
@@ -14,7 +17,13 @@ jest.mock('@/lib/api/middleware', () => ({
 }))
 
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({ auth: { signInWithPassword: mockPasswordSignIn } })),
+  createClient: jest.fn(() => ({
+    auth: { signInWithPassword: mockPasswordSignIn, signOut: mockSignOut },
+  })),
+}))
+
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }))
 
 jest.mock('@/lib/env', () => ({
@@ -38,6 +47,8 @@ const mockFrom = jest.fn((table: string) => {
           not: jest.fn(() => ({
             maybeSingle: jest.fn().mockImplementation(async () => profileResult),
           })),
+          // rebanIfStillPending: select('deleted_at').eq('id', ...).maybeSingle()
+          maybeSingle: jest.fn().mockImplementation(async () => rebanStateResult),
         })),
       })),
     }
@@ -120,7 +131,10 @@ describe('account recovery', () => {
     }
     mockRpc.mockResolvedValue({ data: 'user-1', error: null })
     mockAdminUpdateUser.mockResolvedValue({ error: null })
-    mockPasswordSignIn.mockResolvedValue({ error: null })
+    mockPasswordSignIn.mockResolvedValue({ data: { session: { access_token: 'x' } }, error: null })
+    mockSignOut.mockResolvedValue({ error: null })
+    mockCheckRateLimit.mockResolvedValue(null)
+    rebanStateResult = { data: { deleted_at: '2026-10-01T00:00:00Z' }, error: null }
     mockStripeUpdate.mockResolvedValue({ status: 'active' })
   })
 
@@ -191,5 +205,78 @@ describe('account recovery', () => {
     expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
       ban_duration: '720h',
     })
+  })
+
+  it('answers an expired password recovery exactly like an unknown email, without unbanning', async () => {
+    profileResult = {
+      data: { id: 'user-1', deletion_scheduled_at: new Date(Date.now() - 1000).toISOString() },
+      error: null,
+    }
+    const expired = await POST(request({ email: 'user@example.com', password: 'x' }))
+    profileResult = { data: null, error: null }
+    const unknown = await POST(request({ email: 'nobody@example.com', password: 'x' }))
+
+    expect(expired.status).toBe(401)
+    expect(unknown.status).toBe(401)
+    expect(await expired.json()).toEqual(await unknown.json())
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+  })
+
+  it('enforces a per-email rate limit before touching the account', async () => {
+    const limited = new Response(JSON.stringify({ code: 'RATE_LIMIT_EXCEEDED' }), { status: 429 })
+    mockCheckRateLimit.mockResolvedValueOnce(limited)
+
+    const response = await POST(request({ email: 'User@Example.com ', password: 'x' }))
+
+    expect(response.status).toBe(429)
+    const [, config, key] = mockCheckRateLimit.mock.calls[0]
+    expect(config).toMatchObject({ prefix: 'account-recover-email', failClose: true })
+    expect(key).toBe(
+      `recover-email:${createHash('sha256').update('user@example.com').digest('hex')}`
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+  })
+
+  it('does not re-ban an account that a concurrent request already recovered', async () => {
+    mockPasswordSignIn.mockResolvedValue({ data: { session: null }, error: { message: 'invalid' } })
+    rebanStateResult = { data: { deleted_at: null }, error: null }
+
+    const response = await POST(request({ email: 'user@example.com', password: 'wrong' }))
+
+    expect(response.status).toBe(401)
+    expect(mockAdminUpdateUser).toHaveBeenCalledTimes(1)
+    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: 'none' })
+  })
+
+  it('fails closed (500) when the re-ban cannot be restored', async () => {
+    mockPasswordSignIn.mockResolvedValue({ data: { session: null }, error: { message: 'invalid' } })
+    mockAdminUpdateUser
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValue({ error: { message: 'auth down' } })
+
+    const response = await POST(request({ email: 'user@example.com', password: 'wrong' }))
+
+    expect(response.status).toBe(500)
+    // unban + reban + one retry
+    expect(mockAdminUpdateUser).toHaveBeenCalledTimes(3)
+  })
+
+  it('re-bans when credential verification throws', async () => {
+    mockPasswordSignIn.mockRejectedValue(new Error('network'))
+
+    const response = await POST(request({ email: 'user@example.com', password: 'pw' }))
+
+    expect(response.status).toBe(401)
+    expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('revokes the credential-probe session after successful verification', async () => {
+    const response = await POST(request({ email: 'user@example.com', password: 'correct' }))
+
+    expect(response.status).toBe(200)
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' })
   })
 })

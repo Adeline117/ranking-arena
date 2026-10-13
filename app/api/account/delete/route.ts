@@ -116,10 +116,27 @@ export const POST = withAuth(
     }
 
     if (stripeSubscriptionId) {
-      await adminSupabase
-        .from('subscriptions')
-        .update({ cancel_at_period_end: true })
-        .eq('user_id', user.id)
+      // Stripe already has cancel_at_period_end=true. Mirror it locally; on
+      // failure retry once, then log loudly — the deletion itself is already
+      // committed, and the customer.subscription.updated webhook re-syncs this
+      // column, so we do not fail the request (that would invite a retry that
+      // re-runs the Stripe cancel against an already-scheduled account).
+      let mirrorError: { message: string } | null = null
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { error } = await adminSupabase
+          .from('subscriptions')
+          .update({ cancel_at_period_end: true })
+          .eq('user_id', user.id)
+        mirrorError = error
+        if (!error) break
+      }
+      if (mirrorError) {
+        logger.error('Stripe/DB divergence: cancel_at_period_end not mirrored after deletion', {
+          userId: user.id,
+          stripeSubscriptionId,
+          error: mirrorError.message,
+        })
+      }
     }
 
     const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {
