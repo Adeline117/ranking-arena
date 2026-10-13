@@ -909,7 +909,7 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
                 description={t('noSubscribedFoldersDesc')}
                 action={
                   <Link
-                    href="/rankings"
+                    href="/"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
