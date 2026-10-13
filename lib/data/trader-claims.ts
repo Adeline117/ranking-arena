@@ -538,6 +538,31 @@ export async function activateClaim(
 /**
  * 更新认证交易员资料
  */
+export type VerifiedTraderLinks = Pick<
+  VerifiedTrader,
+  'avatar_url' | 'twitter_url' | 'telegram_url' | 'discord_url' | 'website_url'
+>
+
+/** Currently stored link fields of the caller's own verified profile, or null. */
+export async function getVerifiedTraderLinks(
+  supabase: SupabaseClient,
+  userId: string,
+  identity: VerifiedTraderIdentity
+): Promise<VerifiedTraderLinks | null> {
+  const { data, error } = await supabase
+    .from('verified_traders')
+    .select('avatar_url, twitter_url, telegram_url, discord_url, website_url')
+    .eq('user_id', userId)
+    .eq('trader_id', identity.trader_id)
+    .eq('source', identity.source)
+    .maybeSingle()
+  if (error) {
+    logger.error('[trader-claims] 读取认证资料链接失败:', error)
+    throw error
+  }
+  return (data as VerifiedTraderLinks | null) ?? null
+}
+
 export async function updateVerifiedTrader(
   supabase: SupabaseClient,
   userId: string,
