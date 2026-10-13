@@ -4,27 +4,34 @@ import { createLogger } from '@/lib/utils/logger'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PricingPageClient from './PricingPageClient'
 import { BASE_URL } from '@/lib/constants/urls'
+import { isStripePaymentRuntimeReady } from '@/lib/stripe'
+import { isLifetimeCheckoutEnabled } from '@/lib/stripe/checkout-availability'
 
 const logger = createLogger('pricing-page')
 
 export const metadata: Metadata = {
   title: 'Pricing',
-  description: 'Arena Pro membership plans - unlock advanced trading analytics, alerts, and exclusive features.',
+  description:
+    'Arena Pro membership plans - unlock advanced trading analytics, alerts, and exclusive features.',
   alternates: {
     canonical: `${BASE_URL}/pricing`,
   },
   openGraph: {
     title: 'Pricing — Arena Pro',
-    description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
+    description:
+      'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
     url: `${BASE_URL}/pricing`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro Pricing' }],
+    images: [
+      { url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro Pricing' },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Pricing — Arena Pro',
-    description: 'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
+    description:
+      'Unlock advanced trading analytics, alerts, and exclusive features with Arena Pro membership.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
@@ -57,12 +64,17 @@ async function getLifetimeMemberCount(): Promise<number> {
 
 export default async function PricingPage() {
   const lifetimeCount = await getLifetimeMemberCount()
+  // Server-only readiness probes: only booleans cross to the client, never keys.
+  // When not ready, purchase CTAs render "coming soon" instead of hitting a 503.
+  const paymentsReady = isStripePaymentRuntimeReady()
+  const lifetimeCheckoutReady = paymentsReady && isLifetimeCheckoutEnabled()
 
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: 'Arena Pro',
-    description: 'Professional crypto trader analytics and ranking platform with advanced filters, alerts, and score breakdowns.',
+    description:
+      'Professional crypto trader analytics and ranking platform with advanced filters, alerts, and score breakdowns.',
     url: `${BASE_URL}/pricing`,
     brand: {
       '@type': 'Organization',
@@ -103,7 +115,11 @@ export default async function PricingPage() {
   return (
     <>
       <JsonLd data={jsonLd} />
-      <PricingPageClient lifetimeCount={lifetimeCount} />
+      <PricingPageClient
+        lifetimeCount={lifetimeCount}
+        paymentsReady={paymentsReady}
+        lifetimeCheckoutReady={lifetimeCheckoutReady}
+      />
     </>
   )
 }

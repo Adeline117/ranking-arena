@@ -44,20 +44,20 @@ function mockSubscription(subscription: { tier: string; plan?: string }) {
 describe('PricingPageClient viewer plan state', () => {
   it('labels Free as the current plan only for a real Free subscriber', async () => {
     mockSubscription({ tier: 'free' })
-    render(<PricingPageClient />)
+    render(<PricingPageClient paymentsReady lifetimeCheckoutReady />)
     await waitFor(() => expect(screen.getByText('Current Plan')).toBeInTheDocument())
   })
 
   it('does not label Free as current for a Pro subscriber', async () => {
     mockSubscription({ tier: 'pro', plan: 'monthly' })
-    render(<PricingPageClient />)
+    render(<PricingPageClient paymentsReady lifetimeCheckoutReady />)
     await waitFor(() => expect(global.fetch).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByText('Current Plan')).not.toBeInTheDocument())
   })
 
   it('hides purchase buttons for lifetime members', async () => {
     mockSubscription({ tier: 'pro', plan: 'lifetime' })
-    render(<PricingPageClient />)
+    render(<PricingPageClient paymentsReady lifetimeCheckoutReady />)
     await waitFor(() => expect(screen.getAllByText('You have Lifetime Pro')).toHaveLength(2))
     expect(screen.queryByText('Get Founding Member Access')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upgrade to Pro' })).not.toBeInTheDocument()

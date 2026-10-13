@@ -9,6 +9,7 @@ import {
   assertProPriceReady,
   assertStripePaymentRuntimeReady,
 } from '@/lib/stripe'
+import { isLifetimeCheckoutEnabled } from '@/lib/stripe/checkout-availability'
 import { PRICING } from '@/app/(app)/user-center/membership-config'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -380,11 +381,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (
-      plan === 'lifetime' &&
-      process.env.VERCEL_ENV === 'production' &&
-      process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED !== 'true'
-    ) {
+    if (plan === 'lifetime' && !isLifetimeCheckoutEnabled()) {
       return NextResponse.json(
         {
           error: 'Lifetime checkout is temporarily unavailable.',
