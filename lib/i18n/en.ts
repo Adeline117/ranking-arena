@@ -6812,6 +6812,12 @@ const en = {
     'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
   rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
   pricingLifetimeMemberLabel: 'You have Lifetime Pro',
+  quizBadgeMatchLegend: 'Match a Legend',
+  quizNoTradersFound: 'No matching traders found yet. Check out our rankings to discover traders.',
+  quizRoiExtreme: 'Extreme',
+  quizShareChallenge:
+    "Just scored {match}% {type} on Arena's trader personality test. My trading soulmate: {master}. Bet you can't beat my match {url}",
+  quizShareOnX: 'Share on X',
 } as const
 
 export default en

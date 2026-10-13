@@ -349,6 +349,22 @@ const zhCore = {
   rankingsRefreshingTitle: '排行榜数据更新中',
   rankingsRefreshingDesc: '最新交易所数据通过校验后才会发布排名，请稍后再来查看。',
   rankingsEmptyPeriodTitle: '该周期暂无已发布的排名',
+  // ── Homepage ranking pagination/controls (first paint; mirrors en-core) ──
+  rankingControlsOffline: '您已离线。排名数据仍可查看但无法更新。',
+  rankingControlsDataAsOf: '数据截至',
+  rankingControlsTakingLong: '加载时间超出预期。',
+  rankingControlsRetry: '重试',
+  rankingControlsPrev: '上一页',
+  rankingControlsNext: '下一页',
+  rankingControlsLoading: '加载中\u2026',
+  rankingControlsShowingTop: '显示前 {count} 名交易员。升级 Pro 解锁全部',
+  rankingControlsShowingTopPromo: '限免中 · 已解锁全部 {count} 名交易员',
+  rankingControlsUpgrade: '升级 \u2192',
+  about: '关于',
+  done: '完成',
+  yes: '是',
+  no: '否',
+  ok: '确定',
 } as const
 
 export default zhCore

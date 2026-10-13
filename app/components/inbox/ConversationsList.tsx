@@ -714,7 +714,7 @@ export default function ConversationsList({
             <div style={{ padding: tokens.spacing[4] }}>
               <ErrorMessage
                 title={t('groupMessages')}
-                message={t('failedToLoadRetryShort')}
+                message={t('failedToLoadRetry')}
                 onRetry={loadGroupChannels}
               />
             </div>
@@ -806,7 +806,7 @@ export default function ConversationsList({
             <div style={{ padding: tokens.spacing[4] }}>
               <ErrorMessage
                 title={t('directMessages')}
-                message={t('failedToLoadRetryShort')}
+                message={t('failedToLoadRetry')}
                 onRetry={loadConversations}
               />
             </div>
