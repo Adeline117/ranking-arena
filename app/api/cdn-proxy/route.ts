@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCorsOrigin } from '@/lib/utils/cors'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import logger from '@/lib/logger'
+import { safeFetch, readBodyCapped, SafeFetchError } from '@/lib/utils/safe-fetch'
 
 /**
  * Proxy for PDF/EPUB files to handle CORS and CSP restrictions.
@@ -37,8 +39,23 @@ function safeContentType(upstream: string | null): string {
   return ALLOWED_CONTENT_TYPES.has(base) ? base : DEFAULT_CONTENT_TYPE
 }
 
+// Reject responses larger than 50 MB to prevent memory abuse. Enforced while
+// streaming, so chunked responses without Content-Length are capped too.
+const MAX_BODY_SIZE = 50 * 1024 * 1024
+const FETCH_TIMEOUT_MS = 30_000
+
 function isAllowedUrl(url: string): boolean {
-  return ALLOWED_PREFIXES.some(prefix => url.startsWith(prefix))
+  // Normalise first so the prefix check runs on the canonical href
+  // (e.g. defeats userinfo / backslash tricks in the raw string).
+  let normalized: string
+  try {
+    const parsed = new URL(url)
+    if (parsed.username || parsed.password) return false
+    normalized = parsed.href
+  } catch {
+    return false
+  }
+  return ALLOWED_PREFIXES.some((prefix) => normalized.startsWith(prefix))
 }
 
 export async function GET(request: NextRequest) {
@@ -52,24 +69,27 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const resp = await fetch(url, {
-      headers: {
-        // Pass a reasonable user-agent so arxiv doesn't block server-side fetches
-        'User-Agent': 'Mozilla/5.0 (compatible; Arena/1.0; +https://www.arenafi.org)',
-      },
+    // redirect:'manual' + per-hop allowlist/private-IP revalidation (safeFetch).
+    const { response: resp } = await safeFetch(url, {
+      isAllowed: (u) => isAllowedUrl(u.href),
+      init: () => ({
+        headers: {
+          // Pass a reasonable user-agent so arxiv doesn't block server-side fetches
+          'User-Agent': 'Mozilla/5.0 (compatible; Arena/1.0; +https://www.arenafi.org)',
+        },
+      }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!resp.ok) {
+      try {
+        await resp.body?.cancel()
+      } catch {
+        /* already closed */
+      }
       return NextResponse.json({ error: `Upstream ${resp.status}` }, { status: resp.status })
     }
 
-    // Reject responses larger than 50 MB to prevent memory abuse
-    const MAX_BODY_SIZE = 50 * 1024 * 1024
-    const contentLength = resp.headers.get('Content-Length')
-    if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
-      return NextResponse.json({ error: 'Response too large' }, { status: 413 })
-    }
-
-    const buffer = await resp.arrayBuffer()
+    const buffer = await readBodyCapped(resp, MAX_BODY_SIZE)
     const origin = request.headers.get('Origin')
     return new NextResponse(buffer, {
       headers: {
@@ -82,7 +102,17 @@ export async function GET(request: NextRequest) {
         'Access-Control-Allow-Origin': getCorsOrigin(origin),
       },
     })
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof SafeFetchError) {
+      if (error.code === 'too_large') {
+        return NextResponse.json({ error: 'Response too large' }, { status: 413 })
+      }
+      logger.warn('cdn-proxy rejected upstream', { code: error.code, reason: error.message })
+      return NextResponse.json({ error: 'Upstream not allowed' }, { status: 502 })
+    }
+    logger.warn('cdn-proxy fetch failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Fetch failed' }, { status: 502 })
   }
 }
