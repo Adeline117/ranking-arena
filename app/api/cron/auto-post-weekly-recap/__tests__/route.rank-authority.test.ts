@@ -84,6 +84,16 @@ function queryChain(relation: string): unknown {
   return query
 }
 
+// 18be58f3e paused Arena Bot publication (owner: bot posts are retired). The
+// route must fail closed before any ranking read or post write, whatever the
+// public cohort would contain, until a publication receipt can prove content.
+const PAUSED_PUBLICATION = {
+  count: 0,
+  skipped: true,
+  reason: 'arena_bot_publication_evidence_unavailable',
+  ranking_visibility: 'unknown',
+}
+
 describe('GET /api/cron/auto-post-weekly-recap public ranking authority', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -101,50 +111,37 @@ describe('GET /api/cron/auto-post-weekly-recap public ranking authority', () => 
     })
   })
 
-  it('creates the public recap only from sealed public ranking rows', async () => {
+  it('does not read or publish a recap even from a fully verified public cohort', async () => {
     const response = await GET(
       new NextRequest('https://www.arenafi.org/api/cron/auto-post-weekly-recap')
     )
 
-    await expect(response.json()).resolves.toMatchObject({ count: 1, postId: 'recap-1' })
-    expect(queryCalls).toContain('public_ranked_leaderboard')
-    expect(queryCalls).not.toContain('leaderboard_ranks')
-    expect(insertedPosts).toHaveLength(1)
-    expect(insertedPosts[0].content).toContain('ROI +25.0%')
-    expect(insertedPosts[0].content).toContain('PnL $2,000')
+    await expect(response.json()).resolves.toEqual(PAUSED_PUBLICATION)
+    expect(queryCalls).toEqual([])
+    expect(insertedPosts).toHaveLength(0)
   })
 
-  it('does not publish a recap when sanitization detects an unverified cohort', async () => {
+  it('does not read or publish a recap when the cohort is unverified', async () => {
     rankingRows = [{ ...verifiedRow('binance_futures', 'unsafe'), metrics_estimated: true }]
 
     const response = await GET(
       new NextRequest('https://www.arenafi.org/api/cron/auto-post-weekly-recap')
     )
 
-    await expect(response.json()).resolves.toEqual({
-      count: 0,
-      skipped: true,
-      reason: 'public ranking cohort unavailable',
-    })
-    expect(queryCalls).toContain('public_ranked_leaderboard')
-    expect(queryCalls).not.toContain('leaderboard_ranks')
+    await expect(response.json()).resolves.toEqual(PAUSED_PUBLICATION)
+    expect(queryCalls).toEqual([])
     expect(insertedPosts).toHaveLength(0)
   })
 
-  it('does not publish a recap when the public ranking read errors', async () => {
+  it('does not read or publish a recap when the public ranking read would error', async () => {
     rankingError = { message: 'public cohort unavailable' }
 
     const response = await GET(
       new NextRequest('https://www.arenafi.org/api/cron/auto-post-weekly-recap')
     )
 
-    await expect(response.json()).resolves.toEqual({
-      count: 0,
-      skipped: true,
-      reason: 'public ranking cohort unavailable',
-    })
-    expect(queryCalls).toContain('public_ranked_leaderboard')
-    expect(queryCalls).not.toContain('leaderboard_ranks')
+    await expect(response.json()).resolves.toEqual(PAUSED_PUBLICATION)
+    expect(queryCalls).toEqual([])
     expect(insertedPosts).toHaveLength(0)
   })
 })
