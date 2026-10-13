@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
+import { usePrivyBridge } from '@/lib/privy/bridge-store'
 import { useRouter } from 'next/navigation'
 import { syncPrivyUserToSupabase } from '@/lib/privy/sync-user'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -20,7 +20,9 @@ interface PrivyLoginButtonProps {
 }
 
 export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginButtonProps) {
-  const { login, authenticated, user, ready } = usePrivy()
+  // Read Privy state via the bridge: the PrivyProvider is a lazy sibling host
+  // (see PrivyClientProvider), so this component is NOT inside it.
+  const { login, authenticated, user, ready } = usePrivyBridge()
   const router = useRouter()
   const { t } = useLanguage()
   const hasRedirected = useRef(false)
@@ -60,6 +62,7 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
 
   const handleClick = useCallback(() => {
     if (authenticated) return // Already logged in, effect will handle redirect
+    if (!login) return
     try {
       login()
     } catch (err) {
@@ -68,7 +71,7 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
     }
   }, [authenticated, login, onError, t])
 
-  if (!ready) return null
+  if (!ready || !login) return null
 
   return (
     <button

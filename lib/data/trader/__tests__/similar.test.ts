@@ -30,7 +30,17 @@ function row(overrides: Record<string, unknown> = {}) {
 
 function query(response: { data: unknown[] | null; error: { message: string } | null }) {
   const result: Record<string, jest.Mock | ((...args: unknown[]) => Promise<unknown>)> = {}
-  for (const method of ['select', 'eq', 'neq', 'not', 'gte', 'lte', 'order', 'limit']) {
+  for (const method of [
+    'select',
+    'eq',
+    'neq',
+    'not',
+    'gte',
+    'lte',
+    'order',
+    'limit',
+    'abortSignal',
+  ]) {
     result[method] = jest.fn(() => result)
   }
   result.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
@@ -54,6 +64,8 @@ describe('similar trader public ranking cohort', () => {
     expect(supabase.from).toHaveBeenCalledWith('public_ranked_leaderboard')
     expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(rankingQuery.not).toHaveBeenCalledWith('rank', 'is', null)
+    // Best-effort card: the query is bounded so it cannot stall the profile SSR.
+    expect(rankingQuery.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal))
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({ traderKey: 'similar-1', rank: 2, arenaScore: 88, roi: 10 })
   })

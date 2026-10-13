@@ -1,10 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import { useServingTabData } from '../useServingTabData'
-import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import type { HistoryCompleteness, SourceCapability } from '@/lib/data/serving/types'
 
-jest.mock('@/lib/hooks/useTraderCore', () => ({ useTraderCore: jest.fn() }))
 jest.mock('@/lib/hooks/useTraderRecords', () => ({ useTraderRecords: jest.fn() }))
 
 const capability: SourceCapability = {
@@ -25,10 +23,6 @@ const capability: SourceCapability = {
   exchangeName: 'Test Exchange',
 }
 
-function coreResult() {
-  return { modules: null, isLoading: false }
-}
-
 function recordsResult(completeness: HistoryCompleteness | null) {
   return {
     rows: [],
@@ -47,7 +41,6 @@ function recordsResult(completeness: HistoryCompleteness | null) {
 describe('useServingTabData history completeness', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    ;(useTraderCore as jest.Mock).mockReturnValue(coreResult())
   })
 
   it.each([
@@ -80,6 +73,27 @@ describe('useServingTabData history completeness', () => {
     )
 
     expect(view.result.current.historyCompleteness).toEqual(completeness)
+  })
+
+  it('builds the quarantined core projection locally, with no /core network or skeleton', () => {
+    const fetchSpy = jest.fn()
+    const originalFetch = global.fetch
+    global.fetch = fetchSpy as never
+    try {
+      ;(useTraderRecords as jest.Mock).mockImplementation(() => recordsResult(null))
+      const view = renderHook(() =>
+        useServingTabData(
+          { source: 'gmx', exchangeTraderId: 'trader-a', nickname: 'Trader A', avatarSrc: null },
+          capability,
+          true
+        )
+      )
+      expect(view.result.current.loading).toBe(false)
+      expect(view.result.current.gridStats).toEqual(expect.any(Object))
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      global.fetch = originalFetch
+    }
   })
 
   it('updates the memoized result when evidence weakens', () => {

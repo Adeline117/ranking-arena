@@ -1,7 +1,12 @@
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { linkedAccountsFetcher, useLinkedAccounts } from '../useLinkedAccounts'
+import {
+  LINKED_ACCOUNTS_MAX_HOLD_MS,
+  LINKED_ACCOUNTS_REFETCH_INTERVAL_MS,
+  linkedAccountsFetcher,
+  useLinkedAccounts,
+} from '../useLinkedAccounts'
 
 const originalFetch = global.fetch
 
@@ -187,7 +192,7 @@ describe('useLinkedAccounts public identity boundary', () => {
     expect(view.result.current.authoritativeReady).toBe(false)
   })
 
-  it('withdraws authoritative data while a successful account is revalidating', async () => {
+  it('keeps fresh same-subject authoritative data visible during a background revalidation', async () => {
     const revalidation = deferred<Response>()
     mockFetch
       .mockResolvedValueOnce(
@@ -211,17 +216,70 @@ describe('useLinkedAccounts public identity boundary', () => {
       })
     })
 
-    await waitFor(() => expect(view.result.current.authoritativeReady).toBe(false))
-    expect(view.result.current.isLoading).toBe(true)
-    expect(view.result.current.linkedAccounts).toEqual([])
-    expect(view.result.current.hasMultipleAccounts).toBe(false)
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    // No flicker: previous read stays visible and no loading state is shown.
+    expect(view.result.current.authoritativeReady).toBe(true)
+    expect(view.result.current.isLoading).toBe(false)
+    expect(view.result.current.hasMultipleAccounts).toBe(true)
 
+    // A cross-device unlink lands as soon as the revalidation settles.
     await act(async () => {
       revalidation.resolve(response(payload(subject('bybit', 'a'), [])))
       await revalidation.promise
     })
+    await waitFor(() => expect(view.result.current.linkedAccounts).toEqual([]))
+    expect(view.result.current.authoritativeReady).toBe(true)
+    expect(view.result.current.hasMultipleAccounts).toBe(false)
+  })
+
+  it('withdraws data older than the hold bound while revalidating', async () => {
+    const revalidation = deferred<Response>()
+    mockFetch
+      .mockResolvedValueOnce(
+        response(
+          payload(subject('bybit', 'a'), [
+            account('bybit', 'a'),
+            account('okx', 'linked-account', { isPrimary: false }),
+          ])
+        )
+      )
+      .mockReturnValueOnce(revalidation.promise)
+
+    const view = renderHook(() => useLinkedAccounts('bybit', 'a'), { wrapper: Wrapper })
     await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
-    expect(view.result.current.linkedAccounts).toEqual([])
+
+    const realNow = Date.now
+    const base = realNow()
+    const nowSpy = jest
+      .spyOn(Date, 'now')
+      .mockImplementation(() => base + LINKED_ACCOUNTS_MAX_HOLD_MS + 1_000)
+    try {
+      act(() => {
+        void queryClient.refetchQueries({
+          queryKey: ['linked-accounts-v2', 'bybit', 'a'],
+          exact: true,
+        })
+      })
+
+      await waitFor(() => expect(view.result.current.authoritativeReady).toBe(false))
+      expect(view.result.current.isLoading).toBe(true)
+      expect(view.result.current.linkedAccounts).toEqual([])
+      expect(view.result.current.hasMultipleAccounts).toBe(false)
+
+      await act(async () => {
+        revalidation.resolve(response(payload(subject('bybit', 'a'), [])))
+        await revalidation.promise
+      })
+      await waitFor(() => expect(view.result.current.authoritativeReady).toBe(true))
+      expect(view.result.current.linkedAccounts).toEqual([])
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
+  it('polls the live relation every five minutes', () => {
+    expect(LINKED_ACCOUNTS_REFETCH_INTERVAL_MS).toBe(5 * 60_000)
+    expect(LINKED_ACCOUNTS_MAX_HOLD_MS).toBeLessThanOrEqual(6 * 60_000)
   })
 
   it('withdraws previously authoritative data after a live revalidation error', async () => {
