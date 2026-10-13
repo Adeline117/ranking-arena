@@ -6461,6 +6461,7 @@ const ja = {
   rankingsRefreshingDesc:
     '最新の取引所データが検証を通過した後にランキングを公開します。しばらくしてから再度ご確認ください。',
   rankingsEmptyPeriodTitle: 'この期間のランキングはまだありません',
+  pricingLifetimeMemberLabel: 'ライフタイム Pro 会員です',
 } as const
 
 export default ja

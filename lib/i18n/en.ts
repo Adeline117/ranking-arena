@@ -6811,6 +6811,7 @@ const en = {
   rankingsRefreshingDesc:
     'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
   rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
+  pricingLifetimeMemberLabel: 'You have Lifetime Pro',
 } as const
 
 export default en
