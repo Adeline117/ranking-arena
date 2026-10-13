@@ -28,7 +28,7 @@ jest.mock('@/lib/utils/logger', () => ({
   },
 }))
 
-import { get, getOrSetWithLock } from '../index'
+import { get, getOrSetWithLock, readSharedCacheWriteFenceWithEntries } from '../index'
 
 describe('shared cache reads', () => {
   beforeEach(() => {
@@ -200,5 +200,58 @@ describe('shared cache reads', () => {
       ])
     )
     expect(redis.del).not.toHaveBeenCalled()
+  })
+})
+
+describe('readSharedCacheWriteFenceWithEntries', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  function txRedis(execResult: unknown[] | Error) {
+    const tx = {
+      set: jest.fn(),
+      mget: jest.fn(),
+      exec: jest.fn(async () => {
+        if (execResult instanceof Error) throw execResult
+        return execResult
+      }),
+    }
+    return { redis: { multi: jest.fn(() => tx) }, tx }
+  }
+
+  it('bootstraps the fence and reads it with the entries in one atomic MGET', async () => {
+    const envelope = { data: { rows: 1 }, tier: 'warm', cachedAt: 1, expiresAt: 2 }
+    const { redis, tx } = txRedis(['OK', ['fence-token', envelope, null]])
+    mockGetSharedRedis.mockResolvedValue(redis)
+
+    const result = await readSharedCacheWriteFenceWithEntries('fence:v1', ['primary', 'fallback'])
+
+    expect(redis.multi).toHaveBeenCalledTimes(1)
+    expect(tx.set).toHaveBeenCalledWith('fence:v1', expect.any(String), { nx: true })
+    expect(tx.mget).toHaveBeenCalledWith('fence:v1', 'primary', 'fallback')
+    expect(result).toEqual({
+      fence: { key: 'fence:v1', token: 'fence-token' },
+      entries: [{ rows: 1 }, null],
+    })
+    expect(mockMemorySet).not.toHaveBeenCalled()
+  })
+
+  it('returns no fence and no entries when Redis is unavailable, errors, or the fence is invalid', async () => {
+    mockGetSharedRedis.mockResolvedValue(null)
+    await expect(readSharedCacheWriteFenceWithEntries('fence:v1', ['a'])).resolves.toEqual({
+      fence: null,
+      entries: [null],
+    })
+
+    mockGetSharedRedis.mockResolvedValue(txRedis(new Error('down')).redis)
+    await expect(readSharedCacheWriteFenceWithEntries('fence:v1', ['a'])).resolves.toEqual({
+      fence: null,
+      entries: [null],
+    })
+
+    mockGetSharedRedis.mockResolvedValue(txRedis(['OK', [42, 'cached']]).redis)
+    await expect(readSharedCacheWriteFenceWithEntries('fence:v1', ['a'])).resolves.toEqual({
+      fence: null,
+      entries: [null],
+    })
   })
 })
