@@ -391,7 +391,7 @@ export default function WatchlistClient({ embedded = false }: { embedded?: boole
             description={t('watchlistEmptyDesc')}
             action={
               <Link
-                href="/rankings"
+                href="/"
                 style={{
                   display: 'inline-block',
                   padding: '10px 24px',

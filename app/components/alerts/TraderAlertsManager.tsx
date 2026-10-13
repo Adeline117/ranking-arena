@@ -321,7 +321,7 @@ export default function TraderAlertsManager() {
         title={t('traderAlertsNone')}
         description={t('traderAlertsDesc2')}
         action={
-          <Link href="/rankings" style={ctaStyle}>
+          <Link href="/" style={ctaStyle}>
             {t('watchlistBrowseRankings')}
           </Link>
         }

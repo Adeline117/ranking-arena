@@ -23,6 +23,7 @@ import type { EquityCurveData } from '@/app/(app)/u/[handle]/components/types'
 import type { UnregisteredTraderData } from '@/app/(app)/trader/[handle]/TraderProfileClient'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
 import type { VerifiedTraderProfileData } from '@/app/components/trader/VerifiedTraderEditor'
+import HistoryVerificationNotice from '@/app/components/trader/HistoryVerificationNotice'
 
 /** Valid equity curve period keys. */
 type EquityCurvePeriod = keyof EquityCurveData
@@ -129,6 +130,18 @@ export interface OverviewTabProps {
   isVerifiedTrader: boolean
   verifiedTraderProfile: VerifiedTraderProfileData | null
   claimedUser: { handle: string } | null | undefined
+
+  /**
+   * Historical performance is quarantined (public /core projection). When
+   * true, the performance card + history charts are replaced by a single
+   * "under verification" placeholder. `sealedRank`/`sealedRoi` carry only the
+   * sealed public leaderboard values for `sealedRankingPeriod`, if any.
+   * (Primitive props keep React.memo effective.)
+   */
+  historyUnderVerification?: boolean
+  sealedRankingPeriod?: string
+  sealedRank?: number | null
+  sealedRoi?: number | null
 }
 
 export const OverviewTab = React.memo(function OverviewTab({
@@ -150,8 +163,20 @@ export const OverviewTab = React.memo(function OverviewTab({
   isVerifiedTrader,
   verifiedTraderProfile,
   claimedUser,
+  historyUnderVerification = false,
+  sealedRankingPeriod = '90D',
+  sealedRank = null,
+  sealedRoi = null,
 }: OverviewTabProps) {
   const { t } = useLanguage()
+  const historyVerification = historyUnderVerification
+    ? {
+        currentRanking:
+          sealedRank !== null && sealedRoi !== null
+            ? { period: sealedRankingPeriod, rank: sealedRank, roi: sealedRoi }
+            : null,
+      }
+    : null
   const isAggregateView = hasMultipleAccounts && activeAccount === 'all'
   const showSimilarTraders = !suppressAccountContent && traderSimilar.length > 0
   const showSidebar = showSimilarTraders || features.social
@@ -218,7 +243,11 @@ export const OverviewTab = React.memo(function OverviewTab({
 
         {!suppressAccountContent && (
           <>
-            {traderPerformance ? (
+            {historyVerification ? (
+              // Quarantined history: one explicit placeholder instead of a
+              // "--" performance card and empty equity/drawdown/returns charts.
+              <HistoryVerificationNotice currentRanking={historyVerification.currentRanking} />
+            ) : traderPerformance ? (
               <OverviewPerformanceCard
                 performance={traderPerformance as ExtendedPerformance}
                 equityCurve={traderEquityCurve?.['90D']}
@@ -259,7 +288,7 @@ export const OverviewTab = React.memo(function OverviewTab({
             )}
 
             {/* Equity Curve Chart */}
-            {traderEquityCurve ? (
+            {historyVerification ? null : traderEquityCurve ? (
               <SectionErrorBoundary>
                 <EquityCurveSection
                   equityCurve={traderEquityCurve}
@@ -286,6 +315,7 @@ export const OverviewTab = React.memo(function OverviewTab({
 
             {/* Drawdown Chart */}
             {(() => {
+              if (historyVerification) return null
               const curve =
                 traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
                 traderEquityCurve?.['90D']
@@ -319,6 +349,7 @@ export const OverviewTab = React.memo(function OverviewTab({
 
             {/* Copy-Trade Simulator */}
             {(() => {
+              if (historyVerification) return null
               const simCurve =
                 traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
                 traderEquityCurve?.['90D']
@@ -332,6 +363,7 @@ export const OverviewTab = React.memo(function OverviewTab({
 
             {/* Daily Returns Distribution */}
             {(() => {
+              if (historyVerification) return null
               const curve =
                 traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ??
                 traderEquityCurve?.['90D']

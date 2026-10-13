@@ -246,7 +246,7 @@ export default function FollowingFeed() {
         <p style={{ fontSize: 13 }}>
           {t('followingFeedDiscoverTraders')}
         </p>
-        <Link href="/rankings" style={{
+        <Link href="/" style={{
           display: 'inline-block', marginTop: 16, padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`, borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,

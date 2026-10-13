@@ -2,7 +2,7 @@ import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ServingProfilePanel from '../ServingProfilePanel'
 import ServingRecordsSection from '../ServingRecordsSection'
-import { useTraderCore } from '@/lib/hooks/useTraderCore'
+import { quarantinedPublicCoreModules } from '@/lib/data/serving/core-quarantine'
 import type {
   SourceCapability,
   TraderCoreModules,
@@ -12,7 +12,21 @@ import type {
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ t: (key: string) => key, language: 'en' }),
 }))
-jest.mock('@/lib/hooks/useTraderCore', () => ({ useTraderCore: jest.fn() }))
+// The panel must never request /core while the public core projection is
+// quarantined. Fail loudly if anything reaches the hook.
+jest.mock('@/lib/hooks/useTraderCore', () => ({
+  useTraderCore: jest.fn(() => {
+    throw new Error('useTraderCore must not be called while /core is quarantined')
+  }),
+}))
+// Defaults to the real static projection; GMX disclosure tests override it to
+// exercise the published-core branch kept for when the chain is restored.
+jest.mock('@/lib/data/serving/core-quarantine', () => {
+  const actual = jest.requireActual('@/lib/data/serving/core-quarantine')
+  return {
+    quarantinedPublicCoreModules: jest.fn(actual.quarantinedPublicCoreModules),
+  }
+})
 jest.mock('@/lib/hooks/useBotHeader', () => ({ useBotHeader: () => ({ bot: null }) }))
 jest.mock('@/app/components/trader/performance/PeriodSelector', () => ({
   PeriodSelector: ({
@@ -43,7 +57,6 @@ jest.mock('../DrawdownModule', () => () => null)
 jest.mock('../AssetPreference', () => () => null)
 jest.mock('../HoldingDistribution', () => () => null)
 jest.mock('../AbilityRadar', () => () => null)
-jest.mock('../ModuleDegraded', () => () => null)
 jest.mock('../ServingRecordsSection', () => jest.fn(() => <div data-testid="records-section" />))
 jest.mock('../BotHeaderCard', () => () => null)
 jest.mock('@/app/components/common/ProvenanceFooter', () => () => null)
@@ -94,19 +107,72 @@ function coreModules(extras: Record<string, unknown>): TraderCoreModules {
   }
 }
 
+const actualQuarantine = jest.requireActual<typeof import('@/lib/data/serving/core-quarantine')>(
+  '@/lib/data/serving/core-quarantine'
+)
+const quarantineMock = quarantinedPublicCoreModules as jest.Mock
+
 function mockCore(extras: Record<string, unknown>) {
-  ;(useTraderCore as jest.Mock).mockReturnValue({
-    modules: coreModules(extras),
-    isPendingUpstream: false,
-    isDegraded: false,
-    isLoading: false,
-    error: null,
-    refetch: jest.fn(),
-  })
+  quarantineMock.mockImplementation(() => coreModules(extras))
 }
 
 beforeEach(() => {
   jest.clearAllMocks()
+  quarantineMock.mockImplementation(actualQuarantine.quarantinedPublicCoreModules)
+  global.fetch = jest.fn(() => {
+    throw new Error('ServingProfilePanel must not fetch core modules')
+  }) as unknown as typeof fetch
+})
+
+describe('ServingProfilePanel quarantined core', () => {
+  it('renders the under-verification notice from the static projection without a request', () => {
+    render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
+
+    expect(screen.getByTestId('history-verification-notice')).toBeInTheDocument()
+    expect(screen.getByText('historyVerificationTitle')).toBeInTheDocument()
+    expect(screen.queryByText('metricPnl')).not.toBeInTheDocument()
+    expect(quarantineMock).toHaveBeenLastCalledWith(90)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(screen.getByTestId('records-section')).toBeInTheDocument()
+  })
+
+  it('shows only a sealed (verified) current ranking for the selected timeframe', () => {
+    const withEntries: TraderFirstScreen = {
+      ...firstScreen,
+      entries: [
+        {
+          timeframe: 90,
+          rank: 12,
+          rankingVisibility: 'verified',
+          rankingVisibilityReason: null,
+          headlineRoi: 34.5,
+          headlinePnl: null,
+          headlineWinRate: null,
+          extras: {},
+          provenance: { source: 'gmx', asOf: '2026-07-15T01:00:00.000Z' },
+        },
+        {
+          timeframe: 30,
+          rank: 99,
+          rankingVisibility: 'partial',
+          rankingVisibilityReason: 'cohort_unsealed',
+          headlineRoi: 10,
+          headlinePnl: null,
+          headlineWinRate: null,
+          extras: {},
+          provenance: { source: 'gmx', asOf: '2026-07-15T01:00:00.000Z' },
+        },
+      ],
+    }
+
+    render(<ServingProfilePanel firstScreen={withEntries} capability={capability} />)
+    expect(screen.getByText('#12')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'select-30D' }))
+    expect(screen.getByTestId('history-verification-notice')).toBeInTheDocument()
+    expect(screen.queryByText('#99')).not.toBeInTheDocument()
+    expect(screen.queryByText('#12')).not.toBeInTheDocument()
+  })
 })
 
 describe('ServingProfilePanel GMX metric disclosure', () => {
@@ -192,12 +258,12 @@ describe('ServingProfilePanel timeframe identity', () => {
     const view = render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'select-7D' }))
-    expect(useTraderCore).toHaveBeenLastCalledWith({
-      source: 'gmx',
-      exchangeTraderId: '0x123',
-      tf: 7,
-      enabled: true,
-    })
+    expect(quarantineMock).toHaveBeenLastCalledWith(7)
+    expect(ServingRecordsSection).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: 'gmx', exchangeTraderId: '0x123', tf: 7 }),
+      undefined
+    )
+    ;(ServingRecordsSection as unknown as jest.Mock).mockClear()
 
     const linkedFirstScreen: TraderFirstScreen = {
       ...firstScreen,
@@ -213,18 +279,22 @@ describe('ServingProfilePanel timeframe identity', () => {
     )
 
     expect(screen.getByTestId('period-selector')).toHaveAttribute('data-period', '30D')
-    expect(useTraderCore).toHaveBeenLastCalledWith({
-      source: 'hyperliquid_perp',
-      exchangeTraderId: 'linked-account',
-      tf: 30,
-      enabled: true,
-    })
-    expect(useTraderCore).not.toHaveBeenCalledWith(
+    expect(quarantineMock).toHaveBeenLastCalledWith(30)
+    expect(ServingRecordsSection).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        source: 'hyperliquid_perp',
+        exchangeTraderId: 'linked-account',
+        tf: 30,
+      }),
+      undefined
+    )
+    expect(ServingRecordsSection).not.toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'hyperliquid_perp',
         exchangeTraderId: 'linked-account',
         tf: 7,
-      })
+      }),
+      undefined
     )
   })
 
@@ -234,7 +304,7 @@ describe('ServingProfilePanel timeframe identity', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'select-7D' }))
     expect(screen.getByTestId('period-selector')).toHaveAttribute('data-period', '7D')
-    ;(useTraderCore as jest.Mock).mockClear()
+    quarantineMock.mockClear()
 
     view.rerender(
       <ServingProfilePanel
@@ -247,13 +317,8 @@ describe('ServingProfilePanel timeframe identity', () => {
     )
 
     expect(screen.getByTestId('period-selector')).toHaveAttribute('data-period', '30D')
-    expect(useTraderCore).toHaveBeenCalledTimes(1)
-    expect(useTraderCore).toHaveBeenLastCalledWith({
-      source: 'gmx',
-      exchangeTraderId: '0x123',
-      tf: 30,
-      enabled: true,
-    })
+    expect(quarantineMock).toHaveBeenCalledTimes(1)
+    expect(quarantineMock).toHaveBeenLastCalledWith(30)
   })
 
   it('disables core and record requests when every timeframe is explicitly absent', () => {
@@ -265,13 +330,9 @@ describe('ServingProfilePanel timeframe identity', () => {
 
     render(<ServingProfilePanel firstScreen={firstScreen} capability={noTimeframes} />)
 
-    expect(useTraderCore).toHaveBeenLastCalledWith({
-      source: 'gmx',
-      exchangeTraderId: '0x123',
-      tf: 90,
-      enabled: false,
-    })
+    expect(quarantineMock).not.toHaveBeenCalled()
     expect(screen.getByText('tfNotProvided')).toBeInTheDocument()
+    expect(screen.queryByTestId('history-verification-notice')).not.toBeInTheDocument()
     expect(ServingRecordsSection).not.toHaveBeenCalled()
   })
 })

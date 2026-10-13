@@ -164,7 +164,7 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       { url: '/terms', priority: 0.2, freq: 'yearly' },
       { url: '/disclaimer', priority: 0.2, freq: 'yearly' },
       // Rankings subpages that were previously missing from the sitemap.
-      { url: '/rankings', priority: 0.9, freq: 'hourly' },
+      // '/rankings' is a 308 → '/' (next.config.ts); list only canonical URLs.
       { url: '/rankings/exchanges', priority: 0.7, freq: 'daily' },
       { url: '/rankings/weekly', priority: 0.7, freq: 'daily' },
       // High-SEO exchange landing pages ("binance leaderboard" etc.) — one per

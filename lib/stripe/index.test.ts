@@ -22,6 +22,7 @@ import {
   assertProPriceReady,
   assertApiPriceReady,
   assertStripePaymentRuntimeReady,
+  isStripePaymentRuntimeReady,
   getStripe,
 } from './index'
 import { STRIPE_API_VERSION } from './version'
@@ -299,6 +300,20 @@ describe('Stripe payment runtime readiness', () => {
     expect(() => assertStripePaymentRuntimeReady()).toThrow(
       'Stripe live mode is required for Production payment actions'
     )
+  })
+
+  test('isStripePaymentRuntimeReady mirrors the assertion without throwing', () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.STRIPE_SECRET_KEY = 'sk_test_123'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123'
+    expect(isStripePaymentRuntimeReady()).toBe(false)
+
+    process.env.STRIPE_SECRET_KEY = 'sk_live_123'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_live_123'
+    expect(isStripePaymentRuntimeReady()).toBe(true)
+
+    delete process.env.STRIPE_WEBHOOK_SECRET
+    expect(isStripePaymentRuntimeReady()).toBe(false)
   })
 })
 

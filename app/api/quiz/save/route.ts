@@ -7,6 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:quiz-save')
 
 const VALID_TYPES = new Set([
   'sniper',
@@ -69,8 +72,7 @@ export async function POST(request: NextRequest) {
     let userId: string | null = null
     userId = (await getAuthUser(request))?.id ?? null
 
-    // quiz_results table may not be in generated types yet (migration pending)
-    const { error } = await (supabase as any).from('quiz_results').insert({
+    const { error } = await supabase.from('quiz_results').insert({
       session_id: sessionId,
       user_id: userId,
       primary_type: primaryType,
@@ -82,12 +84,13 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      // Log but don't fail — this is analytics, not critical
-      console.error('[quiz/save] Insert error:', error.message)
+      logger.error('quiz_results insert failed', { sessionId, error: error.message })
+      return NextResponse.json({ error: 'Failed to save quiz result' }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })
-  } catch {
+  } catch (err) {
+    logger.error('quiz save failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }

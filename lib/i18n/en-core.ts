@@ -424,6 +424,10 @@ const enCore = {
   savedTabPosts: 'Posts',
   watchlistTitle: 'Watchlist',
   myFavorites: 'My Favorites',
+  rankingsRefreshingTitle: 'Rankings are being refreshed',
+  rankingsRefreshingDesc:
+    'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
+  rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
 } as const
 
 export default enCore

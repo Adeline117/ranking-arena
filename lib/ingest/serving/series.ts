@@ -54,7 +54,15 @@ export async function downsampleOldSeries(keepDays = 90): Promise<DownsampleResu
   }
 }
 
-/** Keep monthly partitions 2 months ahead on all partitioned arena tables. */
+/** Months of future partitions kept on every partitioned arena table. */
+export const PARTITION_MONTHS_AHEAD = 3
+
+/**
+ * Keep monthly partitions PARTITION_MONTHS_AHEAD months ahead on all
+ * partitioned arena tables. Each table is attempted independently so one
+ * failure (lock timeout, name collision) cannot block the others; failures
+ * are aggregated and re-thrown so the maintenance step still reports them.
+ */
 export async function ensurePartitions(): Promise<number> {
   // position_history is intentionally absent. The fail-closed bridge retires
   // automatic mutation before the 040410 writer cutover; recreating a child
@@ -67,12 +75,24 @@ export async function ensurePartitions(): Promise<number> {
     'copier_records',
   ]
   let created = 0
+  const failures: string[] = []
   for (const table of tables) {
-    const { rows } = await getIngestPool().query<{ ensure_month_partitions: number }>(
-      `SELECT arena.ensure_month_partitions($1, 2)`,
-      [table]
+    try {
+      const { rows } = await getIngestPool().query<{ ensure_month_partitions: number }>(
+        `SELECT arena.ensure_month_partitions($1, $2)`,
+        [table, PARTITION_MONTHS_AHEAD]
+      )
+      created += rows[0]?.ensure_month_partitions ?? 0
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[ensurePartitions] ${table} failed: ${message}`)
+      failures.push(`${table}: ${message}`)
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `ensurePartitions: ${failures.length}/${tables.length} tables failed (created ${created}): ${failures.join('; ')}`
     )
-    created += rows[0]?.ensure_month_partitions ?? 0
   }
   return created
 }

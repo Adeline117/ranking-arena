@@ -6,6 +6,7 @@
  */
 
 import { withAuth } from '@/lib/api/middleware'
+import { ApiError } from '@/lib/api/errors'
 import { success, successWithPagination, badRequest, handleError } from '@/lib/api/response'
 import { validateString, validateNumber } from '@/lib/api/validation'
 import {
@@ -17,6 +18,9 @@ import {
 import { features } from '@/lib/features'
 import { getOrSet, delByPattern } from '@/lib/cache'
 import { NOTIFICATION_READER_CACHE_EPOCH } from '@/lib/notifications/ranking-change-fence'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:notifications')
 
 const SOCIAL_NOTIFICATION_TYPES = [
   'post_reply',
@@ -88,11 +92,19 @@ export const PUT = withAuth(
         return success({ message: 'All notifications marked as read' })
       } else if (notification_ids && notification_ids.length > 0) {
         // Batch mark-read: update all IDs belonging to this user
-        await supabase
+        const { error: batchError } = await supabase
           .from('notifications')
           .update({ read: true, read_at: new Date().toISOString() })
           .in('id', notification_ids)
           .eq('user_id', user.id)
+        if (batchError) {
+          logger.error('[notifications] batch mark-read failed', {
+            userId: user.id,
+            count: notification_ids.length,
+            error: batchError.message,
+          })
+          throw ApiError.database('Failed to mark notifications as read')
+        }
         await delByPattern(`notifications:${user.id}:*`)
         return success({ message: `${notification_ids.length} notifications marked as read` })
       } else if (notification_id) {

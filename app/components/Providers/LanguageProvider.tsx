@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useCallback,
+  useRef,
   ReactNode,
 } from 'react'
 import {
@@ -31,6 +32,26 @@ if (typeof window !== 'undefined') {
   }
 }
 
+/**
+ * Whether a dictionary that just finished loading can change what `t()`
+ * returns for the active language: its own dictionary, or English (the
+ * fallback for missing keys; also merged into ja/ko placeholders). Loads of
+ * any other language must not re-render every translated consumer.
+ */
+function affectsActiveLanguage(loaded: Language, active: Language): boolean {
+  return loaded === active || loaded === 'en'
+}
+
+/**
+ * zh ships a synchronous core dictionary (lib/i18n/zh-core), so a zh user can
+ * switch the moment the provider mounts instead of after the async full
+ * dictionary — shortening the post-hydration English flash. ja/ko have no core
+ * (their placeholder is English), so they switch once loaded.
+ */
+function hasSyncCore(lang: Language): boolean {
+  return lang === 'en' || lang === 'zh'
+}
+
 type LanguageContextType = {
   language: Language
   setLanguage: (lang: Language) => void
@@ -40,9 +61,14 @@ type LanguageContextType = {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Start with 'en' to match SSR output — getLanguage() reads localStorage which is only
-  // available after hydration. We update in useEffect once mounted.
+  // Start with 'en' to match SSR output: the root layout renders lang="en" and
+  // every client component's server HTML is English, so reading the saved
+  // language (localStorage / the html lang set by the pre-hydration script)
+  // during the first render would cause a React #418 hydration mismatch. We
+  // switch right after hydration instead (see effect below).
   const [language, setLanguageState] = useState<Language>('en')
+  const languageRef = useRef<Language>('en')
+  languageRef.current = language
   // Bump when English translations finish async loading — forces t() consumers to re-render.
   // The version value MUST feed the t/contextValue memo deps below, otherwise the bump
   // re-renders the provider but produces an identical context reference and stale consumers
@@ -54,27 +80,24 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     // the English import in a module-level microtask can mutate translationCache
     // between SSR markup and the first client render, producing React #418 on
     // feature pages whose labels are outside en-core.
-    const unsub = onTranslationsReady(() => setTxnVersion((v) => v + 1))
+    const unsub = onTranslationsReady((loaded) => {
+      if (affectsActiveLanguage(loaded, languageRef.current)) setTxnVersion((v) => v + 1)
+    })
     loadTranslations('en').catch((error) => {
       console.warn('[i18n] Full English dictionary failed to load after hydration', error)
     })
 
     const savedLanguage = getLanguage()
     if (savedLanguage !== 'en') {
+      if (hasSyncCore(savedLanguage)) {
+        languageRef.current = savedLanguage
+        setLanguageState(savedLanguage)
+      }
       loadTranslations(savedLanguage).then(() => setLanguageState(savedLanguage))
     }
 
-    // Pre-cache all language files in the background
-    const preloadLangs: Language[] = ['zh', 'ja', 'ko']
-    if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(() => {
-        preloadLangs.forEach((lang) => loadTranslations(lang))
-      })
-    } else {
-      setTimeout(() => {
-        preloadLangs.forEach((lang) => loadTranslations(lang))
-      }, 2000)
-    }
+    // No idle pre-loading of the other languages: each full dictionary is a
+    // large chunk most users never need; a language switch loads its own.
 
     const handleLanguageChange = (e: CustomEvent<Language>) => {
       if (e.detail !== 'en') {
@@ -141,12 +164,18 @@ export function useLanguage() {
   // (above the context branch) to satisfy the rules of hooks; when a provider IS
   // present this state is computed but unused (negligible cost).
   const [fallbackLanguage, setFallbackLanguage] = useState<Language>('en')
+  const fallbackLanguageRef = useRef<Language>('en')
+  fallbackLanguageRef.current = fallbackLanguage
   const [, setFallbackTxnVersion] = useState(() => getTranslationVersion())
 
   useEffect(() => {
     if (context) return // provider present — fallback unused, skip listeners
 
-    const unsub = onTranslationsReady(() => setFallbackTxnVersion((v) => v + 1))
+    const unsub = onTranslationsReady((loaded) => {
+      if (affectsActiveLanguage(loaded, fallbackLanguageRef.current)) {
+        setFallbackTxnVersion((v) => v + 1)
+      }
+    })
     loadTranslations('en').catch((error) => {
       console.warn('[i18n] Full English dictionary failed to load after hydration', error)
     })

@@ -1,6 +1,6 @@
 /**
  * Housekeeping (spec §13 storage cost controls + §2.1 RAW retention):
- *   1. monthly partitions kept 2 months ahead (all partitioned tables)
+ *   1. monthly partitions kept 3 months ahead (all partitioned tables)
  *   2. RAW objects >30d deleted (quarantined exempt)
  *   3. trader_series >90d downsampled to weekly
  *   4. long-tail histories pruned to 180d (recently-ranked traders exempt)

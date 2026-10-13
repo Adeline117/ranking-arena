@@ -256,7 +256,8 @@ export default function RootLayout({
                 {
                   where: {
                     and: [
-                      { href_matches: '/rankings' },
+                      // Ranking table lives on '/' ('/rankings' is a 308 redirect).
+                      { href_matches: '/' },
                       { not: { selector_matches: '[rel~=nofollow]' } },
                     ],
                   },
