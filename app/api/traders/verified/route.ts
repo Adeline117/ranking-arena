@@ -17,8 +17,10 @@ import {
 import { ApiError } from '@/lib/api/errors'
 import {
   getVerifiedTrader,
+  getVerifiedTraderLinks,
   updateVerifiedTrader,
   type UpdateVerifiedTraderInput,
+  type VerifiedTraderLinks,
 } from '@/lib/data/trader-claims'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
@@ -109,13 +111,21 @@ export async function PUT(request: NextRequest) {
     if (body.bio !== undefined) input.bio = String(body.bio).slice(0, 500)
     // Links are rendered as href/src — only safe https URLs (shared with
     // /api/traders/claim/profile). Rejects javascript:, data:, http, etc.
+    // The editor resubmits every field on save, so a legacy stored value that
+    // predates this validation is left untouched rather than blocking edits.
+    const storedLinks = await getVerifiedTraderLinks(supabase, user.id, {
+      trader_id: traderId,
+      source,
+    })
+    const isUnchanged = (field: keyof VerifiedTraderLinks) =>
+      storedLinks != null && body[field] === storedLinks[field]
     for (const field of ['avatar_url', 'twitter_url', 'telegram_url', 'website_url'] as const) {
-      if (body[field] === undefined) continue
+      if (body[field] === undefined || isUnchanged(field)) continue
       const parsed = parseOptionalProfileUrl(body[field])
       if (!parsed.ok) throw ApiError.validation(`Invalid URL for ${field}`)
       input[field] = parsed.value
     }
-    if (body.discord_url !== undefined) {
+    if (body.discord_url !== undefined && !isUnchanged('discord_url')) {
       const parsed = parseOptionalDiscordHandle(body.discord_url)
       if (!parsed.ok) throw ApiError.validation('Invalid discord_url')
       input.discord_url = parsed.value
