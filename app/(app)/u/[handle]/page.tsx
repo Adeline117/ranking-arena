@@ -404,7 +404,7 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
       ])
       // Synthesize a minimal first-screen on timeout — same root-cause fix as
       // /trader/page.tsx: never fall back to the legacy 404 path for a serving
-      // trader; the client fetches /core with its own skeletons.
+      // trader; the client renders the static quarantined core projection (no /core request).
       const firstScreen: TraderFirstScreen = firstScreenRaw ?? {
         source: servingResolved.source,
         exchangeTraderId: servingResolved.exchangeTraderId,

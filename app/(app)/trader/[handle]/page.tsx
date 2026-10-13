@@ -587,8 +587,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // servingFirstScreen={null} on first-screen timeout, which flipped the client
     // back into legacy mode. Instead, synthesize a minimal first-screen from the
     // already-resolved identity so the client stays in serving mode and lets
-    // ServingProfilePanel fetch /core on its own (with its own skeletons + Tier-C
-    // background fetch). entries=[] is a valid empty board, not a missing trader.
+    // ServingProfilePanel render its body on its own (the public /core projection
+    // is quarantined, so the panel builds it locally with no request and shows the
+    // under-verification state). entries=[] is a valid empty board, not a missing trader.
     const firstScreen: TraderFirstScreen = firstScreenRaw ?? {
       source: servingResolved.source,
       exchangeTraderId: servingResolved.exchangeTraderId,
@@ -695,7 +696,8 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
     // servingFirstScreen is now ALWAYS non-null for serving sources (synthesized
     // above on timeout), so the client stays in serving mode and never falls back
-    // to the legacy 404 path. ServingProfilePanel fetches /core for the body.
+    // to the legacy 404 path. ServingProfilePanel renders the body from the static
+    // quarantined core projection (no /core request) plus on-demand record tabs.
     return (
       <>
         <JsonLd data={servingJsonLd} />
