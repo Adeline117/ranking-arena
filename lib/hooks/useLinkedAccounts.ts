@@ -15,7 +15,7 @@ export type AggregatedData = PublicLinkedAggregateData
 type LinkedAccountsResponse = PublicLinkedAggregateResponse
 
 /** Visible-tab polling cadence for the live membership relation. */
-export const LINKED_ACCOUNTS_REFETCH_INTERVAL_MS = 5 * 60_000
+export const LINKED_ACCOUNTS_REFETCH_INTERVAL_MS = 60_000
 /** A hung revalidation becomes an error (which withdraws data) after this. */
 export const LINKED_ACCOUNTS_FETCH_TIMEOUT_MS = 15_000
 /**
