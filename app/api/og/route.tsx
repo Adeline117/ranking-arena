@@ -1,6 +1,5 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
-import { BASE_URL } from '@/lib/constants/urls'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 export const runtime = 'edge'
@@ -27,34 +26,11 @@ export async function GET(request: NextRequest) {
     stat3Label && { label: stat3Label, value: stat3Value },
   ].filter(Boolean) as Array<{ label: string; value: string }>
 
-  // Pre-fetch avatar as base64 so Satori doesn't try to load it directly
-  let avatarUrl = ''
-  if (avatarUrlParam) {
-    if (avatarUrlParam.startsWith('data:')) {
-      // Only inline raster images — never SVG/HTML or other data: payloads.
-      if (/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(avatarUrlParam)) {
-        avatarUrl = avatarUrlParam
-      }
-    } else if (/^https?:\/\//i.test(avatarUrlParam)) {
-      // Remote avatars are ONLY fetched via /api/avatar, which enforces the domain
-      // allowlist, per-hop redirect + private-IP checks, a size cap and image-type
-      // verification. Never fetch the user-supplied URL directly from here.
-      try {
-        const proxyUrl = `${BASE_URL}/api/avatar?url=${encodeURIComponent(avatarUrlParam)}`
-        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
-        if (res.ok) {
-          const ct = res.headers.get('content-type') || 'image/png'
-          if (/^image\/(png|jpeg|webp|gif|avif)$/.test(ct.split(';')[0].trim())) {
-            const buf = await res.arrayBuffer()
-            avatarUrl = `data:${ct};base64,${Buffer.from(buf).toString('base64')}`
-          }
-        }
-      } catch {
-        // Avatar unavailable — omit it
-        avatarUrl = ''
-      }
-    }
-  }
+  // V1 never asks an OG worker to acquire an avatar. Only an inline raster
+  // data URI can render (no outbound request); every other value is omitted.
+  const avatarUrl = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(avatarUrlParam)
+    ? avatarUrlParam
+    : ''
 
   return new ImageResponse(
     <div
@@ -91,11 +67,7 @@ export async function GET(request: NextRequest) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 16 }}>
           {avatarUrl && (
             <img
-              src={
-                avatarUrl.startsWith('data:')
-                  ? avatarUrl
-                  : `${BASE_URL}/api/avatar?url=${encodeURIComponent(avatarUrl)}`
-              }
+              src={avatarUrl}
               alt=""
               width={80}
               height={80}

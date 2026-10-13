@@ -2,7 +2,7 @@
 
 /**
  * TraderPageV2 - New trader detail page component using /api/trader/:platform/:trader_key
- * Pure DB read (< 200ms), staleness indicator, refresh button, graceful degradation.
+ * Read-only compatibility view with graceful degradation.
  */
 
 import { useState } from 'react'
@@ -17,7 +17,6 @@ import {
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderDetailV2 } from '@/lib/hooks/useTraderDetailV2'
 import dynamic from 'next/dynamic'
-import TraderRefreshButton from './TraderRefreshButton'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
 import TradingStyleBadge from './TradingStyleBadge'
 import {
@@ -46,19 +45,13 @@ interface TraderPageV2Props {
 
 export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props) {
   const { t } = useLanguage()
-  const { data, error, isLoading, isStale, triggerRefresh, isRefreshing, refreshError } =
-    useTraderDetailV2({
-      platform: platform as Parameters<typeof useTraderDetailV2>[0]['platform'],
-      traderKey,
-    })
+  const { data, error, isLoading } = useTraderDetailV2({
+    platform: platform as Parameters<typeof useTraderDetailV2>[0]['platform'],
+    traderKey,
+  })
 
   return (
-    <DataStateWrapper
-      isLoading={isLoading}
-      error={error}
-      isEmpty={!data}
-      onRetry={() => window.location.reload()}
-    >
+    <DataStateWrapper isLoading={isLoading} error={error} isEmpty={!data}>
       {data && (
         <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
           {/* Header */}
@@ -135,14 +128,11 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
               </div>
             </div>
 
-            <TraderRefreshButton
-              isRefreshing={isRefreshing}
-              isStale={isStale}
-              onRefresh={triggerRefresh}
-              refreshError={refreshError}
-              updatedAt={data.updated_at}
-              refreshJob={data.refresh_job}
-            />
+            {data.updated_at && (
+              <span className="text-sm" style={{ color: tokens.colors.text.secondary }}>
+                {t('updatedAt')} {new Date(data.updated_at).toLocaleString()}
+              </span>
+            )}
           </div>
 
           {/* Profile stats bar */}

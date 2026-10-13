@@ -97,8 +97,8 @@ if (!CRON_SECRET) {
 }
 
 async function checkBasicHealth() {
-  // 30s timeout — /api/health runs DB + Redis + freshness + VPS checks,
-  // each with 5s internal cap, so worst case ~20s. 15s was too tight.
+  // 30s timeout — public /api/health reports API, DB, Redis, and freshness only.
+  // Its source does not probe VPS; the independent OpenClaw VPS probes below are outside this route contract.
   const res = await fetch(`${ARENA_URL}/api/health`, {
     headers: { 'Cache-Control': 'no-cache' },
     signal: AbortSignal.timeout(30000),

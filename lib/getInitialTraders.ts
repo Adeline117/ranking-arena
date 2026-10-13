@@ -44,7 +44,7 @@ export interface InitialTrader {
   source: string
   source_type: 'futures' | 'spot' | 'web3'
   avatar_url: string | null
-  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
+  /** Existing Supabase-Storage mirror, preferred when it remains direct-safe. */
   avatar_url_mirror?: string | null
   /** Null means the source did not publish a score we can safely present. */
   arena_score: number | null

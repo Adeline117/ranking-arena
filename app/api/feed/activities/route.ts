@@ -139,9 +139,10 @@ export async function GET(request: NextRequest) {
     const cursor = searchParams.get('cursor') ?? null
     const handle = searchParams.get('handle') ?? null
     // `following=1` restricts the feed to the traders the authenticated user
-    // follows (trader_follows.trader_id === trader_activities.source_trader_id,
-    // same join broadcast-trader-events uses). Guests / users with no follows
-    // get an empty result so the client can fall back to Discover.
+    // follows (trader_follows.trader_id === trader_activities.source_trader_id).
+    // This read-only feed relationship is independent from the retired V1
+    // trader-event broadcaster. Guests / users with no follows get an empty
+    // result so the client can fall back to Discover.
     const followingOnly =
       searchParams.get('following') === '1' || searchParams.get('following') === 'true'
 

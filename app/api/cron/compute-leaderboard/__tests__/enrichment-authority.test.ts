@@ -17,7 +17,7 @@ describe('leaderboard enrichment authority', () => {
   it('does not score any season from periodless daily snapshot history', () => {
     expect(route).not.toContain('deriveAdvancedFromDailySnapshots')
     expect(route).not.toContain("from './enrich-daily-snapshots'")
-    expect(route).toContain('trader_daily_snapshots is deliberately excluded')
+    expect(route).not.toContain('trader_daily_snapshots')
     expect(existsSync(join(leaderboardDir, 'enrich-daily-snapshots.ts'))).toBe(false)
     expect(helpers).not.toContain('deriveWinRateMDD')
     expect(helpers).not.toContain('trader_daily_snapshots')

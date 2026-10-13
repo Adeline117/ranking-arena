@@ -1,13 +1,9 @@
 /**
- * Significant-event thresholds for proactive trader-event broadcasts.
+ * Historical thresholds for a retired followed-trader event broadcaster.
  *
- * When a trader that users FOLLOW (trader_follows) moves past one of these
- * rank threshold, the broadcast-trader-events cron notifies all their followers
- * (respecting user_profiles.notify_trader_events). Legacy ROI/PnL delta events
- * are disabled because their daily input lacks publication provenance.
- *
- * Distinct from the per-user opt-in `trader_alerts` thresholds (which each user
- * tunes themselves). These are the platform-wide "this is big" bar.
+ * V1 does not publish or deliver trader-event notifications. Keep these values
+ * only as legacy data/implementation context; they are not an authorization to
+ * restore a scheduler, reader, notification writer, or push delivery path.
  */
 
 /** Absolute rank movement (places) that counts as a notable move. */

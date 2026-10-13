@@ -162,8 +162,9 @@ describe('notification ranking-change reader fence migration', () => {
       expect(route).not.toContain(".from('trader_daily_snapshots')")
       expect(route).not.toContain(".from('notifications')")
       expect(route).not.toContain('getSupabaseAdmin()')
-      expect(route).toContain("status: 'skipped'")
-      expect(route).toContain("ranking_visibility: 'unknown'")
+      // V1 retired both writers: auth-first, then a fixed 410 with no work.
+      expect(route).toContain('verifyCronSecret(request)')
+      expect(route).toContain('{ status: 410, headers: TRADER_ALERTS_NO_STORE_HEADERS }')
     }
   })
 

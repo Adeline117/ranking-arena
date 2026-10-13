@@ -1,60 +1,23 @@
 /**
- * GET /api/portfolio/[address]
- * Returns cross-chain EVM portfolio for the given address.
- * Cached in Redis for 5 minutes.
+ * Retired anonymous EVM portfolio acquisition ingress.
+ *
+ * V1 keeps this public compatibility endpoint fail-closed. This source-only
+ * boundary does not alter code already deployed, prior portfolio data, or an
+ * external chain.
  */
 
 import { NextResponse } from 'next/server'
-import { withPublic } from '@/lib/api/middleware'
-import { getPortfolio } from '@/lib/chains/evm-adapter'
-import * as cache from '@/lib/cache'
-import { createLogger } from '@/lib/utils/logger'
-
-const _log = createLogger('api:portfolio')
+import {
+  V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+  V1_PUBLIC_EGRESS_UNAVAILABLE_BODY,
+} from '@/lib/security/v1-public-egress-publication'
 
 export const dynamic = 'force-dynamic'
 
-function isValidEvmAddress(address: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(address)
+/** Keep this response independent of caller-controlled values and outbound operations. */
+export function GET(): NextResponse {
+  return NextResponse.json(V1_PUBLIC_EGRESS_UNAVAILABLE_BODY, {
+    status: 410,
+    headers: V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+  })
 }
-
-/** Extract address from URL path */
-function extractAddress(url: string): string {
-  const pathParts = new URL(url).pathname.split('/')
-  const idx = pathParts.indexOf('portfolio')
-  return pathParts[idx + 1]
-}
-
-export const GET = withPublic(
-  async ({ request }) => {
-    const address = extractAddress(request.url)
-
-    if (!isValidEvmAddress(address)) {
-      return NextResponse.json({ error: 'Invalid EVM address' }, { status: 400 })
-    }
-
-    const cacheKey = `portfolio:evm:${address.toLowerCase()}`
-
-    // Try cache first
-    const cached =
-      await cache.get<ReturnType<typeof getPortfolio> extends Promise<infer T> ? T : never>(
-        cacheKey
-      )
-    if (cached) {
-      return NextResponse.json(cached, {
-        headers: { 'X-Cache': 'HIT' },
-      })
-    }
-
-    // Fetch fresh data
-    const portfolio = await getPortfolio(address)
-
-    // Cache for 5 minutes — portfolio only changes when user trades
-    await cache.set(cacheKey, portfolio, { ttl: 300 })
-
-    return NextResponse.json(portfolio, {
-      headers: { 'X-Cache': 'MISS' },
-    })
-  },
-  { name: 'portfolio/address', rateLimit: 'public' }
-)

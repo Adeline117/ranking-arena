@@ -1,58 +1,38 @@
 /**
- * GET /api/cron/broadcast-trader-events
+ * Retired followed-trader event broadcaster.
  *
- * Ranking-derived follower broadcasts are intentionally paused. The former
- * implementation combined current performance rows with historical records,
- * but neither path has a public, immutable history-provenance contract.
- *
- * Position notices are paused too: their legacy audience/source resolution was
- * coupled to that same ranking input. Re-enable only with an independently
- * reviewed exact-account evidence contract.
+ * V1 does not publish verified automatic trader-event monitoring or delivery.
+ * A direct authenticated request must not inspect rank or position data, write
+ * notification state, or send a push notification.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { logger } from '@/lib/logger'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { NextResponse } from 'next/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
-import { acquireCronLock } from '@/lib/cron/with-cron-lock'
+import {
+  TRADER_ALERTS_NO_STORE_HEADERS,
+  TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+  TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+} from '@/lib/alerts/trader-alert-publication'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 120
+export const maxDuration = 10
 
-const PROVENANCE_UNAVAILABLE_REASON = 'ranking event provenance unavailable'
-
-export async function GET(request: NextRequest) {
+export function GET(request: Request): NextResponse {
   if (!verifyCronSecret(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+    )
   }
 
-  const releaseLock = await acquireCronLock('broadcast-trader-events', { ttlSeconds: 300 })
-  if (!releaseLock) {
-    return NextResponse.json({ status: 'skipped', reason: 'already running' })
-  }
-
-  const plog = await PipelineLogger.start('broadcast-trader-events')
-  try {
-    // Fail closed: do not read performance data, write notification rows, or
-    // dispatch pushes until both sides of a historical event are proven.
-    logger.info(`[broadcast-trader-events] skipped: ${PROVENANCE_UNAVAILABLE_REASON}`)
-    await plog.success(0, {
-      reason: PROVENANCE_UNAVAILABLE_REASON,
-      ranking_visibility: 'unknown',
-    })
-    return NextResponse.json({
-      status: 'skipped',
-      reason: PROVENANCE_UNAVAILABLE_REASON,
-      ranking_visibility: 'unknown',
-      events: 0,
-      notified: 0,
-    })
-  } catch (err) {
-    logger.error('[broadcast-trader-events] failed', err)
-    await plog.error(err)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
-  } finally {
-    releaseLock()
-  }
+  return NextResponse.json(
+    {
+      error: 'Retired cron route',
+      code: TRADER_NOTIFICATION_NOT_PUBLISHED_CODE,
+      replacement: 'none; trader-event publication requires a separately approved release',
+      message: TRADER_NOTIFICATION_UNAVAILABLE_MESSAGE,
+    },
+    { status: 410, headers: TRADER_ALERTS_NO_STORE_HEADERS }
+  )
 }

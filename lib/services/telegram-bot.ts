@@ -7,8 +7,8 @@
  * Commands:
  *   /rank <trader>   - Look up a trader's ranking and score
  *   /top <exchange>  - Show top 10 traders on an exchange
- *   /follow <trader> - Subscribe to rank change alerts
- *   /unfollow <trader> - Unsubscribe
+ *   /follow <trader> - Retired during V1 verification
+ *   /unfollow <trader> - Remove a legacy subscription
  *   /price <symbol>  - Quick price check (CCXT)
  *   /stats           - Platform stats
  *   /help            - Command list
@@ -242,58 +242,11 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
   await sendMessage({ chat_id: chatId, text: lines.join('\n') })
 }
 
-async function handleFollow(
-  chatId: number,
-  args: string,
-  userId: number,
-  lang: BotLang
-): Promise<void> {
-  const query = args.trim()
-  if (!query) {
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followUsage') })
-    return
-  }
-
-  const supabase = getSupabaseAdmin()
-  const traders = await searchTraders(supabase, { query, limit: 1 })
-
-  if (!traders || traders.length === 0) {
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'traderNotFound', { query }) })
-    return
-  }
-
-  const trader = traders[0]
-  const traderId = `${trader.platform}:${trader.traderKey}`
-
-  // Store follow subscription in Supabase
-  const { error } = await supabase.from('bot_subscriptions').upsert(
-    {
-      platform_type: 'telegram',
-      platform_user_id: String(userId),
-      chat_id: String(chatId),
-      trader_id: traderId,
-      trader_handle: trader.handle || trader.traderKey,
-      trader_platform: trader.platform,
-      enabled: true,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'platform_type,platform_user_id,trader_id' }
-  )
-
-  if (error) {
-    logger.error('[TelegramBot] Follow upsert error:', error)
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followError') })
-    return
-  }
-
-  await sendMessage({
-    chat_id: chatId,
-    text: botMessages(lang, 'followSuccess', {
-      handle: trader.handle || trader.traderKey,
-      platform:
-        EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform,
-    }),
-  })
+async function handleFollow(chatId: number, lang: BotLang): Promise<void> {
+  // Do not create a new bot_subscriptions row while the ranking-alert
+  // evaluator and delivery paths are unpublished. Existing legacy rows can
+  // still be removed with /unfollow.
+  await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followUnavailable') })
 }
 
 async function handleUnfollow(
@@ -475,7 +428,6 @@ async function handleHelp(chatId: number, lang: BotLang): Promise<void> {
     `<b>Arena Bot ${botMessages(lang, 'commands')}</b>\n`,
     `/rank &lt;name&gt; — ${botMessages(lang, 'helpRank')}`,
     `/top [exchange] — ${botMessages(lang, 'helpTop')}`,
-    `/follow &lt;name&gt; — ${botMessages(lang, 'helpFollow')}`,
     `/unfollow &lt;name&gt; — ${botMessages(lang, 'helpUnfollow')}`,
     `/price &lt;symbol&gt; — ${botMessages(lang, 'helpPrice')}`,
     `/stats — ${botMessages(lang, 'helpStats')}`,
@@ -516,7 +468,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
         await handleTop(chatId, args, lang)
         break
       case 'follow':
-        await handleFollow(chatId, args, userId, lang)
+        await handleFollow(chatId, lang)
         break
       case 'unfollow':
         await handleUnfollow(chatId, args, userId, lang)

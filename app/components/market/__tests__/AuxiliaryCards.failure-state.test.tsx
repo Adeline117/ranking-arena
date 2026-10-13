@@ -1,21 +1,22 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { apiFetch } from '@/lib/utils/api-fetch'
 import ArbitrageOpportunities from '../ArbitrageOpportunities'
+import DefiOverview from '../DefiOverview'
+import ExchangeVolume from '../ExchangeVolume'
 import FearGreedGauge from '../FearGreedGauge'
+import SectorPerformance from '../SectorPerformance'
 
 jest.mock('@/lib/utils/api-fetch', () => ({
   apiFetch: jest.fn(),
 }))
 
 const mockTranslations: Record<string, string> = {
-  marketDataError: 'Market data failed to load',
-  loadFailedRetryShort: 'Failed to load, please retry',
-  retry: 'Retry',
-  noDataGeneric: 'No data available',
   arbitrageOpportunities: 'Arbitrage',
-  arbitrageOppsCount: '{n} opportunities',
-  arbitrageEquilibrium: 'Markets are aligned',
-  arbitrageNoOpps: 'No actionable spread',
+  defiOverview: 'DeFi Overview',
+  exchangeVolume: 'Exchange Volume',
+  fearGreedTitle: 'Fear & Greed',
+  sectorPerformance: 'Sector Performance',
+  dataUnavailable: 'Unavailable',
 }
 const mockTranslate = (key: string) => mockTranslations[key] ?? key
 
@@ -28,41 +29,63 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 
 const mockedApiFetch = jest.mocked(apiFetch)
 
-describe('auxiliary market card failure states', () => {
+describe('auxiliary market card state contracts', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
-  it('does not turn an arbitrage request failure into a false no-opportunity claim', async () => {
-    mockedApiFetch
-      .mockRejectedValueOnce(new Error('unavailable'))
-      .mockResolvedValueOnce({ ok: true, opportunities: [] })
-
+  it('renders a local unavailable arbitrage card without requesting data', () => {
     const view = render(<ArbitrageOpportunities />)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Market data failed to load')
-    expect(screen.queryByText('Markets are aligned')).not.toBeInTheDocument()
-    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-
-    expect(await screen.findByText('Markets are aligned')).toBeInTheDocument()
+    expect(screen.getByText('Arbitrage')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
+    expect(mockedApiFetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
   })
 
-  it('ends a failed Fear and Greed load with retry, then renders a genuine empty response', async () => {
-    mockedApiFetch
-      .mockRejectedValueOnce(new Error('unavailable'))
-      .mockResolvedValueOnce({ current: undefined, history: [] })
-
+  it('renders a local unavailable Fear & Greed card without requesting data', () => {
     const view = render(<FearGreedGauge />)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Market data failed to load')
-    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-
-    expect(await screen.findByRole('status')).toHaveTextContent('No data available')
+    expect(screen.getByText('Fear & Greed')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
+    expect(mockedApiFetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
+  })
+
+  it('renders a local unavailable DeFi card without requesting data', () => {
+    const view = render(<DefiOverview />)
+
+    expect(screen.getByText('DeFi Overview')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
+    expect(mockedApiFetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
+  })
+
+  it('renders a local unavailable exchange-volume card without requesting data', () => {
+    const view = render(<ExchangeVolume />)
+
+    expect(screen.getByText('Exchange Volume')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
+    expect(mockedApiFetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
+  })
+
+  it('renders a local unavailable sector card without requesting data', () => {
+    const view = render(<SectorPerformance />)
+
+    expect(screen.getByText('Sector Performance')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Unavailable')
+    expect(mockedApiFetch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(view.container.querySelector('.skeleton')).not.toBeInTheDocument()
   })
 })

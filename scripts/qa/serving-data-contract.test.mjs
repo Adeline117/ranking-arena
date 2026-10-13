@@ -2,13 +2,18 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { resolve } from 'node:path'
-import { isOptionalOnchainDegradation, servingPageReadiness } from './serving-page-readiness.mjs'
+import { servingPageReadiness } from './serving-page-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..', '..')
 const coverage = readFileSync(resolve(root, 'scripts/qa/pipeline-coverage-audit.mjs'), 'utf8')
 const rankCacheDiff = readFileSync(resolve(root, 'scripts/ingest-shadow-diff.ts'), 'utf8')
 const acceptance = readFileSync(resolve(root, 'scripts/qa/serving-acceptance.mjs'), 'utf8')
 const profileRender = readFileSync(resolve(root, 'scripts/qa/serving-profiles-e2e.mjs'), 'utf8')
+const onchainRoute = readFileSync(resolve(root, 'app/api/trader/onchain-enrich/route.ts'), 'utf8')
+const onchainTrigger = readFileSync(
+  resolve(root, 'app/(app)/trader/[handle]/hooks/useOnchainEnrichTrigger.ts'),
+  'utf8'
+)
 
 test('coverage audit checks every registry-declared window against the current serving generation', () => {
   assert.doesNotMatch(coverage, /public\.trader_latest\b/)
@@ -83,15 +88,8 @@ test('profile acceptance waits for core content instead of optional provider idl
   assert.doesNotMatch(profileRender, /\?source=\$\{c\.slug\}/)
 })
 
-test('only a retryable optional on-chain capacity response degrades softly', () => {
-  const retryable = {
-    status: 503,
-    method: 'POST',
-    pathname: '/api/trader/onchain-enrich',
-    retryAfter: '300',
-  }
-  assert.equal(isOptionalOnchainDegradation(retryable), true)
-  assert.equal(isOptionalOnchainDegradation({ ...retryable, retryAfter: null }), false)
-  assert.equal(isOptionalOnchainDegradation({ ...retryable, status: 500 }), false)
-  assert.equal(isOptionalOnchainDegradation({ ...retryable, pathname: '/api/rankings' }), false)
+test('V1 on-chain source hold does not excuse a provider POST failure', () => {
+  assert.doesNotMatch(profileRender, /isOptionalOnchainDegradation/)
+  assert.match(onchainRoute, /status:\s*410/)
+  assert.match(onchainTrigger, /v1ExecutionUnavailable/)
 })

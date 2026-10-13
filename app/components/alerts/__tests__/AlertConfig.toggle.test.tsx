@@ -47,6 +47,12 @@ jest.mock('@/lib/analytics/track', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
+// This suite exercises the legacy configuration workflow. V1 availability is
+// covered separately with the real publication boundary left disabled.
+jest.mock('@/lib/alerts/trader-alert-publication', () => ({
+  TRADER_ALERTS_PUBLISHED: true,
+}))
+
 jest.mock('@/app/components/ui/ErrorMessage', () => ({
   __esModule: true,
   default: ({ message, onRetry }: { message: string; onRetry?: () => void }) => (

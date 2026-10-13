@@ -40,8 +40,7 @@ Evidence and escalation boundary for the Arena crypto trader ranking platform.
 
 1. Do not run a diagnostic just because it is named here: these scripts can contact
    a public endpoint or controlled credentials. Only an owner-approved, exact
-   read-only evidence request may be run (for example `npm run check:freshness`,
-   the published ranking freshness authority).
+   read-only evidence request may be run.
 2. Record the commit, release identity, observation time, source, and unavailable
    dependency. A missing heartbeat, unavailable secret channel, or absent source
    witness is unknown, not a healthy result.
@@ -60,6 +59,346 @@ operations under the V1 NO-GO. The old health, local-recompute, source-fetch,
 checkpoint, and legacy-backfill entrypoints covered by the V1 tombstone contract are
 RETIRED compatibility paths that exit 2 and cannot be used as an alternate operations
 route.
+
+### V1 LCP measurement CLI source boundary
+
+Do not use `scripts/performance/measure-lcp.mjs` as an incident, performance, release,
+or deployment workaround. This checked-in legacy compatibility path has no current
+operational caller. With every argument, it writes exactly `[RETIRED]
+scripts/performance/measure-lcp.mjs` to stderr, leaves stdout empty, and exits `2`.
+It does not parse a target, load Lighthouse, access a network, install dependencies,
+start or control a browser, or generate, read, overwrite, or upload a report.
+
+This is source-only containment for that one script. It does not change, disable,
+inspect, or prove the genuine Lighthouse CI/workflow, other performance tools, Vercel
+Analytics, Chrome DevTools, a deployment, browser state, or an already generated report.
+Historical performance, CI, target, or report records are not current execution or
+external-state evidence. A future measurement, CI, or reporting activity requires an
+independently approved ADR-023 owner plan and separate evidence.
+
+### V1 stuck-log diagnostic CLI source boundary
+
+Do not use `scripts/archive/check-stuck-simple.mjs` as an incident, monitoring, or
+pipeline workaround. This checked-in legacy diagnostic compatibility path has no
+current operational caller. With every argument, it writes exactly `[RETIRED]
+scripts/archive/check-stuck-simple.mjs` to stderr, leaves stdout empty, and exits `2`.
+It does not read, query, or mutate `pipeline_logs`, or call a current monitoring API,
+worker, or meta-monitor.
+
+This is source-only containment for that one script. It does not change, inspect, or
+prove `pipeline_logs`, current monitoring APIs, workers, meta-monitor, deployment,
+data, or any external state. Historical diagnostic, monitoring, or pipeline records
+are not current runtime or data-state evidence. A future diagnostic or remediation
+requires an independently approved ADR-023 owner plan and separate evidence. This
+boundary does not retire or assess `lib/services/pipeline-logger.ts`,
+`/api/health/pipeline`, admin monitoring readers (including enrichment-completeness),
+`lib/cron/auto-cleanup-stuck.ts`, or the separately held
+`/api/cron/cleanup-stuck-logs`.
+
+### V1 archive service-role diagnostic CLI source boundary
+
+Do not use `scripts/archive/check-failed-jobs.mjs`,
+`scripts/archive/check-failed-tasks.mjs`, `scripts/archive/check-latest-errors.mjs`, or
+`scripts/archive/check-rankings.mjs` as an incident, database, pipeline, or ranking
+workaround. These four checked-in legacy service-role diagnostic compatibility paths
+have no current operational caller. With every argument, their respective fixed stderr
+lines are `[RETIRED] scripts/archive/check-failed-jobs.mjs`, `[RETIRED]
+scripts/archive/check-failed-tasks.mjs`, `[RETIRED] scripts/archive/check-latest-errors.mjs`,
+and `[RETIRED] scripts/archive/check-rankings.mjs`; stdout is empty and each exits `2`.
+
+This source-only boundary covers only those four files. It does not retire, assess,
+change, inspect, or prove the current `PipelineLogger`, `/api/health/pipeline`,
+`/api/cron/meta-monitor`, package current diagnostic scripts, `leaderboard_ranks`, or
+public rankings, and it does not touch the separately held cleanup/compute cron paths.
+It also does not stop, inspect, change, or prove a deployed database, cron, or any
+external state. Historical diagnostic, ranking, or pipeline records are not current
+runtime or data-state evidence; a future diagnostic or remediation requires an
+independently approved ADR-023 owner plan and separate evidence.
+
+### V1 homepage regression archive CLI source boundary
+
+Do not use `scripts/archive/check-homepage-regression.mjs` as a homepage, performance,
+release, deployment, or incident workaround. This checked-in legacy homepage diagnostic
+compatibility path has no current operational caller. With every argument, it writes
+exactly `[RETIRED] scripts/archive/check-homepage-regression.mjs` to stderr, leaves stdout
+empty, and exits `2`.
+
+This is source-only containment for that one file. It does not retire, assess, change,
+inspect, or prove `app/page.tsx`, `HomePage`, `HomePageLoader`, the SSR ranking surface,
+homepage Jest/E2E, the genuine Lighthouse CI, `/api/health`, `/api/health/pipeline`, or
+current workflows. It also does not stop, inspect, change, or prove a deployment, browser,
+or any external state. Historical homepage, test, or performance records are not current
+runtime or external-state evidence; a future check, CI, or remediation requires an
+independently approved ADR-023 owner plan and separate evidence.
+
+### V1 ranking authority cache-purge source boundary
+
+Do not use `scripts/maintenance/purge-ranking-authority-caches.sh` as an incident workaround.
+This checked-in compatibility path writes `[RETIRED]` only to stderr and exits `2` for every
+argument; it does not read an environment, invoke Vercel or Git, contact a network, clear a
+cache, or perform host work.
+
+This is source-only containment. It does not clear, inspect, or prove an already deployed
+Data/CDN cache, release, project, or external state, and it does not change public ranking
+routes, cache policy, cache keys, or deployment procedure. A future cache operation requires
+an independently approved ADR-023 owner plan and separate evidence.
+
+### V1 legacy proxy/import acquisition boundary
+
+Do not use a proxy, a browser scraper, an import script, or a Cloudflare deployment as
+a workaround for an unavailable source. The checked-in source hold is limited to these
+historical entrypoints: `GET /api/proxy/phemex`, `cloudflare-worker/src/index.ts`,
+`scripts/import/import_all_platforms.mjs`, `scripts/import/refresh.sh`,
+`scripts/import/import-all-blocked.sh`, `scripts/import/run_hl_enrichment.sh`,
+`scripts/vps-deploy/scraper-v16-parallel.js`, `scripts/vps-deploy/arena-proxy.mjs`,
+`scripts/archive/test-vps-scrapers.ts`, and
+`scripts/archive/verify-data-accuracy.mjs`.
+
+Phemex is auth-first: missing/invalid service authentication returns `401`; valid
+authentication returns `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`; both return the
+three `no-store` headers before URL/query parsing, upstream fetch, or logging. The
+checked-in Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with
+the same headers and no upstream fetch. The named scripts report `RETIRED` and exit
+`2` before proxy, browser, import, or host work. This is source-only containment, not
+an instruction to stop, inspect, restart, or prove an already deployed host, worker,
+proxy, queue, or schedule. It does not classify the separately retired `avatar-mirror`
+worker or the separate avatar-proxy route below; other avatar-related API paths/helpers,
+UI/read RPCs, adapters, and unlisted writers remain outside this runbook's conclusion.
+
+### V1 direct service-auth cron ingress source boundary
+
+Do not invoke the separately bounded direct service-auth cron ingress handlers as an
+incident workaround: `GET /api/cron/batch-5min`, `GET
+/api/cron/check-data-freshness`, `GET /api/cron/cleanup-data`, `GET
+/api/cron/cleanup-stuck-logs`, `GET /api/cron/detect-contracts`, `GET`/`POST
+/api/cron/fetch-funding-rates`, `GET`/`POST /api/cron/fetch-market-data`, `GET`/`POST
+/api/cron/fetch-open-interest`, `GET /api/cron/qualify-referrals`, and `GET
+/api/cron/smoke-test`.
+
+The same fixed, non-environment `V1_CRON_EXECUTION_PUBLISHED=false` source gate is
+auth-first for exactly those ten handlers: missing or invalid service authentication
+returns `401`; a valid service secret returns `410 CRON_EXECUTION_NOT_PUBLISHED`.
+Both responses carry `Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control` `no-store` headers before query/body parsing, locks,
+`PipelineLogger`, database, cache, provider, or network work. This source-only list
+does not classify other cron routes and cannot stop, inspect, restart, or prove a
+deployed scheduler, host, queue, or worker.
+
+### V1 direct rankings-export source boundary
+
+Do not use `GET /api/export/rankings` or its `/api/v1/export/rankings` rewrite alias as an
+incident workaround. This direct Edge service-auth export ingress is fixed under the non-environment
+`V1_RANKINGS_EXPORT_PUBLISHED=false` source boundary: missing or invalid service authentication returns
+`401`; valid authentication returns `410 RANKINGS_EXPORT_NOT_PUBLISHED`. Both responses carry the three
+`no-store` headers before query parsing, Redis rate limiting, ranked-cohort reads, CSV/JSON construction,
+or logging.
+
+This boundary is limited to that direct ingress. It does not classify the V3 CSV endpoint or authenticated
+`/api/settings/export`, and it cannot stop, inspect, or prove an already deployed route, external automation,
+cache, or data-reading state.
+
+### V1 legacy Library collector source boundary
+
+Do not use the legacy Library collectors as an incident workaround. The checked-in source hold is limited to
+`scripts/library/collect_arxiv.mjs`, `scripts/library/collect_books.mjs`,
+`scripts/library/collect_research.mjs`, `scripts/library/collect_whitepapers.mjs`, and
+`scripts/library/seed_bulk.mjs`. Each retained path has no import, environment read, database connection, or
+fetch path. With any arguments, including under an empty environment, it writes `[RETIRED]` only to stderr,
+leaves stdout empty, and exits `2`.
+
+This is source-only containment, not an instruction to stop, inspect, or prove an already deployed collector,
+database, schedule, or historical Library data. Other Library helpers, database schema, and historical archive
+documentation remain outside this bounded conclusion.
+
+### V1 standalone Flash News CLI source boundary
+
+Do not use the standalone Flash News CLIs as an incident workaround. The checked-in source hold is limited to
+`scripts/flash-news/collect.mjs`, `scripts/flash-news/retranslate-all.mjs`,
+`scripts/backfill-flash-news-classify.mjs`, `scripts/backfill-flash-news-translate.mjs`,
+`scripts/purge-flash-news-noncrypto.mjs`, and `scripts/dedup-hot-posts.mjs`. With any arguments, each retained
+path reports fixed `RETIRED` and exits `2`; it does not fetch or mutate a database or file.
+
+This bounded source conclusion does not touch `app/api/cron/flash-news-fetch`, `/api/flash-news`, or the Flash News
+UI, and does not change shared classifier/translator runtime behavior; each remains subject to separate review. It is not an instruction to
+stop, inspect, or prove any external or already deployed script or scheduler.
+
+### V1 legacy worker deploy source boundary
+
+Do not use `worker/deploy.sh` as an incident workaround. This legacy Mac full-pipeline
+compatibility path reports fixed `RETIRED` and exits `2`; it does not install host tooling,
+read a worker environment, connect Redis, or alter a process-manager state.
+
+This is source-only containment, not an instruction to stop, inspect, or prove any deployed
+worker, host, Redis, process manager, or scheduler. `worker/deploy-ingest-local.sh`,
+`worker/deploy-ingest-sg.sh`, their separate safety contracts, and other runtime-ownership
+paths remain outside this bounded conclusion.
+
+### V1 social seed CLI source boundary
+
+Do not use `scripts/seed-quality-content.ts` or `scripts/social-seed/generate-posts.ts` as an
+incident workaround. These social seed compatibility paths report fixed `RETIRED` and exit `2`
+with any arguments; they do not read an environment, fetch, or read/write posts and comments.
+
+This source-only boundary does not change the normal social API, UI, RLS, cache, or existing
+posts/comments. It does not stop, inspect, or prove any external cron, deployed script, database,
+or historical seed data.
+
+### V1 legacy VPS monitor source boundary
+
+Do not use `scripts/vps/health-ping.sh` or `scripts/vps/healthcheck.mjs` as an incident
+workaround. These legacy VPS monitor compatibility paths report fixed `RETIRED` and exit
+`2`; they no longer request the network, read or write host files, send alerts, or start
+an HTTP server.
+
+This source-only boundary does not stop, inspect, or prove an already deployed host,
+process, crontab, UptimeRobot, or external monitor. `/api/health`, OpenClaw, harness,
+and infra topology remain outside this bounded conclusion. `scripts/vps-deploy/setup.sh`,
+`setup-env.sh`, `check-vps.sh`, and `deploy.sh` are each retired separately.
+
+### V1 legacy VPS bootstrap source boundary
+
+Do not use `scripts/vps-deploy/setup.sh` as an incident workaround. This legacy VPS bootstrap
+compatibility path reports fixed `RETIRED` and exits `2`; it does not install software, create host
+files, load an environment, or make network requests.
+
+This source-only boundary covers `setup.sh` only. It does not stop, inspect, or prove infra topology,
+a deployed host, PM2, credentials, or a scheduler. `setup-env.sh` and `check-vps.sh` are each retired
+separately; `scripts/vps-deploy/deploy.sh` is also a retired source path under its own boundary.
+
+### V1 legacy VPS environment provisioning source boundary
+
+Do not use `scripts/vps-deploy/setup-env.sh` as an incident workaround. This legacy VPS
+environment-provisioning compatibility path reports fixed `RETIRED` and exits `2`; it no longer
+performs its legacy setup work.
+
+This source-only boundary does not stop, inspect, or prove infra topology, a deployed host, PM2,
+credentials, or a scheduler. `setup.sh` and `check-vps.sh` are each retired separately;
+`scripts/vps-deploy/deploy.sh` is also a retired source path under its own boundary.
+
+### V1 legacy VPS inspection CLI source boundary
+
+Do not use `scripts/vps-deploy/check-vps.sh` as an incident workaround. This legacy VPS inspection
+compatibility path reports fixed `RETIRED` and exits `2`; it no longer contacts remote hosts, reads
+an environment or logs, checks process state, or makes network requests.
+
+`scripts/vps-deploy/setup.sh`, `scripts/vps-deploy/setup-env.sh`, and
+`scripts/vps-deploy/check-vps.sh`, and `scripts/vps-deploy/deploy.sh` are each retired source paths.
+This source-only boundary does not stop, inspect, or prove infra topology, deployed hosts, PM2,
+credentials, or schedulers.
+
+### V1 legacy VPS deploy CLI source boundary
+
+Do not use `scripts/vps-deploy/deploy.sh` as an incident workaround. This legacy VPS deploy CLI
+compatibility path reports fixed `RETIRED` to stderr and exits `2`; it no longer connects to a remote
+host, transfers files, changes PM2, or makes health requests.
+
+`scripts/vps-deploy/setup.sh`, `scripts/vps-deploy/setup-env.sh`,
+`scripts/vps-deploy/check-vps.sh`, and `scripts/vps-deploy/deploy.sh` are all retired source paths.
+This source-only boundary does not stop, inspect, or prove `infra/vps-playwright` ecosystem configs,
+deployed hosts, PM2, credentials, schedulers, or worker deploy paths such as `worker/deploy.sh`,
+`worker/deploy-ingest-local.sh`, and `worker/deploy-ingest-sg.sh`.
+
+### V1 archive on-chain probe source boundary
+
+Do not use `scripts/archive/test-onchain-apis.mjs` as an incident workaround. This historical
+provider-probe compatibility path reports fixed `RETIRED` and exits `2`; it does not contact
+Hyperliquid, Aevo, dYdX, Drift, Jupiter, or Graph API endpoints.
+
+This source-only boundary does not change the existing `app/api/trader/onchain-enrich` hold,
+worker/on-chain source logic, pages, or evidence paths. It does not stop, inspect, or prove any
+deployed probe, host, scheduler, or provider state.
+
+### V1 archive enrich probe source boundary
+
+Do not use `scripts/archive/test-enrich-fix.sh` as an incident workaround. This checked-in
+compatibility path writes fixed `[RETIRED]` only to stderr, leaves stdout empty, and exits `2`
+for every invocation.
+
+This source-only boundary is limited to that file: it is not a recoverable work route and does
+not change, check, or prove any API route, on-chain pipeline, worker, deploy flow, or product
+behavior. It cannot establish any external or deployed state.
+
+### V1 enrichment monitor and stale runbook source boundary
+
+Do not use `scripts/monitor-enrichment.sh` as an incident workaround. This historical
+compatibility path is a retired V1 NO-GO source path rather than a status monitor; it writes its
+fixed `[RETIRED]` notice to stderr, leaves stdout empty, and exits `2`.
+`scripts/enrich-onchain-all.mjs` is not present in this repository. The former operational material
+in `scripts/DEPLOY_TO_VPS.md` and `scripts/ONCHAIN_ENRICHMENT_README.md` has been replaced by
+historical boundary notes and is not a recoverable runbook.
+
+This source-only boundary does not alter, stop, inspect, or prove any application on-chain API,
+worker, adapter, deployed host, scheduler, credential, database, provider, historical data, or
+product behavior. It does not change the existing `app/api/trader/onchain-enrich` hold and cannot
+establish external or deployed state.
+
+### V1 exchange-logo sync source boundary
+
+Do not use `scripts/sync-exchange-logos.sh` as an incident workaround. This single historical
+compatibility path is a retired V1 NO-GO source path: with any arguments, it writes `[RETIRED]`
+only to stderr, leaves stdout empty, and exits `2`.
+
+This is source-only containment for that file. Existing checked-in
+`public/icons/exchanges/*` assets and the product UI that renders their local paths remain in
+place and outside this bounded conclusion. It does not download, refresh, delete, inspect, or
+prove any deployed asset, cache, external source, or provenance; it also cannot establish that
+another logo acquisition or refresh workflow has stopped.
+
+### V1 monthly dependency update source boundary
+
+Do not use `scripts/monthly-deps-update.mjs` as an incident workaround. This no-current-operational-caller
+legacy compatibility path is a source-only exit-`2` tombstone: with any arguments, it writes
+`[RETIRED]` only to stderr, leaves stdout empty, and does not run `npm audit`, `npm audit fix`,
+`npm outdated`, `npm update`, `git checkout`, or `npm install`, or write a dependency-update report.
+
+This boundary does not remove or change the package `security:fix` command, independent CI
+`npm audit`, Dependabot, human dependency review, deployed dependencies, or product runtime. It
+does not inspect, change, or prove a lockfile, installed package, vulnerability state, release
+version, or any external environment. Any future dependency repair, update, or report requires a
+separately approved ADR-023 owner plan and distinct evidence; this retired path is not an execution
+route.
+
+### V1 avatar-proxy source boundary
+
+Do not use anonymous `GET /api/avatar` or its `/api/v1/avatar` rewrite alias to proxy
+an avatar source. Both resolve to the same fixed `410` source-only response with all
+three `no-store` headers (`Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control`) before query parsing, DNS lookup, upstream fetch, or
+logging. The matching proxy bypass preserves this anonymous response contract only; it
+does not authorize upstream proxy use. Registered helpers and known UI/OG consumers no
+longer generate that request: a proxy-required origin without a mirror uses local,
+inline, or default fallback.
+
+This does not assert zero avatar browser/network activity: existing Supabase mirrors
+and direct allowed raw-avatar URLs may still render. Other avatar-related API
+paths/helpers, adapters, and unlisted writers remain outside this boundary. This
+source-only change cannot clear old CDN cache, stop older deployed code, or prove
+external state.
+
+### V1 avatar-backfill source boundary
+
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only tombstone
+handler, not a backfill procedure. It authenticates first: missing or invalid service
+authentication returns `401`; valid authentication returns `410
+CRON_EXECUTION_NOT_PUBLISHED`. Both paths carry the three `no-store` headers and return
+before parameter parsing, database access, logging, or upstream fetch. This checked-in
+contract does not stop, inspect, restart, or prove a deployed host, external scheduler,
+or healthcheck. The separate avatar-proxy route, other avatar-related API paths/helpers,
+UI/read RPCs, adapters, and unlisted writers remain outside this handler's bounded
+conclusion; the separate `avatar-mirror` worker hold does not expand it.
+
+### V1 avatar-mirror worker source boundary
+
+The checked-in `avatar-mirror` worker execution is separately source-only retired: its
+processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
+queued avatar-mirror job returns as a no-op within `route()` before that handler calls
+`getConnection()`, acquires its per-job source lease, or loads a processor. This makes
+no claim that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock. This is not an instruction to stop, inspect,
+restart, or prove an already-running worker, Redis, host process, or schedule.
+The separate avatar-proxy route, other avatar-related API paths/helpers, UI/read RPCs,
+adapters, and unlisted writers remain outside this worker boundary.
 
 ### Symptom: Cron job stuck in "running" status
 
@@ -142,8 +481,32 @@ delivery deduplication.
 ## Manual Ingest Canary — disabled during V1 NO-GO
 
 The retired `unified-connector`, `batch-fetch-traders`, and `batch-enrich` HTTP
-routes must not be used. First-party collection is owned by region-affine ingest
-workers, and a canary creates real work rather than a dry run.
+routes must not be used. The historical/design ownership model assigned first-party
+collection to region-affine ingest workers, and a canary would create real work rather
+than a dry run.
+
+The checked-in fixed `V1_INGEST_EXECUTION_PUBLISHED=false` source hold prevents only
+the covered native ingest command path from initiating work: the worker entry exits
+before dotenv/runtime dependencies, its scheduler and connection do not begin DB,
+ioredis, or BullMQ work, and Tier-C/first-party bridges plus covered direct ingest
+scripts admit no new ingest. `POST /api/trader/onchain-enrich` is a fixed `410
+INGEST_EXECUTION_NOT_PUBLISHED` response with three `no-store` headers before body,
+rate-limit, provider, or serving-data work. Profile `core` and `records` retain warm
+serving reads; their cold Tier-C fallback becomes pending before provider/ioredis/
+BullMQ/result-queue access. A public route's ordinary rate limiter may still use
+Redis, so this is not a "zero Redis reads" assertion.
+
+This source gate cannot stop, inspect, or prove a running host, persisted queue, or
+external schedule. The checked-in legacy-refresh boundary, including the client-safe
+fixed-false `V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately removes legacy
+refresh-job admission and consumption: `batch-discover` is an auth-first `401/410`
+tombstone, public trader refresh is an auth-first `401/410` tombstone with no
+body/rate-limit/queue work, legacy detail exposes `refresh_job: null`, and
+`batch-5min` is separately covered by the bounded direct service-auth cron ingress
+hold above. The separately named legacy
+proxy/import entrypoints above are source tombstones; do not treat that limited list as
+authority to operate, stop, or inspect a proxy/import runtime, or as a claim that every
+source write has been closed.
 
 Do not enqueue a canary, read worker credentials, select a region, or inspect a
 worker directly from this runbook. A future owner-approved ingest plan must specify
@@ -155,10 +518,24 @@ considered.
 
 ## Manual Leaderboard Recompute — disabled during V1 NO-GO
 
-`compute-leaderboard` writes serving rows. It must not be invoked manually, by a
-cron replay, or through an automation workaround. A score recompute over unchanged
-evidence does not advance `leaderboard_source_freshness.source_as_of` and cannot
-repair a missing source/publication witness.
+The retired `compute-leaderboard` design was a serving-row writer. For the documented
+ranking-command chain, the fixed, non-environment
+`V1_CRON_EXECUTION_PUBLISHED=false` source gate guards these endpoints:
+`GET /api/cron/compute-leaderboard`, `GET /api/cron/precompute-composite`,
+`GET /api/cron/sync-meilisearch`, `GET /api/cron/pipeline-evaluate`, and
+`GET`/`POST /api/hooks/post-deploy`. Each is auth-first: invalid or missing service
+authentication receives `401`; valid authentication receives `410`
+`CRON_EXECUTION_NOT_PUBLISHED`; both paths carry three `no-store` headers and end
+before parameters, locks, pipeline logs, stores, cache, or provider work. This
+ranking-command list does not classify other cron routes.
+
+The separate fixed `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` source gate closes the
+legacy downstream worker/scheduler/caller chain before its dotenv, DB, Redis, BullMQ,
+or HTTP work. It does not stop a running process or an externally persisted schedule,
+and it is not runtime evidence. None of these direct commands may be invoked manually,
+by a cron replay, or through an automation workaround. A score recompute over
+unchanged evidence does not advance `leaderboard_source_freshness.source_as_of` and
+cannot repair a missing source/publication witness.
 
 Any future recompute requires a separately approved release plan with exact source
 evidence, cohort and freshness proof, write target, rollback witness, and post-write
@@ -268,6 +645,27 @@ non-sensitive proof; this document intentionally has no bypass workflow.
 > 目标、最小权限执行者、exact candidate SHA、兼容回退边界和证据保全方式后，才可
 > 另行建立受控执行计划；该计划不在本 runbook 中。
 
+### Retired migration-ledger repair artifact — V1 NO-GO
+
+`scripts/migration-reconcile/ledger-repair-20260702.sql` 是 `[RETIRED]` 的纯注释历史记录，
+不含可运行内容。外部 SQL-file launcher 可能因注释是 no-op 而报告 exit 0；这不是 ledger、catalog、
+数据库或任何 live-state 的证据，也不是工作入口。
+
+这是 source-only boundary：它不运行、检查、变更或证明当前数据库、迁移、已部署服务、host、worker
+或 scheduler 状态。本 runbook 不提供该历史文件的数据库、MCP、CLI 或回退流程；未来任何 ledger
+事项只能由 owner 在独立 ADR-023 中重新定义并保全单独证据。
+
+### V1 ClickHouse schema source boundary
+
+`scripts/clickhouse/schema.sql` 是 `[RETIRED]` 的纯注释来源记录，在 V1 NO-GO 下不含可运行
+内容。外部 SQL-file launcher 可能因注释是 no-op 而报告 exit 0；这不是 ClickHouse catalog、数据、
+配置或任何 live-state 的证据，也不是验证或工作入口。
+
+这是 source-only boundary：它不调用、配置、变更、检查或证明 ClickHouse client、dual-write、
+`PipelineLogger`、deployed ClickHouse instance、host 或 credentials 的状态。本 runbook 不提供该
+文件的 CLI 或其他工作流程，也不触及 analytics runtime、已部署实例或控制面。未来任何该类事项
+只能由 owner 在独立 ADR-023 中重新定义并保全单独证据。
+
 #### 当前事实
 
 - `V1_EXECUTION_STATUS_2026-08-03.md` 是公开服务与 launch 的唯一权威。
@@ -279,7 +677,8 @@ non-sensitive proof; this document intentionally has no bypass workflow.
   证明，须在未来独立只读复核中重新裁定。该历史快照不能被解释成任何文件的 apply
   授权。
 - 旧 Token 公开面、legacy position-history、Tier-A writer/queue、凭据连接、
-  Portfolio 与 claim 路径都必须保持 fail closed；两台 ingest writer 继续停止。
+  Portfolio 与 claim 路径都必须保持 fail closed。历史 owner 记录把两台 ingest writer
+  置于 stop hold；这不是其当前运行状态的证明，本 runbook 也不授权启动、停止或恢复它们。
   不得通过手动 refresh、重放、ACL 放宽、补写 ledger、重新启用 cron 或恢复旧 writer
   来“修复”门禁。
 

@@ -1,210 +1,61 @@
-# 新交易所数据抓取脚本
+# 历史新交易所导入说明 — V1 NO-GO
 
-为ranking-arena项目添加4个新交易所的数据抓取功能。
+本文件保留旧 `scripts/import/` 内容的设计背景，**不是**导入、数据库检查、调试、
+cron 或部署操作手册。V1 期间不得依据历史脚本名称、交易所覆盖表、旧 endpoint 或既有
+数据量推断任何运行状态，也不得把它们作为实际写入的入口。
 
-## 新增交易所
+## 已封存的历史入口
 
-| 交易所 | 脚本文件 | 目标数量 | 市场类型 | 状态 |
-|--------|----------|----------|----------|------|
-| **OKX** (扩充) | `import_okx_enhanced.mjs` | 1000+ | Futures + Spot | ✅ 已实现 |
-| **Bitfinex** | `import_bitfinex.mjs` | 500+ | Spot + Futures | ✅ 已实现 |
-| **Crypto.com** | `import_crypto_com.mjs` | 800+ | Futures | ✅ 已实现 |
-| **Pionex** | `import_pionex.mjs` | 600+ | Futures + Spot | ✅ 已实现 |
+本次 source-only containment 仅封存以下 legacy acquisition entrypoint：
 
-## 快速开始
+- `scripts/import/import_all_platforms.mjs`
+- `scripts/import/refresh.sh`
+- `scripts/import/import-all-blocked.sh`
+- `scripts/import/run_hl_enrichment.sh`
+- `scripts/vps-deploy/scraper-v16-parallel.js`
+- `scripts/vps-deploy/arena-proxy.mjs`
+- `scripts/archive/test-vps-scrapers.ts`
+- `scripts/archive/verify-data-accuracy.mjs`
 
-### 1. 批量执行 (推荐)
-```bash
-# 执行所有新交易所脚本
-node scripts/import/batch_new_exchanges.mjs
+这些脚本固定报告 `RETIRED` 并以 `2` 退出，在 proxy、browser、import 或 host 工作前结束。
+相邻的 checked-in Cloudflare Worker 也固定返回 `410
+LEGACY_PROXY_IMPORT_NOT_PUBLISHED` 与三层 `no-store`，不作 upstream fetch；独立的
+`GET /api/proxy/phemex` 先鉴权，随后固定 `410
+LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`。
 
-# 指定时间段
-node scripts/import/batch_new_exchanges.mjs 30D
+独立的 canonical `GET /api/cron/backfill-avatars` 及其
+`/api/v1/cron/backfill-avatars` rewrite alias 解析到同一 tombstone handler：先校验 service
+authentication，缺失或无效认证返回 `401`；有效认证返回 `410
+CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
+upstream fetch 前结束；它不是 backfill 操作说明。
 
-# 执行全部时间段
-node scripts/import/batch_new_exchanges.mjs ALL
-```
+独立的匿名 `GET /api/avatar` 及其 `/api/v1/avatar` rewrite alias 解析到同一固定 `410`
+source-only response：两条路径都有 `Cache-Control`、`CDN-Cache-Control`、
+`Vercel-CDN-Cache-Control` 三层 `no-store`，并在 query 解析、DNS lookup、upstream fetch 或
+logging 前结束。matching proxy bypass 只保持这个匿名 no-store response contract，不是 upstream
+proxy permission。已登记 helper 和已知 UI/OG consumer 不再生成 proxy request；没有 mirror 的
+proxy-required origin 使用 local、inline 或 default fallback。
 
-### 2. 单独执行
+独立的 checked-in `avatar-mirror` worker execution 已 source-only retired：processor 为 no-op，
+scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `route()` 内以 no-op 返回，
+早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
+worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。它不是 worker 操作说明。
 
-```bash
-# OKX 增强版 (扩充到1000+)
-node scripts/import/import_okx_enhanced.mjs 30D
+## 边界与真相
 
-# Bitfinex
-node scripts/import/import_bitfinex.mjs 7D
+上述只是源码封存，不能停止、检查或证明已经部署的 VPS scraper/proxy、Cloudflare Worker、
+host process、queue、external scheduler 或 healthcheck。它不表示所有 `scripts/import/**`、
+adapter、helper 或写路径都已关闭。avatar-mirror boundary 同样不能停止、检查或证明已运行 worker、
+Redis、host process 或 schedule 已停止。avatar-proxy boundary 同样不能清除旧 CDN cache、停止
+older deployed code，或证明 external state；它不表示所有 avatar browser/network request 为零：
+existing Supabase mirror 与 direct allowed raw-avatar URL 仍可能 render。其他 avatar-related API
+path/helper、UI/read RPC、adapter 与未列 writer 均不在 avatar-backfill handler、avatar-mirror
+worker、avatar-proxy route 或本文列出的 import/proxy 入口的结论中。
+任何未列入口都必须由 owner 在独立、范围明确的审查中决定，不能从本文件推导出执行权限。
 
-# Crypto.com
-node scripts/import/import_crypto_com.mjs 90D
+## 历史设计记录
 
-# Pionex
-node scripts/import/import_pionex.mjs ALL
-```
-
-## 数据表结构
-
-### trader_sources 表
-```sql
-source          VARCHAR  -- 'okx_futures', 'okx_spot', 'bitfinex', 'crypto_com', 'pionex'
-source_trader_id VARCHAR  -- 交易所内的trader ID
-handle          VARCHAR  -- 用户名/昵称
-avatar_url      VARCHAR  -- 头像URL
-profile_url     VARCHAR  -- 原始页面链接
-is_active       BOOLEAN  -- true
-source_kind     VARCHAR  -- 'cex'
-market_type     VARCHAR  -- 'futures' 或 'spot'
-```
-
-### trader_snapshots 表 (排名数据)
-```sql
-source          VARCHAR  -- 同上
-source_trader_id VARCHAR  -- 同上
-season_id       VARCHAR  -- '7D', '30D', '90D'
-rank            INTEGER  -- 排名
-roi             FLOAT    -- ROI百分比
-pnl             FLOAT    -- 盈亏USD
-win_rate        FLOAT    -- 胜率百分比
-max_drawdown    FLOAT    -- 最大回撤百分比
-trade_count     INTEGER  -- 交易次数
-followers       INTEGER  -- 跟随者数量
-arena_score     FLOAT    -- Arena评分
-captured_at     TIMESTAMP -- 抓取时间
-```
-
-## 技术特性
-
-### 频率控制
-- **全局限制**: 每秒最多2-3个请求
-- **随机延迟**: 300ms-2s之间，模拟人类行为
-- **重试机制**: 3次重试，指数退避
-- **限流处理**: 429状态码自动等待
-
-### 数据质量
-- **异常过滤**: ROI > 5000% 的数据会被过滤
-- **数据验证**: 检查必要字段完整性
-- **去重处理**: 避免重复抓取同一交易员
-- **Arena评分**: 自动计算标准化评分
-
-### 错误处理
-- **网络重试**: 自动重试失败的请求
-- **逐条补救**: 批量失败时逐条重试
-- **详细日志**: 记录所有操作和错误信息
-
-## API端点信息
-
-### OKX 增强版
-- **Futures**: `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP`
-- **Spot**: `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SPOT`
-- **特性**: 支持多种排序方式 (pnlRatio, winRatio, copyTraderNum)
-
-### Bitfinex
-- **竞赛列表**: `https://api-pub.bitfinex.com/v2/competitions`
-- **排行榜**: `https://api-pub.bitfinex.com/v2/competitions/leaderboards/{id}`
-- **特性**: 支持多个竞赛类型，实时排行榜
-
-### Crypto.com
-- **API**: `https://crypto.com/api/copy-trading/lead-traders`
-- **特性**: 支持多种排序 (roi_desc, pnl_desc, followers_desc, winrate_desc)
-
-### Pionex
-- **API**: `https://api.pionex.com/api/copy-trading/lead-traders`
-- **特性**: POST请求，支持futures和spot两个市场
-
-## 监控和维护
-
-### 检查数据状态
-```bash
-# 查看各交易所数据量
-psql "$DB_URL" -c "
-SELECT source, COUNT(*) as trader_count 
-FROM trader_sources 
-WHERE source IN ('okx_futures', 'okx_spot', 'bitfinex', 'crypto_com', 'pionex')
-GROUP BY source 
-ORDER BY trader_count DESC;
-"
-
-# 查看最新抓取时间
-psql "$DB_URL" -c "
-SELECT source, season_id, COUNT(*) as snapshots, MAX(captured_at) as latest
-FROM trader_snapshots 
-WHERE source IN ('okx_futures', 'okx_spot', 'bitfinex', 'crypto_com', 'pionex')
-GROUP BY source, season_id 
-ORDER BY latest DESC;
-"
-```
-
-### 性能统计
-```bash
-# 查看Arena评分分布
-psql "$DB_URL" -c "
-SELECT source, 
-  AVG(arena_score) as avg_score,
-  MIN(arena_score) as min_score, 
-  MAX(arena_score) as max_score
-FROM trader_snapshots 
-WHERE source IN ('okx_futures', 'okx_spot', 'bitfinex', 'crypto_com', 'pionex')
-  AND season_id = '30D'
-GROUP BY source;
-"
-```
-
-## 故障排除
-
-### 常见问题
-
-1. **API限流 (429错误)**
-   ```
-   解决: 脚本会自动等待，无需手动干预
-   ```
-
-2. **网络连接失败**
-   ```bash
-   # 检查网络连接
-   curl -I https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP
-   ```
-
-3. **数据库连接失败**
-   ```bash
-   # 测试数据库连接
-   psql "$DB_URL" -c "SELECT 1;"
-   ```
-
-4. **内存不足**
-   ```
-   解决: 脚本使用流式处理，内存占用较低
-   ```
-
-### 调试模式
-
-添加环境变量开启调试:
-```bash
-DEBUG=1 node scripts/import/import_okx_enhanced.mjs
-```
-
-## 定期执行
-
-建议设置cron任务定期更新:
-
-```bash
-# 每天更新7D数据
-0 2 * * * cd /path/to/ranking-arena && node scripts/import/batch_new_exchanges.mjs 7D
-
-# 每周更新30D数据  
-0 3 * * 0 cd /path/to/ranking-arena && node scripts/import/batch_new_exchanges.mjs 30D
-
-# 每月更新90D数据
-0 4 1 * * cd /path/to/ranking-arena && node scripts/import/batch_new_exchanges.mjs 90D
-```
-
-## 扩展指南
-
-要添加新的交易所，参考现有脚本结构:
-
-1. 创建新的 `import_[交易所].mjs` 文件
-2. 实现 `fetchLeaderboard()` 函数
-3. 调用 `saveTraders()` 保存数据
-4. 添加到 `batch_new_exchanges.mjs` 中
-
----
-
-**总结**: 这些脚本将为ranking-arena项目新增约3000+交易员数据，覆盖主流CEX交易所的跟单/排行榜功能。
+旧说明曾讨论 OKX、Bitfinex、Crypto.com、Pionex 等来源的候选采集与旧表字段。它们只说明
+过去的代码意图，不证明数据完整性、采集授权、数据库 ACL、部署状态或可发布性。若未来要
+恢复任何来源，owner 必须另行批准一个包含来源证据、RAW/provenance、写目标、测试、回滚和
+运行边界的计划；该计划不得复用本文件中的旧操作流程。

@@ -13,7 +13,10 @@ const tierC = readFileSync(
   join(process.cwd(), 'worker/src/ingest/processors/tier-c-profile.ts'),
   'utf8'
 )
-const manualSmoke = readFileSync(join(process.cwd(), 'scripts/ingest-test-surfaces.ts'), 'utf8')
+const retiredSurfaceDriver = readFileSync(
+  join(process.cwd(), 'scripts/ingest-test-surfaces.ts'),
+  'utf8'
+)
 const pg17Proof = readFileSync(
   join(
     process.cwd(),
@@ -192,12 +195,14 @@ describe('legacy position-history publisher retirement', () => {
     expect(publish).toContain('copiers require snapshot-receipt publication')
     expect(publish).not.toContain('INSERT INTO arena.copier_records')
 
-    expect(manualSmoke).toContain('buildCopierSnapshotArtifact({')
-    expect(manualSmoke).toContain('writeCopierSnapshotRawArtifact(')
-    expect(manualSmoke).toContain('publishCopierSnapshotInTransaction(transaction, {')
-    expect(manualSmoke).not.toContain('publishHistoryRows')
-    expect(manualSmoke).not.toContain('getHistoryCursor')
-    expect(manualSmoke).not.toMatch(
+    expect(retiredSurfaceDriver).toContain('[RETIRED]')
+    expect(retiredSurfaceDriver).toContain('process.exitCode = 2')
+    expect(retiredSurfaceDriver).not.toContain('buildCopierSnapshotArtifact')
+    expect(retiredSurfaceDriver).not.toContain('writeCopierSnapshotRawArtifact')
+    expect(retiredSurfaceDriver).not.toContain('publishCopierSnapshotInTransaction')
+    expect(retiredSurfaceDriver).not.toContain('publishHistoryRows')
+    expect(retiredSurfaceDriver).not.toContain('getHistoryCursor')
+    expect(retiredSurfaceDriver).not.toMatch(
       /for \(const kind of \[[^\]]*position_history[^\]]*\] as const\)/
     )
   })

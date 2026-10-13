@@ -53,7 +53,10 @@
 - `trader_sources.nickname` / `description` / `verified` / `last_updated`（trader/sync upsert）——
   trader_sources 有 handle 无 nickname。疑列名错。
 - `user_profiles.display_name`（auto-post-market-summary cron）——user_profiles 有 handle 无 display_name。疑列名错。
-- `subscriptions`（account/delete、sync-subscription）canceled_at 等 — 同支付簇。
+- `subscriptions`（account/delete、historical direct sync-subscription command）canceled_at 等 — 同支付簇。
+  `POST /api/admin/sync-subscription` is now a V1 source-only hold rather than a current
+  write surface; retain this finding for account/delete and any separately reviewed future
+  re-publication of the direct admin command.
 
 ## 修复流程（每条）
 

@@ -3,6 +3,7 @@ import { useOnchainEnrichTrigger } from '../useOnchainEnrichTrigger'
 
 const mockInvalidateQueries = jest.fn()
 const mockQueryClient = { invalidateQueries: mockInvalidateQueries }
+const mockIsV1IngestExecutionPublished = jest.fn()
 
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => mockQueryClient,
@@ -10,6 +11,10 @@ jest.mock('@tanstack/react-query', () => ({
 
 jest.mock('@/lib/api/client', () => ({
   getCsrfHeaders: () => ({ 'x-csrf-token': 'test-csrf' }),
+}))
+
+jest.mock('@/lib/ingest/v1-execution-publication', () => ({
+  isV1IngestExecutionPublished: () => mockIsV1IngestExecutionPublished(),
 }))
 
 const baseParams = {
@@ -25,6 +30,9 @@ describe('useOnchainEnrichTrigger', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // Historical request behavior stays unit-tested behind an explicit
+    // test-only GO; checked-in V1 source remains fixed-off.
+    mockIsV1IngestExecutionPublished.mockReturnValue(true)
   })
 
   afterEach(() => {
@@ -40,6 +48,17 @@ describe('useOnchainEnrichTrigger', () => {
     const { result } = renderHook(() => useOnchainEnrichTrigger(baseParams))
 
     await waitFor(() => expect(result.current).toBe('unavailable'))
+    expect(mockInvalidateQueries).not.toHaveBeenCalled()
+  })
+
+  it('keeps V1 unpublished without scheduling an on-demand POST', async () => {
+    mockIsV1IngestExecutionPublished.mockReturnValue(false)
+    global.fetch = jest.fn() as jest.Mock
+
+    const { result } = renderHook(() => useOnchainEnrichTrigger(baseParams))
+
+    await waitFor(() => expect(result.current).toBe('unavailable'))
+    expect(global.fetch).not.toHaveBeenCalled()
     expect(mockInvalidateQueries).not.toHaveBeenCalled()
   })
 

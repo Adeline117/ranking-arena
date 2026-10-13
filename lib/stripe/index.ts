@@ -193,7 +193,6 @@ export const SUBSCRIPTION_PLANS = {
     interval: 'month' as const,
     features: [
       'Category ranking',
-      'Trader alerts',
       'Score breakdown',
       'Pro badge',
       'Advanced filter',

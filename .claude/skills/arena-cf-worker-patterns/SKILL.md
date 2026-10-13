@@ -1,71 +1,78 @@
-# Arena CF Worker Patterns
+# Arena CF Worker, Avatar-Proxy, Avatar-Backfill, and Avatar-Mirror Containment — V1 NO-GO
 
-Cloudflare Worker 代理模式，绕过交易所 API 的 CF/geo 拦截。
+This skill is a report-only source-review aid during V1. It does not authorize a
+Cloudflare deployment, dashboard/API access, credential use, route invocation, proxy
+configuration, upstream fetch, or host/VPS action.
 
-## Worker 位置
-- 代码: `cloudflare-worker/src/index.ts`
-- URL: `https://ranking-arena-proxy.broosbook.workers.dev`
-- 部署: `cd cloudflare-worker && CLOUDFLARE_API_TOKEN=xxx npx wrangler deploy`
+## Checked-in source contract
 
-## 已实现路由
+`cloudflare-worker/src/index.ts` is a historical proxy implementation held to a fixed
+response: every request returns `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with all three
+no-store headers (`Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control`) and does not make an upstream fetch.
 
-| 路由 | 目标 | 状态 |
-|------|------|------|
-| `/health` | 健康检查 | ✅ |
-| `/proxy?url=` | 通用代理 | ✅ |
-| `/binance/copy-trading` | Binance | ✅ |
-| `/bingx/leaderboard` | BingX | ✅ |
-| `/bingx/trader-detail` | BingX | ✅ |
-| `/blofin/leaderboard` | BloFin | ✅ |
-| `/blofin/trader-info` | BloFin | ✅ |
-| `/gains/leaderboard-all` | Gains Network | ✅ |
-| `/gains/open-trades` | Gains Network | ✅ |
-| `/gains/trader-stats` | Gains Network | ✅ |
-| `/dydx/leaderboard` | dYdX | ✅ |
-| `/dydx/historical-pnl` | dYdX | ✅ |
-| `/dydx/subaccount` | dYdX | ✅ |
+`GET /api/proxy/phemex` is a separate Edge-route hold. It authenticates before
+disclosing the hold: missing or invalid service authentication returns `401`; valid
+authentication returns `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED`. Both paths carry
+the same three no-store headers and finish before URL/query parsing, logging, or an
+upstream request.
 
-## 添加新路由模式
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only tombstone
+handler. It authenticates first: missing or invalid service authentication returns
+`401`; valid authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both paths
+carry the same three `no-store` headers and return before parameter parsing, database
+access, logging, or upstream fetch. It is not a cron-invocation or backfill procedure.
 
-```typescript
-// 在 fetch handler 里加 shortcut
-if (url.pathname === '/newexchange/endpoint') {
-  return handleNewExchange(request, url);
-}
+Anonymous `GET /api/avatar` and its `/api/v1/avatar` rewrite alias are a separate
+source-only hold. Both resolve to one fixed `410` response with `Cache-Control`,
+`CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store` headers before query
+parsing, DNS lookup, upstream fetch, or logging. Their matching proxy bypass only
+preserves that anonymous response contract; it does not authorize upstream proxy use.
+Registered helpers and known UI/OG consumers no longer generate a proxy request: a
+proxy-required origin without a mirror falls back to local, inline, or default behavior.
 
-// handler 函数
-async function handleNewExchange(_request: Request, url: URL): Promise<Response> {
-  const param = url.searchParams.get('param') || 'default';
-  const apiUrl = `https://api.newexchange.com/endpoint?param=${param}`;
-  try {
-    const res = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'application/json',
-      },
-    });
-    return new Response(res.body, {
-      status: res.status,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-    });
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 });
-  }
-}
-```
+Treat the checked-in `avatar-mirror` worker execution as separately source-only retired:
+its processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a
+legacy queued avatar-mirror job returns as a no-op within `route()` before that handler
+calls `getConnection()`, acquires its per-job source lease, or loads a processor. Do
+not infer that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock. Do not treat this as a worker-operation procedure.
 
-## 降级策略
+These are checked-in source contracts, not evidence that an external Worker, route,
+proxy, host, queue, Redis, external scheduler, or healthcheck is deployed, stopped, or
+healthy. In particular, the avatar-mirror hold cannot stop, inspect, or prove an
+already-running worker, Redis, host process, or schedule. The avatar-proxy hold cannot
+clear old CDN cache, stop older deployed code, or prove external state.
 
-```
-1. 直连 API（Mac Mini 住宅 IP，部分能过）
-2. CF Worker 代理（不同 IP，Smart Placement）
-3. VPS 代理（新加坡/日本 VPS）
-4. Puppeteer（最终手段，处理 JS challenge）
-```
+## Scope boundary
 
-## 踩坑
+The corresponding legacy acquisition containment is restricted to the named CF/edge
+entries plus these historical script entrypoints:
 
-- Worker 代码更新后必须 `wrangler deploy`，否则还是旧路由
-- Smart Placement 让 CF 自动选最优 edge，但不保证绕过 geo-block
-- Gains API 429 很频繁，即使走 Worker 也会被限
-- `/proxy?url=` 通用路由只转发 GET，POST 需要单独写 handler
+- `scripts/import/import_all_platforms.mjs`
+- `scripts/import/refresh.sh`
+- `scripts/import/import-all-blocked.sh`
+- `scripts/import/run_hl_enrichment.sh`
+- `scripts/vps-deploy/scraper-v16-parallel.js`
+- `scripts/vps-deploy/arena-proxy.mjs`
+- `scripts/archive/test-vps-scrapers.ts`
+- `scripts/archive/verify-data-accuracy.mjs`
+
+The scripts report `RETIRED` and exit `2` before proxy, browser, import, or host work.
+Do not generalize this list into a claim that all source writers have been closed. The
+separate avatar-backfill tombstone covers only its canonical/rewrite-alias handler, and
+the separately retired avatar-mirror worker covers only its processor, scheduler, and
+legacy queued-job behavior. The separate avatar-proxy hold covers only `GET
+/api/avatar`, its `/api/v1/avatar` rewrite alias, and the documented helper/UI/OG
+fallback contract. It does not mean avatar browser/network activity is zero: existing
+Supabase mirrors and direct allowed raw-avatar URLs may still render; other
+avatar-related API paths/helpers, adapters, and unlisted writers remain outside this
+skill's conclusion and need separate review.
+
+## Safe review output
+
+When a geo-block, proxy, or source-acquisition issue is reported, record only the
+local source path, its fixed contract, test evidence, and the missing owner-approved
+evidence needed for a future review. Do not provide a workaround, deployment sequence,
+route-addition recipe, fallback order, or operational command.

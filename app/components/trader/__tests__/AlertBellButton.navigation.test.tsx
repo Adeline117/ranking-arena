@@ -67,6 +67,12 @@ jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
+// This suite exercises the legacy active-status and configuration flow. V1
+// containment is covered separately with the real publication boundary false.
+jest.mock('@/lib/alerts/trader-alert-publication', () => ({
+  TRADER_ALERTS_PUBLISHED: true,
+}))
+
 jest.mock('@/lib/hooks/useLoginModal', () => ({
   useLoginModal: {
     getState: () => ({ openLoginModal: mockOpenLoginModal }),

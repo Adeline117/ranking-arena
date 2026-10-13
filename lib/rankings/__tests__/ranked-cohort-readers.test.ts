@@ -42,7 +42,8 @@ describe('public ranked-cohort reader contract', () => {
     'app/api/rankings/live/route.ts',
     'app/api/v2/rankings/route.ts',
     'app/api/v3/route.ts',
-    'app/api/export/rankings/route.ts',
+    // The homepage SSR reads through getLeaderboard (asserted below).
+    'lib/data/trader/queries.ts',
     'app/api/sidebar/top-traders/route.ts',
     'app/api/traders/[handle]/badges/route.ts',
     'app/(quiz)/quiz/result/page.tsx',
@@ -88,7 +89,6 @@ describe('public ranked-cohort reader contract', () => {
     'app/api/rankings/live/route.ts',
     'app/api/v2/rankings/route.ts',
     'app/api/v3/route.ts',
-    'app/api/export/rankings/route.ts',
     'app/api/sidebar/top-traders/route.ts',
     'app/api/traders/[handle]/badges/route.ts',
     'app/(quiz)/quiz/result/page.tsx',

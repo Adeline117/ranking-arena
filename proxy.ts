@@ -73,8 +73,86 @@ const PUBLIC_ROUTES = [
   '/api/comments', // GET 请求允许
 ]
 
-// 需要跳过的路由
-const SKIP_ROUTES = ['/_next', '/favicon.ico', '/api/health', '/api/cron']
+// 需要跳过的路由前缀
+const SKIP_ROUTE_PREFIXES = ['/_next', '/favicon.ico', '/api/health']
+
+// Next Proxy runs before the checked-in `/api/v1/*` rewrite. Keep both the
+// canonical and versioned cron namespaces outside middleware so each cron
+// route owns its authentication-first response contract.
+const CRON_ROUTE_PREFIXES = ['/api/cron', '/api/v1/cron'] as const
+
+// Exact route handoffs that own their response contract. In particular, the
+// retired Phemex acquisition route, referral-attribution hold, direct admin
+// subscription-sync hold, public avatar compatibility route, public egress
+// holds, and code-quality evaluator hold must reply before any global Redis
+// rate limit or bot guard can intervene.
+const SKIP_EXACT_ROUTES = new Set(['/api/proxy/phemex'])
+const AVATAR_PROXY_BYPASS_PATHS = new Set(['/api/avatar', '/api/v1/avatar'])
+const ADMIN_SUBSCRIPTION_SYNC_BYPASS_PATHS = new Set([
+  '/api/admin/sync-subscription',
+  '/api/v1/admin/sync-subscription',
+])
+const PUBLIC_EGRESS_BYPASS_PATHS = new Set([
+  '/api/cdn-proxy',
+  '/api/v1/cdn-proxy',
+  '/api/market/alpha',
+  '/api/v1/market/alpha',
+  '/api/market/arbitrage',
+  '/api/v1/market/arbitrage',
+  '/api/market/candles',
+  '/api/v1/market/candles',
+  '/api/market/defi',
+  '/api/v1/market/defi',
+  '/api/market/exchanges',
+  '/api/v1/market/exchanges',
+  '/api/market/overview',
+  '/api/v1/market/overview',
+  '/api/market/futures',
+  '/api/v1/market/futures',
+  '/api/market/fear-greed',
+  '/api/v1/market/fear-greed',
+  '/api/market/sparklines',
+  '/api/v1/market/sparklines',
+  '/api/market/sectors',
+  '/api/v1/market/sectors',
+  '/api/posts/link-preview',
+  '/api/v1/posts/link-preview',
+])
+// Parameterized holds cannot be enumerated in the exact-path Set. Market holds
+// deliberately accept only one non-empty route segment. Attestation verification
+// and EVM portfolio acquisition are narrower still: they hand off only a literal
+// bytes32 UID or lowercase-0x 40-hex address, so neighboring namespaces and
+// descendants still receive normal proxy handling.
+const PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS = [
+  /^\/api\/market\/coin\/[^/]+$/,
+  /^\/api\/v1\/market\/coin\/[^/]+$/,
+  /^\/api\/market\/ohlc\/[^/]+$/,
+  /^\/api\/v1\/market\/ohlc\/[^/]+$/,
+  /^\/api\/attestation\/0x[a-fA-F0-9]{64}$/,
+  /^\/api\/v1\/attestation\/0x[a-fA-F0-9]{64}$/,
+  /^\/api\/portfolio\/0x[a-fA-F0-9]{40}$/,
+  /^\/api\/v1\/portfolio\/0x[a-fA-F0-9]{40}$/,
+] as const
+const REFERRAL_PROGRAM_BYPASS_PATHS = new Set([
+  '/api/referral',
+  '/api/referral/apply',
+  '/api/v1/referral',
+  '/api/v1/referral/apply',
+])
+const INTERNAL_NOTIFICATION_DELIVERY_BYPASS_PATHS = new Set([
+  '/api/notifications/send',
+  '/api/v1/notifications/send',
+])
+const RANKINGS_EXPORT_BYPASS_PATHS = new Set(['/api/export/rankings', '/api/v1/export/rankings'])
+const HEALTH_EVALUATE_REPORT_BYPASS_PATHS = new Set([
+  '/api/health/evaluate-report',
+  '/api/v1/health/evaluate-report',
+])
+// The canonical health namespace already skips the proxy, but the versioned
+// alias reaches it before Next.js rewrites. Hand both methods directly to the
+// route-owned authentication-first V1 availability holds: historical GET and
+// write POST each retain a narrow, independent source boundary.
+const HEALTH_HEARTBEAT_BYPASS_PATHS = new Set(['/api/health/heartbeat', '/api/v1/health/heartbeat'])
 
 // ============================================
 // Rate Limiting
@@ -257,8 +335,59 @@ function isProtectedRoute(pathname: string, method: string): boolean {
 /**
  * 检查是否应跳过代理
  */
-function shouldSkip(pathname: string): boolean {
-  return SKIP_ROUTES.some((route) => pathname.startsWith(route))
+export function isCronProxyBypassPath(pathname: string): boolean {
+  return CRON_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
+
+export function isAvatarProxyBypassPath(pathname: string): boolean {
+  return AVATAR_PROXY_BYPASS_PATHS.has(pathname)
+}
+
+export function isAdminSubscriptionSyncProxyBypassPath(pathname: string): boolean {
+  return ADMIN_SUBSCRIPTION_SYNC_BYPASS_PATHS.has(pathname)
+}
+
+export function isPublicEgressProxyBypassPath(pathname: string): boolean {
+  return (
+    PUBLIC_EGRESS_BYPASS_PATHS.has(pathname) ||
+    PUBLIC_EGRESS_DYNAMIC_PATH_PATTERNS.some((pattern) => pattern.test(pathname))
+  )
+}
+
+export function isReferralProgramProxyBypassPath(pathname: string): boolean {
+  return REFERRAL_PROGRAM_BYPASS_PATHS.has(pathname)
+}
+
+export function isInternalNotificationDeliveryProxyBypassPath(pathname: string): boolean {
+  return INTERNAL_NOTIFICATION_DELIVERY_BYPASS_PATHS.has(pathname)
+}
+
+export function isRankingsExportProxyBypassPath(pathname: string): boolean {
+  return RANKINGS_EXPORT_BYPASS_PATHS.has(pathname)
+}
+
+export function isHealthEvaluateReportProxyBypassPath(pathname: string): boolean {
+  return HEALTH_EVALUATE_REPORT_BYPASS_PATHS.has(pathname)
+}
+
+export function isHealthHeartbeatProxyBypassPath(pathname: string): boolean {
+  return HEALTH_HEARTBEAT_BYPASS_PATHS.has(pathname)
+}
+
+export function shouldSkip(pathname: string): boolean {
+  return (
+    SKIP_EXACT_ROUTES.has(pathname) ||
+    isAvatarProxyBypassPath(pathname) ||
+    isAdminSubscriptionSyncProxyBypassPath(pathname) ||
+    isPublicEgressProxyBypassPath(pathname) ||
+    isReferralProgramProxyBypassPath(pathname) ||
+    isInternalNotificationDeliveryProxyBypassPath(pathname) ||
+    isRankingsExportProxyBypassPath(pathname) ||
+    isHealthEvaluateReportProxyBypassPath(pathname) ||
+    isHealthHeartbeatProxyBypassPath(pathname) ||
+    SKIP_ROUTE_PREFIXES.some((route) => pathname.startsWith(route)) ||
+    isCronProxyBypassPath(pathname)
+  )
 }
 
 /**
@@ -415,7 +544,20 @@ function ipFloorClientIp(req: NextRequest): string {
 }
 
 async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextResponse | null> {
-  if (!pathname.startsWith('/api/') || pathname.startsWith('/api/cron/')) return null
+  if (
+    !pathname.startsWith('/api/') ||
+    isCronProxyBypassPath(pathname) ||
+    isAvatarProxyBypassPath(pathname) ||
+    isAdminSubscriptionSyncProxyBypassPath(pathname) ||
+    isPublicEgressProxyBypassPath(pathname) ||
+    isReferralProgramProxyBypassPath(pathname) ||
+    isInternalNotificationDeliveryProxyBypassPath(pathname) ||
+    isRankingsExportProxyBypassPath(pathname) ||
+    isHealthEvaluateReportProxyBypassPath(pathname) ||
+    isHealthHeartbeatProxyBypassPath(pathname)
+  ) {
+    return null
+  }
   const rl = getIpFloorRatelimit()
   if (!rl) return null // fail-open
   const ip = ipFloorClientIp(req)

@@ -8,18 +8,17 @@
  * - Privy/Web3 signup routes new users straight to /onboarding and never touched
  *   the referral apply path at all.
  *
- * The fix: capture `?ref` universally (even pre-hydration on the homepage — see
- * the inline <script> in app/layout.tsx) into localStorage, then a single
- * unified trigger (ReferralAutoApply) applies it once after ANY signup path.
- *
- * IMPORTANT — the pre-hydration inline script in app/layout.tsx duplicates this
- * key + charset + JSON shape by hand (it cannot import this module). If you
- * change PENDING_REF_KEY, REF_CODE_PATTERN, or the stored `{ code, ts }` shape
- * here, you MUST update that inline script in lockstep.
+ * V1 deliberately suspends capture and application. The helpers remain so a
+ * separately reviewed re-publication can restore an explicit browser flow, but
+ * every read and write is a no-op while the checked-in publication hold is
+ * active. The old storage namespace is intentionally retired, so a future
+ * publication cannot silently replay a value captured before this hold.
  */
 
-/** localStorage key holding the pending referral. Keep in sync with app/layout.tsx inline script. */
-export const PENDING_REF_KEY = 'arena_pending_ref'
+import { isV1ReferralProgramPublished } from './v1-publication'
+
+/** New namespace deliberately excludes legacy pre-V1 capture records. */
+export const PENDING_REF_KEY = 'arena_pending_referral_v1'
 
 /** Pending referral is valid for 30 days after capture. */
 const PENDING_REF_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -27,8 +26,8 @@ const PENDING_REF_TTL_MS = 30 * 24 * 60 * 60 * 1000
 /**
  * Allowed referral code charset: 2–64 chars of [A-Za-z0-9_-].
  * Codes are either a `referral_code` or a user `handle`; this rejects junk /
- * injection attempts before we ever store or send them. Keep in sync with the
- * inline script in app/layout.tsx.
+ * injection attempts before a separately reviewed published flow could store
+ * or send them.
  */
 const REF_CODE_PATTERN = /^[A-Za-z0-9_-]{2,64}$/
 
@@ -43,6 +42,7 @@ function isValidCode(code: string | null | undefined): code is string {
 
 /** Read + TTL-check the stored pending ref. Returns null (and does NOT delete) on miss/expiry/corruption. */
 function readPending(): PendingRef | null {
+  if (!isV1ReferralProgramPublished()) return null
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(PENDING_REF_KEY)
@@ -64,6 +64,7 @@ function readPending(): PendingRef | null {
  * SSR-safe and never throws.
  */
 export function capturePendingReferral(search?: string): void {
+  if (!isV1ReferralProgramPublished()) return
   if (typeof window === 'undefined') return
   try {
     const source = search ?? window.location.search
@@ -90,6 +91,7 @@ export function peekPendingReferral(): string | null {
  * transient network failure leaves the ref in place for a retry next mount.
  */
 export function consumePendingReferral(): string | null {
+  if (!isV1ReferralProgramPublished()) return null
   const pending = readPending()
   if (typeof window !== 'undefined') {
     try {

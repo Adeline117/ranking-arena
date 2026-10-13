@@ -22,12 +22,6 @@ interface CoinRow {
   image?: string
 }
 
-interface ExchangeInfo {
-  id: string
-  name: string
-  trade_volume_24h_btc: number
-}
-
 function CardWrapper({
   title,
   linkText,
@@ -256,37 +250,6 @@ function CoinItem({
   )
 }
 
-function formatBTC(value: number): string {
-  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M BTC`
-  if (value >= 1e3) return `${(value / 1e3).toFixed(1)}K BTC`
-  return `${value.toFixed(0)} BTC`
-}
-
-function VolumeBar({ value, max }: { value: number; max: number }) {
-  const pct = max > 0 ? (value / max) * 100 : 0
-  return (
-    <div
-      style={{
-        width: 80,
-        height: 6,
-        background: tokens.colors.bg.tertiary,
-        borderRadius: tokens.radius.full,
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          width: `${pct}%`,
-          height: '100%',
-          background: tokens.gradient.purple,
-          borderRadius: tokens.radius.full,
-          transition: `width ${tokens.transition.slow}`,
-        }}
-      />
-    </div>
-  )
-}
-
 function useTimeSince(timestamp: number | null, t: (key: string) => string): string {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -364,25 +327,6 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
     retry: false,
   })
 
-  // Exchange data — refreshes every 60s
-  const {
-    data: exchangeData,
-    isLoading: exchangesLoading,
-    isError: exchangesError,
-    refetch: refetchExchanges,
-  } = useQuery<ExchangeInfo[]>({
-    queryKey: ['market-exchanges'],
-    queryFn: async () => {
-      const json = await apiFetch<ExchangeInfo[]>('/api/market/exchanges')
-      return Array.isArray(json) ? json.slice(0, 5) : []
-    },
-    refetchInterval: 60_000,
-    staleTime: STALE_STANDARD,
-    refetchOnWindowFocus: false,
-    retry: false,
-  })
-
-  const exchanges = exchangeData ?? []
   const lastFetchedAt = dataUpdatedAt || null
   const hasSpotFallback = !!spotData?.length
 
@@ -431,9 +375,6 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
     }
     return { gainers: g, losers: l }
   }, [marketData, spotData])
-
-  const maxVol =
-    exchanges.length > 0 ? Math.max(...exchanges.map((e) => e.trade_volume_24h_btc)) : 0
 
   return (
     <div>
@@ -530,96 +471,19 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
           )}
         </CardWrapper>
         <CardWrapper title={t('fundFlow')} accentColor={tokens.gradient.purple}>
-          {exchangesLoading ? (
-            <div style={{ height: 160 }} className="skeleton" />
-          ) : exchangesError ? (
-            <ErrorState
-              title={t('marketDataError')}
-              description={t('loadFailedRetryShort')}
-              retry={() => void refetchExchanges()}
-              variant="compact"
-            />
-          ) : exchanges.length === 0 ? (
-            <div
-              style={{
-                height: 160,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: tokens.colors.text.tertiary,
-                fontSize: tokens.typography.fontSize.sm,
-              }}
-            >
-              {t('noDataGeneric')}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {exchanges.map((ex, i) => (
-                <div
-                  key={ex.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                    borderRadius: tokens.radius.md,
-                    background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
-                    minHeight: 40,
-                  }}
-                >
-                  <span
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}
-                  >
-                    <span
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: tokens.radius.sm,
-                        background: tokens.colors.bg.tertiary,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        // eslint-disable-next-line no-restricted-syntax -- off-scale by design
-                        fontSize: 10,
-                        fontWeight: tokens.typography.fontWeight.bold,
-                        color: tokens.colors.text.tertiary,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {i + 1}
-                    </span>
-                    <span
-                      style={{
-                        fontWeight: tokens.typography.fontWeight.semibold,
-                        color: tokens.colors.text.primary,
-                        fontSize: tokens.typography.fontSize.sm,
-                      }}
-                    >
-                      {ex.name}
-                    </span>
-                  </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-                    <VolumeBar value={ex.trade_volume_24h_btc} max={maxVol} />
-                    <span
-                      style={
-                        {
-                          color: tokens.colors.text.secondary,
-                          fontFamily: 'var(--font-mono, monospace)',
-                          fontSize: tokens.typography.fontSize.xs,
-                          fontVariantNumeric: 'tabular-nums',
-                          minWidth: 80,
-                          textAlign: 'right',
-                          letterSpacing: '-0.3px',
-                        } as React.CSSProperties
-                      }
-                    >
-                      {formatBTC(ex.trade_volume_24h_btc)}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <div
+            role="status"
+            style={{
+              height: 160,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: tokens.colors.text.tertiary,
+              fontSize: tokens.typography.fontSize.sm,
+            }}
+          >
+            {t('dataUnavailable')}
+          </div>
         </CardWrapper>
       </div>
     </div>

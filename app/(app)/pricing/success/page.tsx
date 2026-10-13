@@ -450,7 +450,6 @@ function PaymentSuccessContent() {
                 {[
                   { href: '/', label: t('proStep1') },
                   { href: '/', label: t('proStep2') },
-                  { href: '/settings', label: t('proStep3') },
                 ].map((step, i) => (
                   <Link key={i} href={step.href} style={{ textDecoration: 'none' }}>
                     <Box
@@ -492,35 +491,6 @@ function PaymentSuccessContent() {
                 ))}
               </Box>
             </Box>
-
-            {/* 推荐好友交叉销售 */}
-            <Link href="/referral" style={{ textDecoration: 'none' }}>
-              <Box
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: tokens.spacing[3],
-                  padding: tokens.spacing[4],
-                  marginBottom: tokens.spacing[6],
-                  borderRadius: tokens.radius.xl,
-                  background: 'var(--color-bg-secondary)',
-                  border: '1px solid var(--color-border-primary)',
-                  textAlign: 'left',
-                }}
-              >
-                <Box style={{ flex: 1 }}>
-                  <Text size="sm" weight="bold">
-                    {t('inviteFriendsTitle')}
-                  </Text>
-                  <Text size="xs" color="secondary">
-                    {t('inviteFriendsDesc')}
-                  </Text>
-                </Box>
-                <Text size="sm" weight="bold" style={{ color: 'var(--color-accent-primary)' }}>
-                  {t('inviteFriendsCta')} →
-                </Text>
-              </Box>
-            </Link>
 
             {/* 按钮：主操作=第一价值动作（排行榜），次操作=随便逛逛 */}
             <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>

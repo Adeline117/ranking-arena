@@ -1,71 +1,53 @@
-jest.mock('next/server', () => {
-  class MockHeaders {
-    private _headers: Record<string, string> = {}
-    set(key: string, value: string) { this._headers[key] = value }
-    get(key: string) { return this._headers[key] }
-  }
-  class MockNextResponse {
-    _body: unknown; status: number; headers: MockHeaders
-    constructor(body?: unknown, init: { status?: number } = {}) {
-      this._body = body; this.status = init.status || 200; this.headers = new MockHeaders()
-    }
-    async json() { return this._body }
-    static json(data: unknown, init?: { status?: number }) { return new MockNextResponse(data, init) }
-  }
-  return { NextResponse: MockNextResponse }
-})
+/** @jest-environment node */
 
-const mockLimit = jest.fn()
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({
-    from: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      order: jest.fn().mockReturnThis(),
-      limit: mockLimit,
-    })),
-  }),
-}))
-
-jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: jest.fn(() => ({
-    from: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      order: jest.fn().mockReturnThis(),
-      limit: mockLimit,
-    })),
-  })),
-}))
-
-jest.mock('@/lib/cache', () => ({
-  getOrSetWithLock: jest.fn(async (_key: string, fetcher: () => unknown) => fetcher()),
-}))
-
-const originalFetch = global.fetch
-
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  V1_PUBLIC_EGRESS_NOT_PUBLISHED_CODE,
+  V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+} from '@/lib/security/v1-public-egress-publication'
 import { GET } from '../route'
 
-describe('GET /api/market/futures', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
-    mockLimit.mockResolvedValue({
-      data: [
-        { symbol: 'BTCUSDT', platform: 'binance', funding_rate: 0.0001, funding_time: '2024-01-01' },
-      ],
+const routeSource = readFileSync(join(process.cwd(), 'app/api/market/futures/route.ts'), 'utf8')
+
+function codeOnly(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
+}
+
+function expectNoStore(response: Response): void {
+  for (const [header, value] of Object.entries(V1_PUBLIC_EGRESS_NO_STORE_HEADERS)) {
+    expect(response.headers.get(header)).toBe(value)
+  }
+}
+
+describe('GET /api/market/futures V1 containment', () => {
+  it('returns the same fixed no-store 410 for a noisy canonical request', async () => {
+    const request = new Request(
+      'https://example.com/api/market/futures?symbol=BTCUSDT&include=funding,open-interest&cache=1'
+    )
+    const response = (GET as unknown as (input: Request) => Response)(request)
+
+    expect(response.status).toBe(410)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Public outbound fetch is temporarily unavailable during V1 verification.',
+      code: V1_PUBLIC_EGRESS_NOT_PUBLISHED_CODE,
     })
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => [
-        { symbol: 'btc', current_price: 50000, price_change_percentage_24h: 2.5, total_volume: 1e9 },
-      ],
-    }) as unknown as typeof fetch
+    expectNoStore(response)
   })
 
-  afterEach(() => { global.fetch = originalFetch })
+  it('has no request, data-store, cache, or market-provider acquisition capability', () => {
+    const route = codeOnly(routeSource)
 
-  it('returns 200 with aggregated futures data', async () => {
-    const res = await GET()
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(Array.isArray(body)).toBe(true)
+    expect(GET).toHaveLength(0)
+    for (const forbidden of [
+      /\b(?:NextRequest|request|searchParams|new\s+URL)\b/,
+      /\bfetch\s*\(/,
+      /\b(?:logger|cache|Redis|ioredis)\b/,
+      /\b(?:getOrSetWithLock|checkRateLimit|RateLimitPresets|Ratelimit)\b/,
+      /\b(?:getSupabaseAdmin|supabase|funding_rates|open_interest)\b/,
+      /\b(?:computeFuturesData|SYMBOL_TO_CG_ID|CoinGecko)\b|coingecko\.com/,
+    ]) {
+      expect(route).not.toMatch(forbidden)
+    }
   })
 })

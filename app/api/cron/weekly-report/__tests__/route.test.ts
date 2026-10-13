@@ -11,14 +11,31 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
 
+// V1 closes every withCron route with a fixed 410 (asserted in
+// lib/api/__tests__/with-cron.test.ts). Open the gate here so the report logic
+// keeps coverage for the day an owner-approved release reopens this cron.
+// Authentication stays real: only the publication hold is lifted.
+jest.mock('@/lib/cron/v1-execution-publication', () => {
+  const { NextResponse } = jest.requireActual('next/server')
+  const { verifyCronSecret } = jest.requireActual('@/lib/auth/verify-service-auth')
+  return {
+    v1CronExecutionGate: (request: Request) =>
+      verifyCronSecret(request)
+        ? null
+        : NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+  }
+})
 
 const mockFrom = jest.fn()
 const mockSupabaseAdmin = { from: mockFrom }
@@ -37,7 +54,11 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
       { job_name: 'compute-leaderboard', total_runs: 40, error_count: 0, success_rate: 1.0 },
     ]),
     getRecentFailures: jest.fn().mockResolvedValue([
-      { job_name: 'batch-fetch-traders-a', error: 'timeout', created_at: new Date().toISOString() },
+      {
+        job_name: 'batch-fetch-traders-a',
+        error: 'timeout',
+        created_at: new Date().toISOString(),
+      },
     ]),
   },
 }))
@@ -166,18 +187,14 @@ describe('GET /api/cron/weekly-report', () => {
       { job_name: 'failing-job', total_runs: 100, error_count: 50, success_rate: 0.5 },
     ])
 
-    mockFrom.mockImplementation(() =>
-      chainable({ data: [], error: null, count: 0 })
-    )
+    mockFrom.mockImplementation(() => chainable({ data: [], error: null, count: 0 }))
 
     const res = await GET(createCronRequest(CRON_SECRET))
     const body = await res.json()
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(mockSendAlert).toHaveBeenCalledWith(
-      expect.objectContaining({ level: 'warning' })
-    )
+    expect(mockSendAlert).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }))
   })
 
   // ---- Error handling ------------------------------------------------------

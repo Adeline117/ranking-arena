@@ -7,6 +7,94 @@ state must be established only through a separately approved owner inventory. On
 a separately recorded owner GO and reviewed release plan can authorize a host-side
 operation.
 
+## Checked-in V1 ingest source hold
+
+`V1_INGEST_EXECUTION_PUBLISHED=false` is a fixed checked-in source boundary, not an
+environment switch. It holds the native ingest command path: `worker/src/ingest-worker.ts`
+exits before dotenv/runtime dependency initialization; the scheduler and Redis connection
+end before DB, ioredis, or BullMQ work; Tier-C and first-party bridges admit no new
+ingest; and the covered direct ingest scripts do not initiate work. `POST
+/api/trader/onchain-enrich` is a fixed `410 INGEST_EXECUTION_NOT_PUBLISHED` response
+with three `no-store` headers before body parsing, rate limiting, provider, or
+serving-data work.
+
+The public profile `core` and `records` routes retain their warm serving-read branches.
+When they need Tier-C, the held bridge returns pending before bridge-provider, ioredis,
+BullMQ, or result-queue access. Their general public rate limiter may still use Redis,
+so this does not mean those routes make no Redis reads. The gate is source-only: it
+does not stop, inspect, or prove a running host, queue, or external schedule.
+The checked-in legacy-refresh boundary, including the client-safe fixed-false
+`V1_LEGACY_REFRESH_JOBS_PUBLISHED` marker, separately retires legacy queue admission
+and consumption: `batch-discover` is auth-first `401/410`, `batch-5min` is separately
+covered by the direct service-auth cron ingress boundary below, and public refresh never
+admits or exposes a job. Legacy
+proxy/import paths remain outside that refresh-job containment unit.
+
+The same fixed, non-environment `V1_CRON_EXECUTION_PUBLISHED=false` source gate
+separately holds exactly ten direct service-auth cron ingress handlers: `GET
+/api/cron/batch-5min`, `GET /api/cron/check-data-freshness`, `GET
+/api/cron/cleanup-data`, `GET /api/cron/cleanup-stuck-logs`, `GET
+/api/cron/detect-contracts`, `GET`/`POST /api/cron/fetch-funding-rates`, `GET`/`POST
+/api/cron/fetch-market-data`, `GET`/`POST /api/cron/fetch-open-interest`, `GET
+/api/cron/qualify-referrals`, and `GET /api/cron/smoke-test`. Missing or invalid
+service authentication returns `401`; a valid service secret returns `410
+CRON_EXECUTION_NOT_PUBLISHED`. Both responses carry `Cache-Control`,
+`CDN-Cache-Control`, and `Vercel-CDN-Cache-Control` `no-store` headers and return
+before query/body parsing, locks, `PipelineLogger`, database, cache, provider, or
+network work. This bounded source-only list does not classify other cron routes and
+cannot stop, inspect, or prove an existing deployed scheduler, host, queue, or worker.
+
+The separate legacy proxy/import source hold is intentionally limited to `GET
+/api/proxy/phemex`, `cloudflare-worker/src/index.ts`,
+`scripts/import/import_all_platforms.mjs`, `scripts/import/refresh.sh`,
+`scripts/import/import-all-blocked.sh`, `scripts/import/run_hl_enrichment.sh`,
+`scripts/vps-deploy/scraper-v16-parallel.js`, `scripts/vps-deploy/arena-proxy.mjs`,
+`scripts/archive/test-vps-scrapers.ts`, and
+`scripts/archive/verify-data-accuracy.mjs`. Phemex authenticates first, then returns
+fixed `410 LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` with three `no-store` headers;
+there is no URL/query parsing, upstream fetch, or logging after the hold. The checked-in
+Cloudflare Worker returns fixed `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED` with the same
+headers and no upstream fetch. The named scripts report `RETIRED` and exit `2` before
+proxy, browser, import, or host work. This does not stop, inspect, or prove a deployed
+VPS proxy/scraper, Cloudflare Worker, host process, queue, or external schedule. It
+does not include the separately retired `avatar-mirror` worker or the separate
+avatar-proxy route below. Other avatar-related API paths/helpers, UI/read RPCs,
+adapters, and unlisted writers remain outside this proxy/import review.
+
+A separate V1 avatar-proxy source hold covers anonymous `GET /api/avatar` and its
+`/api/v1/avatar` rewrite alias. Both resolve to the same fixed `410` response with all
+three `no-store` headers (`Cache-Control`, `CDN-Cache-Control`, and
+`Vercel-CDN-Cache-Control`) before query parsing, DNS lookup, upstream fetch, or
+logging. The matching proxy bypass only preserves that anonymous response contract; it
+does not authorize an upstream proxy. Registered helpers and known UI/OG consumers no
+longer generate proxy requests: a proxy-required origin without a mirror uses local,
+inline, or default fallback. This is not a claim that avatar browser/network activity
+is zero: existing Supabase mirrors and direct allowed raw-avatar URLs may still render,
+while other avatar-related API paths/helpers, adapters, and unlisted writers remain
+outside. This source-only change cannot clear old CDN cache, stop older deployed code,
+or prove external state.
+
+The canonical `GET /api/cron/backfill-avatars` route and its
+`/api/v1/cron/backfill-avatars` rewrite alias resolve to the same source-only
+tombstone handler. It authenticates first: missing or invalid service authentication
+returns `401`; valid authentication returns `410 CRON_EXECUTION_NOT_PUBLISHED`. Both
+responses carry three `no-store` headers and return before parameter parsing, database,
+logging, or upstream fetch. This is not evidence that a host, external scheduler, or
+healthcheck is deployed, stopped, or healthy. The separate avatar-proxy route, other
+avatar-related API paths/helpers, UI/read RPCs, adapters, and unlisted writers remain
+outside this handler's bounded review; its separate `avatar-mirror` worker hold does
+not change that route scope.
+
+The checked-in `avatar-mirror` worker execution is separately source-only retired: the
+processor is a no-op, its scheduler no longer produces avatar-mirror jobs, and a legacy
+queued avatar-mirror job returns as a no-op within `route()` before that handler calls
+`getConnection()`, acquires its per-job source lease, or loads a processor. This makes
+no claim that the surrounding worker or BullMQ has not already established or used
+shared Redis, or acquired a job lock. It cannot stop, inspect, or prove an
+already-running worker, Redis, host process, or schedule. It does not classify
+the separate avatar-proxy route or other avatar-related API paths/helpers, UI/read
+RPCs, adapters, or unlisted writers.
+
 Arena's ingest fleet is designed to serve customer-facing ranking freshness from two
 nodes sharing one Supabase database and Upstash Redis. A source's
 `arena.sources.fetch_region` selects a region-affine BullMQ queue.
@@ -92,12 +180,14 @@ Until that protocol is deployed to both nodes, do not claim that the heartbeat
 roster alone rules out a manually started or malicious duplicate process. The route
 is not an authorization to schedule, restart, or inspect a worker during V1.
 
-## On-chain enrichment owner
+## On-chain enrichment containment
 
-`maint:onchain-enrich` was historically reconciled every 12 hours on the local
-BullMQ queue. It must remain unscheduled during V1. The retired Mac crontab calls
-to `scripts/onchain-enrich-web3.mts` must stay disabled because the two paths have
-no shared lock and can duplicate provider spend and writes.
+`maint:onchain-enrich` was historically reconciled every 12 hours on the local BullMQ
+queue. In the checked-in V1 source, the fixed ingest gate makes scheduler reconciliation
+return before DB/BullMQ work, the native worker entry does not start, the direct script
+does not run, and `POST /api/trader/onchain-enrich` is the fixed 410/no-store contract
+above. This does not remove, stop, or prove any scheduler, crontab, worker, provider
+spend, or write path outside this checkout.
 
 ## SG dependency incident boundary
 

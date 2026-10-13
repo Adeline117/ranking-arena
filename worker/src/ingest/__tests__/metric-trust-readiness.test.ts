@@ -200,18 +200,19 @@ describe('ingest worker metric-trust startup gate', () => {
     )
   })
 
-  it('installs process handlers before the first await and gates every native setup phase', () => {
+  it('loads deferred runtime behind the entry gate, then installs handlers before native setup', () => {
     const source = readFileSync(join(process.cwd(), 'worker/src/ingest-worker.ts'), 'utf8')
     const main = source.slice(source.indexOf('async function main(): Promise<void>'))
+    const runtimeLoad = main.indexOf('await initializeRuntime()')
     const handlers = main.indexOf('installProcessHandlers()')
     const firstAwaitLine = /^\s*await\b/m.exec(main)
     const firstAwait =
       firstAwaitLine === null ? -1 : firstAwaitLine.index + firstAwaitLine[0].indexOf('await')
     const metricGate = main.indexOf('await assertMetricTrustWorkerReadiness()')
 
-    expect(handlers).toBeGreaterThan(-1)
-    expect(handlers).toBeLessThan(firstAwait)
-    expect(metricGate).toBe(firstAwait)
+    expect(runtimeLoad).toBe(firstAwait)
+    expect(handlers).toBeGreaterThan(runtimeLoad)
+    expect(metricGate).toBeGreaterThan(handlers)
 
     // This is the source-level construction boundary. startup-gate.test.ts
     // executes the callbacks and proves their heartbeat/reconcile/start/ready order.
