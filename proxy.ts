@@ -509,15 +509,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url, 308)
   }
 
-  // Redirect logged-in users away from /login
-  if (pathname === '/login') {
-    const hasSession = hasSessionCookie(request)
-    if (hasSession) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/'
-      return NextResponse.redirect(url)
-    }
-  }
+  // NOTE: no server-side "logged-in → away from /login" redirect. The client
+  // session lives in localStorage ('arena-auth'); a lingering sb-*-auth-token
+  // cookie is not proof of a live session, and the redirect dropped
+  // ?returnUrl= and broke ?addAccount=true. LoginPageClient handles an
+  // existing session (INITIAL_SESSION) and honours a safe returnUrl.
 
   // 处理 CORS 预检请求
   if (method === 'OPTIONS') {
