@@ -6684,6 +6684,7 @@ const ko = {
   rankingsRefreshingDesc:
     '최신 거래소 데이터가 검증을 통과한 후에만 랭킹을 게시합니다. 잠시 후 다시 확인해 주세요.',
   rankingsEmptyPeriodTitle: '이 기간에 게시된 랭킹이 아직 없습니다',
+  pricingLifetimeMemberLabel: '평생 Pro 회원입니다',
 } as const
 
 export default ko

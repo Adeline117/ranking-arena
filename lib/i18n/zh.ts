@@ -6629,6 +6629,7 @@ const zh = {
   rankingsRefreshingTitle: '排行榜数据更新中',
   rankingsRefreshingDesc: '最新交易所数据通过校验后才会发布排名，请稍后再来查看。',
   rankingsEmptyPeriodTitle: '该周期暂无已发布的排名',
+  pricingLifetimeMemberLabel: '您已是终身 Pro 会员',
 } as const
 
 export default zh
