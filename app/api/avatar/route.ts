@@ -4,54 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { lookup as dnsLookup } from 'node:dns/promises'
 import logger from '@/lib/logger'
 import { getCorsOrigin } from '@/lib/utils/cors'
+import { safeFetch, readBodyCapped, SafeFetchError } from '@/lib/utils/safe-fetch'
 // Rate limiting removed — avatars are read-only cacheable resources with
 // domain allowlist + SSRF protection. See GET handler comment for rationale.
-
-/** Reject IPv4/IPv6 addresses that point at private, loopback, link-local, or cloud-metadata ranges. */
-function isPrivateIP(ip: string): boolean {
-  // IPv4
-  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
-  if (v4) {
-    const a = Number(v4[1])
-    const b = Number(v4[2])
-    if (a === 0) return true // 0.0.0.0/8
-    if (a === 10) return true // 10.0.0.0/8 private
-    if (a === 100 && b >= 64 && b <= 127) return true // 100.64.0.0/10 CGNAT
-    if (a === 127) return true // 127.0.0.0/8 loopback
-    if (a === 169 && b === 254) return true // 169.254.0.0/16 link-local + cloud metadata
-    if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12 private
-    if (a === 192 && b === 0) return true // 192.0.0.0/24 IETF
-    if (a === 192 && b === 168) return true // 192.168.0.0/16 private
-    if (a >= 224) return true // 224.0.0.0/4 multicast + reserved
-    return false
-  }
-
-  // IPv6 (normalize to lowercase, strip brackets)
-  const v6 = ip.toLowerCase().replace(/^\[|\]$/g, '')
-  if (v6.includes(':')) {
-    if (v6 === '::' || v6 === '::1') return true // unspecified, loopback
-    if (
-      v6.startsWith('fe80:') ||
-      v6.startsWith('fe8') ||
-      v6.startsWith('fe9') ||
-      v6.startsWith('fea') ||
-      v6.startsWith('feb')
-    )
-      return true // fe80::/10 link-local
-    if (v6.startsWith('fc') || v6.startsWith('fd')) return true // fc00::/7 unique-local
-    if (v6.startsWith('ff')) return true // ff00::/8 multicast
-    // IPv4-mapped IPv6: ::ffff:127.0.0.1, ::ffff:169.254.169.254
-    const mapped = v6.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
-    if (mapped) return isPrivateIP(mapped[1])
-    // 2002::/16 6to4 — could tunnel to private, treat as suspicious
-    if (v6.startsWith('2002:')) return true
-    return false
-  }
-  return false
-}
 
 // Avatar proxy is a read-only, cacheable operation — do NOT force-dynamic.
 // Removing force-dynamic allows Vercel's CDN to cache each unique avatar URL
@@ -79,10 +36,50 @@ const ALLOWED_IMAGE_TYPES = new Set([
   'image/gif',
   'image/avif',
 ])
-function safeImageContentType(upstream: string | null): string {
-  if (!upstream) return 'image/png'
-  const base = upstream.split(';')[0].trim().toLowerCase()
-  return ALLOWED_IMAGE_TYPES.has(base) ? base : 'image/png'
+/**
+ * Decide the served Content-Type. Returns null when the payload is not a
+ * verifiable raster image — such responses must NOT be cached for a year.
+ * Upstream header wins when it is on the whitelist; otherwise (e.g. CDNs that
+ * label avatars application/octet-stream) fall back to magic-byte sniffing.
+ */
+function resolveImageContentType(upstream: string | null, bytes: Uint8Array): string | null {
+  const base = upstream ? upstream.split(';')[0].trim().toLowerCase() : ''
+  if (ALLOWED_IMAGE_TYPES.has(base)) return base
+  return sniffImageType(bytes)
+}
+
+function sniffImageType(b: Uint8Array): string | null {
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return 'image/png'
+  }
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+  if (b.length >= 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) {
+    return 'image/gif'
+  }
+  const ascii = (from: number, to: number) => String.fromCharCode(...b.slice(from, to))
+  if (b.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp'
+  if (b.length >= 12 && ascii(4, 8) === 'ftyp' && /^avi[fs]$/.test(ascii(8, 12))) {
+    return 'image/avif'
+  }
+  return null
+}
+
+// Hard cap on proxied avatar size, enforced while streaming (not only via
+// Content-Length) so chunked responses cannot exhaust function memory.
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024
+
+// Upstream timeout across all redirect hops + body read.
+const FETCH_TIMEOUT_MS = 5_000
+
+/** Exact hostname of THIS project's Supabase (storage avatars/covers). */
+function projectSupabaseHost(): string | null {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!raw) return null
+  try {
+    return new URL(raw).hostname.toLowerCase()
+  } catch {
+    return null
+  }
 }
 
 // 1x1 transparent PNG. Decoded once at module load.
@@ -111,6 +108,127 @@ function gracefulAvatarFallback(origin: string | null): NextResponse {
   })
 }
 
+// 允许代理的头像域名（后缀匹配）。Supabase 不在此列：只允许本项目的
+// 精确 Supabase 主机（见 projectSupabaseHost），避免任意 *.supabase.co 项目被代理。
+const ALLOWED_AVATAR_DOMAINS = [
+  // MEXC
+  'mocortech.com',
+  // Bitget
+  'bgstatic.com',
+  // Binance (多个 CDN 域名)
+  'bnbstatic.com',
+  'tylhh.net',
+  'nftstatic.com',
+  'bscdnweb.com',
+  'myqcloud.com',
+  // Bybit
+  'bybit.com',
+  'staticimg.com',
+  'bycsi.com',
+  // OKX
+  'okx.com',
+  'okcoin.com',
+  // KuCoin
+  'kucoin.com',
+  // Gate.io
+  'gateimg.com',
+  'gate.io',
+  // HTX (multiple CDN domains)
+  'htx.com',
+  'huobi.com',
+  'hbfile.net',
+  'hbimg.com',
+  // HTX uses specific CloudFront distributions — restrict to avoid open proxy
+  'd2uuskl05wy6ml.cloudfront.net',
+  'd1nhio0ox7pgb.cloudfront.net',
+  'd1x7dwosqaosdj.cloudfront.net',
+  // BingX
+  'bingx.com',
+  // CoinEx
+  'coinex.com',
+  'coinexstatic.com', // file.coinexstatic.com — CoinEx avatar CDN
+  // LBank
+  'lbkrs.com',
+  'lbank.com',
+  // Phemex
+  'phemex.com',
+  // Bitmart
+  'bitmart.com',
+  // XT
+  'xt.com',
+  'static-global.com',
+  // Pionex
+  'pionex.com',
+  // Weex
+  'weex.com',
+  'wexx.one',
+  // Blofin
+  'blofin.com',
+  // BingX CDN
+  'bb-os.com',
+  // BTCC
+  'btuserlog.com',
+  // GMX
+  'gmx.io',
+  // Bitfinex
+  'bitfinex.com',
+  // BTSE
+  'btse.com',
+  // dYdX
+  'dydx.exchange',
+  // WhiteBit
+  'whitebit.com',
+  // Toobit
+  'toobit.com',
+  // eToro
+  'etorostatic.com',
+  'etoro.com',
+  // Bitunix (img.bitunix.com serves bitunix trader avatars — actively served source)
+  'bitunix.com',
+  // Aevo
+  'aevo.xyz',
+  // Hyperliquid
+  'hyperliquid.xyz',
+  // Jupiter
+  'jup.ag',
+  // Gate.io / Gate CFD avatar CDNs (enumerated from arena.* serving rows,
+  // 2026-06-11) — gavatar.staticimgs.com + img.gatenft.io serve gate avatars.
+  'staticimgs.com',
+  'gatenft.io',
+  // OKX legacy avatar CDN (static.coinall.ltd)
+  'coinall.ltd',
+  // Long-tail serving-source avatar CDNs (enumerated from arena.traders,
+  // 2026-06-11). Each backs ≥1 active serving source's trader avatars.
+  'snidefender.com', // api-img.snidefender.com
+  'p2primeglobal.com', // public.p2primeglobal.com
+  'hotfullmoon.com', // nft.hotfullmoon.com
+  'saasexch.com', // public.saasexch.com
+  'cbearq.cn', // public.s.cbearq.cn
+  'dm1mubcttd115.cloudfront.net', // pinned exact subdomain (avoid open proxy)
+  // Our CDN
+  'arenafi.org',
+  // GitHub
+  'githubusercontent.com',
+  // Google
+  'googleusercontent.com',
+  'google.com',
+  // Avatar generators (for seed/community avatars)
+  'dicebear.com',
+  'pravatar.cc',
+  'robohash.org',
+  'randomuser.me',
+  'ui-avatars.com',
+]
+
+function isAllowedAvatarUrl(url: URL): boolean {
+  const host = url.hostname.toLowerCase()
+  const supabaseHost = projectSupabaseHost()
+  if (supabaseHost && host === supabaseHost) return true
+  // Strict suffix match: hostname must equal or be a subdomain of an allowed domain.
+  // e.g. "cdn.bnbstatic.com" matches "bnbstatic.com", but "evil-bnbstatic.com" does not.
+  return ALLOWED_AVATAR_DOMAINS.some((domain) => host === domain || host.endsWith('.' + domain))
+}
+
 export async function GET(request: NextRequest) {
   // NO rate limiting on avatar proxy. Rationale:
   // - Read-only, idempotent image proxy — no mutation, no abuse vector
@@ -126,6 +244,7 @@ export async function GET(request: NextRequest) {
   if (!url) {
     return new NextResponse('Missing url parameter', { status: 400 })
   }
+  const origin = request.headers.get('Origin')
 
   try {
     // 解码 URL
@@ -139,11 +258,7 @@ export async function GET(request: NextRequest) {
     // Data URIs should never be proxied — return 1x1 transparent PNG so the
     // browser shows the CSS fallback (gradient + initial) without 400 errors.
     if (decodedUrl.startsWith('data:')) {
-      const transparentPng = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRU5ErkJggg==',
-        'base64'
-      )
-      return new NextResponse(transparentPng, {
+      return new NextResponse(TRANSPARENT_PNG, {
         status: 200,
         headers: {
           'Content-Type': 'image/png',
@@ -157,219 +272,86 @@ export async function GET(request: NextRequest) {
       return new NextResponse('Only HTTP(S) URLs allowed', { status: 400 })
     }
 
-    // 验证 URL 是否来自允许的域名
-    const allowedDomains = [
-      // Supabase Storage (user uploaded avatars/covers)
-      'supabase.co',
-      'supabase.in',
-      // MEXC
-      'mocortech.com',
-      // Bitget
-      'bgstatic.com',
-      // Binance (多个 CDN 域名)
-      'bnbstatic.com',
-      'tylhh.net',
-      'nftstatic.com',
-      'bscdnweb.com',
-      'myqcloud.com',
-      // Bybit
-      'bybit.com',
-      'staticimg.com',
-      'bycsi.com',
-      // OKX
-      'okx.com',
-      'okcoin.com',
-      // KuCoin
-      'kucoin.com',
-      // Gate.io
-      'gateimg.com',
-      'gate.io',
-      // HTX (multiple CDN domains)
-      'htx.com',
-      'huobi.com',
-      'hbfile.net',
-      'hbimg.com',
-      // HTX uses specific CloudFront distributions — restrict to avoid open proxy
-      'd2uuskl05wy6ml.cloudfront.net',
-      'd1nhio0ox7pgb.cloudfront.net',
-      'd1x7dwosqaosdj.cloudfront.net',
-      // BingX
-      'bingx.com',
-      // CoinEx
-      'coinex.com',
-      'coinexstatic.com', // file.coinexstatic.com — CoinEx avatar CDN
-      // LBank
-      'lbkrs.com',
-      'lbank.com',
-      // Phemex
-      'phemex.com',
-      // Bitmart
-      'bitmart.com',
-      // XT
-      'xt.com',
-      'static-global.com',
-      // Pionex
-      'pionex.com',
-      // Weex
-      'weex.com',
-      'wexx.one',
-      // Blofin
-      'blofin.com',
-      // BingX CDN
-      'bb-os.com',
-      // BTCC
-      'btuserlog.com',
-      // GMX
-      'gmx.io',
-      // Bitfinex
-      'bitfinex.com',
-      // BTSE
-      'btse.com',
-      // dYdX
-      'dydx.exchange',
-      // WhiteBit
-      'whitebit.com',
-      // Toobit
-      'toobit.com',
-      // eToro
-      'etorostatic.com',
-      'etoro.com',
-      // Bitunix (img.bitunix.com serves bitunix trader avatars — actively served source)
-      'bitunix.com',
-      // Aevo
-      'aevo.xyz',
-      // Hyperliquid
-      'hyperliquid.xyz',
-      // Jupiter
-      'jup.ag',
-      // Gate.io / Gate CFD avatar CDNs (enumerated from arena.* serving rows,
-      // 2026-06-11) — gavatar.staticimgs.com + img.gatenft.io serve gate avatars.
-      'staticimgs.com',
-      'gatenft.io',
-      // OKX legacy avatar CDN (static.coinall.ltd)
-      'coinall.ltd',
-      // Long-tail serving-source avatar CDNs (enumerated from arena.traders,
-      // 2026-06-11). Each backs ≥1 active serving source's trader avatars.
-      'snidefender.com', // api-img.snidefender.com
-      'p2primeglobal.com', // public.p2primeglobal.com
-      'hotfullmoon.com', // nft.hotfullmoon.com
-      'saasexch.com', // public.saasexch.com
-      'cbearq.cn', // public.s.cbearq.cn
-      'dm1mubcttd115.cloudfront.net', // pinned exact subdomain (avoid open proxy)
-      // Our CDN
-      'arenafi.org',
-      // GitHub
-      'githubusercontent.com',
-      // Google
-      'googleusercontent.com',
-      'google.com',
-      // Avatar generators (for seed/community avatars)
-      'dicebear.com',
-      'pravatar.cc',
-      'robohash.org',
-      'randomuser.me',
-      'ui-avatars.com',
-    ]
+    let urlObj: URL
+    try {
+      urlObj = new URL(decodedUrl)
+    } catch {
+      return new NextResponse('Invalid URL', { status: 400 })
+    }
 
-    const urlObj = new URL(decodedUrl)
-    // Strict suffix match: hostname must equal or be a subdomain of an allowed domain.
-    // e.g. "cdn.bnbstatic.com" matches "bnbstatic.com", but "evil-bnbstatic.com" does not.
-    const isAllowed = allowedDomains.some(
-      (domain) => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain)
-    )
-
-    if (!isAllowed) {
+    if (!isAllowedAvatarUrl(urlObj)) {
       // Allowlist gap (e.g. a serving source's avatar CDN not yet enumerated, like
       // img.meimaobing.top backing some Bitunix traders). Returning a 403 here
       // surfaces a console error + broken <img>. Degrade gracefully to a 200
       // transparent PNG (short cache) so the client shows its CSS fallback and no
       // error is logged — the same treatment given to upstream 401/403/5xx below.
-      return gracefulAvatarFallback(request.headers.get('Origin'))
+      return gracefulAvatarFallback(origin)
     }
 
-    // SSRF defense: resolve hostname and reject if it points to a private/reserved IP.
-    // This prevents DNS rebinding attacks where an allowed domain resolves to an internal IP.
-    try {
-      const records = await dnsLookup(urlObj.hostname, { all: true })
-      for (const r of records) {
-        if (isPrivateIP(r.address)) {
-          return new NextResponse('Blocked: private IP', { status: 403 })
-        }
-      }
-    } catch {
-      // DNS resolution failed — let the fetch handle it (will likely fail with ENOTFOUND)
-    }
-
-    // 请求图片 - 模拟浏览器请求（5s timeout 防止 function 挂起 + SSRF mitigation）
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5_000)
-
-    const response = await fetch(decodedUrl, {
-      signal: controller.signal,
+    // SSRF defense (safeFetch): redirects are followed manually (max 3 hops) and
+    // every hop is re-checked against the allowlist AND resolved via DNS with
+    // private/reserved IPs rejected. One timeout spans all hops + body read.
+    const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS)
+    const browserHeaders = (u: URL): RequestInit => ({
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Referer: urlObj.origin + '/',
-        Origin: urlObj.origin,
-        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        Referer: u.origin + '/',
+        Origin: u.origin,
+        Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
         'Sec-Fetch-Dest': 'image',
         'Sec-Fetch-Mode': 'no-cors',
         'Sec-Fetch-Site': 'cross-site',
       },
-    }).finally(() => clearTimeout(timeout))
+    })
+    // Retry with minimal headers — some CDNs block specific header combos
+    const minimalHeaders = (): RequestInit => ({
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        Accept: 'image/*,*/*;q=0.8',
+      },
+    })
 
-    if (
-      !response.ok &&
-      (response.status === 403 ||
-        response.status === 401 ||
-        response.status === 502 ||
-        response.status === 503)
-    ) {
-      // Retry with minimal headers — some CDNs block specific header combos
-      const controller2 = new AbortController()
-      const timeout2 = setTimeout(() => controller2.abort(), 5_000)
+    let { response } = await safeFetch(urlObj.href, {
+      isAllowed: isAllowedAvatarUrl,
+      init: browserHeaders,
+      signal,
+    })
+
+    if (!response.ok && [401, 403, 502, 503].includes(response.status)) {
       try {
-        const retryResponse = await fetch(decodedUrl, {
-          signal: controller2.signal,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            Accept: 'image/*,*/*;q=0.8',
-          },
-        }).finally(() => clearTimeout(timeout2))
-
-        if (retryResponse.ok) {
-          const ct = safeImageContentType(retryResponse.headers.get('content-type'))
-          const buf = await retryResponse.arrayBuffer()
-          const origin2 = request.headers.get('Origin')
-          return new NextResponse(buf, {
-            headers: {
-              'Content-Type': ct,
-              'X-Content-Type-Options': 'nosniff',
-              // 1-year immutable cache — avatars for a given seed/URL never change.
-              'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
-              'Surrogate-Control': `max-age=${CACHE_MAX_AGE}`,
-              'CDN-Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
-              'Access-Control-Allow-Origin': getCorsOrigin(origin2),
-            },
-          })
-        }
+        await response.body?.cancel()
       } catch {
-        // Retry failed, fall through to original error
+        /* already closed */
       }
+      ;({ response } = await safeFetch(urlObj.href, {
+        isAllowed: isAllowedAvatarUrl,
+        init: minimalHeaders,
+        signal,
+      }))
     }
 
     if (!response.ok) {
+      try {
+        await response.body?.cancel()
+      } catch {
+        /* already closed */
+      }
       // Upstream rate-limited (429) or errored — serve graceful fallback, not
       // a broken image. Short cache so we retry once upstream recovers.
-      return gracefulAvatarFallback(request.headers.get('Origin'))
+      return gracefulAvatarFallback(origin)
     }
 
-    const contentType = safeImageContentType(response.headers.get('content-type'))
-    const buffer = await response.arrayBuffer()
+    const body = await readBodyCapped(response, MAX_AVATAR_BYTES)
+    const contentType = resolveImageContentType(response.headers.get('content-type'), body)
+    if (!contentType) {
+      // Not a verifiable raster image (HTML error page, SVG, JSON…). Never
+      // serve it, and never let it be cached for a year.
+      return gracefulAvatarFallback(origin)
+    }
 
-    const origin = request.headers.get('Origin')
-    return new NextResponse(buffer, {
+    return new NextResponse(body, {
       headers: {
         'Content-Type': contentType,
         'X-Content-Type-Options': 'nosniff',
@@ -381,12 +363,20 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
+    if (error instanceof SafeFetchError) {
+      if (error.code === 'blocked' || error.code === 'too_large') {
+        logger.warn('Avatar proxy rejected upstream', { code: error.code, reason: error.message })
+      }
+      // Blocked hop / private IP / oversize / redirect loop — degrade to the
+      // short-cached transparent PNG (never the 1-year immutable cache).
+      return gracefulAvatarFallback(origin)
+    }
     // Distinguish upstream/network failures from true server errors so they
     // don't pollute 500 error dashboards.
     if (error instanceof Error) {
-      if (error.name === 'AbortError') {
+      if (error.name === 'AbortError' || error.name === 'TimeoutError') {
         // Upstream CDN timed out — serve graceful fallback (short cache, retry later)
-        return gracefulAvatarFallback(request.headers.get('Origin'))
+        return gracefulAvatarFallback(origin)
       }
       const msg = error.message.toLowerCase()
       if (
@@ -397,7 +387,7 @@ export async function GET(request: NextRequest) {
         msg.includes('fetch failed')
       ) {
         // Upstream network error — serve graceful fallback (short cache, retry later)
-        return gracefulAvatarFallback(request.headers.get('Origin'))
+        return gracefulAvatarFallback(origin)
       }
     }
     logger.error('Avatar proxy error:', error)
