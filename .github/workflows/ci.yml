@@ -134,9 +134,6 @@ jobs:
             echo "::error::npm audit found high/critical vulnerabilities in production dependencies — fix before merging"
             exit 1
           }
-          # Dev-only tooling (lint/Lighthouse) is reported but not blocking: several
-          # of its advisories have no upstream fix (e.g. braces), which would
-          # otherwise hold every branch red. Track and burn these down separately.
           npm audit --audit-level=high || \
             echo "::warning::npm audit found high/critical vulnerabilities in dev-only dependencies (non-blocking)"
 
