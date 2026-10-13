@@ -114,9 +114,18 @@ describe('token ranking generation barrier', () => {
 
     expect(migrationIndex).toBeGreaterThan(predeployStart)
     expect(migrationIndex).toBeLessThan(quarantineStart)
-    expect(runner.slice(predeployStart, predeployEnd).trimEnd()).toMatch(
-      new RegExp(`${migrationName.replace('.', '\\.')}\\n\\)$`)
+    // Later unrelated predeploy migrations (e.g. 20260804045000 BingX rank
+    // quarantine) may follow; the barrier must stay the final token-ranking step.
+    const orderedPredeploy =
+      runner.slice(predeployStart, predeployEnd).match(/\d{14}_[a-z0-9_]+\.sql/g) ?? []
+    const barrierPosition = orderedPredeploy.indexOf(migrationName)
+    expect(barrierPosition).toBeGreaterThan(0)
+    expect(orderedPredeploy[barrierPosition - 1]).toBe(
+      '20260729225000_token_trader_rank_authority.sql'
     )
+    expect(
+      orderedPredeploy.slice(barrierPosition + 1).filter((migration) => /token/.test(migration))
+    ).toEqual([])
     expect(generatedTypes).toContain('get_token_ranking_publication_head: {')
     expect(generatedTypes).toContain('window_through_date: string | null')
     expect(generatedTypes).toContain('published_at_epoch_ms: number | null')
