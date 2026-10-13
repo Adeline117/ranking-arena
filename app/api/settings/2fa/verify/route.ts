@@ -42,11 +42,16 @@ export const POST = withAuth(
     const { code } = parsed.data
 
     // Check if already enabled (maybeSingle: profile row may not exist yet)
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('totp_enabled')
       .eq('id', user.id)
       .maybeSingle()
+
+    if (profileError) {
+      logger.error('[2FA Verify] Profile fetch error:', profileError)
+      return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
+    }
 
     if (profile?.totp_enabled) {
       return badRequest('2FA is already enabled')
@@ -67,6 +72,18 @@ export const POST = withAuth(
     const isValid = verifyTotpCode(secretRow.totp_secret, code)
     if (!isValid) {
       return badRequest('Invalid verification code')
+    }
+
+    // Purge any previous backup codes BEFORE enabling 2FA: if this fails,
+    // stale codes would stay valid next to the new set, so abort while 2FA is
+    // still off rather than enabling with an unknown code inventory.
+    const { error: purgeError } = await supabase
+      .from('backup_codes')
+      .delete()
+      .eq('user_id', user.id)
+    if (purgeError) {
+      logger.error('[2FA Verify] Old backup codes deletion error:', purgeError)
+      return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
     }
 
     // Enable 2FA. select('id') so a missing profile row (0 rows updated) is
@@ -95,9 +112,6 @@ export const POST = withAuth(
       code_hash: hashBackupCode(plainCode),
       used: false,
     }))
-
-    // Delete any existing backup codes for this user
-    await supabase.from('backup_codes').delete().eq('user_id', user.id)
 
     // Store hashed backup codes
     const { error: insertError } = await supabase.from('backup_codes').insert(hashedCodes)
