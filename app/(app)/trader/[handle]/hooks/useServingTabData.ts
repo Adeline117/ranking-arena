@@ -8,12 +8,16 @@
  * renders the SAME rich three-tab frontend as legacy, with zero on-demand
  * fetching duplicated. Missing data NULL-collapses (tabs tolerate undefined).
  *
- * The 3 /core fetches are React-Query-cached and dedupe with ServingProfilePanel
- * (same query keys), so flipping between the two layouts costs no extra network.
+ * Core modules: /api/traders/[handle]/core currently returns ONE static
+ * structural projection for every timeframe (lib/data/serving/core-quarantine —
+ * historical core evidence is not publicly sealed). Fetching it 3x per profile
+ * only produced a skeleton → empty flash, so the same projection is built
+ * locally (pure, client-safe) with no network. When the core publication
+ * chain is restored, switch back to useTraderCore here.
  */
 
 import { useMemo } from 'react'
-import { useTraderCore } from '@/lib/hooks/useTraderCore'
+import { quarantinedPublicCoreModules } from '@/lib/data/serving/core-quarantine'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import {
   servingToTraderProfile,
@@ -79,16 +83,17 @@ export interface ServingTabInput {
   scores?: import('../TraderProfileClient').ServingScoreRow[]
 }
 
+// Module-level constants: stable identities for the memo below.
+const QUARANTINED_CORE_7 = quarantinedPublicCoreModules(7)
+const QUARANTINED_CORE_30 = quarantinedPublicCoreModules(30)
+const QUARANTINED_CORE_90 = quarantinedPublicCoreModules(90)
+
 export function useServingTabData(
   input: ServingTabInput,
   capability: SourceCapability | null,
   enabled: boolean
 ): ServingTabData {
   const { source, exchangeTraderId } = input
-
-  const c7 = useTraderCore({ source, exchangeTraderId, tf: 7, enabled })
-  const c30 = useTraderCore({ source, exchangeTraderId, tf: 30, enabled })
-  const c90 = useTraderCore({ source, exchangeTraderId, tf: 90, enabled })
 
   const positions = useTraderRecords({
     source,
@@ -105,9 +110,11 @@ export function useServingTabData(
     enabled: enabled && Boolean(capability?.surfaces?.position_history),
   })
 
-  const m7 = c7.modules
-  const m30 = c30.modules
-  const m90 = c90.modules
+  // Identical to what the quarantined /core route would return; null when
+  // disabled (legacy sources), matching the former disabled-query shape.
+  const m7 = enabled ? QUARANTINED_CORE_7 : null
+  const m30 = enabled ? QUARANTINED_CORE_30 : null
+  const m90 = enabled ? QUARANTINED_CORE_90 : null
   const posRows = positions.rows
   const histRows = posHistory.rows
   const historyCompleteness = posHistory.completeness
@@ -233,7 +240,8 @@ export function useServingTabData(
         // RPC's trader_stats column scan — allow them when present.
         ...EXTRAS_PROMOTABLE_KEYS,
       ],
-      loading: c7.isLoading || c30.isLoading || c90.isLoading,
+      // Core modules are local (no network) — nothing to wait for.
+      loading: false,
     }
   }, [
     exchangeTraderId,
@@ -249,8 +257,5 @@ export function useServingTabData(
     histRows,
     historyCompleteness,
     capability,
-    c7.isLoading,
-    c30.isLoading,
-    c90.isLoading,
   ])
 }
