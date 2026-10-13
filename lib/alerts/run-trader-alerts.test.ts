@@ -1,4 +1,11 @@
 import { runTraderAlerts, SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION } from './run-trader-alerts'
+import { hasFeatureAccess } from '@/lib/types/premium'
+
+// Default: paywall on (PRO_FREE_PROMO=false) — only paid tiers have access.
+jest.mock('@/lib/types/premium', () => ({
+  hasFeatureAccess: jest.fn((tier: string) => tier === 'pro'),
+}))
+const mockedHasFeatureAccess = hasFeatureAccess as jest.MockedFunction<typeof hasFeatureAccess>
 
 interface Call {
   table: string
@@ -129,6 +136,23 @@ describe('runTraderAlerts', () => {
         }),
       ])
     )
+  })
+
+  it('does not skip unpaid users while the Pro free promo unlocks trader alerts', async () => {
+    mockedHasFeatureAccess.mockImplementation(() => true)
+    try {
+      const { client } = clientWith({
+        trader_alerts: [{ data: [alert], error: null }],
+        subscriptions: [{ data: [], error: null }],
+        user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+      })
+      // The run proceeds past the entitlement filter to the ranking read.
+      await expect(runTraderAlerts(client as never, now)).rejects.toThrow(
+        'Unexpected query for public_ranked_leaderboard'
+      )
+    } finally {
+      mockedHasFeatureAccess.mockImplementation((tier) => tier === 'pro')
+    }
   })
 
   it('does not notify a paid account while deletion is pending', async () => {
