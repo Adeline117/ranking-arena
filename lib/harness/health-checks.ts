@@ -121,7 +121,9 @@ const API_ENDPOINTS = [
     expectKey: 'platforms',
     requireVerifiedRanking: true,
   },
-  { path: '/api/rankings/movers', name: 'Movers API', expectKey: 'movers' },
+  // The movers route returns { risers, fallers, ranking_visibility, ... } (no
+  // `movers` field). It is a sealed-empty projection while quarantined.
+  { path: '/api/rankings/movers', name: 'Movers API', expectKey: 'risers' },
   { path: '/api/search?q=test&limit=3', name: 'Search API', expectKey: 'results' },
   { path: '/api/market/prices', name: 'Market Prices', expectKey: null },
   { path: '/api/health', name: 'Health Endpoint', expectKey: 'status' },
