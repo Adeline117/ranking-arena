@@ -188,7 +188,6 @@ import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
 import { useServingTabData } from './hooks/useServingTabData'
-import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
@@ -1182,20 +1181,13 @@ export default function TraderProfileClient({
     servingViewCapability ?? null,
     useThreeTab && !suppressAccountContent
   )
-  // The public /core projection is quarantined (structural empty modules with
-  // cacheState 'quarantined'). Read the SAME React-Query entry the serving tab
-  // hook already fetched (identical key → no extra request) so the tabs can
-  // show one explicit "under verification" state instead of blank charts.
-  const coreProjection90 = useTraderCore({
-    source: visibleData.source,
-    exchangeTraderId: visibleData.source_trader_id,
-    tf: 90,
-    enabled: useThreeTab && !suppressAccountContent,
-  })
-  const historyUnderVerification =
-    useThreeTab && !suppressAccountContent && coreProjection90.modules?.cacheState === 'quarantined'
+  // The public /core projection is quarantined for every timeframe (see
+  // lib/data/serving/core-quarantine.ts and useServingTabData, which uses the
+  // static projection without a request), so the tabs show one explicit
+  // "under verification" state instead of blank charts.
+  const historyUnderVerification = useThreeTab && !suppressAccountContent
   // Only sealed public-cohort values (verified rank + ROI) may be shown here.
-  const verificationTf = selectedPeriod === '7D' ? 7 : selectedPeriod === '30D' ? 30 : 90
+  const verificationTf = ({ '7D': 7, '30D': 30 } as Record<string, number>)[selectedPeriod] ?? 90
   const verificationEntry = historyUnderVerification
     ? servingViewFirstScreen?.entries.find((e) => e.timeframe === verificationTf)
     : undefined
