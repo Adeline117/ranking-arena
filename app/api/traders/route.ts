@@ -24,6 +24,7 @@ import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-tr
 import { PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS } from '@/lib/data/trader/queries'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
+import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import {
   sourceFreshnessStatusMap,
@@ -622,36 +623,14 @@ async function buildPublicTradersResponse(
   })
   const deduplicatedPage = dedupedTraders.length !== traders.length
 
-  // Prefer our own CDN avatar mirror over the exchange-CDN proxy (no 429 cold-burst).
-  // Fail-open + cached (getOrSetWithLock ttl 300) → one indexed RPC per cache fill.
-  dedupedTraders = await attachAvatarMirrors(supabase, dedupedTraders)
-
-  // Verified (claimed) badge (P3-P3, 2026-07-09): verified_traders is tiny
-  // (manual owner review), so one full fetch per request marks the page's
-  // rows. Fail-open — a query error just means no badges this response.
-  try {
-    const { data: verifiedRows } = await supabase
-      .from('verified_traders')
-      .select('trader_id, source')
-    if (verifiedRows?.length) {
-      const verifiedKeys = new Set(verifiedRows.map((v) => `${v.source}|${v.trader_id}`))
-      dedupedTraders = dedupedTraders.map((t) =>
-        verifiedKeys.has(`${t.source}|${t.id}`) ? { ...t, is_verified: true } : t
-      )
-    }
-  } catch {
-    /* fail-open: badge is cosmetic */
-  }
-
   // A removed proof row or duplicate can invalidate the cursor boundary. A
   // smaller truthful page is preferable to a continuation that can skip rows.
   const hasMore = hasLookahead && !cohort.integrityCompromised && !deduplicatedPage
-  const lastTrader = dedupedTraders[dedupedTraders.length - 1]
-  const nextCursor =
-    hasMore && sortBy === 'arena_score' && order === 'desc' && lastTrader ? lastTrader.rank : null
 
   // Without a matching view-native source census, this is intentionally the
   // visible page's source list rather than a stale count-cache approximation.
+  // (Avatar mirrors / claimed badges below never change row membership or
+  // sources, so this can be computed before those enrichments.)
   const availableSources = filterPublicRankingSources(dedupedTraders.map((trader) => trader.source))
 
   const relevantSources = exchangeFilter
@@ -661,11 +640,39 @@ async function buildPublicTradersResponse(
           (source) => (SOURCE_TYPE_MAP[source] || 'futures') === categorySourceType
         )
       : availableSources
-  const freshnessQuery = supabase
-    .from('leaderboard_source_freshness')
-    .select('source,source_as_of')
-    .eq('season_id', timeRange)
-  const { data: sourceWatermarks } = await freshnessQuery
+
+  // Three independent per-request reads, issued concurrently:
+  //  - avatar mirrors: prefer our own CDN mirror over the exchange-CDN proxy
+  //    (no 429 cold-burst). Fail-open; per-trader in-process TTL cache, so
+  //    only uncached traders hit the RPC.
+  //  - claimed (verified_traders) badges (P3-P3, 2026-07-09): tiny table,
+  //    in-process 60s TTL cache. Fail-open — an error just means no badges.
+  //  - source freshness watermarks: deliberately NOT cached — they are the
+  //    per-request serving lease that gates stale rows below.
+  const [mirroredTraders, claimedKeys, freshnessResult] = await Promise.all([
+    attachAvatarMirrors(supabase, dedupedTraders),
+    getClaimedTraderBadgeKeys(supabase),
+    supabase
+      .from('leaderboard_source_freshness')
+      .select('source,source_as_of')
+      .eq('season_id', timeRange),
+  ])
+  dedupedTraders =
+    claimedKeys.size > 0
+      ? mirroredTraders.map((t) =>
+          claimedKeys.has(claimedTraderBadgeKey(t.source, t.id)) ? { ...t, is_verified: true } : t
+        )
+      : mirroredTraders
+
+  const lastTrader = dedupedTraders[dedupedTraders.length - 1]
+  const nextCursor =
+    hasMore && sortBy === 'arena_score' && order === 'desc' && lastTrader ? lastTrader.rank : null
+
+  const { data: sourceWatermarks, error: freshnessError } = freshnessResult
+  if (freshnessError) {
+    // Fail closed below (missing watermarks → stale); log so drift is visible.
+    logger.error('leaderboard_source_freshness query error:', freshnessError)
+  }
   const freshnessSummary = summarizeSourceFreshness(
     (sourceWatermarks || []) as SourceFreshnessRow[],
     relevantSources
