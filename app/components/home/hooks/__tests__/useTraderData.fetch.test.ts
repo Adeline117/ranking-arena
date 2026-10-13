@@ -24,7 +24,7 @@ jest.mock('@/lib/hooks/useBroadcastSync', () => ({
   useTraderDataSync: () => ({ broadcast: mockBroadcast, on: mockOn }),
 }))
 
-import { useTraderData } from '../useTraderData'
+import { useTraderData, clearTraderCohortCache } from '../useTraderData'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -71,6 +71,7 @@ function setup(options: Parameters<typeof useTraderData>[0] = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  clearTraderCohortCache()
   broadcastHandler = undefined
   mockOn.mockImplementation((_event: unknown, handler: (payload: unknown) => void) => {
     broadcastHandler = handler
