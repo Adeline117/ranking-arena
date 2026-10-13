@@ -126,7 +126,10 @@ jobs:
       - name: Security — npm audit (blocks on critical/high)
         run: |
           npm install --package-lock-only --ignore-scripts 2>/dev/null || true
-          # Runtime (production) dependencies block the merge on high/critical.
+          # Shipped (production) dependencies block on high/critical. Dev-only
+          # tooling is reported but not blocking: the eslint-config-next →
+          # fast-glob → micromatch → braces chain has no upstream fix (braces
+          # 3.0.3 is latest) and never reaches the runtime bundle.
           npm audit --omit=dev --audit-level=high || {
             echo "::error::npm audit found high/critical vulnerabilities in production dependencies — fix before merging"
             exit 1
