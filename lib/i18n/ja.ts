@@ -6469,6 +6469,10 @@ const ja = {
   quizShareChallenge:
     'Arena のトレーダー性格診断で {type} に {match}% 一致しました。私のトレード・ソウルメイトは {master}。この一致率を超えられる？ {url}',
   quizShareOnX: 'X でシェア',
+  historyVerificationTitle: '履歴データを検証中',
+  historyVerificationDesc:
+    'このトレーダーの履歴データが検証を通過すると、チャートと詳細な統計がここに表示されます。',
+  historyVerificationCurrentRanking: '現在のランキング（{period}）',
 } as const
 
 export default ja

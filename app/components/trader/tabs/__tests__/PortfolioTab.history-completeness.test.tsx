@@ -41,4 +41,11 @@ describe('PortfolioTab history completeness', () => {
     expect(screen.queryByTestId('portfolio-table')).not.toBeInTheDocument()
     expect(screen.getByText('noPortfolioData')).toBeInTheDocument()
   })
+
+  it('shows the verification placeholder for an empty portfolio while history is quarantined', () => {
+    render(<PortfolioTab {...baseProps} historyCompleteness={null} historyUnderVerification />)
+
+    expect(screen.queryByText('noPortfolioData')).not.toBeInTheDocument()
+    expect(screen.getByText('historyVerificationTitle')).toBeInTheDocument()
+  })
 })

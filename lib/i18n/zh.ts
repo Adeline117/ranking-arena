@@ -6636,6 +6636,9 @@ const zh = {
   quizShareChallenge:
     '我在 Arena 交易人格测试中是 {match}% 的{type}，交易灵魂伴侣是 {master}。不服来测，看你能不能超过我：{url}',
   quizShareOnX: '分享到 X',
+  historyVerificationTitle: '历史数据验证中',
+  historyVerificationDesc: '该交易员的历史数据通过校验后，将在此显示图表和详细统计。',
+  historyVerificationCurrentRanking: '当前排名（{period}）',
 } as const
 
 export default zh
