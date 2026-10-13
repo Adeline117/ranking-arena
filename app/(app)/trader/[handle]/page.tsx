@@ -555,11 +555,29 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   }
 
   if (servingResolved) {
-    const [firstScreenRaw, capabilities, userHandle] = await Promise.all([
-      getCurrentPublicFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
-      cachedCapabilities(),
-      cachedFindUserHandleByTrader(servingResolved.source, servingResolved.exchangeTraderId),
-    ])
+    // Everything here depends only on the resolved identity, so it runs in
+    // one parallel batch. Per-TF sub-scores (ScoreBreakdown/header) are
+    // best-effort with a 2s cap so they can never extend the batch beyond it.
+    const [firstScreenRaw, capabilities, userHandle, verifiedKeys, servingScores] =
+      await Promise.all([
+        getCurrentPublicFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
+        cachedCapabilities(),
+        cachedFindUserHandleByTrader(servingResolved.source, servingResolved.exchangeTraderId),
+        getVerifiedTraderKeys(getReadReplica()),
+        Promise.race([
+          getCurrentPublicServingScores(
+            servingResolved.source,
+            servingResolved.exchangeTraderId
+          ).catch((e) => {
+            logger.warn('[trader/page] getCurrentPublicServingScores failed', {
+              source: servingResolved.source,
+              error: String(e),
+            })
+            return []
+          }),
+          new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
+        ]),
+      ])
 
     // ROOT-CAUSE FIX (2026-06-11): a serving-only trader (exists only in arena.*,
     // not in legacy trader_sources/leaderboard_ranks) MUST NEVER fall through to
@@ -597,7 +615,6 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       best?.headlineWinRate ??
       (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
 
-    const verifiedKeys = await getVerifiedTraderKeys(getReadReplica())
     const servingTraderData: UnregisteredTraderData = {
       handle: firstScreen.nickname ?? servingResolved.nickname ?? decodedHandle,
       // Spec §1.4 avatar chain: mirror direct → proxied origin → null
@@ -624,22 +641,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // (useServingTabData → /core) never carried similarTraders, so OverviewTab's
     // `traderSimilar.length > 0` guard permanently hid the module for serving
     // sources (the default). Legacy path fed it via bridge.ts; serving didn't.
-    // Fix: compute it once here server-side (fetchSimilarTraders is Redis-cached,
-    // 15min warm) using the 90d board score/roi, map to the OverviewTab shape
-    // (same shape as bridge.ts:203), and thread it down as serverSimilarTraders.
-    // Per-TF sub-scores + style for ScoreBreakdown/header (best-effort, 2s cap).
-    const servingScores = await Promise.race([
-      getCurrentPublicServingScores(servingResolved.source, servingResolved.exchangeTraderId).catch(
-        (e) => {
-          logger.warn('[trader/page] getCurrentPublicServingScores failed', {
-            source: servingResolved.source,
-            error: String(e),
-          })
-          return []
-        }
-      ),
-      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
-    ])
+    // Fix: compute it once here server-side using the 90d board score/roi, map
+    // to the OverviewTab shape (same shape as bridge.ts:203), and thread it down
+    // as serverSimilarTraders. NOT cached: fetchSimilarTraders queries the
+    // sealed public cohort on every render (a cached slice could outlive its
+    // serving proof); the query carries its own 2s abort so it stays
+    // best-effort. It depends on the first-screen board entry, so it runs
+    // after the parallel batch above.
 
     const similarScoreExtra = best?.extras.arena_score
     const similarArenaScore = typeof similarScoreExtra === 'number' ? similarScoreExtra : null
