@@ -188,6 +188,7 @@ import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
 import { useServingTabData } from './hooks/useServingTabData'
+import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
@@ -1181,6 +1182,31 @@ export default function TraderProfileClient({
     servingViewCapability ?? null,
     useThreeTab && !suppressAccountContent
   )
+  // The public /core projection is quarantined (structural empty modules with
+  // cacheState 'quarantined'). Read the SAME React-Query entry the serving tab
+  // hook already fetched (identical key → no extra request) so the tabs can
+  // show one explicit "under verification" state instead of blank charts.
+  const coreProjection90 = useTraderCore({
+    source: visibleData.source,
+    exchangeTraderId: visibleData.source_trader_id,
+    tf: 90,
+    enabled: useThreeTab && !suppressAccountContent,
+  })
+  const historyUnderVerification =
+    useThreeTab && !suppressAccountContent && coreProjection90.modules?.cacheState === 'quarantined'
+  // Only sealed public-cohort values (verified rank + ROI) may be shown here.
+  const verificationTf = selectedPeriod === '7D' ? 7 : selectedPeriod === '30D' ? 30 : 90
+  const verificationEntry = historyUnderVerification
+    ? servingViewFirstScreen?.entries.find((e) => e.timeframe === verificationTf)
+    : undefined
+  const sealedRank =
+    verificationEntry?.rankingVisibility === 'verified' &&
+    typeof verificationEntry.rank === 'number' &&
+    typeof verificationEntry.headlineRoi === 'number'
+      ? verificationEntry.rank
+      : null
+  const sealedRoi = sealedRank !== null ? (verificationEntry?.headlineRoi ?? null) : null
+
   // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
   // (bounded) instead of waiting for the 12h rotation, then refetch.
   const onchainEnrichmentState = useOnchainEnrichTrigger({
@@ -1668,6 +1694,10 @@ export default function TraderProfileClient({
                     isVerifiedTrader={isVerifiedTrader}
                     verifiedTraderProfile={authorizationClaimSource?.profile ?? null}
                     claimedUser={visibleClaimedUser}
+                    historyUnderVerification={historyUnderVerification}
+                    sealedRankingPeriod={`${verificationTf}D`}
+                    sealedRank={sealedRank}
+                    sealedRoi={sealedRoi}
                   />
                 </Box>
 
@@ -1744,6 +1774,7 @@ export default function TraderProfileClient({
                         historyCompleteness={effHistoryCompleteness}
                         isPro={isPro}
                         onUnlock={handlePricingRedirect}
+                        historyUnderVerification={historyUnderVerification}
                       />
                     </Box>
                   ) : null}
@@ -1766,6 +1797,7 @@ export default function TraderProfileClient({
                       source={visibleData.source}
                       isPro={isPro}
                       onUnlock={handlePricingRedirect}
+                      historyUnderVerification={historyUnderVerification}
                     />
                   ) : null}
                 </Box>

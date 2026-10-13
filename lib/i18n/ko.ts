@@ -6691,6 +6691,10 @@ const ko = {
   quizShareChallenge:
     'Arena 트레이더 성향 테스트에서 {type} {match}% 일치가 나왔어요. 나의 트레이딩 소울메이트는 {master}. 내 매칭률을 넘을 수 있을까요? {url}',
   quizShareOnX: 'X에 공유',
+  historyVerificationTitle: '과거 데이터 검증 중',
+  historyVerificationDesc:
+    '이 트레이더의 과거 데이터가 검증을 통과하면 차트와 상세 통계가 여기에 표시됩니다.',
+  historyVerificationCurrentRanking: '현재 랭킹 ({period})',
 } as const
 
 export default ko

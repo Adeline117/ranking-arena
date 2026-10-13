@@ -6818,6 +6818,10 @@ const en = {
   quizShareChallenge:
     "Just scored {match}% {type} on Arena's trader personality test. My trading soulmate: {master}. Bet you can't beat my match {url}",
   quizShareOnX: 'Share on X',
+  historyVerificationTitle: 'Historical data under verification',
+  historyVerificationDesc:
+    'Charts and detailed statistics for this trader will appear once their historical data passes verification.',
+  historyVerificationCurrentRanking: 'Current ranking ({period})',
 } as const
 
 export default en
