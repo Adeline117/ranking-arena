@@ -316,7 +316,9 @@ export default function PipelineMonitoringDashboard() {
   const { t } = useLanguage()
   const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const [pipelineData, setPipelineData] = useState<PipelineData | null>(null)
-  const [enrichmentData, setEnrichmentData] = useState<EnrichmentData | null>(null)
+  // /api/health/enrichment was deleted; the enrichment tab renders its
+  // "data unavailable" state rather than polling a 404 every 60s.
+  const [enrichmentData] = useState<EnrichmentData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
@@ -335,24 +337,14 @@ export default function PipelineMonitoringDashboard() {
     try {
       setLoading(true)
 
-      const [pipelineRes, enrichmentRes] = await Promise.all([
-        fetch('/api/health/pipeline', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }),
-        fetch('/api/health/enrichment?period=90D', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }),
-      ])
+      const pipelineRes = await fetch('/api/health/pipeline', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
 
       if (!pipelineRes.ok) throw new Error(`Pipeline API: ${pipelineRes.status}`)
 
       const pData = await pipelineRes.json()
       setPipelineData(pData)
-
-      if (enrichmentRes.ok) {
-        const eData = await enrichmentRes.json()
-        setEnrichmentData(eData)
-      }
 
       setError(null)
     } catch (err) {

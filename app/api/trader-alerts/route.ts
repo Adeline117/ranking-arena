@@ -6,7 +6,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+import { hasFeatureAccess } from '@/lib/types/premium'
 
 export const runtime = 'nodejs'
 
@@ -31,24 +33,36 @@ const TraderAlertSchema = z.object({
 })
 
 /**
+ * Same gate as every other Pro route: `hasFeatureAccess()` (which honours
+ * PRO_FREE_PROMO). Outside the promo, access must reflect a currently active
+ * paid entitlement — reading only `tier` left canceled/expired subscriptions
+ * able to configure a feature the scheduler refuses to execute.
+ */
+async function hasTraderAlertAccess(supabase: SupabaseClient, userId: string): Promise<boolean> {
+  if (hasFeatureAccess('free', 'trader_alerts')) return true
+
+  const { data: subscription, error: subscriptionError } = await supabase
+    .from('subscriptions')
+    .select('tier, status')
+    .eq('user_id', userId)
+    .in('status', ['active', 'trialing'])
+    .in('tier', ['pro', 'lifetime'])
+    .limit(1)
+    .maybeSingle()
+
+  if (subscriptionError) {
+    logger.error('[trader-alerts] subscription lookup failed', subscriptionError)
+    throw new Error('Failed to verify Pro membership')
+  }
+  return subscription != null && hasFeatureAccess('pro', 'trader_alerts')
+}
+
+/**
  * GET - 获取用户的提醒配置列表
  */
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
-    // Access must reflect a currently active paid entitlement. Reading only
-    // `tier` left canceled/expired subscriptions able to configure a feature
-    // the scheduler correctly refuses to execute.
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .select('tier, status')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .in('tier', ['pro', 'lifetime'])
-      .limit(1)
-      .maybeSingle()
-
-    if (subscriptionError) throw new Error('Failed to verify Pro membership')
-    if (!subscription) {
+    if (!(await hasTraderAlertAccess(supabase, user.id))) {
       return NextResponse.json(
         { success: false, error: 'Pro membership required' },
         { status: 403 }
@@ -90,17 +104,7 @@ export const GET = withAuth(
  */
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .select('tier, status')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .in('tier', ['pro', 'lifetime'])
-      .limit(1)
-      .maybeSingle()
-
-    if (subscriptionError) throw new Error('Failed to verify Pro membership')
-    if (!subscription) {
+    if (!(await hasTraderAlertAccess(supabase, user.id))) {
       return NextResponse.json(
         { success: false, error: 'Pro membership required' },
         { status: 403 }

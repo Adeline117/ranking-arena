@@ -1177,6 +1177,24 @@ export default function TraderProfileClient({
     servingViewCapability ?? null,
     useThreeTab && !suppressAccountContent
   )
+  // The public /core projection is quarantined for every timeframe (see
+  // lib/data/serving/core-quarantine.ts and useServingTabData, which uses the
+  // static projection without a request), so the tabs show one explicit
+  // "under verification" state instead of blank charts.
+  const historyUnderVerification = useThreeTab && !suppressAccountContent
+  // Only sealed public-cohort values (verified rank + ROI) may be shown here.
+  const verificationTf = ({ '7D': 7, '30D': 30 } as Record<string, number>)[selectedPeriod] ?? 90
+  const verificationEntry = historyUnderVerification
+    ? servingViewFirstScreen?.entries.find((e) => e.timeframe === verificationTf)
+    : undefined
+  const sealedRank =
+    verificationEntry?.rankingVisibility === 'verified' &&
+    typeof verificationEntry.rank === 'number' &&
+    typeof verificationEntry.headlineRoi === 'number'
+      ? verificationEntry.rank
+      : null
+  const sealedRoi = sealedRank !== null ? (verificationEntry?.headlineRoi ?? null) : null
+
   // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
   // (bounded) instead of waiting for the 12h rotation, then refetch.
   const onchainEnrichmentState = useOnchainEnrichTrigger({
@@ -1292,7 +1310,7 @@ export default function TraderProfileClient({
             }}
           >
             <Link
-              href="/rankings"
+              href="/"
               style={{
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.lg,
@@ -1363,10 +1381,7 @@ export default function TraderProfileClient({
         }}
       >
         <Breadcrumb
-          items={[
-            { label: t('leaderboardBreadcrumb'), href: '/rankings' },
-            { label: visibleDisplayName },
-          ]}
+          items={[{ label: t('leaderboardBreadcrumb'), href: '/' }, { label: visibleDisplayName }]}
         />
 
         <TraderStaleBanner show={showStaleBanner} t={t} />
@@ -1667,6 +1682,10 @@ export default function TraderProfileClient({
                     isVerifiedTrader={isVerifiedTrader}
                     verifiedTraderProfile={authorizationClaimSource?.profile ?? null}
                     claimedUser={visibleClaimedUser}
+                    historyUnderVerification={historyUnderVerification}
+                    sealedRankingPeriod={`${verificationTf}D`}
+                    sealedRank={sealedRank}
+                    sealedRoi={sealedRoi}
                   />
                 </Box>
 
@@ -1743,6 +1762,7 @@ export default function TraderProfileClient({
                         historyCompleteness={effHistoryCompleteness}
                         isPro={isPro}
                         onUnlock={handlePricingRedirect}
+                        historyUnderVerification={historyUnderVerification}
                       />
                     </Box>
                   ) : null}
@@ -1765,6 +1785,7 @@ export default function TraderProfileClient({
                       source={visibleData.source}
                       isPro={isPro}
                       onUnlock={handlePricingRedirect}
+                      historyUnderVerification={historyUnderVerification}
                     />
                   ) : null}
                 </Box>

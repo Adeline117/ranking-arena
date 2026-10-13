@@ -372,7 +372,7 @@ export default function MethodologyPageClient() {
         }}
       >
         <Link
-          href="/rankings"
+          href="/"
           className={anchorClass}
           style={{
             color: 'var(--color-accent-primary)',

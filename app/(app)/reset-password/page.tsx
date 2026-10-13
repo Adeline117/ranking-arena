@@ -191,6 +191,23 @@ const injectStyles = () => {
   document.head.appendChild(style)
 }
 
+// Loading spinner component (module scope: a component declared during render
+// remounts on every render and resets its state).
+const Spinner = () => (
+  <svg
+    className="loader-spin"
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+  >
+    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+    <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+  </svg>
+)
+
 function ResetPasswordContent() {
   const { language: lang, setLanguage: setLang, t } = useLanguage()
   const [email, setEmail] = useState('')
@@ -362,22 +379,6 @@ function ResetPasswordContent() {
       setLoading(false)
     }
   }
-
-  // Loading spinner component
-  const Spinner = () => (
-    <svg
-      className="loader-spin"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-    >
-      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-    </svg>
-  )
 
   if (!mounted) return null
 

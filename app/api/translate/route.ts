@@ -33,6 +33,19 @@ const GPT_TARGET_LANGUAGE: Record<TargetLang, string> = {
   ko: '한국어',
 }
 
+// Per-text input cap (single request and each batch item). Matches the post
+// content maximum (lib/api/validation.ts: 10,000 chars) so every legitimate
+// post can still be translated, while bounding per-request translation cost.
+const MAX_TEXT_LENGTH = 10_000
+const VALID_TARGET_LANGS = new Set<TargetLang>(['zh', 'en', 'ja', 'ko'])
+
+function textTooLong() {
+  return NextResponse.json(
+    { success: false, error: `Text exceeds ${MAX_TEXT_LENGTH} characters` },
+    { status: 400 }
+  )
+}
+
 // 计算内容哈希值（用于检测内容变化）
 function hashContent(text: string): string {
   return createHash('sha256').update(text).digest('hex').slice(0, 32)
@@ -239,12 +252,13 @@ async function handleSingleTranslate(
   { text, targetLang, contentType, contentId }: SingleTranslateRequest,
   supabase: ReturnType<typeof getSupabaseAdmin>
 ) {
-  if (!text || !targetLang) {
+  if (!text || typeof text !== 'string' || !VALID_TARGET_LANGS.has(targetLang)) {
     return NextResponse.json(
       { success: false, error: 'Missing required parameters' },
       { status: 400 }
     )
   }
+  if (text.length > MAX_TEXT_LENGTH) return textTooLong()
 
   const contentHash = hashContent(text)
   const sourceLang = detectSourceLang(text)
@@ -266,13 +280,16 @@ async function handleSingleTranslate(
   // 1. 尝试从缓存获取（如果有 contentType 和 contentId）
   if (contentType && contentId) {
     try {
-      const { data: cached } = await supabase
+      const { data: cached, error: cacheError } = await supabase
         .from('translation_cache')
         .select('translated_text, content_hash')
         .eq('content_type', contentType)
         .eq('content_id', contentId)
         .eq('target_lang', targetLang)
         .maybeSingle()
+      if (cacheError) {
+        logger.warn('Cache query failed', { contentType, contentId, error: cacheError.message })
+      }
 
       // 如果缓存存在且内容未变化，直接返回
       if (cached && cached.content_hash === contentHash) {
@@ -303,7 +320,7 @@ async function handleSingleTranslate(
   // 3. 保存到缓存（如果有 contentType 和 contentId）
   if (contentType && contentId) {
     try {
-      await supabase.from('translation_cache').upsert(
+      const { error: upsertError } = await supabase.from('translation_cache').upsert(
         {
           content_type: contentType,
           content_id: contentId,
@@ -317,9 +334,19 @@ async function handleSingleTranslate(
           onConflict: 'content_type,content_id,target_lang',
         }
       )
-      logger.debug(`Cache saved: ${contentType}/${contentId}`)
+      if (upsertError) {
+        // Translation still succeeds for the caller; the cache miss just costs
+        // another translation next time — but it must be visible.
+        logger.error('Translation cache save failed', {
+          contentType,
+          contentId,
+          error: upsertError.message,
+        })
+      } else {
+        logger.debug(`Cache saved: ${contentType}/${contentId}`)
+      }
     } catch (err: unknown) {
-      logger.warn('Cache save failed', { error: String(err) })
+      logger.error('Translation cache save threw', { error: String(err) })
     }
   }
 
@@ -339,11 +366,17 @@ async function handleBatchTranslate(
   { items, targetLang }: BatchTranslateRequest,
   supabase: ReturnType<typeof getSupabaseAdmin>
 ) {
-  if (!items || items.length === 0 || !targetLang) {
+  if (!items || items.length === 0 || !VALID_TARGET_LANGS.has(targetLang)) {
     return NextResponse.json(
       { success: false, error: 'Missing required parameters' },
       { status: 400 }
     )
+  }
+  if (items.some((item) => !item || typeof item.text !== 'string')) {
+    return NextResponse.json({ success: false, error: 'Invalid batch item' }, { status: 400 })
+  }
+  if (items.slice(0, 20).some((item) => item.text.length > MAX_TEXT_LENGTH)) {
+    return textTooLong()
   }
 
   // 限制批量大小
@@ -366,12 +399,15 @@ async function handleBatchTranslate(
     if (idsOfType.length === 0) continue
 
     try {
-      const { data: cached } = await supabase
+      const { data: cached, error: cacheError } = await supabase
         .from('translation_cache')
         .select('content_id, translated_text, content_hash')
         .eq('content_type', contentType)
         .in('content_id', idsOfType)
         .eq('target_lang', targetLang)
+      if (cacheError) {
+        logger.warn('Batch cache query failed', { contentType, error: cacheError.message })
+      }
 
       if (cached) {
         const cachedMap = new Map(
@@ -449,7 +485,12 @@ async function handleBatchTranslate(
               }
             )
             .then(({ error }) => {
-              if (error) logger.warn('Cache save failed', { error: error.message, itemId: item.id })
+              if (error) {
+                logger.error('Translation cache save failed', {
+                  error: error.message,
+                  itemId: item.id,
+                })
+              }
             })
 
           return { id: item.id, translatedText, cached: false }

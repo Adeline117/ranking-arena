@@ -43,6 +43,7 @@ jest.mock('@/lib/api', () => ({
 jest.mock('@/lib/data/trader-claims', () => ({
   getVerifiedTrader: jest.fn(),
   updateVerifiedTrader: (...args: unknown[]) => mockUpdateVerifiedTrader(...args),
+  getVerifiedTraderLinks: jest.fn().mockResolvedValue(null),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({

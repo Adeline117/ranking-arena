@@ -55,7 +55,20 @@ const baseConfig = createJestConfig(customJestConfig)
 module.exports = async () => {
   const config = await baseConfig()
   // Add ESM-only packages that Jest must transform
-  const esmPackages = ['uncrypto', '@exodus/bytes']
+  // sanitize-html >=2.18 nests ESM-only htmlparser2@12 and its dom* / entities
+  // helpers under its own node_modules; every node_modules segment of that path
+  // must be exempt for Jest to transform them.
+  const esmPackages = [
+    'uncrypto',
+    '@exodus/bytes',
+    'sanitize-html/node_modules',
+    'htmlparser2',
+    'domhandler',
+    'domutils',
+    'dom-serializer',
+    'domelementtype',
+    'entities',
+  ]
   config.transformIgnorePatterns =
     config.transformIgnorePatterns?.map((pattern) => {
       // Inject ESM packages into the negative lookahead of node_modules patterns

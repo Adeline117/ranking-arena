@@ -8,9 +8,21 @@ function source(relativePath: string): string {
 }
 
 describe('public ranking asset publication boundary', () => {
+  // 193bcebdb moved the trader badge and trader OG image to never-cacheable
+  // responses: a public-rank withdrawal must apply on the next image request,
+  // so they emit the epoch-tagged no-store rejection headers on every path.
+  it.each(['app/api/badge/trader/[handle]/route.ts', 'app/api/og/trader/route.tsx'])(
+    '%s rejects non-public sources and never emits cacheable ranking headers',
+    (route) => {
+      const text = source(route)
+      expect(text).toContain('isPublicRankingSourceAllowed')
+      expect(text).toContain('redirectToPublicRankingResponseCacheEpoch')
+      expect(text).toContain('publicRankingResponseRejectionHeaders')
+      expect(text).not.toContain('publicRankingResponseCacheHeaders')
+    }
+  )
+
   it.each([
-    'app/api/badge/trader/[handle]/route.ts',
-    'app/api/og/trader/route.tsx',
     'app/api/og/rank/route.tsx',
     'app/api/og/compare/route.tsx',
     'app/api/og/exchange/route.tsx',
@@ -19,9 +31,7 @@ describe('public ranking asset publication boundary', () => {
     const text = source(route)
     expect(text).toContain('isPublicRankingSourceAllowed')
     expect(text).toContain('redirectToPublicRankingResponseCacheEpoch')
-    // Cacheable images carry the epoch via publicRankingResponseCacheHeaders;
-    // the badge and trader OG are stricter and send epoch-tagged no-store headers.
-    expect(text).toMatch(/publicRankingResponse(?:Cache|Rejection)Headers\(/)
+    expect(text).toContain('publicRankingResponseCacheHeaders')
   })
 
   it.each([
@@ -32,7 +42,7 @@ describe('public ranking asset publication boundary', () => {
   ])('%s gates the resolved database source before publishing ranking metrics', (route) => {
     const text = source(route)
     expect(text).toMatch(
-      /if \(!isPublicRankingSourceAllowed\((?:srcName|exchange|tr\.source|identity\.source)\)\)/
+      /if \(!isPublicRankingSourceAllowed\((?:srcName|exchange|tr\.source|identity\.source)\)(?: \|\| ![A-Za-z]+)?\)/
     )
   })
 })

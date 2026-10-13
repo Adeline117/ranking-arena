@@ -18,6 +18,7 @@ import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { getStripe, STRIPE_API_PRICE_IDS, STRIPE_PRICE_IDS } from '@/lib/stripe'
 import { classifyActiveProSubscription, getProPlan } from '@/lib/stripe/reconciliation'
 import { updateUserSubscription } from '@/app/api/stripe/webhook/handlers/subscription'
+import { isNonStripeProGrant, LOCAL_PRO_GRANT_PLAN } from '@/lib/referral/grant-identity'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -25,6 +26,40 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const logger = createLogger('subscription-expiry')
+
+/**
+ * Expire a non-Stripe Pro grant row whose period has ended. The update is
+ * conditional (still active, still no Stripe id, still past its end) so a
+ * concurrent checkout webhook that converted the row to a paid Stripe
+ * subscription is never downgraded.
+ */
+async function expireLocalProGrant(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  now: Date
+): Promise<{ expired: boolean; error?: string }> {
+  const { data: updated, error: updateError } = await supabase
+    .from('subscriptions')
+    .update({ status: 'expired', updated_at: now.toISOString() })
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .is('stripe_subscription_id', null)
+    // Mirror isNonStripeProGrant: labelled grants, or legacy NULL-plan rows
+    // with no Stripe customer. Never a paid row missing its subscription id.
+    .or(`plan.eq.${LOCAL_PRO_GRANT_PLAN},and(plan.is.null,stripe_customer_id.is.null)`)
+    .lt('current_period_end', now.toISOString())
+    .select('user_id')
+  if (updateError) return { expired: false, error: updateError.message }
+  if (!updated || updated.length === 0) return { expired: false }
+
+  const { error: profileError } = await supabase
+    .from('user_profiles')
+    .update({ subscription_tier: 'free', is_pro: false, updated_at: now.toISOString() })
+    .eq('id', userId)
+    .or('pro_plan.is.null,pro_plan.neq.lifetime') // NULL must still downgrade
+  if (profileError) return { expired: false, error: profileError.message }
+  return { expired: true }
+}
 
 export const GET = withCron('subscription-expiry', async (_request: NextRequest) => {
   const supabase: SupabaseClient<Database> = getSupabaseAdmin()
@@ -169,6 +204,18 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
 
       for (const local of expiredSubscriptions) {
         const profile = profileByUser.get(local.user_id)
+        // Local (referral) grants have no Stripe authority: their own
+        // current_period_end is the source of truth. Previously these rows
+        // were reported as unverifiable and never expired.
+        if (profile?.pro_plan !== 'lifetime' && isNonStripeProGrant(local)) {
+          const expired = await expireLocalProGrant(supabase, local.user_id, now)
+          if (expired.error) {
+            results.errors.push(`Local grant expiry failed for ${local.user_id}: ${expired.error}`)
+          } else if (expired.expired) {
+            confirmedExpired.push(local)
+          }
+          continue
+        }
         if (
           profile?.pro_plan === 'lifetime' ||
           !local.stripe_subscription_id ||
@@ -255,7 +302,9 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
       }
 
       results.downgraded = confirmedExpired.length
-      logger.info(`Downgraded ${confirmedExpired.length} Stripe-verified expired subscriptions`)
+      logger.info(
+        `Downgraded ${confirmedExpired.length} expired subscriptions (Stripe-verified or local grants)`
+      )
     }
   }
 

@@ -10,19 +10,69 @@ import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe } from '@/lib/stripe'
+import { checkRateLimit } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('account-recover')
 const INVALID_RECOVERY = 'Invalid credentials or no pending deletion'
+// Email+password lane: unknown email, wrong password and an expired grace
+// period all get this SAME 401 so the endpoint is not an account/deletion-state
+// oracle. (The token lane keeps its explicit 410: the token is the secret.)
+const INVALID_PASSWORD_RECOVERY =
+  'Invalid credentials, no pending deletion, or the recovery period has expired'
+
+// Per-email brute-force budget on top of the per-IP `sensitive` preset. Each
+// password attempt briefly lifts the deletion ban (GoTrue rejects banned users
+// before checking the password, so there is no ban-preserving way to verify),
+// so the number of attempts per account must be tightly bounded.
+const PER_EMAIL_RATE_LIMIT = {
+  requests: 5,
+  window: 15 * 60,
+  prefix: 'account-recover-email',
+  failClose: true,
+}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-async function reban(userId: string): Promise<void> {
+async function banOnce(userId: string): Promise<boolean> {
   const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
     ban_duration: '720h',
   })
-  if (error)
-    logger.error('Failed to restore deletion ban after recovery failure', { userId, error })
+  if (error) {
+    logger.error('Failed to restore deletion ban', { userId, error: error.message })
+    return false
+  }
+  return true
+}
+
+/** Restore the deletion ban (one retry). Returns false if the account is left unbanned. */
+async function reban(userId: string): Promise<boolean> {
+  if (await banOnce(userId)) return true
+  return banOnce(userId)
+}
+
+/**
+ * Re-ban after a failed credential check — unless a concurrent, legitimate
+ * recovery already restored the account (otherwise a wrong-password request
+ * racing a correct one would lock the recovered user out for 30 days).
+ * A failed state lookup fails closed (re-bans).
+ */
+async function rebanIfStillPending(userId: string): Promise<boolean> {
+  const { data, error } = await getSupabaseAdmin()
+    .from('user_profiles')
+    .select('deleted_at')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) {
+    logger.error('Could not read deletion state before re-ban; re-banning', {
+      userId,
+      error: error.message,
+    })
+  } else if (data && data.deleted_at === null) {
+    logger.warn('Skipping re-ban: account was concurrently recovered', { userId })
+    return true
+  }
+  return reban(userId)
 }
 
 async function resumeSubscription(userId: string): Promise<boolean> {
@@ -100,6 +150,17 @@ export const POST = withPublic(
     } else {
       const { email, password } = body
       if (!email || !password) return badRequest('Email and password are required')
+      if (typeof email !== 'string' || typeof password !== 'string') {
+        return badRequest('Email and password are required')
+      }
+
+      const emailKey = createHash('sha256').update(email.trim().toLowerCase()).digest('hex')
+      const emailLimited = await checkRateLimit(
+        request,
+        PER_EMAIL_RATE_LIMIT,
+        `recover-email:${emailKey}`
+      )
+      if (emailLimited) return emailLimited
 
       const { data: profile, error } = await admin
         .from('user_profiles')
@@ -108,16 +169,20 @@ export const POST = withPublic(
         .not('deleted_at', 'is', null)
         .maybeSingle()
 
-      if (error || !profile) {
-        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+      if (error) {
+        logger.error('Failed to look up pending-deletion profile', { error: error.message })
       }
+      // Expired grace period answers exactly like an unknown email (no oracle,
+      // and the ban is never lifted for an account that can't be recovered).
       if (
-        profile.deletion_scheduled_at &&
-        new Date(profile.deletion_scheduled_at).getTime() <= Date.now()
+        error ||
+        !profile ||
+        (profile.deletion_scheduled_at &&
+          new Date(profile.deletion_scheduled_at).getTime() <= Date.now())
       ) {
         return NextResponse.json(
-          { success: false, error: 'Recovery period has expired.' },
-          { status: 410 }
+          { success: false, error: INVALID_PASSWORD_RECOVERY },
+          { status: 401 }
         )
       }
 
@@ -126,20 +191,52 @@ export const POST = withPublic(
         ban_duration: 'none',
       })
       if (unbanError) {
-        logger.error('Failed to open credential verification window', { userId, unbanError })
+        logger.error('Failed to open credential verification window', {
+          userId,
+          error: unbanError.message,
+        })
         return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
       }
 
       let valid = false
       try {
-        const anon = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-        const { error: signInError } = await anon.auth.signInWithPassword({ email, password })
+        const anon = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
+          email,
+          password,
+        })
         valid = !signInError
-      } finally {
-        if (!valid) await reban(userId)
+        // The session was only a credential probe; revoke it.
+        if (valid && signIn?.session) {
+          const { error: signOutError } = await anon.auth.signOut({ scope: 'local' })
+          if (signOutError) {
+            logger.warn('Failed to revoke credential-probe session', {
+              userId,
+              error: signOutError.message,
+            })
+          }
+        }
+      } catch (verifyError) {
+        valid = false
+        logger.error('Credential verification threw', {
+          userId,
+          error: verifyError instanceof Error ? verifyError.message : String(verifyError),
+        })
       }
       if (!valid) {
-        return NextResponse.json({ success: false, error: INVALID_RECOVERY }, { status: 401 })
+        if (!(await rebanIfStillPending(userId))) {
+          // Fail closed: the account is pending deletion but is now unbanned.
+          logger.error('SECURITY: pending-deletion account left unbanned after failed recovery', {
+            userId,
+          })
+          return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
+        }
+        return NextResponse.json(
+          { success: false, error: INVALID_PASSWORD_RECOVERY },
+          { status: 401 }
+        )
       }
     }
 
@@ -164,12 +261,27 @@ export const POST = withPublic(
     )
 
     if (restoreError || !restoredUserId) {
-      await reban(userId)
+      if (!(await reban(userId))) {
+        logger.error('SECURITY: account left unbanned after failed restore', { userId })
+      }
       logger.error('Failed to restore pending account', {
         userId,
         error: restoreError?.message ?? 'expired or invalid recovery',
       })
       return NextResponse.json({ success: false, error: 'Recovery failed.' }, { status: 500 })
+    }
+
+    // A concurrent wrong-password attempt may have re-banned between our
+    // unban and the restore (its "still pending" check is not locked). The
+    // account is restored now, so lifting the ban again is always correct.
+    const { error: finalUnbanError } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: 'none',
+    })
+    if (finalUnbanError) {
+      logger.error('SECURITY: restored account may still be banned', {
+        userId,
+        finalUnbanError,
+      })
     }
 
     const subscriptionResumed = await resumeSubscription(userId)

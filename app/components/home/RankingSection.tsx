@@ -281,7 +281,20 @@ export default function RankingSection({
             lineHeight: 1.6,
           }}
         >
-          {hasActiveFilters ? t('noTradersMatchFilters') : t('failedToLoadRankings')}
+          {hasActiveFilters ? (
+            t('noTradersMatchFilters')
+          ) : (
+            // No `error` here: the request succeeded but returned an empty
+            // cohort. The API withholds rows (sealed-empty projection) while
+            // source freshness/publication is unverified (`isStale`), so this
+            // is a refresh state — not a load failure.
+            <>
+              <div style={{ color: tokens.colors.text.secondary, marginBottom: 4 }}>
+                {isStale ? t('rankingsRefreshingTitle') : t('rankingsEmptyPeriodTitle')}
+              </div>
+              <div style={{ fontSize: 13 }}>{t('rankingsRefreshingDesc')}</div>
+            </>
+          )}
           {hasActiveFilters ? (
             <button
               onClick={handleResetFilters}

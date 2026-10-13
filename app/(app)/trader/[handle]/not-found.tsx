@@ -72,7 +72,7 @@ export default function TraderNotFound() {
       </p>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
         <Link
-          href="/rankings"
+          href="/"
           style={{
             padding: '10px 28px',
             borderRadius: tokens.radius.md,
