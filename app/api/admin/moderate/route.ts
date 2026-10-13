@@ -14,6 +14,7 @@ import {
   moderateCommentWithRollout,
 } from '@/lib/data/comment-mutation-rollout'
 import { createLogger } from '@/lib/utils/logger'
+import { recordAdminLog } from '@/lib/admin/audit-log'
 
 const logger = createLogger('api:admin-moderate')
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
           }
 
           // Log the action
-          await supabase.from('admin_logs').insert({
+          await recordAdminLog(supabase, {
             admin_id: admin.id,
             action: 'delete_post',
             target_type: 'post',
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
             throw ApiError.database('Database operation failed')
           }
 
-          await supabase.from('admin_logs').insert({
+          await recordAdminLog(supabase, {
             admin_id: admin.id,
             action: 'delete_comment',
             target_type: 'comment',
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
             throw ApiError.database(banError.message)
           }
 
-          await supabase.from('admin_logs').insert({
+          await recordAdminLog(supabase, {
             admin_id: admin.id,
             action: 'ban_user',
             target_type: 'user',

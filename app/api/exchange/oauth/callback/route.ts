@@ -10,13 +10,16 @@ import { env } from '@/lib/env'
 const logger = createLogger('exchange-oauth-callback')
 
 // OAuth Token 交换配置（根据 Binance 官方文档）
-const TOKEN_CONFIG: Record<string, {
-  clientId: string
-  clientSecret: string
-  tokenUrl: string
-  redirectUri: string
-  userInfoUrl?: string
-}> = {
+const TOKEN_CONFIG: Record<
+  string,
+  {
+    clientId: string
+    clientSecret: string
+    tokenUrl: string
+    redirectUri: string
+    userInfoUrl?: string
+  }
+> = {
   binance: {
     clientId: process.env.BINANCE_OAUTH_CLIENT_ID || '',
     clientSecret: process.env.BINANCE_OAUTH_CLIENT_SECRET || '',
@@ -100,8 +103,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired state' }, { status: 400 })
     }
 
-    // 删除已使用的 state
-    await supabase.from('oauth_states').delete().eq('id', stateData.id)
+    // 删除已使用的 state（单次使用）。fail-closed：删除失败或未删到行（并发
+    // 回调已消费同一 state）时拒绝继续，防止 state 重放。
+    const { data: consumed, error: consumeError } = await supabase
+      .from('oauth_states')
+      .delete()
+      .eq('id', stateData.id)
+      .select('id')
+    if (consumeError || !consumed || consumed.length !== 1) {
+      logger.error('Failed to consume OAuth state', {
+        exchange,
+        error: consumeError?.message ?? 'state already consumed',
+      })
+      return NextResponse.json({ error: 'Invalid or expired state' }, { status: 400 })
+    }
 
     // 获取 token 配置
     const config = TOKEN_CONFIG[exchange]
@@ -141,9 +156,12 @@ export async function POST(request: NextRequest) {
       logger.error('Token exchange failed', { errorText, exchange })
       try {
         const errorJson = JSON.parse(errorText)
-        return NextResponse.json({ 
-          error: errorJson.error_description || errorJson.error || 'Failed to exchange token' 
-        }, { status: 400 })
+        return NextResponse.json(
+          {
+            error: errorJson.error_description || errorJson.error || 'Failed to exchange token',
+          },
+          { status: 400 }
+        )
       } catch {
         return NextResponse.json({ error: 'Failed to exchange token' }, { status: 400 })
       }
@@ -167,9 +185,7 @@ export async function POST(request: NextRequest) {
     const encryptedRefreshToken = refresh_token ? encrypt(refresh_token, encryptionKey) : null
 
     // 计算过期时间
-    const expiresAt = expires_in
-      ? new Date(Date.now() + expires_in * 1000).toISOString()
-      : null
+    const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null
 
     // 尝试获取用户信息
     let exchangeUserId: string | null = null
@@ -177,7 +193,7 @@ export async function POST(request: NextRequest) {
       try {
         const userInfoResponse = await fetch(config.userInfoUrl, {
           headers: {
-            'Authorization': `Bearer ${access_token}`,
+            Authorization: `Bearer ${access_token}`,
           },
         })
         if (userInfoResponse.ok) {
@@ -193,9 +209,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 存储到数据库
-    const { error: dbError } = await supabase
-      .from('user_exchange_connections')
-      .upsert({
+    const { error: dbError } = await supabase.from('user_exchange_connections').upsert(
+      {
         user_id: userId,
         exchange,
         exchange_user_id: exchangeUserId,
@@ -208,16 +223,18 @@ export async function POST(request: NextRequest) {
         // 对于 OAuth 连接，不需要 API key/secret
         api_key_encrypted: 'oauth',
         api_secret_encrypted: 'oauth',
-      }, {
+      },
+      {
         onConflict: 'user_id,exchange',
-      })
+      }
+    )
 
     if (dbError) {
       logger.error('Error saving connection', { error: dbError, userId, exchange })
       return NextResponse.json({ error: 'Failed to save connection' }, { status: 500 })
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       exchangeUserId,
     })

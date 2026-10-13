@@ -9,15 +9,13 @@ import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
+import { recordAdminLog } from '@/lib/admin/audit-log'
 
 const logger = createLogger('admin-user-role')
 
 export const dynamic = 'force-dynamic'
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
       const { id: userId } = await params
@@ -65,7 +63,7 @@ export async function PUT(
       }
 
       // Audit log
-      await supabase.from('admin_logs').insert({
+      await recordAdminLog(supabase, {
         admin_id: admin.id,
         action: role === 'moderator' ? 'promote_to_moderator' : 'demote_from_moderator',
         target_type: 'user',
@@ -73,7 +71,12 @@ export async function PUT(
         details: { handle: targetUser.handle, previousRole: targetUser.role, newRole: role },
       })
 
-      logger.info('User role updated', { userId, adminId: admin.id, previousRole: targetUser.role, newRole: role })
+      logger.info('User role updated', {
+        userId,
+        adminId: admin.id,
+        previousRole: targetUser.role,
+        newRole: role,
+      })
 
       return apiSuccess({ message: `User role updated to ${role}` })
     },
