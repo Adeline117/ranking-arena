@@ -6626,6 +6626,9 @@ const zh = {
   u2detail_chartMedian: '中位数',
   u2detail_chartDays: '天数',
   u13admin_accessRequired: '需要管理员权限',
+  rankingsRefreshingTitle: '排行榜数据更新中',
+  rankingsRefreshingDesc: '最新交易所数据通过校验后才会发布排名，请稍后再来查看。',
+  rankingsEmptyPeriodTitle: '该周期暂无已发布的排名',
 } as const
 
 export default zh

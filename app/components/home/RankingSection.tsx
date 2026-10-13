@@ -26,6 +26,12 @@ const ProUpsellModal = dynamic(
   { ssr: false }
 )
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
+/**
+ * Top Movers is quarantined server-side (no sealed historical-delta
+ * publication). Keep the UI path wired but dormant so it is a one-line restore.
+ */
+const MOVERS_PUBLICATION_AVAILABLE = false
+
 const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), {
   ssr: false,
 })
@@ -166,6 +172,10 @@ export default function RankingSection({
     }>
   }>({ risers: [], fallers: [] })
   useEffect(() => {
+    // /api/rankings/movers is a sealed-empty projection until a historical
+    // mover publication exists (see app/api/rankings/movers/route.ts). Skip
+    // the guaranteed-empty request; flip MOVERS_PUBLICATION_AVAILABLE to restore.
+    if (!MOVERS_PUBLICATION_AVAILABLE) return
     const doFetch = () => {
       apiFetch<{ risers?: typeof movers.risers; fallers?: typeof movers.fallers }>(
         '/api/rankings/movers'
@@ -330,7 +340,20 @@ export default function RankingSection({
             lineHeight: 1.6,
           }}
         >
-          {hasActiveFilters ? t('noTradersMatchFilters') : t('failedToLoadRankings')}
+          {hasActiveFilters ? (
+            t('noTradersMatchFilters')
+          ) : (
+            // No `error` here: the request succeeded but returned an empty
+            // cohort. The API withholds rows (sealed-empty projection) while
+            // source freshness/publication is unverified (`isStale`), so this
+            // is a refresh state — not a load failure.
+            <>
+              <div style={{ color: tokens.colors.text.secondary, marginBottom: 4 }}>
+                {isStale ? t('rankingsRefreshingTitle') : t('rankingsEmptyPeriodTitle')}
+              </div>
+              <div style={{ fontSize: 13 }}>{t('rankingsRefreshingDesc')}</div>
+            </>
+          )}
           {hasActiveFilters ? (
             <button
               onClick={handleResetFilters}

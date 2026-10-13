@@ -346,6 +346,9 @@ const zhCore = {
   savedTabPosts: '帖子收藏夹',
   watchlistTitle: '自选列表',
   myFavorites: '我的收藏',
+  rankingsRefreshingTitle: '排行榜数据更新中',
+  rankingsRefreshingDesc: '最新交易所数据通过校验后才会发布排名，请稍后再来查看。',
+  rankingsEmptyPeriodTitle: '该周期暂无已发布的排名',
 } as const
 
 export default zhCore

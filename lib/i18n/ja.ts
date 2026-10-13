@@ -6457,6 +6457,10 @@ const ja = {
   u2detail_chartMedian: '中央値',
   u2detail_chartDays: '日数',
   u13admin_accessRequired: '管理者権限が必要です',
+  rankingsRefreshingTitle: 'ランキングを更新中です',
+  rankingsRefreshingDesc:
+    '最新の取引所データが検証を通過した後にランキングを公開します。しばらくしてから再度ご確認ください。',
+  rankingsEmptyPeriodTitle: 'この期間のランキングはまだありません',
 } as const
 
 export default ja
