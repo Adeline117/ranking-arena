@@ -161,7 +161,10 @@ export async function safeFetch(
  * Read a response body with a hard byte cap enforced while streaming
  * (Content-Length is only used as an early reject, never trusted alone).
  */
-export async function readBodyCapped(response: Response, maxBytes: number): Promise<Buffer> {
+export async function readBodyCapped(
+  response: Response,
+  maxBytes: number
+): Promise<Uint8Array<ArrayBuffer>> {
   const declared = Number(response.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > maxBytes) {
     try {
@@ -171,7 +174,7 @@ export async function readBodyCapped(response: Response, maxBytes: number): Prom
     }
     throw new SafeFetchError('too_large', `declared ${declared} bytes > cap ${maxBytes}`)
   }
-  if (!response.body) return Buffer.alloc(0)
+  if (!response.body) return new Uint8Array(0)
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -190,5 +193,11 @@ export async function readBodyCapped(response: Response, maxBytes: number): Prom
     }
     chunks.push(value)
   }
-  return Buffer.concat(chunks, total)
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return out
 }
