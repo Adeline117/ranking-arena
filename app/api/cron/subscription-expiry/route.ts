@@ -18,7 +18,7 @@ import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { getStripe, STRIPE_API_PRICE_IDS, STRIPE_PRICE_IDS } from '@/lib/stripe'
 import { classifyActiveProSubscription, getProPlan } from '@/lib/stripe/reconciliation'
 import { updateUserSubscription } from '@/app/api/stripe/webhook/handlers/subscription'
-import { isNonStripeProGrant } from '@/lib/referral/grant-identity'
+import { isNonStripeProGrant, LOCAL_PRO_GRANT_PLAN } from '@/lib/referral/grant-identity'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -44,6 +44,9 @@ async function expireLocalProGrant(
     .eq('user_id', userId)
     .eq('status', 'active')
     .is('stripe_subscription_id', null)
+    // Mirror isNonStripeProGrant: labelled grants, or legacy NULL-plan rows
+    // with no Stripe customer. Never a paid row missing its subscription id.
+    .or(`plan.eq.${LOCAL_PRO_GRANT_PLAN},and(plan.is.null,stripe_customer_id.is.null)`)
     .lt('current_period_end', now.toISOString())
     .select('user_id')
   if (updateError) return { expired: false, error: updateError.message }
