@@ -283,6 +283,31 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:b2c-activation-v2-pg17
 
+      - name: Prove notification ranking-change reader fence
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:notification-ranking-change-reader-fence-pg17
+
+      - name: Prove arena_bot legacy-publication isolation
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:arena-bot-legacy-publication-isolation-pg17
+
+      - name: Prove trader-series publication isolation
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trader-series-publication-isolation-pg17
+
+      - name: Prove legacy raw-metric publication isolation
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:legacy-raw-metric-publication-isolation-pg17
+
+      - name: Prove legacy platform-statistics RPC quarantine
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:legacy-platform-stats-rpc-pg17
+
       - name: Prove copier snapshot trust v2 publisher
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
+import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
 import { buildTraderAlertDelivery } from './trader-alert-delivery'
 import {
   evaluateTraderAlert,
@@ -11,6 +12,18 @@ import {
 
 const MAX_ALERTS_PER_RUN = 1_000
 const MAX_PENDING_PER_RUN = 5_000
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
+const PUBLIC_ALERT_PERIOD = '90D'
+
+/**
+ * State rows written before the sealed public cohort existed have no durable
+ * evidence provenance. Keep them out of every future comparison rather than
+ * turning their historical raw values into a newly delivered alert.
+ */
+export const SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION = 1_000_000_000
+
+const PUBLIC_ALERT_RANKING_COLUMNS =
+  'season_id,source,source_trader_id,roi,pnl,max_drawdown,arena_score,rank,win_rate,score_completeness,metrics_estimated,is_outlier,computed_at'
 
 type AlertRow = Pick<
   Database['public']['Tables']['trader_alerts']['Row'],
@@ -63,6 +76,10 @@ function stateKey(alertId: string, metric: string): string {
   return `${alertId}:${metric}`
 }
 
+function deliveryKey(alertId: string, metric: string, baselineVersion: number): string {
+  return `${stateKey(alertId, metric)}:${baselineVersion}`
+}
+
 function traderKey(traderId: string, source: string): string {
   return `${traderId}:${source}`
 }
@@ -98,7 +115,13 @@ function configsFor(alert: AlertRow): Record<TraderAlertMetric, TraderAlertMetri
   }
 }
 
-function toMetricState(row: StateRow): TraderAlertMetricState {
+function toMetricState(row: StateRow): TraderAlertMetricState | null {
+  if (
+    !Number.isSafeInteger(row.baseline_version) ||
+    row.baseline_version < SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION
+  ) {
+    return null
+  }
   return {
     baselineValue: row.baseline_value,
     lastValue: row.last_value,
@@ -106,18 +129,56 @@ function toMetricState(row: StateRow): TraderAlertMetricState {
   }
 }
 
+function unseededSealedMetricState(): TraderAlertMetricState {
+  return {
+    baselineValue: null,
+    lastValue: null,
+    baselineVersion: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function observationFromPublicRankingRow(row: unknown): TraderObservation | null {
+  if (!isRecord(row)) return null
+  if (typeof row.source_trader_id !== 'string' || typeof row.source !== 'string') return null
+
+  const metrics = {
+    roi: row.roi,
+    pnl: row.pnl,
+    score: row.arena_score,
+    rank: row.rank,
+    drawdown: row.max_drawdown,
+  }
+  if (
+    Object.values(metrics).some((value) => typeof value !== 'number' || !Number.isFinite(value))
+  ) {
+    return null
+  }
+
+  return {
+    traderId: row.source_trader_id,
+    source: row.source,
+    roi: metrics.roi as number,
+    pnl: metrics.pnl as number,
+    score: metrics.score as number,
+    rank: metrics.rank as number,
+    drawdown: metrics.drawdown as number,
+  }
+}
+
 function observationForAlert(
   alert: AlertRow,
-  observations: Map<string, TraderObservation>,
-  byTrader: Map<string, TraderObservation[]>
+  observations: Map<string, TraderObservation>
 ): TraderObservation | null {
-  if (alert.source) return observations.get(traderKey(alert.trader_id, alert.source)) ?? null
-
-  // Legacy alerts without an exchange are safe only when the trader ID maps to
-  // exactly one account. Guessing among multiple exchanges can alert on the
-  // wrong person/account.
-  const candidates = byTrader.get(alert.trader_id) ?? []
-  return candidates.length === 1 ? candidates[0] : null
+  // `source_trader_id` is only source-local. A legacy alert with no source
+  // cannot prove which account it targets, even if the current public view
+  // happens to expose one matching row (another source can be unpublished).
+  // It remains inert until its owner saves an explicit source-bound alert.
+  if (!alert.source) return null
+  return observations.get(traderKey(alert.trader_id, alert.source)) ?? null
 }
 
 async function reserveDelivery(
@@ -250,32 +311,34 @@ export async function runTraderAlerts(
   if (alerts.length === 0) return emptyResult
 
   const traderIds = [...new Set(alerts.map((alert) => alert.trader_id))]
-  const { data: leaderboardRows, error: leaderboardError } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, source, roi, pnl, max_drawdown, arena_score, rank')
+  const { data: rankingRows, error: rankingError } = await supabase
+    .from(PUBLIC_RANKED_LEADERBOARD as never)
+    .select(PUBLIC_ALERT_RANKING_COLUMNS)
     .in('source_trader_id', traderIds)
-    .eq('season_id', '90D')
+    .eq('season_id', PUBLIC_ALERT_PERIOD)
+    .not('rank', 'is', null)
 
-  if (leaderboardError) {
-    throw new Error(`Failed to load trader observations: ${leaderboardError.message}`)
+  if (rankingError) {
+    throw new Error(`Failed to load public trader observations: ${rankingError.message}`)
   }
 
+  const sanitizedCohort = sanitizePublicRankingPayload(
+    { traders: (rankingRows ?? []) as unknown[], period: PUBLIC_ALERT_PERIOD },
+    { expectedPeriod: PUBLIC_ALERT_PERIOD, nowMs: now.getTime() }
+  ) as { traders?: unknown[]; ranking_visibility?: unknown }
+  // A partial result has no complete cohort proof. Do not use even the rows
+  // that survived sanitization to advance a user-visible alert baseline.
+  const verifiedRows =
+    sanitizedCohort.ranking_visibility === 'partial' ||
+    sanitizedCohort.ranking_visibility === 'unknown'
+      ? []
+      : (sanitizedCohort.traders ?? [])
+
   const observations = new Map<string, TraderObservation>()
-  const observationsByTrader = new Map<string, TraderObservation[]>()
-  for (const row of leaderboardRows ?? []) {
-    const observation: TraderObservation = {
-      traderId: row.source_trader_id,
-      source: row.source,
-      roi: row.roi,
-      pnl: row.pnl,
-      score: row.arena_score,
-      rank: row.rank,
-      drawdown: row.max_drawdown,
-    }
+  for (const row of verifiedRows) {
+    const observation = observationFromPublicRankingRow(row)
+    if (!observation) continue
     observations.set(traderKey(observation.traderId, observation.source), observation)
-    const sameTrader = observationsByTrader.get(observation.traderId) ?? []
-    sameTrader.push(observation)
-    observationsByTrader.set(observation.traderId, sameTrader)
   }
 
   const alertIds = alerts.map((alert) => alert.id)
@@ -294,24 +357,28 @@ export async function runTraderAlerts(
   if (pendingError) throw new Error(`Failed to load pending trader alerts: ${pendingError.message}`)
 
   const states = new Map<string, TraderAlertMetricState>()
-  for (const row of stateRows ?? [])
-    states.set(stateKey(row.alert_id, row.metric), toMetricState(row))
+  for (const row of stateRows ?? []) {
+    const state = toMetricState(row)
+    if (state) states.set(stateKey(row.alert_id, row.metric), state)
+  }
 
   const alertsById = new Map(alerts.map((alert) => [alert.id, alert]))
   const processedPending = new Set<string>()
   const deliveredAlerts: DeliveredTraderAlert[] = []
   let deliveryFailures = 0
 
-  // Retry already-reserved events first. Their stored payload remains stable
-  // even if the latest observation has moved again.
+  // Retry only events reserved after the sealed evidence epoch. Legacy pending
+  // rows contain raw historical values/messages, so finalizing them would leak
+  // data that can no longer be proven by the public cohort.
   for (const delivery of pendingRows ?? []) {
+    if (delivery.baseline_version < SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION) continue
     const alert = alertsById.get(delivery.alert_id)
     if (!alert) continue
-    const observation = observationForAlert(alert, observations, observationsByTrader)
+    const observation = observationForAlert(alert, observations)
     if (!observation) continue
     const metric = delivery.metric as TraderAlertMetric
     const lastValue = metricValue(observation, metric) ?? delivery.new_value
-    processedPending.add(stateKey(alert.id, metric))
+    processedPending.add(deliveryKey(alert.id, metric, delivery.baseline_version))
 
     try {
       const newlyDelivered = await finalizeDelivery(supabase, delivery, lastValue, observedAt)
@@ -329,13 +396,13 @@ export async function runTraderAlerts(
   const stateWrites: Database['public']['Tables']['trader_alert_states']['Insert'][] = []
 
   for (const alert of alerts) {
-    const observation = observationForAlert(alert, observations, observationsByTrader)
+    const observation = observationForAlert(alert, observations)
     if (!observation) continue
 
     const alertStates: Partial<Record<TraderAlertMetric, TraderAlertMetricState>> = {}
     for (const metric of ['roi', 'pnl', 'score', 'rank', 'drawdown'] as const) {
       const stored = states.get(stateKey(alert.id, metric))
-      if (stored) alertStates[metric] = stored
+      alertStates[metric] = stored ?? unseededSealedMetricState()
     }
 
     const evaluations = evaluateTraderAlert(configsFor(alert), observation, alertStates)
@@ -343,7 +410,6 @@ export async function runTraderAlerts(
 
     for (const evaluation of evaluations) {
       const key = stateKey(alert.id, evaluation.metric)
-      if (processedPending.has(key) || oneTimeDelivered) continue
 
       if (!evaluation.event) {
         stateWrites.push({
@@ -356,6 +422,15 @@ export async function runTraderAlerts(
           updated_at: observedAt,
         })
         states.set(key, evaluation.nextState)
+        continue
+      }
+
+      if (
+        processedPending.has(
+          deliveryKey(alert.id, evaluation.metric, evaluation.event.baselineVersion)
+        ) ||
+        oneTimeDelivered
+      ) {
         continue
       }
 
@@ -410,7 +485,7 @@ export async function runTraderAlerts(
     alertsSkippedNoSubscription: allAlerts.length - alerts.length,
     tradersChecked: new Set(
       alerts
-        .map((alert) => observationForAlert(alert, observations, observationsByTrader))
+        .map((alert) => observationForAlert(alert, observations))
         .filter((value): value is TraderObservation => value != null)
         .map((observation) => traderKey(observation.traderId, observation.source))
     ).size,

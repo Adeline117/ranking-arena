@@ -7,7 +7,6 @@ import { t as i18nT } from '@/lib/i18n'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { useCountUp } from '@/lib/hooks/useCountUp'
 import { TRADER_TEXT_TERTIARY } from './shared/TraderDisplay'
-import { Sparkline } from './Sparkline'
 import { formatROI } from './utils'
 import Metric from '../ui/Metric'
 import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
@@ -97,8 +96,6 @@ export interface TraderMetricCellsProps {
   language: string
   getPnLTooltipFn: (source: string, lang: string) => string
   t: (key: string) => string
-  /** Equity-trend points for the ROI-cell sparkline (absent → numeric only). */
-  roiSpark?: number[]
 }
 
 /**
@@ -111,7 +108,6 @@ export const TraderMetricCells = memo(function TraderMetricCells({
   language,
   getPnLTooltipFn,
   t,
-  roiSpark,
 }: TraderMetricCellsProps) {
   // ROI
   const roi = trader.roi != null && Number.isFinite(trader.roi) ? trader.roi : null
@@ -134,14 +130,9 @@ export const TraderMetricCells = memo(function TraderMetricCells({
 
   return (
     <>
-      {/* ROI — number + equity-trend sparkline (in-cell; absent → number only) */}
+      {/* ROI — current published scalar only; historical trajectories are quarantined. */}
       <Box className="roi-cell" style={ROI_CELL_STYLE}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-          <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
-          {roiSpark && roiSpark.length >= 2 && (
-            <Sparkline pts={roiSpark} up={roi != null ? roi >= 0 : undefined} />
-          )}
-        </div>
+        <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
       </Box>
 
       {/* PnL — shared Metric with colorblind-safe arrow (audit 1.2) */}

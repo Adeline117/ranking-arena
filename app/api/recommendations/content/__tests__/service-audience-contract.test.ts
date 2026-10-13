@@ -55,9 +55,12 @@ describe('content recommendation service audience boundary', () => {
     expect(route).toContain("if (contentType === 'trader')")
     expect(route).toContain('getCurrentTraderRecommendations(supabase, user?.id ?? null, limit)')
     expect(route).toContain("p_target_type: 'trader'")
-    expect(route).toContain(".from('leaderboard_ranks')")
+    expect(route).toContain(".from('public_ranked_leaderboard')")
+    expect(route).not.toContain(".from('leaderboard_ranks')")
+    expect(route).toContain('sanitizePublicRankingPayload')
     expect(route).toContain(".in('source_trader_id', traderKeys)")
     expect(route).toContain('currentByIdentity.get(candidate.targetId)')
+    expect(route).toContain('ranking_visibility_reason: traderResult.rankingVisibilityReason')
     expect(route).not.toContain('// For other types, return raw RPC data')
 
     const traderBranch = route.indexOf("if (contentType === 'trader')")

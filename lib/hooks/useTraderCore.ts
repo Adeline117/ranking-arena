@@ -27,6 +27,13 @@ const POLL_BASE_MS = 2_000
 const POLL_CAP_MS = 15_000
 const POLL_GIVE_UP_MS = 90_000
 
+/** Bump whenever the public core projection gains or loses a trust boundary. */
+export const TRADER_CORE_QUERY_EPOCH = 'history-quarantine-v1'
+
+export function traderCoreQueryKey(source: string, exchangeTraderId: string, tf: ServingTimeframe) {
+  return ['trader-core', TRADER_CORE_QUERY_EPOCH, source, exchangeTraderId, tf] as const
+}
+
 export interface UseTraderCoreOptions {
   source: string
   exchangeTraderId: string
@@ -46,7 +53,9 @@ export function useTraderCore({
   const url = `/api/traders/${encodeURIComponent(exchangeTraderId)}/core?source=${encodeURIComponent(source)}&tf=${tf}`
 
   const query = useQuery<TraderCoreResponse>({
-    queryKey: ['trader-core', source, exchangeTraderId, tf],
+    // The epoch keeps an already-open SPA from replaying the former raw
+    // ROI/PnL/series cache after the public core quarantine is deployed.
+    queryKey: traderCoreQueryKey(source, exchangeTraderId, tf),
     queryFn: async () => {
       const res = await fetcher<ApiSuccessResponse<TraderCoreResponse>>(url)
       return res.data

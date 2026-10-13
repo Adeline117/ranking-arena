@@ -20,6 +20,10 @@ import {
 } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 
 // Candidate rows may be cached server-side, but the final audience decision is
 // evaluated on every request. A CDN-cached payload could outlive a group being
@@ -33,8 +37,133 @@ const NO_STORE_HEADERS = {
 const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
 const GROUP_DISCOVERY_SELECT =
   'id, name, name_en, description, description_en, avatar_url, member_count'
-const TRADER_RECOMMENDATION_SELECT =
-  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+const TRADER_RECOMMENDATION_PERIOD = '90D'
+// This route may expose trader ranking fields only after the sealed public
+// cohort view has established source, history, price/cost-basis, and score
+// completeness eligibility. Keep the row proof fields in the projection so a
+// malformed PostgREST/cache boundary can fail closed before it becomes a
+// recommendation.
+const PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT =
+  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated, trading_style, avg_holding_hours, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+
+type PublicRankedLeaderboardQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  gt(column: string, value: number): PublicRankedLeaderboardQuery
+  or(expression: string): PublicRankedLeaderboardQuery
+  order(
+    column: string,
+    options: { ascending: boolean; nullsFirst: boolean }
+  ): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedTraderRecommendation = Record<string, unknown> & {
+  source: string
+  source_trader_id: string
+  rank: number
+  arena_score: number
+  roi: number
+}
+
+type TraderRecommendationVisibility = 'partial' | 'unknown'
+
+type TraderRecommendationResult = {
+  recommendations: Record<string, unknown>[]
+  personalized: boolean
+  rankingVisibility?: TraderRecommendationVisibility
+  rankingVisibilityReason?: string
+}
+
+type VerifiedTraderRecommendationCohort = {
+  rows: PublicRankedTraderRecommendation[]
+  integrityCompromised: boolean
+  unavailable: boolean
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Local bridge until generated Supabase types include the security-barrier
+ * view. Keeping this narrow prevents callers from accidentally selecting a
+ * raw ranking relation through this recommendation path.
+ */
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function hasPositivePublicRank(row: unknown): row is PublicRankedTraderRecommendation {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    isPublicRankingSourceAllowed(row.source) &&
+    typeof row.source_trader_id === 'string' &&
+    row.source_trader_id.length > 0 &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0 &&
+    typeof row.arena_score === 'number' &&
+    Number.isFinite(row.arena_score) &&
+    row.arena_score > 0 &&
+    typeof row.roi === 'number' &&
+    Number.isFinite(row.roi)
+  )
+}
+
+/**
+ * The view is the membership authority; this re-check is deliberately only
+ * defense in depth for an unexpected client/schema boundary. A filtered row
+ * is never allowed to shift a finite "top" recommendation page.
+ */
+function verifyTraderRecommendationCohort(value: unknown): VerifiedTraderRecommendationCohort {
+  if (!Array.isArray(value)) {
+    return { rows: [], integrityCompromised: false, unavailable: true }
+  }
+
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: value, period: TRADER_RECOMMENDATION_PERIOD },
+    { expectedPeriod: TRADER_RECOMMENDATION_PERIOD }
+  ) as { traders?: unknown[] }
+  const rows = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter(hasPositivePublicRank)
+    : []
+
+  return {
+    rows,
+    integrityCompromised: rows.length !== value.length,
+    unavailable: false,
+  }
+}
+
+function unavailableTraderRecommendations(
+  visibility: TraderRecommendationVisibility,
+  reason: string,
+  recommendations: Record<string, unknown>[] = [],
+  personalized = false
+): TraderRecommendationResult {
+  return {
+    recommendations,
+    personalized,
+    rankingVisibility: visibility,
+    rankingVisibilityReason: reason,
+  }
+}
 
 /**
  * Merge author profiles into post rows. posts.author_id has no FK in prod, so
@@ -156,25 +285,37 @@ type CurrentTraderCandidate = {
   targetId: string
   source: string
   traderKey: string
-  score: unknown
 }
 
-function parseTraderCandidate(row: Record<string, unknown>): CurrentTraderCandidate | null {
+function parseTraderCandidate(row: unknown): CurrentTraderCandidate | null {
+  if (!isRecord(row)) return null
   if (typeof row.target_id !== 'string') return null
   const separator = row.target_id.indexOf(':')
   if (separator <= 0 || separator >= row.target_id.length - 1) return null
 
+  const source = row.target_id.slice(0, separator)
+  const traderKey = row.target_id.slice(separator + 1)
+  // Collaborative-filtering output establishes only a candidate identity. It
+  // may not introduce an inactive, quarantined, alias, or malformed source
+  // into the public ranking query.
+  if (
+    !isPublicRankingSourceAllowed(source) ||
+    traderKey.length === 0 ||
+    traderKey !== traderKey.trim()
+  ) {
+    return null
+  }
+
   return {
     targetId: row.target_id,
-    source: row.target_id.slice(0, separator),
-    traderKey: row.target_id.slice(separator + 1),
-    score: row.score ?? null,
+    source,
+    traderKey,
   }
 }
 
 function traderIdentity(row: Record<string, unknown>): string | null {
   if (typeof row.source !== 'string' || typeof row.source_trader_id !== 'string') return null
-  if (!row.source || !row.source_trader_id) return null
+  if (!isPublicRankingSourceAllowed(row.source) || !row.source_trader_id) return null
   return `${row.source}:${row.source_trader_id}`
 }
 
@@ -182,7 +323,7 @@ async function getCurrentTraderRecommendations(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   actorId: string | null,
   limit: number
-): Promise<{ recommendations: Record<string, unknown>[]; personalized: boolean }> {
+): Promise<TraderRecommendationResult> {
   const recommendations: Record<string, unknown>[] = []
   let personalized = false
 
@@ -195,7 +336,7 @@ async function getCurrentTraderRecommendations(
     if (!rpcError && Array.isArray(rpcData)) {
       const seenTargets = new Set<string>()
       const rankedCandidates = rpcData
-        .map((row) => parseTraderCandidate(row as Record<string, unknown>))
+        .map((row) => parseTraderCandidate(row))
         .filter((candidate): candidate is CurrentTraderCandidate => {
           if (!candidate || seenTargets.has(candidate.targetId)) return false
           seenTargets.add(candidate.targetId)
@@ -203,20 +344,35 @@ async function getCurrentTraderRecommendations(
         })
         .slice(0, limit)
       const traderKeys = [...new Set(rankedCandidates.map((candidate) => candidate.traderKey))]
+      const traderSources = [...new Set(rankedCandidates.map((candidate) => candidate.source))]
 
-      if (traderKeys.length > 0) {
-        const { data: currentTraders, error: currentTradersError } = await supabase
-          .from('leaderboard_ranks')
-          .select(TRADER_RECOMMENDATION_SELECT)
-          .eq('season_id', '90D')
-          .not('rank', 'is', null)
-          .in('source_trader_id', traderKeys)
-          .gt('arena_score', 0)
-          .or('is_outlier.is.null,is_outlier.eq.false')
-        if (currentTradersError) throw currentTradersError
+      if (traderKeys.length > 0 && traderSources.length > 0) {
+        // The security-barrier view establishes complete metric, source,
+        // publication, and freshness eligibility before these candidate
+        // identity predicates. The collaborative RPC is never rank authority.
+        const { data: currentTraders, error: currentTradersError } =
+          await publicRankedLeaderboardClient(supabase)
+            .from('public_ranked_leaderboard')
+            .select(PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT)
+            .eq('season_id', TRADER_RECOMMENDATION_PERIOD)
+            .not('rank', 'is', null)
+            .in('source', traderSources)
+            .in('source_trader_id', traderKeys)
 
-        const currentByIdentity = new Map<string, Record<string, unknown>>()
-        for (const row of (currentTraders as Record<string, unknown>[] | null) ?? []) {
+        if (currentTradersError) {
+          return unavailableTraderRecommendations('unknown', 'public_cohort_unavailable')
+        }
+
+        const currentCohort = verifyTraderRecommendationCohort(currentTraders)
+        if (currentCohort.unavailable) {
+          return unavailableTraderRecommendations('unknown', 'public_cohort_unavailable')
+        }
+        if (currentCohort.integrityCompromised) {
+          return unavailableTraderRecommendations('partial', 'public_cohort_unverified')
+        }
+
+        const currentByIdentity = new Map<string, PublicRankedTraderRecommendation>()
+        for (const row of currentCohort.rows) {
           const identity = traderIdentity(row)
           if (identity && !currentByIdentity.has(identity)) currentByIdentity.set(identity, row)
         }
@@ -224,7 +380,10 @@ async function getCurrentTraderRecommendations(
         for (const candidate of rankedCandidates) {
           const current = currentByIdentity.get(candidate.targetId)
           if (!current || recommendations.length >= limit) continue
-          recommendations.push({ ...current, recommendation_score: candidate.score })
+          // Do not expose the opaque collaborative-filtering score as a
+          // ranking score. This row's rank, ROI, and arena_score originate
+          // exclusively in public_ranked_leaderboard.
+          recommendations.push({ ...current })
         }
         personalized = recommendations.length > 0
       }
@@ -237,25 +396,59 @@ async function getCurrentTraderRecommendations(
         .map((trader) => traderIdentity(trader))
         .filter((identity): identity is string => identity !== null)
     )
-    const { data: topTraders, error: topTradersError } = await supabase
-      .from('leaderboard_ranks')
-      .select(TRADER_RECOMMENDATION_SELECT)
-      .eq('season_id', '90D')
+    // Fall back only to a finite slice of the same sealed view. No Redis
+    // position, raw rank row, or partial profile observation may become a
+    // "top performer" recommendation.
+    const { data: topTraders, error: topTradersError } = await publicRankedLeaderboardClient(
+      supabase
+    )
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT)
+      .eq('season_id', TRADER_RECOMMENDATION_PERIOD)
       .not('rank', 'is', null)
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .order('arena_score', { ascending: false, nullsFirst: false })
       .order('rank', { ascending: true, nullsFirst: false })
       .limit(Math.min(100, limit + existingIds.size))
-    if (topTradersError) throw topTradersError
+    if (topTradersError) {
+      return unavailableTraderRecommendations(
+        'unknown',
+        'public_cohort_unavailable',
+        recommendations,
+        personalized
+      )
+    }
 
-    for (const trader of (topTraders as Record<string, unknown>[] | null) ?? []) {
+    const topCohort = verifyTraderRecommendationCohort(topTraders)
+    if (topCohort.unavailable) {
+      return unavailableTraderRecommendations(
+        'unknown',
+        'public_cohort_unavailable',
+        recommendations,
+        personalized
+      )
+    }
+    if (topCohort.integrityCompromised) {
+      return unavailableTraderRecommendations(
+        'partial',
+        'public_cohort_unverified',
+        recommendations,
+        personalized
+      )
+    }
+
+    for (const trader of topCohort.rows) {
       if (recommendations.length >= limit) break
       const identity = traderIdentity(trader)
       if (!identity || existingIds.has(identity)) continue
       recommendations.push({ ...trader, recommendation_reason: 'top_performer' })
       existingIds.add(identity)
     }
+  }
+
+  if (recommendations.length === 0) {
+    return unavailableTraderRecommendations('unknown', 'public_rank_unavailable')
   }
 
   return { recommendations, personalized }
@@ -295,6 +488,13 @@ export async function GET(request: NextRequest) {
           recommendations: traderResult.recommendations,
           type: contentType,
           personalized: traderResult.personalized,
+          ...(traderResult.rankingVisibility && traderResult.rankingVisibilityReason
+            ? {
+                ranking_visibility: traderResult.rankingVisibility,
+                ranking_visibility_reason: traderResult.rankingVisibilityReason,
+                ranking_visibility_reasons: [traderResult.rankingVisibilityReason],
+              }
+            : {}),
         },
         200,
         NO_STORE_HEADERS

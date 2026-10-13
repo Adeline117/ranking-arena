@@ -11,6 +11,7 @@ import HotContent from './HotContent'
 import { BASE_URL } from '@/lib/constants/urls'
 import { normalizePostTitle } from '@/lib/utils/post-display'
 import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
+import { ARENA_BOT_PUBLICATION_CACHE_EPOCH } from '@/lib/data/arena-bot-publication-policy'
 
 export const metadata: Metadata = {
   title: 'Hot Posts & Trending Discussions',
@@ -120,7 +121,10 @@ const getHotPosts = unstable_cache(
       return []
     }
   },
-  ['hot-posts'],
+  // Do not reuse an ISR payload generated before legacy arena_bot posts were
+  // quarantined. The maintenance purge removes persistent old entries; this
+  // epoch keeps a rolling instance from reading one in the meantime.
+  ['hot-posts', ARENA_BOT_PUBLICATION_CACHE_EPOCH],
   { revalidate: 300, tags: ['posts'] }
 )
 

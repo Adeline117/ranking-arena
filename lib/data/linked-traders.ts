@@ -12,6 +12,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import * as cache from '@/lib/cache'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 import { normalizeDrawdownMagnitude } from '@/lib/utils/format'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -26,14 +30,28 @@ export interface LinkedTraderAccount {
   isPrimary: boolean
   linkedAt: string
 
-  // Latest snapshot stats (from trader_snapshots_v2)
+  /**
+   * Performance/ranking fields are hydrated only from the live sealed public
+   * cohort. Membership remains useful while that cohort is unavailable, but
+   * it must not carry an older raw leaderboard observation across the public
+   * boundary.
+   */
   roi: number | null
   pnl: number | null
   arenaScore: number | null
   winRate: number | null
   maxDrawdown: number | null
   rank: number | null
+  rankingVisibility: LinkedTraderRankingVisibility
+  rankingVisibilityReason: LinkedTraderRankingVisibilityReason | null
 }
+
+export type LinkedTraderRankingVisibility = 'verified' | 'partial' | 'unknown'
+export type LinkedTraderRankingVisibilityReason =
+  | 'source_not_publicly_rankable'
+  | 'public_cohort_unavailable'
+  | 'public_rank_unavailable'
+  | 'public_cohort_unverified'
 
 export interface AggregatedStats {
   combinedPnl: number | null
@@ -54,8 +72,9 @@ function aggCacheKey(userId: string): string {
 }
 
 /**
- * Public aggregate route cache key. Keep this builder beside the mutation
- * invalidator so the route and every linked-account write cannot drift apart.
+ * Legacy public-route key retained only for deletion. The aggregate route is
+ * no-store and must never write a rank-bearing payload without a fresh public
+ * cohort proof, but unlinking also clears values written by older releases.
  */
 export function linkedTraderRouteAggregateCacheKey(userId: string): string {
   return `aggregate:v2:user:${userId}`
@@ -73,6 +92,203 @@ function roiOrNull(value: unknown): number | null {
 function boundedPercentOrNull(value: unknown): number | null {
   const parsed = finiteNumberOrNull(value)
   return parsed != null && parsed >= 0 && parsed <= 100 ? parsed : null
+}
+
+function arenaScoreOrNull(value: unknown): number | null {
+  const parsed = finiteNumberOrNull(value)
+  return parsed != null && parsed > 0 && parsed <= 100 ? parsed : null
+}
+
+function positiveRankOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+const LINKED_RANKING_PERIOD = '90D'
+const PUBLIC_LINKED_RANKING_COLUMNS =
+  'source,source_trader_id,season_id,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+
+type PublicRankedLeaderboardQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+interface PublicLinkedRankedRow extends Record<string, unknown> {
+  source: string
+  source_trader_id: string
+  rank: number
+}
+
+interface LinkedPublicRankingCohort {
+  /** Raw view rows detect duplicate/malformed identities before matching. */
+  rawByIdentity: Map<string, number>
+  /** Only rows that passed the full publication-policy sanitizer. */
+  verifiedByIdentity: Map<string, PublicLinkedRankedRow[]>
+  unavailable: boolean
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  // The security-barrier view is additive while generated database types catch
+  // up. Keep this narrow bridge read-only; there is deliberately no raw-table
+  // fallback when the public cohort is unavailable.
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function linkedRankingIdentity(source: string, traderKey: string): string {
+  // A structural encoding avoids collisions from source/trader keys that may
+  // themselves contain the separators historically used in cache keys.
+  return JSON.stringify([source, traderKey])
+}
+
+function rowIdentity(row: unknown): string | null {
+  if (
+    !isRecord(row) ||
+    typeof row.source !== 'string' ||
+    typeof row.source_trader_id !== 'string' ||
+    row.source.length === 0 ||
+    row.source_trader_id.length === 0
+  ) {
+    return null
+  }
+  return linkedRankingIdentity(row.source, row.source_trader_id)
+}
+
+function incrementMapValue(map: Map<string, number>, key: string): void {
+  map.set(key, (map.get(key) ?? 0) + 1)
+}
+
+function appendMapValue<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const existing = map.get(key)
+  if (existing) existing.push(value)
+  else map.set(key, [value])
+}
+
+function hasPositivePublishedRank(row: unknown): row is PublicLinkedRankedRow {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    isPublicRankingSourceAllowed(row.source) &&
+    typeof row.source_trader_id === 'string' &&
+    row.source_trader_id.length > 0 &&
+    positiveRankOrNull(row.rank) !== null
+  )
+}
+
+/**
+ * A response from the security-barrier view is still treated as untrusted
+ * transport. Keep raw identity multiplicity so a duplicate/filtered row for
+ * one linked account cannot silently select a different matching row.
+ */
+function buildLinkedPublicRankingCohort(
+  value: unknown,
+  unavailable = false
+): LinkedPublicRankingCohort {
+  const rawRows = Array.isArray(value) ? value : []
+  const rawByIdentity = new Map<string, number>()
+  for (const row of rawRows) {
+    const identity = rowIdentity(row)
+    if (identity) incrementMapValue(rawByIdentity, identity)
+  }
+
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rawRows, period: LINKED_RANKING_PERIOD },
+    { expectedPeriod: LINKED_RANKING_PERIOD }
+  ) as { traders?: unknown[] }
+  const verifiedByIdentity = new Map<string, PublicLinkedRankedRow[]>()
+  const rows = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter(hasPositivePublishedRank)
+    : []
+  for (const row of rows) {
+    const identity = rowIdentity(row)
+    if (identity) appendMapValue(verifiedByIdentity, identity, row)
+  }
+
+  return { rawByIdentity, verifiedByIdentity, unavailable }
+}
+
+function clearLinkedRankingMetrics(
+  account: LinkedTraderAccount,
+  rankingVisibility: Exclude<LinkedTraderRankingVisibility, 'verified'>,
+  rankingVisibilityReason: LinkedTraderRankingVisibilityReason
+): void {
+  account.roi = null
+  account.pnl = null
+  account.arenaScore = null
+  account.winRate = null
+  account.maxDrawdown = null
+  account.rank = null
+  account.rankingVisibility = rankingVisibility
+  account.rankingVisibilityReason = rankingVisibilityReason
+}
+
+function applyVerifiedLinkedRanking(
+  account: LinkedTraderAccount,
+  cohort: LinkedPublicRankingCohort
+): void {
+  const identity = linkedRankingIdentity(account.platform, account.traderKey)
+  if (cohort.unavailable) {
+    clearLinkedRankingMetrics(account, 'unknown', 'public_cohort_unavailable')
+    return
+  }
+
+  const rawRows = cohort.rawByIdentity.get(identity) ?? 0
+  const verifiedRows = cohort.verifiedByIdentity.get(identity) ?? []
+  if (rawRows === 0) {
+    clearLinkedRankingMetrics(account, 'unknown', 'public_rank_unavailable')
+    return
+  }
+  if (rawRows !== 1 || verifiedRows.length !== 1) {
+    clearLinkedRankingMetrics(account, 'partial', 'public_cohort_unverified')
+    return
+  }
+
+  const row = verifiedRows[0]
+  const roi = roiOrNull(row.roi)
+  const arenaScore = arenaScoreOrNull(row.arena_score)
+  const winRate = boundedPercentOrNull(row.win_rate)
+  const maxDrawdown = normalizeDrawdownMagnitude(finiteNumberOrNull(row.max_drawdown))
+  const rank = positiveRankOrNull(row.rank)
+  if (
+    roi === null ||
+    arenaScore === null ||
+    winRate === null ||
+    maxDrawdown === null ||
+    rank === null
+  ) {
+    // The sanitizer should make this unreachable, but do not promote a row if
+    // a future policy/type drift weakens one of its assumptions.
+    clearLinkedRankingMetrics(account, 'partial', 'public_cohort_unverified')
+    return
+  }
+
+  account.roi = roi
+  // A published rank row proves a performance window, not a settlement
+  // currency. Keep cross-account Money unavailable until that separate
+  // contract exists.
+  account.pnl = null
+  account.arenaScore = arenaScore
+  account.winRate = winRate
+  account.maxDrawdown = maxDrawdown
+  account.rank = rank
+  account.rankingVisibility = 'verified'
+  account.rankingVisibilityReason = null
 }
 
 function isMissingRelationCompatibilityError(error: unknown): boolean {
@@ -125,6 +341,8 @@ export async function getLinkedTraders(
       winRate: null,
       maxDrawdown: null,
       rank: null,
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_rank_unavailable',
     }))
   } else {
     // Compatibility fallback only for deployments where the canonical table
@@ -157,71 +375,69 @@ export async function getLinkedTraders(
       winRate: null,
       maxDrawdown: null,
       rank: null,
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_rank_unavailable',
     }))
   }
 
   if (links.length === 0) return []
 
-  // Enrich with latest snapshot stats — batch query instead of N+1
-  // Group links by platform for efficient .in() queries
+  // Enrich from the sealed public cohort, grouped by platform to preserve the
+  // exact source + key pair. Never substitute the retained raw rank table:
+  // this response is public and every ranking metric needs a current proof.
   const byPlatform = new Map<string, string[]>()
   for (const link of links) {
+    if (!isPublicRankingSourceAllowed(link.platform)) {
+      clearLinkedRankingMetrics(link, 'partial', 'source_not_publicly_rankable')
+      continue
+    }
     const keys = byPlatform.get(link.platform) || []
     keys.push(link.traderKey)
     byPlatform.set(link.platform, keys)
   }
 
-  // Parallel batch fetch per platform from leaderboard_ranks (precomputed, has correct columns)
-  // Previously queried trader_snapshots_v2 with wrong column names (roi→roi_pct, pnl→pnl_usd,
-  // rank doesn't exist), causing null values for linked account stats.
-  const snapshotMap = new Map<string, Record<string, unknown>>()
-  const snapshotErrors: Error[] = []
+  const cohorts = new Map<string, LinkedPublicRankingCohort>()
   await Promise.all(
     [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
-      const { data: snapshots, error: snapshotsError } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, roi, win_rate, max_drawdown')
-        .eq('source', platform)
-        .in('source_trader_id', traderKeys)
-        .eq('season_id', '90D')
-      if (snapshotsError) {
-        logger.warn(
-          `[getLinkedTraders] leaderboard_ranks query failed for ${platform}:`,
-          snapshotsError.message
-        )
-        snapshotErrors.push(
-          new Error(
-            `linked trader snapshot lookup failed for ${platform}: ${snapshotsError.message || 'unknown error'}`
-          )
-        )
-        return
-      }
-
-      if (snapshots) {
-        for (const s of snapshots) {
-          snapshotMap.set(`${s.source}:${s.source_trader_id}`, s)
+      try {
+        const { data, error } = await publicRankedLeaderboardClient(supabase)
+          .from('public_ranked_leaderboard')
+          .select(PUBLIC_LINKED_RANKING_COLUMNS)
+          .eq('source', platform)
+          .in('source_trader_id', [...new Set(traderKeys)])
+          .eq('season_id', LINKED_RANKING_PERIOD)
+          .not('rank', 'is', null)
+        if (error || !Array.isArray(data)) {
+          if (error) {
+            logger.warn(
+              `[getLinkedTraders] public cohort query failed for ${platform}:`,
+              error.message
+            )
+          }
+          cohorts.set(platform, buildLinkedPublicRankingCohort([], true))
+          return
         }
+        cohorts.set(platform, buildLinkedPublicRankingCohort(data))
+      } catch (error) {
+        logger.warn(
+          `[getLinkedTraders] public cohort query failed for ${platform}:`,
+          error instanceof Error ? error.message : String(error)
+        )
+        cohorts.set(platform, buildLinkedPublicRankingCohort([], true))
       }
     })
   )
-  if (snapshotErrors.length > 0) throw snapshotErrors[0]
 
-  // Apply snapshot data to links
+  // A failed cohort query is not a failed membership query. Preserve the
+  // account relationship and make its ranking metrics explicit unknown.
   for (const link of links) {
-    const snapshot = snapshotMap.get(`${link.platform}:${link.traderKey}`)
-    if (snapshot) {
-      link.roi = roiOrNull(snapshot.roi)
-      link.winRate = boundedPercentOrNull(snapshot.win_rate)
-      link.maxDrawdown = normalizeDrawdownMagnitude(finiteNumberOrNull(snapshot.max_drawdown))
-      // A bare PnL number has no settlement-currency contract. Keep it unknown
-      // until the linked projection returns a Money value bound to provenance.
-      link.pnl = null
-      // Arena Score and rank remain unknown until this row is bound to the
-      // current sealed publication proof/cohort. Row-level flags and
-      // computed_at alone cannot establish source freshness or immutability.
-      link.arenaScore = null
-      link.rank = null
+    if (!isPublicRankingSourceAllowed(link.platform)) continue
+    const cohort = cohorts.get(link.platform)
+    if (!cohort) {
+      clearLinkedRankingMetrics(link, 'unknown', 'public_cohort_unavailable')
+      continue
     }
+    applyVerifiedLinkedRanking(link, cohort)
   }
 
   return links
@@ -231,8 +447,8 @@ export async function getLinkedTraders(
  * Compute aggregated stats across all linked accounts for a user.
  *
  * Cross-source PnL is intentionally unavailable until every account carries
- * an attested settlement currency. A bare leaderboard_ranks.pnl number must
- * never be summed or used as a cross-currency score weight.
+ * an attested settlement currency. A public ranking-window value must never
+ * be summed or used as a cross-currency score weight by itself.
  *
  * Aggregate numerics remain unavailable until every intended account is bound
  * to the same complete, fresh publication contract. A complete-looking subset

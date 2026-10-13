@@ -12,14 +12,25 @@ describe('traderFetcher legacy history quarantine', () => {
   })
 
   it('sanitizes an enveloped legacy trader detail response', async () => {
-    const cached = { positionHistory: [{ symbol: 'BTCUSDT' }], profile: { handle: 'alice' } }
+    const cached = {
+      profile: { handle: 'alice' },
+      equityCurve: { '90D': [{ date: '2026-08-17', roi: 9, pnl: 42 }] },
+      stats: { avgProfit: 42 },
+      portfolio: [{ price: 100, pnl: 42 }],
+      positionHistory: [{ symbol: 'BTCUSDT' }],
+    }
     mockRawFetcher.mockResolvedValueOnce({ success: true, data: cached })
 
     const result = await traderFetcher('/api/traders/alice?include=claim')
 
     expect(result).toEqual({
       profile: cached.profile,
+      equityCurve: undefined,
+      assetBreakdown: undefined,
+      stats: null,
+      portfolio: [],
       positionHistory: [],
+      positionSummary: null,
       historyCompleteness: {
         state: 'unknown',
         reason: 'history_evidence_not_bound',

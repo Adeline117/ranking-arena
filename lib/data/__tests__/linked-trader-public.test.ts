@@ -26,8 +26,12 @@ function account(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function verifiedAccount(overrides: Record<string, unknown> = {}) {
+  return account({ rankingVisibility: 'verified', rankingVisibilityReason: null, ...overrides })
+}
+
 describe('linked aggregate public DTO', () => {
-  it('allowlists identity/profile evidence and force-closes unbound metrics', () => {
+  it('keeps identity but force-closes unproved internal performance fields', () => {
     const result = serializePublicLinkedAggregate(
       {
         accounts: [account(), account({ traderKey: 'trader-2', isPrimary: false })],
@@ -50,11 +54,13 @@ describe('linked aggregate public DTO', () => {
           handle: 'Public Trader',
           label: null,
           isPrimary: true,
-          roi: 12.5,
+          rankingVisibility: 'unknown',
+          rankingVisibilityReason: 'public_cohort_unavailable',
+          roi: null,
           pnl: null,
           arenaScore: null,
-          winRate: 64,
-          maxDrawdown: 12,
+          winRate: null,
+          maxDrawdown: null,
           rank: null,
         },
         expect.objectContaining({ id: 'bybit:trader-2', traderKey: 'trader-2' }),
@@ -82,6 +88,8 @@ describe('linked aggregate public DTO', () => {
       weightedScore: null,
     })
     expect(parsed?.accounts[0]).toMatchObject({
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_cohort_unavailable',
       roi: null,
       pnl: null,
       arenaScore: null,
@@ -91,6 +99,75 @@ describe('linked aggregate public DTO', () => {
       label: null,
     })
     expect(parsed).not.toHaveProperty('userId')
+  })
+
+  it('allows metrics only on a complete verified ranking account', () => {
+    const result = serializePublicLinkedAggregate(
+      {
+        accounts: [
+          verifiedAccount(),
+          verifiedAccount({ traderKey: 'trader-2', isPrimary: false, roi: 0, winRate: 0 }),
+        ],
+        combinedPnl: 100_000,
+        bestRoi: { value: 12.5, platform: 'bybit', traderKey: 'trader-1' },
+        weightedScore: 90,
+      },
+      SUBJECT
+    )
+
+    expect(result.aggregated).toEqual({ combinedPnl: null, bestRoi: null, weightedScore: null })
+    expect(result.accounts).toEqual([
+      expect.objectContaining({
+        rankingVisibility: 'verified',
+        rankingVisibilityReason: null,
+        roi: 12.5,
+        pnl: null,
+        arenaScore: 88,
+        winRate: 64,
+        maxDrawdown: 12,
+        rank: 7,
+      }),
+      expect.objectContaining({
+        traderKey: 'trader-2',
+        rankingVisibility: 'verified',
+        roi: 0,
+        winRate: 0,
+      }),
+    ])
+  })
+
+  it('never synthesizes zero-valued aggregate performance metrics', () => {
+    const result = serializePublicLinkedAggregate(
+      {
+        accounts: [verifiedAccount(), verifiedAccount({ traderKey: 'trader-2', isPrimary: false })],
+        combinedPnl: 0,
+        bestRoi: { value: 0, platform: 'bybit', traderKey: 'trader-1' },
+        weightedScore: 0,
+      },
+      SUBJECT
+    )
+
+    expect(result.aggregated).toEqual({ combinedPnl: null, bestRoi: null, weightedScore: null })
+  })
+
+  it('fails forged verified status closed when its public ranking shape is incomplete', () => {
+    const parsed = parsePublicLinkedAggregate({
+      subject: SUBJECT,
+      aggregated: null,
+      accounts: [verifiedAccount({ rank: null })],
+      totalAccounts: 1,
+    })
+
+    expect(parsed?.accounts[0]).toMatchObject({
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_cohort_unverified',
+      roi: null,
+      pnl: null,
+      arenaScore: null,
+      winRate: null,
+      maxDrawdown: null,
+      rank: null,
+    })
   })
 
   it('distinguishes authoritative empty membership from malformed or failed payloads', () => {
@@ -173,14 +250,19 @@ describe('linked aggregate public DTO', () => {
     )
   })
 
-  it('preserves measured zero while failing unsafe profile numbers closed', () => {
+  it('preserves verified measured zero while failing unsafe profile numbers closed', () => {
     const parsed = parsePublicLinkedAggregate({
       subject: SUBJECT,
       aggregated: null,
-      accounts: [account({ roi: 0, winRate: 0, maxDrawdown: 0 })],
+      accounts: [verifiedAccount({ roi: 0, winRate: 0, maxDrawdown: 0 })],
       totalAccounts: 1,
     })
 
-    expect(parsed?.accounts[0]).toMatchObject({ roi: 0, winRate: 0, maxDrawdown: 0 })
+    expect(parsed?.accounts[0]).toMatchObject({
+      rankingVisibility: 'verified',
+      roi: 0,
+      winRate: 0,
+      maxDrawdown: 0,
+    })
   })
 })

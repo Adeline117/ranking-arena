@@ -22,6 +22,7 @@ import {
   acceptPublishedEquity,
   type PublishedEquity,
 } from '@/lib/rankings/daily-publication-contract'
+import { NOTIFICATION_READER_CACHE_EPOCH } from '@/lib/notifications/ranking-change-fence'
 
 // Re-export pure fetchers from the shared module
 export { fetcher, fetcherWithAuth, fetchWithTimeout } from './fetchers'
@@ -348,7 +349,7 @@ export function useNotifications(userId: string | undefined, token?: string) {
   const url = userId ? '/api/notifications' : ''
 
   return useQuery<NotificationsResponse>({
-    queryKey: ['notifications', userId],
+    queryKey: ['notifications', NOTIFICATION_READER_CACHE_EPOCH, userId],
     placeholderData: (prev) => prev,
     queryFn: () => fetcherWithAuth(url, token),
     enabled: !!userId,

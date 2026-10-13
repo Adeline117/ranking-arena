@@ -2,7 +2,6 @@
 
 import React, { useState, useRef } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import {
@@ -13,7 +12,6 @@ import {
   generateBlockieSvg,
 } from '@/lib/utils/avatar'
 import { useLanguage } from '../Providers/LanguageProvider'
-import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
 import {
   formatDrawdown,
@@ -23,10 +21,7 @@ import {
 } from '@/lib/utils/format'
 import { compareAccountKey, type CompareAccountRef } from '@/lib/compare/identity'
 
-// Lazy load chart components — only rendered when user switches to the equity tab
-const EquityCurveOverlay = dynamic(() => import('./EquityCurveOverlay'), { ssr: false })
-
-/** Chart colors used for trader comparison overlays (duplicated from EquityCurveOverlay to avoid eager import). */
+/** Chart colors used for score bars. */
 const CHART_COLORS = [
   tokens.colors.accent.brand,
   'var(--color-enterprise-gradient-start)',
@@ -44,7 +39,7 @@ interface TraderCompareData {
   id: string
   handle: string | null
   source: string
-  roi: number
+  roi: number | null
   roi_7d?: number | null
   roi_30d?: number | null
   pnl?: number | null
@@ -62,7 +57,8 @@ interface TraderCompareData {
   is_bot?: boolean
   avatar_url?: string
   followers?: number | null
-  equity_curve?: Array<{ date: string; roi: number }>
+  ranking_visibility?: 'verified' | 'partial' | 'unknown'
+  ranking_visibility_reason?: string | null
 }
 
 interface TraderComparisonProps {
@@ -71,7 +67,7 @@ interface TraderComparisonProps {
   showRemoveButton?: boolean
 }
 
-type TabKey = 'metrics' | 'bars' | 'equity'
+type TabKey = 'metrics' | 'bars'
 
 type ComparisonMetricKey =
   | 'arena_score'
@@ -289,7 +285,7 @@ export default function TraderComparison({
     {
       key: 'followers',
       label: t('compareFollowers'),
-      format: (v: number) => v?.toString() || '0',
+      format: (v: number) => v.toString(),
       higherBetter: true,
     },
   ]
@@ -319,18 +315,9 @@ export default function TraderComparison({
     },
   ]
 
-  // Equity curve data
-  const equityTraders = traders.map((tr, i) => ({
-    traderId: traderIdentity(tr),
-    traderName: tr.handle || tr.id.slice(0, 10),
-    data: tr.equity_curve || [],
-    color: CHART_COLORS[i % CHART_COLORS.length],
-  }))
-
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'metrics', label: t('compareMetrics') },
     { key: 'bars', label: t('compareScoreBars') },
-    { key: 'equity', label: t('compareEquityCurve') },
   ]
 
   // Shared grid geometry: label column + one column per trader.
@@ -495,6 +482,11 @@ export default function TraderComparison({
       <Text size="xs" color="tertiary">
         {sourceLabels[trader.source] || trader.source}
       </Text>
+      {trader.ranking_visibility && trader.ranking_visibility !== 'verified' && (
+        <Text size="xs" color="tertiary" title={trader.ranking_visibility_reason ?? undefined}>
+          {trader.ranking_visibility}
+        </Text>
+      )}
     </>
   )
 
@@ -563,7 +555,7 @@ export default function TraderComparison({
           overflowY: 'hidden',
         }}
       >
-        {/* Header: trader avatars (chart tabs only — the metrics table carries its own <thead>) */}
+        {/* Header: trader avatars on score bars; the metrics table carries its own <thead>. */}
         {activeTab !== 'metrics' && (
           <Box
             className="compare-header-grid"
@@ -791,14 +783,16 @@ export default function TraderComparison({
                             overflow: 'hidden',
                           }}
                         >
-                          <Box
-                            style={{
-                              width: `${value ?? 0}%`,
-                              height: '100%',
-                              borderRadius: tokens.radius.full,
-                              background: color,
-                            }}
-                          />
+                          {value != null && (
+                            <Box
+                              style={{
+                                width: `${value}%`,
+                                height: '100%',
+                                borderRadius: tokens.radius.full,
+                                background: color,
+                              }}
+                            />
+                          )}
                         </Box>
                         <Text
                           as="span"
@@ -819,14 +813,6 @@ export default function TraderComparison({
                 </Box>
               </Box>
             ))}
-          </Box>
-        )}
-
-        {activeTab === 'equity' && (
-          <Box style={{ padding: tokens.spacing[4] }}>
-            <CompactErrorBoundary>
-              <EquityCurveOverlay traders={equityTraders} height={300} />
-            </CompactErrorBoundary>
           </Box>
         )}
       </Box>

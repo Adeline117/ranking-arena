@@ -135,15 +135,14 @@ describe('token ranking generation barrier', () => {
     expect(generatedTypes).toContain('published_at_epoch_ms: number | null')
     expect(generatedTypes).toContain('get_token_trader_rankings_v2: {')
     expect(generatedTypes).toContain('get_popular_tokens_v2: {')
-    expect(runbook).toContain('/rest/v1/rpc/get_token_ranking_publication_head')
-    expect(runbook).toContain('.[0].generation_seq == 0')
-    expect(runbook).toContain('20260804043000_retire_legacy_token_rankings.sql')
+    // V1 NO-GO runbook keeps only the containment inventory and fail-closed
+    // requirement; the production head-probe recipe was intentionally removed
+    // (docs/RUNBOOK.md "V1 数据库与排名权威门禁").
+    expect(runbook).toContain('`20260804042000`、`20260804043000`、`20260804044000`')
     expect(runbook).toContain('20260804044000_freeze_legacy_position_history_relations.sql')
-    expect(runbook).toContain('legacy_token_rpcs_closed')
-    expect(runbook).toContain('legacy_token_mvs_closed')
-    expect(runbook).toContain('legacy_history_frozen')
-    expect(runbook).toContain('TOKEN_RANKING_NOT_PUBLISHED')
-    expect(runbook).toContain('rank_eligible=true')
+    expect(runbook).toContain('公开 token 面维持 fail closed')
+    expect(runbook).toContain('legacy token-ranking surface 仍是 **ACTIVE-EXPOSURE**')
+    expect(runbook).not.toContain('/rest/v1/rpc/')
     expect(runbook).not.toContain('.code == "40001"')
     expect(runbook).not.toContain('/rest/v1/rpc/get_popular_tokens_v2')
     expect(runbook).not.toContain('SELECT public.refresh_popular_tokens_mv();')

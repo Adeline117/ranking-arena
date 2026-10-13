@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { RankingTable } from '../RankingTable'
 import type { Trader } from '../RankingTableTypes'
 
@@ -29,12 +29,13 @@ jest.mock('../TraderRow', () => ({
 }))
 
 jest.mock('../TraderCard', () => ({
-  TraderCard: ({ trader, rank }: { trader: Trader; rank: number }) => (
+  TraderCard: ({ trader, rank, series }: { trader: Trader; rank: number; series?: number[] }) => (
     <div
       data-testid="published-rank-card"
       data-trader-id={trader.id}
       data-rank={rank}
       data-arena-score={trader.arena_score ?? 'unknown'}
+      data-rank-series={series ? JSON.stringify(series) : 'none'}
     />
   ),
 }))
@@ -208,5 +209,34 @@ describe('RankingTable persisted rank authority', () => {
       ['finite-score', '91'],
       ['corrupt-score', '37'],
     ])
+  })
+
+  it('rejects a legacy bare rank-history cache payload instead of replaying its sparkline', async () => {
+    setViewport(true)
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ 'binance_futures:published-37': [7, 3] }),
+    }) as jest.Mock
+
+    render(
+      <RankingTable
+        traders={[{ ...rankedTraders[0], source: 'binance_futures' }]}
+        loading={false}
+        loggedIn
+        source="binance_futures"
+        controlledPage={1}
+        serverTotalCount={1}
+      />
+    )
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/rankings/rank-history',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('published-rank-card')).toHaveAttribute('data-rank-series', 'none')
+    })
   })
 })

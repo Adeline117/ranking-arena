@@ -22,6 +22,7 @@ import {
   type CursorExportDataset,
   type ExportDataset,
 } from '@/lib/account/data-export'
+import { isVisibleNotificationType } from '@/lib/notifications/ranking-change-fence'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60s for large exports
@@ -1211,18 +1212,23 @@ async function fetchOwnedCollectionData(supabase: SupabaseClient<Database>, user
 }
 
 function normalizeNotifications(rows: Record<string, unknown>[]) {
-  return rows.map((row) => ({
-    id: row.id,
-    type: row.type,
-    title: row.title,
-    message: row.message,
-    link: row.link,
-    read: row.read,
-    actor_id: row.actor_id,
-    reference_id: row.reference_id,
-    created_at: row.created_at,
-    read_at: row.read_at,
-  }))
+  // The export is a user-visible replay surface too. A legacy ranking_change
+  // payload has no immutable historical provenance, so retain only types that
+  // the shared notification reader policy permits.
+  return rows
+    .filter((row) => isVisibleNotificationType(row.type))
+    .map((row) => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      message: row.message,
+      link: row.link,
+      read: row.read,
+      actor_id: row.actor_id,
+      reference_id: row.reference_id,
+      created_at: row.created_at,
+      read_at: row.read_at,
+    }))
 }
 
 function normalizeCommentLikes(rows: Record<string, unknown>[]) {
@@ -1452,7 +1458,7 @@ export async function POST(request: NextRequest) {
           completedDataset('profile', 1),
           completedDataset('posts', posts.length),
           completedDataset('comments', comments.length),
-          completedDataset('notifications', notifications.length),
+          completedDataset('notifications', normalizedNotifications.length),
           completedDataset('follows.following', following.length),
           completedDataset('follows.followers', followers.length),
           completedDataset('blocks.outgoing', outgoingBlocks.length),

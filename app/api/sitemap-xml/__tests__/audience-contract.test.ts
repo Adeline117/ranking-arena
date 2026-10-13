@@ -15,6 +15,10 @@ describe('sitemap public audience boundary', () => {
     expect(route).toContain(".is('deleted_at', null)")
     expect(route).toContain(".is('group_id', null)")
     expect(route).toContain(".is('original_post_id', null)")
+    expect(route).toContain(
+      "import { ARENA_BOT_AUTHOR_ID } from '@/lib/data/arena-bot-publication-policy'"
+    )
+    expect(route).toContain(".neq('author_id', ARENA_BOT_AUTHOR_ID)")
     expect(route).toContain('activeAuthorIds.has(post.author_id)')
   })
 

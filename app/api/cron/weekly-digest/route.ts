@@ -15,16 +15,13 @@ import { generateUnsubscribeToken } from '@/lib/utils/unsubscribe-token'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
-import {
-  buildFollowedDigestActivity,
-  indexDigestActivities,
-  indexDigestFollows,
-  readAllPages,
-  type DigestActivityRow,
-  type DigestFollowRow,
-} from './personalization'
+import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
+import { readAllPages } from './personalization'
 
 const logger = createLogger('weekly-digest')
+const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
+const PUBLIC_RANKING_COLUMNS =
+  'season_id,source,source_trader_id,handle,roi,pnl,arena_score,rank,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -57,22 +54,21 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     return { count: 0, reason: 'no subscribers' }
   }
 
-  // 2. Top movers (biggest 7D ROI this week). Migrated off retiring trader_latest
-  // → leaderboard_ranks (source↔platform, handle↔display_name, roi↔roi_pct).
-  const { data: movers } = await supabase
-    .from('leaderboard_ranks')
-    .select('source_trader_id, source, handle, roi')
+  // This is an external ranking surface. No raw row or cached ranking excerpt
+  // may become email content; an unavailable cohort simply has no Top Movers
+  // section for this issue.
+  const { data: moverRows, error: moverErr } = await supabase
+    .from(PUBLIC_RANKED_LEADERBOARD as never)
+    .select(PUBLIC_RANKING_COLUMNS)
     .eq('season_id', '7D')
-    .gte('computed_at', weekAgoIso)
     .not('roi', 'is', null)
     .order('roi', { ascending: false })
     .limit(10)
 
-  const topMovers = (movers || []).map((m) => ({
-    name: m.handle || m.source_trader_id,
-    change: `${(m.roi ?? 0) > 0 ? '+' : ''}${(m.roi ?? 0).toFixed(1)}% ROI`,
-    link: `/trader/${encodeURIComponent(m.handle || m.source_trader_id)}?platform=${m.source}`,
-  }))
+  const topMovers = moverErr ? [] : verifiedDigestMovers(moverRows ?? [])
+  if (moverErr) {
+    logger.warn('Verified weekly mover cohort unavailable', { error: moverErr.message })
+  }
 
   // 3. New traders this week
   const { count: newTraders } = await supabase
@@ -89,61 +85,8 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   const now = new Date()
   const weekRange = `${weekAgo.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
-  // 5b. Per-user personalization — what each subscriber's FOLLOWED traders did
-  // this week. Two batched queries (follows, then activities for the union of
-  // followed traders), grouped in memory. No N+1 per user. Subscribers with no
-  // follows / no followed-trader activity fall back to the global digest below.
-  // Join by the complete exchange-account identity. Any remaining source=NULL
-  // follow is ambiguous/unresolved legacy data and is deliberately skipped.
-  const subscriberIdList = subscribers.map((s) => s.id)
-  const followRows: DigestFollowRow[] = []
-  for (let i = 0; i < subscriberIdList.length; i += 500) {
-    const chunk = subscriberIdList.slice(i, i + 500)
-    const { data: follows, error: fErr } = await readAllPages<DigestFollowRow>((from, to) =>
-      supabase
-        .from('trader_follows')
-        .select('user_id, trader_id, source')
-        .in('user_id', chunk)
-        .order('id', { ascending: true })
-        .range(from, to)
-    )
-    if (fErr) {
-      logger.warn('Failed to fetch follows chunk (skipping personalization for chunk)', {
-        error: fErr.message,
-      })
-      continue
-    }
-    followRows.push(...follows)
-  }
-  const { followsByUser, accountsBySource } = indexDigestFollows(followRows)
-
-  const activityRows: DigestActivityRow[] = []
-  for (const [source, sourceTraderIds] of accountsBySource) {
-    const followedIdList = [...sourceTraderIds]
-    for (let i = 0; i < followedIdList.length; i += 300) {
-      const chunk = followedIdList.slice(i, i + 300)
-      const { data: acts, error: aErr } = await readAllPages<DigestActivityRow>((from, to) =>
-        supabase
-          .from('trader_activities')
-          .select('id, source_trader_id, source, handle, activity_text, occurred_at')
-          .eq('source', source)
-          .in('source_trader_id', chunk)
-          .gte('occurred_at', weekAgoIso)
-          .order('occurred_at', { ascending: false })
-          .order('id', { ascending: false })
-          .range(from, to)
-      )
-      if (aErr) {
-        logger.warn('Failed to fetch activities chunk (skipping personalization for chunk)', {
-          source,
-          error: aErr.message,
-        })
-        continue
-      }
-      activityRows.push(...acts)
-    }
-  }
-  const activityByAccount = indexDigestActivities(activityRows)
+  // Persisted activity text may contain historical raw metrics. Do not forward
+  // it until it has its own immutable public-evidence contract.
 
   // 6. Batch-fetch emails via paginated listUsers (replaces N+1 getUserById)
   const subscriberIds = new Set(subscribers.map((s) => s.id))
@@ -168,7 +111,6 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   // 7. Send emails with bounded concurrency to avoid timeout
   let sentCount = 0
   let failCount = 0
-  let personalizedCount = 0
   const CONCURRENCY = 10
   const sendOne = async (sub: (typeof subscribers)[number]) => {
     try {
@@ -182,16 +124,12 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
       const unsubToken = generateUnsubscribeToken(sub.id, 'digest')
       const unsubLink = `${BASE_URL}/api/email/unsubscribe?token=${unsubToken}`
 
-      const followedActivity = buildFollowedDigestActivity(sub.id, followsByUser, activityByAccount)
-      if (followedActivity.length > 0) personalizedCount++
-
       const html =
         buildWeeklyDigestEmail({
           topMovers,
           newTraders: newTraders ?? 0,
           totalTracked: totalTracked ?? 0,
           weekRange,
-          followedActivity,
         }) +
         `
         <div style="max-width: 600px; margin: 0 auto; padding: 0 24px 24px;">
@@ -231,15 +169,55 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   logger.info('Weekly digest complete', {
     sent: sentCount,
     failed: failCount,
-    personalized: personalizedCount,
     subscribers: subscribers.length,
+    rankingContent: topMovers.length > 0 ? 'verified' : 'omitted',
   })
   return {
     count: sentCount,
     failed: failCount,
-    personalized: personalizedCount,
     subscribers: subscribers.length,
     topMovers: topMovers.length,
     newTraders: newTraders ?? 0,
   }
 })
+
+function verifiedDigestMovers(
+  rows: unknown[]
+): Array<{ name: string; change: string; link: string }> {
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rows, period: '7D' },
+    { expectedPeriod: '7D' }
+  ) as { traders?: unknown[]; ranking_visibility?: unknown }
+
+  if (
+    sanitized.ranking_visibility === 'partial' ||
+    sanitized.ranking_visibility === 'unknown' ||
+    sanitized.ranking_visibility === 'error' ||
+    !Array.isArray(sanitized.traders) ||
+    sanitized.traders.length === 0
+  ) {
+    return []
+  }
+
+  const movers: Array<{ name: string; change: string; link: string }> = []
+  for (const row of sanitized.traders) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) return []
+    const record = row as Record<string, unknown>
+    if (
+      typeof record.source !== 'string' ||
+      typeof record.source_trader_id !== 'string' ||
+      typeof record.roi !== 'number' ||
+      !Number.isFinite(record.roi) ||
+      (record.handle !== null && typeof record.handle !== 'string')
+    ) {
+      return []
+    }
+    const name = typeof record.handle === 'string' ? record.handle : record.source_trader_id
+    movers.push({
+      name,
+      change: `${record.roi > 0 ? '+' : ''}${record.roi.toFixed(1)}% ROI`,
+      link: `/trader/${encodeURIComponent(name)}?platform=${encodeURIComponent(record.source)}`,
+    })
+  }
+  return movers
+}

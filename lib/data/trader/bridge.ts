@@ -6,22 +6,42 @@
 
 import type { TraderDetail, EquityPoint } from './types'
 import { normalizeScoreConfidence } from './mappers'
+import { quarantineLegacyPositionHistory } from './history-quarantine'
 
 /**
  * Convert unified TraderDetail to the legacy TraderPageData shape
  * expected by TraderProfileClient.tsx.
  */
-export function toTraderPageData(detail: TraderDetail): Record<string, unknown> {
+export function toTraderPageData(
+  detail: TraderDetail,
+  options: { publicProfileHistoryQuarantine?: boolean } = {}
+): Record<string, unknown> {
   const t = detail.trader
   const p90 = detail.periods['90D']
   const p30 = detail.periods['30D']
   const p7 = detail.periods['7D']
+  const publicProfileHistoryQuarantine = options.publicProfileHistoryQuarantine === true
+  // Keep the quarantine at the adapter's input boundary as well as its output
+  // boundary. This prevents a future public caller from accidentally deriving
+  // a raw avg-profit/winning-position field into `performance` before the
+  // final response projection strips the original `stats` object.
+  const legacyStats = publicProfileHistoryQuarantine ? null : detail.stats
+  const legacyEquityCurve = publicProfileHistoryQuarantine
+    ? { '90D': [], '30D': [], '7D': [] }
+    : detail.equityCurve
+  const legacyAssetBreakdown = publicProfileHistoryQuarantine
+    ? { '90D': [], '30D': [], '7D': [] }
+    : detail.assetBreakdown
+  const legacyPortfolio = publicProfileHistoryQuarantine ? [] : detail.portfolio
+  const legacyPositionSummary = publicProfileHistoryQuarantine ? null : detail.positionSummary
 
   // Profile (matches TraderProfile interface)
   const profile = {
     handle: t.handle || t.traderKey,
     id: t.traderKey,
-    followers: t.followers ?? 0,
+    // Missing source profile counts must remain absent. Treating them as zero
+    // makes an unknown public profile field look like a verified count.
+    followers: t.followers ?? undefined,
     copiers: t.copiers,
     avatar_url: t.avatarUrl,
     isRegistered: false,
@@ -78,8 +98,8 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     sharpe_ratio_7d: p7?.sharpeRatio ?? null,
     winning_positions: (() => {
       // Use enrichment stats, but validate: winning can never exceed total trades
-      const enrichWin = detail.stats?.winningPositions
-      const _enrichTotal = detail.stats?.totalPositions
+      const enrichWin = legacyStats?.winningPositions
+      const _enrichTotal = legacyStats?.totalPositions
       const periodTrades = t.tradesCount
       // If enrichment winning > period trades, enrichment is lifetime data — compute from period instead
       if (enrichWin != null && periodTrades != null && enrichWin > periodTrades) {
@@ -95,7 +115,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       )
     })(),
     total_positions: (() => {
-      const enrichTotal = detail.stats?.totalPositions
+      const enrichTotal = legacyStats?.totalPositions
       const periodTrades = t.tradesCount
       // If enrichment total >> period trades, use period trades (more accurate for display period)
       if (enrichTotal != null && periodTrades != null && enrichTotal > periodTrades * 2) {
@@ -106,7 +126,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       // Cross-validation: total can never be less than winning positions.
       // If mismatch, use period trades as the consistent source for both.
       const winPos =
-        detail.stats?.winningPositions ??
+        legacyStats?.winningPositions ??
         (t.winRate != null && periodTrades != null && periodTrades > 0
           ? Math.round((t.winRate / 100) * periodTrades)
           : undefined)
@@ -140,21 +160,21 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     // Trading style classification
     tradingStyle: t.tradingStyle ?? null,
     // Avg holding time
-    avg_holding_time_hours: t.avgHoldingHours ?? detail.stats?.avgHoldingHours ?? null,
+    avg_holding_time_hours: t.avgHoldingHours ?? legacyStats?.avgHoldingHours ?? null,
     // Largest win/loss
-    largest_win: detail.stats?.largestWin ?? null,
-    largest_loss: detail.stats?.largestLoss ?? null,
+    largest_win: legacyStats?.largestWin ?? null,
+    largest_loss: legacyStats?.largestLoss ?? null,
     // Avg profit/loss for risk/reward ratio
-    avg_profit: detail.stats?.avgProfit ?? null,
-    avg_loss: detail.stats?.avgLoss ?? null,
+    avg_profit: legacyStats?.avgProfit ?? null,
+    avg_loss: legacyStats?.avgLoss ?? null,
   }
 
   // Stats (matches TraderStats interface)
   const stats: Record<string, unknown> = {
     additionalStats: {
       tradesCount: t.tradesCount,
-      avgProfit: detail.stats?.avgProfit ?? null,
-      avgLoss: detail.stats?.avgLoss ?? null,
+      avgProfit: legacyStats?.avgProfit ?? null,
+      avgLoss: legacyStats?.avgLoss ?? null,
       activeSince: detail.trackedSince
         ? new Date(detail.trackedSince).toLocaleDateString('zh-CN', {
             year: 'numeric',
@@ -165,7 +185,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       maxDrawdown: t.maxDrawdown,
       sharpeRatio: t.sharpeRatio,
       avgHoldingTime: (() => {
-        const hours = t.avgHoldingHours ?? detail.stats?.avgHoldingHours
+        const hours = t.avgHoldingHours ?? legacyStats?.avgHoldingHours
         if (hours == null) return null
         if (hours < 1) return `${Math.round(hours * 60)}m`
         if (hours < 24) return `${hours.toFixed(1)}h`
@@ -175,20 +195,20 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
     },
     trading: {
       totalTrades12M: t.tradesCount,
-      avgProfit: detail.stats?.avgProfit ?? null,
-      avgLoss: detail.stats?.avgLoss ?? null,
+      avgProfit: legacyStats?.avgProfit ?? null,
+      avgLoss: legacyStats?.avgLoss ?? null,
       profitableTradesPct: t.winRate,
       winningPositions:
-        detail.stats?.winningPositions ??
+        legacyStats?.winningPositions ??
         (t.winRate != null && t.tradesCount != null && t.tradesCount > 0
           ? Math.round((t.winRate / 100) * t.tradesCount)
           : null),
       totalPositions:
-        detail.stats?.totalPositions ??
+        legacyStats?.totalPositions ??
         (t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null),
     },
     frequentlyTraded:
-      detail.assetBreakdown['90D']?.map((a) => ({
+      legacyAssetBreakdown['90D']?.map((a) => ({
         symbol: a.symbol,
         weightPct: a.weightPct,
         count: 0,
@@ -216,28 +236,26 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
       return [{ date: p.date, roi: p.roi, pnl: p.pnl }]
     })
   const equityCurve = {
-    '90D': mapEC(detail.equityCurve['90D'] || []),
-    '30D': mapEC(detail.equityCurve['30D'] || []),
-    '7D': mapEC(detail.equityCurve['7D'] || []),
+    '90D': mapEC(legacyEquityCurve['90D'] || []),
+    '30D': mapEC(legacyEquityCurve['30D'] || []),
+    '7D': mapEC(legacyEquityCurve['7D'] || []),
   }
 
   // Asset breakdown
   const assetBreakdown = {
     '90D':
-      detail.assetBreakdown['90D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ??
-      [],
+      legacyAssetBreakdown['90D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
     '30D':
-      detail.assetBreakdown['30D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ??
-      [],
+      legacyAssetBreakdown['30D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
     '7D':
-      detail.assetBreakdown['7D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
+      legacyAssetBreakdown['7D']?.map((a) => ({ symbol: a.symbol, weightPct: a.weightPct })) ?? [],
   }
 
   // Similar traders
   const similarTraders = detail.similarTraders.map((st) => ({
     handle: st.handle || st.traderKey,
     id: st.traderKey,
-    followers: st.followers ?? 0,
+    followers: st.followers ?? undefined,
     avatar_url: st.avatarUrl,
     source: st.platform,
     roi_90d: st.roi,
@@ -245,7 +263,7 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
   }))
 
   // Portfolio
-  const portfolio = detail.portfolio.map((p) => ({
+  const portfolio = legacyPortfolio.map((p) => ({
     market: p.symbol,
     direction: p.direction || 'long',
     invested: 0,
@@ -259,19 +277,26 @@ export function toTraderPageData(detail: TraderDetail): Record<string, unknown> 
   // measured zeroes. Evidence-bound records use the arena serving contract.
   const positionHistory: never[] = []
 
-  return {
+  const pageData = {
     profile,
     performance,
     rank: t.rank ?? null,
     source_trader_id: t.traderKey,
-    stats: detail.stats ? stats : null,
+    stats: legacyStats ? stats : null,
     portfolio,
     positionHistory,
     similarTraders,
     equityCurve,
     assetBreakdown,
-    positionSummary: detail.positionSummary ?? null,
+    positionSummary: legacyPositionSummary ?? null,
     trackedSince: detail.trackedSince,
     lastUpdated: t.lastUpdated ?? null,
   }
+
+  // Keep compare's existing legacy adapter contract outside this containment
+  // scope. Public profile callers opt in so a future enrichment change cannot
+  // accidentally reintroduce curve/portfolio/price/PnL fields after mapping.
+  return publicProfileHistoryQuarantine
+    ? (quarantineLegacyPositionHistory(pageData) as Record<string, unknown>)
+    : pageData
 }

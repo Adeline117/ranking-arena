@@ -319,6 +319,8 @@ describe('parseExactTraderFirstScreenResponse', () => {
         {
           timeframe: 90,
           rank: 7,
+          rankingVisibility: 'verified',
+          rankingVisibilityReason: null,
           headlineRoi: 0,
           headlinePnl: { value: 0, currency: 'USDT' },
           headlineWinRate: 0,
@@ -348,6 +350,8 @@ describe('parseExactTraderFirstScreenResponse', () => {
         entries: [
           {
             rank: 7,
+            rankingVisibility: 'verified',
+            rankingVisibilityReason: null,
             headlineRoi: 0,
             headlinePnl: { value: 0, currency: 'USDT' },
             headlineWinRate: 0,
@@ -493,6 +497,63 @@ describe('parseExactTraderFirstScreenResponse', () => {
       ).toBeNull()
     }
   })
+
+  it('rejects a partial or unknown entry that tries to carry ranking metrics', () => {
+    const raw = response()
+    const entry = raw.firstScreen.entries[0]
+    for (const visibility of ['partial', 'unknown'] as const) {
+      expect(
+        parseExactTraderFirstScreenResponse(
+          {
+            ...raw,
+            firstScreen: {
+              ...raw.firstScreen,
+              entries: [
+                {
+                  ...entry,
+                  rankingVisibility: visibility,
+                  rankingVisibilityReason: 'public_cohort_unavailable',
+                },
+              ],
+            },
+          },
+          expected
+        )
+      ).toBeNull()
+    }
+  })
+
+  it('retains an explicit unknown entry only when every rank-derived field is null', () => {
+    const raw = response()
+    const entry = raw.firstScreen.entries[0]
+    const parsed = parseExactTraderFirstScreenResponse(
+      {
+        ...raw,
+        firstScreen: {
+          ...raw.firstScreen,
+          entries: [
+            {
+              ...entry,
+              rank: null,
+              rankingVisibility: 'unknown',
+              rankingVisibilityReason: 'public_cohort_unavailable',
+              headlineRoi: null,
+              headlinePnl: null,
+            },
+          ],
+        },
+      },
+      expected
+    )
+
+    expect(parsed?.firstScreen.entries[0]).toMatchObject({
+      rank: null,
+      rankingVisibility: 'unknown',
+      rankingVisibilityReason: 'public_cohort_unavailable',
+      headlineRoi: null,
+      headlinePnl: null,
+    })
+  })
 })
 
 describe('isExactSourceNotServingError', () => {
@@ -582,6 +643,7 @@ describe('parseExactRankHistory', () => {
     platform: 'bitunix_futures',
     trader_key: 'secondary',
     period: '90D',
+    ranking_visibility: 'verified',
     history: [{ date: '2026-07-29', rank: 7, arena_score: 88 }],
   }
 
@@ -595,6 +657,23 @@ describe('parseExactRankHistory', () => {
     expect(
       parseExactRankHistory(
         { ...payload, history: [{ date: '2026-07-29', rank: 0, arena_score: 88 }] },
+        'bitunix_futures',
+        'secondary'
+      )
+    ).toBeNull()
+  })
+
+  it('rejects legacy or partial history even when its subject is exact', () => {
+    expect(
+      parseExactRankHistory(
+        { ...payload, ranking_visibility: 'partial' },
+        'bitunix_futures',
+        'secondary'
+      )
+    ).toBeNull()
+    expect(
+      parseExactRankHistory(
+        { ...payload, ranking_visibility: undefined },
         'bitunix_futures',
         'secondary'
       )

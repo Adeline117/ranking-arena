@@ -2,36 +2,64 @@
  * GET /api/recommendations/personal
  *
  * Authenticated endpoint returning personalized trader recommendations.
- * Results cached per user in Upstash Redis with 5-minute TTL.
+ * Only metric-free candidates are cached server-side; ranking fields are read
+ * from the current sealed cohort for every response.
  */
 
 import { withAuth } from '@/lib/api/middleware'
-import { getPersonalRecommendations } from '@/lib/recommendations/personal'
+import { NextResponse } from 'next/server'
+import {
+  getPersonalRecommendationCandidates,
+  materializePersonalRecommendations,
+} from '@/lib/recommendations/personal'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
-import { createLogger } from '@/lib/utils/logger'
-import type { PersonalRecommendation } from '@/lib/recommendations/personal'
+import type { PersonalRecommendationCandidate } from '@/lib/recommendations/personal'
 import { parseLimit } from '@/lib/utils/safe-parse'
-
-const _logger = createLogger('api-rec-personal')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
 
-export const GET = withAuth(async ({ user, request }) => {
-  const { searchParams } = new URL(request.url)
-  const limit = parseLimit(searchParams.get('limit'), 20, 50)
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+}
 
-  const cacheKey = `recommendations:personal:${user.id}`
+export const GET = withAuth(
+  async ({ user, request }) => {
+    const { searchParams } = new URL(request.url)
+    const limit = parseLimit(searchParams.get('limit'), 20, 50)
 
-  const recommendations = await tieredGetOrSet<PersonalRecommendation[]>(
-    cacheKey,
-    () => getPersonalRecommendations(user.id, 50),
-    'hot',
-    ['recommendations', `user:${user.id}`],
-  )
+    // v2 caches recommendation identities and reasons only. Ranking-derived
+    // fields are re-read from the sealed cohort below for every cache hit.
+    const cacheKey = `recommendations:personal:v2:candidates:${user.id}`
 
-  const sliced = recommendations.slice(0, limit)
+    const candidates = await tieredGetOrSet<PersonalRecommendationCandidate[]>(
+      cacheKey,
+      () => getPersonalRecommendationCandidates(user.id, 50),
+      'hot',
+      ['recommendations', `user:${user.id}`]
+    )
+    const result = await materializePersonalRecommendations(candidates, limit)
 
-  return { data: sliced, meta: { count: sliced.length, userId: user.id } }
-}, { name: 'get-recommendations-personal', rateLimit: 'authenticated' })
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          data: result.recommendations,
+          meta: { count: result.recommendations.length, userId: user.id },
+          ranking_visibility: result.rankingVisibility,
+          ...(result.rankingVisibilityReason
+            ? {
+                ranking_visibility_reason: result.rankingVisibilityReason,
+                ranking_visibility_reasons: [result.rankingVisibilityReason],
+              }
+            : {}),
+        },
+      },
+      { headers: NO_STORE_HEADERS }
+    )
+  },
+  { name: 'get-recommendations-personal', rateLimit: 'authenticated' }
+)

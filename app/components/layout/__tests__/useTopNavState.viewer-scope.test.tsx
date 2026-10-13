@@ -72,19 +72,18 @@ let currentAuth: AuthSessionReturn
 const queryResults = new Map<string, Array<Promise<QueryResult>>>()
 const realtimeCallbacks = new Map<string, () => void>()
 const fromMock = jest.fn((table: string) => {
-  let eqCalls = 0
   const nextResult = () => {
     const result = queryResults.get(table)?.shift()
     if (!result) throw new Error(`Missing queued result for ${table}`)
     return result
   }
   const builder = {
-    eq: jest.fn(() => {
-      eqCalls += 1
-      return eqCalls >= 2 ? nextResult() : builder
-    }),
+    eq: jest.fn(() => builder),
     maybeSingle: jest.fn(() => nextResult()),
+    neq: jest.fn(() => builder),
     select: jest.fn(() => builder),
+    then: (resolve: (value: QueryResult) => unknown, reject: (reason: unknown) => unknown) =>
+      nextResult().then(resolve, reject),
   }
   return builder
 })

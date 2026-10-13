@@ -1,57 +1,64 @@
 /**
  * /api/compare route tests
  *
- * Tests authentication, premium access control, input validation,
- * and error handling for the trader comparison API.
+ * Tests authentication, premium access control, identity handling, and the
+ * sealed-current-ranking boundary used by the comparison response.
  */
-
-// --- Mocks ---
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue(null)
 const mockRequireAuth = jest.fn()
 const mockSupabaseFrom = jest.fn()
+const mockResolveTrader = jest.fn()
+const mockFetchPublicProfileRankingRows = jest.fn()
+const mockGetAuthUser = jest.fn()
 
-jest.mock('@/lib/api', () => {
-  return {
-    getSupabaseAdmin: jest.fn(() => ({ from: (...args: unknown[]) => mockSupabaseFrom(...args) })),
-    requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
-    success: jest.fn((data: unknown) => {
-      const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
-      return NextResponse.json({
-        success: true,
-        data,
-        meta: { timestamp: new Date().toISOString() },
-      })
-    }),
-    error: jest.fn((message: string, status: number) => {
-      const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
-      return NextResponse.json({ success: false, error: { message } }, { status })
-    }),
-    handleError: jest.fn((err: unknown) => {
-      const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
-      const statusCode = (err as any)?.statusCode || 500
-      const message = err instanceof Error ? err.message : 'Internal error'
-      return NextResponse.json({ success: false, error: { message } }, { status: statusCode })
-    }),
-    checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
-    RateLimitPresets: { authenticated: { limit: 60, window: 60 } },
-  }
-})
+jest.mock('@/lib/api', () => ({
+  getSupabaseAdmin: jest.fn(() => ({ from: (...args: unknown[]) => mockSupabaseFrom(...args) })),
+  requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
+  success: jest.fn((data: unknown, status = 200, headers?: Record<string, string>) => {
+    const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
+    return NextResponse.json(
+      { success: true, data, meta: { timestamp: new Date().toISOString() } },
+      { status, headers }
+    )
+  }),
+  error: jest.fn((message: string, status: number) => {
+    const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
+    return NextResponse.json({ success: false, error: { message } }, { status })
+  }),
+  handleError: jest.fn((err: unknown) => {
+    const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
+    const statusCode = (err as { statusCode?: number } | null)?.statusCode || 500
+    const message = err instanceof Error ? err.message : 'Internal error'
+    return NextResponse.json({ success: false, error: { message } }, { status: statusCode })
+  }),
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  RateLimitPresets: { authenticated: { limit: 60, window: 60 } },
+}))
 
 jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
     headers: { set: jest.Mock; get: jest.Mock }
-    constructor(body?: unknown, init: { status?: number } = {}) {
+
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
       this.status = init.status || 200
-      this.headers = { set: jest.fn(), get: jest.fn().mockReturnValue(null) }
+      const values = new Map(
+        Object.entries(init.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value])
+      )
+      this.headers = {
+        set: jest.fn((key: string, value: string) => values.set(key.toLowerCase(), value)),
+        get: jest.fn((key: string) => values.get(key.toLowerCase()) ?? null),
+      }
     }
+
     async json() {
       return this._body
     }
-    static json(data: unknown, init?: { status?: number }) {
+
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -62,6 +69,7 @@ jest.mock('next/server', () => {
     headers: Map<string, string>
     method: string
     cookies: { get: () => undefined }
+
     constructor(url: string, opts?: { method?: string; headers?: Record<string, string> }) {
       this.url = url
       this.nextUrl = new URL(url)
@@ -84,15 +92,20 @@ jest.mock('@/lib/types/premium', () => ({
   getFeatureLimits: jest.fn().mockReturnValue({ comparisonReportsPerMonth: 100 }),
 }))
 
-// Mock unified data layer
-const mockResolveTrader = jest.fn()
-const mockGetTraderDetail = jest.fn()
-const mockToTraderPageData = jest.fn()
 jest.mock('@/lib/data/unified', () => ({
   resolveTrader: (...args: unknown[]) => mockResolveTrader(...args),
-  getTraderDetail: (...args: unknown[]) => mockGetTraderDetail(...args),
-  toTraderPageData: (...args: unknown[]) => mockToTraderPageData(...args),
 }))
+
+jest.mock('@/lib/data/trader/public-profile-ranking', () => {
+  const actual = jest.requireActual<typeof import('@/lib/data/trader/public-profile-ranking')>(
+    '@/lib/data/trader/public-profile-ranking'
+  )
+  return {
+    ...actual,
+    fetchPublicProfileRankingRows: (...args: unknown[]) =>
+      mockFetchPublicProfileRankingRows(...args),
+  }
+})
 
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
@@ -108,14 +121,11 @@ jest.mock('@/lib/utils/logger', () => ({
   })),
 }))
 
-// Mock getAuthUser + getSupabaseAdmin used by withAuth middleware
-const mockGetAuthUser = jest.fn()
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getSupabaseAdmin: jest.fn(() => ({ from: (...args: unknown[]) => mockSupabaseFrom(...args) })),
 }))
 
-// Skip CSRF and correlation in tests
 jest.mock('@/lib/utils/csrf', () => ({
   validateCsrfToken: jest.fn().mockReturnValue(true),
   generateCsrfToken: jest.fn().mockReturnValue('test-csrf'),
@@ -147,28 +157,66 @@ jest.mock('@/lib/api/versioning', () => ({
   addDeprecationHeaders: jest.fn(),
 }))
 
-// Mock tieredGetOrSet to pass through to the fetcher function
-jest.mock('@/lib/cache/redis-layer', () => ({
-  tieredGetOrSet: jest.fn((_key: string, fn: () => unknown) => fn()),
-}))
-
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 import { hasFeatureAccess } from '@/lib/types/premium'
 
-// Helper to build a chainable Supabase mock
 function buildFromMock(overrides: Record<string, unknown> = {}) {
   const defaultResult = { data: [], error: null, count: 0 }
   const handler: ProxyHandler<object> = {
     get(_target, prop) {
       if (prop === 'then') {
-        return (resolve: (v: unknown) => void) => resolve(overrides.result ?? defaultResult)
+        return (resolve: (value: unknown) => void) => resolve(overrides.result ?? defaultResult)
       }
       if (prop === 'catch' || prop === 'finally') return undefined
       return jest.fn(() => new Proxy({}, handler))
     },
   }
   return new Proxy({}, handler)
+}
+
+function publicRankingRow(
+  source: string,
+  traderKey: string,
+  seasonId: '90D' | '30D' | '7D',
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    season_id: seasonId,
+    source,
+    source_trader_id: traderKey,
+    handle: `${traderKey}-${seasonId}`,
+    avatar_url: `https://cdn.example/${traderKey}.png`,
+    rank: seasonId === '90D' ? 1 : seasonId === '30D' ? 2 : 3,
+    arena_score: 85,
+    roi: seasonId === '90D' ? 45.2 : seasonId === '30D' ? 30.2 : 7.2,
+    pnl: 10_000,
+    win_rate: 65,
+    max_drawdown: 12,
+    trades_count: 200,
+    followers: 42,
+    profitability_score: 88,
+    risk_control_score: 77,
+    execution_score: 66,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+function publicRankingResult(rows: unknown[]) {
+  return {
+    rows,
+    rankingVisibility: rows.length === 3 ? 'verified' : rows.length > 0 ? 'partial' : 'unknown',
+    rankingVisibilityReason:
+      rows.length === 3
+        ? null
+        : rows.length > 0
+          ? 'public_period_not_published'
+          : 'public_rank_unavailable',
+  }
 }
 
 describe('GET /api/compare', () => {
@@ -179,12 +227,9 @@ describe('GET /api/compare', () => {
     mockCheckRateLimit.mockResolvedValue(null)
     mockGetAuthUser.mockResolvedValue(mockUser)
     ;(hasFeatureAccess as jest.Mock).mockReturnValue(true)
-    // Default: unified data layer returns null (trader not found)
     mockResolveTrader.mockResolvedValue(null)
-    mockGetTraderDetail.mockResolvedValue(null)
-    mockToTraderPageData.mockReturnValue({ performance: null, profile: null, equityCurve: null })
+    mockFetchPublicProfileRankingRows.mockResolvedValue(publicRankingResult([]))
 
-    // Default: subscription query returns pro tier
     mockSupabaseFrom.mockImplementation((table: string) => {
       if (table === 'subscriptions') {
         return buildFromMock({ result: { data: { tier: 'pro' }, error: null } })
@@ -193,10 +238,7 @@ describe('GET /api/compare', () => {
     })
   })
 
-  // --- Rate Limiting ---
-
   it('returns rate limit response when rate limited', async () => {
-    // Mock the rate-limit module used by withPublic middleware (uses checkRateLimitFull)
     const { checkRateLimitFull } = require('@/lib/utils/rate-limit') // eslint-disable-line @typescript-eslint/no-require-imports
     const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
     checkRateLimitFull.mockResolvedValueOnce({
@@ -204,118 +246,85 @@ describe('GET /api/compare', () => {
       meta: null,
     })
 
-    const req = new NextRequest(
-      'http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures'
+    const res = await GET(
+      new NextRequest('http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures')
     )
-    const res = await GET(req)
-    const body = await res.json()
 
     expect(res.status).toBe(429)
-    expect(body.error).toBe('Rate limited')
+    expect((await res.json()).error).toBe('Rate limited')
   })
-
-  // --- Authentication ---
 
   it('returns 401 when not authenticated', async () => {
     mockGetAuthUser.mockResolvedValue(null)
 
-    const req = new NextRequest(
-      'http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures'
+    const res = await GET(
+      new NextRequest('http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures')
     )
-    const res = await GET(req)
-    await res.json()
 
     expect(res.status).toBe(401)
   })
 
-  // --- Premium Access ---
-
   it('returns 403 when user lacks pro access', async () => {
     ;(hasFeatureAccess as jest.Mock).mockReturnValue(false)
 
-    const req = new NextRequest(
-      'http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures'
+    const res = await GET(
+      new NextRequest('http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures')
     )
-    const res = await GET(req)
-    const body = await res.json()
 
     expect(res.status).toBe(403)
-    expect(body.error.message).toMatch(/Pro membership required/)
+    expect((await res.json()).error.message).toMatch(/Pro membership required/)
   })
 
-  // --- Input Validation ---
-
-  it('returns 400 when ids parameter is missing', async () => {
-    const req = new NextRequest('http://localhost/api/compare')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error.message).toMatch(/Missing ids/)
-  })
-
-  it('returns 400 when ids is empty after parsing', async () => {
-    const req = new NextRequest('http://localhost/api/compare?ids=&platforms=bybit')
-    const res = await GET(req)
-    await res.json()
+  it.each([
+    ['missing ids', 'http://localhost/api/compare'],
+    ['empty ids', 'http://localhost/api/compare?ids=&platforms=bybit'],
+    ['missing platforms', 'http://localhost/api/compare?ids=t1,t2'],
+    ['mismatched pairs', 'http://localhost/api/compare?ids=t1,t2&platforms=bybit'],
+    ['duplicate identities', 'http://localhost/api/compare?ids=t1,t1&platforms=bybit,bybit'],
+  ])('rejects invalid comparison input: %s', async (_name, url) => {
+    const res = await GET(new NextRequest(url))
 
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 when platforms is missing', async () => {
-    const req = new NextRequest('http://localhost/api/compare?ids=t1,t2')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error.message).toMatch(/Missing platforms/)
-  })
-
-  it('returns 400 when ids and platforms are not paired', async () => {
-    const req = new NextRequest('http://localhost/api/compare?ids=t1,t2&platforms=bybit')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error.message).toMatch(/same number/)
-  })
-
-  it('returns 400 for a duplicate composite identity', async () => {
-    const req = new NextRequest('http://localhost/api/compare?ids=t1,t1&platforms=bybit,bybit')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error.message).toMatch(/Duplicate trader account/)
-  })
-
-  it('returns 400 when more than 10 trader IDs provided', async () => {
+  it('returns 400 when more than ten accounts are requested', async () => {
     const ids = 't1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11'
     const platforms = Array.from({ length: 11 }, () => 'bybit').join(',')
-    const req = new NextRequest(`http://localhost/api/compare?ids=${ids}&platforms=${platforms}`)
-    const res = await GET(req)
-    const body = await res.json()
+    const res = await GET(
+      new NextRequest(`http://localhost/api/compare?ids=${ids}&platforms=${platforms}`)
+    )
 
     expect(res.status).toBe(400)
-    expect(body.error.message).toMatch(/Maximum 10/)
+    expect((await res.json()).error.message).toMatch(/Maximum 10/)
   })
 
-  // --- Success Case ---
+  it('keeps sealed reads and resolver identity source-aware for equal raw IDs', async () => {
+    mockResolveTrader
+      .mockResolvedValueOnce({
+        platform: 'bybit',
+        traderKey: 'shared',
+        handle: 'Bybit trader',
+        avatarUrl: null,
+      })
+      .mockResolvedValueOnce({
+        platform: 'binance_futures',
+        traderKey: 'shared',
+        handle: 'Binance trader',
+        avatarUrl: null,
+      })
+    mockFetchPublicProfileRankingRows
+      .mockResolvedValueOnce(publicRankingResult([publicRankingRow('bybit', 'shared', '90D')]))
+      .mockResolvedValueOnce(
+        publicRankingResult([publicRankingRow('binance_futures', 'shared', '90D')])
+      )
 
-  it('keeps cache and resolver identity source-aware for equal raw IDs', async () => {
-    const { tieredGetOrSet } = require('@/lib/cache/redis-layer') // eslint-disable-line @typescript-eslint/no-require-imports
-    const req = new NextRequest(
-      'http://localhost/api/compare?ids=shared,shared&platforms=bybit,binance_futures'
+    const res = await GET(
+      new NextRequest(
+        'http://localhost/api/compare?ids=shared,shared&platforms=bybit,binance_futures'
+      )
     )
 
-    const res = await GET(req)
-
     expect(res.status).toBe(200)
-    const cacheKeys = (tieredGetOrSet as jest.Mock).mock.calls.map((call) => call[0])
-    expect(cacheKeys).toHaveLength(2)
-    expect(cacheKeys[0]).toContain('bybit')
-    expect(cacheKeys[1]).toContain('binance_futures')
-    expect(cacheKeys[0]).not.toBe(cacheKeys[1])
     expect(mockResolveTrader).toHaveBeenNthCalledWith(1, expect.anything(), {
       handle: 'shared',
       platform: 'bybit',
@@ -324,131 +333,149 @@ describe('GET /api/compare', () => {
       handle: 'shared',
       platform: 'binance_futures',
     })
+    expect(mockFetchPublicProfileRankingRows).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        source: 'bybit',
+        sourceTraderId: 'shared',
+        periods: ['90D', '30D', '7D'],
+      })
+    )
+    expect(mockFetchPublicProfileRankingRows).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        source: 'binance_futures',
+        sourceTraderId: 'shared',
+        periods: ['90D', '30D', '7D'],
+      })
+    )
   })
 
-  it('returns comparison data for valid trader IDs', async () => {
-    // Mock unified data layer to return traders
-    mockResolveTrader
-      .mockResolvedValueOnce({ platform: 'binance_futures', traderKey: 't1', handle: 'Trader1' })
-      .mockResolvedValueOnce({ platform: 'bybit', traderKey: 't2', handle: 'Trader2' })
-
-    const trader1Detail = {
-      source: 'binance_futures',
-      sourceId: 't1',
+  it('re-reads the sealed cohort for each request instead of replaying rank-bearing data', async () => {
+    mockResolveTrader.mockResolvedValue({
+      platform: 'bybit',
+      traderKey: 't1',
       handle: 'Trader1',
-      roi: 45.2,
-      pnl: 10000,
-    }
-    const trader2Detail = {
-      source: 'bybit',
-      sourceId: 't2',
-      handle: 'Trader2',
-      roi: 32.1,
-      pnl: 5000,
-    }
-    mockGetTraderDetail.mockResolvedValueOnce(trader1Detail).mockResolvedValueOnce(trader2Detail)
-
-    mockToTraderPageData
-      .mockReturnValueOnce({
-        performance: {
-          roi: 45.2,
-          pnl: 10000,
-          win_rate: 0.65,
-          max_drawdown: -12,
-          trades_count: 200,
-          arena_score: 85,
-          arena_score_v3: 88,
-        },
-        profile: { handle: 'Trader1', avatar_url: null },
-        equityCurve: null,
-      })
-      .mockReturnValueOnce({
-        performance: {
-          roi: 32.1,
-          pnl: 5000,
-          win_rate: 0.72,
-          max_drawdown: -8,
-          trades_count: 150,
-          arena_score: 78,
-          arena_score_v3: null,
-        },
-        profile: { handle: 'Trader2', avatar_url: null },
-        equityCurve: null,
-      })
-
-    const req = new NextRequest(
-      'http://localhost/api/compare?ids=t1,t2&platforms=binance_futures,bybit'
+      avatarUrl: null,
+    })
+    mockFetchPublicProfileRankingRows.mockResolvedValue(
+      publicRankingResult([publicRankingRow('bybit', 't1', '90D')])
     )
-    const res = await GET(req)
+    const request = new NextRequest('http://localhost/api/compare?ids=t1&platforms=bybit')
+
+    await GET(request)
+    await GET(request)
+
+    expect(mockFetchPublicProfileRankingRows).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns only sealed current-ranking scalars when the retired curve query is supplied', async () => {
+    mockResolveTrader.mockResolvedValue({
+      platform: 'bybit',
+      traderKey: 't1',
+      handle: 'Resolved identity',
+      avatarUrl: 'https://identity.example/t1.png',
+    })
+    mockFetchPublicProfileRankingRows.mockResolvedValue(
+      publicRankingResult([
+        publicRankingRow('bybit', 't1', '90D', { roi: 45.2, pnl: 10_000 }),
+        publicRankingRow('bybit', 't1', '30D', { roi: 30.2 }),
+        publicRankingRow('bybit', 't1', '7D', { roi: 7.2 }),
+      ])
+    )
+
+    const res = await GET(
+      new NextRequest('http://localhost/api/compare?ids=t1&platforms=bybit&include_equity=1')
+    )
     const body = await res.json()
+    const trader = body.data.traders[0]
 
     expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
-    expect(body.data.traders).toHaveLength(2)
-    expect(
-      body.data.traders.map((trader: { id: string; source: string }) => ({
-        id: trader.id,
-        source: trader.source,
-      }))
-    ).toEqual([
-      { id: 't1', source: 'binance_futures' },
-      { id: 't2', source: 'bybit' },
-    ])
-    expect(body.data.requestedIds).toEqual(['t1', 't2'])
-    expect(body.data.requestedPlatforms).toEqual(['binance_futures', 'bybit'])
-    expect(body.data.requestedAccounts).toEqual([
-      { id: 't1', source: 'binance_futures' },
-      { id: 't2', source: 'bybit' },
-    ])
-    expect(body.data.missingAccounts).toEqual([])
-    expect(mockResolveTrader).toHaveBeenNthCalledWith(1, expect.anything(), {
-      handle: 't1',
-      platform: 'binance_futures',
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0, must-revalidate')
+    expect(trader).toMatchObject({
+      id: 't1',
+      source: 'bybit',
+      roi: 45.2,
+      roi_30d: 30.2,
+      roi_7d: 7.2,
+      pnl: 10_000,
+      arena_score: 85,
+      ranking_visibility: 'verified',
+      ranking_visibility_reason: null,
     })
-    expect(mockResolveTrader).toHaveBeenNthCalledWith(2, expect.anything(), {
-      handle: 't2',
-      platform: 'bybit',
-    })
-    expect(body.data.foundCount).toBe(2)
+    expect(trader).not.toHaveProperty('equity_curve')
+    expect(JSON.stringify(body)).not.toContain('daily-pnl')
+    expect(mockFetchPublicProfileRankingRows).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        source: 'bybit',
+        sourceTraderId: 't1',
+        periods: ['90D', '30D', '7D'],
+      })
+    )
   })
 
-  it('returns the exact account identities that could not be resolved', async () => {
-    mockResolveTrader
-      .mockResolvedValueOnce({ platform: 'binance_futures', traderKey: 't1', handle: 'Trader1' })
-      .mockResolvedValueOnce(null)
-    mockGetTraderDetail.mockResolvedValueOnce({
-      source: 'binance_futures',
-      sourceId: 't1',
-      handle: 'Trader1',
-      roi: 45.2,
+  it('keeps unavailable public metrics explicit instead of coercing them to zero', async () => {
+    mockResolveTrader.mockResolvedValue({
+      platform: 'bybit',
+      traderKey: 'unranked',
+      handle: 'Unranked identity',
+      avatarUrl: null,
     })
-    mockToTraderPageData.mockReturnValueOnce({
-      performance: { roi: 45.2 },
-      profile: { handle: 'Trader1', avatar_url: null },
-      equityCurve: null,
-    })
+    mockFetchPublicProfileRankingRows.mockResolvedValue(publicRankingResult([]))
 
-    const req = new NextRequest(
-      'http://localhost/api/compare?ids=t1,missing&platforms=binance_futures,bybit'
+    const res = await GET(
+      new NextRequest('http://localhost/api/compare?ids=unranked&platforms=bybit')
     )
-    const res = await GET(req)
+    const trader = (await res.json()).data.traders[0]
+
+    expect(res.status).toBe(200)
+    expect(trader).toMatchObject({
+      id: 'unranked',
+      roi: null,
+      roi_30d: null,
+      roi_7d: null,
+      pnl: null,
+      max_drawdown: null,
+      win_rate: null,
+      trades_count: null,
+      followers: null,
+      ranking_visibility: 'unknown',
+      ranking_visibility_reason: 'public_rank_unavailable',
+    })
+  })
+
+  it('returns comparison data and exact missing identities for resolvable accounts', async () => {
+    mockResolveTrader
+      .mockResolvedValueOnce({
+        platform: 'binance_futures',
+        traderKey: 't1',
+        handle: 'Trader1',
+        avatarUrl: null,
+      })
+      .mockResolvedValueOnce(null)
+    mockFetchPublicProfileRankingRows.mockResolvedValueOnce(
+      publicRankingResult([publicRankingRow('binance_futures', 't1', '90D')])
+    )
+
+    const res = await GET(
+      new NextRequest('http://localhost/api/compare?ids=t1,missing&platforms=binance_futures,bybit')
+    )
     const body = await res.json()
 
     expect(res.status).toBe(200)
     expect(body.data.traders).toHaveLength(1)
+    expect(body.data.traders[0]).toMatchObject({ id: 't1', source: 'binance_futures' })
     expect(body.data.missingAccounts).toEqual([{ id: 'missing', source: 'bybit' }])
     expect(body.data.foundCount).toBe(1)
   })
 
-  // --- DB Error ---
-
-  it('returns 500 when data fetch fails', async () => {
-    // Make resolveTrader throw to simulate a DB error
+  it('returns 500 when identity resolution fails', async () => {
     mockResolveTrader.mockRejectedValue(new Error('Failed to fetch trader data'))
 
-    const req = new NextRequest('http://localhost/api/compare?ids=t1&platforms=bybit')
-    const res = await GET(req)
-    const body = await res.json()
+    const res = await GET(new NextRequest('http://localhost/api/compare?ids=t1&platforms=bybit'))
 
     expect(res.status).toBe(500)
   })

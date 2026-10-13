@@ -11,7 +11,7 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { Box, Text } from '@/app/components/base'
 
-// Lazy load: TraderComparison includes charts (RadarChart, EquityCurveOverlay) — heavy below-the-fold content
+// Lazy load the comparison matrix and score bars below the fold.
 const TraderComparison = nextDynamic(() => import('@/app/components/premium/TraderComparison'), {
   ssr: false,
 })
@@ -45,20 +45,21 @@ import {
 
 interface TraderCompareData extends CompareAccountRef {
   handle: string | null
-  roi: number
-  roi_7d?: number
-  roi_30d?: number
-  pnl?: number
-  max_drawdown?: number
-  win_rate?: number
-  trades_count?: number
-  arena_score?: number
-  return_score?: number
-  drawdown_score?: number
-  stability_score?: number
+  roi: number | null
+  roi_7d?: number | null
+  roi_30d?: number | null
+  pnl?: number | null
+  max_drawdown?: number | null
+  win_rate?: number | null
+  trades_count?: number | null
+  arena_score?: number | null
+  return_score?: number | null
+  drawdown_score?: number | null
+  stability_score?: number | null
   avatar_url?: string
-  followers?: number
-  equity_curve?: Array<{ date: string; roi: number }>
+  followers?: number | null
+  ranking_visibility?: 'verified' | 'partial' | 'unknown'
+  ranking_visibility_reason?: string | null
 }
 
 interface CompareLoadResult {
@@ -296,7 +297,7 @@ function CompareContent() {
     }
   }, [searchFailedMessage, searchInput, searchRetryKey])
 
-  // Load traders with equity curve data
+  // Load only the compare API's sealed current-ranking projection.
   const loadTraders = async (
     accounts: CompareAccountRef[],
     { replaceUrlOnSuccess = false }: { replaceUrlOnSuccess?: boolean } = {}
@@ -309,7 +310,7 @@ function CompareContent() {
     }
 
     try {
-      const res = await fetch(buildCompareApiUrl(accounts, { includeEquity: true }), {
+      const res = await fetch(buildCompareApiUrl(accounts), {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 
@@ -793,6 +794,8 @@ function CompareContent() {
                 {followedTraders.map((ft) => {
                   const followedSource = ft.platform || ft.source || ''
                   const account = { id: ft.id, source: followedSource }
+                  const followedRoi =
+                    typeof ft.roi === 'number' && Number.isFinite(ft.roi) ? ft.roi : null
                   const isUnavailable = !followedSource
                   const isAdded =
                     !isUnavailable &&
@@ -892,13 +895,16 @@ function CompareContent() {
                             weight="bold"
                             style={{
                               color:
-                                (ft.roi ?? 0) >= 0
-                                  ? tokens.colors.accent.success
-                                  : tokens.colors.accent.error,
+                                followedRoi == null
+                                  ? tokens.colors.text.tertiary
+                                  : followedRoi >= 0
+                                    ? tokens.colors.accent.success
+                                    : tokens.colors.accent.error,
                             }}
                           >
-                            {(ft.roi ?? 0) >= 0 ? '+' : ''}
-                            {(ft.roi ?? 0).toFixed(1)}%
+                            {followedRoi == null
+                              ? '—'
+                              : `${followedRoi >= 0 ? '+' : ''}${followedRoi.toFixed(1)}%`}
                           </Text>
                         </Box>
                       </Box>

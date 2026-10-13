@@ -19,7 +19,9 @@ describe('public ranking asset publication boundary', () => {
     const text = source(route)
     expect(text).toContain('isPublicRankingSourceAllowed')
     expect(text).toContain('redirectToPublicRankingResponseCacheEpoch')
-    expect(text).toContain('publicRankingResponseCacheHeaders')
+    // Cacheable images carry the epoch via publicRankingResponseCacheHeaders;
+    // the badge and trader OG are stricter and send epoch-tagged no-store headers.
+    expect(text).toMatch(/publicRankingResponse(?:Cache|Rejection)Headers\(/)
   })
 
   it.each([
@@ -29,6 +31,8 @@ describe('public ranking asset publication boundary', () => {
     'app/api/share/rank-card/route.tsx',
   ])('%s gates the resolved database source before publishing ranking metrics', (route) => {
     const text = source(route)
-    expect(text).toMatch(/if \(!isPublicRankingSourceAllowed\((?:srcName|exchange|tr\.source)\)\)/)
+    expect(text).toMatch(
+      /if \(!isPublicRankingSourceAllowed\((?:srcName|exchange|tr\.source|identity\.source)\)\)/
+    )
   })
 })

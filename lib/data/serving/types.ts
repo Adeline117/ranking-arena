@@ -53,8 +53,22 @@ export interface TraderFirstScreen {
   botStrategy: 'martingale' | 'grid' | 'ai' | null
   entries: Array<{
     timeframe: 7 | 30 | 90
-    rank: number
+    /**
+     * A published rank only. The arena first-screen RPC may retain a raw board
+     * observation for identity/extras, but public consumers must never receive
+     * that observation as a rank unless the current sealed ranking cohort
+     * independently proves it.
+     */
+    rank: number | null
+    /** Per-timeframe authority state for the rank/ROI/PnL projection. */
+    rankingVisibility: 'verified' | 'partial' | 'unknown'
+    rankingVisibilityReason: string | null
     headlineRoi: number | null
+    /**
+     * The published ranking view has no settlement-currency column. Do not
+     * attach a raw board currency to its numeric PnL; it remains null until a
+     * currency-attested public projection exists.
+     */
     headlinePnl: Money | null
     headlineWinRate: number | null
     /** Board-card extras the source exposed (sparkline, MDD, copiers…) —
@@ -79,7 +93,7 @@ export interface TraderFirstScreenResponse {
   is_verified_data: boolean
 }
 
-export type CoreCacheState = 'warm' | 'cold-fetched' | 'pending'
+export type CoreCacheState = 'warm' | 'cold-fetched' | 'pending' | 'quarantined'
 
 /** One on-demand request per timeframe (spec §2.4-2). */
 export interface TraderCoreModules {
@@ -93,9 +107,8 @@ export interface TraderCoreModules {
   cacheState: CoreCacheState
 }
 
-/** /core route payload: full modules, or a pending shell while Tier-C runs.
- *  A stale hit returns the stale TraderCoreModules with cacheState 'pending'
- *  (data renders immediately, the client keeps polling for fresh). */
+/** /core route payload: full modules, a pending shell, or the temporary
+ * structural-empty public projection while historical core evidence is absent. */
 export type TraderCoreResponse =
   | TraderCoreModules
   | { timeframe: ServingTimeframe; cacheState: 'pending' }

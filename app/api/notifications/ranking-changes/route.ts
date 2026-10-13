@@ -1,9 +1,15 @@
+/**
+ * Ranking-change notifications are paused until rank history has an immutable
+ * public provenance contract. A partial, raw, or unavailable historical row
+ * must never become a user-visible rank or performance notification.
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+
+const PROVENANCE_UNAVAILABLE_REASON = 'ranking event provenance unavailable'
 
 export async function POST(request: NextRequest) {
   if (!verifyCronSecret(request)) {
@@ -11,183 +17,20 @@ export async function POST(request: NextRequest) {
   }
 
   const plog = await PipelineLogger.start('ranking-change-notifications')
-
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
-    let notificationsCreated = 0
-
-    const { data: prefs } = await supabase
-      .from('user_preferences')
-      .select('user_id, watched_traders, ranking_change_threshold')
-      .eq('email_notifications', true)
-
-    if (!prefs || prefs.length === 0) {
-      await plog.success(0)
-      return NextResponse.json({ ok: true, notifications: 0 })
-    }
-
-    // Build a map: trader key → set of user IDs watching it
-    // Also build a per-user threshold lookup
-    const allWatched = new Map<string, Set<string>>()
-    const userThresholds = new Map<string, number>()
-
-    for (const pref of prefs) {
-      userThresholds.set(pref.user_id, pref.ranking_change_threshold ?? 10)
-      const traders = pref.watched_traders as Array<{
-        source: string
-        source_trader_id: string
-      }> | null
-      if (!traders || !Array.isArray(traders)) continue
-      for (const t of traders) {
-        const key = `${t.source}:${t.source_trader_id}`
-        if (!allWatched.has(key)) allWatched.set(key, new Set())
-        allWatched.get(key)!.add(pref.user_id)
-      }
-    }
-
-    if (allWatched.size === 0) {
-      await plog.success(0)
-      return NextResponse.json({ ok: true, notifications: 0 })
-    }
-
-    // Decompose watched keys into (source, source_trader_id) arrays for batch queries
-    const watchedSources: string[] = []
-    const watchedTraderIds: string[] = []
-    for (const key of allWatched.keys()) {
-      const colonIdx = key.indexOf(':')
-      watchedSources.push(key.slice(0, colonIdx))
-      watchedTraderIds.push(key.slice(colonIdx + 1))
-    }
-
-    // BATCH QUERY 1: Fetch ALL current ranks in one query
-    // Filter by source+source_trader_id pairs using OR conditions via RPC or in-clause
-    // Supabase doesn't support multi-column IN, so we fetch all rows for the sources and
-    // filter in-memory — still far fewer queries than N individual lookups.
-    const uniqueSources = [...new Set(watchedSources)]
-    const { data: currentRanks } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, rank, arena_score')
-      .in('source', uniqueSources)
-      .in('source_trader_id', watchedTraderIds)
-      .eq('season_id', '90D')
-
-    // Build current rank lookup: key → { rank, arena_score }
-    const currentRankMap = new Map<string, { rank: number; arena_score: number | null }>()
-    if (currentRanks) {
-      for (const row of currentRanks) {
-        currentRankMap.set(`${row.source}:${row.source_trader_id}`, {
-          rank: row.rank,
-          arena_score: row.arena_score,
-        })
-      }
-    }
-
-    // BATCH QUERY 2: previous ranks. Migrated off retiring trader_snapshots_v2 →
-    // rank_history (period='90D', snapshot_date; actively written by snapshot-ranks).
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-    const { data: prevRanks } = await supabase
-      .from('rank_history')
-      .select('platform, trader_key, rank')
-      .in('platform', uniqueSources)
-      .in('trader_key', watchedTraderIds)
-      .eq('period', '90D')
-      .gte('snapshot_date', yesterday)
-      .order('snapshot_date', { ascending: false })
-
-    // Build prev rank lookup: keep only the latest row per (platform, trader_key)
-    const prevRankMap = new Map<string, number>()
-    if (prevRanks) {
-      for (const row of prevRanks) {
-        const key = `${row.platform}:${row.trader_key}`
-        if (!prevRankMap.has(key) && row.rank != null) {
-          prevRankMap.set(key, row.rank)
-        }
-      }
-    }
-
-    // BATCH QUERY 3: Fetch ALL trader handles in one query
-    const { data: traderInfos } = await supabase
-      .from('trader_sources')
-      .select('source, source_trader_id, handle')
-      .in('source', uniqueSources)
-      .in('source_trader_id', watchedTraderIds)
-
-    const handleMap = new Map<string, string>()
-    if (traderInfos) {
-      for (const t of traderInfos) {
-        handleMap.set(`${t.source}:${t.source_trader_id}`, t.handle || t.source_trader_id)
-      }
-    }
-
-    // Build all notifications to BATCH INSERT
-    const notificationRows: Array<{
-      user_id: string
-      type: string
-      title: string
-      message: string
-      data: Record<string, unknown>
-    }> = []
-
-    for (const [key, userIds] of allWatched) {
-      const current = currentRankMap.get(key)
-      if (!current?.rank) continue
-
-      const prevRank = prevRankMap.get(key)
-      if (!prevRank) continue
-
-      const rankChange = prevRank - current.rank
-      const absChange = Math.abs(rankChange)
-
-      const colonIdx = key.indexOf(':')
-      const source = key.slice(0, colonIdx)
-      const sourceId = key.slice(colonIdx + 1)
-      const handle = handleMap.get(key) || sourceId
-
-      for (const userId of userIds) {
-        const threshold = userThresholds.get(userId) ?? 10
-        if (absChange < threshold) continue
-
-        const direction = rankChange > 0 ? 'up' : 'down'
-        const title =
-          direction === 'up'
-            ? `${handle} rose ${absChange} ranks`
-            : `${handle} dropped ${absChange} ranks`
-        const message = `Now ranked #${current.rank} (was #${prevRank})`
-
-        notificationRows.push({
-          user_id: userId,
-          type: 'ranking_change',
-          title,
-          message,
-          data: {
-            source,
-            source_trader_id: sourceId,
-            handle,
-            old_rank: prevRank,
-            new_rank: current.rank,
-            change: rankChange,
-          },
-        })
-      }
-    }
-
-    // BATCH INSERT all notifications in one query (chunks of 500 to avoid payload limits)
-    // service-layer-exempt: batch — this is a cron-style pipeline job, not a user-facing API.
-    // Uses table-name indirection to avoid pre-push hook grep (cron batch jobs are exempt per CLAUDE.md).
-    const NOTIF_TABLE = 'notifications' as const
-    const BATCH_SIZE = 500
-    for (let i = 0; i < notificationRows.length; i += BATCH_SIZE) {
-      const batch = notificationRows.slice(i, i + BATCH_SIZE)
-      const { error: insertError } = await supabase.from(NOTIF_TABLE).insert(batch)
-      if (insertError) {
-        logger.error('[Notifications] Batch insert error:', insertError)
-      } else {
-        notificationsCreated += batch.length
-      }
-    }
-
-    await plog.success(notificationsCreated)
-    return NextResponse.json({ ok: true, notifications: notificationsCreated })
+    // Fail closed: no current or historical ranking data is read and no
+    // notification is inserted until both observations are proven publishable.
+    await plog.success(0, {
+      reason: PROVENANCE_UNAVAILABLE_REASON,
+      ranking_visibility: 'unknown',
+    })
+    return NextResponse.json({
+      ok: true,
+      status: 'skipped',
+      reason: PROVENANCE_UNAVAILABLE_REASON,
+      ranking_visibility: 'unknown',
+      notifications: 0,
+    })
   } catch (err) {
     await plog.error(err instanceof Error ? err : new Error(String(err)))
     logger.error('[Notifications] Ranking changes error:', err)

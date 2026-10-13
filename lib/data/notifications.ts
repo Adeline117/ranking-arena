@@ -14,6 +14,10 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
 import type { NotificationType as PersistedNotificationType } from '@/lib/types/notification'
+import {
+  isVisibleNotificationType,
+  SUPPRESSED_NOTIFICATION_TYPE,
+} from '@/lib/notifications/ranking-change-fence'
 
 export interface Notification {
   id: string
@@ -53,6 +57,27 @@ interface _NotificationRow {
   created_at: string
 }
 
+interface _NotificationRpcRow extends _NotificationRow {
+  actor_handle?: string | null
+  actor_avatar_url?: string | null
+  unread_count?: unknown
+}
+
+async function getVisibleUnreadNotificationCount(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('read', false)
+    .neq('type', SUPPRESSED_NOTIFICATION_TYPE)
+
+  if (error) throw error
+  return count || 0
+}
+
 /**
  * 获取用户通知列表 + 未读数（单次 RPC 调用，含 actor JOIN）
  */
@@ -76,46 +101,36 @@ export async function getUserNotificationsWithCount(
 
   if (!data || data.length === 0) {
     // Still need unread count even when no notifications on this page
-    const { count } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('read', false)
-    return { notifications: [], unreadCount: count || 0 }
+    return {
+      notifications: [],
+      unreadCount: await getVisibleUnreadNotificationCount(supabase, userId),
+    }
   }
 
-  // unread_count is the same on every row (CROSS JOIN)
-  const unreadCount = Number(data[0].unread_count) || 0
+  // The RPC is the authoritative pagination and count fence. Keep this
+  // application-level check too, so a stale/misconfigured RPC can never replay
+  // a stored ranking-change payload through a service client.
+  const rows = data as _NotificationRpcRow[]
+  const visibleRows = rows.filter((notification) => isVisibleNotificationType(notification.type))
+  const unreadCount =
+    visibleRows.length === data.length
+      ? Number(data[0].unread_count) || 0
+      : await getVisibleUnreadNotificationCount(supabase, userId)
 
-  const notifications: Notification[] = data.map(
-    (n: {
-      id: string
-      user_id: string
-      type: NotificationType
-      title: string
-      message: string
-      link?: string
-      read: boolean
-      actor_id?: string
-      reference_id?: string
-      created_at: string
-      actor_handle?: string
-      actor_avatar_url?: string
-    }) => ({
-      id: n.id,
-      user_id: n.user_id,
-      type: n.type,
-      title: n.title,
-      message: n.message,
-      link: n.link,
-      read: n.read,
-      actor_id: n.actor_id,
-      reference_id: n.reference_id,
-      created_at: n.created_at,
-      actor_handle: n.actor_handle || undefined,
-      actor_avatar_url: n.actor_avatar_url || undefined,
-    })
-  )
+  const notifications: Notification[] = visibleRows.map((n) => ({
+    id: n.id,
+    user_id: n.user_id,
+    type: n.type,
+    title: n.title,
+    message: n.message,
+    link: n.link,
+    read: n.read,
+    actor_id: n.actor_id,
+    reference_id: n.reference_id,
+    created_at: n.created_at,
+    actor_handle: n.actor_handle || undefined,
+    actor_avatar_url: n.actor_avatar_url || undefined,
+  }))
 
   return { notifications, unreadCount }
 }
@@ -142,22 +157,17 @@ export async function getUnreadNotificationCount(
   // KEEP 'exact' — scoped to a single user via (user_id, read) index,
   // tiny row set per user, and the exact number is shown as the
   // notification badge (e.g. "3 unread").
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('read', false)
-
-  if (error) {
+  try {
+    return await getVisibleUnreadNotificationCount(supabase, userId)
+  } catch (error) {
     // A failed count must not read as a confident "0 unread" — the badge would
     // hide real notifications with no signal. Log so the failure is observable.
     logger.error('[notifications] getUnreadNotificationCount failed', {
       userId,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
     })
     return 0
   }
-  return count || 0
 }
 
 /**

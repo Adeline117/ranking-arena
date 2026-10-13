@@ -1,4 +1,4 @@
-import { runTraderAlerts } from './run-trader-alerts'
+import { runTraderAlerts, SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION } from './run-trader-alerts'
 
 interface Call {
   table: string
@@ -7,8 +7,7 @@ interface Call {
 }
 
 function chain(result: unknown, table: string, calls: Call[]): unknown {
-  let proxy: unknown
-  proxy = new Proxy(
+  const proxy: unknown = new Proxy(
     {},
     {
       get(_target, property) {
@@ -61,13 +60,19 @@ const alert = {
 }
 
 const observation = {
+  season_id: '90D',
   source_trader_id: 'trader-1',
   source: 'binance_futures',
   roi: 25,
   pnl: 2_000,
-  max_drawdown: -12,
+  win_rate: 55,
+  max_drawdown: 12,
   arena_score: 80,
   rank: 15,
+  score_completeness: 'full',
+  metrics_estimated: false,
+  is_outlier: false,
+  computed_at: '2026-07-15T05:00:00.000Z',
 }
 
 const delivery = {
@@ -75,7 +80,7 @@ const delivery = {
   alert_id: 'alert-1',
   user_id: 'user-1',
   metric: 'roi',
-  baseline_version: 0,
+  baseline_version: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
   old_value: 10,
   new_value: 25,
   absolute_change: 15,
@@ -150,7 +155,7 @@ describe('runTraderAlerts', () => {
       trader_alerts: [{ data: [alert], error: null }],
       subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
       user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
-      leaderboard_ranks: [{ data: [observation], error: null }],
+      public_ranked_leaderboard: [{ data: [observation], error: null }],
       trader_alert_states: [
         { data: [], error: null },
         { data: null, error: null },
@@ -162,12 +167,18 @@ describe('runTraderAlerts', () => {
 
     expect(result).toMatchObject({ statesWritten: 5, alertsSent: 0, deliveryFailures: 0 })
     expect(rpc).not.toHaveBeenCalled()
+    expect(client.from).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(client.from).not.toHaveBeenCalledWith('leaderboard_ranks')
     const upsert = calls.find(
       (call) => call.table === 'trader_alert_states' && call.method === 'upsert'
     )
     expect(upsert?.args[0]).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ metric: 'roi', baseline_value: 25, baseline_version: 0 }),
+        expect.objectContaining({
+          metric: 'roi',
+          baseline_value: 25,
+          baseline_version: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
+        }),
         expect.objectContaining({ metric: 'drawdown', baseline_value: 12 }),
       ])
     )
@@ -182,7 +193,7 @@ describe('runTraderAlerts', () => {
     const binanceAlert = {
       ...alert,
       id: 'alert-binance',
-      source: 'binance',
+      source: 'binance_futures',
     }
     const legacyAlert = {
       ...alert,
@@ -193,11 +204,11 @@ describe('runTraderAlerts', () => {
       trader_alerts: [{ data: [bybitAlert, binanceAlert, legacyAlert], error: null }],
       subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
       user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
-      leaderboard_ranks: [
+      public_ranked_leaderboard: [
         {
           data: [
             { ...observation, source: 'bybit', roi: 11 },
-            { ...observation, source: 'binance', roi: 22 },
+            { ...observation, source: 'binance_futures', roi: 22 },
           ],
           error: null,
         },
@@ -241,12 +252,57 @@ describe('runTraderAlerts', () => {
     )
   })
 
-  it('reserves and atomically finalizes a threshold event', async () => {
-    const { client, rpc } = clientWith({
+  it('keeps a source-less legacy alert inert even when one public row is currently visible', async () => {
+    const legacyAlert = { ...alert, id: 'alert-legacy', source: null }
+    const { client, calls, rpc } = clientWith({
+      trader_alerts: [{ data: [legacyAlert], error: null }],
+      subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+      public_ranked_leaderboard: [{ data: [observation], error: null }],
+      trader_alert_states: [{ data: [], error: null }],
+      trader_alert_deliveries: [{ data: [], error: null }],
+    })
+
+    const result = await runTraderAlerts(client as never, now)
+
+    expect(result).toMatchObject({ alertsChecked: 1, tradersChecked: 0, statesWritten: 0 })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(calls).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ table: 'trader_alert_states', method: 'upsert' }),
+      ])
+    )
+  })
+
+  it('does not write a baseline or delivery when the sealed cohort is partial', async () => {
+    const { client, calls, rpc } = clientWith({
       trader_alerts: [{ data: [alert], error: null }],
       subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
       user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
-      leaderboard_ranks: [{ data: [observation], error: null }],
+      public_ranked_leaderboard: [
+        { data: [{ ...observation, metrics_estimated: true }], error: null },
+      ],
+      trader_alert_states: [{ data: [], error: null }],
+      trader_alert_deliveries: [{ data: [], error: null }],
+    })
+
+    const result = await runTraderAlerts(client as never, now)
+
+    expect(result).toMatchObject({ statesWritten: 0, alertsSent: 0, deliveryFailures: 0 })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(calls).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ table: 'trader_alert_states', method: 'upsert' }),
+      ])
+    )
+  })
+
+  it('re-seeds legacy raw baselines without calculating an alert from them', async () => {
+    const { client, calls, rpc } = clientWith({
+      trader_alerts: [{ data: [alert], error: null }],
+      subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+      public_ranked_leaderboard: [{ data: [observation], error: null }],
       trader_alert_states: [
         {
           data: [
@@ -256,6 +312,88 @@ describe('runTraderAlerts', () => {
               baseline_value: 10,
               last_value: 10,
               baseline_version: 0,
+              observed_at: '2026-07-15T04:30:00.000Z',
+              updated_at: '2026-07-15T04:30:00.000Z',
+            },
+          ],
+          error: null,
+        },
+        { data: null, error: null },
+      ],
+      trader_alert_deliveries: [{ data: [], error: null }],
+    })
+
+    const result = await runTraderAlerts(client as never, now)
+
+    expect(result).toMatchObject({ statesWritten: 5, alertsSent: 0, deliveryFailures: 0 })
+    expect(rpc).not.toHaveBeenCalled()
+    const upsert = calls.find(
+      (call) => call.table === 'trader_alert_states' && call.method === 'upsert'
+    )
+    expect(upsert?.args[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metric: 'roi',
+          baseline_value: 25,
+          baseline_version: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
+        }),
+      ])
+    )
+  })
+
+  it('does not retry a legacy raw pending delivery', async () => {
+    const disabledAlert = { ...alert, alert_roi_change: false }
+    const { client, rpc } = clientWith({
+      trader_alerts: [{ data: [disabledAlert], error: null }],
+      subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+      public_ranked_leaderboard: [{ data: [observation], error: null }],
+      trader_alert_states: [
+        {
+          data: [
+            {
+              alert_id: 'alert-1',
+              metric: 'roi',
+              baseline_value: 10,
+              last_value: 10,
+              baseline_version: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
+              observed_at: '2026-07-15T04:30:00.000Z',
+              updated_at: '2026-07-15T04:30:00.000Z',
+            },
+          ],
+          error: null,
+        },
+        { data: null, error: null },
+      ],
+      trader_alert_deliveries: [
+        {
+          data: [{ ...delivery, baseline_version: 0 }],
+          error: null,
+        },
+      ],
+    })
+
+    const result = await runTraderAlerts(client as never, now)
+
+    expect(result).toMatchObject({ alertsSent: 0, deliveryFailures: 0 })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('reserves and atomically finalizes a threshold event', async () => {
+    const { client, rpc } = clientWith({
+      trader_alerts: [{ data: [alert], error: null }],
+      subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+      public_ranked_leaderboard: [{ data: [observation], error: null }],
+      trader_alert_states: [
+        {
+          data: [
+            {
+              alert_id: 'alert-1',
+              metric: 'roi',
+              baseline_value: 10,
+              last_value: 10,
+              baseline_version: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
               observed_at: '2026-07-15T04:30:00.000Z',
               updated_at: '2026-07-15T04:30:00.000Z',
             },
@@ -288,7 +426,7 @@ describe('runTraderAlerts', () => {
       trader_alerts: [{ data: [alert], error: null }],
       subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
       user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
-      leaderboard_ranks: [{ data: [observation], error: null }],
+      public_ranked_leaderboard: [{ data: [observation], error: null }],
       trader_alert_states: [
         {
           data: [
@@ -297,7 +435,7 @@ describe('runTraderAlerts', () => {
               metric: 'roi',
               baseline_value: 10,
               last_value: 10,
-              baseline_version: 0,
+              baseline_version: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
               observed_at: '2026-07-15T04:30:00.000Z',
               updated_at: '2026-07-15T04:30:00.000Z',
             },

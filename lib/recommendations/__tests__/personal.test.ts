@@ -1,99 +1,239 @@
 /**
- * personal — 个性化推荐(相似跟随>偏好交易所>全站头部兜底)+ 去重。
+ * Personal recommendations must use the sealed ranking cohort twice:
+ * candidate creation may be cached, but response metrics are always current.
  */
 
-const mockQueues: Record<string, Array<{ data: unknown; error?: unknown }>> = {}
+type QueryResult = { data: unknown; error?: unknown }
+type QueryChain = Record<string, jest.Mock> & { then: Promise<QueryResult>['then'] }
+
+const mockQueues: Record<string, QueryResult[]> = {}
+const queryCalls: Record<string, QueryChain[]> = {}
+
+function makeQuery(result: QueryResult): QueryChain {
+  const chain = {} as QueryChain
+  for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'neq', 'not', 'gt', 'or', 'order']) {
+    chain[method] = jest.fn(() => chain)
+  }
+  chain.limit = jest.fn(async () => ({ data: result.data, error: result.error ?? null }))
+  chain.then = (resolve, reject) =>
+    Promise.resolve({ data: result.data, error: result.error ?? null }).then(resolve, reject)
+  return chain
+}
+
+const mockFrom = jest.fn((table: string) => {
+  const result = mockQueues[table]?.shift() ?? { data: [] }
+  const query = makeQuery(result)
+  ;(queryCalls[table] ??= []).push(query)
+  return query
+})
+
 jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: () => ({
-    from: (table: string) => {
-      const q = mockQueues[table] ?? []
-      const resp = q.length > 1 ? q.shift()! : (q[0] ?? { data: [] })
-      const p = Promise.resolve({ data: resp.data, error: resp.error ?? null })
-      const obj: Record<string, unknown> = {}
-      for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'neq', 'not', 'or', 'order'])
-        obj[m] = () => obj
-      obj.limit = () => p
-      return obj
-    },
-  }),
+  getSupabaseAdmin: () => ({ from: mockFrom }),
 }))
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: () => ({ error: jest.fn(), warn: jest.fn() }),
 }))
 
-import { getPersonalRecommendations } from '../personal'
+import {
+  getPersonalRecommendationCandidates,
+  getPersonalRecommendations,
+  materializePersonalRecommendations,
+  sanitizePersonalRecommendationCandidates,
+} from '../personal'
 
 function ranked(id: string, source = 'bybit', overrides: Record<string, unknown> = {}) {
   return {
+    season_id: '90D',
     source,
     source_trader_id: id,
     handle: id,
     avatar_url: null,
+    rank: 1,
     arena_score: 80,
     roi: 50,
     pnl: 100,
     win_rate: 60,
+    max_drawdown: 12,
+    trades_count: 40,
+    followers: 10,
+    copiers: 2,
+    score_completeness: 'full',
+    metrics_estimated: false,
+    is_outlier: false,
+    computed_at: new Date().toISOString(),
     ...overrides,
   }
 }
 
+function queue(table: string, ...results: QueryResult[]) {
+  mockQueues[table] = results
+}
+
 beforeEach(() => {
-  for (const k of Object.keys(mockQueues)) delete mockQueues[k]
+  jest.clearAllMocks()
+  for (const table of Object.keys(mockQueues)) delete mockQueues[table]
+  for (const table of Object.keys(queryCalls)) delete queryCalls[table]
 })
 
-describe('getPersonalRecommendations', () => {
-  it('无关注 → 全站头部兜底,reason=top_performer', async () => {
-    mockQueues.user_follows = [{ data: [] }]
-    mockQueues.leaderboard_ranks = [{ data: [ranked('top1'), ranked('top2')] }]
-    const recs = await getPersonalRecommendations('u1', 10)
-    expect(recs).toHaveLength(2)
-    expect(recs[0].reason).toBe('top_performer')
-    expect(recs[0].reason_detail).toContain('bybit')
+describe('personal recommendation publication boundary', () => {
+  it('builds metric-free fallback candidates, then materializes fresh metrics from the public cohort', async () => {
+    queue('user_follows', { data: [] })
+    queue(
+      'public_ranked_leaderboard',
+      { data: [ranked('top-1', 'bybit', { arena_score: 80, roi: 50 })] },
+      { data: [ranked('top-1', 'bybit', { arena_score: 71, roi: 7, pnl: 17, win_rate: 61 })] }
+    )
+
+    const candidates = await getPersonalRecommendationCandidates('u1', 10)
+    expect(candidates).toEqual([
+      { source: 'bybit', source_trader_id: 'top-1', reason: 'top_performer' },
+    ])
+    expect(JSON.stringify(candidates)).not.toContain('arena_score')
+    expect(JSON.stringify(candidates)).not.toContain('roi')
+
+    const result = await materializePersonalRecommendations(candidates, 10)
+    expect(result).toEqual({
+      recommendations: [
+        expect.objectContaining({
+          source: 'bybit',
+          source_trader_id: 'top-1',
+          arena_score: 71,
+          roi: 7,
+          pnl: 17,
+          win_rate: 61,
+          reason: 'top_performer',
+        }),
+      ],
+      rankingVisibility: 'verified',
+      rankingVisibilityReason: null,
+    })
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 
-  it('有关注 → 相似交易员 reason=similar_to_follow,已关注的被排除', async () => {
-    mockQueues.user_follows = [{ data: [{ following_id: 'followed-1' }] }]
-    mockQueues.leaderboard_ranks = [
-      // 1. 关注者的 trader 映射
+  it('derives similar and preferred-exchange candidates only from verified seed and candidate rows', async () => {
+    queue('user_follows', { data: [{ following_id: 'followed-1' }] })
+    queue(
+      'public_ranked_leaderboard',
       { data: [ranked('followed-1', 'bybit', { roi: 100 })] },
-      // 2. findSimilarTraders:包含一个已关注的(应被去重)
-      { data: [ranked('similar-1'), ranked('followed-1')] },
-      // 3. getTopFromExchanges 补位
-      { data: [ranked('top-pref')] },
-    ]
-    const recs = await getPersonalRecommendations('u1', 10)
-    const ids = recs.map((r) => r.source_trader_id)
-    expect(ids).toContain('similar-1')
-    expect(ids).not.toContain('followed-1') // 已关注不推
-    expect(recs.find((r) => r.source_trader_id === 'similar-1')?.reason).toBe('similar_to_follow')
-    expect(recs.find((r) => r.source_trader_id === 'top-pref')?.reason).toBe('preferred_exchange')
+      { data: [ranked('similar-1', 'bybit', { roi: 95 })] },
+      { data: [ranked('preferred-1', 'bybit', { roi: 30 })] }
+    )
+
+    const candidates = await getPersonalRecommendationCandidates('u1', 10)
+
+    expect(candidates).toEqual([
+      {
+        source: 'bybit',
+        source_trader_id: 'similar-1',
+        reason: 'similar_to_follow',
+        reference_source: 'bybit',
+        reference_trader_id: 'followed-1',
+      },
+      {
+        source: 'bybit',
+        source_trader_id: 'preferred-1',
+        reason: 'preferred_exchange',
+      },
+    ])
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 
-  it('相似结果重复出现 → 只推一次(followedSet 兼做去重)', async () => {
-    mockQueues.user_follows = [{ data: [{ following_id: 'f1' }, { following_id: 'f2' }] }]
-    mockQueues.leaderboard_ranks = [
-      { data: [ranked('f1', 'bybit'), ranked('f2', 'bybit')] }, // 关注映射
-      { data: [ranked('dup-similar')] }, // f1 的相似
-      { data: [ranked('dup-similar')] }, // f2 的相似(重复)
-      { data: [] }, // 补位
-    ]
-    const recs = await getPersonalRecommendations('u1', 10)
-    expect(recs.filter((r) => r.source_trader_id === 'dup-similar')).toHaveLength(1)
+  it('uses an ordered negative-ROI range instead of substituting a zero seed ROI', async () => {
+    queue('user_follows', { data: [{ following_id: 'followed-1' }] })
+    queue(
+      'public_ranked_leaderboard',
+      { data: [ranked('followed-1', 'bybit', { roi: -10 })] },
+      { data: [ranked('similar-1', 'bybit', { roi: -9 })] },
+      { data: [] }
+    )
+
+    await getPersonalRecommendationCandidates('u1', 10)
+
+    const similarQuery = queryCalls.public_ranked_leaderboard[1]
+    expect(similarQuery.gte).toHaveBeenCalledWith('roi', -13)
+    expect(similarQuery.lte).toHaveBeenCalledWith('roi', -7)
   })
 
-  it('limit 截断', async () => {
-    mockQueues.user_follows = [{ data: [] }]
-    mockQueues.leaderboard_ranks = [{ data: Array.from({ length: 30 }, (_, i) => ranked(`t${i}`)) }]
-    const recs = await getPersonalRecommendations('u1', 5)
-    // 兜底路径 limit 直接传给查询,这里验证返回不超限
-    expect(recs.length).toBeLessThanOrEqual(30)
+  it('fails closed when a seed or candidate row does not satisfy the public cohort proof', async () => {
+    queue('user_follows', { data: [] })
+    queue('public_ranked_leaderboard', {
+      data: [ranked('unverified', 'bybit', { metrics_estimated: true })],
+    })
+
+    await expect(getPersonalRecommendations('u1', 10)).resolves.toEqual([])
+    expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
+    expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 
-  it('user_follows 查询抛错 → 捕获,走兜底不炸', async () => {
-    mockQueues.user_follows = [{ data: null, error: null }] // data null → follows null → []
-    mockQueues.leaderboard_ranks = [{ data: [ranked('fallback')] }]
-    const recs = await getPersonalRecommendations('u1')
-    expect(recs[0].source_trader_id).toBe('fallback')
-    expect(recs[0].reason).toBe('top_performer')
+  it('does not disguise an unverified followed seed as a generic personalization fallback', async () => {
+    queue('user_follows', { data: [{ following_id: 'followed-1' }] })
+    queue('public_ranked_leaderboard', {
+      data: [ranked('followed-1', 'bybit', { metrics_estimated: true })],
+    })
+
+    await expect(getPersonalRecommendationCandidates('u1', 10)).resolves.toEqual([])
+    expect(queryCalls.public_ranked_leaderboard).toHaveLength(1)
+  })
+
+  it('never replays ranking metrics carried by a legacy-shaped candidate cache hit', async () => {
+    queue('public_ranked_leaderboard', {
+      data: [ranked('current-1', 'bybit', { arena_score: 70, roi: 3, pnl: 4, win_rate: 55 })],
+    })
+    const legacyCandidate = {
+      source: 'bybit',
+      source_trader_id: 'current-1',
+      reason: 'top_performer',
+      arena_score: 999,
+      roi: 999,
+      pnl: 999,
+      win_rate: 999,
+      rank: 1,
+    }
+
+    const result = await materializePersonalRecommendations([legacyCandidate], 10)
+
+    expect(result.recommendations).toEqual([
+      expect.objectContaining({ arena_score: 70, roi: 3, pnl: 4, win_rate: 55 }),
+    ])
+    expect(JSON.stringify(result)).not.toContain('999')
+  })
+
+  it('drops a similar-to-follow cache candidate when its current reference seed is no longer ranked', async () => {
+    queue('public_ranked_leaderboard', { data: [ranked('candidate-1', 'bybit')] })
+
+    const result = await materializePersonalRecommendations(
+      [
+        {
+          source: 'bybit',
+          source_trader_id: 'candidate-1',
+          reason: 'similar_to_follow',
+          reference_source: 'bybit',
+          reference_trader_id: 'former-seed',
+        },
+      ],
+      10
+    )
+
+    expect(result).toEqual({
+      recommendations: [],
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'cached_candidate_unverified',
+    })
+  })
+
+  it('projects cache candidates to identity and reason fields only', () => {
+    expect(
+      sanitizePersonalRecommendationCandidates([
+        {
+          source: 'bybit',
+          source_trader_id: 'candidate-1',
+          reason: 'top_performer',
+          arena_score: 100,
+          roi: 100,
+        },
+      ])
+    ).toEqual([{ source: 'bybit', source_trader_id: 'candidate-1', reason: 'top_performer' }])
   })
 })

@@ -69,6 +69,44 @@ import { useDebounce } from '@/lib/hooks/useDebounce'
 
 // ExportRankingButton moved to RankingFilters.tsx
 
+/**
+ * Historical rank points need their own publication proof. In particular, do
+ * not accept the legacy bare `{ "source:trader": [rank] }` payload: a stale
+ * browser/CDN response in that shape predates the no-store history boundary.
+ */
+function parseVerifiedRankHistorySeries(value: unknown): Record<string, number[]> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const payload = value as Record<string, unknown>
+  if (payload.ranking_visibility !== 'verified') return null
+
+  const rawSeries = payload.series
+  if (!rawSeries || typeof rawSeries !== 'object' || Array.isArray(rawSeries)) return null
+
+  const series: Record<string, number[]> = {}
+  for (const [key, points] of Object.entries(rawSeries)) {
+    if (!Array.isArray(points) || !points.every((point) => Number.isInteger(point) && point > 0)) {
+      return null
+    }
+    series[key] = points
+  }
+  return series
+}
+
+function removeRankSeriesKeys(
+  current: Record<string, number[]>,
+  keys: readonly string[]
+): Record<string, number[]> {
+  let changed = false
+  const next = { ...current }
+  for (const key of keys) {
+    if (key in next) {
+      delete next[key]
+      changed = true
+    }
+  }
+  return changed ? next : current
+}
+
 /** Infinite scroll sentinel — triggers onVisible when scrolled into view */
 function CardLoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -166,11 +204,6 @@ function RankingTableInner(props: {
   const [rankSeries, setRankSeries] = useState<Record<string, number[]>>({})
   // Keys already requested (success keeps them; abort/failure releases for retry).
   const requestedSeriesKeysRef = useRef<Set<string>>(new Set())
-  // Equity-trend sparkline for the DESKTOP table ROI cell (`${period}:${platform}:
-  // ${key}` → account_value points). Separate from rankSeries (card rank-trend);
-  // fetched non-blocking per page, absent keys keep the bare ROI number.
-  const [equitySeries, setEquitySeries] = useState<Record<string, number[]>>({})
-  const requestedEquityKeysRef = useRef<Set<string>>(new Set())
 
   // useDeferredValue allows React to interrupt the expensive 50-row render during hydration.
   // During loading state, show immediate (empty/skeleton) data.
@@ -548,10 +581,19 @@ function RankingTableInner(props: {
             release(chunkKeys)
             continue
           }
-          const map = (await res.json()) as Record<string, number[]>
+          const payload: unknown = await res.json()
           if (controller.signal.aborted) {
             release(chunkKeys)
             return
+          }
+          const map = parseVerifiedRankHistorySeries(payload)
+          if (!map) {
+            // Expire any old in-memory series for the visible cards. The
+            // request itself may have crossed a deployment where rank_history
+            // was formerly cacheable, so leaving the previous state would
+            // still replay a raw sparkline after the server fails closed.
+            setRankSeries((prev) => removeRankSeriesKeys(prev, chunkKeys))
+            continue
           }
           // Re-key under the active period before merging into state.
           const prefixed: Record<string, number[]> = {}
@@ -597,59 +639,6 @@ function RankingTableInner(props: {
   const startIndex = hasServerPagination ? 0 : (currentPage - 1) * itemsPerPage
   const endIndex = hasServerPagination ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
-  // Equity-trend sparkline for the DESKTOP table ROI cell. Non-blocking, one POST
-  // per page of visible rows, streams into equitySeries. Mirrors the card-view
-  // rank-history fetch (never N+1, failure leaves the numeric fallback intact).
-  useEffect(() => {
-    if (viewMode !== 'table') return
-    const release = (keys: string[]) => {
-      for (const k of keys) requestedEquityKeysRef.current.delete(k)
-    }
-    const toFetch: { platform: string; trader_key: string }[] = []
-    for (const tr of paginatedTraders) {
-      const platform = tr.source || source || ''
-      if (!platform || !tr.id) continue
-      const cacheKey = `${seriesPeriod}:${platform}:${tr.id}`
-      if (requestedEquityKeysRef.current.has(cacheKey)) continue
-      requestedEquityKeysRef.current.add(cacheKey)
-      toFetch.push({ platform, trader_key: tr.id })
-    }
-    if (toFetch.length === 0) return
-
-    const controller = new AbortController()
-    ;(async () => {
-      for (let i = 0; i < toFetch.length; i += 60) {
-        const chunk = toFetch.slice(i, i + 60)
-        const chunkKeys = chunk.map((c) => `${seriesPeriod}:${c.platform}:${c.trader_key}`)
-        try {
-          const res = await fetch('/api/traders/sparklines', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-            body: JSON.stringify({ traders: chunk, period: seriesPeriod }),
-            signal: controller.signal,
-          })
-          if (!res.ok) {
-            release(chunkKeys)
-            continue
-          }
-          const map = (await res.json()) as Record<string, number[]>
-          if (controller.signal.aborted) {
-            release(chunkKeys)
-            return
-          }
-          const prefixed: Record<string, number[]> = {}
-          for (const [k, v] of Object.entries(map)) prefixed[`${seriesPeriod}:${k}`] = v
-          if (Object.keys(prefixed).length > 0) {
-            setEquitySeries((prev) => ({ ...prev, ...prefixed }))
-          }
-        } catch {
-          release(chunkKeys)
-          if (controller.signal.aborted) return
-        }
-      }
-    })()
-    return () => controller.abort()
-  }, [viewMode, paginatedTraders, seriesPeriod, source])
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -1423,11 +1412,6 @@ function RankingTableInner(props: {
                             getPnLTooltipFn={getPnLTooltip}
                             isExpanded={expandedRowId === trader.id}
                             onToggleExpand={handleToggleExpand}
-                            roiSpark={
-                              equitySeries[
-                                `${seriesPeriod}:${trader.source || source || ''}:${trader.id}`
-                              ]
-                            }
                           />
                         </SectionErrorBoundary>
                       </div>

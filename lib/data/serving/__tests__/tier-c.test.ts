@@ -136,44 +136,30 @@ describe('coreModulesFromTierC', () => {
     ],
   }
 
-  it('maps camelCase ParsedStats to superset snake_case keys, NULL-collapsed', () => {
+  it('quarantines every raw Redis metric, series, and extra', () => {
     const core = coreModulesFromTierC('bitget_futures', 30, payload)
     expect(core).not.toBeNull()
-    expect(core!.stats).toEqual({
-      roi: 22.1,
-      pnl: 5000,
-      mdd: 12.3,
-      win_rate: 58,
-      win_positions: 116,
-      total_positions: 200,
-      copier_pnl: 900,
-      copier_count: 28,
-      aum: 80000,
-      profit_share_rate: 10,
-    })
-    expect('sharpe' in core!.stats).toBe(false) // NULL = not exposed, dropped
-    expect(core!.extras.trading_preferences).toEqual({ BTCUSDT: 0.6 })
-    expect(core!.extras.style_tags).toEqual(['steady'])
-    expect(core!.cacheState).toBe('cold-fetched')
+    expect(core!.stats).toEqual({})
+    expect(core!.series).toEqual({})
+    expect(core!.extras).toEqual({})
+    expect(core!.cacheState).toBe('quarantined')
     expect(core!.timeframe).toBe(30)
   })
 
-  it('only includes series for the requested timeframe', () => {
-    const core = coreModulesFromTierC('bitget_futures', 30, payload)
-    expect(core!.series.roi).toEqual([{ ts: '2026-06-09T00:00:00Z', value: 1.2 }])
-  })
-
-  it('returns null when the payload has no stats rows', () => {
-    expect(coreModulesFromTierC('bitget_futures', 30, { stats: [], series: [] })).toBeNull()
-  })
-
-  it('does not relabel an inception row as a missing requested window', () => {
+  it('quarantines cumulative/inception payloads too', () => {
     const cumulativeOnly = {
       ...payload,
       stats: [{ timeframe: 0, roi: 999, pnl: 123_456 }],
       series: [],
     }
 
-    expect(coreModulesFromTierC('bitget_bots_futures', 30, cumulativeOnly)).toBeNull()
+    const core = coreModulesFromTierC('bitget_bots_futures', 0, cumulativeOnly)
+    expect(core).toMatchObject({
+      timeframe: 'inception',
+      stats: {},
+      series: {},
+      extras: {},
+      cacheState: 'quarantined',
+    })
   })
 })

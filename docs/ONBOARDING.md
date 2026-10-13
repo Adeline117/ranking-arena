@@ -171,7 +171,8 @@ npm run test:e2e         # Playwright E2E tests
 
 The named `check:*` diagnostics may contact public services or controlled read
 credentials. Do not run one merely because this guide names it: the owner must first
-approve the exact read-only evidence query. No diagnostic authorizes a schedule,
+approve the exact read-only evidence query (for example `npm run check:freshness`
+for the published ranking freshness authority). No diagnostic authorizes a schedule,
 fetch, mutation, backfill, cleanup, or repair. Do not use the old health,
 local-recompute, source-fetch, checkpoint, or legacy-backfill paths as evidence or
 remediation; the V1 tombstone contract makes them report `RETIRED` and exit 2.

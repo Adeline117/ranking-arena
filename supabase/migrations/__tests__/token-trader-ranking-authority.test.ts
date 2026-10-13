@@ -51,9 +51,12 @@ describe('get_token_trader_rankings SQL authority', () => {
     expect(normalizedRetirement).toContain(
       'legacy token rankings are retired; authority snapshot required'
     )
-    expect(runbook).toContain(retirementMigration)
-    expect(runbook).toContain('/rest/v1/rpc/get_token_ranking_publication_head')
-    expect(runbook).toContain('legacy_token_rpcs_closed')
+    // The V1 NO-GO runbook lists the retirement in its containment inventory
+    // only; it intentionally carries no production probe recipe.
+    expect(runbook).toContain(retirementMigration.slice(0, 14))
+    expect(runbook).toContain('token-ranking retirement')
+    expect(runbook).toContain('公开 token 面维持 fail closed')
+    expect(runbook).not.toContain('/rest/v1/rpc/')
     expect(runbook).not.toContain('.[0].token_rank')
   })
 

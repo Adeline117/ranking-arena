@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isQuarantinedArenaBotAuthor } from '@/lib/data/arena-bot-publication-policy'
 
 // This module is imported by an Edge route. Keep its runtime dependency graph
 // limited to supabase-js + platform globals; the shared logger dynamically
@@ -11,6 +12,12 @@ function logAudienceFailure(level: 'warn' | 'error', message: string, detail?: u
 
 export type ServiceReadablePostCandidate = {
   id: string
+  /**
+   * Optional because a few legacy callers only retain post IDs. When present,
+   * this gives cached candidates a local fail-closed fence before an RPC can
+   * materialize their title/content.
+   */
+  author_id?: string | null
   group_id?: string | null
   visibility?: string | null
   status?: string | null
@@ -72,9 +79,15 @@ export async function filterServiceReadablePostRows<T extends ServiceReadablePos
   rows: readonly T[],
   actorId?: string | null
 ): Promise<T[]> {
-  if (rows.length === 0) return []
+  // Historical arena_bot text has no immutable publication receipt. Filter by
+  // the fixed system UUID only; never infer bot identity from a user-visible
+  // handle, title, or content. This keeps a stale cached candidate from being
+  // replayed while the database canonical reader remains the authority for
+  // ID-only and every other audience decision.
+  const nonQuarantinedRows = rows.filter((row) => !isQuarantinedArenaBotAuthor(row.author_id))
+  if (nonQuarantinedRows.length === 0) return []
 
-  const postIds = [...new Set(rows.map((row) => row.id).filter(Boolean))]
+  const postIds = [...new Set(nonQuarantinedRows.map((row) => row.id).filter(Boolean))]
   if (postIds.length === 0) return []
 
   const decisions: AudienceDecision[] = []
@@ -99,7 +112,7 @@ export async function filterServiceReadablePostRows<T extends ServiceReadablePos
   const readableIds = new Set(
     decisions.filter((decision) => decision.readable).map((decision) => decision.id)
   )
-  return rows.filter((row) => readableIds.has(row.id))
+  return nonQuarantinedRows.filter((row) => readableIds.has(row.id))
 }
 
 /** Check a post audience without returning any post payload to the caller. */

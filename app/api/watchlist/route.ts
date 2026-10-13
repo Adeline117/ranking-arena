@@ -11,8 +11,226 @@ import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError, error as errorResponse } from '@/lib/api/response'
 import { ErrorCode } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  isPublicRankingSourceAllowed,
+  sanitizePublicRankingPayload,
+} from '@/lib/rankings/publication-policy'
 
 const log = createLogger('api:watchlist')
+const WATCHLIST_RANKING_PERIOD = '90D'
+const PUBLIC_WATCHLIST_RANKING_COLUMNS =
+  'source,source_trader_id,roi,pnl,rank,arena_score,win_rate,avatar_url,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+
+type WatchlistRankingVisibility = 'verified' | 'partial' | 'unknown'
+
+type PublicRankedLeaderboardQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+}
+
+type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
+  select(columns: string): PublicRankedLeaderboardQuery
+  eq(column: string, value: string): PublicRankedLeaderboardQuery
+  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
+  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
+  limit(count: number): PublicRankedLeaderboardQuery
+}
+
+type PublicRankedLeaderboardClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
+}
+
+type PublicWatchlistRankedRow = Record<string, unknown> & {
+  source: string
+  source_trader_id: string
+  rank: number
+}
+
+type WatchlistRankingCohort = {
+  verifiedByIdentity: Map<string, PublicWatchlistRankedRow[]>
+  rawByIdentity: Map<string, number>
+  unavailable: boolean
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
+  // Generated Supabase types lag the additive security-barrier view. This
+  // narrow bridge intentionally has no raw-table fallback.
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicRankedLeaderboardClient
+}
+
+function watchlistIdentity(source: unknown, traderId: unknown): string | null {
+  return typeof source === 'string' &&
+    source.length > 0 &&
+    typeof traderId === 'string' &&
+    traderId.length > 0
+    ? `${source}\u0000${traderId}`
+    : null
+}
+
+function hasPositivePublishedRank(row: unknown): row is PublicWatchlistRankedRow {
+  return (
+    isRecord(row) &&
+    typeof row.source === 'string' &&
+    isPublicRankingSourceAllowed(row.source) &&
+    typeof row.source_trader_id === 'string' &&
+    row.source_trader_id.length > 0 &&
+    typeof row.rank === 'number' &&
+    Number.isSafeInteger(row.rank) &&
+    row.rank > 0
+  )
+}
+
+function appendMapValue<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const values = map.get(key)
+  if (values) values.push(value)
+  else map.set(key, [value])
+}
+
+function incrementMapValue(map: Map<string, number>, key: string): void {
+  map.set(key, (map.get(key) ?? 0) + 1)
+}
+
+function buildWatchlistRankingCohort(value: unknown, unavailable = false): WatchlistRankingCohort {
+  const rawRows = Array.isArray(value) ? value : []
+  const rawByIdentity = new Map<string, number>()
+  for (const row of rawRows) {
+    if (!isRecord(row)) continue
+    const identity = watchlistIdentity(row.source, row.source_trader_id)
+    if (identity) incrementMapValue(rawByIdentity, identity)
+  }
+
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: rawRows, period: WATCHLIST_RANKING_PERIOD },
+    { expectedPeriod: WATCHLIST_RANKING_PERIOD }
+  ) as { traders?: unknown[] }
+  const verifiedByIdentity = new Map<string, PublicWatchlistRankedRow[]>()
+  const safeRows = Array.isArray(sanitized.traders)
+    ? sanitized.traders.filter(hasPositivePublishedRank)
+    : []
+  for (const row of safeRows) {
+    const identity = watchlistIdentity(row.source, row.source_trader_id)
+    if (identity) appendMapValue(verifiedByIdentity, identity, row)
+  }
+
+  return { verifiedByIdentity, rawByIdentity, unavailable }
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function unknownWatchlistRankingFields(
+  item: Record<string, unknown>,
+  visibility: WatchlistRankingVisibility,
+  reason: string
+): Record<string, unknown> {
+  return {
+    ...item,
+    rank: null,
+    roi: null,
+    pnl: null,
+    arena_score: null,
+    win_rate: null,
+    avatar_url: null,
+    ranking_visibility: visibility,
+    ranking_visibility_reason: reason,
+  }
+}
+
+/**
+ * Watchlist membership is user-owned identity data. Ranking metrics are a
+ * separate published-cohort claim: only an exactly-one, fully sanitized view
+ * row may enrich an item. Missing and malformed rows remain actionable but
+ * disclose no raw ranking fields.
+ */
+async function enrichWatchlistWithPublicRankings(
+  supabase: unknown,
+  watchlist: unknown[]
+): Promise<Record<string, unknown>[]> {
+  const items = watchlist.filter(isRecord)
+  const publicItems = items.filter(
+    (item) =>
+      typeof item.source === 'string' &&
+      isPublicRankingSourceAllowed(item.source) &&
+      typeof item.source_trader_id === 'string' &&
+      item.source_trader_id.length > 0
+  )
+
+  let cohort = buildWatchlistRankingCohort([])
+  if (publicItems.length > 0) {
+    const sources = [...new Set(publicItems.map((item) => item.source as string))]
+    const traderIds = [...new Set(publicItems.map((item) => item.source_trader_id as string))]
+    try {
+      const { data, error } = await publicRankedLeaderboardClient(supabase)
+        .from('public_ranked_leaderboard')
+        .select(PUBLIC_WATCHLIST_RANKING_COLUMNS)
+        .eq('season_id', WATCHLIST_RANKING_PERIOD)
+        .in('source', sources)
+        .in('source_trader_id', traderIds)
+        .not('rank', 'is', null)
+        .limit(200)
+      if (error || !Array.isArray(data)) {
+        if (error)
+          log.warn('Published watchlist ranking cohort unavailable', { error: error.message })
+        cohort = buildWatchlistRankingCohort([], true)
+      } else {
+        cohort = buildWatchlistRankingCohort(data)
+      }
+    } catch (error) {
+      log.warn('Published watchlist ranking cohort unavailable', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      cohort = buildWatchlistRankingCohort([], true)
+    }
+  }
+
+  return items.map((item) => {
+    const identity = watchlistIdentity(item.source, item.source_trader_id)
+    if (
+      !identity ||
+      typeof item.source !== 'string' ||
+      !isPublicRankingSourceAllowed(item.source)
+    ) {
+      return unknownWatchlistRankingFields(item, 'partial', 'source_not_publicly_rankable')
+    }
+    if (cohort.unavailable) {
+      return unknownWatchlistRankingFields(item, 'unknown', 'public_cohort_unavailable')
+    }
+
+    const rawRows = cohort.rawByIdentity.get(identity) ?? 0
+    const verifiedRows = cohort.verifiedByIdentity.get(identity) ?? []
+    if (rawRows !== 1 || verifiedRows.length !== 1) {
+      return unknownWatchlistRankingFields(
+        item,
+        rawRows > 0 ? 'partial' : 'unknown',
+        rawRows > 0 ? 'public_cohort_unverified' : 'public_rank_unavailable'
+      )
+    }
+
+    const row = verifiedRows[0]
+    return {
+      ...item,
+      rank: row.rank,
+      roi: finiteNumberOrNull(row.roi),
+      pnl: finiteNumberOrNull(row.pnl),
+      arena_score: finiteNumberOrNull(row.arena_score),
+      win_rate: finiteNumberOrNull(row.win_rate),
+      avatar_url:
+        typeof row.avatar_url === 'string' && row.avatar_url.length > 0 ? row.avatar_url : null,
+      ranking_visibility: 'verified',
+      ranking_visibility_reason: null,
+    }
+  })
+}
 
 /**
  * SCHEMA DRIFT GUARD: the `trader_watchlist` table does NOT exist in prod.
@@ -61,50 +279,7 @@ export const GET = withAuth(
       return serverError('Internal server error')
     }
 
-    const watchlist = data || []
-
-    // Enrich watchlist items with leaderboard snapshot data (ROI, PnL, rank, arena_score)
-    if (watchlist.length > 0) {
-      const { data: ranks } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
-        .eq('season_id', '90D')
-        .in('source', [...new Set(watchlist.map((w) => w.source))])
-        .in('source_trader_id', [...new Set(watchlist.map((w) => w.source_trader_id))])
-
-      if (ranks && ranks.length > 0) {
-        type RankRow = {
-          source: string
-          source_trader_id: string
-          roi: unknown
-          pnl: unknown
-          rank: unknown
-          arena_score: unknown
-          win_rate: unknown
-          avatar_url: unknown
-        }
-        const rankMap = new Map(
-          ranks.map((r) => [
-            `${(r as RankRow).source}:${(r as RankRow).source_trader_id}`,
-            r as RankRow,
-          ])
-        )
-        for (const item of watchlist) {
-          const key = `${item.source}:${item.source_trader_id}`
-          const rank = rankMap.get(key)
-          if (rank) {
-            Object.assign(item, {
-              roi: rank.roi,
-              pnl: rank.pnl,
-              rank: rank.rank,
-              arena_score: rank.arena_score,
-              win_rate: rank.win_rate,
-              avatar_url: rank.avatar_url,
-            })
-          }
-        }
-      }
-    }
+    const watchlist = await enrichWatchlistWithPublicRankings(supabase, data ?? [])
 
     // Return raw NextResponse to maintain backward-compatible shape { watchlist: [...] }
     // (frontend useWatchlist reads data.watchlist directly)

@@ -199,6 +199,33 @@ describe('ComparePageClient discovery failures', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('renders an unavailable followed-trader ROI as unknown rather than zero', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/subscription') return okJson({ subscription: { tier: 'pro' } })
+      if (url.startsWith('/api/following')) {
+        return okJson({
+          items: [
+            {
+              id: 'unknown-roi',
+              handle: 'Unknown ROI',
+              type: 'trader',
+              source: 'bybit',
+              roi: null,
+            },
+          ],
+        })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    }) as unknown as typeof fetch
+
+    render(<ComparePageClient />)
+
+    expect(await screen.findByText('Unknown ROI')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText('+0.0%')).not.toBeInTheDocument()
+  })
+
   it('reports unresolved URL accounts and replaces the URL with only loaded identities', async () => {
     mockSearchParams.set('ids', 'alice,ghost')
     mockSearchParams.set('platforms', 'binance,bybit')
@@ -289,7 +316,7 @@ describe('ComparePageClient discovery failures', () => {
     await waitFor(() => expect(compareAttempts).toBe(2))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(global.fetch).toHaveBeenLastCalledWith(
-      '/api/compare?ids=shared%2Cshared&platforms=bybit%2Cbinance_futures&include_equity=1',
+      '/api/compare?ids=shared%2Cshared&platforms=bybit%2Cbinance_futures',
       { headers: { Authorization: 'Bearer access-token' } }
     )
   })

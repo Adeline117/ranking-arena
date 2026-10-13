@@ -155,12 +155,12 @@ describe('持仓数交叉校验', () => {
 })
 
 describe('profile 映射', () => {
-  it('handle 缺失回退 traderKey;followers null → 0', () => {
+  it('handle 缺失回退 traderKey;followers null 保持 unknown', () => {
     const d = detail({ trader: { handle: null, followers: null } })
     const profile = toTraderPageData(d).profile as Record<string, unknown>
     expect(profile.handle).toBe('tk-1')
     expect(profile.id).toBe('tk-1')
-    expect(profile.followers).toBe(0)
+    expect(profile.followers).toBeUndefined()
     expect(profile.isRegistered).toBe(false)
   })
 
@@ -246,11 +246,42 @@ describe('集合映射', () => {
     expect(out.positionHistory).toEqual([])
   })
 
+  it('public profile mode removes legacy curves, stats, and price/PnL portfolio values', () => {
+    const d = detail({
+      equityCurve: {
+        '90D': [{ date: '2026-08-17', roi: 9, pnl: 42 }],
+        '30D': [],
+        '7D': [],
+      },
+      stats: stats({ avgProfit: 42 }),
+      portfolio: [{ symbol: 'BTCUSDT', direction: 'long', entryPrice: 100, pnlUsd: 42 }],
+      positionSummary: { totalUnrealizedPnl: 42 },
+    })
+
+    const out = toTraderPageData(d, { publicProfileHistoryQuarantine: true })
+
+    expect(out).toMatchObject({
+      equityCurve: undefined,
+      assetBreakdown: undefined,
+      stats: null,
+      portfolio: [],
+      positionHistory: [],
+      positionSummary: null,
+      historyCompleteness: { state: 'unknown', reason: 'history_evidence_not_bound' },
+    })
+    expect(out.performance).toMatchObject({
+      avg_profit: null,
+      avg_loss: null,
+      largest_win: null,
+      largest_loss: null,
+    })
+  })
+
   it('stats 为 null → 输出 stats null(不伪造)', () => {
     expect(toTraderPageData(detail()).stats).toBeNull()
   })
 
-  it('similarTraders 映射 handle 回退 + followers 0 兜底', () => {
+  it('similarTraders 映射 handle 回退 + followers unknown 不伪造为 0', () => {
     const d = detail({
       similarTraders: [
         {
@@ -265,6 +296,6 @@ describe('集合映射', () => {
       ],
     })
     const st = toTraderPageData(d).similarTraders as Array<Record<string, unknown>>
-    expect(st[0]).toMatchObject({ handle: 'sk1', id: 'sk1', followers: 0, source: 'okx' })
+    expect(st[0]).toMatchObject({ handle: 'sk1', id: 'sk1', followers: undefined, source: 'okx' })
   })
 })

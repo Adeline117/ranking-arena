@@ -20,6 +20,7 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { botMessages, type BotLang } from '@/lib/i18n/bot'
 import { BASE_URL } from '@/lib/constants/urls'
+import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 
 // ============================================
 // Types
@@ -44,6 +45,42 @@ interface TelegramSendMessageParams {
   parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2'
   disable_web_page_preview?: boolean
   reply_to_message_id?: number
+}
+
+type PublicStatsQueryResult = {
+  data: unknown[] | null
+  error: { message: string } | null
+  count?: number | null
+}
+
+type PublicStatsQuery = PromiseLike<PublicStatsQueryResult> & {
+  select(columns: string, options?: { count?: 'exact'; head?: boolean }): PublicStatsQuery
+  eq(column: string, value: string): PublicStatsQuery
+  range(from: number, to: number): PublicStatsQuery
+}
+
+type PublicStatsClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicStatsQuery
+}
+
+const PUBLIC_TELEGRAM_STATS_PERIOD = '90D'
+// Keep the bot's source scan bounded. A partial source list is less honest
+// than explicitly reporting its publication state as unknown.
+const MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS = 5_000
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicStatsClient(value: unknown): PublicStatsClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicStatsClient
+}
+
+function exactPublicTraderCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
 }
 
 // ============================================
@@ -113,7 +150,8 @@ async function handleRank(chatId: number, args: string, lang: BotLang): Promise<
 
   const lines: string[] = []
   for (const t of traders) {
-    const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+    const exchangeName =
+      EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
     const score = t.arenaScore != null ? t.arenaScore.toFixed(1) : 'N/A'
     const rank = t.rank != null ? `#${t.rank}` : 'N/A'
     const roi = t.roi != null ? `${t.roi >= 0 ? '+' : ''}${t.roi.toFixed(2)}%` : 'N/A'
@@ -197,12 +235,19 @@ async function handleTop(chatId: number, args: string, lang: BotLang): Promise<v
     )
   }
 
-  lines.push(`\n${botMessages(lang, 'viewMore')}: ${BASE_URL}/rankings${platform ? `/${platform}` : ''}`)
+  lines.push(
+    `\n${botMessages(lang, 'viewMore')}: ${BASE_URL}/rankings${platform ? `/${platform}` : ''}`
+  )
 
   await sendMessage({ chat_id: chatId, text: lines.join('\n') })
 }
 
-async function handleFollow(chatId: number, args: string, userId: number, lang: BotLang): Promise<void> {
+async function handleFollow(
+  chatId: number,
+  args: string,
+  userId: number,
+  lang: BotLang
+): Promise<void> {
   const query = args.trim()
   if (!query) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'followUsage') })
@@ -221,21 +266,19 @@ async function handleFollow(chatId: number, args: string, userId: number, lang: 
   const traderId = `${trader.platform}:${trader.traderKey}`
 
   // Store follow subscription in Supabase
-  const { error } = await supabase
-    .from('bot_subscriptions')
-    .upsert(
-      {
-        platform_type: 'telegram',
-        platform_user_id: String(userId),
-        chat_id: String(chatId),
-        trader_id: traderId,
-        trader_handle: trader.handle || trader.traderKey,
-        trader_platform: trader.platform,
-        enabled: true,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'platform_type,platform_user_id,trader_id' }
-    )
+  const { error } = await supabase.from('bot_subscriptions').upsert(
+    {
+      platform_type: 'telegram',
+      platform_user_id: String(userId),
+      chat_id: String(chatId),
+      trader_id: traderId,
+      trader_handle: trader.handle || trader.traderKey,
+      trader_platform: trader.platform,
+      enabled: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'platform_type,platform_user_id,trader_id' }
+  )
 
   if (error) {
     logger.error('[TelegramBot] Follow upsert error:', error)
@@ -247,12 +290,18 @@ async function handleFollow(chatId: number, args: string, userId: number, lang: 
     chat_id: chatId,
     text: botMessages(lang, 'followSuccess', {
       handle: trader.handle || trader.traderKey,
-      platform: EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform,
+      platform:
+        EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform,
     }),
   })
 }
 
-async function handleUnfollow(chatId: number, args: string, userId: number, lang: BotLang): Promise<void> {
+async function handleUnfollow(
+  chatId: number,
+  args: string,
+  userId: number,
+  lang: BotLang
+): Promise<void> {
   const query = args.trim()
   if (!query) {
     await sendMessage({ chat_id: chatId, text: botMessages(lang, 'unfollowUsage') })
@@ -282,7 +331,10 @@ async function handleUnfollow(chatId: number, args: string, userId: number, lang
   )
 
   if (!match) {
-    await sendMessage({ chat_id: chatId, text: botMessages(lang, 'subscriptionNotFound', { query }) })
+    await sendMessage({
+      chat_id: chatId,
+      text: botMessages(lang, 'subscriptionNotFound', { query }),
+    })
     return
   }
 
@@ -336,7 +388,8 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
     const volume = priceData.usd_24h_vol
     const marketCap = priceData.usd_market_cap
 
-    const changeStr = change24h != null ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%` : 'N/A'
+    const changeStr =
+      change24h != null ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%` : 'N/A'
     const changeIcon = change24h != null ? (change24h >= 0 ? '\u{1F7E2}' : '\u{1F534}') : ''
 
     const lines = [
@@ -346,7 +399,8 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
     ]
 
     if (volume != null) lines.push(`${botMessages(lang, 'volumeLabel')}: $${formatNumber(volume)}`)
-    if (marketCap != null) lines.push(`${botMessages(lang, 'marketCapLabel')}: $${formatNumber(marketCap)}`)
+    if (marketCap != null)
+      lines.push(`${botMessages(lang, 'marketCapLabel')}: $${formatNumber(marketCap)}`)
 
     await sendMessage({ chat_id: chatId, text: lines.join('\n') })
   } catch (err) {
@@ -356,40 +410,60 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
 }
 
 async function handleStats(chatId: number, lang: BotLang): Promise<void> {
-  const supabase = getSupabaseAdmin()
-
-  // Get trader count and exchange count from leaderboard_ranks
-  // Estimated — this is a /stats Telegram bot command showing a rough
-  // headline number. Exact scan of leaderboard_ranks (~300k) is overkill.
+  const cohort = publicStatsClient(getSupabaseAdmin())
   const [traderResult, exchangeResult] = await Promise.all([
-    supabase
-      .from('leaderboard_ranks')
-      .select('source_trader_id', { count: 'estimated', head: true })
-      .eq('season_id', '90D'),
-    supabase
-      .from('leaderboard_ranks')
+    cohort
+      .from('public_ranked_leaderboard')
+      .select('source_trader_id', { count: 'exact', head: true })
+      .eq('season_id', PUBLIC_TELEGRAM_STATS_PERIOD),
+    cohort
+      .from('public_ranked_leaderboard')
       .select('source')
-      .eq('season_id', '90D'),
+      .eq('season_id', PUBLIC_TELEGRAM_STATS_PERIOD)
+      .range(0, MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS),
   ])
 
-  const traderCount = traderResult.count ?? 0
+  // A published-count failure or an empty view is not proof that zero traders
+  // exist. The bot is public, so never substitute raw ranks or a numeric zero.
+  const traderCount = traderResult.error ? null : exactPublicTraderCount(traderResult.count)
+  let activeExchanges: string[] | null = null
+  if (
+    traderCount !== null &&
+    traderCount <= MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS &&
+    !exchangeResult.error &&
+    Array.isArray(exchangeResult.data) &&
+    exchangeResult.data.length === traderCount
+  ) {
+    const sources = new Set<string>()
+    for (const row of exchangeResult.data) {
+      const source = isRecord(row) ? row.source : null
+      if (typeof source !== 'string' || !isPublicRankingSourceAllowed(source)) {
+        sources.clear()
+        break
+      }
+      sources.add(source)
+    }
+    if (sources.size > 0) {
+      activeExchanges = Array.from(sources)
+        .map((source) => EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]?.name || source)
+        .sort()
+    }
+  }
 
-  // Count unique exchanges
-  const exchanges = new Set((exchangeResult.data || []).map((r: { source: string }) => r.source))
-  const exchangeCount = exchanges.size
-
-  // Active exchange list
-  const activeExchanges = Array.from(exchanges)
-    .map((s) => EXCHANGE_CONFIG[s as keyof typeof EXCHANGE_CONFIG]?.name || s)
-    .sort()
+  const unavailable = botMessages(lang, 'publishedCohortUnavailable')
+  const traderCountText = traderCount === null ? unavailable : traderCount.toLocaleString()
+  const exchangeCountText = activeExchanges === null ? unavailable : String(activeExchanges.length)
+  const exchangeListText = activeExchanges
+    ? activeExchanges.map((exchange) => `  ${exchange}`).join('\n')
+    : unavailable
 
   const lines = [
     `<b>${botMessages(lang, 'statsTitle')}</b>\n`,
-    `${botMessages(lang, 'totalTraders')}: ${traderCount.toLocaleString()}`,
-    `${botMessages(lang, 'activeExchanges')}: ${exchangeCount}`,
+    `${botMessages(lang, 'totalTraders')}: ${traderCountText}`,
+    `${botMessages(lang, 'activeExchanges')}: ${exchangeCountText}`,
     `${botMessages(lang, 'scoringPeriods')}: 7D / 30D / 90D`,
     `\n${botMessages(lang, 'exchangeList')}:`,
-    activeExchanges.map((e) => `  ${e}`).join('\n'),
+    exchangeListText,
     `\n${botMessages(lang, 'website')}: ${BASE_URL}`,
   ]
 
@@ -483,7 +557,8 @@ function formatNumber(n: number): string {
 }
 
 function formatPrice(n: number): string {
-  if (n >= 1) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (n >= 1)
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (n >= 0.01) return n.toFixed(4)
   return n.toFixed(8)
 }

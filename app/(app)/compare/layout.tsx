@@ -2,62 +2,145 @@ import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
+import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
 import {
   buildCompareUrl,
   parseCompareAccounts,
   type CompareAccountRef,
 } from '@/lib/compare/identity'
 
+const PUBLIC_COMPARE_RANKING_COLUMNS =
+  'handle,source,source_trader_id,season_id,rank,roi,arena_score,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+
+type PublicCompareRankingQueryResult = {
+  data: unknown | null
+  error: { message: string } | null
+}
+
+type PublicCompareRankingQuery = {
+  select(columns: string): PublicCompareRankingQuery
+  eq(column: string, value: string): PublicCompareRankingQuery
+  maybeSingle(): Promise<PublicCompareRankingQueryResult>
+}
+
+type PublicCompareRankingClient = {
+  from(relation: 'public_ranked_leaderboard'): PublicCompareRankingQuery
+}
+
+type VerifiedCompareRanking = {
+  handle: string
+  source: string
+  roi: number
+  arenaScore: number
+  pnl: number
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Narrow bridge while generated Supabase types catch up with the public view. */
+function publicCompareRankingClient(value: unknown): PublicCompareRankingClient {
+  if (!isRecord(value) || typeof value.from !== 'function') {
+    throw new TypeError('Supabase client does not expose the public ranking cohort')
+  }
+  return value as PublicCompareRankingClient
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function positiveRank(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
+/**
+ * The security-barrier view is the cohort authority. Re-check every row at
+ * this server boundary as well: a stale cache/proxy payload must never turn
+ * into a public OG score or return claim.
+ */
+function verifyCompareRanking(
+  candidate: unknown,
+  source: string,
+  sourceTraderId: string
+): VerifiedCompareRanking | null {
+  const sanitized = sanitizePublicRankingPayload(
+    { traders: candidate === null ? [] : [candidate], period: '90D' },
+    { expectedPeriod: '90D' }
+  ) as { traders?: unknown[] }
+  const row = sanitized.traders?.[0]
+  if (
+    !isRecord(row) ||
+    row.source !== source ||
+    row.source_trader_id !== sourceTraderId ||
+    !positiveRank(row.rank) ||
+    !finiteNumber(row.roi) ||
+    !finiteNumber(row.arena_score) ||
+    !finiteNumber(row.pnl)
+  ) {
+    return null
+  }
+
+  const handle =
+    typeof row.handle === 'string' && row.handle.trim().length > 0
+      ? row.handle.trim()
+      : sourceTraderId
+  return {
+    // The OG route uses comma-separated transport. Preserve the identity but
+    // prevent an exchange handle containing a comma from changing card count.
+    handle: handle.replaceAll(',', ' '),
+    source,
+    roi: row.roi,
+    arenaScore: row.arena_score,
+    pnl: row.pnl,
+  }
+}
+
 /**
  * The og/compare route renders from name/roi/score query params (edge, no DB).
  * Previously this layout passed only `ids`, which og/compare ignores → every
  * shared /compare link unfurled a FAKE "Trader A · SCORE -- · ROI +0.0%" card.
  * We resolve the ids here (server, service-role) into real names/rois/scores and
- * pass those; on any failure we fall back to the static site image rather than a
- * fabricated card. (`/api/compare` can't be used — it's auth-gated, crawlers 401.)
+ * pass those only after the sealed public ranking cohort and a local proof
+ * sanitizer agree. On any failure we fall back to the static site image rather
+ * than a fabricated card. (`/api/compare` can't be used — it's auth-gated,
+ * crawlers 401.)
  */
 async function buildCompareOgUrl(accounts: CompareAccountRef[]): Promise<string> {
   const staticFallback = `${BASE_URL}/og-image.png`
   if (accounts.length === 0) return staticFallback
   try {
     const supabase = getSupabaseAdmin()
-    const rows = (
-      await Promise.all(
-        accounts.map(async (account) => {
-          const resolved = await resolveTrader(supabase, {
-            handle: account.id,
-            platform: account.source,
-          })
-          if (!resolved) return null
-          const { data } = await supabase
-            .from('leaderboard_ranks')
-            .select('handle, source, roi, arena_score, pnl')
-            .eq('source', resolved.platform)
-            .eq('source_trader_id', resolved.traderKey)
-            .eq('season_id', '90D')
-            .maybeSingle()
-          return data as {
-            handle: string | null
-            source: string | null
-            roi: number | null
-            arena_score: number | null
-            pnl: number | null
-          } | null
+    const rows = await Promise.all(
+      accounts.map(async (account) => {
+        const resolved = await resolveTrader(supabase, {
+          handle: account.id,
+          platform: account.source,
         })
-      )
-    ).filter(Boolean) as Array<{
-      handle: string | null
-      source: string | null
-      roi: number | null
-      arena_score: number | null
-      pnl: number | null
-    }>
-    if (rows.length === 0) return staticFallback
-    const names = rows.map((r) => r.handle || 'Trader').join(',')
-    const platforms = rows.map((r) => r.source || '').join(',')
-    const rois = rows.map((r) => Math.round((r.roi ?? 0) * 10) / 10).join(',')
-    const scores = rows.map((r) => Math.round(r.arena_score ?? 0)).join(',')
-    const pnls = rows.map((r) => Math.round(r.pnl ?? 0)).join(',')
+        if (!resolved) return null
+        const { data, error } = await publicCompareRankingClient(supabase)
+          .from('public_ranked_leaderboard')
+          .select(PUBLIC_COMPARE_RANKING_COLUMNS)
+          .eq('source', resolved.platform)
+          .eq('source_trader_id', resolved.traderKey)
+          .eq('season_id', '90D')
+          .maybeSingle()
+        if (error) return null
+        return verifyCompareRanking(data, resolved.platform, resolved.traderKey)
+      })
+    )
+    // A partial card would silently change the comparison selected in the
+    // shared URL. Without a verified row for every account, publish no rank-
+    // derived metric at all.
+    if (rows.some((row) => row === null)) return staticFallback
+
+    const verifiedRows = rows as VerifiedCompareRanking[]
+    const names = verifiedRows.map((row) => row.handle).join(',')
+    const platforms = verifiedRows.map((row) => row.source).join(',')
+    const rois = verifiedRows.map((row) => Math.round(row.roi * 10) / 10).join(',')
+    const scores = verifiedRows.map((row) => Math.round(row.arenaScore)).join(',')
+    const pnls = verifiedRows.map((row) => Math.round(row.pnl)).join(',')
     return (
       `${BASE_URL}/api/og/compare?names=${encodeURIComponent(names)}` +
       `&platforms=${encodeURIComponent(platforms)}&rois=${rois}&scores=${scores}&pnls=${pnls}`

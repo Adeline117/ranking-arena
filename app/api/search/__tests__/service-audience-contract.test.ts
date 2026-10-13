@@ -25,7 +25,7 @@ describe('search service audience boundary', () => {
   })
 
   it('re-authorizes unified post results and post-title suggestions on cache hits', () => {
-    expect(route).toContain('search:unified:v4:candidates:')
+    expect(route).toContain('search:unified:v5:candidates:')
     expect(route).toMatch(/const cached = await cacheGet<UnifiedSearchCacheCandidate>\(cacheKey\)/)
     expect(route).toMatch(
       /const result = await materializeUnifiedSearchCandidate\(supabase, cached\)/
@@ -34,7 +34,21 @@ describe('search service audience boundary', () => {
     expect(route).toMatch(
       /const readablePostSuggestions = await filterServiceReadablePostRows\(\s*supabase,\s*hotPostSuggestions,\s*null\s*\)/
     )
+    expect(route).not.toContain('search:unified:v4:')
     expect(route).not.toContain('search:unified:v3:')
+  })
+
+  it('caches only trader identities and re-materializes current public ranking proof', () => {
+    expect(route).toContain('import {\n  materializePublicSearchTraders,')
+    expect(route).toContain('const currentTraders = await materializePublicSearchTraders(')
+    expect(route).toContain('candidate.traderCandidates ?? []')
+    expect(route).toContain('results: { traders: [], posts, users, groups }')
+    expect(route).toContain('traderCandidates,')
+    expect(route).toContain('traderSort,')
+    expect(route).not.toContain('arenaScore: h.arena_score')
+    expect(route).not.toContain('roi: h.roi')
+    expect(route).not.toContain('pnl: h.pnl')
+    expect(route).not.toContain('rank: h.rank')
   })
 
   it('rematerializes current discoverable groups and rechecks public profiles after cache hits', () => {

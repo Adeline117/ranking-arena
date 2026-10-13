@@ -297,12 +297,17 @@ function parseFirstScreenEntry(
   canonicalSource: string
 ): TraderFirstScreen['entries'][number] | Invalid {
   const entry = record(value)
+  const rankingVisibility = entry?.rankingVisibility
+  const rankingVisibilityReason = entry?.rankingVisibilityReason
   if (
     !entry ||
     (entry.timeframe !== 7 && entry.timeframe !== 30 && entry.timeframe !== 90) ||
-    typeof entry.rank !== 'number' ||
-    !Number.isInteger(entry.rank) ||
-    entry.rank <= 0 ||
+    (entry.rank !== null &&
+      (typeof entry.rank !== 'number' || !Number.isInteger(entry.rank) || entry.rank <= 0)) ||
+    (rankingVisibility !== 'verified' &&
+      rankingVisibility !== 'partial' &&
+      rankingVisibility !== 'unknown') ||
+    !nullableString(rankingVisibilityReason, 256) ||
     !finiteNumberOrNull(entry.headlineRoi) ||
     !finiteNumberOrNull(entry.headlineWinRate)
   ) {
@@ -317,7 +322,13 @@ function parseFirstScreenEntry(
     headlinePnl === INVALID ||
     provenance === INVALID ||
     provenance.source !== canonicalSource ||
-    !extrasRecord
+    !extrasRecord ||
+    (rankingVisibility === 'verified' &&
+      (entry.rank === null || entry.headlineRoi === null || rankingVisibilityReason !== null)) ||
+    (rankingVisibility !== 'verified' &&
+      (entry.rank !== null || entry.headlineRoi !== null || headlinePnl !== null)) ||
+    (rankingVisibility !== 'verified' &&
+      (typeof rankingVisibilityReason !== 'string' || rankingVisibilityReason.length === 0))
   ) {
     return INVALID
   }
@@ -325,6 +336,8 @@ function parseFirstScreenEntry(
   return {
     timeframe: entry.timeframe,
     rank: entry.rank,
+    rankingVisibility,
+    rankingVisibilityReason,
     headlineRoi: entry.headlineRoi,
     headlinePnl,
     headlineWinRate: entry.headlineWinRate,
@@ -569,6 +582,10 @@ export function parseExactRankHistory(
     root?.platform !== platform ||
     root.trader_key !== traderKey ||
     root.period !== '90D' ||
+    // A matching identity alone cannot authenticate historical observations.
+    // Legacy rank_history responses omit this proof marker and are deliberately
+    // rejected so a browser/React Query cache cannot replay old sparklines.
+    root.ranking_visibility !== 'verified' ||
     !Array.isArray(root.history)
   ) {
     return null

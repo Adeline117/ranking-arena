@@ -27,7 +27,8 @@ const messages: Record<BotLang, Record<string, string>> = {
 
     // /follow
     followUsage: 'Usage: /follow <trader name>\nExample: /follow CryptoKing',
-    followSuccess: 'Now following {handle} on {platform}. You will receive alerts when their rank changes significantly.',
+    followSuccess:
+      'Now following {handle} on {platform}. You will receive alerts when their rank changes significantly.',
     followError: 'Failed to set up alert. Please try again later.',
 
     // /unfollow
@@ -51,14 +52,15 @@ const messages: Record<BotLang, Record<string, string>> = {
     activeExchanges: 'Active Exchanges',
     scoringPeriods: 'Scoring Periods',
     exchangeList: 'Exchanges',
+    publishedCohortUnavailable: 'Unknown (published cohort unavailable)',
     website: 'Website',
 
     // /help
     commands: 'Commands',
-    helpRank: 'Look up a trader\'s ranking and score',
+    helpRank: "Look up a trader's ranking and score",
     helpTop: 'Show top 10 traders (optionally filter by exchange)',
     helpFollow: 'Subscribe to rank change alerts for a trader',
-    helpUnfollow: 'Unsubscribe from a trader\'s alerts',
+    helpUnfollow: "Unsubscribe from a trader's alerts",
     helpPrice: 'Quick crypto price check',
     helpStats: 'Platform statistics',
     helpHelp: 'Show this help message',
@@ -104,6 +106,7 @@ const messages: Record<BotLang, Record<string, string>> = {
     activeExchanges: '活跃交易所',
     scoringPeriods: '评分周期',
     exchangeList: '交易所列表',
+    publishedCohortUnavailable: '未知（公开排名队列不可用）',
     website: '网站',
 
     commands: '命令列表',
@@ -122,7 +125,11 @@ const messages: Record<BotLang, Record<string, string>> = {
 /**
  * Get a bot message with optional template variable replacement.
  */
-export function botMessages(lang: BotLang, key: string, vars?: Record<string, string | number>): string {
+export function botMessages(
+  lang: BotLang,
+  key: string,
+  vars?: Record<string, string | number>
+): string {
   let msg = messages[lang]?.[key] || messages.en[key] || key
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {

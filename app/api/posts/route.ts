@@ -39,6 +39,7 @@ import { fireAndForget } from '@/lib/utils/logger'
 import { sendNotifications } from '@/lib/data/notifications'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
 import { logRpcError } from '@/lib/data/serving/log-rpc-error'
+import { ARENA_BOT_PUBLICATION_CACHE_EPOCH } from '@/lib/data/arena-bot-publication-policy'
 // sanitizeInput / sanitizeText are dynamically imported inside POST only —
 // keeps the sanitize-html parser out of the GET handler's module graph at
 // cold-start (the GET handler doesn't need it).
@@ -141,8 +142,12 @@ const FollowingRequestSchema = z
   )
 
 // 缓存键前缀
-const POSTS_CACHE_PREFIX = 'posts:'
-const PUBLIC_POSTS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120'
+const POSTS_CACHE_PREFIX = `posts:${ARENA_BOT_PUBLICATION_CACHE_EPOCH}:`
+// The response itself is an audience boundary. The process-local cache above
+// is versioned for rolling deploys, but a shared CDN cannot prove that a
+// legacy arena_bot payload was not already resident. Do not publish a new
+// shared response until a receipt-backed bot publisher exists.
+const PUBLIC_POSTS_CACHE_CONTROL = 'private, no-store, max-age=0'
 const PRIVATE_POSTS_CACHE_CONTROL = 'private, no-store, max-age=0'
 
 function setPostsReadCachePolicy<T extends Response>(response: T, isViewerOwned: boolean): T {
@@ -150,7 +155,7 @@ function setPostsReadCachePolicy<T extends Response>(response: T, isViewerOwned:
     'Cache-Control',
     isViewerOwned ? PRIVATE_POSTS_CACHE_CONTROL : PUBLIC_POSTS_CACHE_CONTROL
   )
-  if (isViewerOwned) {
+  if (isViewerOwned || PUBLIC_POSTS_CACHE_CONTROL.includes('no-store')) {
     // Target both Vercel and any upstream/shared CDN explicitly. These headers
     // outrank the browser-facing Cache-Control header at their respective CDN.
     response.headers.set('CDN-Cache-Control', 'no-store')

@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth/viewer-scope'
 import { selectScopedUnreadNotifications, useInboxStore } from '@/lib/stores/inboxStore'
 import type { AuthSessionReturn } from '@/lib/hooks/useAuthSession'
+import { NOTIFICATION_READER_CACHE_EPOCH } from '@/lib/notifications/ranking-change-fence'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -110,6 +111,17 @@ describe('NotificationsList viewer ownership', () => {
                     {
                       actor_avatar_url: null,
                       actor_handle: null,
+                      created_at: '2026-07-28T12:01:00.000Z',
+                      id: 'unsafe-ranking-change',
+                      link: '/trader/unsafe',
+                      message: 'Raw rank #9 to #1',
+                      read: false,
+                      title: 'Unsafe ranking payload',
+                      type: 'ranking_change',
+                    },
+                    {
+                      actor_avatar_url: null,
+                      actor_handle: null,
                       created_at: '2026-07-28T12:00:00.000Z',
                       id: 'notice-a',
                       link: null,
@@ -119,7 +131,7 @@ describe('NotificationsList viewer ownership', () => {
                       type: 'system',
                     },
                   ],
-                  unread_count: 1,
+                  unread_count: 2,
                 }
               : { notifications: [], unread_count: 5 },
         } as Response
@@ -137,6 +149,7 @@ describe('NotificationsList viewer ownership', () => {
     )
 
     expect(await screen.findByText('A notice')).toBeInTheDocument()
+    expect(screen.queryByText('Unsafe ranking payload')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('A notice'))
 
     const transition = beginViewerTransition('user-b')
@@ -153,7 +166,12 @@ describe('NotificationsList viewer ownership', () => {
       expect(selectScopedUnreadNotifications(useInboxStore.getState(), scopeB)).toBe(5)
     )
     expect(
-      queryClient.getQueryData(['notifications', scopeB.viewerKey, scopeB.sessionGeneration])
+      queryClient.getQueryData([
+        'notifications',
+        NOTIFICATION_READER_CACHE_EPOCH,
+        scopeB.viewerKey,
+        scopeB.sessionGeneration,
+      ])
     ).toBeDefined()
 
     putA.resolve({
