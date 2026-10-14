@@ -2,8 +2,6 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { dismissOverlays } from './helpers'
 
 const GMX_TRADER = '0x1fa0152a66e390f049863a3d30772b9674cf3c92'
-const WINDOW_TO = Date.UTC(2026, 6, 15) / 1000
-const CUTOFF_ISO = new Date(WINDOW_TO * 1000).toISOString()
 
 const VALUES = {
   7: { roi: 7.07, pnl: 70.07 },
@@ -11,56 +9,28 @@ const VALUES = {
   90: { roi: 90.9, pnl: 900.9 },
 } as const
 
-const SUMMARY = 'Fees and price impact included · unrealized PnL excluded'
-const PNL_LABEL = 'Realized Net PnL'
-const ROI_LABEL = 'Realized ROI · Window Max Capital'
+// Distinct per-timeframe ranks so each assertion witnesses the exact entry.
+const RANKS = { 7: 3, 30: 2, 90: 1 } as const
 
-// The production PWA service worker can satisfy /core from an older cache
-// before Playwright's page route sees the request. Block it so every assertion
-// witnesses the deterministic v2 payload installed below, never stale prod data.
+// The public /core projection is quarantined for every timeframe
+// (lib/data/serving/core-quarantine.ts); the client builds that static
+// projection locally and must not request /core at all. Block the PWA service
+// worker so a stale cached /core response cannot mask a regression.
 test.use({ serviceWorkers: 'block' })
 
-async function expectVerifiedMetricLabels(scope: Page | Locator) {
-  const pnlInfo = scope.getByRole('button', {
-    name: /^GMX realized net PnL includes fees and price impact/,
-  })
-  const roiInfo = scope.getByRole('button', {
-    name: /^GMX ROI is realized net PnL divided by maximum capital/,
-  })
-
-  await expect(pnlInfo).toBeVisible()
-  await expect(pnlInfo.locator('..')).toContainText(PNL_LABEL)
-  await expect(roiInfo).toBeVisible()
-  await expect(roiInfo.locator('..')).toContainText(ROI_LABEL)
+async function expectSealedRanking(scope: Page | Locator, tf: keyof typeof VALUES) {
+  const notice = scope.getByTestId('history-verification-notice').first()
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText('Historical data under verification')
+  await expect(notice.getByText(`#${RANKS[tf]}`, { exact: true })).toBeVisible()
+  const roiText = `+${VALUES[tf].roi.toFixed(2)}%`
+  await expect(notice.getByText(roiText, { exact: true })).toBeVisible()
+  // Quarantined history never surfaces PnL or the GMX realized-PnL contract.
+  await expect(notice).not.toContainText('$')
+  await expect(scope.getByText('Realized Net PnL')).toHaveCount(0)
 }
 
-function coreModule(tf: keyof typeof VALUES) {
-  return {
-    timeframe: tf,
-    stats: VALUES[tf],
-    currency: 'USD',
-    series: {},
-    extras: {
-      pnl_basis: 'gmx_period_realized_net',
-      roi_basis: 'max_capital_usd',
-      pnl_includes_unrealized: false,
-      pnl_components_complete: true,
-      profile_series_contract: 'unavailable_same_basis',
-      profile_window_metrics_complete: true,
-      window_semantics: 'completed_utc_days',
-      window_from: WINDOW_TO - tf * 86_400,
-      window_to: WINDOW_TO,
-      window_duration_days: tf,
-    },
-    provenance: {
-      source: 'gmx',
-      asOf: '2026-07-15T00:05:00.000Z',
-    },
-    cacheState: 'warm',
-  }
-}
-
-async function installDeterministicGmxResponses(page: Page) {
+async function installDeterministicGmxResponses(page: Page): Promise<string[]> {
   await page.addInitScript(() => localStorage.setItem('language', 'en'))
 
   await page.route('**/api/traders/**/first-screen?*', async (route) => {
@@ -92,7 +62,9 @@ async function installDeterministicGmxResponses(page: Page) {
             botStrategy: null,
             entries: ([7, 30, 90] as const).map((timeframe) => ({
               timeframe,
-              rank: 1,
+              rank: RANKS[timeframe],
+              rankingVisibility: 'verified',
+              rankingVisibilityReason: null,
               headlineRoi: VALUES[timeframe].roi,
               headlinePnl: { value: VALUES[timeframe].pnl, currency: 'USD' },
               headlineWinRate: null,
@@ -123,24 +95,12 @@ async function installDeterministicGmxResponses(page: Page) {
     })
   })
 
-  await page.route('**/api/traders/**/core?*', async (route) => {
-    const url = new URL(route.request().url())
-    if (url.searchParams.get('source') !== 'gmx') {
-      await route.continue()
-      return
-    }
-
-    const tf = Number(url.searchParams.get('tf'))
-    if (tf !== 7 && tf !== 30 && tf !== 90) {
-      await route.fulfill({ status: 400, body: 'unexpected timeframe' })
-      return
-    }
-
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({ success: true, data: coreModule(tf) }),
-    })
+  const coreCalls: string[] = []
+  await page.route(/\/api\/traders\/[^/]+\/core(?:\?|$)/, async (route) => {
+    coreCalls.push(route.request().url())
+    await route.fulfill({ status: 410, body: 'quarantined /core must not be requested' })
   })
+  return coreCalls
 }
 
 function collectFirstPartyFailures(page: Page) {
@@ -165,77 +125,47 @@ async function openGmxProfile(page: Page, suffix: string) {
   await dismissOverlays(page)
 }
 
-test.describe('GMX verified profile metric contract', () => {
+test.describe('GMX profile under history quarantine', () => {
+  let coreCalls: string[] = []
+
   test.beforeEach(async ({ page }) => {
-    await installDeterministicGmxResponses(page)
+    coreCalls = await installDeterministicGmxResponses(page)
   })
 
-  test('default three-tab layout keeps contract, values, cutoff and period in sync', async ({
+  test('default three-tab layout shows the verification notice with sealed rank/ROI', async ({
     page,
   }) => {
     const failures = collectFirstPartyFailures(page)
     await openGmxProfile(page, '&period=90D')
 
-    const card = page.locator('.performance-card').first()
-    await expect(card).toBeVisible()
-    await expectVerifiedMetricLabels(card)
+    await expectSealedRanking(page, 90)
+    await expect(page.locator('.performance-card')).toHaveCount(0)
 
-    const note = card.getByRole('note', { name: SUMMARY })
-    await expect(note).toBeVisible()
-    await expect(note.locator('time')).toHaveAttribute('datetime', CUTOFF_ISO)
-    await expect(card.getByText('+$900.90', { exact: true })).toBeVisible()
-    await expect(card.getByText('+90.90%', { exact: true })).toBeVisible()
+    await openGmxProfile(page, '&period=7D')
+    await expectSealedRanking(page, 7)
+    await expect(page.getByText(`#${RANKS[90]}`, { exact: true })).toHaveCount(0)
 
-    const button7 = card.getByRole('button', { name: '7D period' })
-    await button7.click()
-    await expect(button7).toHaveAttribute('aria-pressed', 'true')
-    await expect(page).toHaveURL(/(?:\?|&)period=7D(?:&|$)/)
-    await expect(card.getByText('+$70.07', { exact: true })).toBeVisible()
-    await expect(card.getByText('+7.07%', { exact: true })).toBeVisible()
-    await expect(card.getByText('+$900.90', { exact: true })).toHaveCount(0)
-
-    const button30 = card.getByRole('button', { name: '30D period' })
-    await button30.click()
-    await expect(button30).toHaveAttribute('aria-pressed', 'true')
-    await expect(page).toHaveURL(/(?:\?|&)period=30D(?:&|$)/)
-    await expect(card.getByText('+$300.30', { exact: true })).toBeVisible()
-    await expect(card.getByText('+30.30%', { exact: true })).toBeVisible()
-    await expect(note.locator('time')).toHaveAttribute('datetime', CUTOFF_ISO)
-
-    const button90 = card.getByRole('button', { name: '90D period' })
-    await button90.click()
-    await expect(button90).toHaveAttribute('aria-pressed', 'true')
-    await expect(page).toHaveURL((url) => url.searchParams.get('period') === null)
-    await expect(card.getByText('+$900.90', { exact: true })).toBeVisible()
+    expect(coreCalls).toEqual([])
     expect(failures).toEqual([])
   })
 
-  test('rollback panel preserves the same verified labels and selected-window data', async ({
-    page,
-  }) => {
+  test('rollback panel switches periods without requesting /core', async ({ page }) => {
     const failures = collectFirstPartyFailures(page)
     await openGmxProfile(page, '&threetab=0')
 
-    const note = page.getByRole('note', { name: SUMMARY })
-    await expect(note).toBeVisible()
-    await expect(note.locator('time')).toHaveAttribute('datetime', CUTOFF_ISO)
-    await expectVerifiedMetricLabels(page)
-    await expect(page.getByText('+$900.9 USD', { exact: true })).toBeVisible()
-    await expect(page.getByText('+90.90%', { exact: true })).toBeVisible()
+    await expectSealedRanking(page, 90)
 
     const button7 = page.getByRole('button', { name: '7D period' }).first()
     await button7.click()
     await expect(button7).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByText('+$70.07 USD', { exact: true })).toBeVisible()
-    await expect(page.getByText('+7.07%', { exact: true })).toBeVisible()
-    await expect(page.getByText('+$900.9 USD', { exact: true })).toHaveCount(0)
+    await expectSealedRanking(page, 7)
 
     const button30 = page.getByRole('button', { name: '30D period' }).first()
     await button30.click()
     await expect(button30).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByText('+$300.3 USD', { exact: true })).toBeVisible()
-    await expect(page.getByText('+30.30%', { exact: true })).toBeVisible()
-    await expect(note.locator('time')).toHaveAttribute('datetime', CUTOFF_ISO)
+    await expectSealedRanking(page, 30)
+
+    expect(coreCalls).toEqual([])
     expect(failures).toEqual([])
   })
 })
