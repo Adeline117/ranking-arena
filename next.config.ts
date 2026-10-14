@@ -56,7 +56,13 @@ const nextConfig = {
   },
 
   // Webpack config (production builds use webpack for better chunk consolidation)
-  webpack: (config: Record<string, any>, { isServer }: { isServer: boolean }) => {
+  webpack: (
+    config: Record<string, any>,
+    {
+      isServer,
+      webpack,
+    }: { isServer: boolean; webpack: { IgnorePlugin: new (options: object) => unknown } }
+  ) => {
     if (!isServer) {
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
@@ -83,8 +89,7 @@ const nextConfig = {
       // route pay for a site-wide vendor payload.
     }
     config.plugins.push(
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      new (require('webpack').IgnorePlugin)({
+      new webpack.IgnorePlugin({
         resourceRegExp:
           /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
