@@ -109,17 +109,14 @@ describe('legacy token-ranking retirement', () => {
       expect(migration).toContain(expectedHash)
     }
 
-    for (const name of [
-      'arena.token_trader_ranking_page_payload_v1',
-      'public.get_token_trader_rankings',
-      'public.get_popular_tokens',
-      'public.get_token_trader_rankings_v2',
-      'public.get_popular_tokens_v2',
-    ]) {
-      expect(sha256(targetBodies.get(name)!)).toBe(
-        'b1abcb9e518dc30cbe2b266c30925b305a623df663fce576186fd6d378188a9e'
-      )
-    }
+    const retiredBodyHash = 'b1abcb9e518dc30cbe2b266c30925b305a623df663fce576186fd6d378188a9e'
+    expect(sha256(targetBodies.get('arena.token_trader_ranking_page_payload_v1')!)).toBe(
+      retiredBodyHash
+    )
+    expect(sha256(targetBodies.get('public.get_token_trader_rankings')!)).toBe(retiredBodyHash)
+    expect(sha256(targetBodies.get('public.get_popular_tokens')!)).toBe(retiredBodyHash)
+    expect(sha256(targetBodies.get('public.get_token_trader_rankings_v2')!)).toBe(retiredBodyHash)
+    expect(sha256(targetBodies.get('public.get_popular_tokens_v2')!)).toBe(retiredBodyHash)
     expect(sha256(targetBodies.get('public.get_token_ranking_publication_head')!)).toBe(
       'b24f3284f48fda1a79c0f3aff2027b00c7bc51c1669d49dcfc6667a9c84b55b0'
     )
