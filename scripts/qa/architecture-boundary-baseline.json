@@ -13,26 +13,6 @@
     },
     {
       "rule": "lib-must-not-import-app",
-      "source": "lib/hooks/useAchievements.ts",
-      "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/hooks/useAchievements.ts",
-      "specifier": "@/app/components/ui/Toast"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/useOneClickSiwe.ts",
-      "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/useSiweAuth.ts",
-      "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-app",
       "source": "lib/web3/wallet-components.ts",
       "specifier": "@/app/components/settings/WalletSection"
     },
@@ -40,11 +20,6 @@
       "rule": "lib-must-not-import-app",
       "source": "lib/web3/wallet-components.ts",
       "specifier": "@/app/components/web3/OneClickWalletButton"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/Web3ProviderClient.tsx",
-      "specifier": "@/app/components/Providers/LanguageProvider"
     }
   ]
 }
