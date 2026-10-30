@@ -43,16 +43,6 @@
     },
     {
       "rule": "lib-must-not-import-app",
-      "source": "lib/stripe/index.ts",
-      "specifier": "@/app/(app)/user-center/membership-config"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/stripe/lifetime-entitlement.ts",
-      "specifier": "@/app/(app)/user-center/membership-config"
-    },
-    {
-      "rule": "lib-must-not-import-app",
       "source": "lib/web3/useOneClickSiwe.ts",
       "specifier": "@/app/components/Providers/LanguageProvider"
     },
