@@ -152,6 +152,7 @@ PREDEPLOY_MIGRATIONS=(
   20260804053000_copier_snapshot_publication_substrate.sql
   20260804054000_publish_copier_snapshot_atomically.sql
 )
+readonly -a PREDEPLOY_MIGRATIONS
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
 # accepts it only when its exact reviewed ledger and complete object contract
@@ -159,11 +160,13 @@ PREDEPLOY_MIGRATIONS=(
 QUARANTINED_PREDEPLOY_MIGRATIONS=(
   20260722054000_metric_trust_source_page_lineage.sql
 )
+readonly -a QUARANTINED_PREDEPLOY_MIGRATIONS
 
 TIP_CHECKOUT_CUTOVER_VERSIONS=(
   20260721210000
   20260721211000
 )
+readonly -a TIP_CHECKOUT_CUTOVER_VERSIONS
 TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 
 # These contracts revoke compatibility writes or change identity uniqueness
@@ -174,6 +177,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260717120000_trader_follows_composite_identity.sql
   20260729061000_tier_a_execution_claim_enforcement.sql
 )
+readonly -a POSTDEPLOY_MIGRATIONS
 
 # Recovery repairs the immutable application snapshot whose original cutover
 # was exactly these 41 migrations. Keep this prerequisite frozen: later launch
@@ -221,6 +225,7 @@ RECOVERY_PREREQUISITE_MIGRATIONS=(
   20260717222500_notification_type_contract.sql
   20260716192000_social_edge_write_contract.sql
 )
+readonly -a RECOVERY_PREREQUISITE_MIGRATIONS
 
 # These index migrations were present in the immutable target application
 # snapshot but omitted from the original cutover manifest. PostgreSQL forbids
@@ -234,6 +239,7 @@ CONCURRENT_RECOVERY_MIGRATIONS=(
   20260716101500_add_interaction_export_cursor_indexes.sql
   20260716110000_add_domain_export_cursor_indexes.sql
 )
+readonly -a CONCURRENT_RECOVERY_MIGRATIONS
 
 # These transactional migrations were also present in the immutable target
 # application snapshot but omitted from the original cutover manifest. Apply
@@ -245,6 +251,7 @@ RECOVERY_MIGRATIONS=(
   20260716112200_atomic_impression_recording.sql
   20260716083256_repair_legacy_exchange_logo_paths.sql
 )
+readonly -a RECOVERY_MIGRATIONS
 
 # Do not replay this older collection boundary. The separately applied
 # 20260717230000 migration replaces its policies with current-owner/current-
@@ -252,6 +259,7 @@ RECOVERY_MIGRATIONS=(
 SUPERSEDED_MIGRATIONS=(
   20260716104500_collection_read_write_boundaries.sql
 )
+readonly -a SUPERSEDED_MIGRATIONS
 
 require_environment() {
   if [[ -z "${DATABASE_URL:-}" ]]; then
