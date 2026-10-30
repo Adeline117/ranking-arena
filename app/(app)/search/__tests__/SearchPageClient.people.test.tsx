@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import type { UnifiedSearchResponse } from '@/app/api/search/route'
+import type { UnifiedSearchResponse } from '@/lib/search/contracts'
 import SearchPageClient from '../SearchPageClient'
 
 const mockSearchParams = new URLSearchParams('q=arena')

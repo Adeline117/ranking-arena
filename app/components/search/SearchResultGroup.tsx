@@ -6,7 +6,7 @@ import { t, type TranslationKey } from '@/lib/i18n'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
-import type { UnifiedSearchResult } from '@/app/api/search/route'
+import type { UnifiedSearchResult } from '@/lib/search/contracts'
 
 // Category config for search results grouping
 // Label comes from t(category) — the keys traders/posts/users/groups exist in

@@ -1,6 +1,6 @@
 import 'server-only'
 import Stripe from 'stripe'
-import { API_PRICING, PRICING } from '@/app/(app)/user-center/membership-config'
+import { API_PRICING, PRICING } from '@/lib/config/pricing'
 import { stripeMetadataUserId } from '@/lib/stripe/identity'
 import { STRIPE_API_VERSION } from '@/lib/stripe/version'
 import { isTipCheckoutEnabled } from '@/lib/security/tip-checkout-cutover'

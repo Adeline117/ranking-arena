@@ -389,6 +389,18 @@ jobs:
       - name: Supabase typed-client bypass ratchet
         run: npm run qa:cast-ratchet
 
+      # Deployable layers must not grow new reverse dependencies (lib->app,
+      # lib->worker, UI->API route, ...). The checked-in baseline is the known
+      # debt ledger and may only shrink; the base baseline is read at the event's
+      # base SHA (taken from the event file, not interpolated).
+      - name: Architecture boundary ratchet
+        run: |
+          set -euo pipefail
+          ARCHITECTURE_BASE_REF="$(jq -r '.pull_request.base.sha // .before // empty' "$GITHUB_EVENT_PATH")"
+          case "$ARCHITECTURE_BASE_REF" in 0000000000000000000000000000000000000000) ARCHITECTURE_BASE_REF= ;; esac
+          export ARCHITECTURE_BASE_REF
+          npm run qa:architecture
+
       - name: Migration lint — block dangerous DDL
         run: |
           set -euo pipefail

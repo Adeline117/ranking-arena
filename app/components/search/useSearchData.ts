@@ -10,7 +10,7 @@ import {
   clearHistory,
 } from '@/lib/services/search-history'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
+import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/lib/search/contracts'
 import { logger } from '@/lib/logger'
 import { features } from '@/lib/features'
 import { mapHotPosts } from './hot-posts'
