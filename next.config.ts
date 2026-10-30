@@ -425,8 +425,6 @@ const nextConfig = {
       // @solana/web3.js is 102MB installed — tree-shaking PublicKey etc.
       // avoids pulling Connection/Transaction/etc. into the wallet chunk.
       '@solana/web3.js',
-      // cockatiel advertises sideEffects:false; server-only but cheap hint.
-      'cockatiel',
     ],
 
     // Keep optimizeCss disabled: Next.js loads the deprecated `critters` package
