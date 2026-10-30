@@ -15,11 +15,13 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 const ReferralCard = dynamic(() => import('@/app/components/profile/ReferralCard'), { ssr: false })
 const WalletSection = dynamic(
-  () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.WalletSection })),
+  () =>
+    import('@/app/components/web3/wallet-components').then((m) => ({ default: m.WalletSection })),
   { ssr: false }
 )
 const LazyWeb3Boundary = dynamic(
-  () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.Web3Boundary })),
+  () =>
+    import('@/app/components/web3/wallet-components').then((m) => ({ default: m.Web3Boundary })),
   { ssr: false }
 )
 const ImageCropper = dynamic(

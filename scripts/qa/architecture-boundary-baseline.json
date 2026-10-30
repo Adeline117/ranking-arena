@@ -1,25 +1,4 @@
 {
   "version": 1,
-  "violations": [
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/data/serving/legacy-adapter.ts",
-      "specifier": "@/app/(app)/u/[handle]/components/types"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/data/serving/legacy-adapter.ts",
-      "specifier": "@/app/components/trader/OverviewPerformanceCard"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/wallet-components.ts",
-      "specifier": "@/app/components/settings/WalletSection"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/web3/wallet-components.ts",
-      "specifier": "@/app/components/web3/OneClickWalletButton"
-    }
-  ]
+  "violations": []
 }

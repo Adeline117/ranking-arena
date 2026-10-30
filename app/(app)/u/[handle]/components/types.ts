@@ -6,6 +6,7 @@ import type {
   TraderFeedItem,
 } from '@/lib/data/trader'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import type { PositionHistoryEntry } from '@/lib/data/trader-view-contracts'
 
 export interface ServerProfile {
   id: string
@@ -39,21 +40,8 @@ export interface AssetBreakdownData {
   '7D': Array<{ symbol: string; weightPct: number }>
 }
 
-export interface PositionHistoryEntry {
-  symbol: string
-  direction: 'long' | 'short'
-  positionType: string
-  marginMode: string
-  openTime: string
-  closeTime: string
-  entryPrice: number
-  exitPrice: number
-  maxPositionSize: number
-  closedSize: number
-  pnlUsd: number
-  pnlPct: number
-  status: string
-}
+// Defined in lib so lib/data/serving can use it without importing app/.
+export type { PositionHistoryEntry }
 
 /** @deprecated Use TraderDetail from lib/types/unified-trader.ts */
 export type TraderPageData = {

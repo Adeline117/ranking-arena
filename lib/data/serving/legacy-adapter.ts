@@ -25,8 +25,8 @@
  */
 
 import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
-import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
-import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+import type { PositionHistoryEntry } from '@/lib/data/trader-view-contracts'
+import type { ExtendedPerformance } from '@/lib/data/trader-view-contracts'
 import { normalizeScoreConfidence } from '@/lib/data/trader/mappers'
 
 type Row = Record<string, unknown>
