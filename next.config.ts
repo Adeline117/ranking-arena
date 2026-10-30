@@ -56,7 +56,13 @@ const nextConfig = {
   },
 
   // Webpack config (production builds use webpack for better chunk consolidation)
-  webpack: (config: Record<string, any>, { isServer }: { isServer: boolean }) => {
+  webpack: (
+    config: Record<string, any>,
+    {
+      isServer,
+      webpack,
+    }: { isServer: boolean; webpack: { IgnorePlugin: new (options: object) => unknown } }
+  ) => {
     if (!isServer) {
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
@@ -83,8 +89,7 @@ const nextConfig = {
       // route pay for a site-wide vendor payload.
     }
     config.plugins.push(
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      new (require('webpack').IgnorePlugin)({
+      new webpack.IgnorePlugin({
         resourceRegExp:
           /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
@@ -606,6 +611,13 @@ const nextConfig = {
 
   async redirects() {
     return [
+      // Legacy snapshots-based data health was removed. The authoritative
+      // registry/source_as_of monitor is the scraper-status admin tab.
+      {
+        source: '/admin/data-health',
+        destination: '/admin?tab=scraperStatus',
+        permanent: true,
+      },
       { source: '/legal/terms', destination: '/terms', permanent: true },
       { source: '/legal/privacy', destination: '/privacy', permanent: true },
       { source: '/legal/disclaimer', destination: '/disclaimer', permanent: true },
@@ -633,13 +645,6 @@ const nextConfig = {
       { source: '/profile', destination: '/settings', permanent: true },
       { source: '/events', destination: '/market', permanent: true },
       { source: '/market/events', destination: '/market', permanent: true },
-      // Legacy snapshots-based data health was removed. The authoritative
-      // registry/source_as_of monitor is the scraper-status admin tab.
-      {
-        source: '/admin/data-health',
-        destination: '/admin?tab=scraperStatus',
-        permanent: true,
-      },
       // /rankings (bare) → / (homepage has the main ranking table)
       { source: '/rankings', destination: '/', permanent: true },
       // /rankings/traders → / (legacy). The :exchange wildcard below now
