@@ -45,21 +45,6 @@
       "rule": "lib-must-not-import-app",
       "source": "lib/web3/Web3ProviderClient.tsx",
       "specifier": "@/app/components/Providers/LanguageProvider"
-    },
-    {
-      "rule": "lib-must-not-import-worker",
-      "source": "lib/ingest/serving/__tests__/board-series-publish.test.ts",
-      "specifier": "@/worker/src/ingest/worker-db-fence"
-    },
-    {
-      "rule": "lib-must-not-import-worker",
-      "source": "lib/ingest/serving/__tests__/metric-trust-publish.test.ts",
-      "specifier": "@/worker/src/ingest/worker-db-fence"
-    },
-    {
-      "rule": "lib-must-not-import-worker",
-      "source": "lib/ingest/serving/__tests__/publish-count-generation.test.ts",
-      "specifier": "@/worker/src/ingest/worker-db-fence"
     }
   ]
 }
