@@ -202,7 +202,10 @@ test('CI pull requests have read-only token handling and no secret-bearing comma
 
       if (step.uses?.startsWith('actions/upload-artifact@')) {
         assert.ok(
-          jobGuard === pushMainOnly || step.if === pushMainOnly || step.if === alwaysPushMainOnly,
+          jobGuard === disabled ||
+            jobGuard === pushMainOnly ||
+            step.if === pushMainOnly ||
+            step.if === alwaysPushMainOnly,
           `${jobName} exposes an artifact runtime token after PR code`
         )
       }
