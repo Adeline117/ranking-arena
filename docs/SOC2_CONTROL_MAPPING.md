@@ -25,16 +25,16 @@
 
 ## A — Availability（可用性）
 
-| 控制                  | 状态 | 证据                                                                           |
-| --------------------- | ---- | ------------------------------------------------------------------------------ |
-| SLO 定义              | ✅   | `docs/SLO.md` 5 条(核心页/API/数据新鲜度/备份/写路径)                          |
-| 健康监控              | ✅   | 6 个 health 端点 + health-monitor(30min) + Telegram 告警                       |
-| 部署后验证 + 自动回滚 | ✅   | deploy-gate smoke + 失败自动 promote 回滚(2026-07-02)                          |
-| 备份                  | 🟡   | R2 arena+public 异地日备 + 严格 HEAD/新鲜度契约；auth 独立副本尚缺             |
-| 灾难恢复              | 🔴   | managed scratch 全恢复未通过；当前只能依赖 Supabase PITR（SLO #4）             |
-| 冗余/失败切换         | 🟡   | worker 双节点 + 心跳漂移哨兵；但 Mac Mini/VPS 单点仍在(→ PHASE2_INFRA_PLAN #2) |
-| 事故响应              | ✅   | 高质量 RUNBOOK + postmortem 制度(模板 + 5 起回填)                              |
-| 弹性(重试/熔断)       | ✅   | circuit breaker(cockatiel) + 重试 + 分布式锁 + BullMQ 3x                       |
+| 控制                  | 状态 | 证据                                                                                                               |
+| --------------------- | ---- | ------------------------------------------------------------------------------------------------------------------ |
+| SLO 定义              | ✅   | `docs/SLO.md` 5 条(核心页/API/数据新鲜度/备份/写路径)                                                              |
+| 健康监控              | ✅   | 6 个 health 端点 + health-monitor(30min) + Telegram 告警                                                           |
+| 部署后验证 + 自动回滚 | ✅   | deploy-gate smoke + 失败自动 promote 回滚(2026-07-02)                                                              |
+| 备份                  | 🟡   | R2 arena+public 异地日备 + 严格 HEAD/新鲜度契约；auth 独立副本尚缺                                                 |
+| 灾难恢复              | 🔴   | managed scratch 全恢复未通过；当前只能依赖 Supabase PITR（SLO #4）                                                 |
+| 冗余/失败切换         | 🟡   | worker 双节点 + 心跳漂移哨兵；但 Mac Mini/VPS 单点仍在(→ PHASE2_INFRA_PLAN #2)                                     |
+| 事故响应              | ✅   | 高质量 RUNBOOK + postmortem 制度(模板 + 5 起回填)                                                                  |
+| 弹性(重试/熔断)       | ✅   | circuit breaker(自研 lib/middleware/circuit-breaker.ts、lib/ingest/fetch/circuit.ts) + 重试 + 分布式锁 + BullMQ 3x |
 
 ## C — Confidentiality（保密）
 
