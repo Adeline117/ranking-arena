@@ -1,4 +1,4 @@
-import type { UnifiedSearchResult } from '@/app/api/search/route'
+import type { UnifiedSearchResult } from '@/lib/search/contracts'
 
 export type SearchResultType = 'group' | 'post' | 'trader' | 'user'
 
