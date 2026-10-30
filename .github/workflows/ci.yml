@@ -399,10 +399,14 @@ jobs:
       # partition, trigger changes / edits to committed migrations). The Node
       # gate owns diff enumeration; Git, I/O, and parser failures exit 2 and
       # policy findings exit 1. Do not wrap it in shell fallbacks.
+      # The base SHA is read from the event file at runtime rather than
+      # interpolated from github.event, matching the DDL lint above.
       - name: Migration SQL safety gate
-        env:
-          MIGRATION_SAFETY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: npm run qa:migration-safety
+        run: |
+          set -euo pipefail
+          MIGRATION_SAFETY_BASE_REF="$(jq -r '.pull_request.base.sha // .before // empty' "$GITHUB_EVENT_PATH")"
+          export MIGRATION_SAFETY_BASE_REF
+          npm run qa:migration-safety
 
   # ─────────────────────────────────────────────
   # Stage 3a: Unit Tests (parallel with build)
