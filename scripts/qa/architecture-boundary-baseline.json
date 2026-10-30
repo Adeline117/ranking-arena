@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "violations": [
+    {
+      "rule": "app-ui-must-not-import-api-route",
+      "source": "app/(app)/compare/ComparePageClient.tsx",
+      "specifier": "@/app/api/search/route"
+    },
+    {
+      "rule": "app-ui-must-not-import-api-route",
+      "source": "app/(app)/search/__tests__/SearchPageClient.people.test.tsx",
+      "specifier": "@/app/api/search/route"
+    },
+    {
+      "rule": "app-ui-must-not-import-api-route",
+      "source": "app/(app)/search/search-result-model.ts",
+      "specifier": "@/app/api/search/route"
+    },
+    {
+      "rule": "app-ui-must-not-import-api-route",
+      "source": "app/(app)/search/SearchPageClient.tsx",
+      "specifier": "@/app/api/search/route"
+    },
+    {
+      "rule": "app-ui-must-not-import-api-route",
+      "source": "app/components/search/SearchResultGroup.tsx",
+      "specifier": "@/app/api/search/route"
+    },
+    {
+      "rule": "app-ui-must-not-import-api-route",
+      "source": "app/components/search/useSearchData.ts",
+      "specifier": "@/app/api/search/route"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/data/serving/legacy-adapter.ts",
+      "specifier": "@/app/(app)/u/[handle]/components/types"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/data/serving/legacy-adapter.ts",
+      "specifier": "@/app/components/trader/OverviewPerformanceCard"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/hooks/useAchievements.ts",
+      "specifier": "@/app/components/Providers/LanguageProvider"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/hooks/useAchievements.ts",
+      "specifier": "@/app/components/ui/Toast"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/rankings/__tests__/daily-derived-consumer-containment.test.ts",
+      "specifier": "@/app/api/trader/[platform]/[trader_key]/history/route"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/rankings/__tests__/daily-derived-consumer-containment.test.ts",
+      "specifier": "@/app/api/traders/[handle]/equity/route"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/rankings/__tests__/daily-derived-consumer-containment.test.ts",
+      "specifier": "@/app/api/traders/[handle]/indicators/route"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/stores/quizStore.ts",
+      "specifier": "@/app/(quiz)/quiz/components/types"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/stripe/index.ts",
+      "specifier": "@/app/(app)/user-center/membership-config"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/stripe/lifetime-entitlement.ts",
+      "specifier": "@/app/(app)/user-center/membership-config"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/web3/useOneClickSiwe.ts",
+      "specifier": "@/app/components/Providers/LanguageProvider"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/web3/useSiweAuth.ts",
+      "specifier": "@/app/components/Providers/LanguageProvider"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/web3/wallet-components.ts",
+      "specifier": "@/app/components/settings/WalletSection"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/web3/wallet-components.ts",
+      "specifier": "@/app/components/web3/OneClickWalletButton"
+    },
+    {
+      "rule": "lib-must-not-import-app",
+      "source": "lib/web3/Web3ProviderClient.tsx",
+      "specifier": "@/app/components/Providers/LanguageProvider"
+    },
+    {
+      "rule": "lib-must-not-import-worker",
+      "source": "lib/ingest/serving/__tests__/board-series-publish.test.ts",
+      "specifier": "@/worker/src/ingest/worker-db-fence"
+    },
+    {
+      "rule": "lib-must-not-import-worker",
+      "source": "lib/ingest/serving/__tests__/metric-trust-publish.test.ts",
+      "specifier": "@/worker/src/ingest/worker-db-fence"
+    },
+    {
+      "rule": "lib-must-not-import-worker",
+      "source": "lib/ingest/serving/__tests__/publish-count-generation.test.ts",
+      "specifier": "@/worker/src/ingest/worker-db-fence"
+    },
+    {
+      "rule": "runtime-module-must-not-import-root-entrypoint",
+      "source": "lib/api/__tests__/proxy-cron-alias-bypass.test.ts",
+      "specifier": "@/proxy"
+    },
+    {
+      "rule": "runtime-module-must-not-import-root-entrypoint",
+      "source": "lib/security/__tests__/tip-checkout-proxy.test.ts",
+      "specifier": "@/proxy"
+    },
+    {
+      "rule": "runtime-module-must-not-import-root-entrypoint",
+      "source": "lib/telemetry/__tests__/sentry-config-sanitization.test.ts",
+      "specifier": "../../../sentry.edge.config"
+    },
+    {
+      "rule": "runtime-module-must-not-import-root-entrypoint",
+      "source": "lib/telemetry/__tests__/sentry-config-sanitization.test.ts",
+      "specifier": "../../../sentry.server.config"
+    }
+  ]
+}
