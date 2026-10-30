@@ -510,7 +510,10 @@ jobs:
   e2e:
     name: Production E2E Canary (read-only)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # V1 NO-GO：该作业直接访问生产站，属于生产读取；在 owner 另行批准只读取证前
+    # 保持关闭（与 types-live-drift / data-consistency 同一处理）。恢复时改回
+    # github.event_name == 'push' && github.ref == 'refs/heads/main'。
+    if: ${{ false }}
     # 关键路径只跑 desktop smoke-critical-path（当前 5 用例），~3-5min 就
     # 完成。此前跑全量 46 spec × 4 端设备 × workers=1 × retries=2 → 永远跑不完、必到
     # 30min job 超时被取消：既不给真实 green/red 信号，又让 CI「完成」晚 30min → 每次
