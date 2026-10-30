@@ -10,6 +10,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   symlink,
   unlink,
@@ -1448,9 +1449,13 @@ test('cleanup preserves a temporary root whose inode was replaced', async (t) =>
     if (!swapped && path.basename(target).startsWith('.arena-baseline-capture-runtime-')) {
       swapped = true
       replacementPath = target
+      // Build the replacement while the original still exists so it cannot
+      // reuse the original inode (ext4 recycles a just-freed inode on rm+mkdir).
+      const staged = `${target}.replacement`
+      await mkdir(staged, { mode: 0o700 })
+      await writeFile(path.join(staged, 'replacement-owner.txt'), 'preserve\n', { mode: 0o600 })
       await rm(target, { force: true, recursive: true })
-      await mkdir(target, { mode: 0o700 })
-      await writeFile(path.join(target, 'replacement-owner.txt'), 'preserve\n', { mode: 0o600 })
+      await rename(staged, target)
     }
     await _captureContractForTests.safeRemove(target, destination, identity)
   }
