@@ -245,7 +245,7 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "brace-expansion": "file:worker/vendor/brace-expansion-compat",
     "capacitor-native-biometric": "^4.2.2",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.4.0",
     "jest": "^30.3.0",
