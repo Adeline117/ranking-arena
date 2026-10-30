@@ -45,8 +45,8 @@ jobs:
       QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
       QA_TEST_PASSWORD_B: ${{ secrets.QA_TEST_PASSWORD_B }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -87,7 +87,7 @@ jobs:
           NODE_ENV: production # npm start 服务端按生产模式跑（webServer 用 npm start）
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: playwright-report-nightly
@@ -97,7 +97,7 @@ jobs:
           retention-days: 14
 
       - name: Upload screenshots on failure
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: failure()
         with:
           name: playwright-screenshots-nightly
