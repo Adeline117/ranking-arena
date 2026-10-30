@@ -1,12 +1,12 @@
 /* eslint-disable no-console -- this is the logger implementation; console usage is intentional */
-
-import { readCorrelationId } from '@/lib/telemetry/correlation-context'
 /**
  * 统一日志工具
  * 生产环境自动关闭 debug/log，保留 warn/error
  */
 
-// Correlation ID support — server-only (node:async_hooks not available in browser)
+import { readCorrelationId } from '@/lib/telemetry/correlation-context'
+
+// Correlation ID from the request context (server only; undefined in the browser).
 function correlationId(): string | undefined {
   if (typeof window !== 'undefined') return undefined
   return readCorrelationId()
