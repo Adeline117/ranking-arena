@@ -1,0 +1,266 @@
+{
+  "contract": "arena.managed-scratch-evidence-receipt@1",
+  "status": "template/not-evidence",
+  "production_authorized": false,
+  "receipt_id": "REPLACE_WITH_UNIQUE_SHA256",
+  "created_at": "REPLACE_WITH_UTC_TIMESTAMP",
+  "provider_incident": {
+    "evidence_sha256": "REPLACE_WITH_SHA256",
+    "incident_identity_sha256": "REPLACE_WITH_SHA256",
+    "resolved_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "status": "resolved/evidence-only"
+  },
+  "legacy_restore": {
+    "auth": {
+      "catalog_sha256": "REPLACE_WITH_SHA256",
+      "checked_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "coverage": "not-in-app-backup",
+      "existing_login": "not-covered",
+      "identity_count": 0,
+      "mfa_if_configured": "not-covered",
+      "new_registration": "not-covered",
+      "oauth_if_configured": "not-covered",
+      "result": "not-covered",
+      "target_identity_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256",
+      "user_count": 0
+    },
+    "completed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "completion": {
+      "artifact_bytes": 0,
+      "artifact_sha256": "REPLACE_WITH_LEGACY_ARTIFACT_SHA256",
+      "backup_completed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "gzip_crc_result": "failed",
+      "gzip_isize_result": "failed",
+      "metadata_contract": "legacy-pg17-restrict-footer",
+      "metadata_sha256": "REPLACE_WITH_SHA256",
+      "metadata_verified": false,
+      "pg_dump_tail_result": "failed",
+      "required_relations_result": "failed",
+      "restore_exit_code": 1,
+      "stream_completed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "stream_started_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "tail_sha256": "REPLACE_WITH_SHA256",
+      "target_identity_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256"
+    },
+    "counts": {
+      "checked_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "constraint_count": 0,
+      "critical_rows": {
+        "arena.trader_stats": 0,
+        "arena.traders": 0,
+        "public.leaderboard_ranks": 0
+      },
+      "index_count": 0,
+      "nonempty_table_count": 0,
+      "table_count": 0,
+      "target_identity_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256"
+    },
+    "evidence_id": "REPLACE_WITH_UNIQUE_SHA256",
+    "purpose": "protected-legacy-restore",
+    "result": "failed",
+    "rls": {
+      "acl_sha256": "REPLACE_WITH_SHA256",
+      "catalog_sha256": "REPLACE_WITH_SHA256",
+      "checked_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "enabled_relation_count": 0,
+      "policy_count": 0,
+      "relation_count": 0,
+      "result": "failed",
+      "target_identity_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256"
+    },
+    "rpo_rto": {
+      "backup_cutoff_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "calculation_sha256": "REPLACE_WITH_SHA256",
+      "latest_included_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "rpo_seconds": 0,
+      "rto_seconds": 0,
+      "service_ready_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "target_identity_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256"
+    },
+    "smoke": {
+      "checked_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "checks": [
+        { "id": "health", "result": "failed" },
+        { "id": "rankings", "result": "failed" },
+        { "id": "traders", "result": "failed" }
+      ],
+      "result": "failed",
+      "target_identity_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256"
+    },
+    "source": {
+      "artifact_identity_sha256": "REPLACE_WITH_SHA256",
+      "artifact_sha256": "REPLACE_WITH_LEGACY_ARTIFACT_SHA256",
+      "kind": "protected-legacy-2026-07-26",
+      "protected_copy_identity_sha256": "REPLACE_WITH_SHA256",
+      "snapshot_date": "2026-07-26"
+    },
+    "started_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "subject_target_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256",
+    "target": {
+      "capacity_slot_sha256": "REPLACE_WITH_SHA256",
+      "clean_at_start": true,
+      "compute_class": "replace-me",
+      "created_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "deleted_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "deletion_due_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "deletion_owner_sha256": "REPLACE_WITH_SHA256",
+      "deletion_receipt_sha256": "REPLACE_WITH_SHA256",
+      "deletion_status": "deleted",
+      "disk_gib": 100,
+      "empty_at_start": true,
+      "extensions": [
+        {
+          "name": "REPLACE_WITH_EXACT_EXTENSION_NAME",
+          "schema": "REPLACE_WITH_EXACT_EXTENSION_SCHEMA",
+          "version": "REPLACE_WITH_EXACT_EXTENSION_VERSION"
+        }
+      ],
+      "identity_sha256": "REPLACE_WITH_LEGACY_TARGET_SHA256",
+      "isolated_from_production": true,
+      "kind": "managed-restore",
+      "outbound_side_effects_quarantined": true,
+      "postgres_version": "17.0",
+      "production_aliases_attached": false,
+      "production_credentials_present": false,
+      "region": "replace-me"
+    }
+  },
+  "current_contract_restore": {
+    "auth": "COPY_THE_AUTH_EVIDENCE_SHAPE_FROM_LEGACY_RESTORE_AND_REPLACE_ALL_VALUES",
+    "completed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "completion": "COPY_THE_COMPLETION_SHAPE_AND_USE_ARENA_PG_DUMP_COMPLETE_V1",
+    "counts": "COPY_THE_COUNTS_SHAPE_AND_REPLACE_ALL_VALUES",
+    "evidence_id": "REPLACE_WITH_UNIQUE_SHA256",
+    "purpose": "current-contract-post-incident-restore",
+    "result": "failed",
+    "rls": "COPY_THE_RLS_SHAPE_AND_REPLACE_ALL_VALUES",
+    "rpo_rto": "COPY_THE_RPO_RTO_SHAPE_AND_REPLACE_ALL_VALUES",
+    "smoke": "COPY_THE_SMOKE_SHAPE_AND_REPLACE_ALL_VALUES",
+    "source": {
+      "artifact_identity_sha256": "REPLACE_WITH_SHA256",
+      "artifact_sha256": "REPLACE_WITH_CURRENT_ARTIFACT_SHA256",
+      "kind": "current-contract-post-incident"
+    },
+    "started_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "subject_target_sha256": "REPLACE_WITH_CURRENT_TARGET_SHA256",
+    "target": "COPY_THE_TARGET_SHAPE_WITH_A_DISTINCT_CURRENT_TARGET_AND_EXACT_SORTED_EXTENSIONS"
+  },
+  "source_capture": {
+    "artifacts": {
+      "app_schema_sha256": "REPLACE_WITH_SHA256",
+      "migration_ledger_sha256": "REPLACE_WITH_SHA256",
+      "normalized_catalog_sha256": "REPLACE_WITH_SHA256",
+      "source_catalog_file_sha256": "REPLACE_WITH_SHA256"
+    },
+    "ca_sha256": "REPLACE_WITH_SHA256",
+    "ca_validity": {
+      "not_after": "REPLACE_WITH_UTC_TIMESTAMP",
+      "not_before": "REPLACE_WITH_UTC_TIMESTAMP"
+    },
+    "captured_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "connection_mode": "direct-5432",
+    "evidence_id": "REPLACE_WITH_UNIQUE_SHA256",
+    "git_sha": "REPLACE_WITH_40_CHARACTER_GIT_SHA",
+    "incomplete_marker_absent": true,
+    "postgres_version": "17.0",
+    "purpose": "canonical-source-capture",
+    "repeatable_read": true,
+    "source_identity_sha256": "REPLACE_WITH_HASHED_SOURCE_IDENTITY",
+    "sslmode": "verify-full",
+    "status": "source-capture/not-a-candidate",
+    "subject_source_identity_sha256": "REPLACE_WITH_HASHED_SOURCE_IDENTITY",
+    "transaction_read_only": true
+  },
+  "candidate": {
+    "artifact_sha256": "REPLACE_WITH_SHA256",
+    "capture_evidence_id": "REPLACE_WITH_SOURCE_CAPTURE_EVIDENCE_ID",
+    "created_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "evidence_id": "REPLACE_WITH_UNIQUE_SHA256",
+    "expected_replay_catalog_sha256": "REPLACE_WITH_SHA256",
+    "expected_replay_ledger_sha256": "REPLACE_WITH_SHA256",
+    "foundation_sha256": "REPLACE_WITH_REVIEWED_FOUNDATION_SHA256",
+    "git_sha": "REPLACE_WITH_40_CHARACTER_GIT_SHA",
+    "independent_review": {
+      "result": "failed",
+      "reviewed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "reviewer_identity_sha256": "REPLACE_WITH_SHA256"
+    },
+    "launch_inventory_sha256": "REPLACE_WITH_SHA256",
+    "postdeploy_migration_count": 3,
+    "predeploy_migration_count": 122,
+    "platform_prerequisites_sha256": "REPLACE_WITH_PLATFORM_PREREQUISITES_SHA256",
+    "production_deployable": false,
+    "purpose": "canonical-baseline-candidate",
+    "replay_runner_sha256": "REPLACE_WITH_REPLAY_RUNNER_SHA256",
+    "source_catalog_sha256": "REPLACE_WITH_SOURCE_NORMALIZED_CATALOG_SHA256",
+    "status": "candidate/not-deployable"
+  },
+  "managed_pg17_replays": [
+    {
+      "auth": "COPY_THE_AUTH_EVIDENCE_SHAPE_AND_REPLACE_ALL_VALUES",
+      "candidate_evidence_id": "REPLACE_WITH_CANDIDATE_EVIDENCE_ID",
+      "completed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "comparison": "COPY_THE_COMPARISON_SHAPE_AND_BIND_REPLAY_A",
+      "counts": "COPY_THE_COUNTS_SHAPE_AND_REPLACE_ALL_VALUES",
+      "evidence_id": "REPLACE_WITH_UNIQUE_SHA256",
+      "foundation_sha256": "COPY_EXACT_CANDIDATE_FOUNDATION_SHA256",
+      "git_sha": "REPLACE_WITH_40_CHARACTER_GIT_SHA",
+      "phases": { "app_schema": "failed", "forward_epoch": "failed", "foundation": "failed" },
+      "platform_prerequisites_sha256": "COPY_EXACT_CANDIDATE_PLATFORM_PREREQUISITES_SHA256",
+      "purpose": "managed-pg17-baseline-replay",
+      "replay_runner_sha256": "COPY_EXACT_CANDIDATE_REPLAY_RUNNER_SHA256",
+      "result": "failed",
+      "rls": "COPY_THE_RLS_SHAPE_AND_REPLACE_ALL_VALUES",
+      "slot": "replay-a",
+      "smoke": "COPY_THE_SMOKE_SHAPE_AND_REPLACE_ALL_VALUES",
+      "started_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "status": "replay/candidate-evidence",
+      "subject_target_sha256": "REPLACE_WITH_REPLAY_A_TARGET_SHA256",
+      "target": "COPY_THE_TARGET_SHAPE_WITH_KIND_MANAGED_SCHEMA_REPLAY_DISTINCT_CAPACITY_AND_EXACT_SORTED_EXTENSIONS"
+    },
+    {
+      "auth": "COPY_THE_AUTH_EVIDENCE_SHAPE_AND_REPLACE_ALL_VALUES",
+      "candidate_evidence_id": "REPLACE_WITH_CANDIDATE_EVIDENCE_ID",
+      "completed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "comparison": "COPY_THE_COMPARISON_SHAPE_AND_BIND_REPLAY_B",
+      "counts": "COPY_THE_COUNTS_SHAPE_AND_REPLACE_ALL_VALUES",
+      "evidence_id": "REPLACE_WITH_UNIQUE_SHA256",
+      "foundation_sha256": "COPY_EXACT_CANDIDATE_FOUNDATION_SHA256",
+      "git_sha": "REPLACE_WITH_40_CHARACTER_GIT_SHA",
+      "phases": { "app_schema": "failed", "forward_epoch": "failed", "foundation": "failed" },
+      "platform_prerequisites_sha256": "COPY_EXACT_CANDIDATE_PLATFORM_PREREQUISITES_SHA256",
+      "purpose": "managed-pg17-baseline-replay",
+      "replay_runner_sha256": "COPY_EXACT_CANDIDATE_REPLAY_RUNNER_SHA256",
+      "result": "failed",
+      "rls": "COPY_THE_RLS_SHAPE_AND_REPLACE_ALL_VALUES",
+      "slot": "replay-b",
+      "smoke": "COPY_THE_SMOKE_SHAPE_AND_REPLACE_ALL_VALUES",
+      "started_at": "REPLACE_WITH_UTC_TIMESTAMP",
+      "status": "replay/candidate-evidence",
+      "subject_target_sha256": "REPLACE_WITH_REPLAY_B_TARGET_SHA256",
+      "target": "COPY_THE_TARGET_SHAPE_WITH_KIND_MANAGED_SCHEMA_REPLAY_DISTINCT_CAPACITY_AND_EXACT_SORTED_EXTENSIONS"
+    }
+  ],
+  "preview": {
+    "auth": "COPY_THE_AUTH_EVIDENCE_SHAPE_AND_REPLACE_ALL_VALUES",
+    "candidate_evidence_id": "REPLACE_WITH_CANDIDATE_EVIDENCE_ID",
+    "completed_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "comparison": "COPY_THE_COMPARISON_SHAPE_AND_BIND_PREVIEW",
+    "counts": "COPY_THE_COUNTS_SHAPE_AND_REPLACE_ALL_VALUES",
+    "evidence_id": "REPLACE_WITH_UNIQUE_SHA256",
+    "foundation_sha256": "COPY_EXACT_CANDIDATE_FOUNDATION_SHA256",
+    "git_sha": "REPLACE_WITH_40_CHARACTER_GIT_SHA",
+    "phases": { "app_schema": "failed", "forward_epoch": "failed", "foundation": "failed" },
+    "platform_prerequisites_sha256": "COPY_EXACT_CANDIDATE_PLATFORM_PREREQUISITES_SHA256",
+    "pull_request_number": 0,
+    "purpose": "managed-preview-full-replay",
+    "replay_runner_sha256": "COPY_EXACT_CANDIDATE_REPLAY_RUNNER_SHA256",
+    "result": "failed",
+    "rls": "COPY_THE_RLS_SHAPE_AND_REPLACE_ALL_VALUES",
+    "smoke": "COPY_THE_SMOKE_SHAPE_AND_REPLACE_ALL_VALUES",
+    "started_at": "REPLACE_WITH_UTC_TIMESTAMP",
+    "status": "preview/candidate-evidence",
+    "subject_target_sha256": "REPLACE_WITH_PREVIEW_TARGET_SHA256",
+    "target": "COPY_THE_TARGET_SHAPE_WITH_KIND_MANAGED_PREVIEW_DISTINCT_CAPACITY_AND_EXACT_SORTED_EXTENSIONS"
+  }
+}
