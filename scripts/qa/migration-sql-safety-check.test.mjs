@@ -490,7 +490,10 @@ test('CI invokes the fail-closed checker directly without shell error suppressio
   const end = boundaries.length > 0 ? Math.min(...boundaries) : undefined
   const gate = workflow.slice(start, end)
 
-  assert.match(gate, /MIGRATION_SAFETY_BASE_REF:/)
-  assert.match(gate, /run: npm run qa:migration-safety/)
+  assert.match(gate, /set -euo pipefail/)
+  assert.match(gate, /MIGRATION_SAFETY_BASE_REF="\$\(jq -r .+ "\$GITHUB_EVENT_PATH"\)"/)
+  assert.match(gate, /export MIGRATION_SAFETY_BASE_REF/)
+  assert.match(gate, /npm run qa:migration-safety/)
+  assert.doesNotMatch(gate, /\$\{\{/)
   assert.doesNotMatch(gate, /\|\|\s*true|continue-on-error|2>\s*\/dev\/null/)
 })
