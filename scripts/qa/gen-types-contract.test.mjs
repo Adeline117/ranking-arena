@@ -785,7 +785,10 @@ test('CI keeps type contracts secret-scoped, push-main only, and deployment-bloc
   )
   assert.doesNotMatch(buildJob, /secrets\./)
   assert.match(e2eJob, /Production E2E Canary \(read-only\)/)
-  assert.match(e2eJob, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/)
+  // V1 NO-GO: the production canary reads the live site, so it stays suspended
+  // like types-live-drift until an owner-approved read-only evidence window.
+  assert.match(e2eJob, /if: \$\{\{ false \}\}/)
+  assert.doesNotMatch(e2eJob, /^\s{4}if: github\.event_name/m)
   assert.match(e2eJob, /PLAYWRIGHT_BASE_URL: https:\/\/www\.arenafi\.org/)
   assert.doesNotMatch(e2eJob, /secrets\.|download-artifact|needs: build|npm start|path: \.next/)
   for (const gateJob of [
