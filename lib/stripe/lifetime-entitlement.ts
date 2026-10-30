@@ -2,7 +2,7 @@ import 'server-only'
 
 import type Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { PRICING } from '@/app/(app)/user-center/membership-config'
+import { PRICING } from '@/lib/config/pricing'
 import type { Database, Json } from '@/lib/supabase/database.types'
 import {
   resolveCheckoutSessionAuthority,

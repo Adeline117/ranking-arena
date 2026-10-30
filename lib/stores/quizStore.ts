@@ -7,7 +7,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { QuizState } from '@/app/(quiz)/quiz/components/types'
+import type { QuizState } from '@/lib/quiz/types'
 
 // Bump this when question count or IDs change to auto-clear stale localStorage
 const QUIZ_STORE_VERSION = 2

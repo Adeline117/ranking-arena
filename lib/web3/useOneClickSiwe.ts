@@ -25,7 +25,7 @@ async function getSiweMessage() {
   const { SiweMessage } = await import('siwe')
   return SiweMessage
 }
-import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
+import { useLanguage, type TranslationFunction } from '@/lib/i18n/client'
 import {
   establishRequiredSiweSession,
   parseSiweAuthResult,

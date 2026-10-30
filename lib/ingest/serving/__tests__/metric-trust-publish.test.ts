@@ -9,7 +9,7 @@ import {
 } from '../../acquisition-manifest'
 import type { ParsedLeaderboardRow, RawPage, SourceRow } from '../../core/types'
 import { binanceLeaderboardListRequestSha256 } from '../../leaderboard-request-evidence'
-import { validateWorkerDbFencedWriteStatement } from '@/worker/src/ingest/worker-db-fence'
+import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
 import {
   fenceAttemptBoundLeaderboardPublicationCommit,
   hasRegisteredLeaderboardMetricTrust,

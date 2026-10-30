@@ -8,7 +8,7 @@ jest.mock('../../db', () => ({
   getIngestPool: jest.fn(),
 }))
 
-import { validateWorkerDbFencedWriteStatement } from '@/worker/src/ingest/worker-db-fence'
+import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
 
 import { prepareBoardSeriesPublication, publishBoardSeriesInTransaction } from '../publish'
 

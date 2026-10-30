@@ -10,7 +10,7 @@ import {
   assertStripePaymentRuntimeReady,
 } from '@/lib/stripe'
 import { isLifetimeCheckoutEnabled } from '@/lib/stripe/checkout-availability'
-import { PRICING } from '@/app/(app)/user-center/membership-config'
+import { PRICING } from '@/lib/config/pricing'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
