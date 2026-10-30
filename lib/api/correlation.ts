@@ -32,9 +32,9 @@ if (
 
 // Publish the reader through a runtime-neutral bridge so shared modules
 // (logger, cache, Supabase) can read the active ID without resolving this
-// Node-only module themselves. Their former dynamic `require('@/lib/api/' +
-// 'correlation')` compiled to webpack's empty context and always threw, so
-// production logs never carried a correlation ID.
+// Node-only module themselves. Their former string-concatenated dynamic
+// require of this module compiled to webpack's empty context and always threw,
+// so production logs never carried a correlation ID.
 installCorrelationIdReader(() => correlationStore?.getStore())
 
 // ============================================
